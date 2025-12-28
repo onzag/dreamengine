@@ -1,5 +1,5 @@
 import schema from '../schema/character.js';
-import { character, party, world, utils } from '../schema/variables.js';
+import { character, party, world, utils, specials } from '../schema/variables.js';
 
 function escapeHTML(str) {
     if (typeof str === "undefined" || str === null) {
@@ -69,6 +69,19 @@ const BASIC_STATES = (child, non_sapient_animal, extra_sfw, extra_nsfw) => ({
         "decay_rate_per_inference": 1,
         "bond_mini": true,
     },
+    "Happy": {
+        "general_description": "{{char}} feels joy and contentment in their current situation",
+        "automatic_trigger": true,
+        "automatic_reliever": true,
+        "decay_rate_per_inference": 1,
+        "bond_mini": true,
+    },
+    "Sad": {
+        "general_description": "{{char}} feels sorrow and unhappiness due to a negative event or situation",
+        "automatic_trigger": true,
+        "automatic_reliever": true,
+        "decay_rate_per_inference": 1,
+    },
     "Wants Play": child ? {
         "general_description": "{{char}} feels the need to engage in playful activities and have fun, {{char_pronoun}} may seek out toys or games and look for their caregiver or trusted adult to join in the playtime",
         "automatic_trigger": true,
@@ -96,7 +109,6 @@ const BASIC_STATES = (child, non_sapient_animal, extra_sfw, extra_nsfw) => ({
         "automatic_trigger": true,
         "automatic_reliever": true,
         "decay_rate_per_inference": 1,
-        "track_causants": true,
     },
     "Scared": {
         "general_description":
@@ -144,15 +156,15 @@ const BASIC_STATES = (child, non_sapient_animal, extra_sfw, extra_nsfw) => ({
         , but none {{char_pronoun}} is intested with is currently present; {{char}} will keep {{char_possessive}} sexual urges to {{char_reflexive_pronoun}} and react to sexual advances by anyone negatively
     {{/if}}
 {{/with}}`,
-        "causant_min_bond_required": 0,
-        "causant_max_bond_required": 100,
-        "causant_min_2_bond_required": 25,
-        "causant_max_2_bond_required": 100,
+        "potential_causant_negative_prompt": non_sapient_animal ? null : "{{char}} is not attracted to {{potential_causant}} so sexual advances by {{potential_causant}} will be rejected",
+        "causant_min_bond_required": non_sapient_animal ? null : 0,
+        "causant_max_bond_required": non_sapient_animal ? null : 100,
+        "causant_min_2_bond_required": non_sapient_animal ? null : 25,
+        "causant_max_2_bond_required": non_sapient_animal ? null : 100,
         "automatic_trigger": true,
         "automatic_reliever": true,
         "decay_rate_per_inference": 1,
         "bond_mini": true,
-        "track_causants": true,
     },
     "Anxious": {
         "general_description": "{{char}} feels uneasy and worried about upcoming events or situations",
@@ -200,20 +212,9 @@ const BASIC_STATES = (child, non_sapient_animal, extra_sfw, extra_nsfw) => ({
         "decay_rate_per_inference": 1,
     },
     "Embarrassed": {
-        "general_description": 
-`{{char}} feels self-conscious and uneasy due to
-{{#with (get_all_character_state_causants "Embarrassed") as |embarrassing_party|}}
-    {{#if (in embarrassing_party char)}}
-        something {{char_pronoun}} did {{char_reflexive_pronoun}}
-    {{else if (gt (length embarrassing_party) 0)}}
-        what {{format_and embarrassing_party}} said or did
-    {{else}}
-        a recent awkward situation or event
-    {{/if}}
-{{/with}}`,
+        "general_description": `{{char}} feels self-conscious and uneasy due to {{get_state_cause "Embarrassed")}}`,
         "automatic_trigger": true,
         "automatic_reliever": true,
-        "track_causants": true,
         "decay_rate_per_inference": 1,
     },
     "Angry": {
@@ -221,10 +222,9 @@ const BASIC_STATES = (child, non_sapient_animal, extra_sfw, extra_nsfw) => ({
 {{char}} feels strong displeasure or hostility
 {{#with (get_all_character_state_causants "Angry") as |angry_party|}}
     {{#if (gt (length angry_party) 0)}}
-        towards {{format_and angry_party}}
+        towards {{format_and angry_party}} because
     {{else}}
-        about a frustrating situation or event
-    {{/if}}
+    {{get_state_cause "Angry")}}
 {{/with}}`,
         "automatic_trigger": true,
         "automatic_reliever": true,
@@ -232,8 +232,44 @@ const BASIC_STATES = (child, non_sapient_animal, extra_sfw, extra_nsfw) => ({
             "{{char}} has calmed down after expressing their anger",
             "{{char}} has been apologized to or reconciled with those they were angry at",
         ],
-        "track_causants": true,
     },
+    "Berserk": non_sapient_animal ? {
+        "general_description":
+`{{char}} is in a frenzied and uncontrollable state, driven by primal instincts rather than rational thought, {{char_pronoun}} may lash out aggressively at anything perceived as a threat
+{{#with (get_present_party 10 100 0 100) as |friends|}}
+    {{#if (gt (length friends) 0)}}
+        {{char}} can be calmed down by {{format_and friends}} or aggressively subdued if necessary
+    {{/else}}
+        {{char}} can only be aggressively subdued
+    {{/if}}
+{{/with}}`,
+        "automatic_trigger": false,
+        "automatic_reliever": false,
+        "manual_relievers": [
+            "{{char}} has been subdued",
+            `{{#with (get_present_party 0 100 0 100)}}
+    {{#if (gt (length this) 0)}}
+        {{char}} has been calmed down by {{format_and this}}
+    {{/if}}
+{{/with}}`,
+        ],
+        "manual_triggers": [
+            "{{char}} has been provoked or threatened aggressively with violence",
+        ],
+        "triggers_states": [
+            {"state": "Angry", "intensity": 3},
+        ],
+        "removes_states_on_relief": [
+            "Angry",
+        ],
+        "relief_uses_decay_rate": true,
+        "decay_rate_after_relief": 1,
+        "relieving_description": "{{char}} has calmed down from the berserk state but still seems slightly agitated",
+        "decay_rate_per_inference": 0,
+        "trigger_likelyhood": 0.5,
+        "describes_action": true,
+        "starting_intensity": 4,
+    } : null,
 
     // Extra NSFW states
     "Sexually Frustrated": extra_nsfw && !extra_sfw && !child && !non_sapient_animal ? {
@@ -282,6 +318,7 @@ const BASIC_STATES = (child, non_sapient_animal, extra_sfw, extra_nsfw) => ({
         "automatic_trigger": false,
         "automatic_reliever": false,
         "decay_rate_per_inference": 0,
+        "starting_intensity": 4,
         "describes_action": true,
         "manual_triggers": [
             "{{char}} is experiencing an orgasm",
@@ -296,6 +333,17 @@ const BASIC_STATES = (child, non_sapient_animal, extra_sfw, extra_nsfw) => ({
         "has_custom_viewables": true,
         "custom_viewables_priority": 15,
         "describes_action": true,
+        "triggers_states_on_relief": [
+            {"state": "Satisfied", "intensity": 4},
+        ],
+        "decay_rate_after_relief": 1,
+        "relieving_description":
+`{{char}} has finished experiencing an orgasm
+{{#with (get_all_character_state_causants "Having an Orgasm") as |orgasm_party|}}
+    {{#if (gt (length orgasm_party) 0)}}
+        and will request cuddles and affection with {{format_and orgasm_party}}
+    {{/if}}
+{{/with}}`,
     } : null,
 
     // Injury and Death related states
@@ -320,7 +368,6 @@ const BASIC_STATES = (child, non_sapient_animal, extra_sfw, extra_nsfw) => ({
         "relief_uses_decay_rate": true,
         "decay_rate_after_relief": 0.1,
         "injury_and_death": true,
-        "track_causants": true,
     },
     "Permanently Injured": {
         "general_description": "{{char}} has sustained permanent damage or impairment to their body, which may affect their physical abilities and overall well-being",
@@ -340,6 +387,7 @@ const BASIC_STATES = (child, non_sapient_animal, extra_sfw, extra_nsfw) => ({
         "permanent": true,
         "relief_uses_decay_rate": true,
         "decay_rate_after_relief": 0.1,
+        "relieving_description": "{{char}}'s permanent injuries have been managed to improve quality of life",
         "injury_and_death": true,
     },
     "Received Gunshot": {
@@ -358,6 +406,7 @@ const BASIC_STATES = (child, non_sapient_animal, extra_sfw, extra_nsfw) => ({
         "manual_relievers": [
             "{{char}} has received emergency medical treatment for the gunshot wound",
         ],
+        "relieving_description": "{{char}}'s gunshot wound has been treated and {{char_pronoun}} is in critical condition",
         "decay_rate_per_inference": 0.1,
     },
     "Received Mortal Wound": {
@@ -374,7 +423,90 @@ const BASIC_STATES = (child, non_sapient_animal, extra_sfw, extra_nsfw) => ({
     }
 });
 
-const CHARACTER_PRESETS = [
+const BASIC_EMOTIONS = (child, non_sapient_animal) => ([
+    {
+        name: "neutral",
+        common: true,
+        triggered_by_states: [],
+    },
+    {
+        name: "relaxed",
+        common: true,
+        triggered_by_states: [],
+    },
+    {
+        name: "happy",
+        common: true,
+        triggered_by_states: child ? ["Wants Play", "Needs affection", "Loving", "Happy"] : ["Loving", "Happy"],
+    },
+    {
+        name: "sad",
+        common: false,
+        triggered_by_states: ["Sad", "Lonely"],
+    },
+    {
+        name: "angry",
+        common: false,
+        triggered_by_states: ["Angry", "Berserk"],
+    },
+    {
+        name: "scared",
+        common: false,
+        triggered_by_states: ["Scared", "Anxious"],
+    },
+    !child ? {
+        name: "aroused",
+        common: false,
+        triggered_by_states: extra_nsfw ? ["Aroused", "Having Sex"] : ["Aroused"],
+    } : null,
+    {
+        name: "crying",
+        common: false,
+        triggered_by_states: [],
+    },
+    {
+        name: "surprised",
+        common: false,
+        triggered_by_states: [],
+    },
+    {
+        name: "disgusted",
+        common: false,
+        triggered_by_states: [],
+    },
+    {
+        name: "confused",
+        common: false,
+        triggered_by_states: [],
+    },
+    {
+        name: "excited",
+        common: false,
+        triggered_by_states: ["Determined"],
+    },
+    {
+        name: "tired",
+        common: false,
+        triggered_by_states: ["Tired"],
+    },
+    {
+        name: "injured",
+        common: false,
+        triggered_by_states: ["Injured", "Received Gunshot", "Received Mortal Wound"],
+    },
+    {
+        name: "embarrassed",
+        common: false,
+        triggered_by_states: ["Embarrassed"],
+    },
+    {
+        name: "stressed",
+        common: false,
+        triggered_by_states: ["Stressed", "Desperate"],
+    }
+]);
+
+const CHARACTER_PRESETS = (extra_sfw, extra_nsfw) => ([
     [
         "Adult/Sapient Beast/Humanoid",
         "An adult human being or creature.",
@@ -389,7 +521,8 @@ Mention their typical clothing style and accessories.))
         {{char}} is currently in a relationship with {{format_and loved_party}}, and {{char_pronoun}} shows visible signs of affection and attachment towards {{format_object_pronoun loved_party}}, they will not accept sexual or romantic advances from anyone else.
     {{/if}}
 {{/with}}`,
-            "states": BASIC_STATES,
+            "states": BASIC_STATES(false, false, extra_sfw, extra_nsfw),
+            "emotions": BASIC_EMOTIONS(false, false),
         }
     ],
     [
@@ -407,10 +540,11 @@ Include information about their behavior))
         {{char}} is currently in a relationship with {{format_and loved_party}}, and {{char_pronoun}} shows visible signs of affection and attachment towards {{format_object_pronoun loved_party}}, they will not accept sexual or romantic advances from anyone else.
     {{/if}}
 {{/with}}`,
-            "states": BASIC_STATES,
+            "states": BASIC_STATES(false, false, extra_sfw, extra_nsfw),
+            "emotions": BASIC_EMOTIONS(false, false),
         }
     ],
-    [
+    extra_nsfw ? null : [
         "Child",
         "A young human being or creature",
         {
@@ -422,6 +556,8 @@ Mention their typical clothing style and accessories.))
 {{char}} is a child and behaves accordingly and seeks for guidance and care from adults they trust around them.
 
 {{char}} is a child and does not accept any sexual or romantic advances from anyone, and will react negatively to such advances.`,
+            "states": BASIC_STATES(true, false, extra_sfw, extra_nsfw),
+            "emotions": BASIC_EMOTIONS(true, false),
         }
     ],
     [
@@ -437,9 +573,11 @@ Include information about their behavior))
 {{char}} is driven primarily by instinct and basic needs such as hunger, safety, and reproduction.
 
 {{char}} does not accept any sexual or romantic advances from anyone, and will react negatively to such advances.`,
+            "states": BASIC_STATES(false, true, extra_sfw, extra_nsfw),
+            "emotions": BASIC_EMOTIONS(false, true),
         }
     ],
-]
+]);
 
 const WIZARD_SECTIONS = [
     {
@@ -552,7 +690,7 @@ class CharacterOverlay extends HTMLElement {
                     <tr><th>Variable</th><th>Description</th></tr>
                     </thead>
                     <tbody>
-                    ${character.map(varInfo => `<tr title=${JSON.stringify(escapeHTML(varInfo[2]))}><td>{{${varInfo[0]}}}</td><td>${escapeHTML(varInfo[1])}</td></tr>`).join('')}
+                    ${character.map(varInfo => `<tr title=${JSON.stringify(escapeHTML(varInfo[2]))}><td>${varInfo[0]}</td><td>${escapeHTML(varInfo[1])}</td></tr>`).join('')}
                 </tbody>
                 </table>
                 <h3>Party Variables</h3>
@@ -561,7 +699,7 @@ class CharacterOverlay extends HTMLElement {
                     <tr><th>Variable</th><th>Description</th></tr>
                     </thead>
                     <tbody>
-                    ${party.map(varInfo => `<tr title=${JSON.stringify(escapeHTML(varInfo[2]))}><td>{{${varInfo[0]}}}</td><td>${escapeHTML(varInfo[1])}</td></tr>`).join('')}
+                    ${party.map(varInfo => `<tr title=${JSON.stringify(escapeHTML(varInfo[2]))}><td>${varInfo[0]}</td><td>${escapeHTML(varInfo[1])}</td></tr>`).join('')}
                 </tbody>
                 </table>
                 <h3>World Variables</h3>
@@ -570,7 +708,16 @@ class CharacterOverlay extends HTMLElement {
                     <tr><th>Variable</th><th>Description</th></tr>
                     </thead>
                     <tbody>
-                    ${world.map(varInfo => `<tr title=${JSON.stringify(escapeHTML(varInfo[2]))}><td>{{${varInfo[0]}}}</td><td>${escapeHTML(varInfo[1])}</td></tr>`).join('')}
+                    ${world.map(varInfo => `<tr title=${JSON.stringify(escapeHTML(varInfo[2]))}><td>${varInfo[0]}</td><td>${escapeHTML(varInfo[1])}</td></tr>`).join('')}
+                </tbody>
+                </table>
+                <h3>Special Variables</h3>
+                <table>
+                <thead>
+                    <tr><th>Variable</th><th>Description</th></tr>
+                    </thead>
+                    <tbody>
+                    ${specials.map(varInfo => `<tr title=${JSON.stringify(escapeHTML(varInfo[2]))}><td>${varInfo[0]}</td><td>${escapeHTML(varInfo[1])}</td></tr>`).join('')}
                 </tbody>
                 </table>
                 <h3 Utility Functions</h3>
@@ -632,7 +779,8 @@ class CharacterOverlay extends HTMLElement {
                                     input-data-character-file="${this.currentCharacterFile}"
                                     input-placeholder="${escapeHTML(schema.properties[fieldName].placeholder || '')}"
                                     input-default-value="${escapeHTML(schema.properties[fieldName].default || '')}"
-                                    ${isMultiline ? 'multiline="true"' : ''}>
+                                    ${isMultiline ? 'multiline="true" input-is-codemirror="true"' : ''}
+                                >
                                 </app-overlay-input>`;
                     }
                 } else if (schema.properties[fieldName].type === "number") {

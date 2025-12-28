@@ -8,6 +8,8 @@ World consistency check, check if the prompt is consistent with the world, eg. n
 
 Death check (Inference) check if the user has been killed.
 
+Check time skip (Inference) will cause decaying states to fully decay, time skip should also occur if location changed with far away locations
+
 Reroll Location of Characters that are not currently present, some characters may end up in the unknown zone by their lost potential
 rerolls happen every inference, so they may end back at a location
     World has a property that may absorb some characters at a given location, more likely there

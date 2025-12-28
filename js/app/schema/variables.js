@@ -1,7 +1,7 @@
 
 export const character = [
     [
-        "user",
+        "user_name",
         "The name of the user, only really useful if they are the chosen one or the likes",
         "eg. Player",
         (user, character) => user.name,
@@ -176,6 +176,49 @@ export const world = [
     ]
 ];
 
+function getPronounHelper(user, character, party, world, listOrCharacter, they, he, she, they_singular) {
+    let nameOne = listOrCharacter;
+    if (Array.isArray(listOrCharacter)) {
+        if (listOrCharacter.length === 0) {
+            return they;
+        } else if (listOrCharacter.length === 1) {
+            nameOne = listOrCharacter[0];
+        } else {
+            return they;
+        }
+    }
+    for (const member of party.everyone) {
+        if (member.name == nameOne) {
+            const gender = member.reference.gender.toLowerCase();
+            if (gender === "male") {
+                return he;
+            } else if (gender === "female") {
+                return she;
+            } else {
+                return they_singular;
+            }
+        }
+    }
+    return they_singular;
+}
+
+export const specials = [
+    [
+        "potential_causant",
+        "Only available at causant_negative_prompt and causant_positive_prompt, the name of the potential causant for a possible state",
+        "eg. Aria, Thalon, Mira",
+        (user, character, party, world, potentialCausant) => potentialCausant,
+    ],
+]
+
+function formatAnd(list) {
+    if (!list || !Array.isArray(list)) return "";
+            if (list.length === 0) return "";
+            if (list.length === 1) return list[0];
+            if (list.length === 2) return `${list[0]} and ${list[1]}`;
+            return `${list.slice(0, -1).join(', ')}, and ${list[list.length - 1]}`;
+}
+
 export const utils = [
     [
         "get_last_state_causant state_name",
@@ -203,6 +246,19 @@ export const utils = [
             }
             const activators = characterInfo.currentStates[actualStateName].activatedBy;
             return activators;
+        },
+    ],
+    [
+        "get_state_cause state_name",
+        "The cause/reason for the last activation of the state",
+        "eg. 'helped me with my chores', 'betrayed me in the past'",
+        (user, character, party, world, stateName) => {
+            const actualStateName = stateName.trim().toUpperCase().replace(/\s+/, "_");
+            const characterInfo = party.everyone.find(member => member.name === character.name);
+            if (!characterInfo || !characterInfo.stateHistory[actualStateName] || characterInfo.stateHistory[actualStateName].length === 0) {
+                return "";
+            }
+            return formatAnd(characterInfo.currentStates[actualStateName].causes) || "";
         },
     ],
     [
@@ -534,11 +590,7 @@ export const utils = [
         "formats a list with commas and 'and'",
         "eg. Arya, Thalon, and Mira",
         (user, character, party, world, list) => {
-            if (!list || !Array.isArray(list)) return "";
-            if (list.length === 0) return "";
-            if (list.length === 1) return list[0];
-            if (list.length === 2) return `${list[0]} and ${list[1]}`;
-            return `${list.slice(0, -1).join(', ')}, and ${list[list.length - 1]}`;
+            formatAnd(list);
         }
     ],
     [
@@ -619,4 +671,54 @@ export const utils = [
             return value1 >= value2;
         }
     ],
+    [
+        "format_object_pronoun listOrCharacter",
+        "Formats the object pronoun for a list of characters or a single character",
+        "eg. him, her, them",
+        (user, character, party, world, listOrCharacter) => {
+            return getPronounHelper(user, character, party, world, listOrCharacter, "them", "him", "her", "them");
+        }
+    ],
+    [
+        "format_possessive listOrCharacter",
+        "Formats the possessive pronoun for a list of characters or a single character",
+        "eg. his, her, their",
+        (user, character, party, world, listOrCharacter) => {
+            return getPronounHelper(user, character, party, world, listOrCharacter, "their", "his", "her", "their");
+        }
+    ],
+    [
+        "format_reflexive listOrCharacter",
+        "Formats the reflexive pronoun for a list of characters or a single character",
+        "eg. himself, herself, themself",
+        (user, character, party, world, listOrCharacter) => {
+            return getPronounHelper(user, character, party, world, listOrCharacter, "themselves", "himself", "herself", "themself");
+        }
+    ],
+    [
+        "format_pronoun listOrCharacter",
+        "Formats the pronoun for a list of characters or a single character",
+        "eg. he, she, they",
+        (user, character, party, world, listOrCharacter) => {
+            return getPronounHelper(user, character, party, world, listOrCharacter, "they", "he", "she", "they");
+        }
+    ],
+    [
+        "format_ownership_pronoun listOrCharacter",
+        "Formats the ownership pronoun for a list of characters or a single character",
+        "eg. his, hers, theirs",
+        (user, character, party, world, listOrCharacter) => {
+            return getPronounHelper(user, character, party, world, listOrCharacter, "theirs", "his", "hers", "theirs");
+        },
+    ],
 ];
+
+export const ALL_VARIABLES = [
+    ...character,
+    ...party,
+    ...world,
+    ...utils,
+    ...specials,
+];
+
+export const ALL_VARIABLES_FNS = ALL_VARIABLES.map(entry => entry[0].split(' ')[0]);

@@ -293,13 +293,26 @@ export default {
                             ]
                         }
                     },
+                    // can do some efficiency logic with this
+                    // we can filter any states from being checked if any of the present party bond levels
+                    // does not clear this criteria, also we may be interested in pushing negatives
+                    // as in "character will not activate state x towards x"
+                    "potential_causant_negative_prompt": {
+                        "type": "string",
+                        "description": "Prompt to inject towards a potential causant that does not meet the bond requirements for this state.",
+                        "placeholder": "{{potential_causant}} has not built enough of a bond with {{char}} so x is offlimits."
+                    },
+                    "potential_causant_positive_prompt": {
+                        "type": "string",
+                        "description": "Prompt to inject towards a potential causant that meets the bond requirements for this state.",
+                        "placeholder": "{{potential_causant}} has built a strong bond with {{char}} so x is possible."
+                    },
                     "causant_min_bond_required": {
                         "type": "number",
                         "description": "Indicates the minimum bond level required for this state to be activated by a causant.",
                         "minimum": -100,
                         "maximum": 100,
                         "default": -100,
-                        "must_have_bool": "track_causant",
                     },
                     "causant_max_bond_required": {
                         "type": "number",
@@ -307,7 +320,6 @@ export default {
                         "minimum": -100,
                         "maximum": 100,
                         "default": 100,
-                        "must_have_bool": "track_causant",
                     },
                     "causant_min_2_bond_required": {
                         "type": "number",
@@ -315,7 +327,6 @@ export default {
                         "minimum": 0,
                         "maximum": 100,
                         "default": 0,
-                        "must_have_bool": "track_causant",
                     },
                     "causant_max_2_bond_required": {
                         "type": "number",
@@ -323,7 +334,6 @@ export default {
                         "minimum": 0,
                         "maximum": 100,
                         "default": 100,
-                        "must_have_bool": "track_causant",
                     },
                     "automatic_trigger": {
                         "type": "boolean",
@@ -332,6 +342,13 @@ export default {
                     "automatic_reliever": {
                         "type": "boolean",
                         "description": "Indicates if this state can be relieved automatically by the criteria of the LLM, useful for generic states that indicate emotions for example."
+                    },
+                    "trigger_likelihood": {
+                        "type": "number",
+                        "description": "The likelihood for this state to be triggered manually per inference, a value between 0 and 1.",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "percentage": true,
                     },
                     "decay_rate_per_inference": {
                         "type": "number",
@@ -554,138 +571,11 @@ export default {
                         "type": "array",
                         "description": "States that can trigger this emotion.",
                         "items": {
-                            "type": "object",
-                            "properties": {
-                                "state": {
-                                    "type": "string"
-                                },
-                                "chance": {
-                                    "type": "number",
-                                    "minimum": 0,
-                                    "maximum": 1
-                                },
-                                "min_bond_level": {
-                                    "type": "integer",
-                                    "minimum": -100,
-                                    "maximum": 100
-                                },
-                                "max_bond_level": {
-                                    "type": "integer",
-                                    "minimum": -100,
-                                    "maximum": 100
-                                },
-                                "min_2nd_bond_level": {
-                                    "type": "integer",
-                                    "minimum": -100,
-                                    "maximum": 100
-                                },
-                                "max_2nd_bond_level": {
-                                    "type": "integer",
-                                    "minimum": -100,
-                                    "maximum": 100
-                                }
-                            },
-                            "required": [
-                                "state",
-                                "chance"
-                            ]
+                            "type": "string",
+                            "description": "The name of the state that can trigger this emotion."
                         },
                         "minItems": 1
                     },
-                    "triggers_states": {
-                        "type": "array",
-                        "description": "States that are triggered by this emotion.",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "state": {
-                                    "type": "string"
-                                },
-                                "intensity": {
-                                    "type": "number",
-                                    "minimum": 0,
-                                    "maximum": 4
-                                },
-                                "chance": {
-                                    "type": "number",
-                                    "minimum": 0,
-                                    "maximum": 1
-                                },
-                                "min_bond_level": {
-                                    "type": "integer",
-                                    "minimum": -100,
-                                    "maximum": 100
-                                },
-                                "max_bond_level": {
-                                    "type": "integer",
-                                    "minimum": -100,
-                                    "maximum": 100
-                                },
-                                "min_2nd_bond_level": {
-                                    "type": "integer",
-                                    "minimum": -100,
-                                    "maximum": 100
-                                },
-                                "max_2nd_bond_level": {
-                                    "type": "integer",
-                                    "minimum": -100,
-                                    "maximum": 100
-                                }
-                            },
-                            "required": [
-                                "state",
-                                "chance",
-                                "intensity"
-                            ]
-                        }
-                    },
-                    "relieves_states": {
-                        "type": "array",
-                        "description": "States that are relieved by this emotion.",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "state": {
-                                    "type": "string"
-                                },
-                                "intensity_loss": {
-                                    "type": "number",
-                                    "minimum": -4,
-                                    "maximum": 0
-                                },
-                                "chance": {
-                                    "type": "number",
-                                    "minimum": 0,
-                                    "maximum": 1
-                                },
-                                "min_bond_level": {
-                                    "type": "integer",
-                                    "minimum": -100,
-                                    "maximum": 100
-                                },
-                                "max_bond_level": {
-                                    "type": "integer",
-                                    "minimum": -100,
-                                    "maximum": 100
-                                },
-                                "min_2nd_bond_level": {
-                                    "type": "integer",
-                                    "minimum": -100,
-                                    "maximum": 100
-                                },
-                                "max_2nd_bond_level": {
-                                    "type": "integer",
-                                    "minimum": -100,
-                                    "maximum": 100
-                                }
-                            },
-                            "required": [
-                                "state",
-                                "chance",
-                                "intensity_loss"
-                            ]
-                        }
-                    }
                 },
                 "required": [
                     "name"

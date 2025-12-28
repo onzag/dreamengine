@@ -1,6 +1,19 @@
 const hoverSound = document.getElementById('hoverSound');
 const confirmSound = document.getElementById('confirmSound');
 const cancelSound = document.getElementById('cancelSound');
+import { ALL_VARIABLES_FNS } from "../schema/variables.js";
+
+import "../../codemirror/bundle.js";
+
+const EditorView = window.EditorView;
+const basicSetup = window.basicSetup;
+const handlebarsLanguage = window.handlebarsLanguage;
+const indentWithTab = window.indentWithTab;
+const keymap = window.keymap;
+const placeholder = window.placeholder;
+const getMatchDecorator = window.getMatchDecorator;
+
+const usedMatchDecorator = getMatchDecorator(ALL_VARIABLES_FNS);
 
 function playHoverSound() {
     hoverSound.currentTime = 0;
@@ -8,13 +21,13 @@ function playHoverSound() {
 }
 
 function playConfirmSound() {
-  confirmSound.currentTime = 0;
-  confirmSound.play().catch(err => console.log('Confirm sound play failed:', err));
+    confirmSound.currentTime = 0;
+    confirmSound.play().catch(err => console.log('Confirm sound play failed:', err));
 }
 
 function playCancelSound() {
-  cancelSound.currentTime = 0;
-  cancelSound.play().catch(err => console.log('Cancel sound play failed:', err));
+    cancelSound.currentTime = 0;
+    cancelSound.play().catch(err => console.log('Cancel sound play failed:', err));
 }
 
 class Overlay extends HTMLElement {
@@ -274,51 +287,77 @@ class OverlayInput extends HTMLElement {
 
         const isNumber = this.getAttribute('input-type') === 'number';
         const isPercentage = this.getAttribute('input-is-percentage') === 'true';
+        const isCodeMirror = this.getAttribute("input-is-codemirror") === "true" && this.getAttribute('multiline') === 'true';
 
-        if (this.getAttribute("input-default-value")) {
-            const inputElement = this.shadowRoot.querySelector('input, textarea');
-            if (isNumber) {
-                const numericValue = parseFloat(this.getAttribute("input-default-value"));
-                if (isPercentage) {
-                    inputElement.value = (numericValue * 100).toString();
+        if (!isCodeMirror) {
+            if (this.getAttribute("input-default-value")) {
+                const inputElement = this.shadowRoot.querySelector('input, textarea');
+                if (isNumber) {
+                    const numericValue = parseFloat(this.getAttribute("input-default-value"));
+                    if (isPercentage) {
+                        inputElement.value = (numericValue * 100).toString();
+                    } else {
+                        inputElement.value = numericValue.toString();
+                    }
                 } else {
-                    inputElement.value = numericValue.toString();
+                    inputElement.value = this.getAttribute("input-default-value");
                 }
-            } else {
-                inputElement.value = this.getAttribute("input-default-value");
+                this.originalValue = this.getAttribute("input-default-value");
             }
-            this.originalValue = this.getAttribute("input-default-value");
-        }
 
-        const textarea = this.shadowRoot.querySelector('textarea');
-        if (textarea) {
-            // Measure placeholder height
-            textarea.value = textarea.placeholder;
-            textarea.style.height = 'auto';
-            const placeholderHeight = textarea.scrollHeight;
-            textarea.style.minHeight = placeholderHeight + 'px';
-            textarea.value = '';  // Clear it
+            const textarea = this.shadowRoot.querySelector('textarea');
+            if (textarea) {
+                // Measure placeholder height
+                textarea.value = textarea.placeholder;
+                textarea.style.height = 'auto';
+                const placeholderHeight = textarea.scrollHeight;
+                textarea.style.minHeight = placeholderHeight + 'px';
+                textarea.value = '';  // Clear it
 
-            textarea.addEventListener('input', function () {
-                this.style.height = 'auto';
-                this.style.height = this.scrollHeight + 'px';
-            });
+                textarea.addEventListener('input', function () {
+                    this.style.height = 'auto';
+                    this.style.height = this.scrollHeight + 'px';
+                });
+            }
+        } else {
+            if (this.getAttribute("input-default-value")) {
+                this.editor = new EditorView({
+                    lineWrapping: true,
+                    doc: this.getAttribute("input-default-value"),
+                    extensions: [basicSetup, keymap.of(indentWithTab), handlebarsLanguage, placeholder(this.getAttribute("input-placeholder")), EditorView.lineWrapping, usedMatchDecorator],
+                    parent: this.shadowRoot.querySelector('.codemirror-wrapper'),
+                });
+                this.originalValue = this.getAttribute("input-default-value");
+            } else {
+                this.editor = new EditorView({
+                    lineWrapping: true,
+                    extensions: [basicSetup, keymap.of(indentWithTab), handlebarsLanguage, placeholder(this.getAttribute("input-placeholder")), EditorView.lineWrapping, usedMatchDecorator],
+                    parent: this.shadowRoot.querySelector('.codemirror-wrapper'),
+                });
+            }
         }
 
         window.electronAPI.loadValueFromUserData(this.getAttribute('input-data-location'), this.getAttribute("input-data-character-file")).then((value) => {
             if (value !== null) {
-                const potentialTextArea = this.shadowRoot.querySelector('input, textarea');
-                if (isPercentage && isNumber) {
-                    const numberValue = parseFloat(value);
-                    potentialTextArea.value = (numberValue * 100).toString();
+                if (isCodeMirror) {
+                    this.editor.dispatch({
+                        changes: { from: 0, to: this.editor.state.doc.length, insert: value.toString() }
+                    });
+                    this.originalValue = value.toString();
                 } else {
-                    potentialTextArea.value = value.toString();
-                }
-                this.originalValue = value.toString();
+                    const potentialTextArea = this.shadowRoot.querySelector('input, textarea');
+                    if (isPercentage && isNumber) {
+                        const numberValue = parseFloat(value);
+                        potentialTextArea.value = (numberValue * 100).toString();
+                    } else {
+                        potentialTextArea.value = value.toString();
+                    }
+                    this.originalValue = value.toString();
 
-                if (potentialTextArea && this.getAttribute('multiline') === 'true') {
-                    textarea.style.height = 'auto';
-                    textarea.style.height = textarea.scrollHeight + 'px';
+                    if (potentialTextArea && this.getAttribute('multiline') === 'true') {
+                        textarea.style.height = 'auto';
+                        textarea.style.height = textarea.scrollHeight + 'px';
+                    }
                 }
             }
         });
@@ -354,6 +393,11 @@ class OverlayInput extends HTMLElement {
         if (multiline) {
             wrapperClass += " textarea-wrapper";
         }
+        let isCodeMirror = false;
+        if (this.getAttribute("input-is-codemirror") === "true" && multiline) {
+            wrapperClass += " codemirror-wrapper";
+            isCodeMirror = true;
+        }
 
         let extraAttributes = "";
         if (type === 'number') {
@@ -371,7 +415,10 @@ class OverlayInput extends HTMLElement {
             }
         }
 
-        const inputItself = multiline ? `<textarea placeholder="${placeholder}"></textarea>` : `<input type="${type}" placeholder="${placeholder}" ${extraAttributes} />`;
+        let inputItself = multiline ? `<textarea placeholder="${placeholder}"></textarea>` : `<input type="${type}" placeholder="${placeholder}" ${extraAttributes} />`;
+        if (isCodeMirror) {
+            inputItself = "";
+        }
 
         this.shadowRoot.innerHTML = `
       <style>
@@ -432,6 +479,41 @@ input::-webkit-outer-spin-button {
   color: #FF6B6B;
   font-weight: bold;
 }
+  
+.cm-gutterElement, .cm-gutters {
+    background-color: rgba(0, 0, 0, 0.9) !important;
+    color: white !important;
+}
+.cm-gutters {
+    border-right: none !important;
+    border-radius: 0.5vh 0 0 0.5vh !important;
+}
+.cm-editor {
+    border-radius: 0.5vh !important;
+    box-shadow: inset 0 0 10px rgba(100,0,200,0.3) !important;
+    background-color: rgba(255, 255, 255, 0.05) !important;
+    border: solid 1px #ccc !important;
+    font-family: 'Cabin Sketch', sans-serif !important;
+    caret-color: white !important;
+}
+.cm-line {
+font-family: 'Cabin Sketch', sans-serif !important;
+}
+.cm-gutterElement {
+font-family: 'Cabin Sketch', sans-serif !important;
+}
+.cm-activeLine {
+    background-color: rgba(0, 0, 0, 0.3) !important;
+    caret-color: white !important;
+}
+.ͼb {
+    color: rgb(219, 112, 236) !important;
+}
+.ͼi {
+    color: rgb(135, 206, 250) !important;
+}
+    .cm-editor .cm-cursor, .cm-dropCursor { border-left-color: white !important; background-color: white !important; }
+    .cm-specialkeyword { color: #FF6B6B !important; font-weight: bold !important; border: solid 1px #FF6B6B !important; border-radius: 0.3vh !important; }
       </style>
       <div class="overlay-input">
         <label>${label}</label>
