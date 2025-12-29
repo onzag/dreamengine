@@ -13,6 +13,15 @@ const keymap = window.keymap;
 const placeholder = window.placeholder;
 const getMatchDecorator = window.getMatchDecorator;
 const javascriptLanguage = window.javascriptLanguage;
+const initializeTVSFS = window.initializeTVSFS;
+const tsErrorLinter = window.tsErrorLinter;
+const tsComplete = window.tsComplete;
+const linter = window.linter;
+const tsvfsViewPlugin = window.tsvfsViewPlugin;
+const autocompletion = window.autocompletion;
+const convertTsToJs = window.convertTsToJs;
+
+initializeTVSFS(`declare const cat: { log(msg: any): void; };`);
 
 const usedMatchDecorator = getMatchDecorator(ALL_VARIABLES_FNS);
 
@@ -283,7 +292,7 @@ class OverlayInput extends HTMLElement {
         this.originalValue = "";
     }
 
-    connectedCallback() {
+    async connectedCallback() {
         this.render();
 
         const isNumber = this.getAttribute('input-type') === 'number';
@@ -325,8 +334,15 @@ class OverlayInput extends HTMLElement {
             if (isCodeMirror === "handlebars") {
                 extensions[2] = handlebarsLanguage;
                 extensions.push(usedMatchDecorator)
-            } else if (isCodeMirror === "javascript") {
+            } else if (isCodeMirror === "typescript") {
                 extensions[2] = javascriptLanguage;
+                await initializeTVSFS(`declare const console: { log(msg: any): void; };`);
+                console.log("HERE")
+                extensions.push(linter(tsErrorLinter, {
+                    delay: 0,
+                }));
+                extensions.push(autocompletion({ override: [tsComplete] }));
+                extensions.push(tsvfsViewPlugin(this));
             }
             if (this.getAttribute("input-default-value")) {
                 this.editor = new EditorView({
@@ -345,7 +361,12 @@ class OverlayInput extends HTMLElement {
             }
         }
 
-        window.electronAPI.loadValueFromUserData(this.getAttribute('input-data-location'), this.getAttribute("input-data-character-file")).then((value) => {
+        let dataLocation = this.getAttribute('input-data-location');
+        if (isCodeMirror === "typescript") {
+            dataLocation += ".ts";
+        }
+
+        window.electronAPI.loadValueFromUserData(this.getAttribute("input-data-character-file")).then((value) => {
             if (value !== null) {
                 if (isCodeMirror) {
                     this.editor.dispatch({
@@ -375,6 +396,7 @@ class OverlayInput extends HTMLElement {
         let value = this.shadowRoot.querySelector('input, textarea').value;
         const type = this.getAttribute('input-type') || 'text';
         const isPercentage = this.getAttribute('input-is-percentage') === 'true';
+        const isCodeMirror = this.getAttribute('multiline') === 'true' && this.getAttribute("input-is-codemirror");
         if (type === 'number') {
             value = parseFloat(value);
             if (isNaN(value)) {
@@ -384,7 +406,16 @@ class OverlayInput extends HTMLElement {
                 value = value / 100;
             }
         }
-        await window.electronAPI.setValueIntoUserData(this.getAttribute('input-data-location'), this.getAttribute("input-data-character-file"), value);
+        const dataLocationOriginal = this.getAttribute('input-data-location');
+        let dataLocation = dataLocationOriginal;
+        if (isCodeMirror === "typescript") {
+            dataLocation += ".ts";
+        }
+        await window.electronAPI.setValueIntoUserData(dataLocation, this.getAttribute("input-data-character-file"), value);
+        if (isCodeMirror === "typescript") {
+            const dataLocationJs = dataLocationOriginal + ".script";
+            await window.electronAPI.setValueIntoUserData(dataLocationJs, this.getAttribute("input-data-character-file"), convertTsToJs(value));
+        }
     }
 
     hasBeenModified() {
@@ -520,12 +551,40 @@ font-family: 'Cabin Sketch', sans-serif !important;
 .ͼi {
     color: rgb(135, 206, 250) !important;
 }
+    .cm-tooltip-autocomplete, .cm-tooltip {
+        background-color: rgba(0, 0, 0, 0.8) !important;
+        backdrop-filter: blur(4px) !important;
+        border: solid 1px #ccc !important;
+        font-family: 'Cabin Sketch', sans-serif !important;
+    }
+    .cm-tooltip-autocomplete ul::-webkit-scrollbar {
+  width: 12px !important;
+}
+
+.cm-tooltip-autocomplete ul::-webkit-scrollbar-track {
+  background: rgba(100, 0, 200, 0.3) !important;
+}
+
+.cm-tooltip-autocomplete ul::-webkit-scrollbar-thumb {
+  background: rgba(50, 0, 100, 0.8) !important;
+  border: 1px solid #ccc !important;
+  border-radius: 6px !important;
+}
+
+.cm-tooltip-autocomplete ul::-webkit-scrollbar-thumb:hover {
+  background: rgba(70, 0, 140, 0.9) !important;
+}
+
+* .cm-tooltip.cm-tooltip-autocomplete > ul, .cm-diagnosticText { font-family: 'Cabin Sketch', sans-serif !important; }
+
+.cm-completionIcon { display: none !important; }
+
     .cm-editor .cm-cursor, .cm-dropCursor { border-left-color: white !important; background-color: white !important; }
     .cm-specialkeyword { color: #FF6B6B !important; font-weight: bold !important; border: solid 1px #FF6B6B !important; border-radius: 0.3vh !important; }
       </style>
       <div class="overlay-input">
         <label>${label}</label>
-        <div class="${wrapperClass}">
+        <div class="${wrapperClass}" ${isCodeMirror ? 'title=""' : ''}>
             ${inputItself}
         </div>
         <div class="error-message"></div>

@@ -20,9 +20,11 @@
     "build:codemirror": "esbuild js/codemirror/build.js --bundle --outfile=js/codemirror/bundle.js"
   },
   "devDependencies": {
+    "@typescript/vfs": "^1.6.2",
     "@xiechao/codemirror-lang-handlebars": "^1.0.4",
     "codemirror": "^6.0.2",
     "electron": "^39.2.7",
-    "esbuild": "^0.27.2"
+    "esbuild": "^0.27.2",
+    "typescript": "^5.9.3"
   }
 }

@@ -602,12 +602,20 @@ export default {
             }
         },
         "advanced_pre_inference_script": {
-            "type": "string",
+            "type": "object",
+            "properties": {
+                "script": {
+                    "type": "string",
+                },
+                "ts": {
+                    "type": "string",
+                }
+            },
             "title": "Pre-Inference Script",
-            "description": "A JavaScript script that runs before each inference for this character, allowing for advanced customization of character behaviour.",
+            "description": "A TypeScript script that runs before each inference for this character, allowing for advanced customization of character behaviour.",
             "multiline": true,
-            "code_language": "javascript",
-            "placeholder": "// Javascript code here, use char, user, DE and others objects",
+            "code_language": "typescript",
+            "placeholder": "// TypeScript code here, use char, user, DE and others objects",
             "example": 
 `// Use DE, char, user and others object for accessing the game state
 // Example: Make the character tired at night
@@ -638,12 +646,20 @@ if (durationOfSleepingOrTimeSkips < 4) {
 `
         },
         "advanced_pre_bond_check_script": {
-            "type": "string",
+            "type": "object",
+            "properties": {
+                "script": {
+                    "type": "string",
+                },
+                "ts": {
+                    "type": "string",
+                }
+            },
             "title": "Pre-Bond Check Script",
-            "description": "A JavaScript script that runs before each bond check inference for this character, allowing for advanced customization of character behaviour.",
+            "description": "A TypeScript script that runs before each bond check inference for this character, allowing for advanced customization of character behaviour.",
             "multiline": true,
-            "code_language": "javascript",
-            "placeholder": "// Javascript code here, use char, user, DE and others objects",
+            "code_language": "typescript",
+            "placeholder": "// TypeScript code here, use char, user, DE and others objects",
             "example": 
 `// Use DE, char, user, others, other for accessing the game state
 // Example: Add a new rule to the bond inference step based on them being nice to user
@@ -653,12 +669,20 @@ if (oher.name !== user.name && DE.social.bondLevels[char.name]?[user.name] >= 50
 }
 `       },
         "advanced_post_inference_script": {
-            "type": "string",
+            "type": "object",
+            "properties": {
+                "script": {
+                    "type": "string",
+                },
+                "ts": {
+                    "type": "string",
+                }
+            },
             "title": "Post-Inference Script",
-            "description": "A JavaScript script that runs after each inference ends, allowing for advanced customization of character behaviour.",
+            "description": "A TypeScript script that runs after each inference ends, allowing for advanced customization of character behaviour.",
             "multiline": true,
-            "code_language": "javascript",
-            "placeholder": "// Javascript code here, use char, user, DE and others objects",
+            "code_language": "typescript",
+            "placeholder": "// TypeScript code here, use char, user, DE and others objects",
             "example": 
 `// Use DE, char, user object for accessing the game state
 // Example: Run a special inference step to give the char the master sword

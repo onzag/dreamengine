@@ -787,7 +787,7 @@ class CharacterOverlay extends HTMLElement {
             const fieldName = fieldGroup[0];
             const groupFields = fieldGroup[1];
             const fieldsHTML = groupFields.map(fieldName => {
-                if (schema.properties[fieldName].type === "string") {
+                if (schema.properties[fieldName].type === "string" || schema.properties[fieldName].code_language) {
                     if (schema.properties[fieldName].enum) {
                         // It's a select input
                         return `<app-overlay-select
