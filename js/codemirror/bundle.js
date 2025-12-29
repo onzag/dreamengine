@@ -25935,12 +25935,14 @@
       init_dist6();
       init_dist2();
       init_dist2();
+      init_dist16();
       window.EditorView = EditorView;
       window.basicSetup = basicSetup;
       window.handlebarsLanguage = handlebarsLanguage;
       window.indentWithTab = indentWithTab;
       window.keymap = keymap;
       window.placeholder = placeholder;
+      window.javascriptLanguage = javascriptLanguage;
       var SpecialKeywordWidget = class extends WidgetType {
         constructor(placeholderText) {
           super();

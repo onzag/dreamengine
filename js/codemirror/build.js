@@ -3,6 +3,7 @@ import { handlebarsLanguage } from "@xiechao/codemirror-lang-handlebars"
 import { indentWithTab } from "@codemirror/commands"
 import { EditorView, keymap, placeholder, MatchDecorator } from "@codemirror/view"
 import { Decoration, ViewPlugin, WidgetType } from "@codemirror/view";
+import { javascriptLanguage } from "@codemirror/lang-javascript";
 
 window.EditorView = EditorView;
 window.basicSetup = basicSetup;
@@ -10,6 +11,7 @@ window.handlebarsLanguage = handlebarsLanguage;
 window.indentWithTab = indentWithTab;
 window.keymap = keymap;
 window.placeholder = placeholder;
+window.javascriptLanguage = javascriptLanguage;
 
 class SpecialKeywordWidget extends WidgetType {
     constructor(placeholderText) {

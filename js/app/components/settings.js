@@ -7,23 +7,23 @@ const cancelSound = document.getElementById('cancelSound');
 const pauseSound = document.getElementById('pauseSound');
 
 function playHoverSound() {
-  hoverSound.currentTime = 0;
-  hoverSound.play().catch(err => console.log('Hover sound play failed:', err));
+    hoverSound.currentTime = 0;
+    hoverSound.play().catch(err => console.log('Hover sound play failed:', err));
 }
 
 function playConfirmSound() {
-  confirmSound.currentTime = 0;
-  confirmSound.play().catch(err => console.log('Confirm sound play failed:', err));
+    confirmSound.currentTime = 0;
+    confirmSound.play().catch(err => console.log('Confirm sound play failed:', err));
 }
 
 function playCancelSound() {
-  cancelSound.currentTime = 0;
-  cancelSound.play().catch(err => console.log('Cancel sound play failed:', err));
+    cancelSound.currentTime = 0;
+    cancelSound.play().catch(err => console.log('Cancel sound play failed:', err));
 }
 
 function playPauseSound() {
-  pauseSound.currentTime = 0;
-  pauseSound.play().catch(err => console.log('Pause sound play failed:', err));
+    pauseSound.currentTime = 0;
+    pauseSound.play().catch(err => console.log('Pause sound play failed:', err));
 }
 
 class Settings extends HTMLElement {
@@ -33,6 +33,8 @@ class Settings extends HTMLElement {
 
         this.onCancelSettings = this.onCancelSettings.bind(this);
         this.onSaveAndCloseSettings = this.onSaveAndCloseSettings.bind(this);
+
+        this.currentSectionIndex = 0;
     }
 
     connectedCallback() {
@@ -41,67 +43,20 @@ class Settings extends HTMLElement {
         playPauseSound();
         this.shadowRoot.querySelector('app-overlay').addEventListener('cancel', this.onCancelSettings);
         this.shadowRoot.querySelector('app-overlay').addEventListener('confirm', this.onSaveAndCloseSettings);
-    }
 
-    onCancelSettings() {
-        let hasUnsavedChanges = false;
-        this.shadowRoot.querySelectorAll('app-overlay-input').forEach(inputComponent => {
-            if (inputComponent.hasBeenModified()) {
-                hasUnsavedChanges = true;
-            }
+        this.renderSection()
+
+        this.shadowRoot.querySelector('app-overlay-tabs').addEventListener('tab-change', (e) => {
+            this.currentSectionIndex = e.detail.newIndex;
+            this.renderSection()
         });
-        if (!hasUnsavedChanges) {
-            this.shadowRoot.querySelectorAll('app-overlay-select').forEach(selectComponent => {
-                if (selectComponent.hasBeenModified()) {
-                    hasUnsavedChanges = true;
-                }
-            });
-        }
-
-        if (hasUnsavedChanges) {
-            const dialog = document.createElement('app-dialog');
-            dialog.setAttribute('dialog-title', 'You have unsaved changes. Are you sure you want to discard them?');
-            dialog.setAttribute("confirmation", "true");
-            dialog.setAttribute("confirm-text", "Discard");
-            dialog.setAttribute("cancel-text", "Cancel");
-            dialog.addEventListener('confirm', () => {
-                this.closeSettings();
-                playCancelSound();
-                document.body.removeChild(dialog);
-            });
-            dialog.addEventListener('cancel', () => {
-                document.body.removeChild(dialog);
-                playCancelSound();
-            });
-            document.body.appendChild(dialog);
-        } else {
-            this.closeSettings();
-            playCancelSound();
-        }
     }
 
-    async onSaveAndCloseSettings() {
-        this.closeSettings();
-        playConfirmSound();
+    renderSection() {
+        const tabsContainer = this.shadowRoot.querySelector('app-overlay-tabs');
 
-        await Promise.all(Array.from(this.shadowRoot.querySelectorAll('app-overlay-input')).map(inputComponent => 
-            inputComponent.saveValueToUserData()
-        ));
-
-        await Promise.all(Array.from(this.shadowRoot.querySelectorAll('app-overlay-select')).map(selectComponent => {
-            return selectComponent.saveValueToUserData();
-        }));
-
-        window.electronAPI.saveSettingsToDisk();
-    }
-
-    closeSettings() {
-        this.dispatchEvent(new CustomEvent('close'));
-    }
-
-    render() {
-        this.shadowRoot.innerHTML = `<app-overlay overlay-title="Settings" cancel-text="Cancel" confirm-text="Save & Close">
-            <app-overlay-section section-title="User">
+        if (this.currentSectionIndex === 0) {
+            tabsContainer.innerHTML = `<app-overlay-section section-title="User">
                 <app-overlay-input-warning>Changing any of these options will not affect previous game campaigns, only new ones.</app-overlay-input-warning>
                 <app-overlay-input
                     label="Username"
@@ -164,7 +119,72 @@ class Settings extends HTMLElement {
                     title="This is the file path to your external image editor application, used to edit images generated by the AI."
                     input-data-location="externalApps.imageEditorPath"
                 ></app-overlay-input>
-            </app-overlay-section>
+            </app-overlay-section>`;
+        } else if (this.currentSectionIndex === 1) {
+            tabsContainer.innerHTML = ""
+        };
+    }
+
+    onCancelSettings() {
+        let hasUnsavedChanges = false;
+        this.shadowRoot.querySelectorAll('app-overlay-input').forEach(inputComponent => {
+            if (inputComponent.hasBeenModified()) {
+                hasUnsavedChanges = true;
+            }
+        });
+        if (!hasUnsavedChanges) {
+            this.shadowRoot.querySelectorAll('app-overlay-select').forEach(selectComponent => {
+                if (selectComponent.hasBeenModified()) {
+                    hasUnsavedChanges = true;
+                }
+            });
+        }
+
+        if (hasUnsavedChanges) {
+            const dialog = document.createElement('app-dialog');
+            dialog.setAttribute('dialog-title', 'You have unsaved changes. Are you sure you want to discard them?');
+            dialog.setAttribute("confirmation", "true");
+            dialog.setAttribute("confirm-text", "Discard");
+            dialog.setAttribute("cancel-text", "Cancel");
+            dialog.addEventListener('confirm', () => {
+                this.closeSettings();
+                playCancelSound();
+                document.body.removeChild(dialog);
+            });
+            dialog.addEventListener('cancel', () => {
+                document.body.removeChild(dialog);
+                playCancelSound();
+            });
+            document.body.appendChild(dialog);
+        } else {
+            this.closeSettings();
+            playCancelSound();
+        }
+    }
+
+    async onSaveAndCloseSettings() {
+        this.closeSettings();
+        playConfirmSound();
+
+        await Promise.all(Array.from(this.shadowRoot.querySelectorAll('app-overlay-input')).map(inputComponent =>
+            inputComponent.saveValueToUserData()
+        ));
+
+        await Promise.all(Array.from(this.shadowRoot.querySelectorAll('app-overlay-select')).map(selectComponent => {
+            return selectComponent.saveValueToUserData();
+        }));
+
+        window.electronAPI.saveSettingsToDisk();
+    }
+
+    closeSettings() {
+        this.dispatchEvent(new CustomEvent('close'));
+    }
+
+    render() {
+        this.shadowRoot.innerHTML = `<app-overlay overlay-title="Settings" cancel-text="Cancel" confirm-text="Save & Close">
+            <app-overlay-tabs current="${this.currentSectionIndex}" sections='["General", "Advanced AI Inference"]'>              
+            </app-overlay-tabs>
         </app-overlay>`;
     }
 }

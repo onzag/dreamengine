@@ -45,7 +45,8 @@ export default {
             "maxLength": 1000,
             "minLength": 50,
             "placeholder": "You are {{char}} a brave and adventurous explorer, always seeking new challenges and experiences.\n\nYou have a strong sense of justice and are willing to help those in need.",
-            "multiline": true
+            "multiline": true,
+            "code_language": "handlebars"
         },
         "short": {
             "type": "string",
@@ -474,9 +475,27 @@ export default {
                         },
                         "minItems": 1
                     },
+                    "bond_increase_conditions": {
+                        "type": "array",
+                        "description": "Conditions for increasing the bond level when this bond is active.",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "increase_if": {
+                                    "type": "string",
+                                    "description": "The ensure rule to add into the prompt to increase the bond level, always starts as if, eg. {{other}} and {{char}} share a deep emotional connection"
+                                },
+                                "decrease_if": {
+                                    "type": "string",
+                                    "description": "The ensure rule to add into the prompt to increase the bond level, always starts as if, eg. {{other}} and {{char}} share a deep emotional connection"
+                                }
+                            }
+                        },
+                        "minItems": 1
+                    },
                     "2nd_bond_increase_questions": {
                         "type": "array",
-                        "description": "Rules for increasing the second bond level when this bond is active.",
+                        "description": "Yes/No questions for increasing the second bond level when this bond is active.",
                         "items": {
                             "type": "object",
                             "properties": {
@@ -581,6 +600,92 @@ export default {
                     "name"
                 ]
             }
+        },
+        "advanced_pre_inference_script": {
+            "type": "string",
+            "title": "Pre-Inference Script",
+            "description": "A JavaScript script that runs before each inference for this character, allowing for advanced customization of character behaviour.",
+            "multiline": true,
+            "code_language": "javascript",
+            "placeholder": "// Javascript code here, use char, user, DE and others objects",
+            "example": 
+`// Use DE, char, user and others object for accessing the game state
+// Example: Make the character tired at night
+const charStates = DE.stateFor[char.name].states;
+if (DE.time.hourOfDay >= 20 || DE.time.hourOfDay < 6) {
+    charStates['TIRED'] = { intensity: charStates['TIRED'].intensity + 2 };
+    if (charStates['TIRED'].intensity > 4) {
+        charStates['TIRED'].intensity = 4;
+    }
+}
+const prevDay = DE.time.prevDay;
+const historyOfCharacter = DE.stateFor[char.name].history.filter(entry => entry.day === prevDay);
+const durationOfSleepingOrTimeSkips = historyOfCharacter.reduce((total, entry) => {
+    if (entry.type === "TIME_SKIP" || (entry.type === "STATE_INFO" && entry.states.include("SLEEPING"))) {
+        return total + entry.durationHours;
+    }
+    return total;
+});
+if (durationOfSleepingOrTimeSkips < 4) {
+    const charStates = DE.stateFor[char.name].states;
+    charStates['TIRED'] = { intensity: 4 };
+    charStates['SLEEP_DEPRIVED'] = { intensity: charStates['SLEEP_DEPRIVED'].intensity + 1 };
+    if (charStates['SLEEP_DEPRIVED'].intensity === 4) {
+        charStates['SLEEPING'] = { intensity: 4 };
+        char.stateMessages["SLEEPING"].push(char.name + " is so sleep deprived that they immediately fall asleep.");
+    }
+}
+`
+        },
+        "advanced_pre_bond_check_script": {
+            "type": "string",
+            "title": "Pre-Bond Check Script",
+            "description": "A JavaScript script that runs before each bond check inference for this character, allowing for advanced customization of character behaviour.",
+            "multiline": true,
+            "code_language": "javascript",
+            "placeholder": "// Javascript code here, use char, user, DE and others objects",
+            "example": 
+`// Use DE, char, user, others, other for accessing the game state
+// Example: Add a new rule to the bond inference step based on them being nice to user
+if (oher.name !== user.name && DE.social.bondLevels[char.name]?[user.name] >= 50) {
+    DE.currentBondInference.bond_increase_conditions.increase_if.push(other.name + " was very nice to " + user.name);
+    DE.currentBondInference.bond_increase_conditions.decrease_if.push(other.name + " was rude to " + user.name);
+}
+`       },
+        "advanced_post_inference_script": {
+            "type": "string",
+            "title": "Post-Inference Script",
+            "description": "A JavaScript script that runs after each inference ends, allowing for advanced customization of character behaviour.",
+            "multiline": true,
+            "code_language": "javascript",
+            "placeholder": "// Javascript code here, use char, user, DE and others objects",
+            "example": 
+`// Use DE, char, user object for accessing the game state
+// Example: Run a special inference step to give the char the master sword
+// this would be better as a advanced_post_inference_script_per_character in the world schema
+// but for the sake of the example we put it here
+const result = await DE.run_inference_on_last_inference({
+    user_query: "Has " + char.name + " obtained the Master Sword yet? Respond with a simple YES or NO.",
+    system: "You are an assistant that determines if " + char.name + " has obtained the Master Sword in their adventure. Respond with a simple 'YES' or 'NO'.",
+    paragraphs: 1,
+    max_tokens: 10,
+});
+if (result.trim().toUpperCase().includes("YES")) {
+    // give the character the master sword state
+    DE.social.references[char.name].general += "\n\nAs {{char}} you are the holder of Master Sword, a legendary weapon of great power.";
+    DE.social.references[char.name].states["HOLDING_THE_MASTER_SWORD"] = {
+        describes_action: true,
+        general_description: "{{char}} is holding the Master Sword, a legendary weapon of great power.",
+        automatic_trigger: false,
+        automatic_reliever: false,
+        decay_rate_per_inference: 0,
+        permanent: true,
+    };
+    DE.stateFor[char.name].states["HOLDING_THE_MASTER_SWORD"] = { intensity: 4 };
+    // prevent any other character from taking it away
+    DE.world.reference.rules.push("The Master Sword cannot be removed from " + char.name + " under any circumstances.");
+}
+`
         }
     },
     "required": [

@@ -12,6 +12,7 @@ const indentWithTab = window.indentWithTab;
 const keymap = window.keymap;
 const placeholder = window.placeholder;
 const getMatchDecorator = window.getMatchDecorator;
+const javascriptLanguage = window.javascriptLanguage;
 
 const usedMatchDecorator = getMatchDecorator(ALL_VARIABLES_FNS);
 
@@ -287,7 +288,7 @@ class OverlayInput extends HTMLElement {
 
         const isNumber = this.getAttribute('input-type') === 'number';
         const isPercentage = this.getAttribute('input-is-percentage') === 'true';
-        const isCodeMirror = this.getAttribute("input-is-codemirror") === "true" && this.getAttribute('multiline') === 'true';
+        const isCodeMirror = this.getAttribute('multiline') === 'true' && this.getAttribute("input-is-codemirror");
 
         if (!isCodeMirror) {
             if (this.getAttribute("input-default-value")) {
@@ -320,18 +321,25 @@ class OverlayInput extends HTMLElement {
                 });
             }
         } else {
+            const extensions = [basicSetup, keymap.of(indentWithTab), null, placeholder(this.getAttribute("input-placeholder")), EditorView.lineWrapping]
+            if (isCodeMirror === "handlebars") {
+                extensions[2] = handlebarsLanguage;
+                extensions.push(usedMatchDecorator)
+            } else if (isCodeMirror === "javascript") {
+                extensions[2] = javascriptLanguage;
+            }
             if (this.getAttribute("input-default-value")) {
                 this.editor = new EditorView({
                     lineWrapping: true,
                     doc: this.getAttribute("input-default-value"),
-                    extensions: [basicSetup, keymap.of(indentWithTab), handlebarsLanguage, placeholder(this.getAttribute("input-placeholder")), EditorView.lineWrapping, usedMatchDecorator],
+                    extensions,
                     parent: this.shadowRoot.querySelector('.codemirror-wrapper'),
                 });
                 this.originalValue = this.getAttribute("input-default-value");
             } else {
                 this.editor = new EditorView({
                     lineWrapping: true,
-                    extensions: [basicSetup, keymap.of(indentWithTab), handlebarsLanguage, placeholder(this.getAttribute("input-placeholder")), EditorView.lineWrapping, usedMatchDecorator],
+                    extensions,
                     parent: this.shadowRoot.querySelector('.codemirror-wrapper'),
                 });
             }
@@ -394,7 +402,7 @@ class OverlayInput extends HTMLElement {
             wrapperClass += " textarea-wrapper";
         }
         let isCodeMirror = false;
-        if (this.getAttribute("input-is-codemirror") === "true" && multiline) {
+        if (this.getAttribute("input-is-codemirror") && multiline) {
             wrapperClass += " codemirror-wrapper";
             isCodeMirror = true;
         }
@@ -748,3 +756,50 @@ class OverlayTabs extends HTMLElement {
 }
 
 customElements.define('app-overlay-tabs', OverlayTabs);
+
+class OverlayButton extends HTMLElement {
+    constructor() {
+        super();
+        this.attachShadow({ mode: 'open' });
+
+        this.onButtonClick = this.onButtonClick.bind(this);
+    }
+
+    connectedCallback() {
+        this.render();
+
+        this.shadowRoot.querySelector('div').addEventListener('click', this.onButtonClick);
+        this.shadowRoot.querySelector('div').addEventListener('mouseenter', playHoverSound);
+    }
+
+    onButtonClick() {
+        this.dispatchEvent(new CustomEvent('button-click'));
+        playConfirmSound();
+    }
+
+    render() {
+        this.shadowRoot.innerHTML = `
+      <style>
+        .overlay-button {
+            padding: 2vh 4vh;
+            font-size: 3vh;
+            cursor: pointer;
+            border: solid 2px #ccc;
+            border-radius: 0.5vh;
+            background-color: rgba(255,255,255, 0.1);
+            text-align: center;
+            user-select: none;
+            display: inline-block;
+        }
+        .overlay-button:hover {
+            color: #FF6B6B;
+        }
+      </style>
+      <div class="overlay-button">
+        <slot></slot>
+      </div>
+    `;
+    }
+}
+
+customElements.define('app-overlay-button', OverlayButton);

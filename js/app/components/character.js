@@ -1,5 +1,5 @@
 import schema from '../schema/character.js';
-import { character, party, world, utils, specials } from '../schema/variables.js';
+import { character, social, world, utils, specials } from '../schema/variables.js';
 
 function escapeHTML(str) {
     if (typeof str === "undefined" || str === null) {
@@ -90,9 +90,9 @@ const BASIC_STATES = (child, non_sapient_animal, extra_sfw, extra_nsfw) => ({
     } : null,
     "Protective": child ? null : {
         "general_description":
-            `{{#with (get_present_party 0 100 0 100) as |party|}}
-    {{#if (gt (length party) 0)}}
-        {{char}} feels a strong urge to safeguard and defend {{format_and party}} from harm
+            `{{#with (get_present_social_group 0 100 0 100) as |social_group|}}
+    {{#if (gt (length social_group) 0)}}
+        {{char}} feels a strong urge to safeguard and defend {{format_and social_group}} from harm
     {{#else}}
         {{char}} feels protective but has none worth protecting currently
     {{/if}}
@@ -104,8 +104,8 @@ const BASIC_STATES = (child, non_sapient_animal, extra_sfw, extra_nsfw) => ({
     "Caring": child ? null :{
         "general_description": 
 `{{char}} shows kindness and concern towards
-{{#with (get_all_character_state_causants "Caring") as |cared_party|}}
-{{#if (gt (length cared_party) 0)}}{{format_and cared_party}}{{else}}others{{/if}}{{/with}}`,
+{{#with (get_all_character_state_causants "Caring") as |cared_social_group|}}
+{{#if (gt (length cared_social_group) 0)}}{{format_and cared_social_group}}{{else}}others{{/if}}{{/with}}`,
         "automatic_trigger": true,
         "automatic_reliever": true,
         "decay_rate_per_inference": 1,
@@ -113,9 +113,9 @@ const BASIC_STATES = (child, non_sapient_animal, extra_sfw, extra_nsfw) => ({
     "Scared": {
         "general_description":
             `{{char}} feels fear or anxiety about potential threats or dangers
-{{#with (get_all_character_state_causants "Scared") as |negative_party|}}
-    {{#if (gt (length negative_party) 0)}}
-        , especially from {{format_or negative_party}}
+{{#with (get_all_character_state_causants "Scared") as |negative_social_group|}}
+    {{#if (gt (length negative_social_group) 0)}}
+        , especially from {{format_or negative_social_group}}
     {{/if}}
 {{/with}}`,
         "automatic_trigger": true,
@@ -145,11 +145,11 @@ const BASIC_STATES = (child, non_sapient_animal, extra_sfw, extra_nsfw) => ({
             non_sapient_animal ? 
             `{{char}} feels a heightened sexual drive and instinctual urge to mate, driven by primal instincts rather than complex emotions {{char_pronoun}} may become aggressive towards others` :
             `{{char}} feels a heightened sense of sexual desire
-{{#with (get_present_party 0 100 25 100) as |attractive_party|}}
-    {{#if (gt (length attractive_party) 0)}} towards {{format_and attractive_party}}
-        {{#with (get_difference_of_present_party attractive_party) as |unattractive_party|}}
-            {{#if (gt (length unattractive_party) 0)}}
-                {{char}} will not accept any sexual advances from {{format_or unattractive_party}}
+{{#with (get_present_social_group 0 100 25 100) as |attractive_social_group|}}
+    {{#if (gt (length attractive_social_group) 0)}} towards {{format_and attractive_social_group}}
+        {{#with (get_difference_of_present_social_group attractive_social_group) as |unattractive_social_group|}}
+            {{#if (gt (length unattractive_social_group) 0)}}
+                {{char}} will not accept any sexual advances from {{format_or unattractive_social_group}}
             {{/if}}
         {{/with}}
     {{#else}}
@@ -175,9 +175,9 @@ const BASIC_STATES = (child, non_sapient_animal, extra_sfw, extra_nsfw) => ({
     "Loving": child ? null :{
         "general_description":
             `{{char}} feels love and care
-{{{#with (get_present_party 25 100 15 100) as |loved_party|}}
-    {{#if (gt (length loved_party) 0)}}
-        towards {{format_and loved_party}}; {{char}} will not show or take affection from anyone else and react negatively
+{{{#with (get_present_social_group 25 100 15 100) as |loved_social_group|}}
+    {{#if (gt (length loved_social_group) 0)}}
+        towards {{format_and loved_social_group}}; {{char}} will not show or take affection from anyone else and react negatively
     {{#else}}
         , but none {{char_pronoun}} cares about is currently available for {{char_object_pronoun}};
         {{char}} will not accept affection from anyone
@@ -192,9 +192,9 @@ const BASIC_STATES = (child, non_sapient_animal, extra_sfw, extra_nsfw) => ({
         "general_description":
         child ? "{{char}} has a strong desire for affection and closeness from their caregiver or trusted adult to feel safe and secure, {{char_pronoun}} will not receive affection from anyone else and react negatively" :
             `{{char}} has a strong desire for affection and closeness
-{{{#with (get_present_party 25 100 15 100) as |loved_party|}}
-    {{#if (gt (length loved_party) 0)}}
-        from {{format_and loved_party}}; {{char}} will not receive affection from anyone else and react negatively
+{{{#with (get_present_social_group 25 100 15 100) as |loved_social_group|}}
+    {{#if (gt (length loved_social_group) 0)}}
+        from {{format_and loved_social_group}}; {{char}} will not receive affection from anyone else and react negatively
     {{#else}}
         , but none {{char_pronoun}} cares about is currently available for {{char_object_pronoun}};
         {{char}} will not accept affection from anyone
@@ -220,9 +220,9 @@ const BASIC_STATES = (child, non_sapient_animal, extra_sfw, extra_nsfw) => ({
     "Angry": {
         "general_description": `
 {{char}} feels strong displeasure or hostility
-{{#with (get_all_character_state_causants "Angry") as |angry_party|}}
-    {{#if (gt (length angry_party) 0)}}
-        towards {{format_and angry_party}} because
+{{#with (get_all_character_state_causants "Angry") as |angry_social_group|}}
+    {{#if (gt (length angry_social_group) 0)}}
+        towards {{format_and angry_social_group}} because
     {{else}}
     {{get_state_cause "Angry")}}
 {{/with}}`,
@@ -236,7 +236,7 @@ const BASIC_STATES = (child, non_sapient_animal, extra_sfw, extra_nsfw) => ({
     "Berserk": non_sapient_animal ? {
         "general_description":
 `{{char}} is in a frenzied and uncontrollable state, driven by primal instincts rather than rational thought, {{char_pronoun}} may lash out aggressively at anything perceived as a threat
-{{#with (get_present_party 10 100 0 100) as |friends|}}
+{{#with (get_present_social_group 10 100 0 100) as |friends|}}
     {{#if (gt (length friends) 0)}}
         {{char}} can be calmed down by {{format_and friends}} or aggressively subdued if necessary
     {{/else}}
@@ -247,7 +247,7 @@ const BASIC_STATES = (child, non_sapient_animal, extra_sfw, extra_nsfw) => ({
         "automatic_reliever": false,
         "manual_relievers": [
             "{{char}} has been subdued",
-            `{{#with (get_present_party 0 100 0 100)}}
+            `{{#with (get_present_social_group 0 100 0 100)}}
     {{#if (gt (length this) 0)}}
         {{char}} has been calmed down by {{format_and this}}
     {{/if}}
@@ -275,11 +275,11 @@ const BASIC_STATES = (child, non_sapient_animal, extra_sfw, extra_nsfw) => ({
     "Sexually Frustrated": extra_nsfw && !extra_sfw && !child && !non_sapient_animal ? {
         "general_description": 
 `{{char}} feels a strong sense of sexual frustration due to unmet desires as
-{{#with (get_present_party 0 100 25 100) as |attractive_party|}}
-    {{#if (gt (length attractive_party) 0)}} towards {{format_and attractive_party}}
-        {{#with (get_difference_of_present_party attractive_party) as |unattractive_party|}}
-            {{#if (gt (length unattractive_party) 0)}}
-                ; {{char}} will not accept any sexual advances from {{format_or unattractive_party}}
+{{#with (get_present_social_group 0 100 25 100) as |attractive_social_group|}}
+    {{#if (gt (length attractive_social_group) 0)}} towards {{format_and attractive_social_group}}
+        {{#with (get_difference_of_present_social_group attractive_social_group) as |unattractive_social_group|}}
+            {{#if (gt (length unattractive_social_group) 0)}}
+                ; {{char}} will not accept any sexual advances from {{format_or unattractive_social_group}}
             {{/if}}
         {{/with}}
     {{#else}}
@@ -339,9 +339,9 @@ const BASIC_STATES = (child, non_sapient_animal, extra_sfw, extra_nsfw) => ({
         "decay_rate_after_relief": 1,
         "relieving_description":
 `{{char}} has finished experiencing an orgasm
-{{#with (get_all_character_state_causants "Having an Orgasm") as |orgasm_party|}}
-    {{#if (gt (length orgasm_party) 0)}}
-        and will request cuddles and affection with {{format_and orgasm_party}}
+{{#with (get_all_character_state_causants "Having an Orgasm") as |orgasm_social_group|}}
+    {{#if (gt (length orgasm_social_group) 0)}}
+        and will request cuddles and affection with {{format_and orgasm_social_group}}
     {{/if}}
 {{/with}}`,
     } : null,
@@ -350,9 +350,9 @@ const BASIC_STATES = (child, non_sapient_animal, extra_sfw, extra_nsfw) => ({
     "Injured": {
         "general_description":
 `{{char}} is hurt or wounded, which may affect their physical abilities and overall well-being
-{{#with (get_all_character_state_causants "Injured") as |injury_party|}}
-    {{#if (gt (length injury_party) 0)}}
-        , {{char}} will retaliate against {{format_and injury_party}} if given the chance
+{{#with (get_all_character_state_causants "Injured") as |injury_social_group|}}
+    {{#if (gt (length injury_social_group) 0)}}
+        , {{char}} will retaliate against {{format_and injury_social_group}} if given the chance
     {{/if}}
 {{/with}}`,
         "automatic_trigger": false,
@@ -516,9 +516,9 @@ const CHARACTER_PRESETS = (extra_sfw, extra_nsfw) => ([
 Include information about their height, build, hair color, eye color, and any distinguishing features.
 Mention their typical clothing style and accessories.))
 
-{{{#with (get_present_party 25 100 25 100) as |loved_party|}}
-    {{#if (gt (length loved_party) 0)}}
-        {{char}} is currently in a relationship with {{format_and loved_party}}, and {{char_pronoun}} shows visible signs of affection and attachment towards {{format_object_pronoun loved_party}}, they will not accept sexual or romantic advances from anyone else.
+{{{#with (get_present_social_group 25 100 25 100) as |loved_social_group|}}
+    {{#if (gt (length loved_social_group) 0)}}
+        {{char}} is currently in a relationship with {{format_and loved_social_group}}, and {{char_pronoun}} shows visible signs of affection and attachment towards {{format_object_pronoun loved_social_group}}, they will not accept sexual or romantic advances from anyone else.
     {{/if}}
 {{/with}}`,
             "states": BASIC_STATES(false, false, extra_sfw, extra_nsfw),
@@ -535,9 +535,9 @@ Include information about their behavior))
 
 {{char}} possesses human-like intelligence but does not speak, ensure to only use asterisks "*" to denote actions and sounds they make.
 
-{{#with (get_present_party 25 100 25 100) as |loved_party|}}
-    {{#if (gt (length loved_party) 0)}}
-        {{char}} is currently in a relationship with {{format_and loved_party}}, and {{char_pronoun}} shows visible signs of affection and attachment towards {{format_object_pronoun loved_party}}, they will not accept sexual or romantic advances from anyone else.
+{{#with (get_present_social_group 25 100 25 100) as |loved_social_group|}}
+    {{#if (gt (length loved_social_group) 0)}}
+        {{char}} is currently in a relationship with {{format_and loved_social_group}}, and {{char_pronoun}} shows visible signs of affection and attachment towards {{format_object_pronoun loved_social_group}}, they will not accept sexual or romantic advances from anyone else.
     {{/if}}
 {{/with}}`,
             "states": BASIC_STATES(false, false, extra_sfw, extra_nsfw),
@@ -622,9 +622,23 @@ const WIZARD_SECTIONS = [
         fields: []
     },
     {
-        title: "Misc",
-        fields: []
+        title: "Advanced",
+        fields: [
+            [
+                "Scripting and Customization",
+                [
+                    "advanced_pre_inference_script",
+                    "advanced_pre_bond_check_script",
+                    "advanced_post_inference_script",
+                ]
+            ]
+        ]
     },
+    {
+        title: "Test",
+        fields: [],
+        testing: true,
+    }
 ]
 
 // Sound effects
@@ -693,13 +707,13 @@ class CharacterOverlay extends HTMLElement {
                     ${character.map(varInfo => `<tr title=${JSON.stringify(escapeHTML(varInfo[2]))}><td>${varInfo[0]}</td><td>${escapeHTML(varInfo[1])}</td></tr>`).join('')}
                 </tbody>
                 </table>
-                <h3>Party Variables</h3>
+                <h3>Social Group Variables</h3>
                 <table>
                     <thead>
                     <tr><th>Variable</th><th>Description</th></tr>
                     </thead>
                     <tbody>
-                    ${party.map(varInfo => `<tr title=${JSON.stringify(escapeHTML(varInfo[2]))}><td>${varInfo[0]}</td><td>${escapeHTML(varInfo[1])}</td></tr>`).join('')}
+                    ${social.map(varInfo => `<tr title=${JSON.stringify(escapeHTML(varInfo[2]))}><td>${varInfo[0]}</td><td>${escapeHTML(varInfo[1])}</td></tr>`).join('')}
                 </tbody>
                 </table>
                 <h3>World Variables</h3>
@@ -748,8 +762,26 @@ class CharacterOverlay extends HTMLElement {
         });
     }
 
+    buildTestingSection() {
+        this.shadowRoot.querySelector('app-overlay-tabs').innerHTML = `
+            <app-overlay-section section-title="Singular Testing Environment">
+                You will be placed with your character in a temporary chat session in the Lunar Module world; you and your character are alone in this world, and can interact freely to test how your character behaves based on the settings you have configured so far.
+                <br><br>
+                The Lunar Module world is a simple enclosed environment that has no world rules, so you can focus on interacting with your character without any distractions.
+                <br><br>
+                <div>
+                    <app-overlay-button id="startTestingButton">Start Testing Session</app-overlay-button>
+                </div>
+            </app-overlay-section>
+        `;
+    }
+
     buildChildrenMap() {
         const sectionToDisplay = WIZARD_SECTIONS[this.currentSectionIndex];
+        if (sectionToDisplay.testing) {
+            this.buildTestingSection();
+            return;
+        }
         const fields = sectionToDisplay.fields;
         const fieldsAsHTML = fields.map(fieldGroup => {
             const fieldName = fieldGroup[0];
@@ -779,7 +811,7 @@ class CharacterOverlay extends HTMLElement {
                                     input-data-character-file="${this.currentCharacterFile}"
                                     input-placeholder="${escapeHTML(schema.properties[fieldName].placeholder || '')}"
                                     input-default-value="${escapeHTML(schema.properties[fieldName].default || '')}"
-                                    ${isMultiline ? 'multiline="true" input-is-codemirror="true"' : ''}
+                                    ${isMultiline ? 'multiline="true" input-is-codemirror="' + (schema.properties[fieldName].code_language || "handlebars") + '"' : ''}
                                 >
                                 </app-overlay-input>`;
                     }
