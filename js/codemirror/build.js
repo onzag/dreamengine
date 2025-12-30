@@ -70,7 +70,7 @@ function tsErrorLinter() {
         .concat(window.TVSFS_ENV.languageService.getSyntacticDiagnostics('index.ts'))
 
         // remove await errors at top level
-        .filter((c) => c.code !== 1378 && c.code !== 1375);
+        .filter((c) => c.code !== 1378 && c.code !== 1375 && c.code !== 1108);
     return tsErrors.map((tsError) => ({
         from: tsError.start,
         to: tsError.start + tsError.length,
@@ -122,7 +122,7 @@ function tsComplete(ctx) {
             completion.name.startsWith(lastWord)
         );
     } else {
-        if (lastChar && ['(', '{', "=", ":"].includes(lastChar)) {
+        if (lastChar && ['(', '{', "=", ":", ")", "]", "}"].includes(lastChar)) {
             tsCompletions.entries = [];
         } else if (lastCharIndex > 0 && isAlpha(lastChar)) {
             // let's try to find a potential keyword before this last char

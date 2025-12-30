@@ -97,31 +97,48 @@ export const social = [
         "char_social_group",
         "The list of social group members (characters wtih a bond with, positive or negative)",
         "eg. [Arya, Thalon, Mira]",
-        (user, character, social) => social.groupForChar[character.name].members.map(member => member.name),
+        (user, character, DE) => DE.social.bonds[character.name].active.map(bond => bond.towards),
     ],
     [
         "char_social_group_present_members",
         "The list of present social group members (present characters the character has a bond with, positive or negative)",
         "eg. [Arya, Thalon]",
-        (user, character, social) => social.groupForChar[character.name].members.filter(member => member.isPresent).map(member => member.name),
+        (user, character, DE) => {
+            const socialGroup = DE.social.bonds[character.name].active.map(bond => bond.towards);
+            const currentLocation = DE.world.currentLocation.name;
+            return socialGroup.filter(memberName => {
+                const stateOfChar = DE.stateFor[memberName];
+                const locationOfChar = stateOfChar.location.current;
+                return locationOfChar === currentLocation;
+            });
+        }
     ],
     [
         "user_social_group_ex_members",
         "The list of ex-social group members",
         "eg. [Dorian]",
-        (user, character, social) => social.groupForChar[user.name].exMembers.map(member => member.name),
+        (user, character, DE) => DE.social.bonds[character.name].exMembers.map(member => member.name),
     ],
     [
-        "non_social_group_members_at_location",
-        "The list of non-social group members available in the current location of the world",
+        "all_characters_at_location location_name",
+        "The list of all characters available in the current location of the world, including the user",
         "eg. [Luna, Kiro]",
-        (user, character, social) => social.nonMembersAtLocation.map(member => member.name),
+        (user, character, DE, location_name) => {
+            const allMembersAtLocation = [];
+            for (const member of Object.keys(DE.stateFor)) {
+                const locationOfChar = DE.stateFor[member].location.current;
+                if (locationOfChar === location_name) {
+                    allMembersAtLocation.push(member);
+                }
+            }
+            return allMembersAtLocation;
+        }
     ],
     [
-        "non_social_group_members_at_world",
-        "The list of all characters available in the world, including the social group itself",
+        "all_world_characters",
+        "The list of all characters available in the world, including the user",
         "eg. [Arya, Thalon, Mira, Dorian, Luna, Kiro]",
-        (user, character, social) => social.everyone.map(member => member.name),
+        (user, character, DE) => Object.keys(DE.stateFor),
     ]
 ];
 
@@ -131,23 +148,39 @@ export const world = [
         "current_location",
         "The name of the current location",
         "eg. Eldoria, Shadowfen",
-        (user, character, social, world) => world.currentLocation.name,
+        (user, character, DE) => DE.world.currentLocation.name,
     ],
     [
-        "location_is_in_vehicle",
+        "current_location_is_in_vehicle",
         "Boolean indicating if the social group is currently in a vehicle",
         "true or false",
-        (user, character, social, world) => world.currentLocation.isVehicle,
+        (user, character, DE) => DE.world.currentLocation.isVehicle,
     ],
     [
-        "location_is_safe",
+        "current_location_is_safe",
         "Boolean indicating if the current location is a safe location",
         "true or false",
-        (user, character, social, world) => world.currentLocation.isSafe,
+        (user, character, DE) => DE.world.currentLocation.isSafe,
+    ],
+    [
+        "location_is_vehicle location_name",
+        "Boolean indicating if the provided location is a vehicle",
+        "true or false",
+        (user, character, DE, location_name) => {
+            return DE.world.locations.find(loc => loc.name === location_name)?.isVehicle || false;
+        }
+    ],
+    [
+        "location_is_safe location_name",
+        "Boolean indicating if the provided location is a safe location",
+        "true or false",
+        (user, character, DE, location_name) => {
+            return DE.world.locations.find(loc => loc.name === location_name)?.isSafe || false;
+        }
     ]
 ];
 
-function getPronounHelper(user, character, social, world, listOrCharacter, they, he, she, they_singular) {
+function getPronounHelper(user, character, DE, listOrCharacter, they, he, she, they_singular) {
     let nameOne = listOrCharacter;
     if (Array.isArray(listOrCharacter)) {
         if (listOrCharacter.length === 0) {
@@ -160,7 +193,7 @@ function getPronounHelper(user, character, social, world, listOrCharacter, they,
     }
     for (const member of social.everyone) {
         if (member.name == nameOne) {
-            const gender = social.references[member.name].gender.toLowerCase();
+            const gender = references[member.name].gender.toLowerCase();
             if (gender === "male") {
                 return he;
             } else if (gender === "female") {
@@ -176,10 +209,16 @@ function getPronounHelper(user, character, social, world, listOrCharacter, they,
 export const specials = [
     [
         "potential_causant",
-        "Only available at causant_negative_prompt and causant_positive_prompt, the name of the potential causant for a possible state",
+        "Only available at potential_causant_negative_prompt and potential_causant_positive_prompt, the name of the potential causant for a possible state activation, basically all the present characters",
         "eg. Aria, Thalon, Mira",
-        (user, character, social, world, potentialCausant) => potentialCausant,
+        (user, character, DE, potentialCausant) => potentialCausant,
     ],
+    [
+        "other",
+        "Only available at bonds and relationships, the name of the other character in the bond or relationship",
+        "eg. Aria, Thalon, Mira",
+        (user, character, DE, otherCharacter) => otherCharacter,
+    ]
 ]
 
 function formatAnd(list) {
@@ -190,111 +229,108 @@ function formatAnd(list) {
             return `${list.slice(0, -1).join(', ')}, and ${list[list.length - 1]}`;
 }
 
+function getCausantsHelper(user, character, DE, stateName) {
+    const actualStateName = stateName.trim().toUpperCase().replace(/\s+/, "_");
+            const characterHistory = DE.stateFor[character.name].history;
+            const lastEntryWithActivation = null;
+            // loop in reverse to find the last activation of the state
+            for (let i = characterHistory.length - 1; i >= 0; i--) {
+                const entry = characterHistory[i];
+                if (entry.type === "INTERACTING" && entry.states.includes(actualStateName)) {
+                    lastEntryWithActivation = entry;
+                    break;
+                }
+            }
+            if (!lastEntryWithActivation) {
+                return [];
+            }
+            const stateCausants = lastEntryWithActivation.stateCausants[actualStateName];
+            if (stateCausants === null) {
+                console.warn(`State ${actualStateName} does not track causants for character ${character.name}`);
+                return [];
+            }
+}
+
 export const utils = [
     [
-        "get_last_state_causant state_name",
-        "The name of the character/user/object that activated the state, it could also be an unspecified non-character or object",
-        "eg. Aria, Thalon, Player",
-        (user, character, social, world, stateName) => {
-            const actualStateName = stateName.trim().toUpperCase().replace(/\s+/, "_");
-            const characterInfo = social.everyone.find(member => member.name === character.name);
-            if (!characterInfo || !characterInfo.stateHistory[actualStateName] || characterInfo.stateHistory[actualStateName].length === 0) {
-                return "";
-            }
-            const activators = characterInfo.currentStates[actualStateName].activatedBy;
-            return activators[activators.length - 1] || "";
+        "get_last_state_causants state_name",
+        "The name of the characters/users/objects that activated the state last, it is available everywhere but it needs track_causants enabled for the state to work",
+        "eg. [\"Aria\", \"Thalon\", \"Player\", \"The Ancient Sword\"]",
+        (user, character, DE, stateName) => {
+            return getCausantsHelper(user, character, DE, stateName).map(causant => causant.name);
         },
     ],
     [
-        "get_all_state_causants state_name",
-        "The name of all characters/users that activated the state, it could also be unspecified non-characters or objects",
-        "eg. [Aria, Thalon, Random Spooky Book]",
-        (user, character, social, world, stateName) => {
-            const actualStateName = stateName.trim().toUpperCase().replace(/\s+/, "_");
-            const characterInfo = social.everyone.find(member => member.name === character.name);
-            if (!characterInfo || !characterInfo.stateHistory[actualStateName] || characterInfo.stateHistory[actualStateName].length === 0) {
-                return "";
-            }
-            const activators = characterInfo.currentStates[actualStateName].activatedBy;
-            return activators;
-        },
-    ],
-    [
-        "get_state_cause state_name",
-        "The cause/reason for the last activation of the state",
+        "get_last_state_cause state_name",
+        "The cause/reason for the last activation of the state, it requires track_cause enabled for the state to work",
         "eg. 'helped me with my chores', 'betrayed me in the past'",
-        (user, character, social, world, stateName) => {
+        (user, character, DE, stateName) => {
             const actualStateName = stateName.trim().toUpperCase().replace(/\s+/, "_");
-            const characterInfo = social.everyone.find(member => member.name === character.name);
-            if (!characterInfo || !characterInfo.stateHistory[actualStateName] || characterInfo.stateHistory[actualStateName].length === 0) {
+            const characterHistory = DE.stateFor[character.name].history;
+            const lastEntryWithActivation = null;
+            // loop in reverse to find the last activation of the state
+            // this will include current as the history contains the current session too
+            for (let i = characterHistory.length - 1; i >= 0; i--) {
+                const entry = characterHistory[i];
+                if (entry.type === "INTERACTING" && entry.states.includes(actualStateName)) {
+                    lastEntryWithActivation = entry;
+                    break;
+                }
+            }
+            if (!lastEntryWithActivation) {
                 return "";
             }
-            return formatAnd(characterInfo.currentStates[actualStateName].causes) || "";
+            const stateCauses = lastEntryWithActivation.stateCauses[actualStateName];
+            if (stateCauses === null) {
+                console.warn(`State ${actualStateName} does not track causes for character ${character.name}`);
+                return "";
+            }
+            return stateCauses.map(cause => cause.description);
         },
     ],
     [
-        "get_last_character_state_causant state_name",
-        "The name of the character that activated the state, always ensuring a character is returned",
-        "eg. Aria, Thalon",
-        (user, character, social, world, stateName) => {
-            const characterInfo = social.everyone.find(member => member.name === character.name);
-            if (!characterInfo || !characterInfo.stateHistory[stateName] || characterInfo.stateHistory[stateName].length === 0) {
-                return "";
-            }
-            const activators = characterInfo.currentStates[stateName].activatedBy;
-            activators.filter(activator => {
-                for (const member of social.everyone) {
-                    if (member.name == activator) {
-                        return true;
-                    }
-                }
-                return false;
-            });
-            return activators.length > 0 ? activators[activators.length - 1] : "";
+        "get_last_state_character_causants state_name",
+        "The name of the characters only that activated the state last, it is available everywhere but it needs track_causants enabled for the state to work",
+        "eg. [\"Aria\", \"Thalon\", \"Player\"]",
+        (user, character, DE, stateName) => {
+            return getCausantsHelper(user, character, DE, stateName).filter(causant => causant.type === "character").map(causant => causant.name);
         },
     ],
     [
-        "get_all_character_state_causants state_name",
-        "The of all the character that activated the state, always ensuring a character is returned",
-        "eg. Aria, Thalon",
-        (user, character, social, world, stateName) => {
-            const characterInfo = social.everyone.find(member => member.name === character.name);
-            if (!characterInfo || !characterInfo.stateHistory[stateName] || characterInfo.stateHistory[stateName].length === 0) {
-                return "";
-            }
-            const activators = characterInfo.currentStates[stateName].activatedBy;
-            activators.filter(activator => {
-                for (const member of social.everyone) {
-                    if (member.name == activator) {
-                        return true;
-                    }
-                }
-                return false;
-            });
-            return activators;
+        "get_last_state_object_causants state_name",
+        "The name of the characters only that activated the state last, it is available everywhere but it needs track_causants enabled for the state to work",
+        "eg. [\"Aria\", \"Thalon\", \"Player\"]",
+        (user, character, DE, stateName) => {
+            return getCausantsHelper(user, character, DE, stateName).filter(causant => causant.type === "object").map(causant => causant.name);
         },
     ],
     [
         "get_social_group min_bond_level max_bond_level min_2_bond_level max_2_bond_level",
         "Get the list of social group members for the current character",
         "eg. [Arya, Thalon, Mira]",
-        (user, character, social, world, minBondLevel, maxBondLevel, min2BondLevel, max2BondLevel) => {
-            return social.groupForChar[character.name].members.filter(member => {
-                const bond = member.bonds[character.name][member.name].bond;
-                const secondaryBond = member.bonds[character.name][member.name].bond_2;
-                return bond >= minBondLevel && bond <= maxBondLevel && secondaryBond >= min2BondLevel && secondaryBond <= max2BondLevel;
-            });
+        (user, character, DE, minBondLevel, maxBondLevel, min2BondLevel, max2BondLevel) => {
+            return DE.social.bonds[character.name].active.filter(bond => {
+                const bondValue = bond.bond;
+                const secondaryBond = bond.bond_2;
+                return bondValue >= minBondLevel && bondValue <= maxBondLevel && secondaryBond >= min2BondLevel && secondaryBond <= max2BondLevel;
+            }).map(bond => bond.towards);
         }
     ],
     [
         "get_present_social_group min_bond_level max_bond_level min_2_bond_level max_2_bond_level",
         "Get the list of social group members for the current character",
         "eg. [Arya, Thalon, Mira]",
-        (user, character, social, world, minBondLevel, maxBondLevel, min2BondLevel, max2BondLevel) => {
-            return social.groupForChar[character.name].members.filter(member => {
-                const bond = member.bonds[character.name][member.name].bond;
-                const secondaryBond = member.bonds[character.name][member.name].bond_2;
-                return bond >= minBondLevel && bond <= maxBondLevel && secondaryBond >= min2BondLevel && secondaryBond <= max2BondLevel && member.isPresent;
+        (user, character, DE, minBondLevel, maxBondLevel, min2BondLevel, max2BondLevel) => {
+            const currentLocation = DE.world.currentLocation.name;
+            const socialGroup = DE.social.bonds[character.name].active.filter(bond => {
+                const bondValue = bond.bond;
+                const secondaryBond = bond.bond_2;
+                return bondValue >= minBondLevel && bondValue <= maxBondLevel && secondaryBond >= min2BondLevel && secondaryBond <= max2BondLevel;
+            }).map(bond => bond.towards);
+            return socialGroup.filter(memberName => {
+                const stateOfChar = DE.stateFor[memberName];
+                const locationOfChar = stateOfChar.location.current;
+                return locationOfChar === currentLocation;
             });
         }
     ],
@@ -302,176 +338,165 @@ export const utils = [
         "get_difference_of_present_social_group list",
         "Get the difference between the provided list and the present social group members",
         "eg. [Arya, Thalon]",
-        (user, character, social, world, list) => {
-            const presentMembers = social.groupForChar[character.name].members.filter(member => member.isPresent).map(member => member.name);
-            return list.filter(name => !presentMembers.includes(name));
+        (user, character, DE, list) => {
+            const currentLocation = DE.world.currentLocation.name;
+            const socialGroup = DE.social.bonds[character.name].active.map(bond => bond.towards);
+            const presentSocialGroup = socialGroup.filter(memberName => {
+                const stateOfChar = DE.stateFor[memberName];
+                const locationOfChar = stateOfChar.location.current;
+                return locationOfChar === currentLocation;
+            });
+            return list.filter(name => !presentSocialGroup.includes(name));
         }
     ],
     [
         "is_dead character",
         "Boolean indicating if the character is dead",
         "true or false",
-        (user, character, social, world, characterQuestioned) => {
-            if (!characterQuestioned) return false;
-            for (const member of social.everyone) {
-                if (member.name == characterQuestioned) {
-                    return member.isDead;
-                }
-            }
-            return false;
+        (user, character, DE, characterQuestioned) => {
+            const stateOfChar = DE.stateFor[characterQuestioned];
+            return stateOfChar.isDead;
         }
     ],
     [
         "is_male character",
         "Boolean indicating if the character is male",
         "true or false",
-        (user, character, social, world, characterQuestioned) => {
-            if (!characterQuestioned) return false;
-            for (const member of social.everyone) {
-                if (member.name == characterQuestioned) {
-                    return social.references[member.name].gender.toLowerCase() === "male";
-                }
-            }
-            return false;
+        (user, character, DE, characterQuestioned) => {
+            const charRef = DE.references[characterQuestioned];
+            return charRef.gender.toLowerCase() === "male";
         }
     ],
     [
         "is_female character",
         "Boolean indicating if the character is female",
         "true or false",
-        (user, character, social, world, characterQuestioned) => {
-            if (!characterQuestioned) return false;
-            for (const member of social.everyone) {
-                if (member.name == characterQuestioned) {
-                    return social.references[member.name].gender.toLowerCase() === "female";
-                }
-            }
-            return false;
+        (user, character, DE, characterQuestioned) => {
+            const charRef = DE.references[characterQuestioned];
+            return charRef.gender.toLowerCase() === "female";
         }
     ],
     [
         "is_ambiguous character",
         "Boolean indicating if the character is of ambiguous gender",
         "true or false",
-        (user, character, social, world, characterQuestioned) => {
-            if (!characterQuestioned) return false;
-            for (const member of social.everyone) {
-                if (member.name == characterQuestioned) {
-                    return social.references[member.name].gender.toLowerCase() === "ambiguous";
-                }
-            }
-            return false;
+        (user, character, DE, characterQuestioned) => {
+            const charRef = DE.references[characterQuestioned];
+            return charRef.gender.toLowerCase() === "ambiguous";
         }
     ],
     [
         "is_sex_male character",
         "Boolean indicating if the character sex is male",
         "true or false",
-        (user, character, social, world, characterQuestioned) => {
-            if (!characterQuestioned) return false;
-            for (const member of social.everyone) {
-                if (member.name == characterQuestioned) {
-                    return social.references[member.name].sex.toLowerCase() === "male";
-                }
-            }
-            return false;
+        (user, character, DE, characterQuestioned) => {
+            const charRef = DE.references[characterQuestioned];
+            return charRef.sex.toLowerCase() === "male";
         }
     ],
     [
         "is_sex_female character",
         "Boolean indicating if the character sex is female",
         "true or false",
-        (user, character, social, world, characterQuestioned) => {
-            if (!characterQuestioned) return false;
-            for (const member of social.everyone) {
-                if (member.name == characterQuestioned) {
-                    return social.references[member.name].sex.toLowerCase() === "female";
-                }
-            }
-            return false;
+        (user, character, DE, characterQuestioned) => {
+            const charRef = DE.references[characterQuestioned];
+            return charRef.sex.toLowerCase() === "female";
         }
     ],
     [
         "is_sex_intersex character",
         "Boolean indicating if the character sex is intersex",
         "true or false",
-        (user, character, social, world, characterQuestioned) => {
-            if (!characterQuestioned) return false;
-            for (const member of social.everyone) {
-                if (member.name == characterQuestioned) {
-                    return social.references[member.name].sex.toLowerCase() === "intersex";
-                }
-            }
-            return false;
+        (user, character, DE, characterQuestioned) => {
+            const charRef = DE.references[characterQuestioned];
+            return charRef.sex.toLowerCase() === "intersex";
         }
     ],
     [
-        "is_member character",
-        "Boolean indicating if the character is a member of the social",
+        "is_char character",
+        "Boolean indicating if the character is a character, this will give true to the user as well",
         "true or false",
-        (user, character, social, world, characterQuestioned) => {
-            if (!characterQuestioned) return false;
-            for (const member of social.members) {
-                if (member.name == characterQuestioned) {
-                    return true;
-                }
-            }
-            return false;
+        (user, character, DE, characterQuestioned) => {
+            return !!DE.references[characterQuestioned];
+        }
+    ],
+    [
+        "is_user character",
+        "Boolean indicating if the character is the user",
+        "true or false",
+        (user, character, DE, characterQuestioned) => {
+            return user.name === characterQuestioned;
         }
     ],
     [
         "is_present_member character",
         "Boolean indicating if the character is a present member of the social",
         "true or false",
-        (user, character, social, world, characterQuestioned) => {
-            if (!characterQuestioned) return false;
-            for (const member of social.members) {
-                if (member.name == characterQuestioned) {
-                    return member.isPresent;
-                }
-            }
-            return false;
+        (user, character, DE, characterQuestioned) => {
+            const currentLocation = DE.world.currentLocation.name;
+            const charState = DE.stateFor[characterQuestioned];
+            return charState.location.current === currentLocation;
         }
     ],
     [
         "is_not_present character",
         "Boolean indicating if the character is not present in the location",
         "true or false",
-        (user, character, social, world, characterQuestioned) => {
-            if (!characterQuestioned) return false;
-            for (const member of social.everyone) {
-                if (member.name == characterQuestioned) {
-                    return !member.isPresent;
-                }
-            }
-            return false;
+        (user, character, DE, characterQuestioned) => {
+            const currentLocation = DE.world.currentLocation.name;
+            const charState = DE.stateFor[characterQuestioned];
+            return charState.location.current !== currentLocation;
         }
     ],
     [
-        "should_be_at character",
+        "last_saw character",
         "String indicating a location where another character should be at according to the character's knowledge",
         "true or false",
-        (user, character, social, world, characterQuestioned) => {
-            if (!characterQuestioned) return false;
-            for (const member of social.groupForChar[character.name]) {
-                if (member.name == characterQuestioned) {
-                    return !member.isPresent ? member.lastKnownLocation : world.currentLocation.name;
+        (user, character, DE, characterQuestioned) => {
+            const charHistory = DE.stateFor[character.name].history;
+            for (let i = charHistory.length - 1; i >= 0; i--) {
+                const entry = charHistory[i];
+                if (entry.accompanied_with.includes(characterQuestioned)) {
+                    return entry.location;
                 }
             }
-            return "";
+
+            return ""
         }
     ],
     [
-        "is_lost character",
+        "has_no_idea_where_is character",
         "Boolean indicating if the character is a member that got lost after being left behind (known to this member)",
         "true or false",
-        (user, character, social, world, characterQuestioned) => {
-            if (!characterQuestioned) return false;
-            for (const member of social.groupForChar[character.name]) {
-                if (member.name == characterQuestioned) {
-                    return !member.isPresent && member.isLost;
+        (user, character, DE, characterQuestioned) => {
+            let shouldBeAt = null;
+            const charHistory = DE.stateFor[character.name].history;
+            let foundAtIndex = -1;
+            for (let i = charHistory.length - 1; i >= 0; i--) {
+                const entry = charHistory[i];
+                if (entry.accompanied_with.includes(characterQuestioned)) {
+                    shouldBeAt = entry.location;
+                    foundAtIndex = i;
+                    break;
                 }
             }
+
+            // this character just doesn't have any info about the questioned character, they have never met!
+            if (!shouldBeAt) {
+                console.warn(`Character ${character.name} has no knowledge about character ${characterQuestioned}, cannot determine if they have lost them.`);
+                return false
+            };
+
+            // check if there is a history entry more recent for that location
+            for (let j = foundAtIndex + 1; j < charHistory.length; j++) {
+                const entry = charHistory[j];
+                if (entry.location === shouldBeAt) {
+                    // character has been at the location more recently, and the character questioned was not with them, they must have lost them
+                    return true;
+                }
+            }
+
+            // character has not been at the location more recently, they must know where they are
             return false;
         }
     ],
@@ -479,40 +504,39 @@ export const utils = [
         "does_not_know_character character",
         "Boolean indicating if the character does not know the questioned character and does not have a bond with them",
         "true or false",
-        (user, character, social, world, characterQuestioned) => {
-            if (!characterQuestioned) return false;
-            for (const member of social.everyone) {
-                if (member.name == characterQuestioned) {
-                    return member.bonds[character][characterQuestioned].not_met;
+        (user, character, DE, characterQuestioned) => {
+            const bonds = DE.social.bonds[character.name].active;
+            for (const bond of bonds) {
+                if (bond.towards === characterQuestioned) {
+                    return false;
                 }
             }
-            return false;
+            return true;
         }
     ],
     [
         "is_strangers_with character",
         "Boolean indicating if the character has a stranger relationship with the questioned character",
         "true or false",
-        (user, character, social, world, characterQuestioned) => {
-            if (!characterQuestioned) return false;
-            for (const member of social.everyone) {
-                if (member.name == characterQuestioned) {
-                    return member.bonds[character][characterQuestioned].stranger;
+        (user, character, DE, characterQuestioned) => {
+            const bonds = DE.social.bonds[character.name].active;
+            for (const bond of bonds) {
+                if (bond.towards === characterQuestioned && bond.stranger) {
+                    return true;
                 }
             }
             return false;
         }
     ],
     [
-        "is_at_location character",
+        "is_here character",
         "Boolean indicating if the character is at the current location of the world",
         "true or false",
-        (user, character, social, world, characterQuestioned) => {
-            if (!characterQuestioned) return false;
-            for (const member of social.everyoneAtLocation) {
-                if (member.name == characterQuestioned) {
-                    return true;
-                }
+        (user, character, DE, characterQuestioned) => {
+            const currentLocation = DE.world.currentLocation.name;
+            const charState = DE.stateFor[characterQuestioned];
+            if (charState.location.current === currentLocation) {
+                return true;
             }
             return false;
         }
@@ -521,7 +545,7 @@ export const utils = [
         "size list",
         "The size of the list",
         "eg. 3",
-        (user, character, social, world, list) => {
+        (user, character, DE, list) => {
             if (!list || !Array.isArray(list)) return 0;
             return list.length;
         }
@@ -530,7 +554,7 @@ export const utils = [
         "intersect list1 list2",
         "intersects two lists",
         "eg. [Arya, Thalon]",
-        (user, character, social, world, list1, list2) => {
+        (user, character, DE, list1, list2) => {
             if (!list1 || !Array.isArray(list1)) return [];
             if (!list2 || !Array.isArray(list2)) return [];
             return list1.filter(value => list2.includes(value));
@@ -540,7 +564,7 @@ export const utils = [
         "union list1 list2",
         "unites two lists",
         "eg. [Arya, Thalon, Mira]",
-        (user, character, social, world, list1, list2) => {
+        (user, character, DE, list1, list2) => {
             if (!list1 || !Array.isArray(list1)) return [];
             if (!list2 || !Array.isArray(list2)) return [];
             return Array.from(new Set([...list1, ...list2]));
@@ -550,7 +574,7 @@ export const utils = [
         "difference list1 list2",
         "difference between two lists",
         "eg. [Arya]",
-        (user, character, social, world, list1, list2) => {
+        (user, character, DE, list1, list2) => {
             if (!list1 || !Array.isArray(list1)) return [];
             if (!list2 || !Array.isArray(list2)) return [];
             return list1.filter(value => !list2.includes(value));
@@ -560,7 +584,7 @@ export const utils = [
         "format_and list",
         "formats a list with commas and 'and'",
         "eg. Arya, Thalon, and Mira",
-        (user, character, social, world, list) => {
+        (user, character, DE, list) => {
             formatAnd(list);
         }
     ],
@@ -568,7 +592,7 @@ export const utils = [
         "fomat_or list",
         "formats a list with commas and 'or'",
         "eg. Arya, Thalon, or Mira",
-        (user, character, social, world, list) => {
+        (user, character, DE, list) => {
             if (!list || !Array.isArray(list)) return "";
             if (list.length === 0) return "";
             if (list.length === 1) return list[0];
@@ -580,7 +604,7 @@ export const utils = [
         "length list",
         "The length of the list",
         "eg. 3",
-        (user, character, social, world, list) => {
+        (user, character, DE, list) => {
             if (!list || typeof list !== "string") return 0;
             return list.length;
         }
@@ -589,7 +613,7 @@ export const utils = [
         "in value list",
         "Boolean indicating if the value is in the list",
         "true or false",
-        (user, character, social, world, value, list) => {
+        (user, character, DE, value, list) => {
             if (!list || !Array.isArray(list)) return false;
             return list.includes(value);
         }
@@ -598,7 +622,7 @@ export const utils = [
         "gt value1 value2",
         "Boolean indicating if value1 is greater than value2",
         "true or false",
-        (user, character, social, world, value1, value2) => {
+        (user, character, DE, value1, value2) => {
             return value1 > value2;
         }
     ],
@@ -606,7 +630,7 @@ export const utils = [
         "lt value1 value2",
         "Boolean indicating if value1 is less than value2",
         "true or false",
-        (user, character, social, world, value1, value2) => {
+        (user, character, DE, value1, value2) => {
             return value1 < value2;
         }
     ],
@@ -614,7 +638,7 @@ export const utils = [
         "eq value1 value2",
         "Boolean indicating if value1 is equal to value2",
         "true or false",
-        (user, character, social, world, value1, value2) => {
+        (user, character, DE, value1, value2) => {
             return value1 == value2;
         }
     ],
@@ -622,7 +646,7 @@ export const utils = [
         "neq value1 value2",
         "Boolean indicating if value1 is not equal to value2",
         "true or false",
-        (user, character, social, world, value1, value2) => {
+        (user, character, DE, value1, value2) => {
             return value1 != value2;
         }
     ],
@@ -630,7 +654,7 @@ export const utils = [
         "lte value1 value2",
         "Boolean indicating if value1 is less than or equal to value2",
         "true or false",
-        (user, character, social, world, value1, value2) => {
+        (user, character, DE, value1, value2) => {
             return value1 <= value2;
         }
     ],
@@ -638,7 +662,7 @@ export const utils = [
         "gte value1 value2",
         "Boolean indicating if value1 is greater than or equal to value2",
         "true or false",
-        (user, character, social, world, value1, value2) => {
+        (user, character, DE, value1, value2) => {
             return value1 >= value2;
         }
     ],
@@ -646,42 +670,50 @@ export const utils = [
         "format_object_pronoun listOrCharacter",
         "Formats the object pronoun for a list of characters or a single character",
         "eg. him, her, them",
-        (user, character, social, world, listOrCharacter) => {
-            return getPronounHelper(user, character, social, world, listOrCharacter, "them", "him", "her", "them");
+        (user, character, DE, listOrCharacter) => {
+            return getPronounHelper(user, character, DE, listOrCharacter, "them", "him", "her", "them");
         }
     ],
     [
         "format_possessive listOrCharacter",
         "Formats the possessive pronoun for a list of characters or a single character",
         "eg. his, her, their",
-        (user, character, social, world, listOrCharacter) => {
-            return getPronounHelper(user, character, social, world, listOrCharacter, "their", "his", "her", "their");
+        (user, character, DE, listOrCharacter) => {
+            return getPronounHelper(user, character, DE, listOrCharacter, "their", "his", "her", "their");
         }
     ],
     [
         "format_reflexive listOrCharacter",
         "Formats the reflexive pronoun for a list of characters or a single character",
         "eg. himself, herself, themself",
-        (user, character, social, world, listOrCharacter) => {
-            return getPronounHelper(user, character, social, world, listOrCharacter, "themselves", "himself", "herself", "themself");
+        (user, character, DE, listOrCharacter) => {
+            return getPronounHelper(user, character, DE, listOrCharacter, "themselves", "himself", "herself", "themself");
         }
     ],
     [
         "format_pronoun listOrCharacter",
         "Formats the pronoun for a list of characters or a single character",
         "eg. he, she, they",
-        (user, character, social, world, listOrCharacter) => {
-            return getPronounHelper(user, character, social, world, listOrCharacter, "they", "he", "she", "they");
+        (user, character, DE, listOrCharacter) => {
+            return getPronounHelper(user, character, DE, listOrCharacter, "they", "he", "she", "they");
         }
     ],
     [
         "format_ownership_pronoun listOrCharacter",
         "Formats the ownership pronoun for a list of characters or a single character",
         "eg. his, hers, theirs",
-        (user, character, social, world, listOrCharacter) => {
-            return getPronounHelper(user, character, social, world, listOrCharacter, "theirs", "his", "hers", "theirs");
+        (user, character, DE, listOrCharacter) => {
+            return getPronounHelper(user, character, DE, listOrCharacter, "theirs", "his", "hers", "theirs");
         },
     ],
+    [
+        "get_random_seed_from_string options_number input_string",
+        "Generates a random seed integer from a string input for this specific character, the range will be from 0 to options_number - 1, useful for creating random character traits for instantiable characters that will get a random name",
+        "integer",
+        (user, character, DE, options_number, input_string) => {
+            return generateIntSeedFromString(options_number, input_string);
+        }
+    ]
 ];
 
 export const ALL_VARIABLES = [

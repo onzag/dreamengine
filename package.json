@@ -17,6 +17,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "electron .",
+    "start:debug": "ELECTRON_ENABLE_LOGGING=1 NODE_OPTIONS='--trace-uncaught --trace-warnings' electron --inspect=9229 .",
     "build:codemirror": "esbuild js/codemirror/build.js --bundle --outfile=js/codemirror/bundle.js"
   },
   "devDependencies": {

@@ -56,6 +56,12 @@ class Settings extends HTMLElement {
         const tabsContainer = this.shadowRoot.querySelector('app-overlay-tabs');
 
         if (this.currentSectionIndex === 0) {
+            const debug_desc = "Debug mode is not meant for playing, allows you to hear the voices of schizophrenic characters, see the system inference reasoning, rolling chances, you get debug commands, and more. Only use this mode for testing and debugging purposes.";
+            const easy_desc = "Easy mode shows characters hidden states, bond strengths, second bond strength, and shows how they feel about each other, making it easier to role-play and interact with them; editing messages is fully allowed in this mode.";
+            const normal_desc = "Normal mode is the default gameplay experience, characters will have hidden states and feelings, making interactions more immersive and challenging, editing is limited to typos and minor changes but you still are able to undo inferences, and get back to a previous state. (multiple timelines)";
+            const hard_desc = "Hard mode increases the challenge by removing the ability to undo inferences, making choices permanent; (single timeline)";
+            const diff_array = [debug_desc, easy_desc, normal_desc, hard_desc];
+            
             tabsContainer.innerHTML = `<app-overlay-section section-title="User">
                 <app-overlay-input-warning>Changing any of these options will not affect previous game campaigns, only new ones.</app-overlay-input-warning>
                 <app-overlay-input
@@ -76,8 +82,17 @@ class Settings extends HTMLElement {
                     title="The sex will affect how the AI interacts with your character in-game, it represents what it's actually physically present in your character's body; some characters may take this into account when interacting with you."
                     input-data-location="user.sex"
                 ></app-overlay-select>
-            </app-overlay-section>
-            <app-overlay-section section-title="AI Inference Settings">
+                <app-overlay-select
+                    label="Difficulty"
+                    input-options='["Debug", "Easy", "Normal", "Hard"]'
+                    input-default-value="Normal"
+                    input-options-descriptions='${JSON.stringify(diff_array)}'
+                    title="The difficulty level will affect the challenge and complexity of the game, choose based on your preferred gameplay experience."
+                    input-data-location="difficulty"
+                ></app-overlay-select>
+            </app-overlay-section>`;
+        } else if (this.currentSectionIndex === 1) {
+            tabsContainer.innerHTML = `<app-overlay-section section-title="AI Inference Settings">
                 <app-overlay-input
                     label="Inference host"
                     input-placeholder="Enter inference host"
@@ -120,8 +135,6 @@ class Settings extends HTMLElement {
                     input-data-location="externalApps.imageEditorPath"
                 ></app-overlay-input>
             </app-overlay-section>`;
-        } else if (this.currentSectionIndex === 1) {
-            tabsContainer.innerHTML = ""
         };
     }
 
@@ -183,7 +196,7 @@ class Settings extends HTMLElement {
 
     render() {
         this.shadowRoot.innerHTML = `<app-overlay overlay-title="Settings" cancel-text="Cancel" confirm-text="Save & Close">
-            <app-overlay-tabs current="${this.currentSectionIndex}" sections='["General", "Advanced AI Inference"]'>              
+            <app-overlay-tabs current="${this.currentSectionIndex}" sections='["General", "AI Settings"]'>              
             </app-overlay-tabs>
         </app-overlay>`;
     }

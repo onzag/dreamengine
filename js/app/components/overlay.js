@@ -290,10 +290,70 @@ class OverlayInput extends HTMLElement {
 
         this.saveValueToUserData = this.saveValueToUserData.bind(this);
         this.originalValue = "";
+
+        this.editorInitializedInMode = null;
+
+        this.switchCodeMirrorMode = this.switchCodeMirrorMode.bind(this);
+    }
+
+    switchCodeMirrorMode() {
+        const newMode = this.editorInitializedInMode === "typescript" ? "handlebars" : "typescript";
+        const currentValue = this.editor.state.doc.toString();
+        this.editor.destroy();
+        this.initializeEditor(newMode, currentValue, false, false);
+    }
+
+    async initializeEditor(mode, doc, updateOriginalValue, allowUseDefault) {
+        const extensions = [basicSetup, keymap.of(indentWithTab), null, placeholder(mode === "typescript" ? this.getAttribute("input-placeholder-ts") || this.getAttribute("input-placeholder") : this.getAttribute("input-placeholder")), EditorView.lineWrapping]
+        if (mode === "handlebars") {
+            extensions[2] = handlebarsLanguage;
+            extensions.push(usedMatchDecorator)
+        } else if (mode === "typescript") {
+            extensions[2] = javascriptLanguage;
+            await initializeTVSFS(`declare const console: { log(msg: any): void; };`);
+            extensions.push(linter(tsErrorLinter, {
+                delay: 0,
+            }));
+            extensions.push(autocompletion({ override: [tsComplete] }));
+            extensions.push(tsvfsViewPlugin(this));
+        }
+        if (allowUseDefault &&this.getAttribute("input-default-value")) {
+            this.editor = new EditorView({
+                lineWrapping: true,
+                doc: doc || this.getAttribute("input-default-value"),
+                extensions,
+                parent: this.shadowRoot.querySelector('.codemirror-wrapper'),
+            });
+            if (updateOriginalValue) {
+                this.originalValue = doc || this.getAttribute("input-default-value");
+            }
+            this.editorInitializedInMode = mode;
+        } else {
+            this.editor = new EditorView({
+                lineWrapping: true,
+                doc: doc || '',
+                extensions,
+                parent: this.shadowRoot.querySelector('.codemirror-wrapper'),
+            });
+            if (updateOriginalValue) {
+                this.originalValue = doc || '';
+            }
+            this.editorInitializedInMode = mode;
+        }
+
+        const modeSwitcherButton = this.shadowRoot.querySelector('.code-mirror-mode-switcher');
+        if (modeSwitcherButton) {
+            modeSwitcherButton.innerText = mode === "typescript" ? "Switch to Handlebars" : "Switch to TypeScript";
+        }
     }
 
     async connectedCallback() {
         this.render();
+
+        const modeSwitcher = this.shadowRoot.querySelector('.code-mirror-mode-switcher');
+        modeSwitcher?.addEventListener('click', this.switchCodeMirrorMode);
+        modeSwitcher?.addEventListener('mouseenter', playHoverSound);
+        modeSwitcher?.addEventListener('click', playConfirmSound);
 
         const isNumber = this.getAttribute('input-type') === 'number';
         const isPercentage = this.getAttribute('input-is-percentage') === 'true';
@@ -329,50 +389,33 @@ class OverlayInput extends HTMLElement {
                     this.style.height = this.scrollHeight + 'px';
                 });
             }
-        } else {
-            const extensions = [basicSetup, keymap.of(indentWithTab), null, placeholder(this.getAttribute("input-placeholder")), EditorView.lineWrapping]
-            if (isCodeMirror === "handlebars") {
-                extensions[2] = handlebarsLanguage;
-                extensions.push(usedMatchDecorator)
-            } else if (isCodeMirror === "typescript") {
-                extensions[2] = javascriptLanguage;
-                await initializeTVSFS(`declare const console: { log(msg: any): void; };`);
-                console.log("HERE")
-                extensions.push(linter(tsErrorLinter, {
-                    delay: 0,
-                }));
-                extensions.push(autocompletion({ override: [tsComplete] }));
-                extensions.push(tsvfsViewPlugin(this));
-            }
-            if (this.getAttribute("input-default-value")) {
-                this.editor = new EditorView({
-                    lineWrapping: true,
-                    doc: this.getAttribute("input-default-value"),
-                    extensions,
-                    parent: this.shadowRoot.querySelector('.codemirror-wrapper'),
-                });
-                this.originalValue = this.getAttribute("input-default-value");
-            } else {
-                this.editor = new EditorView({
-                    lineWrapping: true,
-                    extensions,
-                    parent: this.shadowRoot.querySelector('.codemirror-wrapper'),
-                });
-            }
         }
 
         let dataLocation = this.getAttribute('input-data-location');
+        const dataLocationOriginal = dataLocation;
         if (isCodeMirror === "typescript") {
             dataLocation += ".ts";
+        } else if (isCodeMirror) {
+            dataLocation += ".src";
         }
 
-        window.electronAPI.loadValueFromUserData(this.getAttribute("input-data-character-file")).then((value) => {
+        window.electronAPI.loadValueFromUserData(dataLocation, this.getAttribute("input-data-character-file")).then((value) => {
             if (value !== null) {
                 if (isCodeMirror) {
-                    this.editor.dispatch({
-                        changes: { from: 0, to: this.editor.state.doc.length, insert: value.toString() }
-                    });
-                    this.originalValue = value.toString();
+                    const newValue = value.toString();
+
+                    if (isCodeMirror === "typescript") {
+                        this.initializeEditor("typescript", newValue, true, true);
+                    } else {
+                        // check the mode
+                        window.electronAPI.loadValueFromUserData(dataLocationOriginal + ".js", this.getAttribute("input-data-character-file")).then((value) => {
+                            if (value !== null) {
+                                this.initializeEditor("typescript", newValue, true, true);
+                            } else {
+                                this.initializeEditor("handlebars", newValue, true, true);
+                            }
+                        });
+                    }
                 } else {
                     const potentialTextArea = this.shadowRoot.querySelector('input, textarea');
                     if (isPercentage && isNumber) {
@@ -388,7 +431,15 @@ class OverlayInput extends HTMLElement {
                         textarea.style.height = textarea.scrollHeight + 'px';
                     }
                 }
+            } else if (isCodeMirror) {
+                if (isCodeMirror === "typescript") {
+                    this.initializeEditor("typescript", "", true, true);
+                } else {
+                    this.initializeEditor("handlebars", "", true, true);
+                }
             }
+        }).catch(err => {
+            console.error(err);
         });
     }
 
@@ -410,11 +461,15 @@ class OverlayInput extends HTMLElement {
         let dataLocation = dataLocationOriginal;
         if (isCodeMirror === "typescript") {
             dataLocation += ".ts";
+        } else if (isCodeMirror) {
+            dataLocation += ".src";
         }
         await window.electronAPI.setValueIntoUserData(dataLocation, this.getAttribute("input-data-character-file"), value);
-        if (isCodeMirror === "typescript") {
-            const dataLocationJs = dataLocationOriginal + ".script";
+        if (isCodeMirror === "typescript" || this.editorInitializedInMode === "typescript") {
+            const dataLocationJs = dataLocationOriginal + ".js";
             await window.electronAPI.setValueIntoUserData(dataLocationJs, this.getAttribute("input-data-character-file"), convertTsToJs(value));
+        } else if (isCodeMirror && this.editorInitializedInMode === "handlebars") {
+            await window.electronAPI.setValueIntoUserData(dataLocationJs, this.getAttribute("input-data-character-file"), null);
         }
     }
 
@@ -432,10 +487,9 @@ class OverlayInput extends HTMLElement {
         if (multiline) {
             wrapperClass += " textarea-wrapper";
         }
-        let isCodeMirror = false;
-        if (this.getAttribute("input-is-codemirror") && multiline) {
+        const isCodeMirror = this.getAttribute("multiline") === 'true' && this.getAttribute("input-is-codemirror");
+        if (isCodeMirror) {
             wrapperClass += " codemirror-wrapper";
-            isCodeMirror = true;
         }
 
         let extraAttributes = "";
@@ -457,6 +511,12 @@ class OverlayInput extends HTMLElement {
         let inputItself = multiline ? `<textarea placeholder="${placeholder}"></textarea>` : `<input type="${type}" placeholder="${placeholder}" ${extraAttributes} />`;
         if (isCodeMirror) {
             inputItself = "";
+        }
+        let codeMirrorModeSwitcher = "";
+        if (isCodeMirror === "typescript") {
+
+        } else if (isCodeMirror) {
+            codeMirrorModeSwitcher = `<button class="code-mirror-mode-switcher"></button>`;
         }
 
         this.shadowRoot.innerHTML = `
@@ -518,7 +578,19 @@ input::-webkit-outer-spin-button {
   color: #FF6B6B;
   font-weight: bold;
 }
-  
+.code-mirror-mode-switcher {
+    font-size: 2.5vh;
+    background: black;
+    color: white;
+    border: solid 1px #ccc;
+    border-radius: 2px;
+    font-family: 'Cabin Sketch', sans-serif;
+    padding: 1vh;
+    cursor: pointer;
+    }
+    .code-mirror-mode-switcher:hover {
+        color: #FF6B6B;
+    }
 .cm-gutterElement, .cm-gutters {
     background-color: rgba(0, 0, 0, 0.9) !important;
     color: white !important;
@@ -584,6 +656,7 @@ font-family: 'Cabin Sketch', sans-serif !important;
       </style>
       <div class="overlay-input">
         <label>${label}</label>
+        ${codeMirrorModeSwitcher}
         <div class="${wrapperClass}" ${isCodeMirror ? 'title=""' : ''}>
             ${inputItself}
         </div>
@@ -606,7 +679,7 @@ class OverlayInputSelect extends HTMLElement {
         this.render();
 
         if (this.getAttribute("input-default-value")) {
-            const inputElement = this.shadowRoot.querySelector('input, textarea');
+            const inputElement = this.shadowRoot.querySelector('select');
             inputElement.value = this.getAttribute("input-default-value");
             this.originalValue = this.getAttribute("input-default-value");
         }
@@ -616,6 +689,8 @@ class OverlayInputSelect extends HTMLElement {
                 this.shadowRoot.querySelector('select').value = value;
                 this.originalValue = value;
             }
+        }).catch(err => {
+            console.error(err);
         });
     }
 
@@ -633,6 +708,7 @@ class OverlayInputSelect extends HTMLElement {
         const label = this.getAttribute('label') || 'Input Label';
 
         const options = JSON.parse(this.getAttribute('input-options') || '[]');
+        const optionsDescriptions = JSON.parse(this.getAttribute('input-options-descriptions') || '[]');
 
         this.shadowRoot.innerHTML = `
       <style>
@@ -677,7 +753,7 @@ class OverlayInputSelect extends HTMLElement {
       <div class="overlay-input">
         <label>${label}</label>
         <select value="">
-            ${options.map(opt => `<option value="${opt}">${opt[0].toUpperCase() + opt.slice(1)}</option>`).join('')}
+            ${options.map((opt, index) => `<option value="${opt}" title="${optionsDescriptions[index] || ''}">${opt[0].toUpperCase() + opt.slice(1)}</option>`).join('')}
         </select>
         <div class="error-message"></div>
       </div>

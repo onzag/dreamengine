@@ -39,12 +39,21 @@ export default {
             ]
         },
         "general": {
-            "type": "string",
+            "type": "object",
+            "properties": {
+                "src": {
+                    "type": "string",
+                },
+                "js": {
+                    "type": "string",
+                },
+            },
             "title": "General Information",
             "description": "Describes the character general behaviour and personality, it is in YOU format, you are, you do, as {{char}}",
             "maxLength": 1000,
             "minLength": 50,
             "placeholder": "You are {{char}} a brave and adventurous explorer, always seeking new challenges and experiences.\n\nYou have a strong sense of justice and are willing to help those in need.",
+            "placeholder_ts": "return `You are ${char.name} a brave and adventurous explorer, always seeking new challenges and experiences.\n\nYou have a strong sense of justice and are willing to help those in need.`;",
             "multiline": true,
             "code_language": "handlebars"
         },
@@ -54,7 +63,8 @@ export default {
             "description": "A short mostly physical (on the surface) description of the character, used in lists and overviews.",
             "maxLength": 250,
             "minLength": 20,
-            "placeholder": "A muscular woman with short brown hair and green eyes, wearing a leather jacket and boots."
+            "placeholder": "A muscular woman with short brown hair and green eyes, wearing a leather jacket and boots.",
+            "multiline": true,
         },
         "initiative": {
             "type": "number",
@@ -298,6 +308,10 @@ export default {
                     // we can filter any states from being checked if any of the present party bond levels
                     // does not clear this criteria, also we may be interested in pushing negatives
                     // as in "character will not activate state x towards x"
+                    // these are injected into the prompt depending on the characters that are present
+                    // and can be potential causants of a behaviour, once the behaviour is activated
+                    // the rules can be different depending on the bond levels and the causant (if tracked)
+                    // and can interact with the sourrounding characters too
                     "potential_causant_negative_prompt": {
                         "type": "string",
                         "description": "Prompt to inject towards a potential causant that does not meet the bond requirements for this state.",
@@ -308,28 +322,28 @@ export default {
                         "description": "Prompt to inject towards a potential causant that meets the bond requirements for this state.",
                         "placeholder": "{{potential_causant}} has built a strong bond with {{char}} so x is possible."
                     },
-                    "causant_min_bond_required": {
+                    "potential_causant_min_bond_required": {
                         "type": "number",
                         "description": "Indicates the minimum bond level required for this state to be activated by a causant.",
                         "minimum": -100,
                         "maximum": 100,
                         "default": -100,
                     },
-                    "causant_max_bond_required": {
+                    "potential_causant_max_bond_required": {
                         "type": "number",
                         "description": "Indicates the maximum bond level required for this state to be activated by a causant.",
                         "minimum": -100,
                         "maximum": 100,
                         "default": 100,
                     },
-                    "causant_min_2_bond_required": {
+                    "potential_causant_min_2_bond_required": {
                         "type": "number",
                         "description": "Indicates the minimum second bond level required for this state to be activated by a causant agent.",
                         "minimum": 0,
                         "maximum": 100,
                         "default": 0,
                     },
-                    "causant_max_2_bond_required": {
+                    "potential_causant_max_2_bond_required": {
                         "type": "number",
                         "description": "Indicates the maximum second bond level required for this state to be activated by a causant agent.",
                         "minimum": 0,
@@ -417,10 +431,22 @@ export default {
                         "type": "boolean",
                         "description": "Indicates if this state is related to injury and death, useful for states that indicate critical conditions and we want to set in a separate inference step to avoid polluting other state logic.",
                     },
-                    "track_causant": {
+                    "track_causants": {
                         "type": "boolean",
-                        "description": "Indicates if this state tracks who or what caused it to be activated, useful for states that may need to reference their causant later.",
+                        "description": "Indicates if the causant that triggered this state should be tracked, useful for states that depend on who activated them. Tracking causants is an expensive operation so only use it when necessary.",
                     },
+                    "track_cause": {
+                        "type": "boolean",
+                        "description": "Indicates if the cause of the state activation should be tracked, useful for states that depend on the reason they were activated. Tracking cause is an expensive operation so only use it when necessary.",
+                    },
+                    "defuse_time": {
+                        "type": "number",
+                        "description": "The time in minutes it takes for this state to defuse after being activated, useful for states that indicate temporary conditions or emotions, 0 means no defuse time, " + 
+                        "always set this value as it allows emotions to defuse during time skips when the user is not present; otherwise eg. an angry character will remain angry forever. " + 
+                        "the decay rate per inference only applies while the character is active in the scene, defuse time applies always.",
+                        "minimum": 0,
+                        "maximum": 1440
+                    }
                 },
                 "required": [
                     "common_state_experienced_by_character",
@@ -512,54 +538,6 @@ export default {
                     "description": {
                         "type": "string",
                         "description": "The description of the bond, use {{char}} and {{other}} as placeholders."
-                    },
-                    "state_overrides": {
-                        "type": "object",
-                        "description": "State prompt injections associated with this bond.",
-                        "additionalProperties": {
-                            "type": "object",
-                            "properties": {
-                                "description": {
-                                    "type": "string",
-                                    "description": "The prompt injection text for this state, use {{char}} and {{other}} as placeholders; eg. {{char}} is now happy and will cheer {{other}}"
-                                },
-                                "initial_message": {
-                                    "type": "string",
-                                    "description": "If specified, forces an initial message action when this bond is activated, use {{char}} and {{other}} as placeholders; eg. {{char}} smiles at {{other}}"
-                                },
-                                "manual_triggers": {
-                                    "type": "array",
-                                    "description": "Manual triggers that can activate this state.",
-                                    "items": {
-                                        "type": "object",
-                                        "properties": {
-                                            "if": {
-                                                "type": "string",
-                                                "description": "The ensure rule to add into the prompt to trigger this state, always starts as if, eg. {{other}} and {{char}} are alone together"
-                                            }
-                                        }
-                                    },
-                                    "minItems": 1
-                                },
-                                "manual_relievers": {
-                                    "type": "array",
-                                    "description": "Manual relievers that can deactivate this state.",
-                                    "items": {
-                                        "type": "object",
-                                        "properties": {
-                                            "if": {
-                                                "type": "string",
-                                                "description": "The ensure rule to add into the prompt to relieve this state, always starts as if, eg. {{other}} comforts {{char}}"
-                                            }
-                                        }
-                                    },
-                                    "minItems": 1
-                                }
-                            },
-                            "required": [
-                                "description"
-                            ]
-                        }
                     }
                 },
                 "required": [
@@ -601,6 +579,88 @@ export default {
                 ]
             }
         },
+        "heuristic_evolution": {
+            "type": "object",
+            "title": "Heuristic Evolution",
+            "description": "Heuristic Evolution For the character when inference is not used"
+        },
+        "advanced_spawn_script": {
+            "type": "object",
+            "properties": {
+                "script": {
+                    "type": "string",
+                },
+                "ts": {
+                    "type": "string",
+                }
+            },
+            "title": "Spawn Script",
+            "description": "A TypeScript script that runs when the character is spawned for the first time, allowing for advanced customization of character initial state. Characters are only spawned once when the world is created and they always exist after that.",
+            "multiline": true,
+            "code_language": "typescript",
+            "placeholder": "// TypeScript code here, use char, user, DE and others objects",
+            "example": 
+`//Example: With a random roll, change the character location to a random tavern
+const roll = Math.random();
+if (roll < 0.5) {
+    const taverns = DE.world.locations.filter(loc => loc.type === "TAVERN");
+}
+`
+        },
+        "advanced_first_interact_script": {
+            "type": "object",
+            "properties": {
+                "script": {
+                    "type": "string",
+                },
+                "ts": {
+                    "type": "string",
+                }
+            },
+            "title": "First Interaction Script",
+            "description": "A TypeScript script that runs when the character first interacts with the user, allowing for advanced customization of character initial interaction behaviour that will persist.",
+            "multiline": true,
+            "code_language": "typescript",
+            "placeholder": "// TypeScript code here, use char, user, DE and others objects",
+            "example": 
+`//Example: Give the character a random backstory and personality from inference
+const backstory = await run_inference({
+  system_prompt: "You are an assistant that generates a random backstory for a character named " + char.name +
+    " and personality for a character in a fantasy world, use second person, as \\"You are " + char.name + "\\", " +
+    " describe their appearance, personality traits, hobbies, fears and motivations in a concise manner.",
+  user_prompt: "Generate a concise backstory and personality for " + char.name + " in second person.",
+  paragraphs: 3,
+  max_tokens: 500,
+});
+DE.social[char.name].general = backstory.text;
+const short_backstory = await run_inference({
+  system_prompt: "You are an assistant that generates a short physical description only description for a character named " + char.name +
+  " the description should be very small, physical traits only (what can be seen), concise, one liner, in 3rd person and not inlude the name of the character.\n\n" +
+  "Example: A large woman with a wooden sword strapped to her back, wearing leather armor and a red bandana.\n\n" +
+  "Example: A dwarf man with a long braided beard, wearing a helmet and carrying a battle axe.\n\n" +
+  user_prompt: "Generate a short physical description only for the character whose backstory is:\n\n" + backstory.text,
+  paragraphs: 1,
+  max_tokens: 50,
+});
+DE.references[char.name].short = short_backstory.text;
+`
+        },
+        "advanced_post_any_inference_script": {
+            "type": "object",
+            "properties": {
+                "script": {
+                    "type": "string",
+                },
+                "ts": {
+                    "type": "string",
+                }
+            },
+            "title": "Post Any Inference Script",
+            "description": "A TypeScript script that runs after any inference ends including those that do not include the character",
+            "multiline": true,
+            "code_language": "typescript",
+            "placeholder": "// TypeScript code here, use char, user, DE and others objects",
+        },
         "advanced_pre_inference_script": {
             "type": "object",
             "properties": {
@@ -617,22 +677,26 @@ export default {
             "code_language": "typescript",
             "placeholder": "// TypeScript code here, use char, user, DE and others objects",
             "example": 
-`// Use DE, char, user and others object for accessing the game state
-// Example: Make the character tired at night
+`// Example: Make the character tired at night
 const charStates = DE.stateFor[char.name].states;
 if (DE.time.hourOfDay >= 20 || DE.time.hourOfDay < 6) {
-    charStates['TIRED'] = { intensity: charStates['TIRED'].intensity + 2 };
-    if (charStates['TIRED'].intensity > 4) {
-        charStates['TIRED'].intensity = 4;
-    }
+  charStates['TIRED'] = { intensity: charStates['TIRED'].intensity + 2 };
+  if (charStates['TIRED'].intensity > 4) {
+    charStates['TIRED'].intensity = 4;
+  }
 }
+
+// We are going to check if the character has slept enough the previous day
 const prevDay = DE.time.prevDay;
+// we will get the character state history for the previous day
 const historyOfCharacter = DE.stateFor[char.name].history.filter(entry => entry.day === prevDay);
+// we will sum the duration of all SLEEPING states
+// we will assume the character was resting during that time
 const durationOfSleepingOrTimeSkips = historyOfCharacter.reduce((total, entry) => {
-    if (entry.type === "TIME_SKIP" || (entry.type === "STATE_INFO" && entry.states.include("SLEEPING"))) {
-        return total + entry.durationHours;
-    }
-    return total;
+  if (entry.states.include("SLEEPING"))) {
+    return total + entry.durationHours;
+  }
+  return total;
 });
 if (durationOfSleepingOrTimeSkips < 4) {
     const charStates = DE.stateFor[char.name].states;
@@ -679,7 +743,7 @@ if (oher.name !== user.name && DE.social.bondLevels[char.name]?[user.name] >= 50
                 }
             },
             "title": "Post-Inference Script",
-            "description": "A TypeScript script that runs after each inference ends, allowing for advanced customization of character behaviour.",
+            "description": "A TypeScript script that runs after each inference ends that included the character, allowing for advanced customization of character behaviour.",
             "multiline": true,
             "code_language": "typescript",
             "placeholder": "// TypeScript code here, use char, user, DE and others objects",
@@ -688,16 +752,16 @@ if (oher.name !== user.name && DE.social.bondLevels[char.name]?[user.name] >= 50
 // Example: Run a special inference step to give the char the master sword
 // this would be better as a advanced_post_inference_script_per_character in the world schema
 // but for the sake of the example we put it here
-const result = await DE.run_inference_on_last_inference({
+const result = await run_inference_on_last_conversation(DE, {
     user_query: "Has " + char.name + " obtained the Master Sword yet? Respond with a simple YES or NO.",
     system: "You are an assistant that determines if " + char.name + " has obtained the Master Sword in their adventure. Respond with a simple 'YES' or 'NO'.",
     paragraphs: 1,
     max_tokens: 10,
 });
-if (result.trim().toUpperCase().includes("YES")) {
+if (result.text.trim().toUpperCase().includes("YES")) {
     // give the character the master sword state
-    DE.social.references[char.name].general += "\n\nAs {{char}} you are the holder of Master Sword, a legendary weapon of great power.";
-    DE.social.references[char.name].states["HOLDING_THE_MASTER_SWORD"] = {
+    DE.references[char.name].general += "\n\nAs {{char}} you are the holder of Master Sword, a legendary weapon of great power.";
+    DE.references[char.name].states["HOLDING_THE_MASTER_SWORD"] = {
         describes_action: true,
         general_description: "{{char}} is holding the Master Sword, a legendary weapon of great power.",
         automatic_trigger: false,

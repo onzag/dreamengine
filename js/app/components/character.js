@@ -627,9 +627,11 @@ const WIZARD_SECTIONS = [
             [
                 "Scripting and Customization",
                 [
+                    "advanced_spawn_script",
                     "advanced_pre_inference_script",
                     "advanced_pre_bond_check_script",
                     "advanced_post_inference_script",
+                    "advanced_post_any_inference_script",
                 ]
             ]
         ]
@@ -811,7 +813,8 @@ class CharacterOverlay extends HTMLElement {
                                     input-data-character-file="${this.currentCharacterFile}"
                                     input-placeholder="${escapeHTML(schema.properties[fieldName].placeholder || '')}"
                                     input-default-value="${escapeHTML(schema.properties[fieldName].default || '')}"
-                                    ${isMultiline ? 'multiline="true" input-is-codemirror="' + (schema.properties[fieldName].code_language || "handlebars") + '"' : ''}
+                                    input-placeholder-ts="${escapeHTML(schema.properties[fieldName].placeholder_ts || '')}"
+                                    ${isMultiline ? 'multiline="true"' + (schema.properties[fieldName].code_language ? ' input-is-codemirror="' + (schema.properties[fieldName].code_language) + '"' : '') : ''}
                                 >
                                 </app-overlay-input>`;
                     }
