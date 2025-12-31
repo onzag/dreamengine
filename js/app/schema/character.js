@@ -41,6 +41,10 @@ export default {
         "general": {
             "type": "object",
             "properties": {
+                "imports": {
+                    "type": "array",
+                    "title": "Imports",
+                },
                 "src": {
                     "type": "string",
                 },
@@ -220,6 +224,19 @@ export default {
                         "minimum": 0,
                         "maximum": 100,
                         "must_have_bool": "has_custom_viewables",
+                    },
+                    "lays_down_state": {
+                        "type": "boolean",
+                        "description": "Indicates if this state causes the character to lay down, mostly useful for injury states and resting states. This also forces the character to look for laying down slots at a location.",
+                    },
+                    "lays_down_state_is_sudden": {
+                        "type": "boolean",
+                        "description": "Indicates if the laying down caused by this state is sudden, useful for injury states that cause the character to fall down suddenly. This will make the character drop wherever they are.",
+                        "must_have_bool": "lays_down_state",
+                    },
+                    "rests_state": {
+                        "type": "boolean",
+                        "description": "Indicates if this state causes the character to seek rest slots at locations. For example chairs, beds, couches, etc. To sit down. The character will move to a rest slot if available.",
                     },
                     "random_spawn_rate": {
                         "type": "number",
@@ -579,6 +596,18 @@ export default {
                 ]
             }
         },
+        "properties": {
+            "type": "object",
+            "title": "Character Properties",
+            "description": "Custom properties for the character, used for advanced scripting and behaviour customization.",
+            "additionalProperties": {
+                "type": "string"
+            },
+            "default": {
+                "race": "human",
+                "age": 30,
+            }
+        },
         "heuristic_evolution": {
             "type": "object",
             "title": "Heuristic Evolution",
@@ -587,6 +616,10 @@ export default {
         "advanced_spawn_script": {
             "type": "object",
             "properties": {
+                "imports": {
+                    "type": "array",
+                    "title": "Imports",
+                },
                 "script": {
                     "type": "string",
                 },
@@ -610,6 +643,10 @@ if (roll < 0.5) {
         "advanced_first_interact_script": {
             "type": "object",
             "properties": {
+                "imports": {
+                    "type": "array",
+                    "title": "Imports",
+                },
                 "script": {
                     "type": "string",
                 },
@@ -648,6 +685,10 @@ DE.references[char.name].short = short_backstory.text;
         "advanced_post_any_inference_script": {
             "type": "object",
             "properties": {
+                "imports": {
+                    "type": "array",
+                    "title": "Imports",
+                },
                 "script": {
                     "type": "string",
                 },
@@ -664,6 +705,10 @@ DE.references[char.name].short = short_backstory.text;
         "advanced_pre_inference_script": {
             "type": "object",
             "properties": {
+                "imports": {
+                    "type": "array",
+                    "title": "Imports",
+                },
                 "script": {
                     "type": "string",
                 },
@@ -712,6 +757,10 @@ if (durationOfSleepingOrTimeSkips < 4) {
         "advanced_pre_bond_check_script": {
             "type": "object",
             "properties": {
+                "imports": {
+                    "type": "array",
+                    "title": "Imports",
+                },
                 "script": {
                     "type": "string",
                 },
@@ -735,6 +784,10 @@ if (oher.name !== user.name && DE.social.bondLevels[char.name]?[user.name] >= 50
         "advanced_post_inference_script": {
             "type": "object",
             "properties": {
+                "imports": {
+                    "type": "array",
+                    "title": "Imports",
+                },
                 "script": {
                     "type": "string",
                 },

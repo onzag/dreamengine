@@ -1,36 +1,13 @@
 import './overlay.js';
-
-// Sound effects
-const hoverSound = document.getElementById('hoverSound');
-const confirmSound = document.getElementById('confirmSound');
-const cancelSound = document.getElementById('cancelSound');
-const pauseSound = document.getElementById('pauseSound');
-
-function playHoverSound() {
-    hoverSound.currentTime = 0;
-    hoverSound.play().catch(err => console.log('Hover sound play failed:', err));
-}
-
-function playConfirmSound() {
-    confirmSound.currentTime = 0;
-    confirmSound.play().catch(err => console.log('Confirm sound play failed:', err));
-}
-
-function playCancelSound() {
-    cancelSound.currentTime = 0;
-    cancelSound.play().catch(err => console.log('Cancel sound play failed:', err));
-}
-
-function playPauseSound() {
-    pauseSound.currentTime = 0;
-    pauseSound.play().catch(err => console.log('Pause sound play failed:', err));
-}
+import "./profile-image.js";
+import { playCancelSound, playConfirmSound, playHoverSound, playPauseSound } from '../sound.js';
 
 class Settings extends HTMLElement {
     constructor() {
         super();
         this.attachShadow({ mode: 'open' });
 
+        this.closeSettings = this.closeSettings.bind(this);
         this.onCancelSettings = this.onCancelSettings.bind(this);
         this.onSaveAndCloseSettings = this.onSaveAndCloseSettings.bind(this);
 
@@ -45,6 +22,10 @@ class Settings extends HTMLElement {
         this.shadowRoot.querySelector('app-overlay').addEventListener('confirm', this.onSaveAndCloseSettings);
 
         this.renderSection()
+
+        this.shadowRoot.querySelector('app-overlay-tabs').addEventListener('pre-tab-change', (e) => {
+            this.onCheckForUnsavedChanges(null, playConfirmSound, e.detail.denyTabChange, e.detail.executeTabChange, null);
+        });
 
         this.shadowRoot.querySelector('app-overlay-tabs').addEventListener('tab-change', (e) => {
             this.currentSectionIndex = e.detail.newIndex;
@@ -63,10 +44,11 @@ class Settings extends HTMLElement {
             const diff_array = [debug_desc, easy_desc, normal_desc, hard_desc];
             
             tabsContainer.innerHTML = `<app-overlay-section section-title="User">
+                <app-profile-image image-url="/test.png"></app-profile-image>
                 <app-overlay-input-warning>Changing any of these options will not affect previous game campaigns, only new ones.</app-overlay-input-warning>
                 <app-overlay-input
                     label="Username"
-                    input-placeholder="Enter in game username"
+                    input-placeholder="Draxkor"
                     title="This name will be the name that the AI uses to refer to you in-game, make sure to pick something unique and that you like; always present yourself to the AI as this name."
                     input-data-location="user.username"
                 ></app-overlay-input>
@@ -82,6 +64,23 @@ class Settings extends HTMLElement {
                     title="The sex will affect how the AI interacts with your character in-game, it represents what it's actually physically present in your character's body; some characters may take this into account when interacting with you."
                     input-data-location="user.sex"
                 ></app-overlay-select>
+                <app-overlay-input
+                    label="Height"
+                    title="This is your character's height, in centimeters, which may influence how other characters perceive and interact with you in the game world."
+                    input-data-location="user.height"
+                    input-placeholder="175"
+                    input-type="number"
+                    input-number-min="50"
+                    input-number-max="300"
+                    input-number-step="1"
+                    input-number-unit="cm"
+                ></app-overlay-input>
+                <app-overlay-input
+                    label="Short Description"
+                    title="This short description provides a brief overview of your character's physical appearance and notable traits, helping the AI to visualize and role-play your character more effectively."
+                    input-data-location="user.short"
+                    input-placeholder="An elderly overweight witch with a hunched back and a long crooked nose."
+                ></app-overlay-input>
                 <app-overlay-select
                     label="Difficulty"
                     input-options='["Debug", "Easy", "Normal", "Hard"]'
@@ -138,7 +137,7 @@ class Settings extends HTMLElement {
         };
     }
 
-    onCancelSettings() {
+    onCheckForUnsavedChanges(onceDoneFn, onceDoneFnNoResistance, resistanceAppliedFn, onAllowFn, onceCancelFn) {
         let hasUnsavedChanges = false;
         this.shadowRoot.querySelectorAll('app-overlay-input').forEach(inputComponent => {
             if (inputComponent.hasBeenModified()) {
@@ -154,25 +153,32 @@ class Settings extends HTMLElement {
         }
 
         if (hasUnsavedChanges) {
+            resistanceAppliedFn && resistanceAppliedFn();
             const dialog = document.createElement('app-dialog');
             dialog.setAttribute('dialog-title', 'You have unsaved changes. Are you sure you want to discard them?');
             dialog.setAttribute("confirmation", "true");
             dialog.setAttribute("confirm-text", "Discard");
             dialog.setAttribute("cancel-text", "Cancel");
             dialog.addEventListener('confirm', () => {
-                this.closeSettings();
                 playCancelSound();
                 document.body.removeChild(dialog);
+                onAllowFn && onAllowFn();
+                onceDoneFn && onceDoneFn();
             });
             dialog.addEventListener('cancel', () => {
                 document.body.removeChild(dialog);
                 playCancelSound();
+                onceCancelFn && onceCancelFn();
             });
             document.body.appendChild(dialog);
         } else {
-            this.closeSettings();
-            playCancelSound();
+            onceDoneFn && onceDoneFn();
+            onceDoneFnNoResistance && onceDoneFnNoResistance();
         }
+    }
+
+    onCancelSettings() {
+        this.onCheckForUnsavedChanges(this.closeSettings, playCancelSound);
     }
 
     async onSaveAndCloseSettings() {

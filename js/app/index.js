@@ -3,6 +3,7 @@ import './components/dialog.js';
 import './components/overlay.js';
 import './components/settings.js';
 import './components/character.js';
+import './components/manage.js';
 
 // Sound effects
 const hoverSound = document.getElementById('hoverSound');
@@ -81,6 +82,20 @@ const openSettingsBtn = document.getElementById('open-settings-btn');
 openSettingsBtn.addEventListener('click', function() {
     HAS_ACTIVE_DIALOG = true;
     const overlay = document.createElement("app-settings");
+    document.body.appendChild(overlay);
+    overlay.addEventListener('close', () => {
+        document.body.removeChild(overlay);
+        setTimeout(() => {
+            HAS_ACTIVE_DIALOG = false;
+        }, 300);
+    });
+});
+
+
+const manageBtn = document.getElementById('manage-btn');
+manageBtn.addEventListener('click', function() {
+    HAS_ACTIVE_DIALOG = true;
+    const overlay = document.createElement("app-manage");
     document.body.appendChild(overlay);
     overlay.addEventListener('close', () => {
         document.body.removeChild(overlay);

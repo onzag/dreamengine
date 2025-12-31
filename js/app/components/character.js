@@ -1,5 +1,6 @@
 import schema from '../schema/character.js';
 import { character, social, world, utils, specials } from '../schema/variables.js';
+import { playCancelSound, playConfirmSound, playHoverSound, playPauseSound } from '../sound.js';
 
 function escapeHTML(str) {
     if (typeof str === "undefined" || str === null) {
@@ -32,13 +33,13 @@ const BASIC_STATES = (child, non_sapient_animal, extra_sfw, extra_nsfw) => ({
             "{{char}} has had a meal or snack",
         ],
         "triggers_states_on_relief": [
-            child ? {"state": "Tired", "intensity": 1} : null,
-            {"state": "Satisfied", "intensity": 2},
+            child ? { "state": "Tired", "intensity": 1 } : null,
+            { "state": "Satisfied", "intensity": 2 },
         ],
         "decay_rate_per_inference": 0,
     },
     "Thirsty": {
-        "general_description": child ? 
+        "general_description": child ?
             "{{char}} is feeling thirsty and needs to drink, {{char_pronoun}} may become cranky if not given water in time, {{char_pronoun}} will seek out for their caregiver or trusted adult to provide water for {{char_object_pronoun}}" :
             "{{char}} feels the need for water to stay hydrated",
         "random_spawn_rate": 0.03,
@@ -49,7 +50,7 @@ const BASIC_STATES = (child, non_sapient_animal, extra_sfw, extra_nsfw) => ({
             "{{char}} has eaten food with high water content",
         ],
         "triggers_states_on_relief": [
-            {"state": "Satisfied", "intensity": 2},
+            { "state": "Satisfied", "intensity": 2 },
         ],
         "decay_rate_per_inference": 0,
     },
@@ -101,9 +102,9 @@ const BASIC_STATES = (child, non_sapient_animal, extra_sfw, extra_nsfw) => ({
         "automatic_reliever": true,
         "decay_rate_per_inference": 1,
     },
-    "Caring": child ? null :{
-        "general_description": 
-`{{char}} shows kindness and concern towards
+    "Caring": child ? null : {
+        "general_description":
+            `{{char}} shows kindness and concern towards
 {{#with (get_all_character_state_causants "Caring") as |cared_social_group|}}
 {{#if (gt (length cared_social_group) 0)}}{{format_and cared_social_group}}{{else}}others{{/if}}{{/with}}`,
         "automatic_trigger": true,
@@ -142,9 +143,9 @@ const BASIC_STATES = (child, non_sapient_animal, extra_sfw, extra_nsfw) => ({
     },
     "Aroused": extra_sfw || child ? null : {
         "general_description":
-            non_sapient_animal ? 
-            `{{char}} feels a heightened sexual drive and instinctual urge to mate, driven by primal instincts rather than complex emotions {{char_pronoun}} may become aggressive towards others` :
-            `{{char}} feels a heightened sense of sexual desire
+            non_sapient_animal ?
+                `{{char}} feels a heightened sexual drive and instinctual urge to mate, driven by primal instincts rather than complex emotions {{char_pronoun}} may become aggressive towards others` :
+                `{{char}} feels a heightened sense of sexual desire
 {{#with (get_present_social_group 0 100 25 100) as |attractive_social_group|}}
     {{#if (gt (length attractive_social_group) 0)}} towards {{format_and attractive_social_group}}
         {{#with (get_difference_of_present_social_group attractive_social_group) as |unattractive_social_group|}}
@@ -172,7 +173,7 @@ const BASIC_STATES = (child, non_sapient_animal, extra_sfw, extra_nsfw) => ({
         "automatic_reliever": true,
         "decay_rate_per_inference": 1,
     },
-    "Loving": child ? null :{
+    "Loving": child ? null : {
         "general_description":
             `{{char}} feels love and care
 {{{#with (get_present_social_group 25 100 15 100) as |loved_social_group|}}
@@ -190,8 +191,8 @@ const BASIC_STATES = (child, non_sapient_animal, extra_sfw, extra_nsfw) => ({
     },
     "Needs affection": {
         "general_description":
-        child ? "{{char}} has a strong desire for affection and closeness from their caregiver or trusted adult to feel safe and secure, {{char_pronoun}} will not receive affection from anyone else and react negatively" :
-            `{{char}} has a strong desire for affection and closeness
+            child ? "{{char}} has a strong desire for affection and closeness from their caregiver or trusted adult to feel safe and secure, {{char_pronoun}} will not receive affection from anyone else and react negatively" :
+                `{{char}} has a strong desire for affection and closeness
 {{{#with (get_present_social_group 25 100 15 100) as |loved_social_group|}}
     {{#if (gt (length loved_social_group) 0)}}
         from {{format_and loved_social_group}}; {{char}} will not receive affection from anyone else and react negatively
@@ -235,7 +236,7 @@ const BASIC_STATES = (child, non_sapient_animal, extra_sfw, extra_nsfw) => ({
     },
     "Berserk": non_sapient_animal ? {
         "general_description":
-`{{char}} is in a frenzied and uncontrollable state, driven by primal instincts rather than rational thought, {{char_pronoun}} may lash out aggressively at anything perceived as a threat
+            `{{char}} is in a frenzied and uncontrollable state, driven by primal instincts rather than rational thought, {{char_pronoun}} may lash out aggressively at anything perceived as a threat
 {{#with (get_present_social_group 10 100 0 100) as |friends|}}
     {{#if (gt (length friends) 0)}}
         {{char}} can be calmed down by {{format_and friends}} or aggressively subdued if necessary
@@ -257,7 +258,7 @@ const BASIC_STATES = (child, non_sapient_animal, extra_sfw, extra_nsfw) => ({
             "{{char}} has been provoked or threatened aggressively with violence",
         ],
         "triggers_states": [
-            {"state": "Angry", "intensity": 3},
+            { "state": "Angry", "intensity": 3 },
         ],
         "removes_states_on_relief": [
             "Angry",
@@ -273,8 +274,8 @@ const BASIC_STATES = (child, non_sapient_animal, extra_sfw, extra_nsfw) => ({
 
     // Extra NSFW states
     "Sexually Frustrated": extra_nsfw && !extra_sfw && !child && !non_sapient_animal ? {
-        "general_description": 
-`{{char}} feels a strong sense of sexual frustration due to unmet desires as
+        "general_description":
+            `{{char}} feels a strong sense of sexual frustration due to unmet desires as
 {{#with (get_present_social_group 0 100 25 100) as |attractive_social_group|}}
     {{#if (gt (length attractive_social_group) 0)}} towards {{format_and attractive_social_group}}
         {{#with (get_difference_of_present_social_group attractive_social_group) as |unattractive_social_group|}}
@@ -302,12 +303,12 @@ const BASIC_STATES = (child, non_sapient_animal, extra_sfw, extra_nsfw) => ({
             "{{char}} is engaging in sexual activity",
         ],
         "triggers_states_on_relief": [
-            {"state": "Satisfied", "intensity": 3},
+            { "state": "Satisfied", "intensity": 3 },
         ],
         "bond_mini": true,
         "triggers_states": [
-            {"state": "Aroused", "intensity": 4},
-            {"state": "Loving", "intensity": 1},
+            { "state": "Aroused", "intensity": 4 },
+            { "state": "Loving", "intensity": 1 },
         ],
         "has_custom_viewables": true,
         "custom_viewables_priority": 10,
@@ -328,17 +329,17 @@ const BASIC_STATES = (child, non_sapient_animal, extra_sfw, extra_nsfw) => ({
         ],
         "bond_mini": true,
         "triggers_states": [
-            {"state": "Aroused", "intensity": 4},
+            { "state": "Aroused", "intensity": 4 },
         ],
         "has_custom_viewables": true,
         "custom_viewables_priority": 15,
         "describes_action": true,
         "triggers_states_on_relief": [
-            {"state": "Satisfied", "intensity": 4},
+            { "state": "Satisfied", "intensity": 4 },
         ],
         "decay_rate_after_relief": 1,
         "relieving_description":
-`{{char}} has finished experiencing an orgasm
+            `{{char}} has finished experiencing an orgasm
 {{#with (get_all_character_state_causants "Having an Orgasm") as |orgasm_social_group|}}
     {{#if (gt (length orgasm_social_group) 0)}}
         and will request cuddles and affection with {{format_and orgasm_social_group}}
@@ -349,7 +350,7 @@ const BASIC_STATES = (child, non_sapient_animal, extra_sfw, extra_nsfw) => ({
     // Injury and Death related states
     "Injured": {
         "general_description":
-`{{char}} is hurt or wounded, which may affect their physical abilities and overall well-being
+            `{{char}} is hurt or wounded, which may affect their physical abilities and overall well-being
 {{#with (get_all_character_state_causants "Injured") as |injury_social_group|}}
     {{#if (gt (length injury_social_group) 0)}}
         , {{char}} will retaliate against {{format_and injury_social_group}} if given the chance
@@ -643,38 +644,14 @@ const WIZARD_SECTIONS = [
     }
 ]
 
-// Sound effects
-const hoverSound = document.getElementById('hoverSound');
-const confirmSound = document.getElementById('confirmSound');
-const cancelSound = document.getElementById('cancelSound');
-const pauseSound = document.getElementById('pauseSound');
-
-function playHoverSound() {
-    hoverSound.currentTime = 0;
-    hoverSound.play().catch(err => console.log('Hover sound play failed:', err));
-}
-
-function playConfirmSound() {
-    confirmSound.currentTime = 0;
-    confirmSound.play().catch(err => console.log('Confirm sound play failed:', err));
-}
-
-function playCancelSound() {
-    cancelSound.currentTime = 0;
-    cancelSound.play().catch(err => console.log('Cancel sound play failed:', err));
-}
-
-function playPauseSound() {
-    pauseSound.currentTime = 0;
-    pauseSound.play().catch(err => console.log('Pause sound play failed:', err));
-}
-
 class CharacterOverlay extends HTMLElement {
     constructor() {
         super();
         this.attachShadow({ mode: 'open' });
 
         this.currentSectionIndex = 0;
+
+        this.onCancel = this.onCancel.bind(this);
     }
 
     connectedCallback() {
@@ -754,9 +731,9 @@ class CharacterOverlay extends HTMLElement {
         this.shadowRoot.querySelector('app-overlay').addEventListener('confirm', () => {
             this.saveCurrent();
         });
-        this.shadowRoot.querySelector('app-overlay').addEventListener('cancel', () => {
-            this.dispatchEvent(new CustomEvent('close'));
-            playConfirmSound();
+        this.shadowRoot.querySelector('app-overlay').addEventListener('cancel', this.onCancel);
+        this.shadowRoot.querySelector('app-overlay-tabs').addEventListener('pre-tab-change', (e) => {
+            this.onCheckForUnsavedChanges(null, playConfirmSound, e.detail.denyTabChange, e.detail.executeTabChange, null);
         });
         this.shadowRoot.querySelector('app-overlay-tabs').addEventListener('tab-change', (e) => {
             this.currentSectionIndex = e.detail.newIndex;
@@ -764,15 +741,74 @@ class CharacterOverlay extends HTMLElement {
         });
     }
 
+    onCheckForUnsavedChanges(onceDoneFn, onceDoneFnNoResistance, resistanceAppliedFn, onAllowFn, onceCancelFn) {
+        let hasUnsavedChanges = false;
+        this.shadowRoot.querySelectorAll('app-overlay-input').forEach(inputComponent => {
+            if (inputComponent.hasBeenModified()) {
+                hasUnsavedChanges = true;
+            }
+        });
+        if (!hasUnsavedChanges) {
+            this.shadowRoot.querySelectorAll('app-overlay-select').forEach(selectComponent => {
+                if (selectComponent.hasBeenModified()) {
+                    hasUnsavedChanges = true;
+                }
+            });
+        }
+
+        if (hasUnsavedChanges) {
+            resistanceAppliedFn && resistanceAppliedFn();
+            const dialog = document.createElement('app-dialog');
+            dialog.setAttribute('dialog-title', 'You have unsaved changes. Are you sure you want to discard them?');
+            dialog.setAttribute("confirmation", "true");
+            dialog.setAttribute("confirm-text", "Discard");
+            dialog.setAttribute("cancel-text", "Cancel");
+            dialog.addEventListener('confirm', () => {
+                playCancelSound();
+                document.body.removeChild(dialog);
+                onAllowFn && onAllowFn();
+                onceDoneFn && onceDoneFn();
+            });
+            dialog.addEventListener('cancel', () => {
+                document.body.removeChild(dialog);
+                playCancelSound();
+                onceCancelFn && onceCancelFn();
+            });
+            document.body.appendChild(dialog);
+        } else {
+            onceDoneFn && onceDoneFn();
+            onceDoneFnNoResistance && onceDoneFnNoResistance();
+        }
+    }
+
+    onCancel() {
+        const onceDone = () => {
+            this.dispatchEvent(new CustomEvent("close"));
+        }
+        this.onCheckForUnsavedChanges(onceDone, playCancelSound);
+    }
+
     buildTestingSection() {
         this.shadowRoot.querySelector('app-overlay-tabs').innerHTML = `
             <app-overlay-section section-title="Singular Testing Environment">
                 You will be placed with your character in a temporary chat session in the Lunar Module world; you and your character are alone in this world, and can interact freely to test how your character behaves based on the settings you have configured so far.
                 <br><br>
-                The Lunar Module world is a simple enclosed environment that has no world rules, so you can focus on interacting with your character without any distractions.
+                The Lunar Module world is a simple enclosed environment that has no extra world rules, so you can focus on interacting with your character without any distractions.
                 <br><br>
                 <div>
                     <app-overlay-button id="startTestingButton">Start Testing Session</app-overlay-button>
+                </div>
+            </app-overlay-section>
+            <app-overlay-section section-title="Interactive Testing Environment">
+                You will be placed with your character in a temporary chat session in the Artic Station world, along with two other test characters of your choice; you can interact freely with your character and the test characters to see how your character behaves in a social setting based on the settings you have configured so far.
+                <br><br>
+                The Artic Station world is a simple environment with only one extra rule (no item spawn), it has 3 rooms, a common area, a bedroom, and a kitchen; you can also go outside to the snowy environment but it is dangerous, staying outside for too long may lead to hypothermia and death.
+                <br><br>
+                <div id="test-characters-selected">Test Characters Selected: <span id="test-characters-selected-names" class="none">You haven't selected any test characters</span></div>
+                <br><br>
+                <div>
+                    <app-overlay-button id="startTestingButton">Choose Test Characters</app-overlay-button>
+                    <app-overlay-button disabled="true" id="startTestingButton">Start Testing Session</app-overlay-button>
                 </div>
             </app-overlay-section>
         `;

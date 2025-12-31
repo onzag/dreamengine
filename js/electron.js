@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron')
+const { app, BrowserWindow, ipcMain, session } = require('electron')
 const path = require('path')
 const fs = require('fs');
 const os = require('os');
@@ -35,7 +35,10 @@ const createWindow = () => {
     fullscreenable: true,
     fullscreen: initconfig.fullscreen || false,
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+        preload: path.join(__dirname, 'preload.js'),
+        contextIsolation: true,
+        sandbox: true,
+        webSecurity: true,
     },
   })
 
@@ -43,11 +46,23 @@ const createWindow = () => {
   win.loadFile('./js/app/index.html')
 
   // Open dev tools with Ctrl+Shift+I (or Cmd+Option+I on macOS)
-  //win.webContents.openDevTools();
+  win.webContents.openDevTools();
 }
 
 app.whenReady().then(() => {
-  createWindow()
+    createWindow()
+
+    // const allowedImagesDir = path.join(__dirname, 'app', 'images')
+    // session.defaultSession.webRequest.onBeforeRequest((details, callback) => {
+    //     const url = details.url
+    //     if (url.startsWith('file://')) {
+    //         const p = decodeURI(url.replace('file://', ''))
+    //         const normalized = path.normalize(p)
+    //         const isAllowed = normalized.startsWith(allowedImagesDir)
+    //         if (!isAllowed) return callback({ cancel: true })
+    //     }
+    //     callback({})
+    // })
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -160,6 +175,12 @@ chars.forEach(file => {
 
 // Character file management IPC handlers
 ipcMain.handle('createEmptyCharacterFile', async () => {
+    // find a potentially existing unsaved character file first
+    for (const [fileName, data] of Object.entries(CHARACTER_CACHE)) {
+        if (data.__unsaved) {
+            return { group: data.group || "", characterFile: fileName };
+        }
+    }
     const filePath = path.join(CHARACTER_FOLDER, `character_${Date.now()}.json`);
     CHARACTER_CACHE[path.basename(filePath)] = {
         __unsaved: true
@@ -214,4 +235,14 @@ ipcMain.handle('loadCharacterFile', async (event, characterFile) => {
 
 ipcMain.handle('listCharacterFiles', async (event) => {
     return Object.keys(CHARACTER_CACHE);
+});
+
+ipcMain.handle('listCharacterGroups', async (event) => {
+    const groups = new Set();
+    Object.values(CHARACTER_CACHE).forEach(charData => {
+        if (!charData['__unsaved'] && charData.group) {
+            groups.add(charData.group);
+        }
+    });
+    return Array.from(groups);
 });

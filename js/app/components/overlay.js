@@ -1,9 +1,8 @@
-const hoverSound = document.getElementById('hoverSound');
-const confirmSound = document.getElementById('confirmSound');
-const cancelSound = document.getElementById('cancelSound');
 import { ALL_VARIABLES_FNS } from "../schema/variables.js";
 
 import "../../codemirror/bundle.js";
+
+import { playCancelSound, playConfirmSound, playHoverSound, playPauseSound } from '../sound.js';
 
 const EditorView = window.EditorView;
 const basicSetup = window.basicSetup;
@@ -25,21 +24,6 @@ initializeTVSFS(`declare const cat: { log(msg: any): void; };`);
 
 const usedMatchDecorator = getMatchDecorator(ALL_VARIABLES_FNS);
 
-function playHoverSound() {
-    hoverSound.currentTime = 0;
-    hoverSound.play().catch(err => console.log('Hover sound play failed:', err));
-}
-
-function playConfirmSound() {
-    confirmSound.currentTime = 0;
-    confirmSound.play().catch(err => console.log('Confirm sound play failed:', err));
-}
-
-function playCancelSound() {
-    cancelSound.currentTime = 0;
-    cancelSound.play().catch(err => console.log('Cancel sound play failed:', err));
-}
-
 class Overlay extends HTMLElement {
     constructor() {
         super();
@@ -60,8 +44,12 @@ class Overlay extends HTMLElement {
 
         document.addEventListener("keydown", this.onDocumentKeydown);
 
-        this.shadowRoot.getElementById('confirm-btn').addEventListener('click', this.onAcceptButtonClick);
-        this.shadowRoot.getElementById('cancel-btn').addEventListener('click', this.onCancelButtonClick);
+        if (this.shadowRoot.getElementById('confirm-btn')) {
+            this.shadowRoot.getElementById('confirm-btn').addEventListener('click', this.onAcceptButtonClick);
+        }
+        if (this.shadowRoot.getElementById('cancel-btn')) {
+            this.shadowRoot.getElementById('cancel-btn').addEventListener('click', this.onCancelButtonClick);
+        }
 
         this.shadowRoot.querySelectorAll('.overlay-buttons div').forEach(btn => {
             btn.addEventListener('mouseenter', playHoverSound);
@@ -124,8 +112,8 @@ class Overlay extends HTMLElement {
 
     render() {
         const title = this.getAttribute('overlay-title') || 'Overlay Title';
-        const cancelText = this.getAttribute('cancel-text') || 'Cancel';
-        const confirmText = this.getAttribute('confirm-text') || 'Confirm';
+        const cancelText = this.getAttribute('cancel-text') || null;
+        const confirmText = this.getAttribute('confirm-text') || null;
         let specialButtonHTML = "";
 
         if (this.getAttribute('special-button-text')) {
@@ -235,8 +223,8 @@ class Overlay extends HTMLElement {
             <slot></slot>
         </div>
         <div class="overlay-buttons">
-                <div id="cancel-btn">${cancelText}</div>
-                <div id="confirm-btn">${confirmText}</div>
+                ${cancelText ? `<div id="cancel-btn">${cancelText}</div>` : ''}
+                ${confirmText ? `<div id="confirm-btn">${confirmText}</div>` : ''}
             </div>
       </div>
     `;
@@ -317,7 +305,7 @@ class OverlayInput extends HTMLElement {
             extensions.push(autocompletion({ override: [tsComplete] }));
             extensions.push(tsvfsViewPlugin(this));
         }
-        if (allowUseDefault &&this.getAttribute("input-default-value")) {
+        if (allowUseDefault && this.getAttribute("input-default-value")) {
             this.editor = new EditorView({
                 lineWrapping: true,
                 doc: doc || this.getAttribute("input-default-value"),
@@ -444,19 +432,26 @@ class OverlayInput extends HTMLElement {
     }
 
     async saveValueToUserData() {
-        let value = this.shadowRoot.querySelector('input, textarea').value;
-        const type = this.getAttribute('input-type') || 'text';
-        const isPercentage = this.getAttribute('input-is-percentage') === 'true';
+        let value;
         const isCodeMirror = this.getAttribute('multiline') === 'true' && this.getAttribute("input-is-codemirror");
-        if (type === 'number') {
-            value = parseFloat(value);
-            if (isNaN(value)) {
-                value = 0;
+
+        if (!isCodeMirror) {
+            value = this.shadowRoot.querySelector('input, textarea').value;
+            const type = this.getAttribute('input-type') || 'text';
+            const isPercentage = this.getAttribute('input-is-percentage') === 'true';
+            if (type === 'number') {
+                value = parseFloat(value);
+                if (isNaN(value)) {
+                    value = 0;
+                }
+                if (isPercentage) {
+                    value = value / 100;
+                }
             }
-            if (isPercentage) {
-                value = value / 100;
-            }
+        } else {
+            value = this.editor.state.doc.toString();
         }
+
         const dataLocationOriginal = this.getAttribute('input-data-location');
         let dataLocation = dataLocationOriginal;
         if (isCodeMirror === "typescript") {
@@ -465,16 +460,33 @@ class OverlayInput extends HTMLElement {
             dataLocation += ".src";
         }
         await window.electronAPI.setValueIntoUserData(dataLocation, this.getAttribute("input-data-character-file"), value);
+        const dataLocationJs = dataLocationOriginal + ".js";
         if (isCodeMirror === "typescript" || this.editorInitializedInMode === "typescript") {
-            const dataLocationJs = dataLocationOriginal + ".js";
             await window.electronAPI.setValueIntoUserData(dataLocationJs, this.getAttribute("input-data-character-file"), convertTsToJs(value));
         } else if (isCodeMirror && this.editorInitializedInMode === "handlebars") {
             await window.electronAPI.setValueIntoUserData(dataLocationJs, this.getAttribute("input-data-character-file"), null);
         }
+        this.originalValue = value;
     }
 
     hasBeenModified() {
-        const currentValue = this.shadowRoot.querySelector('input').value;
+        const isCodeMirror = this.getAttribute('multiline') === 'true' && this.getAttribute("input-is-codemirror");
+        if (isCodeMirror) {
+            const currentValue = this.editor.state.doc.toString();
+            return currentValue.trim() !== this.originalValue.trim();
+        }
+        const currentValue = this.shadowRoot.querySelector('input, textarea').value;
+        if (this.getAttribute('input-type') === 'number') {
+            const isPercentage = this.getAttribute('input-is-percentage') === 'true';
+            let value = parseFloat(currentValue);
+            if (isNaN(value)) {
+                value = 0;
+            }
+            if (isPercentage) {
+                value = value / 100;
+            }
+            return value !== parseFloat(this.originalValue);
+        }
         return currentValue.trim() !== this.originalValue.trim();
     }
 
@@ -496,6 +508,10 @@ class OverlayInput extends HTMLElement {
         if (type === 'number') {
             const min = this.getAttribute('input-number-min');
             const max = this.getAttribute('input-number-max');
+            const step = this.getAttribute('input-number-step');
+            if (step !== null && step !== '') {
+                extraAttributes += ` step="${step}"`;
+            }
             if (min !== null && min !== '') {
                 extraAttributes += ` min="${min}"`;
             }
@@ -504,7 +520,10 @@ class OverlayInput extends HTMLElement {
             }
 
             if (this.getAttribute('input-is-percentage') === 'true') {
-                wrapperClass += ` percent-input`;
+                wrapperClass += ` special-input percent-input`;
+            }
+            if (this.getAttribute('input-number-unit')) {
+                wrapperClass += ` special-input ${this.getAttribute('input-number-unit')}-input`;
             }
         }
 
@@ -550,10 +569,15 @@ class OverlayInput extends HTMLElement {
             text-align: left;
             color: #FF6B6B;
         }
-            input::-webkit-inner-spin-button,
+
+        input::-webkit-inner-spin-button,
 input::-webkit-outer-spin-button {
   -webkit-appearance: none;
   margin: 0;
+}
+
+input {
+    box-sizing: border-box;
 }
 
 .input-wrapper {
@@ -568,8 +592,7 @@ input::-webkit-outer-spin-button {
     width: 100%   
 }
 
-.input-wrapper.percent-input::after {
-  content: '%';
+.input-wrapper.special-input::after {
   position: absolute;
   right: 10px;
   top: 50%;
@@ -578,6 +601,23 @@ input::-webkit-outer-spin-button {
   color: #FF6B6B;
   font-weight: bold;
 }
+
+.input-wrapper.percent-input::after {
+  content: '%';
+}
+
+.input-wrapper.cm-input::after {
+  content: 'cm';
+}
+
+.input-wrapper.m-input::after {
+  content: 'm';
+}
+
+.input-wrapper.km-input::after {
+  content: 'km';
+}
+
 .code-mirror-mode-switcher {
     font-size: 2.5vh;
     background: black;
@@ -682,6 +722,8 @@ class OverlayInputSelect extends HTMLElement {
             const inputElement = this.shadowRoot.querySelector('select');
             inputElement.value = this.getAttribute("input-default-value");
             this.originalValue = this.getAttribute("input-default-value");
+        } else {
+            this.originalValue = this.shadowRoot.querySelector('select').value;
         }
 
         window.electronAPI.loadValueFromUserData(this.getAttribute('input-data-location'), this.getAttribute("input-data-character-file")).then((value) => {
@@ -697,6 +739,7 @@ class OverlayInputSelect extends HTMLElement {
     async saveValueToUserData() {
         const value = this.shadowRoot.querySelector('select').value;
         await window.electronAPI.setValueIntoUserData(this.getAttribute('input-data-location'), this.getAttribute("input-data-character-file"), value.trim());
+        this.originalValue = value;
     }
 
     hasBeenModified() {
@@ -811,7 +854,6 @@ class OverlayTabs extends HTMLElement {
             tab.addEventListener('click', (e) => {
                 if (!tab.classList.contains('active')) {
                     this.onTabClick(index);
-                    playConfirmSound();
                 } else {
                     playCancelSound();
                 }
@@ -821,19 +863,35 @@ class OverlayTabs extends HTMLElement {
     }
 
     onTabClick(index) {
-        const current = parseInt(this.getAttribute('current')) || 0;
-        this.dispatchEvent(new CustomEvent('tab-change', {
+        let allowsTabChange = true;
+        const executeTabChange = () => {
+            this.dispatchEvent(new CustomEvent('tab-change', {
+                detail: {
+                    newIndex: index
+                }
+            }));
+            this.shadowRoot.querySelectorAll('.tab').forEach((tab, tabIndex) => {
+                if (tabIndex === index) {
+                    tab.classList.add('active');
+                } else {
+                    tab.classList.remove('active');
+                }
+            });
+        }
+        this.dispatchEvent(new CustomEvent('pre-tab-change', {
             detail: {
-                newIndex: index
+                newIndex: index,
+                denyTabChange: () => {
+                    allowsTabChange = false;
+                },
+                executeTabChange,
             }
         }));
-        this.shadowRoot.querySelectorAll('.tab').forEach((tab, tabIndex) => {
-            if (tabIndex === index) {
-                tab.classList.add('active');
-            } else {
-                tab.classList.remove('active');
-            }
-        });
+
+        if (!allowsTabChange) {
+            return;
+        }
+        executeTabChange();
     }
 
     render() {
@@ -907,8 +965,21 @@ class OverlayButton extends HTMLElement {
         this.shadowRoot.querySelector('div').addEventListener('mouseenter', playHoverSound);
     }
 
+    static get observedAttributes() {
+        return ['disabled'];
+    }
+
+    attributeChangedCallback(name, oldValue, newValue) {
+        if (name === 'disabled') {
+            this.shadowRoot.querySelector('div').className = `overlay-button${newValue === 'true' ? ' disabled' : ''}`;
+        }
+    }
+
     onButtonClick() {
         this.dispatchEvent(new CustomEvent('button-click'));
+        if (this.getAttribute('play-sound-on-click') === 'false') {
+            return;
+        }
         playConfirmSound();
     }
 
@@ -929,8 +1000,15 @@ class OverlayButton extends HTMLElement {
         .overlay-button:hover {
             color: #FF6B6B;
         }
+        .overlay-button.disabled {
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+        .overlay-button.disabled:hover {
+            color: inherit;
+        }
       </style>
-      <div class="overlay-button">
+      <div class="overlay-button${this.getAttribute('disabled') === 'true' ? ' disabled' : ''}">
         <slot></slot>
       </div>
     `;
