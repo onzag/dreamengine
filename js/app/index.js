@@ -5,31 +5,15 @@ import './components/settings.js';
 import './components/character.js';
 import './components/manage.js';
 
-// Sound effects
-const hoverSound = document.getElementById('hoverSound');
-const confirmSound = document.getElementById('confirmSound');
-const cancelSound = document.getElementById('cancelSound');
-const pauseSound = document.getElementById('pauseSound');
+import { playConfirmSound, playHoverSound, toggleAmbience,
+    toggleFX, isAmbienceEnabled, isFXEnabled, startAmbienceWithFade } from './sound.js';
 
-function playHoverSound() {
-  hoverSound.currentTime = 0;
-  hoverSound.play().catch(err => console.log('Hover sound play failed:', err));
-}
-
-function playConfirmSound() {
-  confirmSound.currentTime = 0;
-  confirmSound.play().catch(err => console.log('Confirm sound play failed:', err));
-}
-
-function playCancelSound() {
-  cancelSound.currentTime = 0;
-  cancelSound.play().catch(err => console.log('Cancel sound play failed:', err));
-}
-
-function playPauseSound() {
-  pauseSound.currentTime = 0;
-  pauseSound.play().catch(err => console.log('Pause sound play failed:', err));
-}
+const initialPromise = new Promise((resolve) => {
+    window.electronAPI.getDreamEnginePath().then((path) => {
+        window.DREAMENGINE_INFO_HOME = path;
+        resolve(path);
+    });
+});
 
 let HAS_ACTIVE_DIALOG = false;
 function exitGame() {
@@ -65,6 +49,7 @@ exitBtn.addEventListener('click', function() {
 const newCharacterBtn = document.getElementById('new-character-btn');
 newCharacterBtn.addEventListener('click', async () => {
     HAS_ACTIVE_DIALOG = true;
+    await initialPromise;
     const rs = await window.electronAPI.createEmptyCharacterFile();
     const overlay = document.createElement("app-character");
     overlay.setAttribute("character-group", rs.group);
@@ -79,8 +64,9 @@ newCharacterBtn.addEventListener('click', async () => {
 });
 
 const openSettingsBtn = document.getElementById('open-settings-btn');
-openSettingsBtn.addEventListener('click', function() {
+openSettingsBtn.addEventListener('click', async () => {
     HAS_ACTIVE_DIALOG = true;
+    await initialPromise;
     const overlay = document.createElement("app-settings");
     document.body.appendChild(overlay);
     overlay.addEventListener('close', () => {
@@ -93,8 +79,9 @@ openSettingsBtn.addEventListener('click', function() {
 
 
 const manageBtn = document.getElementById('manage-btn');
-manageBtn.addEventListener('click', function() {
+manageBtn.addEventListener('click', async () => {
     HAS_ACTIVE_DIALOG = true;
+    await initialPromise;
     const overlay = document.createElement("app-manage");
     document.body.appendChild(overlay);
     overlay.addEventListener('close', () => {
@@ -115,7 +102,7 @@ footerLinks.forEach(link => {
 });
 
 // Toggle full screen on alt+Enter
-document.addEventListener("keydown", (e) => {
+document.addEventListener("keydown", async (e) => {
     if (e.key === "Enter" && e.altKey) {
         window.electronAPI.toggleFullScreen();
         // Force focus on body to trigger repaint
@@ -128,3 +115,75 @@ document.addEventListener("keydown", (e) => {
         exitGame();
     }
 });
+
+document.querySelector(".fx").addEventListener("click", () => {
+    playConfirmSound();
+    const wasToggledTo = toggleFX();
+    if (wasToggledTo) {
+        playConfirmSound();
+        document.querySelector(".fx").classList.add("enabled");
+    } else {
+        document.querySelector(".fx").classList.remove("enabled");
+    }
+});
+
+document.querySelector(".fx").addEventListener("mouseenter", (e) => {
+    playHoverSound();
+
+    e.currentTarget.querySelector("path").setAttribute("fill", "#FF6B6B");
+});
+
+document.querySelector(".fx").addEventListener("mouseleave", (e) => {
+    e.currentTarget.querySelector("path").setAttribute("fill", "#ccc");
+});
+
+document.querySelector(".ambience").addEventListener("mouseenter", (e) => {
+    playHoverSound();
+
+    e.currentTarget.querySelector("path").setAttribute("fill", "#FF6B6B");
+});
+
+document.querySelector(".ambience").addEventListener("mouseleave", (e) => {
+    e.currentTarget.querySelector("path").setAttribute("fill", "#ccc");
+});
+
+document.querySelector(".ambience").addEventListener("click", () => {
+    playConfirmSound();
+    const wasToggledTo = toggleAmbience();
+    if (wasToggledTo) {
+        document.querySelector(".ambience").classList.add("enabled");
+    } else {
+        document.querySelector(".ambience").classList.remove("enabled");
+    }
+});
+
+// Initialize sound icons based on settings
+window.addEventListener('DOMContentLoaded', () => {
+    if (isFXEnabled()) {
+        document.querySelector(".fx").classList.add("enabled");
+    } else {
+        document.querySelector(".fx").classList.remove("enabled");
+    }
+
+    if (isAmbienceEnabled()) {
+        document.querySelector(".ambience").classList.add("enabled");
+    } else {
+        document.querySelector(".ambience").classList.remove("enabled");
+    }
+
+    setTimeout(async () => {
+        await startAmbienceWithFade(['./sounds/qubodup-wind-loop.ogg'], 2000);
+        removeLoadingBlur();
+    }, 500);
+});
+
+function removeLoadingBlur() {
+    const loadingOverlay = document.getElementById('loading-overlay');
+    loadingOverlay.style.transition = 'opacity 1s ease';
+    loadingOverlay.style.opacity = '0';
+    setTimeout(() => {
+        if (loadingOverlay.parentNode) {
+            loadingOverlay.parentNode.removeChild(loadingOverlay);
+        }
+    }, 1000);
+}

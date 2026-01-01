@@ -5,26 +5,26 @@ const os = require('os');
 
 const CHARACTER_CACHE = {};
 
-if (!fs.existsSync(path.join(app.getPath('home'), '.dreamengine'))) {
-    fs.mkdirSync(path.join(app.getPath('home'), '.dreamengine'));
+const DREAMENGINE_INFO_HOME = path.join(app.getPath('home'), '.dreamengine');
+if (!fs.existsSync(DREAMENGINE_INFO_HOME)) {
+    fs.mkdirSync(DREAMENGINE_INFO_HOME);
 }
 
-if (!fs.existsSync(path.join(app.getPath('home'), '.dreamengine', 'init-config.json'))) {
-    fs.writeFileSync(path.join(app.getPath('home'), '.dreamengine', 'init-config.json'), JSON.stringify({
+if (!fs.existsSync(path.join(DREAMENGINE_INFO_HOME, 'init-config.json'))) {
+    fs.writeFileSync(path.join(DREAMENGINE_INFO_HOME, 'init-config.json'), JSON.stringify({
         fullscreen: false
     }));
 }
 
-const initconfig = JSON.parse(fs.readFileSync(path.join(app.getPath('home'), '.dreamengine', 'init-config.json')));
+const initconfig = JSON.parse(fs.readFileSync(path.join(DREAMENGINE_INFO_HOME, 'init-config.json')));
 
 async function saveInitConfig() {
-    await fs.promises.writeFile(path.join(app.getPath('home'), '.dreamengine', 'init-config.json'), JSON.stringify(initconfig));
+    await fs.promises.writeFile(path.join(DREAMENGINE_INFO_HOME, 'init-config.json'), JSON.stringify(initconfig));
 }
 
-const userDataPath = path.join(os.homedir(), '.dreamengine');
 let userData = {};
 try {
-    userData = JSON.parse(fs.readFileSync(path.join(userDataPath, 'settings.json'), 'utf-8'));
+    userData = JSON.parse(fs.readFileSync(path.join(DREAMENGINE_INFO_HOME, 'settings.json'), 'utf-8'));
 } catch (e) { }
 
 
@@ -46,23 +46,32 @@ const createWindow = () => {
   win.loadFile('./js/app/index.html')
 
   // Open dev tools with Ctrl+Shift+I (or Cmd+Option+I on macOS)
-  win.webContents.openDevTools();
+  //win.webContents.openDevTools();
 }
 
 app.whenReady().then(() => {
     createWindow()
 
-    // const allowedImagesDir = path.join(__dirname, 'app', 'images')
-    // session.defaultSession.webRequest.onBeforeRequest((details, callback) => {
-    //     const url = details.url
-    //     if (url.startsWith('file://')) {
-    //         const p = decodeURI(url.replace('file://', ''))
-    //         const normalized = path.normalize(p)
-    //         const isAllowed = normalized.startsWith(allowedImagesDir)
-    //         if (!isAllowed) return callback({ cancel: true })
-    //     }
-    //     callback({})
-    // })
+    const allowedBasePaths = [
+        "file://" + DREAMENGINE_INFO_HOME,
+        "file://" + __dirname,
+        "http://",
+        "https://",
+        "data:",
+        "websocket://",
+        "ws://",
+        "wss://",
+        "devtools://",
+    ];
+    session.defaultSession.webRequest.onBeforeRequest((details, callback) => {
+        const url = details.url;
+        const isAllowed = allowedBasePaths.some(basePath => url.startsWith(basePath));
+        if (!isAllowed) {
+            console.warn("Blocked URL:", url, "not in allowed paths.", allowedBasePaths);
+            return callback({ cancel: true });
+        }
+        return callback({ });
+    })
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -92,7 +101,7 @@ ipcMain.handle('toggleFullScreen', () => {
 ipcMain.on('openDevTools', () => {
   const win = BrowserWindow.getFocusedWindow();
   if (win) {
-    win.webContents.openDevTools({ mode: 'detach' });
+    win.webContents.openDevTools();
   }
 });
 
@@ -147,17 +156,17 @@ ipcMain.handle('setValueIntoUserData', (event, key, characterFile, value) => {
 });
 
 ipcMain.on('saveSettingsToDisk', () => {
-    if (!fs.existsSync(userDataPath)) {
-        fs.mkdirSync(userDataPath, { recursive: true });
+    if (!fs.existsSync(DREAMENGINE_INFO_HOME)) {
+        fs.mkdirSync(DREAMENGINE_INFO_HOME, { recursive: true });
     }
-    fs.writeFileSync(path.join(userDataPath, 'settings.json'), JSON.stringify(userData, null, 2), 'utf-8');
+    fs.writeFileSync(path.join(DREAMENGINE_INFO_HOME, 'settings.json'), JSON.stringify(userData, null, 2), 'utf-8');
 });
 
-const CHARACTER_FOLDER = path.join(app.getPath('home'), '.dreamengine', 'characters');
+const CHARACTER_FOLDER = path.join(DREAMENGINE_INFO_HOME, 'characters');
 if (!fs.existsSync(CHARACTER_FOLDER)) {
     fs.mkdirSync(CHARACTER_FOLDER, { recursive: true });
 }
-const CHARACTER_ASSETS_FOLDER = path.join(app.getPath('home'), '.dreamengine', 'characters-assets');
+const CHARACTER_ASSETS_FOLDER = path.join(DREAMENGINE_INFO_HOME, 'characters-assets');
 if (!fs.existsSync(CHARACTER_ASSETS_FOLDER)) {
     fs.mkdirSync(CHARACTER_ASSETS_FOLDER, { recursive: true });
 }
@@ -245,4 +254,52 @@ ipcMain.handle('listCharacterGroups', async (event) => {
         }
     });
     return Array.from(groups);
+});
+
+ipcMain.handle('getDreamEnginePath', () => {
+    return DREAMENGINE_INFO_HOME;
+});
+
+ipcMain.handle('uploadFileToDEPath', async (event, dePath, file) => {
+    if (!file) {
+        throw new Error("No file provided for upload");
+    }
+    // ensure no directory traversal
+    if (dePath.includes('..')) {
+        throw new Error("Invalid path");
+    }
+    const destPath = path.join(DREAMENGINE_INFO_HOME, dePath);
+    const arrayBuffer = await file.arrayBuffer();
+    await fs.promises.writeFile(destPath, Buffer.from(arrayBuffer));
+    return true;
+});
+
+// Accept raw bytes (ArrayBuffer or Uint8Array) from renderer and persist to DreamEngine path
+ipcMain.handle('uploadBytesToDEPath', async (event, dePath, bytes) => {
+    if (!bytes) {
+        throw new Error('No byte data provided for upload');
+    }
+    if (typeof dePath !== 'string' || dePath.length === 0) {
+        throw new Error('Invalid destination path');
+    }
+    if (dePath.includes('..')) {
+        throw new Error('Invalid path');
+    }
+    if (dePath !== "profile" && !dePath.startsWith("characters-assets/")) {
+        throw new Error('Unauthorized path for upload');
+    }
+    if (dePath.endsWith(".json") || dePath.endsWith(".js")) {
+        throw new Error('Uploading JSON or JS files is not allowed');
+    }
+    const destPath = path.join(DREAMENGINE_INFO_HOME, dePath);
+    let buffer;
+    if (bytes instanceof Uint8Array) {  
+        buffer = Buffer.from(bytes);
+    } else if (bytes instanceof ArrayBuffer) {
+        buffer = Buffer.from(new Uint8Array(bytes));
+    } else {
+        throw new Error('Unsupported byte payload type');
+    }
+    await fs.promises.writeFile(destPath, buffer);
+    return true;
 });

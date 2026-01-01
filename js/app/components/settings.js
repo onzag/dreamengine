@@ -44,7 +44,8 @@ class Settings extends HTMLElement {
             const diff_array = [debug_desc, easy_desc, normal_desc, hard_desc];
             
             tabsContainer.innerHTML = `<app-overlay-section section-title="User">
-                <app-profile-image image-url="/test.png"></app-profile-image>
+                <app-profile-image image-url="profile" editable="true"></app-profile-image>
+                <div class="profile-image-spacer"></div>
                 <app-overlay-input-warning>Changing any of these options will not affect previous game campaigns, only new ones.</app-overlay-input-warning>
                 <app-overlay-input
                     label="Username"
@@ -139,18 +140,11 @@ class Settings extends HTMLElement {
 
     onCheckForUnsavedChanges(onceDoneFn, onceDoneFnNoResistance, resistanceAppliedFn, onAllowFn, onceCancelFn) {
         let hasUnsavedChanges = false;
-        this.shadowRoot.querySelectorAll('app-overlay-input').forEach(inputComponent => {
+        this.shadowRoot.querySelectorAll('app-overlay-input, app-overlay-select, app-profile-image').forEach(inputComponent => {
             if (inputComponent.hasBeenModified()) {
                 hasUnsavedChanges = true;
             }
         });
-        if (!hasUnsavedChanges) {
-            this.shadowRoot.querySelectorAll('app-overlay-select').forEach(selectComponent => {
-                if (selectComponent.hasBeenModified()) {
-                    hasUnsavedChanges = true;
-                }
-            });
-        }
 
         if (hasUnsavedChanges) {
             resistanceAppliedFn && resistanceAppliedFn();
@@ -185,13 +179,9 @@ class Settings extends HTMLElement {
         this.closeSettings();
         playConfirmSound();
 
-        await Promise.all(Array.from(this.shadowRoot.querySelectorAll('app-overlay-input')).map(inputComponent =>
+        await Promise.all(Array.from(this.shadowRoot.querySelectorAll('app-overlay-input, app-overlay-select, app-profile-image')).map(inputComponent =>
             inputComponent.saveValueToUserData()
         ));
-
-        await Promise.all(Array.from(this.shadowRoot.querySelectorAll('app-overlay-select')).map(selectComponent => {
-            return selectComponent.saveValueToUserData();
-        }));
 
         window.electronAPI.saveSettingsToDisk();
     }
@@ -201,7 +191,13 @@ class Settings extends HTMLElement {
     }
 
     render() {
-        this.shadowRoot.innerHTML = `<app-overlay overlay-title="Settings" cancel-text="Cancel" confirm-text="Save & Close">
+        this.shadowRoot.innerHTML = `
+        <style>
+            .profile-image-spacer {
+                height: 4vh;
+            }
+        </style>
+        <app-overlay overlay-title="Settings" cancel-text="Cancel" confirm-text="Save & Close">
             <app-overlay-tabs current="${this.currentSectionIndex}" sections='["General", "AI Settings"]'>              
             </app-overlay-tabs>
         </app-overlay>`;

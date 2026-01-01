@@ -94,32 +94,6 @@ export const character = [
 
 export const social = [
     [
-        "char_social_group",
-        "The list of social group members (characters wtih a bond with, positive or negative)",
-        "eg. [Arya, Thalon, Mira]",
-        (user, character, DE) => DE.social.bonds[character.name].active.map(bond => bond.towards),
-    ],
-    [
-        "char_social_group_present_members",
-        "The list of present social group members (present characters the character has a bond with, positive or negative)",
-        "eg. [Arya, Thalon]",
-        (user, character, DE) => {
-            const socialGroup = DE.social.bonds[character.name].active.map(bond => bond.towards);
-            const currentLocation = DE.world.currentLocation.name;
-            return socialGroup.filter(memberName => {
-                const stateOfChar = DE.stateFor[memberName];
-                const locationOfChar = stateOfChar.location.current;
-                return locationOfChar === currentLocation;
-            });
-        }
-    ],
-    [
-        "user_social_group_ex_members",
-        "The list of ex-social group members",
-        "eg. [Dorian]",
-        (user, character, DE) => DE.social.bonds[character.name].exMembers.map(member => member.name),
-    ],
-    [
         "all_characters_at_location location_name",
         "The list of all characters available in the current location of the world, including the user",
         "eg. [Luna, Kiro]",
@@ -318,7 +292,7 @@ export const utils = [
     ],
     [
         "get_present_social_group min_bond_level max_bond_level min_2_bond_level max_2_bond_level",
-        "Get the list of social group members for the current character",
+        "Get the list of social group members for the current character that are present at the same location as our character",
         "eg. [Arya, Thalon, Mira]",
         (user, character, DE, minBondLevel, maxBondLevel, min2BondLevel, max2BondLevel) => {
             const currentLocation = DE.world.currentLocation.name;
@@ -335,6 +309,25 @@ export const utils = [
         }
     ],
     [
+        "get_present_participating_social_group min_bond_level max_bond_level min_2_bond_level max_2_bond_level",
+        "Get the list of social group members for the current character, that are not only present but also participating in a conversation with our character",
+        "eg. [Thalon, Mira]",
+        (user, character, DE, minBondLevel, maxBondLevel, min2BondLevel, max2BondLevel) => {
+            if (minBondLevel === -100 && maxBondLevel === 100 && min2BondLevel === 0 && max2BondLevel === 100) {
+                return DE.conversations[DE.stateFor[character.name].conversationId].participants.filter(memberName => memberName !== character.name);
+            }
+            const socialGroup = DE.social.bonds[character.name].active.filter(bond => {
+                const bondValue = bond.bond;
+                const secondaryBond = bond.bond_2;
+                return bondValue >= minBondLevel && bondValue <= maxBondLevel && secondaryBond >= min2BondLevel && secondaryBond <= max2BondLevel;
+            }).map(bond => bond.towards);
+            const stateForChar = DE.stateFor[character.name];
+            const conversationId = stateForChar.conversationId;
+            const conversation = DE.conversations[conversationId];
+            return conversation.participants.filter(memberName => socialGroup.includes(memberName));
+        }
+    ],
+    [
         "get_difference_of_present_social_group list",
         "Get the difference between the provided list and the present social group members",
         "eg. [Arya, Thalon]",
@@ -347,6 +340,18 @@ export const utils = [
                 return locationOfChar === currentLocation;
             });
             return list.filter(name => !presentSocialGroup.includes(name));
+        }
+    ],
+    [
+        "get_gone_social_group min_bond_level max_bond_level min_2_bond_level max_2_bond_level",
+        "Get the list of social group members that are gone forever (most likely dead) for the current character",
+        "eg. [Thalon, Mira]",
+        (user, character, DE, minBondLevel, maxBondLevel, min2BondLevel, max2BondLevel) => {
+            return DE.social.exbonds[character.name].active.filter(bond => {
+                const bondValue = bond.bond;
+                const secondaryBond = bond.bond_2;
+                return bondValue >= minBondLevel && bondValue <= maxBondLevel && secondaryBond >= min2BondLevel && secondaryBond <= max2BondLevel;
+            }).map(bond => bond.towards);
         }
     ],
     [
@@ -449,6 +454,31 @@ export const utils = [
         }
     ],
     [
+        "is_gone character",
+        "Boolean indicating if the character is gone forever (most likely dead)",
+        "true or false",
+        (user, character, DE, characterQuestioned) => {
+            const exbonds = DE.social.exbonds[character.name].active;
+            for (const bond of exbonds) {
+                if (bond.towards === characterQuestioned) {
+                    return true;
+                }
+            }
+            return false;
+        }
+    ],
+    [
+        "is_in_conversation character",
+        "Boolean indicating if the character is currently in a conversation with our character",
+        "true or false",
+        (user, character, DE, characterQuestioned) => {
+            const stateForChar = DE.stateFor[character.name];
+            const conversationId = stateForChar.conversationId;
+            const conversation = DE.conversations[conversationId];
+            return conversation.participants.includes(characterQuestioned);
+        }
+    ],
+    [
         "last_saw character",
         "String indicating a location where another character should be at according to the character's knowledge",
         "true or false",
@@ -456,7 +486,7 @@ export const utils = [
             const charHistory = DE.stateFor[character.name].history;
             for (let i = charHistory.length - 1; i >= 0; i--) {
                 const entry = charHistory[i];
-                if (entry.accompanied_with.includes(characterQuestioned)) {
+                if (entry.surroundingNonStrangers.includes(characterQuestioned)) {
                     return entry.location;
                 }
             }
@@ -474,7 +504,7 @@ export const utils = [
             let foundAtIndex = -1;
             for (let i = charHistory.length - 1; i >= 0; i--) {
                 const entry = charHistory[i];
-                if (entry.accompanied_with.includes(characterQuestioned)) {
+                if (entry.surroundingNonStrangers.includes(characterQuestioned)) {
                     shouldBeAt = entry.location;
                     foundAtIndex = i;
                     break;

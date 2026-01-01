@@ -52,4 +52,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
         const result = await ipcRenderer.invoke('listCharacterGroups');
         return result;
     },
+    getDreamEnginePath: () => {
+        return ipcRenderer.invoke('getDreamEnginePath');
+    },
+    uploadFileToDEPath: async (dePath, file) => {
+        const arrayBuffer = await file.arrayBuffer();
+        const uint8Array = new Uint8Array(arrayBuffer);
+        return ipcRenderer.invoke('uploadBytesToDEPath', dePath, uint8Array);
+    },
 });
