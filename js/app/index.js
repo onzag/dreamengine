@@ -172,7 +172,7 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 
     setTimeout(async () => {
-        await startAmbienceWithFade(['./sounds/qubodup-wind-loop.ogg'], 2000);
+        await startAmbienceWithFade(['./sounds/dream-ambience.ogg'], 2000);
         removeLoadingBlur();
     }, 500);
 });

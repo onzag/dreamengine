@@ -49,10 +49,10 @@ function toggleFX() {
 function toggleAmbience() {
   ambienceEnabled = !ambienceEnabled;
   localStorage.setItem('ambienceEnabled', ambienceEnabled.toString());
-  if (ambienceEnabled && currentAmbience) {
-    playAmbience(currentAmbience);
+  if (!ambienceEnabled) {
+    stopAmbience(true);
   } else {
-    pauseAmbience();
+    playAmbience(currentAmbience);
   }
   return ambienceEnabled;
 }
@@ -67,42 +67,37 @@ function isAmbienceEnabled() {
 
 const AMBIENCES = []
 
-async function playAmbience(src, volume=0.5) {
-  if (currentAmbience === src) {
-    document.querySelectorAll('audio.ambience').forEach(audio => {
-      audio.play().catch(err => console.log('Ambience play failed:', err));
-    });
-  } else {
-    currentAmbience = (currentAmbience || []).concat(src);
-    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    const gainNode = audioContext.createGain();
-    const sources = [];
-    for (const srcItem of src) {
-      const ambienceAudio = await fetch(srcItem).then(res => res.arrayBuffer());
-      const audioBuffer = await audioContext.decodeAudioData(ambienceAudio);
-      const source = audioContext.createBufferSource();
-      source.buffer = audioBuffer;
-      source.loop = true;
-      // Route audio through gain node
-      source.connect(gainNode);
-      if (ambienceEnabled) {
-        source.start(0);
-        sources.push(source);
-      }
-    }
-    // Connect gain to destination once
-    gainNode.connect(audioContext.destination);
-    gainNode.gain.setValueAtTime(volume, audioContext.currentTime);
-    gainNode.gain.value = volume;
-    AMBIENCES.push({
-      context: audioContext,
-      gainNode: gainNode,
-      sources,
-    });
+async function playAmbience(src, volume = 0.5) {
+  currentAmbience = (currentAmbience || []).concat(src);
+  if (!ambienceEnabled) {
+    return;
   }
+  const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  const gainNode = audioContext.createGain();
+  const sources = [];
+  for (const srcItem of src) {
+    const ambienceAudio = await fetch(srcItem).then(res => res.arrayBuffer());
+    const audioBuffer = await audioContext.decodeAudioData(ambienceAudio);
+    const source = audioContext.createBufferSource();
+    source.buffer = audioBuffer;
+    source.loop = true;
+    // Route audio through gain node
+    source.connect(gainNode);
+    source.start(0);
+    sources.push(source);
+  }
+  // Connect gain to destination once
+  gainNode.connect(audioContext.destination);
+  gainNode.gain.setValueAtTime(volume, audioContext.currentTime);
+  gainNode.gain.value = volume;
+  AMBIENCES.push({
+    context: audioContext,
+    gainNode: gainNode,
+    sources,
+  });
 }
 
-function stopAmbience() {
+function stopAmbience(doNotClearCurrent = false) {
   AMBIENCES.forEach(amb => {
     amb.sources.forEach(source => {
       source.stop();
@@ -111,6 +106,9 @@ function stopAmbience() {
   });
   // Clear tracked ambiences without reassigning the constant
   AMBIENCES.length = 0;
+  if (!doNotClearCurrent) {
+    currentAmbience = null;
+  }
 }
 
 let isFading = null;
@@ -128,7 +126,7 @@ async function stopAmbienceWithFade(durationMs) {
     if (isFading !== "OUT") {
       return;
     }
-    
+
     let updatedOne = false;
     AMBIENCES.forEach(amb => {
       if (amb.gainNode.gain.value === 0) {
@@ -148,7 +146,7 @@ async function stopAmbienceWithFade(durationMs) {
       stopAmbience();
       return;
     }
-    
+
     await new Promise(resolve => setTimeout(resolve, stepDuration));
   }
 }
@@ -162,7 +160,7 @@ async function startAmbienceWithFade(src, durationMs) {
   const steps = 20;
   const stepDuration = durationMs / steps;
   const volumeStepSize = 0.5 / steps;
-  
+
   while (true) {
     if (isFading !== "IN") {
       return;
@@ -186,11 +184,13 @@ async function startAmbienceWithFade(src, durationMs) {
       isFading = null;
       return;
     }
-    
+
     await new Promise(resolve => setTimeout(resolve, stepDuration));
   }
 }
 
-export { playCancelSound, playPauseSound, playHoverSound, playConfirmSound, toggleFX,
+export {
+  playCancelSound, playPauseSound, playHoverSound, playConfirmSound, toggleFX,
   toggleAmbience, isFXEnabled, isAmbienceEnabled, playAmbience, stopAmbience,
-  stopAmbienceWithFade, startAmbienceWithFade };
+  stopAmbienceWithFade, startAmbienceWithFade
+};
