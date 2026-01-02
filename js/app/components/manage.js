@@ -1,4 +1,4 @@
-import { playCancelSound, playPauseSound } from '../sound.js';
+import { playCancelSound, playConfirmSound, playPauseSound } from '../sound.js';
 import "./manage/characters.js";
 import "./manage/worlds.js";
 import "./manage/scripts.js";
@@ -29,6 +29,7 @@ class ManageOverlay extends HTMLElement {
         this.shadowRoot.querySelector('app-overlay-tabs').addEventListener('tab-change', (e) => {
             this.currentSectionIndex = e.detail.newIndex;
             this.buildChildrenMap();
+            playConfirmSound();
         });
 
         this.buildChildrenMap();

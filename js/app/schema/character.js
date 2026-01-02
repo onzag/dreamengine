@@ -115,52 +115,13 @@ export default {
             "default": 0,
             "percentage": true,
         },
-        "left_behind_lost_potential": {
+        "wander_potential": {
             "type": "number",
             "minimum": 0,
             "maximum": 1,
-            "title": "Left Behind Lost Potential",
-            "description": "When a character is left behind, this value determines a random roll, per inference for the character to get lost at the location, not being there anymore",
-            "default": 0.05
-        },
-        "left_behind_remove_states": {
-            "type": "array",
-            "title": "Left Behind Remove States",
-            "description": "States that are removed from the character when they are left behind.",
-            "items": {
-                "type": "string",
-                "title": "State Name",
-                "description": "The name of the state to remove when the character is left behind.",
-                "is_state": true
-            }
-        },
-        "left_behind_add_states": {
-            "type": "array",
-            "title": "Left Behind Add States",
-            "description": "States that are added to the character when they are left behind.",
-            "items": {
-                "type": "string",
-                "title": "State Name",
-                "description": "The name of the state to add when the character is left behind.",
-                "is_state": true
-            }
-        },
-        "left_behind_lost_remove_states": {
-            "type": "array",
-            "title": "Left Behind Remove States",
-            "description": "States that are removed from the character when they are left behind and they get lost.",
-            "items": {
-                "type": "string"
-            }
-        },
-        "left_behind_lost_add_states": {
-            "type": "array",
-            "title": "Left Behind Add States",
-            "description": "States that are added to the character when they are left behind and they get lost.",
-            "items": {
-                "type": "string"
-            },
-            "minItems": 1
+            "title": "Wander Potential",
+            "description": "When a character is left to its means, this value determines a random roll, per inference for the character to start to wander, not being there anymore",
+            "default": 0.05,
         },
         "states": {
             "title": "Character States",
@@ -229,7 +190,7 @@ export default {
                         "type": "boolean",
                         "description": "Indicates if this state causes the character to lay down, mostly useful for injury states and resting states. This also forces the character to look for laying down slots at a location.",
                     },
-                    "lays_down_state_is_sudden": {
+                    "lays_down_state_is_sudden_onset": {
                         "type": "boolean",
                         "description": "Indicates if the laying down caused by this state is sudden, useful for injury states that cause the character to fall down suddenly. This will make the character drop wherever they are.",
                         "must_have_bool": "lays_down_state",
@@ -300,7 +261,7 @@ export default {
                             ]
                         }
                     },
-                    "triggers_states_on_relief": {
+                    "triggers_states_on_relieve": {
                         "type": "array",
                         "description": "States that are triggered when this state is relieved.",
                         "items": {
@@ -329,12 +290,12 @@ export default {
                     // and can be potential causants of a behaviour, once the behaviour is activated
                     // the rules can be different depending on the bond levels and the causant (if tracked)
                     // and can interact with the sourrounding characters too
-                    "potential_causant_negative_prompt": {
+                    "potential_causant_negative_description": {
                         "type": "string",
                         "description": "Prompt to inject towards a potential causant that does not meet the bond requirements for this state.",
                         "placeholder": "{{potential_causant}} has not built enough of a bond with {{char}} so x is offlimits."
                     },
-                    "potential_causant_positive_prompt": {
+                    "potential_causant_positive_description": {
                         "type": "string",
                         "description": "Prompt to inject towards a potential causant that meets the bond requirements for this state.",
                         "placeholder": "{{potential_causant}} has built a strong bond with {{char}} so x is possible."
@@ -346,7 +307,7 @@ export default {
                         "maximum": 100,
                         "default": -100,
                     },
-                    "potential_causant_max_bond_required": {
+                    "potential_causant_max_bond_allowed": {
                         "type": "number",
                         "description": "Indicates the maximum bond level required for this state to be activated by a causant.",
                         "minimum": -100,
@@ -360,7 +321,7 @@ export default {
                         "maximum": 100,
                         "default": 0,
                     },
-                    "potential_causant_max_2_bond_required": {
+                    "potential_causant_max_2_bond_allowed": {
                         "type": "number",
                         "description": "Indicates the maximum second bond level required for this state to be activated by a causant agent.",
                         "minimum": 0,
@@ -371,22 +332,22 @@ export default {
                         "type": "boolean",
                         "description": "Indicates if this state can be triggered automatically by the criteria of the LLM, useful for generic states that indicate emotions for example."
                     },
-                    "automatic_reliever": {
+                    "automatic_relieve": {
                         "type": "boolean",
                         "description": "Indicates if this state can be relieved automatically by the criteria of the LLM, useful for generic states that indicate emotions for example."
                     },
-                    "trigger_likelihood": {
+                    "decay_rate_per_inference_cycle": {
+                        "type": "number",
+                        "description": "The decay rate per inference for this state, a value between 0 and 4.",
+                        "minimum": 0,
+                        "maximum": 4
+                    },
+                    "manual_trigger_likelihood": {
                         "type": "number",
                         "description": "The likelihood for this state to be triggered manually per inference, a value between 0 and 1.",
                         "minimum": 0,
                         "maximum": 1,
                         "percentage": true,
-                    },
-                    "decay_rate_per_inference": {
-                        "type": "number",
-                        "description": "The decay rate per inference for this state, a value between 0 and 4.",
-                        "minimum": 0,
-                        "maximum": 4
                     },
                     "manual_triggers": {
                         "type": "array",
@@ -415,9 +376,9 @@ export default {
                             }
                         }
                     },
-                    "describes_action": {
+                    "binary_behaviour": {
                         "type": "boolean",
-                        "description": "Indicates if this state describes an action the character takes, useful for states that indicate behaviours. When it is an action, there is no intensity associated with it.",
+                        "description": "Indicates if this state describes an action the character takes, useful for states that indicate binary behaviours. When it is an action, there is no intensity associated with it.",
                     },
                     "starting_intensity": {
                         "type": "number",
@@ -458,9 +419,9 @@ export default {
                     },
                     "defuse_time": {
                         "type": "number",
-                        "description": "The time in minutes it takes for this state to defuse after being activated, useful for states that indicate temporary conditions or emotions, 0 means no defuse time, " + 
-                        "always set this value as it allows emotions to defuse during time skips when the user is not present; otherwise eg. an angry character will remain angry forever. " + 
-                        "the decay rate per inference only applies while the character is active in the scene, defuse time applies always.",
+                        "description": "The time in minutes it takes for this state to defuse after being activated, useful for states that indicate temporary conditions or emotions, 0 means no defuse time, " +
+                            "always set this value as it allows emotions to defuse during time skips when the user is not present; otherwise eg. an angry character will remain angry forever. " +
+                            "the decay rate per inference only applies while the character is active in the scene, defuse time applies always.",
                         "minimum": 0,
                         "maximum": 1440
                     }
@@ -502,54 +463,47 @@ export default {
                         "minimum": 0,
                         "maximum": 100
                     },
-                    "disable_states": {
-                        "type": "array",
-                        "description": "States to disable when this bond is active.",
-                        "items": {
-                            "type": "string"
-                        },
-                        "minItems": 1
-                    },
-                    "enable_states": {
-                        "type": "array",
-                        "description": "States to enable when this bond is active, only if they are disabled by default.",
-                        "items": {
-                            "type": "string"
-                        },
-                        "minItems": 1
-                    },
-                    "bond_increase_conditions": {
-                        "type": "array",
+                    "bond_conditions": {
+                        "type": "object",
                         "description": "Conditions for increasing the bond level when this bond is active.",
+                        "properties": {
+                            "increase_if": {
+                                "type": "array",
+                                "items": {
+                                    "type": "string",
+                                },
+                                "description": "The ensure rule to add into the prompt to increase the bond level, always starts as if, eg. {{other}} and {{char}} share a deep emotional connection"
+                            },
+                            "decrease_if": {
+                                "type": "array",
+                                "items": {
+                                    "type": "string",
+                                },
+                                "description": "The ensure rule to add into the prompt to increase the bond level, always starts as if, eg. {{other}} and {{char}} share a deep emotional connection"
+                            }
+                        }
+                    },
+                    "2nd_bond_conditions": {
+                        "type": "array",
+                        "description": "Conditions for increasing the second bond level when this bond is active.",
                         "items": {
                             "type": "object",
                             "properties": {
                                 "increase_if": {
-                                    "type": "string",
+                                    "type": "array",
+                                    "items": {
+                                        "type": "string",
+                                    },
                                     "description": "The ensure rule to add into the prompt to increase the bond level, always starts as if, eg. {{other}} and {{char}} share a deep emotional connection"
                                 },
                                 "decrease_if": {
-                                    "type": "string",
+                                    "type": "array",
+                                    "items": {
+                                        "type": "string",
+                                    },
                                     "description": "The ensure rule to add into the prompt to increase the bond level, always starts as if, eg. {{other}} and {{char}} share a deep emotional connection"
                                 }
                             }
-                        },
-                        "minItems": 1
-                    },
-                    "2nd_bond_increase_questions": {
-                        "type": "array",
-                        "description": "Yes/No questions for increasing the second bond level when this bond is active.",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "question": {
-                                    "type": "string",
-                                    "description": "The question to ask the user to increase the second bond level."
-                                }
-                            },
-                            "required": [
-                                "question"
-                            ]
                         }
                     },
                     "description": {
@@ -573,10 +527,6 @@ export default {
             "additionalProperties": {
                 "type": "object",
                 "properties": {
-                    "name": {
-                        "type": "string",
-                        "description": "The name of the emotion."
-                    },
                     "common": {
                         "type": "boolean",
                         "description": "Indicates if this emotion is commonly experienced by the character."
@@ -592,7 +542,7 @@ export default {
                     },
                 },
                 "required": [
-                    "name"
+                    "common"
                 ]
             }
         },
@@ -607,11 +557,6 @@ export default {
                 "race": "human",
                 "age": 30,
             }
-        },
-        "heuristic_evolution": {
-            "type": "object",
-            "title": "Heuristic Evolution",
-            "description": "Heuristic Evolution For the character when inference is not used"
         },
         "advanced_spawn_script": {
             "type": "object",
@@ -631,9 +576,10 @@ export default {
             "description": "A TypeScript script that runs when the character is spawned for the first time, allowing for advanced customization of character initial state. Characters are only spawned once when the world is created and they always exist after that.",
             "multiline": true,
             "code_language": "typescript",
+            "code_context": "Spawn",
             "placeholder": "// TypeScript code here, use char, user, DE and others objects",
-            "example": 
-`//Example: With a random roll, change the character location to a random tavern
+            "example":
+                `//Example: With a random roll, change the character location to a random tavern
 const roll = Math.random();
 if (roll < 0.5) {
     const taverns = DE.world.locations.filter(loc => loc.type === "TAVERN");
@@ -658,9 +604,10 @@ if (roll < 0.5) {
             "description": "A TypeScript script that runs when the character first interacts with the user, allowing for advanced customization of character initial interaction behaviour that will persist.",
             "multiline": true,
             "code_language": "typescript",
+            "code_context": "First Interact",
             "placeholder": "// TypeScript code here, use char, user, DE and others objects",
-            "example": 
-`//Example: Give the character a random backstory and personality from inference
+            "example":
+                `//Example: Give the character a random backstory and personality from inference
 const backstory = await run_inference({
   system_prompt: "You are an assistant that generates a random backstory for a character named " + char.name +
     " and personality for a character in a fantasy world, use second person, as \\"You are " + char.name + "\\", " +
@@ -700,6 +647,7 @@ DE.references[char.name].short = short_backstory.text;
             "description": "A TypeScript script that runs after any inference ends including those that do not include the character",
             "multiline": true,
             "code_language": "typescript",
+            "code_context": "Post any inference",
             "placeholder": "// TypeScript code here, use char, user, DE and others objects",
         },
         "advanced_pre_inference_script": {
@@ -720,9 +668,10 @@ DE.references[char.name].short = short_backstory.text;
             "description": "A TypeScript script that runs before each inference for this character, allowing for advanced customization of character behaviour.",
             "multiline": true,
             "code_language": "typescript",
+            "code_context": "Pre inference",
             "placeholder": "// TypeScript code here, use char, user, DE and others objects",
-            "example": 
-`// Example: Make the character tired at night
+            "example":
+                `// Example: Make the character tired at night
 const charStates = DE.stateFor[char.name].states;
 if (DE.time.hourOfDay >= 20 || DE.time.hourOfDay < 6) {
   charStates['TIRED'] = { intensity: charStates['TIRED'].intensity + 2 };
@@ -772,9 +721,10 @@ if (durationOfSleepingOrTimeSkips < 4) {
             "description": "A TypeScript script that runs before each bond check inference for this character, allowing for advanced customization of character behaviour.",
             "multiline": true,
             "code_language": "typescript",
+            "code_context": "Pre bond check",
             "placeholder": "// TypeScript code here, use char, user, DE and others objects",
-            "example": 
-`// Use DE, char, user, others, other for accessing the game state
+            "example":
+                `// Use DE, char, user, others, other for accessing the game state
 // Example: Add a new rule to the bond inference step based on them being nice to user
 if (oher.name !== user.name && DE.social.bondLevels[char.name]?[user.name] >= 50) {
     DE.currentBondInference.bond_increase_conditions.increase_if.push(other.name + " was very nice to " + user.name);
@@ -799,9 +749,10 @@ if (oher.name !== user.name && DE.social.bondLevels[char.name]?[user.name] >= 50
             "description": "A TypeScript script that runs after each inference ends that included the character, allowing for advanced customization of character behaviour.",
             "multiline": true,
             "code_language": "typescript",
+            "code_context": "Post inference",
             "placeholder": "// TypeScript code here, use char, user, DE and others objects",
-            "example": 
-`// Use DE, char, user object for accessing the game state
+            "example":
+                `// Use DE, char, user object for accessing the game state
 // Example: Run a special inference step to give the char the master sword
 // this would be better as a advanced_post_inference_script_per_character in the world schema
 // but for the sake of the example we put it here

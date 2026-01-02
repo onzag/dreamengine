@@ -44,7 +44,9 @@ class Settings extends HTMLElement {
             const diff_array = [debug_desc, easy_desc, normal_desc, hard_desc];
             
             tabsContainer.innerHTML = `<app-overlay-section section-title="User">
+            <div class="main-profile-image-container">
                 <app-profile-image image-url="profile" editable="true"></app-profile-image>
+            </div>
                 <div class="profile-image-spacer"></div>
                 <app-overlay-input-warning>Changing any of these options will not affect previous game campaigns, only new ones.</app-overlay-input-warning>
                 <app-overlay-input
@@ -195,6 +197,10 @@ class Settings extends HTMLElement {
         <style>
             .profile-image-spacer {
                 height: 4vh;
+            }
+            .main-profile-image-container {
+                width: 20vw;
+                height: 20vw;
             }
         </style>
         <app-overlay overlay-title="Settings" cancel-text="Cancel" confirm-text="Save & Close">

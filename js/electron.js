@@ -4,6 +4,8 @@ const fs = require('fs');
 const os = require('os');
 
 const CHARACTER_CACHE = {};
+const SCRIPT_CACHE = {};
+const WORLD_CACHE = {};
 
 const DREAMENGINE_INFO_HOME = path.join(app.getPath('home'), '.dreamengine');
 if (!fs.existsSync(DREAMENGINE_INFO_HOME)) {
@@ -109,24 +111,32 @@ ipcMain.on('closeApp', () => {
   app.quit();
 });
 
-ipcMain.handle('loadValueFromUserData', async (event, key, characterFile) => {
+ipcMain.handle('loadValueFromUserData', async (event, key, cacheFile) => {
     const splitted = key.split(".");
     let current = userData;
-    if (characterFile) {
+    if (cacheFile) {
+        let cacheToUse = null;
+        if (cacheFile.fileType === 'character') {
+            cacheToUse = CHARACTER_CACHE;
+        } else if (cacheFile.fileType === 'script') {
+            cacheToUse = SCRIPT_CACHE;
+        } else if (cacheFile.fileType === 'world') {
+            cacheToUse = WORLD_CACHE;
+        }
         let notFoundInCache = false;
-        if (!CHARACTER_CACHE[characterFile]) {
-            CHARACTER_CACHE[characterFile] = {};
+        if (!cacheToUse[cacheFile.fileName]) {
+            cacheToUse[cacheFile.fileName] = {};
             notFoundInCache = true;
         }
         if (notFoundInCache) {
-            const CHARACTER_FOLDER = path.join(app.getPath('home'), '.dreamengine', 'characters');
-            const filePath = path.join(CHARACTER_FOLDER, characterFile);
+            const CACHE_FOLDER = path.join(app.getPath('home'), '.dreamengine', cacheToUse === CHARACTER_CACHE ? 'characters' : cacheToUse === SCRIPT_CACHE ? 'scripts' : 'worlds');
+            const filePath = path.join(CACHE_FOLDER, cacheFile.fileName);
             if (fs.existsSync(filePath)) {
                 const data = await fs.promises.readFile(filePath, 'utf-8');
-                CHARACTER_CACHE[characterFile] = JSON.parse(data);
+                cacheToUse[cacheFile.fileName] = JSON.parse(data);
             }
         }
-        current = CHARACTER_CACHE[characterFile] || {};
+        current = cacheToUse[cacheFile.fileName] || {};
     }
     for (let i = 0; i < splitted.length; i++) {
         if (current[splitted[i]] === undefined) {
@@ -137,14 +147,19 @@ ipcMain.handle('loadValueFromUserData', async (event, key, characterFile) => {
     return current || null;
 });
 
-ipcMain.handle('setValueIntoUserData', (event, key, characterFile, value) => {
+ipcMain.handle('setValueIntoUserData', (event, key, cacheFile, value) => {
     const splitted = key.split(".");
     let current = userData;
-    if (characterFile) {
-        if (!CHARACTER_CACHE[characterFile]) {
-            CHARACTER_CACHE[characterFile] = {};
+    if (cacheFile) {
+        let cacheToUse = null;
+        if (cacheFile.fileType === 'character') {
+            cacheToUse = CHARACTER_CACHE;
+        } else if (cacheFile.fileType === 'script') {
+            cacheToUse = SCRIPT_CACHE;
+        } else if (cacheFile.fileType === 'world') {
+            cacheToUse = WORLD_CACHE;
         }
-        current = CHARACTER_CACHE[characterFile];
+        current = cacheToUse[cacheFile.fileName];
     }
     for (let i = 0; i < splitted.length - 1; i++) {
         if (current[splitted[i]] === undefined) {
@@ -170,6 +185,18 @@ const CHARACTER_ASSETS_FOLDER = path.join(DREAMENGINE_INFO_HOME, 'characters-ass
 if (!fs.existsSync(CHARACTER_ASSETS_FOLDER)) {
     fs.mkdirSync(CHARACTER_ASSETS_FOLDER, { recursive: true });
 }
+const SCRIPT_FOLDER = path.join(DREAMENGINE_INFO_HOME, 'scripts');
+if (!fs.existsSync(SCRIPT_FOLDER)) {
+    fs.mkdirSync(SCRIPT_FOLDER, { recursive: true });
+}
+const WORLD_FOLDER = path.join(DREAMENGINE_INFO_HOME, 'worlds');
+if (!fs.existsSync(WORLD_FOLDER)) {
+    fs.mkdirSync(WORLD_FOLDER, { recursive: true });
+}
+const WORLD_ASSETS_FOLDER = path.join(DREAMENGINE_INFO_HOME, 'worlds-assets');
+if (!fs.existsSync(WORLD_ASSETS_FOLDER)) {
+    fs.mkdirSync(WORLD_ASSETS_FOLDER, { recursive: true });
+}
 
 // let's load every single chracter file into cache on startup
 // they are relatively small so this should be fine
@@ -179,6 +206,24 @@ chars.forEach(file => {
         const filePath = path.join(CHARACTER_FOLDER, file);
         const data = fs.readFileSync(filePath, 'utf-8');
         CHARACTER_CACHE[file] = JSON.parse(data);
+    }
+});
+
+const scripts = fs.readdirSync(SCRIPT_FOLDER);
+scripts.forEach(file => {
+    if (file.endsWith('.json')) {
+        const filePath = path.join(SCRIPT_FOLDER, file);
+        const data = fs.readFileSync(filePath, 'utf-8');
+        SCRIPT_CACHE[file] = JSON.parse(data);
+    }
+});
+
+const worlds = fs.readdirSync(WORLD_FOLDER);
+worlds.forEach(file => {
+    if (file.endsWith('.json')) {
+        const filePath = path.join(WORLD_FOLDER, file);
+        const data = fs.readFileSync(filePath, 'utf-8');
+        WORLD_CACHE[file] = JSON.parse(data);
     }
 });
 
@@ -197,8 +242,44 @@ ipcMain.handle('createEmptyCharacterFile', async () => {
     return { group: '', characterFile: path.basename(filePath) };
 });
 
+ipcMain.handle('createEmptyScriptFile', async () => {
+    // find a potentially existing unsaved script file first
+    for (const [fileName, data] of Object.entries(SCRIPT_CACHE)) {
+        if (data.__unsaved) {
+            return { scriptFile: fileName };
+        }
+    }
+    const filePath = path.join(SCRIPT_FOLDER, `script_${Date.now()}.json`);
+    SCRIPT_CACHE[path.basename(filePath)] = {
+        __unsaved: true
+    };
+    return { scriptFile: path.basename(filePath) };
+});
+
+ipcMain.handle('createEmptyWorldFile', async () => {
+    // find a potentially existing unsaved world file first
+    for (const [fileName, data] of Object.entries(WORLD_CACHE)) {
+        if (data.__unsaved) {
+            return { worldFile: fileName };
+        }
+    }
+    const filePath = path.join(WORLD_FOLDER, `world_${Date.now()}.json`);
+    WORLD_CACHE[path.basename(filePath)] = {
+        __unsaved: true
+    };
+    return { worldFile: path.basename(filePath) };
+});
+
 ipcMain.handle('checkCharacterFileExists', async (event, characterFile) => {
     return !!CHARACTER_CACHE[characterFile];
+});
+
+ipcMain.handle('checkScriptFileExists', async (event, scriptFile) => {
+    return !!SCRIPT_CACHE[scriptFile];
+});
+
+ipcMain.handle('checkWorldFileExists', async (event, worldFile) => {
+    return !!WORLD_CACHE[worldFile];
 });
 
 ipcMain.handle('updateCharacterFileFromCache', async (event, characterFile) => {
@@ -210,6 +291,32 @@ ipcMain.handle('updateCharacterFileFromCache', async (event, characterFile) => {
         delete currentData.__unsaved;
     }
     const filePath = path.join(CHARACTER_FOLDER, characterFile);
+    await fs.promises.writeFile(filePath, JSON.stringify(currentData, null, 2), 'utf-8');
+    return currentData;
+});
+
+ipcMain.handle('updateScriptFileFromCache', async (event, scriptFile) => {
+    const currentData = SCRIPT_CACHE[scriptFile];
+    if (!currentData) {
+        return null;
+    }
+    if (currentData.__unsaved) {
+        delete currentData.__unsaved;
+    }
+    const filePath = path.join(SCRIPT_FOLDER, scriptFile);
+    await fs.promises.writeFile(filePath, JSON.stringify(currentData, null, 2), 'utf-8');
+    return currentData;
+});
+
+ipcMain.handle('updateWorldFileFromCache', async (event, worldFile) => {
+    const currentData = WORLD_CACHE[worldFile];
+    if (!currentData) {
+        return null;
+    }
+    if (currentData.__unsaved) {
+        delete currentData.__unsaved;
+    }
+    const filePath = path.join(WORLD_FOLDER, worldFile);
     await fs.promises.writeFile(filePath, JSON.stringify(currentData, null, 2), 'utf-8');
     return currentData;
 });
@@ -229,21 +336,80 @@ ipcMain.handle("deleteCharacterFile", async (event, characterFile) => {
     return false;
 });
 
-ipcMain.handle('loadCharacterFile', async (event, characterFile) => {
-    const filePath = path.join(CHARACTER_FOLDER, characterFile);
-    if (CHARACTER_CACHE[characterFile]) {
-        return CHARACTER_CACHE[characterFile];
-    }
+ipcMain.handle("deleteScriptFile", async (event, scriptFile) => {
+    const filePath = path.join(SCRIPT_FOLDER, scriptFile);
+    delete SCRIPT_CACHE[scriptFile];
     if (fs.existsSync(filePath)) {
-        const data = await fs.promises.readFile(filePath, 'utf-8');
-        CHARACTER_CACHE[characterFile] = JSON.parse(data);
-        return CHARACTER_CACHE[characterFile];
+        await fs.promises.unlink(filePath);
+        return true;
     }
-    return null;
+    return false;
 });
 
-ipcMain.handle('listCharacterFiles', async (event) => {
-    return Object.keys(CHARACTER_CACHE);
+ipcMain.handle("deleteWorldFile", async (event, worldFile) => {
+    const filePath = path.join(WORLD_FOLDER, worldFile);
+    const assetsFolderPath = path.join(WORLD_ASSETS_FOLDER, worldFile.replace('.json', ''));
+    delete WORLD_CACHE[worldFile];
+    if (fs.existsSync(filePath)) {
+        await fs.promises.unlink(filePath);
+        if (fs.existsSync(assetsFolderPath)) {
+            fs.rmdirSync(assetsFolderPath, { recursive: true });
+        }
+        return true;
+    }
+    return false;
+});
+
+ipcMain.handle('listCharacterFiles', async (event, group) => {
+    return Object.keys(CHARACTER_CACHE).filter(fileName => {
+        const data = CHARACTER_CACHE[fileName];
+        if (data.__unsaved) {
+            return false;
+        }
+        return data.group === group;
+    }).map(fileName => {
+        const data = CHARACTER_CACHE[fileName];
+        return { file: fileName, name: data.name || "Unnamed Character" };
+    });
+});
+
+ipcMain.handle('listScriptContexts', async (event) => {
+    const contexts = new Set();
+    Object.values(SCRIPT_CACHE).forEach(scriptData => {
+        if (!scriptData['__unsaved']) {
+            contexts.add(scriptData.context || "Spawn");
+        }
+    });
+    return Array.from(contexts);
+});
+
+ipcMain.handle('listScriptFiles', async (event, context) => {
+    return Object.keys(SCRIPT_CACHE).filter(fileName => {
+        const data = SCRIPT_CACHE[fileName];
+        if (data.__unsaved) {
+            return false;
+        }
+        if (data.context !== context) {
+            return false;
+        }
+        return true;
+    }).map(fileName => {
+        const data = SCRIPT_CACHE[fileName];
+        return { file: fileName, name: data.name || "Unnamed Script" };
+    });
+});
+
+ipcMain.handle('listWorldFiles', async (event) => {
+    return Object.keys(WORLD_CACHE).filter(fileName => {
+        const data = WORLD_CACHE[fileName];
+        if (data.__unsaved) {
+            return false;
+        }
+        return true;
+    }).map(fileName => {
+        const data = WORLD_CACHE[fileName];
+        return { file: fileName, name: data.name || "Unnamed World" };
+    });
 });
 
 ipcMain.handle('listCharacterGroups', async (event) => {

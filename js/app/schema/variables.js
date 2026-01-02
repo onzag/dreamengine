@@ -100,7 +100,7 @@ export const social = [
         (user, character, DE, location_name) => {
             const allMembersAtLocation = [];
             for (const member of Object.keys(DE.stateFor)) {
-                const locationOfChar = DE.stateFor[member].location.current;
+                const locationOfChar = DE.stateFor[member].location;
                 if (locationOfChar === location_name) {
                     allMembersAtLocation.push(member);
                 }
@@ -122,7 +122,7 @@ export const world = [
         "current_location",
         "The name of the current location",
         "eg. Eldoria, Shadowfen",
-        (user, character, DE) => DE.world.currentLocation.name,
+        (user, character, DE) => DE.world.currentLocation,
     ],
     [
         "current_location_is_in_vehicle",
@@ -197,32 +197,32 @@ export const specials = [
 
 function formatAnd(list) {
     if (!list || !Array.isArray(list)) return "";
-            if (list.length === 0) return "";
-            if (list.length === 1) return list[0];
-            if (list.length === 2) return `${list[0]} and ${list[1]}`;
-            return `${list.slice(0, -1).join(', ')}, and ${list[list.length - 1]}`;
+    if (list.length === 0) return "";
+    if (list.length === 1) return list[0];
+    if (list.length === 2) return `${list[0]} and ${list[1]}`;
+    return `${list.slice(0, -1).join(', ')}, and ${list[list.length - 1]}`;
 }
 
 function getCausantsHelper(user, character, DE, stateName) {
     const actualStateName = stateName.trim().toUpperCase().replace(/\s+/, "_");
-            const characterHistory = DE.stateFor[character.name].history;
-            const lastEntryWithActivation = null;
-            // loop in reverse to find the last activation of the state
-            for (let i = characterHistory.length - 1; i >= 0; i--) {
-                const entry = characterHistory[i];
-                if (entry.type === "INTERACTING" && entry.states.includes(actualStateName)) {
-                    lastEntryWithActivation = entry;
-                    break;
-                }
-            }
-            if (!lastEntryWithActivation) {
-                return [];
-            }
-            const stateCausants = lastEntryWithActivation.stateCausants[actualStateName];
-            if (stateCausants === null) {
-                console.warn(`State ${actualStateName} does not track causants for character ${character.name}`);
-                return [];
-            }
+    const characterHistory = DE.stateFor[character.name].history;
+    const lastEntryWithActivation = null;
+    // loop in reverse to find the last activation of the state
+    for (let i = characterHistory.length - 1; i >= 0; i--) {
+        const entry = characterHistory[i];
+        if (entry.type === "INTERACTING" && entry.states.find(s => s.state === actualStateName)) {
+            lastEntryWithActivation = entry;
+            break;
+        }
+    }
+    if (!lastEntryWithActivation) {
+        return [];
+    }
+    const stateCausants = lastEntryWithActivation.causants[actualStateName];
+    if (stateCausants === null) {
+        console.warn(`State ${actualStateName} does not track causants for character ${character.name}`);
+        return [];
+    }
 }
 
 export const utils = [
@@ -246,7 +246,7 @@ export const utils = [
             // this will include current as the history contains the current session too
             for (let i = characterHistory.length - 1; i >= 0; i--) {
                 const entry = characterHistory[i];
-                if (entry.type === "INTERACTING" && entry.states.includes(actualStateName)) {
+                if (entry.type === "INTERACTING" && entry.states.find(s => s.state === actualStateName)) {
                     lastEntryWithActivation = entry;
                     break;
                 }
@@ -295,7 +295,7 @@ export const utils = [
         "Get the list of social group members for the current character that are present at the same location as our character",
         "eg. [Arya, Thalon, Mira]",
         (user, character, DE, minBondLevel, maxBondLevel, min2BondLevel, max2BondLevel) => {
-            const currentLocation = DE.world.currentLocation.name;
+            const currentLocation = DE.world.currentLocation;
             const socialGroup = DE.social.bonds[character.name].active.filter(bond => {
                 const bondValue = bond.bond;
                 const secondaryBond = bond.bond_2;
@@ -303,7 +303,7 @@ export const utils = [
             }).map(bond => bond.towards);
             return socialGroup.filter(memberName => {
                 const stateOfChar = DE.stateFor[memberName];
-                const locationOfChar = stateOfChar.location.current;
+                const locationOfChar = stateOfChar.location;
                 return locationOfChar === currentLocation;
             });
         }
@@ -332,11 +332,11 @@ export const utils = [
         "Get the difference between the provided list and the present social group members",
         "eg. [Arya, Thalon]",
         (user, character, DE, list) => {
-            const currentLocation = DE.world.currentLocation.name;
+            const currentLocation = DE.world.currentLocation;
             const socialGroup = DE.social.bonds[character.name].active.map(bond => bond.towards);
             const presentSocialGroup = socialGroup.filter(memberName => {
                 const stateOfChar = DE.stateFor[memberName];
-                const locationOfChar = stateOfChar.location.current;
+                const locationOfChar = stateOfChar.location;
                 return locationOfChar === currentLocation;
             });
             return list.filter(name => !presentSocialGroup.includes(name));
@@ -347,7 +347,7 @@ export const utils = [
         "Get the list of social group members that are gone forever (most likely dead) for the current character",
         "eg. [Thalon, Mira]",
         (user, character, DE, minBondLevel, maxBondLevel, min2BondLevel, max2BondLevel) => {
-            return DE.social.exbonds[character.name].active.filter(bond => {
+            return DE.social.bonds[character.name].ex.filter(bond => {
                 const bondValue = bond.bond;
                 const secondaryBond = bond.bond_2;
                 return bondValue >= minBondLevel && bondValue <= maxBondLevel && secondaryBond >= min2BondLevel && secondaryBond <= max2BondLevel;
@@ -368,7 +368,7 @@ export const utils = [
         "Boolean indicating if the character is male",
         "true or false",
         (user, character, DE, characterQuestioned) => {
-            const charRef = DE.references[characterQuestioned];
+            const charRef = DE.characters[characterQuestioned];
             return charRef.gender.toLowerCase() === "male";
         }
     ],
@@ -377,7 +377,7 @@ export const utils = [
         "Boolean indicating if the character is female",
         "true or false",
         (user, character, DE, characterQuestioned) => {
-            const charRef = DE.references[characterQuestioned];
+            const charRef = DE.characters[characterQuestioned];
             return charRef.gender.toLowerCase() === "female";
         }
     ],
@@ -386,7 +386,7 @@ export const utils = [
         "Boolean indicating if the character is of ambiguous gender",
         "true or false",
         (user, character, DE, characterQuestioned) => {
-            const charRef = DE.references[characterQuestioned];
+            const charRef = DE.characters[characterQuestioned];
             return charRef.gender.toLowerCase() === "ambiguous";
         }
     ],
@@ -395,7 +395,7 @@ export const utils = [
         "Boolean indicating if the character sex is male",
         "true or false",
         (user, character, DE, characterQuestioned) => {
-            const charRef = DE.references[characterQuestioned];
+            const charRef = DE.characters[characterQuestioned];
             return charRef.sex.toLowerCase() === "male";
         }
     ],
@@ -404,7 +404,7 @@ export const utils = [
         "Boolean indicating if the character sex is female",
         "true or false",
         (user, character, DE, characterQuestioned) => {
-            const charRef = DE.references[characterQuestioned];
+            const charRef = DE.characters[characterQuestioned];
             return charRef.sex.toLowerCase() === "female";
         }
     ],
@@ -413,7 +413,7 @@ export const utils = [
         "Boolean indicating if the character sex is intersex",
         "true or false",
         (user, character, DE, characterQuestioned) => {
-            const charRef = DE.references[characterQuestioned];
+            const charRef = DE.characters[characterQuestioned];
             return charRef.sex.toLowerCase() === "intersex";
         }
     ],
@@ -422,7 +422,7 @@ export const utils = [
         "Boolean indicating if the character is a character, this will give true to the user as well",
         "true or false",
         (user, character, DE, characterQuestioned) => {
-            return !!DE.references[characterQuestioned];
+            return !!DE.characters[characterQuestioned];
         }
     ],
     [
@@ -438,9 +438,9 @@ export const utils = [
         "Boolean indicating if the character is a present member of the social",
         "true or false",
         (user, character, DE, characterQuestioned) => {
-            const currentLocation = DE.world.currentLocation.name;
+            const currentLocation = DE.world.currentLocation;
             const charState = DE.stateFor[characterQuestioned];
-            return charState.location.current === currentLocation;
+            return charState.location === currentLocation;
         }
     ],
     [
@@ -448,9 +448,9 @@ export const utils = [
         "Boolean indicating if the character is not present in the location",
         "true or false",
         (user, character, DE, characterQuestioned) => {
-            const currentLocation = DE.world.currentLocation.name;
+            const currentLocation = DE.world.currentLocation;
             const charState = DE.stateFor[characterQuestioned];
-            return charState.location.current !== currentLocation;
+            return charState.location !== currentLocation;
         }
     ],
     [
@@ -458,7 +458,7 @@ export const utils = [
         "Boolean indicating if the character is gone forever (most likely dead)",
         "true or false",
         (user, character, DE, characterQuestioned) => {
-            const exbonds = DE.social.exbonds[character.name].active;
+            const exbonds = DE.social.bonds[character.name].ex;
             for (const bond of exbonds) {
                 if (bond.towards === characterQuestioned) {
                     return true;
@@ -563,9 +563,9 @@ export const utils = [
         "Boolean indicating if the character is at the current location of the world",
         "true or false",
         (user, character, DE, characterQuestioned) => {
-            const currentLocation = DE.world.currentLocation.name;
+            const currentLocation = DE.world.currentLocation;
             const charState = DE.stateFor[characterQuestioned];
-            if (charState.location.current === currentLocation) {
+            if (charState.location === currentLocation) {
                 return true;
             }
             return false;

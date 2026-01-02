@@ -658,7 +658,10 @@ class CharacterOverlay extends HTMLElement {
         this.currentCharacterFile = this.getAttribute("character-file") || null;
         this.currentCharacterName = "";
 
-        window.electronAPI.loadValueFromUserData("name", this.currentCharacterFile).then((name) => {
+        window.electronAPI.loadValueFromUserData("name", {
+            fileName: this.currentCharacterFile,
+            fileType: "character",
+        }).then((name) => {
             if (name) {
                 this.currentCharacterName = name;
             } else {
@@ -831,10 +834,12 @@ class CharacterOverlay extends HTMLElement {
                         return `<app-overlay-select
                                     class="${fieldName}"
                                     label="${escapeHTML(schema.properties[fieldName].title)}" 
-                                    title="${escapeHTML(schema.properties[fieldName].description || '')}" 
+                                    title="${escapeHTML(schema.properties[fieldName].description || '')}"
                                     input-data-location="${fieldName}"
-                                    input-data-character-file="${this.currentCharacterFile}"
+                                    input-data-file="${this.currentCharacterFile}"
+                                    input-data-type="character"
                                     input-options='${JSON.stringify(schema.properties[fieldName].enum)}'
+                                    input-options-descriptions='${JSON.stringify(schema.properties[fieldName].enumDescriptions || [])}'
                                     input-default-value="${escapeHTML(schema.properties[fieldName].default || '')}"
                                 >
                                 </app-overlay-select>`;
@@ -846,10 +851,12 @@ class CharacterOverlay extends HTMLElement {
                                     label="${escapeHTML(schema.properties[fieldName].title)}" 
                                     title="${escapeHTML(schema.properties[fieldName].description || '')}" 
                                     input-data-location="${fieldName}"
-                                    input-data-character-file="${this.currentCharacterFile}"
+                                    input-data-file="${this.currentCharacterFile}"
+                                    input-data-type="character"
                                     input-placeholder="${escapeHTML(schema.properties[fieldName].placeholder || '')}"
                                     input-default-value="${escapeHTML(schema.properties[fieldName].default || '')}"
                                     input-placeholder-ts="${escapeHTML(schema.properties[fieldName].placeholder_ts || '')}"
+                                    input-allows-imports-from="${schema.properties[fieldName].code_context || ''}"
                                     ${isMultiline ? 'multiline="true"' + (schema.properties[fieldName].code_language ? ' input-is-codemirror="' + (schema.properties[fieldName].code_language) + '"' : '') : ''}
                                 >
                                 </app-overlay-input>`;
@@ -863,7 +870,8 @@ class CharacterOverlay extends HTMLElement {
                                     input-number-min="${schema.properties[fieldName].minimum !== undefined ? schema.properties[fieldName].minimum : ''}"
                                     input-number-max="${schema.properties[fieldName].maximum !== undefined ? schema.properties[fieldName].maximum : ''}"
                                     input-data-location="${fieldName}"
-                                    input-data-character-file="${this.currentCharacterFile}"
+                                    input-data-file="${this.currentCharacterFile}"
+                                    input-data-type="character"
                                     input-placeholder="${escapeHTML(schema.properties[fieldName].placeholder || '')}"
                                     input-default-value="${escapeHTML(schema.properties[fieldName].default)}"
                                     input-is-percentage="${schema.properties[fieldName].percentage ? 'true' : ''}"

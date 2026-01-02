@@ -185,6 +185,7 @@ class Overlay extends HTMLElement {
         right: 6vh;
         top: 2vh;
         cursor: pointer;
+        z-index: 21;
     }
         .special-button:hover {
             color: #FF6B6B;
@@ -335,8 +336,43 @@ class OverlayInput extends HTMLElement {
         }
     }
 
+    initializeImporter() {
+        // Implementation for showcasing the importer
+        const importLocation = this.getAttribute("input-allows-imports-from");
+        if (!importLocation) {
+            return;
+        }
+        const importButton = this.shadowRoot.querySelector('.code-mirror-import-button');
+        if (!importButton) {
+            return;
+        }
+
+        importButton.addEventListener('mouseenter', playHoverSound);
+        importButton.addEventListener('click', () => {
+            const dialog = document.createElement('app-dialog');
+            const scriptselector = document.createElement('app-manage-scripts');
+            scriptselector.setAttribute('force-context', importLocation);
+            scriptselector.setAttribute('no-new-button', 'true');
+            scriptselector.setAttribute("widget-mode", "true");
+            scriptselector.addEventListener('script-selected', (e) => {
+                const scriptFile = e.detail.scriptFile;
+                const scriptName = e.detail.scriptName;
+                document.body.removeChild(dialog);
+                this.shadowRoot.querySelector('.code-mirror-import-list').innerHTML += `<div class="imported-script-item" data-script-file="${scriptFile}">${scriptName} <span class="remove-import">[remove]</span></div>`;
+            });
+            dialog.setAttribute('dialog-title', 'Select a Script to Import');
+            dialog.appendChild(scriptselector);
+            document.body.appendChild(dialog);
+            dialog.addEventListener("cancel", () => {
+                document.body.removeChild(dialog);
+            });
+        });
+    }
+
     async connectedCallback() {
         this.render();
+
+        this.initializeImporter();
 
         const modeSwitcher = this.shadowRoot.querySelector('.code-mirror-mode-switcher');
         modeSwitcher?.addEventListener('click', this.switchCodeMirrorMode);
@@ -387,7 +423,12 @@ class OverlayInput extends HTMLElement {
             dataLocation += ".src";
         }
 
-        window.electronAPI.loadValueFromUserData(dataLocation, this.getAttribute("input-data-character-file")).then((value) => {
+        const cacheFile = this.getAttribute("input-data-file") ? {
+            fileName: this.getAttribute("input-data-file"),
+            fileType: this.getAttribute("input-data-type"),
+        } : null;
+
+        window.electronAPI.loadValueFromUserData(dataLocation, cacheFile).then((value) => {
             if (value !== null) {
                 if (isCodeMirror) {
                     const newValue = value.toString();
@@ -396,7 +437,7 @@ class OverlayInput extends HTMLElement {
                         this.initializeEditor("typescript", newValue, true, true);
                     } else {
                         // check the mode
-                        window.electronAPI.loadValueFromUserData(dataLocationOriginal + ".js", this.getAttribute("input-data-character-file")).then((value) => {
+                        window.electronAPI.loadValueFromUserData(dataLocationOriginal + ".js", cacheFile).then((value) => {
                             if (value !== null) {
                                 this.initializeEditor("typescript", newValue, true, true);
                             } else {
@@ -459,12 +500,21 @@ class OverlayInput extends HTMLElement {
         } else if (isCodeMirror) {
             dataLocation += ".src";
         }
-        await window.electronAPI.setValueIntoUserData(dataLocation, this.getAttribute("input-data-character-file"), value);
+
+        const cacheFile = this.getAttribute("input-data-file") ? {
+            fileName: this.getAttribute("input-data-file"),
+            fileType: this.getAttribute("input-data-type"),
+        } : null;
+
+        await window.electronAPI.setValueIntoUserData(dataLocation, cacheFile, value);
         const dataLocationJs = dataLocationOriginal + ".js";
+        const dataLocationImports = dataLocationOriginal + ".imports";
         if (isCodeMirror === "typescript" || this.editorInitializedInMode === "typescript") {
-            await window.electronAPI.setValueIntoUserData(dataLocationJs, this.getAttribute("input-data-character-file"), convertTsToJs(value));
+            await window.electronAPI.setValueIntoUserData(dataLocationJs, cacheFile, convertTsToJs(value));
+            await window.electronAPI.setValueIntoUserData(dataLocationImports, cacheFile, this.getCurrentImports());
         } else if (isCodeMirror && this.editorInitializedInMode === "handlebars") {
-            await window.electronAPI.setValueIntoUserData(dataLocationJs, this.getAttribute("input-data-character-file"), null);
+            await window.electronAPI.setValueIntoUserData(dataLocationJs, cacheFile, null);
+            await window.electronAPI.setValueIntoUserData(dataLocationImports, cacheFile, this.getCurrentImports());
         }
         this.originalValue = value;
     }
@@ -532,10 +582,15 @@ class OverlayInput extends HTMLElement {
             inputItself = "";
         }
         let codeMirrorModeSwitcher = "";
+        let codeMirrorImporter = "";
         if (isCodeMirror === "typescript") {
 
         } else if (isCodeMirror) {
             codeMirrorModeSwitcher = `<button class="code-mirror-mode-switcher"></button>`;
+        }
+
+        if ((isCodeMirror === "handlebars" || isCodeMirror === "typescript") && this.getAttribute("input-allows-imports-from")) {
+            codeMirrorImporter = `<div class="code-mirror-importer"><button class="code-mirror-import-button">Add Script</button><div class="code-mirror-import-list"></div></div>`;
         }
 
         this.shadowRoot.innerHTML = `
@@ -562,6 +617,7 @@ class OverlayInput extends HTMLElement {
             background-color: rgba(0, 0, 0, 0.9);
             color: white;
             resize: none;
+            boder-sizing: border-box;
         }
         .error-message {
             font-size: 4vh;
@@ -569,6 +625,9 @@ class OverlayInput extends HTMLElement {
             text-align: left;
             color: #FF6B6B;
         }
+            .hidden {
+                display: none;
+            }
 
         input::-webkit-inner-spin-button,
 input::-webkit-outer-spin-button {
@@ -589,7 +648,8 @@ input {
 }
 
 .input-wrapper input, .input-wrapper textarea {
-    width: 100%   
+    width: 100%;
+    box-sizing: border-box;
 }
 
 .input-wrapper.special-input::after {
@@ -618,7 +678,14 @@ input {
   content: 'km';
 }
 
-.code-mirror-mode-switcher {
+.code-mirror-importer {
+    width: 100%;
+}
+.code-mirror-import-list {
+    width: 100%;
+}
+
+.code-mirror-mode-switcher, .code-mirror-import-button {
     font-size: 2.5vh;
     background: black;
     color: white;
@@ -628,7 +695,7 @@ input {
     padding: 1vh;
     cursor: pointer;
     }
-    .code-mirror-mode-switcher:hover {
+    .code-mirror-mode-switcher:hover, .code-mirror-import-button:hover {
         color: #FF6B6B;
     }
 .cm-gutterElement, .cm-gutters {
@@ -696,6 +763,7 @@ font-family: 'Cabin Sketch', sans-serif !important;
       </style>
       <div class="overlay-input">
         <label>${label}</label>
+        ${codeMirrorImporter}
         ${codeMirrorModeSwitcher}
         <div class="${wrapperClass}" ${isCodeMirror ? 'title=""' : ''}>
             ${inputItself}
@@ -726,7 +794,12 @@ class OverlayInputSelect extends HTMLElement {
             this.originalValue = this.shadowRoot.querySelector('select').value;
         }
 
-        window.electronAPI.loadValueFromUserData(this.getAttribute('input-data-location'), this.getAttribute("input-data-character-file")).then((value) => {
+        const cacheFile = this.getAttribute("input-data-file") ? {
+            fileName: this.getAttribute("input-data-file"),
+            fileType: this.getAttribute("input-data-type"),
+        } : null;
+
+        window.electronAPI.loadValueFromUserData(this.getAttribute('input-data-location'), cacheFile).then((value) => {
             if (value !== null) {
                 this.shadowRoot.querySelector('select').value = value;
                 this.originalValue = value;
@@ -737,8 +810,12 @@ class OverlayInputSelect extends HTMLElement {
     }
 
     async saveValueToUserData() {
+        const cacheFile = this.getAttribute("input-data-file") ? {
+            fileName: this.getAttribute("input-data-file"),
+            fileType: this.getAttribute("input-data-type"),
+        } : null;
         const value = this.shadowRoot.querySelector('select').value;
-        await window.electronAPI.setValueIntoUserData(this.getAttribute('input-data-location'), this.getAttribute("input-data-character-file"), value.trim());
+        await window.electronAPI.setValueIntoUserData(this.getAttribute('input-data-location'), cacheFile, value.trim());
         this.originalValue = value;
     }
 
@@ -971,7 +1048,10 @@ class OverlayButton extends HTMLElement {
 
     attributeChangedCallback(name, oldValue, newValue) {
         if (name === 'disabled') {
-            this.shadowRoot.querySelector('div').className = `overlay-button${newValue === 'true' ? ' disabled' : ''}`;
+            const div = this.shadowRoot.querySelector('div');
+            if (div) {
+                div.className = `overlay-button${newValue === 'true' ? ' disabled' : ''}`;
+            }
         }
     }
 
