@@ -24,7 +24,27 @@ class Settings extends HTMLElement {
         // @ts-expect-error
         this.root.querySelector('app-overlay').addEventListener('cancel', this.onCancelSettings);
         // @ts-expect-error
-        this.root.querySelector('app-overlay').addEventListener('confirm', this.onSaveAndCloseSettings);
+        this.root.querySelector('app-overlay').addEventListener('confirm', () => {
+            // check everything is valid
+            const someInvalid = Array.from(this.root.querySelectorAll('app-overlay-input, app-overlay-select, non-repeating-taglist')).some(inputComponent => {
+                // @ts-expect-error
+                return inputComponent.hasErrorsPresent();
+            });
+            if (someInvalid) {
+                const dialog = document.createElement('app-dialog');
+                dialog.setAttribute('dialog-title', 'Cannot Save Changes');
+                dialog.innerHTML = `
+                    <p>There are some invalid fields in the settings configuration. Please correct them before saving.</p>
+                `;
+                this.root.appendChild(dialog);
+                dialog.addEventListener('cancel', () => {
+                    this.root.removeChild(dialog);
+                });
+                return;
+            } else {
+                this.onSaveAndCloseSettings();
+            }
+        });
 
         this.renderSection()
 
@@ -51,7 +71,7 @@ class Settings extends HTMLElement {
             const normal_desc = "Normal mode is the default gameplay experience, characters will have hidden states and feelings, making interactions more immersive and challenging, editing is limited to typos and minor changes but you still are able to undo inferences, and get back to a previous state. (multiple timelines)";
             const hard_desc = "Hard mode increases the challenge by removing the ability to undo inferences, making choices permanent; (single timeline)";
             const diff_array = [debug_desc, easy_desc, normal_desc, hard_desc];
-            
+
             tabsContainer.innerHTML = `<app-overlay-section section-title="User">
             <div class="main-profile-image-container">
                 <app-profile-image image-url="profile" editable="true"></app-profile-image>

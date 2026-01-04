@@ -172,7 +172,25 @@ class CharacterOverlay extends HTMLElement {
         });
         // @ts-expect-error
         this.root.querySelector('app-overlay').addEventListener('confirm', () => {
-            this.saveCurrent();
+            // check everything is valid
+            const someInvalid = Array.from(this.root.querySelectorAll('app-overlay-input, app-overlay-select, non-repeating-taglist')).some(inputComponent => {
+                // @ts-expect-error
+                return inputComponent.hasErrorsPresent();
+            });
+            if (someInvalid) {
+                const dialog = document.createElement('app-dialog');
+                dialog.setAttribute('dialog-title', 'Cannot Save Changes');
+                dialog.innerHTML = `
+                    <p>There are some invalid fields in the character configuration. Please correct them before saving.</p>
+                `;
+                this.root.appendChild(dialog);
+                dialog.addEventListener('cancel', () => {
+                    this.root.removeChild(dialog);
+                });
+                return;
+            } else {
+                this.saveCurrent();
+            }
         });
         // @ts-expect-error
         this.root.querySelector('app-overlay').addEventListener('cancel', this.onCancel);
@@ -310,6 +328,8 @@ class CharacterOverlay extends HTMLElement {
                                     input-data-location="${fieldName}"
                                     input-data-file="${this.currentCharacterFile}"
                                     input-data-type="character"
+                                    input-minlength="${schema.properties[fieldName].minLength !== undefined ? schema.properties[fieldName].minLength : ''}"
+                                    input-maxlength="${schema.properties[fieldName].maxLength !== undefined ? schema.properties[fieldName].maxLength : ''}"
                                     input-placeholder="${escapeHTML(schema.properties[fieldName].placeholder || '')}"
                                     input-default-value="${escapeHTML(schema.properties[fieldName].default || '')}"
                                     input-placeholder-ts="${escapeHTML(schema.properties[fieldName].placeholder_ts || '')}"

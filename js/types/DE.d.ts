@@ -277,3 +277,6 @@ declare interface DEObject {
     };
     conversations: Record<string, DEConversation>;
 }
+
+declare type DE = DEObject;
+declare var DE: DEObject;

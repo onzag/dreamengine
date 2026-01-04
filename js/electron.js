@@ -61,25 +61,28 @@ const createWindow = () => {
     //win.webContents.openDevTools();
 }
 
+const ALLOWED_BASE_PATHS = [
+    "file://" + DREAMENGINE_INFO_HOME.replace(/\\/g, "/"),
+    "file://" + __dirname.replace(/\\/g, "/"),
+    "file:///" + DREAMENGINE_INFO_HOME.replace(/\\/g, "/"),
+    "file:///" + __dirname.replace(/\\/g, "/"),
+    "http://",
+    "https://",
+    "data:",
+    "websocket://",
+    "ws://",
+    "wss://",
+    "devtools://",
+];
+
 app.whenReady().then(() => {
     createWindow()
-
-    const allowedBasePaths = [
-        "file://" + DREAMENGINE_INFO_HOME,
-        "file://" + __dirname,
-        "http://",
-        "https://",
-        "data:",
-        "websocket://",
-        "ws://",
-        "wss://",
-        "devtools://",
-    ];
+    
     session.defaultSession.webRequest.onBeforeRequest((details, callback) => {
         const url = details.url;
-        const isAllowed = allowedBasePaths.some(basePath => url.startsWith(basePath));
+        const isAllowed = ALLOWED_BASE_PATHS.some(basePath => url.startsWith(basePath));
         if (!isAllowed) {
-            console.warn("Blocked URL:", url, "not in allowed paths.", allowedBasePaths);
+            console.warn("Blocked URL:", url, "not in allowed paths.", ALLOWED_BASE_PATHS);
             return callback({ cancel: true });
         }
         return callback({});

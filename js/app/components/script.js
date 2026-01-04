@@ -52,7 +52,15 @@ const WIZARD_SECTIONS = [
     {
         title: "Properties",
         description: "Properties to use in the script as configurable properties.",
-        fields: []
+        fields: [
+            [
+                "Freeze Settings",
+                [
+                    "freeze_states",
+                    "freeze_root_properties",
+                ],
+            ],
+        ]
     },
 ]
 
@@ -95,7 +103,26 @@ class ScriptOverlay extends HTMLElement {
 
         // @ts-expect-error
         this.root.querySelector('app-overlay').addEventListener('confirm', () => {
-            this.saveCurrent();
+            // check everything is valid
+            const someInvalid = Array.from(this.root.querySelectorAll('app-overlay-input, app-overlay-select, non-repeating-taglist')).some(inputComponent => {
+                // @ts-expect-error
+                inputComponent.hasErrorsPresent();
+            });
+            if (someInvalid) {
+                const dialog = document.createElement('app-dialog');
+                dialog.setAttribute('dialog-title', 'Cannot Save Changes');
+                dialog.innerHTML = `
+                    <p>There are some invalid fields in the character configuration. Please correct them before saving.</p>
+                `;
+                this.root.appendChild(dialog);
+                dialog.addEventListener('cancel', () => {
+                    this.root.removeChild(dialog);
+                });
+                playCancelSound();
+                return;
+            } else {
+                this.saveCurrent();
+            }
         });
         // @ts-expect-error
         this.root.querySelector('app-overlay').addEventListener('cancel', this.onCancel);

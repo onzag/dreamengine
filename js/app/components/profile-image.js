@@ -59,6 +59,9 @@ class ProfileImage extends HTMLElement {
     }
 
     async saveValueToUserData() {
+        if (!this.hasBeenModified()) {
+            return;
+        }
         const imageUrl = this.getAttribute('image-url') || '';
         await window.electronAPI.uploadFileToDEPath(imageUrl, this.currentFileObject);
     }

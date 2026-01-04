@@ -90,6 +90,14 @@ const schema = {
                 "type": "string",
             },
         },
+        "freeze_root_properties": {
+            "type": "array",
+            "title": "Freeze Root Properties",
+            "description": "List of root character properties that this script does not allow to be modified, by the user configuration",
+            "items": {
+                "type": "string",
+            },
+        },
     },
     "required": ["name", "script"],
 }

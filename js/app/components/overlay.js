@@ -319,12 +319,16 @@ class OverlayInput extends HTMLElement {
          */
         this.root = this.attachShadow({ mode: 'open' });
 
+        this.checkValue = this.checkValue.bind(this);
+
         this.saveValueToUserData = this.saveValueToUserData.bind(this);
         this.originalValue = "";
 
         this.editorInitializedInMode = null;
 
         this.switchCodeMirrorMode = this.switchCodeMirrorMode.bind(this);
+
+        this.hasError = false;
     }
 
     switchCodeMirrorMode() {
@@ -350,9 +354,9 @@ class OverlayInput extends HTMLElement {
             extensions[2] = javascriptLanguage;
             if (!IS_TVSFS_INITIALIZED) {
                 if (!TVSFS_INITIALIZE_PROMISE) {
-                    TVSFS_INITIALIZE_PROMISE = fetch("../../types/DE.d.ts").then(res => res.text()).then(tsDecls => {
+                    TVSFS_INITIALIZE_PROMISE = fetch("../types/DE.d.ts").then(res => res.text()).then(async tsDecls => {
+                        await initializeTVSFS(tsDecls);
                         IS_TVSFS_INITIALIZED = true;
-                        initializeTVSFS(tsDecls);
                     });
                 }
                 await TVSFS_INITIALIZE_PROMISE;
@@ -445,8 +449,12 @@ class OverlayInput extends HTMLElement {
         const isCodeMirror = this.getAttribute('multiline') === 'true' && this.getAttribute("input-is-codemirror");
 
         if (!isCodeMirror) {
+            const inputElement = this.root.querySelector('input, textarea');
+
+            // @ts-expect-error
+            inputElement.addEventListener('input', this.checkValue);
+
             if (this.getAttribute("input-default-value")) {
-                const inputElement = this.root.querySelector('input, textarea');
                 if (isNumber) {
                     // @ts-expect-error
                     const numericValue = parseFloat(this.getAttribute("input-default-value"));
@@ -498,10 +506,6 @@ class OverlayInput extends HTMLElement {
             fileType: this.getAttribute("input-data-type"),
         } : null;
 
-        if (!cacheFile) {
-            throw new Error("input-data-file and input-data-type attributes are required for cached inputs");
-        }
-
         // @ts-ignore
         window.electronAPI.loadValueFromUserData(dataLocation, cacheFile).then((value) => {
             if (value !== null) {
@@ -547,12 +551,78 @@ class OverlayInput extends HTMLElement {
                     this.initializeEditor("handlebars", "", true, true);
                 }
             }
+
+            this.checkValue();
         }).catch(err => {
             console.error(err);
         });
     }
 
+    hasErrorsPresent() {
+        return this.hasError;
+    }
+
+    checkValue() {
+        const isCodeMirror = this.getAttribute('multiline') === 'true' && this.getAttribute("input-is-codemirror");
+        // we don't check these
+        if (isCodeMirror) {
+            return;
+        }
+
+        const min = this.getAttribute('input-number-min');
+        const max = this.getAttribute('input-number-max');
+        const isPercentage = this.getAttribute('input-is-percentage') === 'true';
+        let hasError = false;
+        let errorMessage = "";
+        if (this.getAttribute('input-type') === 'number') {
+            // @ts-expect-error
+            let value = parseFloat(this.root.querySelector('input').value);
+            if (isNaN(value)) {
+                value = 0;
+            }
+            if (isPercentage) {
+                value = value / 100;
+            }
+            if (min !== null && min !== '' && value < parseFloat(min)) {
+                hasError = true;
+                if (isPercentage) {
+                    errorMessage = `Value must be at least ${parseFloat(min) * 100}%.`;
+                } else {
+                    errorMessage = `Value must be at least ${min}.`;
+                }
+            }
+            if (max !== null && max !== '' && value > parseFloat(max)) {
+                hasError = true;
+                if (isPercentage) {
+                    errorMessage = `Value must be at most ${parseFloat(max) * 100}%.`;
+                } else {
+                    errorMessage = `Value must be at most ${max}.`;
+                }
+            }
+        } else {
+            const minLength = this.getAttribute('input-minlength');
+            const maxLength = this.getAttribute('input-maxlength');
+            // @ts-expect-error
+            const value = this.root.querySelector('input, textarea').value;
+            if (minLength !== null && minLength !== '' && value.length < parseInt(minLength)) {
+                hasError = true;
+                errorMessage = `Value must be at least ${minLength} characters long.`;
+            }
+            if (maxLength !== null && maxLength !== '' && value.length > parseInt(maxLength)) {
+                hasError = true;
+                errorMessage = `Value must be at most ${maxLength} characters long.`;
+            }
+        }
+
+        // @ts-expect-error
+        this.root.querySelector('.error-message').innerHTML = errorMessage;
+        this.hasError = hasError;
+    }
+
     async saveValueToUserData() {
+        if (this.hasErrorsPresent()) {
+            throw new Error("Cannot save value, there are errors present");
+        }
         let value;
         const isCodeMirror = this.getAttribute('multiline') === 'true' && this.getAttribute("input-is-codemirror");
 
@@ -590,10 +660,6 @@ class OverlayInput extends HTMLElement {
             fileName: this.getAttribute("input-data-file"),
             fileType: this.getAttribute("input-data-type"),
         } : null;
-
-        if (!cacheFile) {
-            throw new Error("input-data-file and input-data-type attributes are required for cached inputs");
-        }
         
         // @ts-ignore
         await window.electronAPI.setValueIntoUserData(dataLocation, cacheFile, value);
@@ -630,7 +696,7 @@ class OverlayInput extends HTMLElement {
             if (isPercentage) {
                 value = value / 100;
             }
-            return value !== parseFloat(this.originalValue);
+            return value !== (parseFloat(this.originalValue) || 0);
         }
         return currentValue.trim() !== this.originalValue.trim();
     }
@@ -882,6 +948,14 @@ class OverlayInputSelect extends HTMLElement {
         this.originalValue = "";
     }
 
+    hasErrorsPresent() {
+        return false;
+    }
+
+    checkValue() {
+        return;
+    }
+
     connectedCallback() {
         this.render();
 
@@ -906,10 +980,6 @@ class OverlayInputSelect extends HTMLElement {
             fileType: this.getAttribute("input-data-type"),
         } : null;
 
-        if (!cacheFile) {
-            throw new Error("input-data-file and input-data-type attributes are required for cached inputs");
-        }
-
         // @ts-ignore
         window.electronAPI.loadValueFromUserData(dataLocation, cacheFile).then((value) => {
             if (value !== null) {
@@ -930,10 +1000,6 @@ class OverlayInputSelect extends HTMLElement {
         const dataLocation = this.getAttribute('input-data-location');
         if (!dataLocation) {
             throw new Error("input-data-location attribute is required");
-        }
-
-        if (!cacheFile) {
-            throw new Error("input-data-file and input-data-type attributes are required for cached inputs");
         }
 
         // @ts-ignore

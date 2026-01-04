@@ -42,7 +42,7 @@ NOTE: Always use the names of the characters when referring to them, do NOT use 
  *  execute: (DE: DEObject, char: CompleteCharacterReference, currentConversationParticipants: string[], newConversationParticipants: string[]) => Promise<void>,
  * }>} 
  */
-const SOCIAL_ACTIONS = [
+const MOVEMENT_ACTIONS = [
     {
         identifier: "Move Conversation Members",
         instruction(DE, char, currentConversationParticipants) {
