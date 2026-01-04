@@ -49,6 +49,17 @@ input::-webkit-outer-spin-button {
   font-weight: 700;
 }
 
+@keyframes loadingPulse {
+  0%, 100% {
+    opacity: 0.3;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+}
+
 html, body {
   width: 100%;
   height: 100%;

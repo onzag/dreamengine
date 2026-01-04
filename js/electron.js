@@ -393,7 +393,7 @@ ipcMain.handle('listCharacterFiles', async (event, group) => {
         if (data.__unsaved) {
             return false;
         }
-        return data.group === group;
+        return (data.group || "Ungrouped") === group;
     }).map(fileName => {
         const data = CHARACTER_CACHE[fileName];
         return { file: fileName, name: data.name || "Unnamed Character" };
@@ -404,7 +404,7 @@ ipcMain.handle('listScriptContexts', async (event) => {
     const contexts = new Set();
     Object.values(SCRIPT_CACHE).forEach(scriptData => {
         if (!scriptData['__unsaved']) {
-            contexts.add(scriptData.context || "Spawn");
+            contexts.add(scriptData.context || "Character Spawn");
         }
     });
     return Array.from(contexts);
@@ -416,7 +416,7 @@ ipcMain.handle('listScriptFiles', async (event, context) => {
         if (data.__unsaved) {
             return false;
         }
-        if (data.context !== context) {
+        if ((data.context || "Character Spawn") !== context) {
             return false;
         }
         return true;
@@ -442,8 +442,8 @@ ipcMain.handle('listWorldFiles', async (event) => {
 ipcMain.handle('listCharacterGroups', async (event) => {
     const groups = new Set();
     Object.values(CHARACTER_CACHE).forEach(charData => {
-        if (!charData['__unsaved'] && charData.group) {
-            groups.add(charData.group);
+        if (!charData['__unsaved']) {
+            groups.add(charData.group || "Ungrouped");
         }
     });
     return Array.from(groups);

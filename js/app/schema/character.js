@@ -44,10 +44,6 @@ const schema = {
         "general": {
             "type": "object",
             "properties": {
-                "imports": {
-                    "type": "array",
-                    "title": "Imports",
-                },
                 "src": {
                     "type": "string",
                 },
@@ -591,7 +587,7 @@ const schema = {
             "description": "A TypeScript script that runs when the character is spawned for the first time, allowing for advanced customization of character initial state. Characters are only spawned once when the world is created and they always exist after that.",
             "multiline": true,
             "code_language": "typescript",
-            "code_context": "Spawn",
+            "code_context": "Character Spawn",
             "placeholder": "// TypeScript code here, use char, user, DE and others objects",
         },
     },

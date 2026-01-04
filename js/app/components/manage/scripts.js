@@ -45,7 +45,7 @@ class AppManageScripts extends HTMLElement {
     onGoBackContext() {
         this.root.querySelector('.go-back-button-container')?.classList.add('hidden');
         this.currentContext = "";
-        localStorage.removeItem('lastContext');
+        localStorage.removeItem('lastScriptContext');
         playConfirmSound();
         this.reloadScriptContexts();
     }
@@ -66,7 +66,7 @@ class AppManageScripts extends HTMLElement {
             const hasNewButton = this.getAttribute("no-new-button") !== "true";
 
             // @ts-ignore
-            this.root.querySelector('.character-list').innerHTML = `
+            this.root.querySelector('.script-list').innerHTML = `
                 <div class="no-scripts-placeholder">
                     You have no scripts yet.${hasNewButton ? ' Click "New Script" to create one.' : ''}
                 </div>
@@ -112,7 +112,7 @@ class AppManageScripts extends HTMLElement {
         this.root.querySelector('.go-back-button-container').classList.remove('hidden');
         // @ts-ignore
         this.currentContext = e.currentTarget.dataset.context;
-        localStorage.setItem('lastContext', this.currentContext);
+        localStorage.setItem('lastScriptContext', this.currentContext);
         playConfirmSound();
         this.reloadScripts();
     }

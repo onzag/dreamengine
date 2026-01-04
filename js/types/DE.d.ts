@@ -280,3 +280,4 @@ declare interface DEObject {
 
 declare type DE = DEObject;
 declare var DE: DEObject;
+declare var char: CompleteCharacterReference;

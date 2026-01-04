@@ -13,8 +13,12 @@ class AppManageCharacters extends HTMLElement {
 
         if (this.currentCharacterGroup) {
             this.reloadCharacters();
+            // @ts-expect-error
+            this.root.querySelector('.go-back-button-container').classList.remove('hidden');
         } else {
             this.reloadCharacterGroups();
+            // @ts-expect-error
+            this.root.querySelector('.go-back-button-container').classList.add('hidden');
         }
 
         // @ts-expect-error

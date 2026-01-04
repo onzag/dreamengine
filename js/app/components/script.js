@@ -1,5 +1,6 @@
 import schema from '../schema/script.js';
 import { playCancelSound, playConfirmSound, playHoverSound, playPauseSound } from '../sound.js';
+import "./non-repeat-taglist.js";
 
 /**
  * 
@@ -54,6 +55,12 @@ const WIZARD_SECTIONS = [
         description: "Properties to use in the script as configurable properties.",
         fields: [
             [
+                "Configurable Properties",
+                [
+                    "configurable_properties",
+                ],
+            ],
+            [
                 "Freeze Settings",
                 [
                     "freeze_states",
@@ -104,7 +111,7 @@ class ScriptOverlay extends HTMLElement {
         // @ts-expect-error
         this.root.querySelector('app-overlay').addEventListener('confirm', () => {
             // check everything is valid
-            const someInvalid = Array.from(this.root.querySelectorAll('app-overlay-input, app-overlay-select, non-repeating-taglist')).some(inputComponent => {
+            const someInvalid = Array.from(this.root.querySelectorAll('app-overlay-input, app-overlay-select, non-repeat-taglist')).some(inputComponent => {
                 // @ts-expect-error
                 inputComponent.hasErrorsPresent();
             });
@@ -150,20 +157,12 @@ class ScriptOverlay extends HTMLElement {
      */
     onCheckForUnsavedChanges(onceDoneFn, onceDoneFnNoResistance, resistanceAppliedFn, onAllowFn, onceCancelFn) {
         let hasUnsavedChanges = false;
-        Array.from(this.root.querySelectorAll('app-overlay-input')).forEach(inputComponent => {
+        Array.from(this.root.querySelectorAll('app-overlay-input, app-overlay-select, non-repeat-taglist')).forEach(inputComponent => {
             // @ts-expect-error
             if (inputComponent.hasBeenModified()) {
                 hasUnsavedChanges = true;
             }
         });
-        if (!hasUnsavedChanges) {
-            Array.from(this.root.querySelectorAll('app-overlay-select')).forEach(selectComponent => {
-                // @ts-expect-error
-                if (selectComponent.hasBeenModified()) {
-                    hasUnsavedChanges = true;
-                }
-            });
-        }
 
         if (hasUnsavedChanges) {
             resistanceAppliedFn && resistanceAppliedFn();
@@ -253,6 +252,30 @@ class ScriptOverlay extends HTMLElement {
                                     input-is-percentage="${schema.properties[fieldName].percentage ? 'true' : ''}"
                                 >
                                 </app-overlay-input>`;
+                } else if (schema.properties[fieldName].real_type === "arbitrary_property_string_array" || schema.properties[fieldName].real_type === "arbitrary_state_string_array") {
+                    return `<non-repeat-taglist
+                                class="${fieldName}"
+                                label="${escapeHTML(schema.properties[fieldName].title)}"
+                                title="${escapeHTML(schema.properties[fieldName].description || '')}"
+                                input-data-location="${fieldName}"
+                                input-data-file="${this.currentScriptFile}"
+                                input-data-type="script"
+                                input-type="${schema.properties[fieldName].real_type === "arbitrary_property_string_array" ? 'property' : 'state'}"
+
+                            >
+                            </non-repeat-taglist>`;
+                } else if (schema.properties[fieldName].real_type === "arbitrary_property_object") {
+                    return `<non-repeat-taglist
+                                class="${fieldName}"
+                                label="${escapeHTML(schema.properties[fieldName].title)}"
+                                title="${escapeHTML(schema.properties[fieldName].description || '')}"
+                                input-data-location="${fieldName}"
+                                input-data-file="${this.currentScriptFile}"
+                                input-data-type="script"
+                                input-type="property"
+                                children-schema='${escapeHTML(JSON.stringify(schema.properties[fieldName].additionalProperties.properties))}'
+                            >
+                            </non-repeat-taglist>`;
                 }
             }).join('');
 
@@ -270,15 +293,10 @@ class ScriptOverlay extends HTMLElement {
 
     async updateScriptFileOnDisk() {
         // save each field
-        await Promise.all(Array.from(this.root.querySelectorAll('app-overlay-input')).map(inputComponent =>
+        await Promise.all(Array.from(this.root.querySelectorAll('app-overlay-input, app-overlay-select, non-repeat-taglist')).map(inputComponent =>
             // @ts-ignore
             inputComponent.saveValueToUserData()
         ));
-
-        await Promise.all(Array.from(this.root.querySelectorAll('app-overlay-select')).map(selectComponent => {
-            // @ts-ignore
-            return selectComponent.saveValueToUserData();
-        }));
 
         if (!this.currentScriptFile) {
             throw new Error("No script file specified to save.");

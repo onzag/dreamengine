@@ -422,8 +422,13 @@ class OverlayInput extends HTMLElement {
                 // @ts-expect-error
                 const scriptName = e.detail.scriptName;
                 document.body.removeChild(dialog);
+                const newDiv = document.createElement('div');
+                newDiv.classList.add('imported-script-item');
+                newDiv.dataset.scriptFile = scriptFile;
+                newDiv.innerHTML = `${scriptName} <span class="remove-import">[remove]</span>`;
                 // @ts-expect-error
-                this.root.querySelector('.code-mirror-import-list').innerHTML += `<div class="imported-script-item" data-script-file="${scriptFile}">${scriptName} <span class="remove-import">[remove]</span></div>`;
+                this.root.querySelector('.code-mirror-import-list').appendChild(newDiv);
+                this.addEventListenersToImportItem(newDiv);
             });
             dialog.setAttribute('dialog-title', 'Select a Script to Import');
             dialog.appendChild(scriptselector);
@@ -432,6 +437,50 @@ class OverlayInput extends HTMLElement {
                 document.body.removeChild(dialog);
             });
         });
+
+        const importsDataLocation = this.getAttribute("input-data-location") + ".imports";
+        // @ts-ignore
+        const cacheFile = this.getAttribute("input-data-file") ? {
+            fileName: this.getAttribute("input-data-file"),
+            fileType: this.getAttribute("input-data-type"),
+        } : null;
+        /**
+         * @type {string[]}
+         */
+        this.originalImports = [];
+        // @ts-ignore
+        window.electronAPI.loadValueFromUserData(importsDataLocation, cacheFile).then(async (imports) => {
+            let addedHTML = "";
+            if (imports !== null && Array.isArray(imports)) {
+                this.originalImports = imports;
+                for (const importFile of imports) {
+                    const importFileName = await window.electronAPI.loadValueFromUserData("name", { fileName: importFile, fileType: "script" });
+                    addedHTML += `<div class="imported-script-item" data-script-file="${importFile}">${importFileName} <span class="remove-import">[remove]</span></div>`;
+                }
+            }
+            // @ts-expect-error
+            this.root.querySelector('.code-mirror-import-list').innerHTML = addedHTML;
+            // add event listeners to each
+            this.root.querySelectorAll('.imported-script-item').forEach(item => {
+                this.addEventListenersToImportItem(item);
+            });
+        })
+    }
+
+    /**
+     * 
+     * @param {Element} divItem 
+     */
+    addEventListenersToImportItem(divItem) {
+        const removeButton = divItem.querySelector('.remove-import');
+        if (removeButton) {
+            removeButton.addEventListener('mouseenter', playHoverSound);
+            removeButton.addEventListener('click', () => {
+                // remove this item
+                // @ts-expect-error
+                divItem.parentElement.removeChild(divItem);
+            });
+        }
     }
 
     async connectedCallback() {
@@ -498,7 +547,7 @@ class OverlayInput extends HTMLElement {
         }
 
         if (!dataLocation) {
-            throw new Error("input-data-location attribute is required");
+            return;
         }
 
         const cacheFile = this.getAttribute("input-data-file") ? {
@@ -619,6 +668,15 @@ class OverlayInput extends HTMLElement {
         this.hasError = hasError;
     }
 
+    getValue() {
+        const isCodeMirror = this.getAttribute('multiline') === 'true' && this.getAttribute("input-is-codemirror");
+        if (isCodeMirror) {
+            throw new Error("Not supported for CodeMirror inputs");
+        }
+        // @ts-expect-error
+        return this.root.querySelector('input, textarea').value;
+    }
+
     async saveValueToUserData() {
         if (this.hasErrorsPresent()) {
             throw new Error("Cannot save value, there are errors present");
@@ -669,21 +727,50 @@ class OverlayInput extends HTMLElement {
             // @ts-ignore
             await window.electronAPI.setValueIntoUserData(dataLocationJs, cacheFile, convertTsToJs(value));
             // @ts-ignore
-            await window.electronAPI.setValueIntoUserData(dataLocationImports, cacheFile, this.getCurrentImports());
+            if (this.getAttribute("input-allows-imports-from")) {
+                const currentImports = this.getCurrentImports();
+                // @ts-ignore
+                await window.electronAPI.setValueIntoUserData(dataLocationImports, cacheFile, currentImports);
+                this.originalImports = currentImports;
+            }
         } else if (isCodeMirror && this.editorInitializedInMode === "handlebars") {
             // @ts-ignore
             await window.electronAPI.setValueIntoUserData(dataLocationJs, cacheFile, null);
             // @ts-ignore
-            await window.electronAPI.setValueIntoUserData(dataLocationImports, cacheFile, this.getCurrentImports());
+            if (this.getAttribute("input-allows-imports-from")) {
+                const currentImports = this.getCurrentImports();
+                // @ts-ignore
+                await window.electronAPI.setValueIntoUserData(dataLocationImports, cacheFile, currentImports);
+                this.originalImports = currentImports;
+            }
         }
         this.originalValue = value;
+    }
+
+    getCurrentImports() {
+        const importElements = this.root.querySelectorAll('.imported-script-item');
+        /**
+         * @type {string[]}
+         */
+        const imports = [];
+
+        importElements.forEach(el => {
+            // @ts-expect-error
+            imports.push(el.dataset.scriptFile);
+        });
+
+        return imports;
     }
 
     hasBeenModified() {
         const isCodeMirror = this.getAttribute('multiline') === 'true' && this.getAttribute("input-is-codemirror");
         if (isCodeMirror) {
+            if (!this.getAttribute("input-allows-imports-from")) {
+                return this.editor.state.doc.toString().trim() !== this.originalValue.trim();
+            }
+            const imports = this.getCurrentImports();
             const currentValue = this.editor.state.doc.toString();
-            return currentValue.trim() !== this.originalValue.trim();
+            return JSON.stringify(imports) !== JSON.stringify(this.originalImports) || currentValue.trim() !== this.originalValue.trim();
         }
         // @ts-expect-error
         const currentValue = this.root.querySelector('input, textarea').value;
@@ -778,13 +865,15 @@ class OverlayInput extends HTMLElement {
             background-color: rgba(0, 0, 0, 0.9);
             color: white;
             resize: none;
-            boder-sizing: border-box;
         }
         .error-message {
             font-size: 4vh;
             height: 4vh;
             text-align: left;
             color: #FF6B6B;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
         }
             .hidden {
                 display: none;
@@ -845,6 +934,10 @@ input {
 .code-mirror-import-list {
     width: 100%;
 }
+    .remove-import:hover {
+        color: #FF6B6B;
+        cursor: pointer;
+    }
 
 .code-mirror-mode-switcher, .code-mirror-import-button {
     font-size: 2.5vh;
@@ -972,7 +1065,7 @@ class OverlayInputSelect extends HTMLElement {
 
         const dataLocation = this.getAttribute('input-data-location');
         if (!dataLocation) {
-            throw new Error("input-data-location attribute is required");
+            return;
         }
 
         const cacheFile = this.getAttribute("input-data-file") ? {
@@ -999,7 +1092,7 @@ class OverlayInputSelect extends HTMLElement {
         } : null;
         const dataLocation = this.getAttribute('input-data-location');
         if (!dataLocation) {
-            throw new Error("input-data-location attribute is required");
+            return;
         }
 
         // @ts-ignore
@@ -1007,6 +1100,11 @@ class OverlayInputSelect extends HTMLElement {
         // @ts-ignore
         await window.electronAPI.setValueIntoUserData(dataLocation, cacheFile, value.trim());
         this.originalValue = value;
+    }
+
+    getValue() {
+        // @ts-expect-error
+        return this.root.querySelector('select').value;
     }
 
     hasBeenModified() {
@@ -1062,6 +1160,9 @@ class OverlayInputSelect extends HTMLElement {
             height: 4vh;
             text-align: left;
             color: #FF6B6B;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
         }
       </style>
       <div class="overlay-input">

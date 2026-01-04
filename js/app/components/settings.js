@@ -26,7 +26,7 @@ class Settings extends HTMLElement {
         // @ts-expect-error
         this.root.querySelector('app-overlay').addEventListener('confirm', () => {
             // check everything is valid
-            const someInvalid = Array.from(this.root.querySelectorAll('app-overlay-input, app-overlay-select, non-repeating-taglist')).some(inputComponent => {
+            const someInvalid = Array.from(this.root.querySelectorAll('app-overlay-input, app-overlay-select, non-repeat-taglist')).some(inputComponent => {
                 // @ts-expect-error
                 return inputComponent.hasErrorsPresent();
             });

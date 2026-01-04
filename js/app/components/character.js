@@ -173,7 +173,7 @@ class CharacterOverlay extends HTMLElement {
         // @ts-expect-error
         this.root.querySelector('app-overlay').addEventListener('confirm', () => {
             // check everything is valid
-            const someInvalid = Array.from(this.root.querySelectorAll('app-overlay-input, app-overlay-select, non-repeating-taglist')).some(inputComponent => {
+            const someInvalid = Array.from(this.root.querySelectorAll('app-overlay-input, app-overlay-select, non-repeat-taglist')).some(inputComponent => {
                 // @ts-expect-error
                 return inputComponent.hasErrorsPresent();
             });
@@ -218,20 +218,12 @@ class CharacterOverlay extends HTMLElement {
      */
     onCheckForUnsavedChanges(onceDoneFn, onceDoneFnNoResistance, resistanceAppliedFn, onAllowFn, onceCancelFn) {
         let hasUnsavedChanges = false;
-        Array.from(this.root.querySelectorAll('app-overlay-input')).forEach(inputComponent => {
+        Array.from(this.root.querySelectorAll('app-overlay-input, app-overlay-select, non-repeat-taglist')).forEach(inputComponent => {
             // @ts-expect-error
             if (inputComponent.hasBeenModified()) {
                 hasUnsavedChanges = true;
             }
         });
-        if (!hasUnsavedChanges) {
-            Array.from(this.root.querySelectorAll('app-overlay-select')).forEach(selectComponent => {
-                // @ts-expect-error
-                if (selectComponent.hasBeenModified()) {
-                    hasUnsavedChanges = true;
-                }
-            });
-        }
 
         if (hasUnsavedChanges) {
             resistanceAppliedFn && resistanceAppliedFn();
@@ -371,15 +363,10 @@ class CharacterOverlay extends HTMLElement {
 
     async updateCharacterFileOnDisk() {
         // save each field
-        await Promise.all(Array.from(this.root.querySelectorAll('app-overlay-input')).map(inputComponent =>
+        await Promise.all(Array.from(this.root.querySelectorAll('app-overlay-input, app-overlay-select, non-repeat-taglist')).map(inputComponent =>
             // @ts-expect-error
             inputComponent.saveValueToUserData()
         ));
-
-        await Promise.all(Array.from(this.root.querySelectorAll('app-overlay-select')).map(selectComponent => {
-            // @ts-expect-error
-            return selectComponent.saveValueToUserData();
-        }));
 
         await window.electronAPI.updateCharacterFileFromCache(
             // @ts-ignore
