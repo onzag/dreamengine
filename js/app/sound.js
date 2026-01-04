@@ -1,11 +1,14 @@
-const cancelSound = document.getElementById('cancelSound');
-const pauseSound = document.getElementById('pauseSound');
-const hoverSound = document.getElementById('hoverSound');
-const confirmSound = document.getElementById('confirmSound');
+const cancelSound = /** @type {HTMLAudioElement} */ (document.getElementById('cancelSound'));
+const pauseSound = /** @type {HTMLAudioElement} */ (document.getElementById('pauseSound'));
+const hoverSound = /** @type {HTMLAudioElement} */ (document.getElementById('hoverSound'));
+const confirmSound = /** @type {HTMLAudioElement} */ (document.getElementById('confirmSound'));
 
 let fxEnabled = (localStorage.getItem('fxEnabled') || "true") === 'true';
 let ambienceEnabled = (localStorage.getItem('ambienceEnabled') || "true") === 'true';
 
+/**
+ * @type Array<string> | null
+ */
 let currentAmbience = null;
 
 function playCancelSound() {
@@ -51,7 +54,7 @@ function toggleAmbience() {
   localStorage.setItem('ambienceEnabled', ambienceEnabled.toString());
   if (!ambienceEnabled) {
     stopAmbience(true);
-  } else {
+  } else if (currentAmbience) {
     playAmbience(currentAmbience);
   }
   return ambienceEnabled;
@@ -65,13 +68,23 @@ function isAmbienceEnabled() {
   return ambienceEnabled;
 }
 
+/**
+ * @type {Array<{context: AudioContext, gainNode: GainNode, sources: AudioBufferSourceNode[]}>}
+ */
 const AMBIENCES = []
 
+/**
+ * 
+ * @param {string[]} src 
+ * @param {number} volume 
+ * @returns 
+ */
 async function playAmbience(src, volume = 0.5) {
   currentAmbience = (currentAmbience || []).concat(src);
   if (!ambienceEnabled) {
     return;
   }
+  // @ts-ignore
   const audioContext = new (window.AudioContext || window.webkitAudioContext)();
   const gainNode = audioContext.createGain();
   const sources = [];
@@ -111,8 +124,17 @@ function stopAmbience(doNotClearCurrent = false) {
   }
 }
 
+/**
+ * 
+ * @type {"IN" | "OUT" | null}
+ */
 let isFading = null;
 
+/**
+ * 
+ * @param {number} durationMs 
+ * @returns 
+ */
 async function stopAmbienceWithFade(durationMs) {
   if (isFading === "OUT") {
     return;
@@ -151,6 +173,12 @@ async function stopAmbienceWithFade(durationMs) {
   }
 }
 
+/**
+ * 
+ * @param {string[]} src 
+ * @param {number} durationMs 
+ * @returns 
+ */
 async function startAmbienceWithFade(src, durationMs) {
   if (isFading === "IN") {
     return;

@@ -4,7 +4,10 @@ import "../script.js";
 class AppManageScripts extends HTMLElement {
     constructor() {
         super();
-        this.attachShadow({ mode: 'open' });
+        /**
+         * @type ShadowRoot
+         */
+        this.root = this.attachShadow({ mode: 'open' });
 
         this.currentContext = this.getAttribute("force-context") || localStorage.getItem('lastScriptContext') || "";
     }
@@ -15,12 +18,12 @@ class AppManageScripts extends HTMLElement {
         // buggy behaviour in this, it wont load properly the value if we do it before render
         this.currentContext = this.getAttribute("force-context") || localStorage.getItem('lastScriptContext') || "";
         if (this.currentContext) {
-            this.reloadScripts(this.currentContext);
+            this.reloadScripts();
         } else {
             this.reloadScriptContexts();
         }
 
-        const newButton = this.shadowRoot.querySelector('app-overlay-button');
+        const newButton = this.root.querySelector('app-overlay-button');
         if (newButton) newButton.addEventListener('click', async () => {
             const rs = await window.electronAPI.createEmptyScriptFile();
             const overlay = document.createElement("app-script");
@@ -31,16 +34,16 @@ class AppManageScripts extends HTMLElement {
                 this.reloadCurrentLocation();
             });
         });
-        this.shadowRoot.querySelector('.go-back-button-container').addEventListener('click', () => {
+        this.root.querySelector('.go-back-button-container')?.addEventListener('click', () => {
             this.onGoBackContext();
         });
-        this.shadowRoot.querySelector('.go-back-button-container').addEventListener('mouseenter', () => {
+        this.root.querySelector('.go-back-button-container')?.addEventListener('mouseenter', () => {
             playHoverSound();
         });
     }
 
     onGoBackContext() {
-        this.shadowRoot.querySelector('.go-back-button-container').classList.add('hidden');
+        this.root.querySelector('.go-back-button-container')?.classList.add('hidden');
         this.currentContext = "";
         localStorage.removeItem('lastContext');
         playConfirmSound();
@@ -49,20 +52,21 @@ class AppManageScripts extends HTMLElement {
 
     reloadCurrentLocation() {
         if (this.currentContext) {
-            this.reloadScripts(this.currentContext);
+            this.reloadScripts();
         } else {
             this.reloadScriptContexts();
         }
     }
 
     async reloadScriptContexts() {
-        this.shadowRoot.querySelector('.go-back-button-container').classList.add('hidden');
+        this.root.querySelector('.go-back-button-container')?.classList.add('hidden');
         // Logic to reload character groups can be added here
         const contexts = await window.electronAPI.listScriptContexts();
         if (contexts.length === 0) {
             const hasNewButton = this.getAttribute("no-new-button") !== "true";
 
-            this.shadowRoot.querySelector('.character-list').innerHTML = `
+            // @ts-ignore
+            this.root.querySelector('.character-list').innerHTML = `
                 <div class="no-scripts-placeholder">
                     You have no scripts yet.${hasNewButton ? ' Click "New Script" to create one.' : ''}
                 </div>
@@ -81,23 +85,32 @@ class AppManageScripts extends HTMLElement {
                     </div>
                 </div>
             `).join('');
-            this.shadowRoot.querySelector('.script-list').innerHTML = contextElements;
+            const scriptLists = this.root.querySelector('.script-list');
+            if (scriptLists) scriptLists.innerHTML = contextElements;
 
-            this.shadowRoot.querySelectorAll('.script-context-item').forEach(item => {
+            this.root.querySelectorAll('.script-context-item').forEach(item => {
                 item.addEventListener('click', (e) => this.onContextSelected(e));
                 item.addEventListener('mouseenter', (e) => {
                     playHoverSound();
+                    // @ts-ignore
                     e.currentTarget.querySelector("svg path").setAttribute("fill", "#FF6B6B");
                 });
                 item.addEventListener('mouseleave', (e) => {
+                    // @ts-ignore
                     e.currentTarget.querySelector("svg path").setAttribute("fill", "#ccc");
                 });
             });
         }
     }
 
+    /**
+     * 
+     * @param {Event} e 
+     */
     onContextSelected(e) {
-        this.shadowRoot.querySelector('.go-back-button-container').classList.remove('hidden');
+        // @ts-ignore
+        this.root.querySelector('.go-back-button-container').classList.remove('hidden');
+        // @ts-ignore
         this.currentContext = e.currentTarget.dataset.context;
         localStorage.setItem('lastContext', this.currentContext);
         playConfirmSound();
@@ -107,9 +120,11 @@ class AppManageScripts extends HTMLElement {
     async reloadScripts() {
         // Logic to reload script list can be added here
         if (this.getAttribute("force-context")) {
-            this.shadowRoot.querySelector('.go-back-button-container').classList.add('hidden');
+            // @ts-ignore
+            this.root.querySelector('.go-back-button-container').classList.add('hidden');
         } else {
-            this.shadowRoot.querySelector('.go-back-button-container').classList.remove('hidden');
+            // @ts-ignore
+            this.root.querySelector('.go-back-button-container').classList.remove('hidden');
         }
 
         const scripts = await window.electronAPI.listScriptFiles(this.currentContext);
@@ -117,7 +132,8 @@ class AppManageScripts extends HTMLElement {
         if (scripts.length === 0) {
             const hasNewButton = this.getAttribute("no-new-button") !== "true";
 
-            this.shadowRoot.querySelector('.script-list').innerHTML = `
+            // @ts-ignore
+            this.root.querySelector('.script-list').innerHTML = `
                 <div class="no-scripts-placeholder">
                     You have no scripts yet.${hasNewButton ? ' Click "New Script" to create one.' : ''}
                 </div>
@@ -137,24 +153,34 @@ class AppManageScripts extends HTMLElement {
                     </div>
                 </div>
             `).join('');
-        this.shadowRoot.querySelector('.script-list').innerHTML = scriptElements;
-        this.shadowRoot.querySelectorAll('.script-item').forEach(item => {
+        // @ts-ignore
+        this.root.querySelector('.script-list').innerHTML = scriptElements;
+        this.root.querySelectorAll('.script-item').forEach(item => {
             item.addEventListener('click', (e) => this.onScriptSelected(e));
             item.addEventListener('mouseenter', (e) => {
                 playHoverSound();
+                // @ts-ignore
                 e.currentTarget.querySelector("svg path").setAttribute("fill", "#FF6B6B");
             });
             item.addEventListener('mouseleave', (e) => {
+                // @ts-ignore
                 e.currentTarget.querySelector("svg path").setAttribute("fill", "#ccc");
             });
         });
     }
 
+    /**
+     * 
+     * @param {Event} e 
+     * @returns 
+     */
     onScriptSelected(e) {
         if (this.getAttribute("widget-mode")) {
             this.dispatchEvent(new CustomEvent('script-selected', {
                 detail: {
+                    // @ts-ignore
                     scriptFile: e.currentTarget.dataset.scriptFile,
+                    // @ts-ignore
                     scriptName: e.currentTarget.querySelector('.script-name').innerText,
                 },
                 bubbles: true,
@@ -162,6 +188,7 @@ class AppManageScripts extends HTMLElement {
             }));
             return;
         }
+        // @ts-ignore
         const scriptFile = e.currentTarget.dataset.scriptFile;
         const overlay = document.createElement("app-script");
         overlay.setAttribute("script-file", scriptFile);
@@ -174,7 +201,7 @@ class AppManageScripts extends HTMLElement {
 
     render() {
         const hasNewButton = this.getAttribute("no-new-button") !== "true";
-        this.shadowRoot.innerHTML = `
+        this.root.innerHTML = `
             <style>
                .script-list {
                    display: flex;

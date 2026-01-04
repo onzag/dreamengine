@@ -12,7 +12,10 @@ const MANAGE_SECTIONS = [
 class ManageOverlay extends HTMLElement {
     constructor() {
         super();
-        this.attachShadow({ mode: 'open' });
+        /**
+         * @type {ShadowRoot}
+         */
+        this.root = this.attachShadow({ mode: 'open' });
 
         this.currentSectionIndex = 0;
     }
@@ -21,12 +24,15 @@ class ManageOverlay extends HTMLElement {
         this.render();
         playPauseSound();
 
-        this.shadowRoot.querySelector("app-overlay").addEventListener('cancel', () => {
+        // @ts-expect-error
+        this.root.querySelector("app-overlay").addEventListener('cancel', () => {
             this.remove();
             playCancelSound();
         });
 
-        this.shadowRoot.querySelector('app-overlay-tabs').addEventListener('tab-change', (e) => {
+        // @ts-expect-error
+        this.root.querySelector('app-overlay-tabs').addEventListener('tab-change', (e) => {
+            // @ts-expect-error
             this.currentSectionIndex = e.detail.newIndex;
             this.buildChildrenMap();
             playConfirmSound();
@@ -36,18 +42,21 @@ class ManageOverlay extends HTMLElement {
     }
 
     buildChildrenMap() {
-        const contentArea = this.shadowRoot.querySelector('.internal-content-area');
+        const contentArea = this.root.querySelector('.internal-content-area');
         if (this.currentSectionIndex === 0) {
+            // @ts-expect-error
             contentArea.innerHTML = '<app-manage-characters></app-manage-characters>';
         } else if (this.currentSectionIndex === 1) {
+            // @ts-expect-error
             contentArea.innerHTML = '<app-manage-worlds></app-manage-worlds>';
         } else if (this.currentSectionIndex === 2) {
+            // @ts-expect-error
             contentArea.innerHTML = '<app-manage-scripts></app-manage-scripts>';
         }
     }
 
     render() {
-        this.shadowRoot.innerHTML = `
+        this.root.innerHTML = `
             <style>
                 @import "./components/manage.css";
             </style>

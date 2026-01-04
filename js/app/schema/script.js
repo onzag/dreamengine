@@ -1,4 +1,7 @@
-export default {
+/**
+ * @type {any}
+ */
+const schema = {
     "title": "Script Schema",
     "type": "object",
     "properties": {
@@ -78,7 +81,17 @@ export default {
                     },
                 },
             },
-        }
+        },
+        "freeze_states": {
+            "type": "array",
+            "title": "Freeze States",
+            "description": "List of character states that this script does not allow to be modified, by the user configuration",
+            "items": {
+                "type": "string",
+            },
+        },
     },
     "required": ["name", "script"],
 }
+
+export default schema;

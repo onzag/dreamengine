@@ -5,7 +5,10 @@ import { playCancelSound, playConfirmSound, playHoverSound, playPauseSound } fro
 class Settings extends HTMLElement {
     constructor() {
         super();
-        this.attachShadow({ mode: 'open' });
+        /**
+         * @type {ShadowRoot}
+         */
+        this.root = this.attachShadow({ mode: 'open' });
 
         this.closeSettings = this.closeSettings.bind(this);
         this.onCancelSettings = this.onCancelSettings.bind(this);
@@ -18,25 +21,31 @@ class Settings extends HTMLElement {
         this.render();
 
         playPauseSound();
-        this.shadowRoot.querySelector('app-overlay').addEventListener('cancel', this.onCancelSettings);
-        this.shadowRoot.querySelector('app-overlay').addEventListener('confirm', this.onSaveAndCloseSettings);
+        // @ts-expect-error
+        this.root.querySelector('app-overlay').addEventListener('cancel', this.onCancelSettings);
+        // @ts-expect-error
+        this.root.querySelector('app-overlay').addEventListener('confirm', this.onSaveAndCloseSettings);
 
         this.renderSection()
 
-        this.shadowRoot.querySelector('app-overlay-tabs').addEventListener('pre-tab-change', (e) => {
+        // @ts-expect-error
+        this.root.querySelector('app-overlay-tabs').addEventListener('pre-tab-change', (e) => {
+            // @ts-ignore
             this.onCheckForUnsavedChanges(null, playConfirmSound, e.detail.denyTabChange, e.detail.executeTabChange, null);
         });
 
-        this.shadowRoot.querySelector('app-overlay-tabs').addEventListener('tab-change', (e) => {
+        // @ts-expect-error
+        this.root.querySelector('app-overlay-tabs').addEventListener('tab-change', (e) => {
+            // @ts-ignore
             this.currentSectionIndex = e.detail.newIndex;
             this.renderSection()
         });
     }
 
     renderSection() {
-        const tabsContainer = this.shadowRoot.querySelector('app-overlay-tabs');
+        const tabsContainer = this.root.querySelector('app-overlay-tabs');
 
-        if (this.currentSectionIndex === 0) {
+        if (this.currentSectionIndex === 0 && tabsContainer) {
             const debug_desc = "Debug mode is not meant for playing, allows you to hear the voices of schizophrenic characters, see the system inference reasoning, rolling chances, you get debug commands, and more. Only use this mode for testing and debugging purposes.";
             const easy_desc = "Easy mode shows characters hidden states, bond strengths, second bond strength, and shows how they feel about each other, making it easier to role-play and interact with them; editing messages is fully allowed in this mode.";
             const normal_desc = "Normal mode is the default gameplay experience, characters will have hidden states and feelings, making interactions more immersive and challenging, editing is limited to typos and minor changes but you still are able to undo inferences, and get back to a previous state. (multiple timelines)";
@@ -93,7 +102,7 @@ class Settings extends HTMLElement {
                     input-data-location="difficulty"
                 ></app-overlay-select>
             </app-overlay-section>`;
-        } else if (this.currentSectionIndex === 1) {
+        } else if (this.currentSectionIndex === 1 && tabsContainer) {
             tabsContainer.innerHTML = `<app-overlay-section section-title="AI Inference Settings">
                 <app-overlay-input
                     label="Inference host"
@@ -140,9 +149,19 @@ class Settings extends HTMLElement {
         };
     }
 
+    /**
+     * Check for unsaved changes and optionally run callbacks.
+     *
+     * @param {() => void} [onceDoneFn]
+     * @param {() => void} [onceDoneFnNoResistance]
+     * @param {() => void} [resistanceAppliedFn]
+     * @param {() => void} [onAllowFn]
+     * @param {() => void} [onceCancelFn]
+     */
     onCheckForUnsavedChanges(onceDoneFn, onceDoneFnNoResistance, resistanceAppliedFn, onAllowFn, onceCancelFn) {
         let hasUnsavedChanges = false;
-        this.shadowRoot.querySelectorAll('app-overlay-input, app-overlay-select, app-profile-image').forEach(inputComponent => {
+        this.root.querySelectorAll('app-overlay-input, app-overlay-select, app-profile-image').forEach(inputComponent => {
+            // @ts-ignore
             if (inputComponent.hasBeenModified()) {
                 hasUnsavedChanges = true;
             }
@@ -181,7 +200,8 @@ class Settings extends HTMLElement {
         this.closeSettings();
         playConfirmSound();
 
-        await Promise.all(Array.from(this.shadowRoot.querySelectorAll('app-overlay-input, app-overlay-select, app-profile-image')).map(inputComponent =>
+        await Promise.all(Array.from(this.root.querySelectorAll('app-overlay-input, app-overlay-select, app-profile-image')).map(inputComponent =>
+            // @ts-ignore
             inputComponent.saveValueToUserData()
         ));
 
@@ -193,7 +213,7 @@ class Settings extends HTMLElement {
     }
 
     render() {
-        this.shadowRoot.innerHTML = `
+        this.root.innerHTML = `
         <style>
             .profile-image-spacer {
                 height: 4vh;

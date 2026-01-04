@@ -3,7 +3,10 @@ import { playCancelSound, playHoverSound, playPauseSound } from '../sound.js';
 class Dialog extends HTMLElement {
     constructor() {
         super();
-        this.attachShadow({ mode: 'open' });
+        /**
+         * @type {ShadowRoot}
+         */
+        this.root = this.attachShadow({ mode: 'open' });
 
         this.onCloseDialog = this.onCloseDialog.bind(this);
         this.onDocumentKeydown = this.onDocumentKeydown.bind(this);
@@ -18,19 +21,27 @@ class Dialog extends HTMLElement {
 
         playPauseSound();
         document.addEventListener("keydown", this.onDocumentKeydown);
-        this.shadowRoot.querySelector('.backdrop').addEventListener('click', this.onBackdropClick);
+        // @ts-expect-error
+        this.root.querySelector('.backdrop').addEventListener('click', this.onBackdropClick);
 
         if (this.getAttribute('confirmation') === 'true') {
-            this.shadowRoot.getElementById('confirm-btn').addEventListener('click', this.onAcceptButtonClick);
-            this.shadowRoot.getElementById('cancel-btn').addEventListener('click', this.onCancelButtonClick);
-            this.shadowRoot.getElementById('confirm-btn').focus();
+            // @ts-expect-error
+            this.root.getElementById('confirm-btn').addEventListener('click', this.onAcceptButtonClick);
+            // @ts-expect-error
+            this.root.getElementById('cancel-btn').addEventListener('click', this.onCancelButtonClick);
+            // @ts-expect-error
+            this.root.getElementById('confirm-btn').focus();
 
-            this.shadowRoot.querySelectorAll('.dialog-buttons div').forEach(btn => {
+            this.root.querySelectorAll('.dialog-buttons div').forEach(btn => {
                 btn.addEventListener('mouseenter', playHoverSound);
             });
         }
     }
 
+    /**
+     * 
+     * @param {KeyboardEvent} e 
+     */
     onDocumentKeydown(e) {
         if (e.key === "Escape") {
             this.onCloseDialog();
@@ -80,7 +91,7 @@ class Dialog extends HTMLElement {
             `;
         }
 
-        this.shadowRoot.innerHTML = `
+        this.root.innerHTML = `
       <style>
       *::-webkit-scrollbar {
   width: 12px !important;

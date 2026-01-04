@@ -4,30 +4,49 @@ import "../../codemirror/bundle.js";
 
 import { playCancelSound, playConfirmSound, playHoverSound, playPauseSound } from '../sound.js';
 
+// @ts-ignore
 const EditorView = window.EditorView;
+// @ts-ignore
 const basicSetup = window.basicSetup;
+// @ts-ignore
 const handlebarsLanguage = window.handlebarsLanguage;
+// @ts-ignore
 const indentWithTab = window.indentWithTab;
+// @ts-ignore
 const keymap = window.keymap;
+// @ts-ignore
 const placeholder = window.placeholder;
+// @ts-ignore
 const getMatchDecorator = window.getMatchDecorator;
+// @ts-ignore
 const javascriptLanguage = window.javascriptLanguage;
+// @ts-ignore
 const initializeTVSFS = window.initializeTVSFS;
+// @ts-ignore
 const tsErrorLinter = window.tsErrorLinter;
+// @ts-ignore
 const tsComplete = window.tsComplete;
+// @ts-ignore
 const linter = window.linter;
+// @ts-ignore
 const tsvfsViewPlugin = window.tsvfsViewPlugin;
+// @ts-ignore
 const autocompletion = window.autocompletion;
+// @ts-ignore
 const convertTsToJs = window.convertTsToJs;
 
-initializeTVSFS(`declare const cat: { log(msg: any): void; };`);
+let IS_TVSFS_INITIALIZED = false;
+/**
+ * @type {Promise<void>|null}
+ */
+let TVSFS_INITIALIZE_PROMISE = null;
 
 const usedMatchDecorator = getMatchDecorator(ALL_VARIABLES_FNS);
 
 class Overlay extends HTMLElement {
     constructor() {
         super();
-        this.attachShadow({ mode: 'open' });
+        this.root = this.attachShadow({ mode: 'open' });
 
         this.onDocumentKeydown = this.onDocumentKeydown.bind(this);
         this.onCloseOverlay = this.onCloseOverlay.bind(this);
@@ -40,22 +59,25 @@ class Overlay extends HTMLElement {
         this.render();
 
         // hide stars when overlay is active
+        // @ts-expect-error
         document.querySelector('.sky').style.display = 'none';
 
         document.addEventListener("keydown", this.onDocumentKeydown);
 
-        if (this.shadowRoot.getElementById('confirm-btn')) {
-            this.shadowRoot.getElementById('confirm-btn').addEventListener('click', this.onAcceptButtonClick);
+        if (this.root.getElementById('confirm-btn')) {
+            // @ts-expect-error
+            this.root.getElementById('confirm-btn').addEventListener('click', this.onAcceptButtonClick);
         }
-        if (this.shadowRoot.getElementById('cancel-btn')) {
-            this.shadowRoot.getElementById('cancel-btn').addEventListener('click', this.onCancelButtonClick);
+        if (this.root.getElementById('cancel-btn')) {
+            // @ts-expect-error
+            this.root.getElementById('cancel-btn').addEventListener('click', this.onCancelButtonClick);
         }
 
-        this.shadowRoot.querySelectorAll('.overlay-buttons div').forEach(btn => {
+        this.root.querySelectorAll('.overlay-buttons div').forEach(btn => {
             btn.addEventListener('mouseenter', playHoverSound);
         });
 
-        const specialButton = this.shadowRoot.querySelector('.special-button');
+        const specialButton = this.root.querySelector('.special-button');
         if (specialButton) {
             specialButton.addEventListener('mouseenter', playHoverSound);
             specialButton.addEventListener('click', () => {
@@ -64,6 +86,10 @@ class Overlay extends HTMLElement {
         }
     }
 
+    /**
+     * 
+     * @param {KeyboardEvent} e 
+     */
     onDocumentKeydown(e) {
         if (e.key === "Escape") {
             this.onCloseOverlay();
@@ -91,17 +117,27 @@ class Overlay extends HTMLElement {
     disconnectedCallback() {
         document.removeEventListener("keydown", this.onDocumentKeydown);
         // show stars when overlay is inactive
+        // @ts-expect-error
         document.querySelector('.sky').style.display = 'block';
     }
 
+    /**
+     * 
+     * @param {string} name 
+     * @param {string|null} oldValue 
+     * @param {string|null} newValue 
+     */
     attributeChangedCallback(name, oldValue, newValue) {
-        if (oldValue !== newValue && this.shadowRoot.querySelector('.overlay')) {
+        if (oldValue !== newValue && this.root.querySelector('.overlay')) {
             if (name === 'overlay-title') {
-                this.shadowRoot.querySelector('.overlay-title-text').innerHTML = newValue;
+                // @ts-expect-error
+                this.root.querySelector('.overlay-title-text').innerHTML = newValue;
             } else if (name === 'cancel-text') {
-                this.shadowRoot.getElementById('cancel-btn').innerHTML = newValue;
+                // @ts-expect-error
+                this.root.getElementById('cancel-btn').innerHTML = newValue;
             } else if (name === 'confirm-text') {
-                this.shadowRoot.getElementById('confirm-btn').innerHTML = newValue;
+                // @ts-expect-error
+                this.root.getElementById('confirm-btn').innerHTML = newValue;
             }
         }
     }
@@ -120,7 +156,7 @@ class Overlay extends HTMLElement {
             specialButtonHTML = `<div class="special-button">${this.getAttribute('special-button-text')}</div>`;
         }
 
-        this.shadowRoot.innerHTML = `
+        this.root.innerHTML = `
       <style>
       *::-webkit-scrollbar {
   width: 12px !important;
@@ -237,7 +273,10 @@ customElements.define('app-overlay', Overlay);
 class OverlaySection extends HTMLElement {
     constructor() {
         super();
-        this.attachShadow({ mode: 'open' });
+        /**
+         * @type {ShadowRoot}
+         */
+        this.root = this.attachShadow({ mode: 'open' });
     }
 
     connectedCallback() {
@@ -245,7 +284,7 @@ class OverlaySection extends HTMLElement {
     }
 
     render() {
-        this.shadowRoot.innerHTML = `
+        this.root.innerHTML = `
       <style>
         .overlay-section {
             padding: 4vh;
@@ -275,7 +314,10 @@ class OverlaySection extends HTMLElement {
 class OverlayInput extends HTMLElement {
     constructor() {
         super();
-        this.attachShadow({ mode: 'open' });
+        /**
+         * @type {ShadowRoot}
+         */
+        this.root = this.attachShadow({ mode: 'open' });
 
         this.saveValueToUserData = this.saveValueToUserData.bind(this);
         this.originalValue = "";
@@ -292,6 +334,13 @@ class OverlayInput extends HTMLElement {
         this.initializeEditor(newMode, currentValue, false, false);
     }
 
+    /**
+     * 
+     * @param {string} mode 
+     * @param {string} doc 
+     * @param {boolean} updateOriginalValue 
+     * @param {boolean} allowUseDefault 
+     */
     async initializeEditor(mode, doc, updateOriginalValue, allowUseDefault) {
         const extensions = [basicSetup, keymap.of(indentWithTab), null, placeholder(mode === "typescript" ? this.getAttribute("input-placeholder-ts") || this.getAttribute("input-placeholder") : this.getAttribute("input-placeholder")), EditorView.lineWrapping]
         if (mode === "handlebars") {
@@ -299,7 +348,15 @@ class OverlayInput extends HTMLElement {
             extensions.push(usedMatchDecorator)
         } else if (mode === "typescript") {
             extensions[2] = javascriptLanguage;
-            await initializeTVSFS(`declare const console: { log(msg: any): void; };`);
+            if (!IS_TVSFS_INITIALIZED) {
+                if (!TVSFS_INITIALIZE_PROMISE) {
+                    TVSFS_INITIALIZE_PROMISE = fetch("../../types/DE.d.ts").then(res => res.text()).then(tsDecls => {
+                        IS_TVSFS_INITIALIZED = true;
+                        initializeTVSFS(tsDecls);
+                    });
+                }
+                await TVSFS_INITIALIZE_PROMISE;
+            }
             extensions.push(linter(tsErrorLinter, {
                 delay: 0,
             }));
@@ -311,10 +368,10 @@ class OverlayInput extends HTMLElement {
                 lineWrapping: true,
                 doc: doc || this.getAttribute("input-default-value"),
                 extensions,
-                parent: this.shadowRoot.querySelector('.codemirror-wrapper'),
+                parent: this.root.querySelector('.codemirror-wrapper'),
             });
             if (updateOriginalValue) {
-                this.originalValue = doc || this.getAttribute("input-default-value");
+                this.originalValue = doc || this.getAttribute("input-default-value") || "";
             }
             this.editorInitializedInMode = mode;
         } else {
@@ -322,7 +379,7 @@ class OverlayInput extends HTMLElement {
                 lineWrapping: true,
                 doc: doc || '',
                 extensions,
-                parent: this.shadowRoot.querySelector('.codemirror-wrapper'),
+                parent: this.root.querySelector('.codemirror-wrapper'),
             });
             if (updateOriginalValue) {
                 this.originalValue = doc || '';
@@ -330,8 +387,9 @@ class OverlayInput extends HTMLElement {
             this.editorInitializedInMode = mode;
         }
 
-        const modeSwitcherButton = this.shadowRoot.querySelector('.code-mirror-mode-switcher');
+        const modeSwitcherButton = this.root.querySelector('.code-mirror-mode-switcher');
         if (modeSwitcherButton) {
+            // @ts-expect-error
             modeSwitcherButton.innerText = mode === "typescript" ? "Switch to Handlebars" : "Switch to TypeScript";
         }
     }
@@ -342,7 +400,7 @@ class OverlayInput extends HTMLElement {
         if (!importLocation) {
             return;
         }
-        const importButton = this.shadowRoot.querySelector('.code-mirror-import-button');
+        const importButton = this.root.querySelector('.code-mirror-import-button');
         if (!importButton) {
             return;
         }
@@ -355,10 +413,13 @@ class OverlayInput extends HTMLElement {
             scriptselector.setAttribute('no-new-button', 'true');
             scriptselector.setAttribute("widget-mode", "true");
             scriptselector.addEventListener('script-selected', (e) => {
+                // @ts-expect-error
                 const scriptFile = e.detail.scriptFile;
+                // @ts-expect-error
                 const scriptName = e.detail.scriptName;
                 document.body.removeChild(dialog);
-                this.shadowRoot.querySelector('.code-mirror-import-list').innerHTML += `<div class="imported-script-item" data-script-file="${scriptFile}">${scriptName} <span class="remove-import">[remove]</span></div>`;
+                // @ts-expect-error
+                this.root.querySelector('.code-mirror-import-list').innerHTML += `<div class="imported-script-item" data-script-file="${scriptFile}">${scriptName} <span class="remove-import">[remove]</span></div>`;
             });
             dialog.setAttribute('dialog-title', 'Select a Script to Import');
             dialog.appendChild(scriptselector);
@@ -374,7 +435,7 @@ class OverlayInput extends HTMLElement {
 
         this.initializeImporter();
 
-        const modeSwitcher = this.shadowRoot.querySelector('.code-mirror-mode-switcher');
+        const modeSwitcher = this.root.querySelector('.code-mirror-mode-switcher');
         modeSwitcher?.addEventListener('click', this.switchCodeMirrorMode);
         modeSwitcher?.addEventListener('mouseenter', playHoverSound);
         modeSwitcher?.addEventListener('click', playConfirmSound);
@@ -385,21 +446,26 @@ class OverlayInput extends HTMLElement {
 
         if (!isCodeMirror) {
             if (this.getAttribute("input-default-value")) {
-                const inputElement = this.shadowRoot.querySelector('input, textarea');
+                const inputElement = this.root.querySelector('input, textarea');
                 if (isNumber) {
+                    // @ts-expect-error
                     const numericValue = parseFloat(this.getAttribute("input-default-value"));
                     if (isPercentage) {
+                        // @ts-expect-error
                         inputElement.value = (numericValue * 100).toString();
                     } else {
+                        // @ts-expect-error
                         inputElement.value = numericValue.toString();
                     }
                 } else {
+                    // @ts-expect-error
                     inputElement.value = this.getAttribute("input-default-value");
                 }
+                // @ts-expect-error
                 this.originalValue = this.getAttribute("input-default-value");
             }
 
-            const textarea = this.shadowRoot.querySelector('textarea');
+            const textarea = this.root.querySelector('textarea');
             if (textarea) {
                 // Measure placeholder height
                 textarea.value = textarea.placeholder;
@@ -423,11 +489,20 @@ class OverlayInput extends HTMLElement {
             dataLocation += ".src";
         }
 
+        if (!dataLocation) {
+            throw new Error("input-data-location attribute is required");
+        }
+
         const cacheFile = this.getAttribute("input-data-file") ? {
             fileName: this.getAttribute("input-data-file"),
             fileType: this.getAttribute("input-data-type"),
         } : null;
 
+        if (!cacheFile) {
+            throw new Error("input-data-file and input-data-type attributes are required for cached inputs");
+        }
+
+        // @ts-ignore
         window.electronAPI.loadValueFromUserData(dataLocation, cacheFile).then((value) => {
             if (value !== null) {
                 if (isCodeMirror) {
@@ -437,6 +512,7 @@ class OverlayInput extends HTMLElement {
                         this.initializeEditor("typescript", newValue, true, true);
                     } else {
                         // check the mode
+                        // @ts-ignore
                         window.electronAPI.loadValueFromUserData(dataLocationOriginal + ".js", cacheFile).then((value) => {
                             if (value !== null) {
                                 this.initializeEditor("typescript", newValue, true, true);
@@ -446,17 +522,21 @@ class OverlayInput extends HTMLElement {
                         });
                     }
                 } else {
-                    const potentialTextArea = this.shadowRoot.querySelector('input, textarea');
+                    const potentialTextArea = this.root.querySelector('input, textarea');
                     if (isPercentage && isNumber) {
                         const numberValue = parseFloat(value);
+                        // @ts-expect-error
                         potentialTextArea.value = (numberValue * 100).toString();
                     } else {
+                        // @ts-expect-error
                         potentialTextArea.value = value.toString();
                     }
                     this.originalValue = value.toString();
 
                     if (potentialTextArea && this.getAttribute('multiline') === 'true') {
+                        // @ts-expect-error
                         textarea.style.height = 'auto';
+                        // @ts-expect-error
                         textarea.style.height = textarea.scrollHeight + 'px';
                     }
                 }
@@ -477,7 +557,8 @@ class OverlayInput extends HTMLElement {
         const isCodeMirror = this.getAttribute('multiline') === 'true' && this.getAttribute("input-is-codemirror");
 
         if (!isCodeMirror) {
-            value = this.shadowRoot.querySelector('input, textarea').value;
+            // @ts-expect-error
+            value = this.root.querySelector('input, textarea').value;
             const type = this.getAttribute('input-type') || 'text';
             const isPercentage = this.getAttribute('input-is-percentage') === 'true';
             if (type === 'number') {
@@ -501,19 +582,32 @@ class OverlayInput extends HTMLElement {
             dataLocation += ".src";
         }
 
+        if (!dataLocation) {
+            throw new Error("input-data-location attribute is required");
+        }
+
         const cacheFile = this.getAttribute("input-data-file") ? {
             fileName: this.getAttribute("input-data-file"),
             fileType: this.getAttribute("input-data-type"),
         } : null;
 
+        if (!cacheFile) {
+            throw new Error("input-data-file and input-data-type attributes are required for cached inputs");
+        }
+        
+        // @ts-ignore
         await window.electronAPI.setValueIntoUserData(dataLocation, cacheFile, value);
         const dataLocationJs = dataLocationOriginal + ".js";
         const dataLocationImports = dataLocationOriginal + ".imports";
         if (isCodeMirror === "typescript" || this.editorInitializedInMode === "typescript") {
+            // @ts-ignore
             await window.electronAPI.setValueIntoUserData(dataLocationJs, cacheFile, convertTsToJs(value));
+            // @ts-ignore
             await window.electronAPI.setValueIntoUserData(dataLocationImports, cacheFile, this.getCurrentImports());
         } else if (isCodeMirror && this.editorInitializedInMode === "handlebars") {
+            // @ts-ignore
             await window.electronAPI.setValueIntoUserData(dataLocationJs, cacheFile, null);
+            // @ts-ignore
             await window.electronAPI.setValueIntoUserData(dataLocationImports, cacheFile, this.getCurrentImports());
         }
         this.originalValue = value;
@@ -525,7 +619,8 @@ class OverlayInput extends HTMLElement {
             const currentValue = this.editor.state.doc.toString();
             return currentValue.trim() !== this.originalValue.trim();
         }
-        const currentValue = this.shadowRoot.querySelector('input, textarea').value;
+        // @ts-expect-error
+        const currentValue = this.root.querySelector('input, textarea').value;
         if (this.getAttribute('input-type') === 'number') {
             const isPercentage = this.getAttribute('input-is-percentage') === 'true';
             let value = parseFloat(currentValue);
@@ -593,7 +688,7 @@ class OverlayInput extends HTMLElement {
             codeMirrorImporter = `<div class="code-mirror-importer"><button class="code-mirror-import-button">Add Script</button><div class="code-mirror-import-list"></div></div>`;
         }
 
-        this.shadowRoot.innerHTML = `
+        this.root.innerHTML = `
       <style>
         .overlay-input {
             display: flex;
@@ -777,7 +872,11 @@ font-family: 'Cabin Sketch', sans-serif !important;
 class OverlayInputSelect extends HTMLElement {
     constructor() {
         super();
-        this.attachShadow({ mode: 'open' });
+
+        /**
+         * @type {ShadowRoot}
+         */
+        this.root = this.attachShadow({ mode: 'open' });
 
         this.saveValueToUserData = this.saveValueToUserData.bind(this);
         this.originalValue = "";
@@ -787,11 +886,19 @@ class OverlayInputSelect extends HTMLElement {
         this.render();
 
         if (this.getAttribute("input-default-value")) {
-            const inputElement = this.shadowRoot.querySelector('select');
+            const inputElement = this.root.querySelector('select');
+            // @ts-expect-error
             inputElement.value = this.getAttribute("input-default-value");
+            // @ts-expect-error
             this.originalValue = this.getAttribute("input-default-value");
         } else {
-            this.originalValue = this.shadowRoot.querySelector('select').value;
+            // @ts-expect-error
+            this.originalValue = this.root.querySelector('select').value;
+        }
+
+        const dataLocation = this.getAttribute('input-data-location');
+        if (!dataLocation) {
+            throw new Error("input-data-location attribute is required");
         }
 
         const cacheFile = this.getAttribute("input-data-file") ? {
@@ -799,9 +906,15 @@ class OverlayInputSelect extends HTMLElement {
             fileType: this.getAttribute("input-data-type"),
         } : null;
 
-        window.electronAPI.loadValueFromUserData(this.getAttribute('input-data-location'), cacheFile).then((value) => {
+        if (!cacheFile) {
+            throw new Error("input-data-file and input-data-type attributes are required for cached inputs");
+        }
+
+        // @ts-ignore
+        window.electronAPI.loadValueFromUserData(dataLocation, cacheFile).then((value) => {
             if (value !== null) {
-                this.shadowRoot.querySelector('select').value = value;
+                // @ts-expect-error
+                this.root.querySelector('select').value = value;
                 this.originalValue = value;
             }
         }).catch(err => {
@@ -814,23 +927,38 @@ class OverlayInputSelect extends HTMLElement {
             fileName: this.getAttribute("input-data-file"),
             fileType: this.getAttribute("input-data-type"),
         } : null;
-        const value = this.shadowRoot.querySelector('select').value;
-        await window.electronAPI.setValueIntoUserData(this.getAttribute('input-data-location'), cacheFile, value.trim());
+        const dataLocation = this.getAttribute('input-data-location');
+        if (!dataLocation) {
+            throw new Error("input-data-location attribute is required");
+        }
+
+        if (!cacheFile) {
+            throw new Error("input-data-file and input-data-type attributes are required for cached inputs");
+        }
+
+        // @ts-ignore
+        const value = this.root.querySelector('select').value;
+        // @ts-ignore
+        await window.electronAPI.setValueIntoUserData(dataLocation, cacheFile, value.trim());
         this.originalValue = value;
     }
 
     hasBeenModified() {
-        const currentValue = this.shadowRoot.querySelector('select').value;
+        // @ts-expect-error
+        const currentValue = this.root.querySelector('select').value;
         return currentValue.trim() !== this.originalValue.trim();
     }
 
     render() {
         const label = this.getAttribute('label') || 'Input Label';
 
+        /**
+         * @type {string[]}
+         */
         const options = JSON.parse(this.getAttribute('input-options') || '[]');
         const optionsDescriptions = JSON.parse(this.getAttribute('input-options-descriptions') || '[]');
 
-        this.shadowRoot.innerHTML = `
+        this.root.innerHTML = `
       <style>
         .overlay-input {
             display: flex;
@@ -884,7 +1012,10 @@ class OverlayInputSelect extends HTMLElement {
 class OverlayInputWarning extends HTMLElement {
     constructor() {
         super();
-        this.attachShadow({ mode: 'open' });
+        /**
+         * @type {ShadowRoot}
+         */
+        this.root = this.attachShadow({ mode: 'open' });
     }
 
     connectedCallback() {
@@ -892,7 +1023,7 @@ class OverlayInputWarning extends HTMLElement {
     }
 
     render() {
-        this.shadowRoot.innerHTML = `
+        this.root.innerHTML = `
       <style>
         .overlay-input-warning {
             font-size: 2vh;
@@ -919,7 +1050,10 @@ customElements.define('app-overlay-section', OverlaySection);
 class OverlayTabs extends HTMLElement {
     constructor() {
         super();
-        this.attachShadow({ mode: 'open' });
+        /**
+         * @type {ShadowRoot}
+         */
+        this.root = this.attachShadow({ mode: 'open' });
 
         this.onTabClick = this.onTabClick.bind(this);
     }
@@ -927,7 +1061,7 @@ class OverlayTabs extends HTMLElement {
     connectedCallback() {
         this.render();
 
-        this.shadowRoot.querySelectorAll('.tab').forEach((tab, index) => {
+        this.root.querySelectorAll('.tab').forEach((tab, index) => {
             tab.addEventListener('click', (e) => {
                 if (!tab.classList.contains('active')) {
                     this.onTabClick(index);
@@ -939,6 +1073,11 @@ class OverlayTabs extends HTMLElement {
         });
     }
 
+/**
+ * 
+ * @param {number} index 
+ * @returns 
+ */    
     onTabClick(index) {
         let allowsTabChange = true;
         const executeTabChange = () => {
@@ -947,7 +1086,7 @@ class OverlayTabs extends HTMLElement {
                     newIndex: index
                 }
             }));
-            this.shadowRoot.querySelectorAll('.tab').forEach((tab, tabIndex) => {
+            this.root.querySelectorAll('.tab').forEach((tab, tabIndex) => {
                 if (tabIndex === index) {
                     tab.classList.add('active');
                 } else {
@@ -972,10 +1111,14 @@ class OverlayTabs extends HTMLElement {
     }
 
     render() {
+        /**
+         * @type {string[]}
+         */
         const sections = JSON.parse(this.getAttribute('sections') || '[]');
+        // @ts-expect-error
         const current = parseInt(this.getAttribute('current')) || 0;
 
-        this.shadowRoot.innerHTML = `
+        this.root.innerHTML = `
       <style>
         .tabs {
             display: flex;
@@ -1030,7 +1173,10 @@ customElements.define('app-overlay-tabs', OverlayTabs);
 class OverlayButton extends HTMLElement {
     constructor() {
         super();
-        this.attachShadow({ mode: 'open' });
+        /**
+         * @type {ShadowRoot}
+         */
+        this.root = this.attachShadow({ mode: 'open' });
 
         this.onButtonClick = this.onButtonClick.bind(this);
     }
@@ -1038,17 +1184,25 @@ class OverlayButton extends HTMLElement {
     connectedCallback() {
         this.render();
 
-        this.shadowRoot.querySelector('div').addEventListener('click', this.onButtonClick);
-        this.shadowRoot.querySelector('div').addEventListener('mouseenter', playHoverSound);
+        // @ts-expect-error
+        this.root.querySelector('div').addEventListener('click', this.onButtonClick);
+        // @ts-expect-error
+        this.root.querySelector('div').addEventListener('mouseenter', playHoverSound);
     }
 
     static get observedAttributes() {
         return ['disabled'];
     }
 
+    /**
+     * 
+     * @param {string} name 
+     * @param {string|null} oldValue 
+     * @param {string|null} newValue 
+     */
     attributeChangedCallback(name, oldValue, newValue) {
         if (name === 'disabled') {
-            const div = this.shadowRoot.querySelector('div');
+            const div = this.root.querySelector('div');
             if (div) {
                 div.className = `overlay-button${newValue === 'true' ? ' disabled' : ''}`;
             }
@@ -1064,7 +1218,7 @@ class OverlayButton extends HTMLElement {
     }
 
     render() {
-        this.shadowRoot.innerHTML = `
+        this.root.innerHTML = `
       <style>
         .overlay-button {
             padding: 2vh 4vh;

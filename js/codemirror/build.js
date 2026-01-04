@@ -9,20 +9,33 @@ import ts from 'typescript';
 import { linter } from '@codemirror/lint';
 import { autocompletion } from '@codemirror/autocomplete';
 
+// @ts-ignore
 window.EditorView = EditorView;
+// @ts-ignore
 window.basicSetup = basicSetup;
+// @ts-ignore
 window.handlebarsLanguage = handlebarsLanguage;
+// @ts-ignore
 window.indentWithTab = indentWithTab;
+// @ts-ignore
 window.keymap = keymap;
+// @ts-ignore
 window.placeholder = placeholder;
+// @ts-ignore
 window.javascriptLanguage = javascriptLanguage;
+// @ts-ignore
 window.TVSFS_ENV = null;
+// @ts-ignore
 window.linter = linter;
+// @ts-ignore
 window.autocompletion = autocompletion;
+// @ts-ignore
 window.ViewPlugin = ViewPlugin;
+// @ts-ignore
 window.tsvfsViewPlugin = (editorContainer) => ViewPlugin.fromClass(
     class {
         update() {
+            // @ts-ignore
             window.TVSFS_ENV.updateFile('index.ts', editorContainer.editor.state.doc.toString() || ' ');
         }
     }
@@ -37,6 +50,11 @@ const REQUIRED_LIBS = [
 ]
 
 let IS_TVSFS_INITIALIZED = false;
+/**
+ * 
+ * @param {string} globalsDefinitions 
+ * @returns 
+ */
 async function initializeTVSFS(globalsDefinitions) {
     if (IS_TVSFS_INITIALIZED) return;
     const fsMap = new Map();
@@ -58,19 +76,25 @@ async function initializeTVSFS(globalsDefinitions) {
 //    debugger;
 //    console.error("Error initializing TVSFS:", e);
 //}
+    // @ts-ignore
     window.TVSFS_ENV = env;
     IS_TVSFS_INITIALIZED = true;
 }
+// @ts-ignore
 window.initializeTVSFS = initializeTVSFS;
 
 // displays errors
 function tsErrorLinter() {
+    // @ts-ignore
     const tsErrors = window.TVSFS_ENV.languageService
         .getSemanticDiagnostics('index.ts')
+        // @ts-ignore
         .concat(window.TVSFS_ENV.languageService.getSyntacticDiagnostics('index.ts'))
 
         // remove await errors at top level
+        // @ts-ignore
         .filter((c) => c.code !== 1378 && c.code !== 1375 && c.code !== 1108);
+    // @ts-ignore
     return tsErrors.map((tsError) => ({
         from: tsError.start,
         to: tsError.start + tsError.length,
@@ -82,14 +106,26 @@ function tsErrorLinter() {
             ),
     }));
 }
+// @ts-ignore
 window.tsErrorLinter = tsErrorLinter;
 
+/**
+ * 
+ * @param {string} char 
+ * @returns 
+ */
 function isAlpha(char) {
     return /^[A-Z]$/i.test(char);
 }
 
 // displays autocompletes
+/**
+ * 
+ * @param {*} ctx 
+ * @returns 
+ */
 function tsComplete(ctx) {
+    // @ts-ignore
     let tsCompletions = window.TVSFS_ENV.languageService.getCompletionsAtPosition(
         'index.ts',
         ctx.pos,
@@ -100,7 +136,14 @@ function tsComplete(ctx) {
 
     const text = ctx.state.doc.toString();
 
-    let lastWord, from;
+    /**
+     * @type string | undefined
+     */
+    let lastWord = undefined;
+    /**
+     * @type number | undefined
+     */
+    let from = undefined;
     let lastChar;
     let lastCharIndex = -1;
     for (let i = ctx.pos - 1; i >= 0; i--) {
@@ -118,6 +161,7 @@ function tsComplete(ctx) {
     }
 
     if (lastWord) {
+        // @ts-ignore
         tsCompletions.entries = tsCompletions.entries.filter((completion) =>
             completion.name.startsWith(lastWord)
         );
@@ -145,8 +189,10 @@ function tsComplete(ctx) {
 
     return {
         from: ctx.pos, // Autocomplete position
+        // @ts-ignore
         options: tsCompletions.entries.map((completion) => ({
             label: completion.name,
+            // @ts-ignore
             apply: (view) => {
                 view.dispatch({
                     changes: { from, to: ctx.pos, insert: completion.name },
@@ -155,9 +201,14 @@ function tsComplete(ctx) {
         })),
     };
 }
+// @ts-ignore
 window.tsComplete = tsComplete;
 
 class SpecialKeywordWidget extends WidgetType {
+    /**
+     * 
+     * @param {string} placeholderText 
+     */
     constructor(placeholderText) {
         super();
         this.placeholderText = placeholderText;
@@ -172,7 +223,7 @@ class SpecialKeywordWidget extends WidgetType {
         return false;
     }
 }
-
+// @ts-ignore
 window.getMatchDecorator = (all_keywords_str_list) => {
     const specialKeywordMatcher = new MatchDecorator({
         regexp: new RegExp(`\\b(${all_keywords_str_list.join('|')})\\b`, 'g'),
@@ -182,9 +233,17 @@ window.getMatchDecorator = (all_keywords_str_list) => {
     });
 
     const specials = ViewPlugin.fromClass(class {
+        /**
+         * 
+         * @param {*} view 
+         */
         constructor(view) {
             this.specials = specialKeywordMatcher.createDeco(view)
         }
+        /**
+         * 
+         * @param {*} update 
+         */
         update(update) {
             this.specials = specialKeywordMatcher.updateDeco(update, this.specials)
         }
@@ -195,6 +254,7 @@ window.getMatchDecorator = (all_keywords_str_list) => {
     return specials;
 }
 
+// @ts-ignore
 window.convertTsToJs = (tsCode) => {
     const result = ts.transpileModule(tsCode, {
         compilerOptions: {

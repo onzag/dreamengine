@@ -17,6 +17,11 @@ document.addEventListener('DOMContentLoaded', function() {
   const starsCrossAuxContainer = document.querySelector(".stars-cross-aux");
 
   // Helper function to add HTML to container
+  /**
+   * 
+   * @param {Element | null} container 
+   * @param {string} html 
+   */
   function addStarToContainer(container, html) {
     if (container) {
       container.insertAdjacentHTML('beforeend', html);
@@ -168,10 +173,21 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 });
 
+/**
+ * 
+ * @param {number} num 
+ * @returns {any}
+ */
 function roundToOneDecimal(num) {
   return Math.round(num * 10) / 10;
 }
 
+/**
+ * 
+ * @param {number} min 
+ * @param {number} max 
+ * @returns {any}
+ */
 function getRandomInt(min, max) {
   return Math.random() * (max - min) + min;
 }

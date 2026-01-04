@@ -1,6 +1,11 @@
 import schema from '../schema/script.js';
 import { playCancelSound, playConfirmSound, playHoverSound, playPauseSound } from '../sound.js';
 
+/**
+ * 
+ * @param {string} str 
+ * @returns 
+ */
 function escapeHTML(str) {
     if (typeof str === "undefined" || str === null) {
         return '';
@@ -16,10 +21,14 @@ function escapeHTML(str) {
             '"': '&quot;',
             "'": '&#39;'
         };
+        // @ts-ignore
         return escapeMap[match];
     });
 }
 
+/**
+ * @type {Array<{title: string, description?: string, fields: Array<[string, Array<string>]>}>}
+ */
 const WIZARD_SECTIONS = [
     {
         title: "Script Source",
@@ -50,7 +59,10 @@ const WIZARD_SECTIONS = [
 class ScriptOverlay extends HTMLElement {
     constructor() {
         super();
-        this.attachShadow({ mode: 'open' });
+        /**
+         * @type {ShadowRoot}
+         */
+        this.root = this.attachShadow({ mode: 'open' });
 
         this.currentSectionIndex = 0;
 
@@ -61,6 +73,9 @@ class ScriptOverlay extends HTMLElement {
         this.currentScriptFile = this.getAttribute("script-file") || null;
         this.currentScriptName = "";
 
+        if (!this.currentScriptFile) {
+            throw new Error("Script file attribute is required for <app-script> component.");
+        }
         window.electronAPI.loadValueFromUserData("name", {
             fileName: this.currentScriptFile,
             fileType: "script",
@@ -70,35 +85,53 @@ class ScriptOverlay extends HTMLElement {
             } else {
                 this.currentScriptName = "Unnamed Script";
             }
-            this.shadowRoot.querySelector('app-overlay').setAttribute("overlay-title", `Working on: ${JSON.stringify(escapeHTML(this.currentScriptName))}`);
+            // @ts-expect-error
+            this.root.querySelector('app-overlay').setAttribute("overlay-title", `Working on: ${JSON.stringify(escapeHTML(this.currentScriptName))}`);
         });
 
         this.render();
         playPauseSound();
         this.buildChildrenMap();
 
-        this.shadowRoot.querySelector('app-overlay').addEventListener('confirm', () => {
+        // @ts-expect-error
+        this.root.querySelector('app-overlay').addEventListener('confirm', () => {
             this.saveCurrent();
         });
-        this.shadowRoot.querySelector('app-overlay').addEventListener('cancel', this.onCancel);
-        this.shadowRoot.querySelector('app-overlay-tabs').addEventListener('pre-tab-change', (e) => {
+        // @ts-expect-error
+        this.root.querySelector('app-overlay').addEventListener('cancel', this.onCancel);
+        // @ts-expect-error
+        this.root.querySelector('app-overlay-tabs').addEventListener('pre-tab-change', (e) => {
+            // @ts-ignore
             this.onCheckForUnsavedChanges(null, playConfirmSound, e.detail.denyTabChange, e.detail.executeTabChange, null);
         });
-        this.shadowRoot.querySelector('app-overlay-tabs').addEventListener('tab-change', (e) => {
+        // @ts-expect-error
+        this.root.querySelector('app-overlay-tabs').addEventListener('tab-change', (e) => {
+            // @ts-ignore
             this.currentSectionIndex = e.detail.newIndex;
             this.buildChildrenMap();
         });
     }
 
+    /**
+     * Check for unsaved changes and optionally run callbacks.
+     *
+     * @param {() => void} [onceDoneFn]
+     * @param {() => void} [onceDoneFnNoResistance]
+     * @param {() => void} [resistanceAppliedFn]
+     * @param {() => void} [onAllowFn]
+     * @param {() => void} [onceCancelFn]
+     */
     onCheckForUnsavedChanges(onceDoneFn, onceDoneFnNoResistance, resistanceAppliedFn, onAllowFn, onceCancelFn) {
         let hasUnsavedChanges = false;
-        this.shadowRoot.querySelectorAll('app-overlay-input').forEach(inputComponent => {
+        Array.from(this.root.querySelectorAll('app-overlay-input')).forEach(inputComponent => {
+            // @ts-expect-error
             if (inputComponent.hasBeenModified()) {
                 hasUnsavedChanges = true;
             }
         });
         if (!hasUnsavedChanges) {
-            this.shadowRoot.querySelectorAll('app-overlay-select').forEach(selectComponent => {
+            Array.from(this.root.querySelectorAll('app-overlay-select')).forEach(selectComponent => {
+                // @ts-expect-error
                 if (selectComponent.hasBeenModified()) {
                     hasUnsavedChanges = true;
                 }
@@ -199,7 +232,8 @@ class ScriptOverlay extends HTMLElement {
             return `<app-overlay-section section-title="${escapeHTML(fieldName)}">${fieldsHTML}</app-overlay-section>`;
         }).join('');
 
-        this.shadowRoot.querySelector('app-overlay-tabs').innerHTML = fieldsAsHTML;
+        // @ts-ignore
+        this.root.querySelector('app-overlay-tabs').innerHTML = fieldsAsHTML;
     }
 
     async saveCurrent() {
@@ -209,24 +243,31 @@ class ScriptOverlay extends HTMLElement {
 
     async updateScriptFileOnDisk() {
         // save each field
-        await Promise.all(Array.from(this.shadowRoot.querySelectorAll('app-overlay-input')).map(inputComponent =>
+        await Promise.all(Array.from(this.root.querySelectorAll('app-overlay-input')).map(inputComponent =>
+            // @ts-ignore
             inputComponent.saveValueToUserData()
         ));
 
-        await Promise.all(Array.from(this.shadowRoot.querySelectorAll('app-overlay-select')).map(selectComponent => {
+        await Promise.all(Array.from(this.root.querySelectorAll('app-overlay-select')).map(selectComponent => {
+            // @ts-ignore
             return selectComponent.saveValueToUserData();
         }));
+
+        if (!this.currentScriptFile) {
+            throw new Error("No script file specified to save.");
+        }
 
         await window.electronAPI.updateScriptFileFromCache(
             this.currentScriptFile
         ).then((scriptFileContents) => {
             this.currentScriptName = scriptFileContents.name || this.currentScriptName;
-            this.shadowRoot.querySelector('app-overlay').setAttribute("overlay-title", `Working on: ${JSON.stringify(escapeHTML(this.currentScriptName))}`);
+            // @ts-expect-error
+            this.root.querySelector('app-overlay').setAttribute("overlay-title", `Working on: ${JSON.stringify(escapeHTML(this.currentScriptName))}`);
         });
     }
 
     render() {
-        this.shadowRoot.innerHTML = `
+        this.root.innerHTML = `
             <style>
                 @import "./components/script.css";
             </style>

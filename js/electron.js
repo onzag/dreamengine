@@ -3,8 +3,17 @@ const path = require('path')
 const fs = require('fs');
 const os = require('os');
 
+/**
+ * @type any
+ */
 const CHARACTER_CACHE = {};
+/**
+ * @type any
+ */
 const SCRIPT_CACHE = {};
+/**
+ * @type any
+ */
 const WORLD_CACHE = {};
 
 const DREAMENGINE_INFO_HOME = path.join(app.getPath('home'), '.dreamengine');
@@ -18,6 +27,7 @@ if (!fs.existsSync(path.join(DREAMENGINE_INFO_HOME, 'init-config.json'))) {
     }));
 }
 
+// @ts-ignore
 const initconfig = JSON.parse(fs.readFileSync(path.join(DREAMENGINE_INFO_HOME, 'init-config.json')));
 
 async function saveInitConfig() {
@@ -31,24 +41,24 @@ try {
 
 
 const createWindow = () => {
-  const win = new BrowserWindow({
-    width: 1200,
-    height: 800,
-    fullscreenable: true,
-    fullscreen: initconfig.fullscreen || false,
-    webPreferences: {
-        preload: path.join(__dirname, 'preload.js'),
-        contextIsolation: true,
-        sandbox: true,
-        webSecurity: true,
-    },
-  })
+    const win = new BrowserWindow({
+        width: 1200,
+        height: 800,
+        fullscreenable: true,
+        fullscreen: initconfig.fullscreen || false,
+        webPreferences: {
+            preload: path.join(__dirname, 'preload.js'),
+            contextIsolation: true,
+            sandbox: true,
+            webSecurity: true,
+        },
+    })
 
-  win.setMenuBarVisibility(false)
-  win.loadFile('./js/app/index.html')
+    win.setMenuBarVisibility(false)
+    win.loadFile('./js/app/index.html')
 
-  // Open dev tools with Ctrl+Shift+I (or Cmd+Option+I on macOS)
-  //win.webContents.openDevTools();
+    // Open dev tools with Ctrl+Shift+I (or Cmd+Option+I on macOS)
+    //win.webContents.openDevTools();
 }
 
 app.whenReady().then(() => {
@@ -72,49 +82,54 @@ app.whenReady().then(() => {
             console.warn("Blocked URL:", url, "not in allowed paths.", allowedBasePaths);
             return callback({ cancel: true });
         }
-        return callback({ });
+        return callback({});
     })
 
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
-  })
+    app.on('activate', () => {
+        if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    })
 })
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit()
+    if (process.platform !== 'darwin') app.quit()
 })
 
 // Very buggy fullscreen toggle workaround due to electron issues
 // Handle IPC messages from the renderer process
 ipcMain.handle('toggleFullScreen', () => {
-  const win = BrowserWindow.getFocusedWindow();
-  const target = !win.isFullScreen();
-  if (win && target) {
-    win.setFullScreen(target);
-    initconfig.fullscreen = true;
-    saveInitConfig();
-  } else if (win) {
-    win.setFullScreen(target);
-    initconfig.fullscreen = false;
-    saveInitConfig();
-  }
+    const win = BrowserWindow.getFocusedWindow();
+    if (win) {
+        const target = !win.isFullScreen();
+        if (win && target) {
+            win.setFullScreen(target);
+            initconfig.fullscreen = true;
+            saveInitConfig();
+        } else if (win) {
+            win.setFullScreen(target);
+            initconfig.fullscreen = false;
+            saveInitConfig();
+        }
+    }
 });
 
 ipcMain.on('openDevTools', () => {
-  const win = BrowserWindow.getFocusedWindow();
-  if (win) {
-    win.webContents.openDevTools();
-  }
+    const win = BrowserWindow.getFocusedWindow();
+    if (win) {
+        win.webContents.openDevTools();
+    }
 });
 
 ipcMain.on('closeApp', () => {
-  app.quit();
+    app.quit();
 });
 
 ipcMain.handle('loadValueFromUserData', async (event, key, cacheFile) => {
     const splitted = key.split(".");
     let current = userData;
     if (cacheFile) {
+        /**
+         * @type any
+         */
         let cacheToUse = null;
         if (cacheFile.fileType === 'character') {
             cacheToUse = CHARACTER_CACHE;
@@ -139,9 +154,11 @@ ipcMain.handle('loadValueFromUserData', async (event, key, cacheFile) => {
         current = cacheToUse[cacheFile.fileName] || {};
     }
     for (let i = 0; i < splitted.length; i++) {
+        // @ts-ignore
         if (current[splitted[i]] === undefined) {
             return null;
         }
+        // @ts-ignore
         current = current[splitted[i]];
     }
     return current || null;
@@ -151,6 +168,9 @@ ipcMain.handle('setValueIntoUserData', (event, key, cacheFile, value) => {
     const splitted = key.split(".");
     let current = userData;
     if (cacheFile) {
+        /**
+         * @type any
+         */
         let cacheToUse = null;
         if (cacheFile.fileType === 'character') {
             cacheToUse = CHARACTER_CACHE;
@@ -162,11 +182,15 @@ ipcMain.handle('setValueIntoUserData', (event, key, cacheFile, value) => {
         current = cacheToUse[cacheFile.fileName];
     }
     for (let i = 0; i < splitted.length - 1; i++) {
+        // @ts-ignore
         if (current[splitted[i]] === undefined) {
+            // @ts-ignore
             current[splitted[i]] = {};
         }
+        // @ts-ignore
         current = current[splitted[i]];
     }
+    // @ts-ignore
     current[splitted[splitted.length - 1]] = value;
 });
 
@@ -459,7 +483,7 @@ ipcMain.handle('uploadBytesToDEPath', async (event, dePath, bytes) => {
     }
     const destPath = path.join(DREAMENGINE_INFO_HOME, dePath);
     let buffer;
-    if (bytes instanceof Uint8Array) {  
+    if (bytes instanceof Uint8Array) {
         buffer = Buffer.from(bytes);
     } else if (bytes instanceof ArrayBuffer) {
         buffer = Buffer.from(new Uint8Array(bytes));

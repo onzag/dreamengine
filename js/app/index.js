@@ -42,12 +42,12 @@ buttons.forEach(button => {
 });
 
 const exitBtn = document.getElementById('exit-btn');
-exitBtn.addEventListener('click', function() {
+exitBtn?.addEventListener('click', function() {
     exitGame();
 });
 
 const newCharacterBtn = document.getElementById('new-character-btn');
-newCharacterBtn.addEventListener('click', async () => {
+newCharacterBtn?.addEventListener('click', async () => {
     HAS_ACTIVE_DIALOG = true;
     await initialPromise;
     const rs = await window.electronAPI.createEmptyCharacterFile();
@@ -64,7 +64,7 @@ newCharacterBtn.addEventListener('click', async () => {
 });
 
 const openSettingsBtn = document.getElementById('open-settings-btn');
-openSettingsBtn.addEventListener('click', async () => {
+openSettingsBtn?.addEventListener('click', async () => {
     HAS_ACTIVE_DIALOG = true;
     await initialPromise;
     const overlay = document.createElement("app-settings");
@@ -79,7 +79,7 @@ openSettingsBtn.addEventListener('click', async () => {
 
 
 const manageBtn = document.getElementById('manage-btn');
-manageBtn.addEventListener('click', async () => {
+manageBtn?.addEventListener('click', async () => {
     HAS_ACTIVE_DIALOG = true;
     await initialPromise;
     const overlay = document.createElement("app-manage");
@@ -116,59 +116,63 @@ document.addEventListener("keydown", async (e) => {
     }
 });
 
-document.querySelector(".fx").addEventListener("click", () => {
+document.querySelector(".fx")?.addEventListener("click", () => {
     playConfirmSound();
     const wasToggledTo = toggleFX();
     if (wasToggledTo) {
         playConfirmSound();
-        document.querySelector(".fx").classList.add("enabled");
+        document.querySelector(".fx")?.classList.add("enabled");
     } else {
-        document.querySelector(".fx").classList.remove("enabled");
+        document.querySelector(".fx")?.classList.remove("enabled");
     }
 });
 
-document.querySelector(".fx").addEventListener("mouseenter", (e) => {
+document.querySelector(".fx")?.addEventListener("mouseenter", (e) => {
     playHoverSound();
 
+    // @ts-ignore
     e.currentTarget.querySelector("path").setAttribute("fill", "#FF6B6B");
 });
 
-document.querySelector(".fx").addEventListener("mouseleave", (e) => {
+document.querySelector(".fx")?.addEventListener("mouseleave", (e) => {
+    // @ts-ignore
     e.currentTarget.querySelector("path").setAttribute("fill", "#ccc");
 });
 
-document.querySelector(".ambience").addEventListener("mouseenter", (e) => {
+document.querySelector(".ambience")?.addEventListener("mouseenter", (e) => {
     playHoverSound();
 
+    // @ts-ignore
     e.currentTarget.querySelector("path").setAttribute("fill", "#FF6B6B");
 });
 
-document.querySelector(".ambience").addEventListener("mouseleave", (e) => {
+document.querySelector(".ambience")?.addEventListener("mouseleave", (e) => {
+    // @ts-ignore
     e.currentTarget.querySelector("path").setAttribute("fill", "#ccc");
 });
 
-document.querySelector(".ambience").addEventListener("click", () => {
+document.querySelector(".ambience")?.addEventListener("click", () => {
     playConfirmSound();
     const wasToggledTo = toggleAmbience();
     if (wasToggledTo) {
-        document.querySelector(".ambience").classList.add("enabled");
+        document.querySelector(".ambience")?.classList.add("enabled");
     } else {
-        document.querySelector(".ambience").classList.remove("enabled");
+        document.querySelector(".ambience")?.classList.remove("enabled");
     }
 });
 
 // Initialize sound icons based on settings
 window.addEventListener('DOMContentLoaded', () => {
     if (isFXEnabled()) {
-        document.querySelector(".fx").classList.add("enabled");
+        document.querySelector(".fx")?.classList.add("enabled");
     } else {
-        document.querySelector(".fx").classList.remove("enabled");
+        document.querySelector(".fx")?.classList.remove("enabled");
     }
 
     if (isAmbienceEnabled()) {
-        document.querySelector(".ambience").classList.add("enabled");
+        document.querySelector(".ambience")?.classList.add("enabled");
     } else {
-        document.querySelector(".ambience").classList.remove("enabled");
+        document.querySelector(".ambience")?.classList.remove("enabled");
     }
 
     setTimeout(async () => {
@@ -179,11 +183,13 @@ window.addEventListener('DOMContentLoaded', () => {
 
 function removeLoadingBlur() {
     const loadingOverlay = document.getElementById('loading-overlay');
-    loadingOverlay.style.transition = 'opacity 1s ease';
-    loadingOverlay.style.opacity = '0';
-    setTimeout(() => {
-        if (loadingOverlay.parentNode) {
-            loadingOverlay.parentNode.removeChild(loadingOverlay);
-        }
-    }, 1000);
+    if (loadingOverlay) {
+        loadingOverlay.style.transition = 'opacity 1s ease';
+        loadingOverlay.style.opacity = '0';
+        setTimeout(() => {
+            if (loadingOverlay.parentNode) {
+                loadingOverlay.parentNode.removeChild(loadingOverlay);
+            }
+        }, 1000);
+    }
 }

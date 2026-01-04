@@ -3,7 +3,7 @@ import { playCancelSound, playConfirmSound, playHoverSound } from '../../sound.j
 class AppManageCharacters extends HTMLElement {
     constructor() {
         super();
-        this.attachShadow({ mode: 'open' });
+        this.root = this.attachShadow({ mode: 'open' });
 
         this.currentCharacterGroup = localStorage.getItem('lastCharacterGroup') || "";
     }
@@ -17,7 +17,8 @@ class AppManageCharacters extends HTMLElement {
             this.reloadCharacterGroups();
         }
 
-        this.shadowRoot.querySelector('app-overlay-button').addEventListener('click', async () => {
+        // @ts-expect-error
+        this.root.querySelector('app-overlay-button').addEventListener('click', async () => {
             const rs = await window.electronAPI.createEmptyCharacterFile();
             const overlay = document.createElement("app-character");
             overlay.setAttribute("character-group", rs.group);
@@ -28,10 +29,12 @@ class AppManageCharacters extends HTMLElement {
                 this.reloadCurrentLocation();
             });
         });
-        this.shadowRoot.querySelector('.go-back-button-container').addEventListener('click', () => {
+        // @ts-expect-error
+        this.root.querySelector('.go-back-button-container').addEventListener('click', () => {
             this.onGoBackCharacterGroups();
         });
-        this.shadowRoot.querySelector('.go-back-button-container').addEventListener('mouseenter', () => {
+        // @ts-expect-error
+        this.root.querySelector('.go-back-button-container').addEventListener('mouseenter', () => {
             playHoverSound();
         });
     }
@@ -58,8 +61,9 @@ class AppManageCharacters extends HTMLElement {
                     </div>
                 </div>
             `).join('');
-            this.shadowRoot.querySelector('.character-list').innerHTML = characterElements;
-            this.shadowRoot.querySelectorAll('.character-item').forEach(item => {
+            // @ts-expect-error
+            this.root.querySelector('.character-list').innerHTML = characterElements;
+            this.root.querySelectorAll('.character-item').forEach(item => {
                 item.addEventListener('click', (e) => this.onCharacterSelected(e));
                 item.addEventListener('mouseenter', (e) => {
                     playHoverSound();
@@ -73,7 +77,8 @@ class AppManageCharacters extends HTMLElement {
         if (groups.length === 0) {
             const hasNewButton = this.getAttribute("no-new-button") !== "true";
 
-            this.shadowRoot.querySelector('.character-list').innerHTML = `
+            // @ts-expect-error
+            this.root.querySelector('.character-list').innerHTML = `
                 <div class="no-characters-placeholder">
                     You have no characters yet.${hasNewButton ? ' Click "New Character" to create one.' : ''}
                 </div>
@@ -92,23 +97,32 @@ class AppManageCharacters extends HTMLElement {
                     </div>
                 </div>
             `).join('');
-            this.shadowRoot.querySelector('.character-list').innerHTML = groupElements;
+            // @ts-expect-error
+            this.root.querySelector('.character-list').innerHTML = groupElements;
 
-            this.shadowRoot.querySelectorAll('.character-group-item').forEach(item => {
+            this.root.querySelectorAll('.character-group-item').forEach(item => {
                 item.addEventListener('click', (e) => this.onCharacterGroupSelected(e));
                 item.addEventListener('mouseenter', (e) => {
                     playHoverSound();
+                    // @ts-expect-error
                     e.currentTarget.querySelector("svg path").setAttribute("fill", "#FF6B6B");
                 });
                 item.addEventListener('mouseleave', (e) => {
+                    // @ts-expect-error
                     e.currentTarget.querySelector("svg path").setAttribute("fill", "#ccc");
                 });
             });
         }
     }
 
+    /**
+     * 
+     * @param {Event} e 
+     */
     onCharacterGroupSelected(e) {
-        this.shadowRoot.querySelector('.go-back-button-container').classList.remove('hidden');
+        // @ts-expect-error
+        this.root.querySelector('.go-back-button-container').classList.remove('hidden');
+        // @ts-expect-error
         this.currentCharacterGroup = e.currentTarget.dataset.characterGroup;
         localStorage.setItem('lastCharacterGroup', this.currentCharacterGroup);
         playConfirmSound();
@@ -116,18 +130,26 @@ class AppManageCharacters extends HTMLElement {
     }
 
     onGoBackCharacterGroups() {
-        this.shadowRoot.querySelector('.go-back-button-container').classList.add('hidden');
+        // @ts-expect-error
+        this.root.querySelector('.go-back-button-container').classList.add('hidden');
         this.currentCharacterGroup = "";
         localStorage.removeItem('lastCharacterGroup');
         playCancelSound();
         this.reloadCharacterGroups();
     }
 
+    /**
+     * 
+     * @param {Event} e 
+     * @returns 
+     */
     onCharacterSelected(e) {
         if (this.getAttribute("widget-mode")) {
             this.dispatchEvent(new CustomEvent('character-selected', {
                 detail: {
+                    // @ts-expect-error
                     characterGroup: e.currentTarget.dataset.characterGroup,
+                    // @ts-expect-error
                     characterFile: e.currentTarget.dataset.characterFile,
                 },
                 bubbles: true,
@@ -135,7 +157,9 @@ class AppManageCharacters extends HTMLElement {
             }));
             return;
         }
+        // @ts-expect-error
         const characterFile = e.currentTarget.dataset.characterFile;
+        // @ts-expect-error
         const characterGroup = e.currentTarget.dataset.characterGroup;
         const overlay = document.createElement("app-character");
         overlay.setAttribute("character-group", characterGroup);
@@ -149,7 +173,7 @@ class AppManageCharacters extends HTMLElement {
 
     render() {
         const hasNewButton = this.getAttribute("no-new-button") !== "true";
-        this.shadowRoot.innerHTML = `
+        this.root.innerHTML = `
             <style>
                .character-list {
                    display: flex;

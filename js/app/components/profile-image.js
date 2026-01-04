@@ -1,7 +1,10 @@
 class ProfileImage extends HTMLElement {
     constructor() {
         super();
-        this.attachShadow({ mode: 'open' });
+        /**
+         * @type {ShadowRoot}
+         */
+        this.root = this.attachShadow({ mode: 'open' });
 
         this.currentObjectUrl = null;
         this.currentFileObject = null;
@@ -10,19 +13,25 @@ class ProfileImage extends HTMLElement {
     connectedCallback() {
         this.render();
 
-        this.shadowRoot.querySelector('.profile-image').addEventListener('error', () => {
-            this.shadowRoot.querySelector('.profile-image').src = './images/default-profile.png';
+        // @ts-expect-error
+        this.root.querySelector('.profile-image').addEventListener('error', () => {
+            // @ts-expect-error
+            this.root.querySelector('.profile-image').src = './images/default-profile.png';
         });
 
         if (this.hasAttribute('editable')) {
-            const fileInput = this.shadowRoot.querySelector('input[type="file"]');
-            const editOverlay = this.shadowRoot.querySelector('.edit-overlay');
+            const fileInput = this.root.querySelector('input[type="file"]');
+            const editOverlay = this.root.querySelector('.edit-overlay');
 
+            // @ts-expect-error
             editOverlay.addEventListener('click', () => {
+                // @ts-expect-error
                 fileInput.click();
             });
 
+            // @ts-expect-error
             fileInput.addEventListener('change', async (event) => {
+                // @ts-expect-error
                 const file = event.target.files[0];
                 if (file) {
                     const urlBlob = URL.createObjectURL(file);
@@ -31,7 +40,8 @@ class ProfileImage extends HTMLElement {
                     }
                     this.currentObjectUrl = urlBlob;
                     this.currentFileObject = file;
-                    this.shadowRoot.querySelector('.profile-image').src = urlBlob;
+                    // @ts-expect-error
+                    this.root.querySelector('.profile-image').src = urlBlob;
                 }
             });
         }
@@ -56,7 +66,7 @@ class ProfileImage extends HTMLElement {
     render() {
         const imageUrl = this.getAttribute('image-url') || '';
         const isEditable = this.hasAttribute('editable');
-        this.shadowRoot.innerHTML = `
+        this.root.innerHTML = `
             <style>
                 .profile-image {
                     width: 100%;

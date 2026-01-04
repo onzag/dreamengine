@@ -13,10 +13,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
     closeApp: () => {
         ipcRenderer.send('closeApp');
     },
+    /**
+     * 
+     * @param {string} key 
+     * @param {string} cacheFile 
+     * @returns 
+     */
     loadValueFromUserData: async (key, cacheFile) => {
         const result = await ipcRenderer.invoke('loadValueFromUserData', key, cacheFile);
         return result;
     },
+    /**
+     * 
+     * @param {string} key 
+     * @param {string} cacheFile 
+     * @param {*} value 
+     */
     setValueIntoUserData: async (key, cacheFile, value) => {
         await ipcRenderer.invoke('setValueIntoUserData', key, cacheFile, value);
     },
@@ -36,46 +48,101 @@ contextBridge.exposeInMainWorld('electronAPI', {
         const result = await ipcRenderer.invoke('createEmptyWorldFile');
         return result;
     },
+    /**
+     * 
+     * @param {string} characterFile 
+     * @returns 
+     */
     checkCharacterFileExists: async (characterFile) => {
         const result = await ipcRenderer.invoke('checkCharacterFileExists', characterFile);
         return result;
     },
+    /**
+     * 
+     * @param {string} scriptFile 
+     * @returns 
+     */
     checkScriptFileExists: async (scriptFile) => {
         const result = await ipcRenderer.invoke('checkScriptFileExists', scriptFile);
         return result;
     },
+    /**
+     * 
+     * @param {string} worldFile 
+     * @returns 
+     */
     checkWorldFileExists: async (worldFile) => {
         const result = await ipcRenderer.invoke('checkWorldFileExists', worldFile);
         return result;
     },
+    /**
+     * 
+     * @param {string} characterFile 
+     * @returns 
+     */
     updateCharacterFileFromCache: async (characterFile) => {
         const result = await ipcRenderer.invoke('updateCharacterFileFromCache', characterFile);
         return result;
     },
+    /**
+     * 
+     * @param {string} scriptFile 
+     * @returns 
+     */
     updateScriptFileFromCache: async (scriptFile) => {
         const result = await ipcRenderer.invoke('updateScriptFileFromCache', scriptFile);
         return result;
     },
+    /**
+     * 
+     * @param {string} worldFile 
+     * @returns 
+     */
     updateWorldFileFromCache: async (worldFile) => {
         const result = await ipcRenderer.invoke('updateWorldFileFromCache', worldFile);
         return result;
     },
+    /**
+     * 
+     * @param {string} characterFile 
+     * @returns 
+     */
     deleteCharacterFile: async (characterFile) => {
         const result = await ipcRenderer.invoke('deleteCharacterFile', characterFile);
         return result;
     },
+    /**
+     * 
+     * @param {string} scriptFile 
+     * @returns 
+     */
     deleteScriptFile: async (scriptFile) => {
         const result = await ipcRenderer.invoke('deleteScriptFile', scriptFile);
         return result;
     },
+    /**
+     * 
+     * @param {string} worldFile 
+     * @returns 
+     */
     deleteWorldFile: async (worldFile) => {
         const result = await ipcRenderer.invoke('deleteWorldFile', worldFile);
         return result;
     },
+    /**
+     * 
+     * @param {string} group 
+     * @returns 
+     */
     listCharacterFiles: async (group) => {
         const result = await ipcRenderer.invoke('listCharacterFiles', group);
         return result;
     },
+    /**
+     * 
+     * @param {string} context 
+     * @returns 
+     */
     listScriptFiles: async (context) => {
         const result = await ipcRenderer.invoke('listScriptFiles', context);
         return result;
@@ -95,6 +162,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getDreamEnginePath: () => {
         return ipcRenderer.invoke('getDreamEnginePath');
     },
+    /**
+     * 
+     * @param {string} dePath 
+     * @param {File} file 
+     * @returns 
+     */
     uploadFileToDEPath: async (dePath, file) => {
         const arrayBuffer = await file.arrayBuffer();
         const uint8Array = new Uint8Array(arrayBuffer);

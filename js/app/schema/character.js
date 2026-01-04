@@ -1,4 +1,7 @@
-export default {
+/**
+ * @type {any}
+ */
+const schema = {
     "title": "Character Schema",
     "type": "object",
     "properties": {
@@ -134,6 +137,18 @@ export default {
                         "type": "string",
                         "title": "General Description",
                         "description": "A general description of the state, what it means for the character to be in this state. Use {{char}} as a placeholder for the character name.",
+                    },
+                    "dominance": {
+                        "type": "string",
+                        "enum": ["Hyper Dominant", "Dominant", "Coexisting"],
+                        "title": "State Dominance",
+                        "default": "Coexisting",
+                        "description": "A Dominant behaviour state will take over and prevent other dominant behaviours from activating, while coexisting states can coexist with among themselves and other" +
+                        " dominant states; a hyper dominant state will override all other states including other dominant states and does not coexist " +
+                        "with anything else; avoid using hyper dominant states unless the state is drastic and overrides anything else, a very common example is a sleeping" + 
+                        " state that overrides everything else but the character does not do anything else while sleeping, an example of a good usecase for a dominant behaviour is being extremely angry," +
+                        " which prevents other dominant states from activating but allows coexisting states like being very tired which would prevent another dominant state like " +
+                        "being hyperactive from activating at the same time. The inference would often prevent this so coexisting behaviours are often the most flexible choice.",
                     },
                     "relieving_description": {
                         "type": "string",
@@ -578,207 +593,7 @@ export default {
             "code_language": "typescript",
             "code_context": "Spawn",
             "placeholder": "// TypeScript code here, use char, user, DE and others objects",
-            "example":
-                `//Example: With a random roll, change the character location to a random tavern
-const roll = Math.random();
-if (roll < 0.5) {
-    const taverns = DE.world.locations.filter(loc => loc.type === "TAVERN");
-}
-`
         },
-        "advanced_first_interact_script": {
-            "type": "object",
-            "properties": {
-                "imports": {
-                    "type": "array",
-                    "title": "Imports",
-                },
-                "script": {
-                    "type": "string",
-                },
-                "ts": {
-                    "type": "string",
-                }
-            },
-            "title": "First Interaction Script",
-            "description": "A TypeScript script that runs when the character first interacts with the user, allowing for advanced customization of character initial interaction behaviour that will persist.",
-            "multiline": true,
-            "code_language": "typescript",
-            "code_context": "First Interact",
-            "placeholder": "// TypeScript code here, use char, user, DE and others objects",
-            "example":
-                `//Example: Give the character a random backstory and personality from inference
-const backstory = await run_inference({
-  system_prompt: "You are an assistant that generates a random backstory for a character named " + char.name +
-    " and personality for a character in a fantasy world, use second person, as \\"You are " + char.name + "\\", " +
-    " describe their appearance, personality traits, hobbies, fears and motivations in a concise manner.",
-  user_prompt: "Generate a concise backstory and personality for " + char.name + " in second person.",
-  paragraphs: 3,
-  max_tokens: 500,
-});
-DE.social[char.name].general = backstory.text;
-const short_backstory = await run_inference({
-  system_prompt: "You are an assistant that generates a short physical description only description for a character named " + char.name +
-  " the description should be very small, physical traits only (what can be seen), concise, one liner, in 3rd person and not inlude the name of the character.\n\n" +
-  "Example: A large woman with a wooden sword strapped to her back, wearing leather armor and a red bandana.\n\n" +
-  "Example: A dwarf man with a long braided beard, wearing a helmet and carrying a battle axe.\n\n" +
-  user_prompt: "Generate a short physical description only for the character whose backstory is:\n\n" + backstory.text,
-  paragraphs: 1,
-  max_tokens: 50,
-});
-DE.references[char.name].short = short_backstory.text;
-`
-        },
-        "advanced_post_any_inference_script": {
-            "type": "object",
-            "properties": {
-                "imports": {
-                    "type": "array",
-                    "title": "Imports",
-                },
-                "script": {
-                    "type": "string",
-                },
-                "ts": {
-                    "type": "string",
-                }
-            },
-            "title": "Post Any Inference Script",
-            "description": "A TypeScript script that runs after any inference ends including those that do not include the character",
-            "multiline": true,
-            "code_language": "typescript",
-            "code_context": "Post any inference",
-            "placeholder": "// TypeScript code here, use char, user, DE and others objects",
-        },
-        "advanced_pre_inference_script": {
-            "type": "object",
-            "properties": {
-                "imports": {
-                    "type": "array",
-                    "title": "Imports",
-                },
-                "script": {
-                    "type": "string",
-                },
-                "ts": {
-                    "type": "string",
-                }
-            },
-            "title": "Pre-Inference Script",
-            "description": "A TypeScript script that runs before each inference for this character, allowing for advanced customization of character behaviour.",
-            "multiline": true,
-            "code_language": "typescript",
-            "code_context": "Pre inference",
-            "placeholder": "// TypeScript code here, use char, user, DE and others objects",
-            "example":
-                `// Example: Make the character tired at night
-const charStates = DE.stateFor[char.name].states;
-if (DE.time.hourOfDay >= 20 || DE.time.hourOfDay < 6) {
-  charStates['TIRED'] = { intensity: charStates['TIRED'].intensity + 2 };
-  if (charStates['TIRED'].intensity > 4) {
-    charStates['TIRED'].intensity = 4;
-  }
-}
-
-// We are going to check if the character has slept enough the previous day
-const prevDay = DE.time.prevDay;
-// we will get the character state history for the previous day
-const historyOfCharacter = DE.stateFor[char.name].history.filter(entry => entry.day === prevDay);
-// we will sum the duration of all SLEEPING states
-// we will assume the character was resting during that time
-const durationOfSleepingOrTimeSkips = historyOfCharacter.reduce((total, entry) => {
-  if (entry.states.include("SLEEPING"))) {
-    return total + entry.durationHours;
-  }
-  return total;
-});
-if (durationOfSleepingOrTimeSkips < 4) {
-    const charStates = DE.stateFor[char.name].states;
-    charStates['TIRED'] = { intensity: 4 };
-    charStates['SLEEP_DEPRIVED'] = { intensity: charStates['SLEEP_DEPRIVED'].intensity + 1 };
-    if (charStates['SLEEP_DEPRIVED'].intensity === 4) {
-        charStates['SLEEPING'] = { intensity: 4 };
-        char.stateMessages["SLEEPING"].push(char.name + " is so sleep deprived that they immediately fall asleep.");
-    }
-}
-`
-        },
-        "advanced_pre_bond_check_script": {
-            "type": "object",
-            "properties": {
-                "imports": {
-                    "type": "array",
-                    "title": "Imports",
-                },
-                "script": {
-                    "type": "string",
-                },
-                "ts": {
-                    "type": "string",
-                }
-            },
-            "title": "Pre-Bond Check Script",
-            "description": "A TypeScript script that runs before each bond check inference for this character, allowing for advanced customization of character behaviour.",
-            "multiline": true,
-            "code_language": "typescript",
-            "code_context": "Pre bond check",
-            "placeholder": "// TypeScript code here, use char, user, DE and others objects",
-            "example":
-                `// Use DE, char, user, others, other for accessing the game state
-// Example: Add a new rule to the bond inference step based on them being nice to user
-if (oher.name !== user.name && DE.social.bondLevels[char.name]?[user.name] >= 50) {
-    DE.currentBondInference.bond_increase_conditions.increase_if.push(other.name + " was very nice to " + user.name);
-    DE.currentBondInference.bond_increase_conditions.decrease_if.push(other.name + " was rude to " + user.name);
-}
-`       },
-        "advanced_post_inference_script": {
-            "type": "object",
-            "properties": {
-                "imports": {
-                    "type": "array",
-                    "title": "Imports",
-                },
-                "script": {
-                    "type": "string",
-                },
-                "ts": {
-                    "type": "string",
-                }
-            },
-            "title": "Post-Inference Script",
-            "description": "A TypeScript script that runs after each inference ends that included the character, allowing for advanced customization of character behaviour.",
-            "multiline": true,
-            "code_language": "typescript",
-            "code_context": "Post inference",
-            "placeholder": "// TypeScript code here, use char, user, DE and others objects",
-            "example":
-                `// Use DE, char, user object for accessing the game state
-// Example: Run a special inference step to give the char the master sword
-// this would be better as a advanced_post_inference_script_per_character in the world schema
-// but for the sake of the example we put it here
-const result = await run_inference_on_last_conversation(DE, {
-    user_query: "Has " + char.name + " obtained the Master Sword yet? Respond with a simple YES or NO.",
-    system: "You are an assistant that determines if " + char.name + " has obtained the Master Sword in their adventure. Respond with a simple 'YES' or 'NO'.",
-    paragraphs: 1,
-    max_tokens: 10,
-});
-if (result.text.trim().toUpperCase().includes("YES")) {
-    // give the character the master sword state
-    DE.references[char.name].general += "\n\nAs {{char}} you are the holder of Master Sword, a legendary weapon of great power.";
-    DE.references[char.name].states["HOLDING_THE_MASTER_SWORD"] = {
-        describes_action: true,
-        general_description: "{{char}} is holding the Master Sword, a legendary weapon of great power.",
-        automatic_trigger: false,
-        automatic_reliever: false,
-        decay_rate_per_inference: 0,
-        permanent: true,
-    };
-    DE.stateFor[char.name].states["HOLDING_THE_MASTER_SWORD"] = { intensity: 4 };
-    // prevent any other character from taking it away
-    DE.world.reference.rules.push("The Master Sword cannot be removed from " + char.name + " under any circumstances.");
-}
-`
-        }
     },
     "required": [
         "states",
@@ -787,3 +602,5 @@ if (result.text.trim().toUpperCase().includes("YES")) {
         "initiative"
     ]
 }
+
+export default schema;
