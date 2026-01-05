@@ -2,6 +2,31 @@ import { playConfirmSound, playHoverSound } from "../sound.js";
 
 const XMARK = '&#10005;'; // Unicode multiplication sign (×) for better appearance
 
+/**
+ * 
+ * @param {string} str 
+ * @returns 
+ */
+function escapeHTML(str) {
+    if (typeof str === "undefined" || str === null) {
+        return '';
+    }
+    if (typeof str !== 'string') {
+        return str;
+    }
+    return str.replace(/[&<>"']/g, function (match) {
+        const escapeMap = {
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#39;'
+        };
+        // @ts-ignore
+        return escapeMap[match];
+    });
+}
+
 class NonRepeatingTagList extends HTMLElement {
     constructor() {
         super();
@@ -39,9 +64,10 @@ class NonRepeatingTagList extends HTMLElement {
 
     /**
      * 
-     * @param {string | null} value 
+     * @param {string | null} value
+     * @param {any | null} valueForChildren
      */
-    async addOne(value) {
+    async addOne(value, valueForChildren = null) {
         const container = this.root.querySelector('.input-list-container');
         const tagDiv = document.createElement('div');
 
@@ -83,32 +109,30 @@ class NonRepeatingTagList extends HTMLElement {
                 optionsHtml += `<option value="${possibleValue.replace(/"/g, '&quot;')}" ${selectedAttr}>${possibleValue}</option>`;
             });
             tagDiv.innerHTML = `<div class="tag-input-container">
-        <select>
+        <select ${this.configurableValues?.includes(value || "") ? 'disabled' : ''}>
             ${optionsHtml}
         </select>
-        <button class="remove-button">${XMARK}</button>
+        ${this.configurableValues?.includes(value || "") ? '<div class="script-notice">This property is used by a script</div>' : `<button class="remove-button">${XMARK}</button>`}
         </div>
       `;
         } else {
             // Create a text input
             tagDiv.innerHTML = `<div class="tag-input-container">
-        <input type="text" value="${value ? value.replace(/"/g, '&quot;') : ''}" />
-        <button class="remove-button">${XMARK}</button>
+        <input type="text" value="${value ? value.replace(/"/g, '&quot;') : ''}" ${this.configurableValues?.includes(value || "") ? 'readonly' : ''} />
+        ${this.configurableValues?.includes(value || "") ? '<div class="script-notice">This property is used by a script</div>' : `<button class="remove-button">${XMARK}</button>`}
         </div>
       `;
         }
         const removeButton = tagDiv.querySelector('.remove-button');
-        // @ts-expect-error
-        removeButton.addEventListener('click', async () => {
+        removeButton?.addEventListener('click', async () => {
             tagDiv.remove();
             playConfirmSound();
             await this.checkValue();
             this.dispatchEvent(new Event('input-detected', { bubbles: true }));
         });
         // @ts-expect-error
-        removeButton.title = "Remove this value";
-        // @ts-expect-error
-        removeButton.addEventListener('mouseenter', () => {
+        if (removeButton) removeButton.title = "Remove this value";
+        removeButton?.addEventListener('mouseenter', () => {
             playHoverSound();
         });
         // @ts-expect-error
@@ -146,12 +170,17 @@ class NonRepeatingTagList extends HTMLElement {
                                     input-data-type="${this.getAttribute('input-data-type')}"
                                     input-options='${JSON.stringify(childSchema.enum)}'
                                     input-options-descriptions='${JSON.stringify(childSchema.enumDescriptions || [])}'
-                                    input-default-value="${childSchema.default || ''}"
+                                    input-default-value="${escapeHTML(((valueForChildren || {})[childKey]) || childSchema.default || '')}"
                                     input-key="${childKey}"
                                 >
                                 </app-overlay-select>`;
                     } else {
                         // It's a text input
+                        let actualValueForchildren = ((valueForChildren || {})[childKey]);
+                        if (childSchema.code_language) {
+                            // It's a code input
+                            actualValueForchildren = actualValueForchildren ? JSON.stringify(actualValueForchildren) : '';
+                        }
                         const isMultiline = childSchema.multiline || false;
                         childHTML = `<app-overlay-input
                                     class="${childKey}"
@@ -161,7 +190,7 @@ class NonRepeatingTagList extends HTMLElement {
                                     input-data-file="${this.getAttribute('input-data-file')}"
                                     input-data-type="${this.getAttribute('input-data-type')}"
                                     input-placeholder="${childSchema.placeholder || ''}"
-                                    input-default-value="${childSchema.default || ''}"
+                                    input-default-value="${escapeHTML(actualValueForchildren || childSchema.default || '')}"
                                     input-placeholder-ts="${childSchema.placeholder_ts || ''}"
                                     ${isMultiline ? 'multiline="true"' + (childSchema.code_language ? ' input-is-codemirror="' + (childSchema.code_language) + '"' : '') : ''}
                                     input-key="${childKey}"
@@ -169,6 +198,7 @@ class NonRepeatingTagList extends HTMLElement {
                                 </app-overlay-input>`;
                     }
                 } else if (childSchema.type === "number" || childSchema.type === "integer") {
+                    const actualValueForchildren = ((valueForChildren || {})[childKey]) 
                     childHTML = `<app-overlay-input
                                     class="${childKey}"
                                     label="${childSchema.title}" 
@@ -181,7 +211,8 @@ class NonRepeatingTagList extends HTMLElement {
                                     input-data-file="${this.getAttribute('input-data-file')}"
                                     input-data-type="${this.getAttribute('input-data-type')}"
                                     input-placeholder="${childSchema.placeholder || ''}"
-                                    input-default-value="${typeof childSchema.default !== 'undefined' && childSchema.default !== null ? childSchema.default : ''}"
+                                    input-default-value="${escapeHTML(typeof actualValueForchildren !== 'undefined' && actualValueForchildren !== null ? actualValueForchildren :
+                                        (typeof childSchema.default !== 'undefined' && childSchema.default !== null ? childSchema.default : ''))}"
                                     input-is-percentage="${childSchema.percentage ? 'true' : ''}"
                                     input-key="${childKey}"
                                     input-number-unit="${childSchema.unit || ''}"
@@ -195,24 +226,25 @@ class NonRepeatingTagList extends HTMLElement {
                                     input-data-location="${wholePath}"
                                     input-data-file="${this.getAttribute('input-data-file')}"
                                     input-data-type="${this.getAttribute('input-data-type')}"
-                                    input-default-value="${childSchema.default || ''}"
+                                    input-default-value="${escapeHTML(((valueForChildren || {})[childKey]) || childSchema.default || '')}"
                                     input-key="${childKey}"
                                 >
                                 </app-overlay-input-boolean>`;
                 } else if (
-                    childSchema.real_type === "arbitrary_property_string" ||
-                    childSchema.real_type === "arbitrary_state_string" ||
+                    childSchema.real_type === "arbitrary_property_object" ||
+                    childSchema.real_type === "arbitrary_state_object" ||
                     childSchema.real_type === "known_state_string" ||
-                    childSchema.real_type === "arbitrary_string"
+                    childSchema.real_type === "arbitrary_object" ||
+                    childSchema.real_type === "not_known_state_string"
                 ) {
                     let inputType = "";
                     if (childSchema.real_type === "known_state_string") {
                         inputType = "known_state";
-                    } else if (childSchema.real_type === "arbitrary_state_string") {
+                    } else if (childSchema.real_type === "arbitrary_state_object") {
                         inputType = "state";
-                    } else if (childSchema.real_type === "arbitrary_property_string") {
+                    } else if (childSchema.real_type === "arbitrary_property_object") {
                         inputType = "property";
-                    } else if (childSchema.real_type === "arbitrary_string") {
+                    } else if (childSchema.real_type === "arbitrary_object") {
                         inputType = "arbitrary";
                     } else if (childSchema.real_type === "not_known_state_string") {
                         inputType = "not_known_state";
@@ -236,13 +268,15 @@ class NonRepeatingTagList extends HTMLElement {
 
             childrenSchemaDiv.innerHTML = finalInnerHTML;
 
-            childrenSchemaDiv.querySelectorAll('app-overlay-input, app-overlay-select, non-repeat-taglist, app-overlay-input-boolean').forEach((childInput) => {
+            const childInputs = childrenSchemaDiv.querySelectorAll('app-overlay-input, app-overlay-select, non-repeat-taglist, app-overlay-input-boolean');
+
+            childInputs.forEach((childInput) => {
                 childInput.addEventListener('input-detected', () => {
                     this.checkValue();
                 });
             });
 
-            return childrenSchemaDiv;
+            return childInputs;
         }
         return null;
     }
@@ -265,7 +299,12 @@ class NonRepeatingTagList extends HTMLElement {
         /**
          * @type {string[]}
          */
-        let notAllowedValues = [];
+        let notAllowedValues = this.getAttribute('not-allowed-values') ? JSON.parse(this.getAttribute('not-allowed-values') || "[]") : [];
+        // @ts-ignore
+        if (this.frozenValues.length > 0) {
+            // @ts-ignore
+            notAllowedValues = notAllowedValues.concat(this.frozenValues);
+        }
         if (this.getAttribute('input-type') === 'not_known_state') {
             // @ts-expect-error
             const givenValues = this.knownScriptStatesForCharacterFile || await window.electronAPI.listScriptStatesForCharacterFile(this.getAttribute("input-data-file"));
@@ -337,6 +376,7 @@ class NonRepeatingTagList extends HTMLElement {
                 // @ts-expect-error
                 input.parentElement.classList.add('error');
                 hasNotAllowedValueError = true;
+                lastNotAllowedValue = value;
             }
 
             if (allPossibleValues.length > 0 && !allPossibleValues.includes(value) && value !== '') {
@@ -344,7 +384,6 @@ class NonRepeatingTagList extends HTMLElement {
                 // @ts-expect-error
                 input.parentElement.classList.add('error');
                 hasNotFoundValueError = true;
-                lastNotAllowedValue = value;
             }
 
             const tagDiv = input.parentElement;
@@ -456,7 +495,7 @@ class NonRepeatingTagList extends HTMLElement {
         this.onMoreErrorsFunction = func.bind(this);
     }
 
-    connectedCallback() {
+    async connectedCallback() {
         this.render();
 
         const childrenSchemaSrc = this.getAttribute('children-schema');
@@ -477,8 +516,54 @@ class NonRepeatingTagList extends HTMLElement {
             this.originalValue = {};
         }
 
+        /**
+         * @type {string[]}
+         */
+        this.frozenValues = [];
+        /**
+         * @type {string[]}
+         */
+        this.configurableValues = [];
+        /**
+         * @type {any}
+         */
+        this.configurableValuesToAlwaysBeThere = {}
+
+        const inputType = this.getAttribute('input-type');
+        if (inputType === 'for_properties_input') {
+            const inputFile = this.getAttribute("input-data-file");
+            // @ts-expect-error
+            const propertiesInfo = await window.electronAPI.getScriptManagedPropertiesForCharacterFile(inputFile);
+            propertiesInfo.forEach((prop) => {
+                if (prop.frozen) {
+                    // @ts-expect-error
+                    this.frozenValues.push(prop.property);
+                } else if (prop.configurable) {
+                    // @ts-expect-error
+                    this.configurableValues.push(prop.property);
+                    this.originalValue[prop.property] = {
+                        value: prop.default_value || {
+                            ts: "",
+                            script: "",
+                        }
+                    };
+                    this.configurableValuesToAlwaysBeThere[prop.property] = {
+                        value: prop.default_value || {
+                            ts: "",
+                            script: "",
+                        }
+                    };
+                }
+            });
+        }
+
         const dataLocation = this.getAttribute('input-data-location');
         if (!dataLocation) {
+            const addedElements = await this.updateWithValue(this.originalValue);
+            await Promise.all(addedElements.map(async (el) => {
+                await el?.isReady();
+            }));
+            await this.checkValue();
             // @ts-expect-error
             this._resolveReady();
             return;
@@ -497,13 +582,17 @@ class NonRepeatingTagList extends HTMLElement {
         window.electronAPI.loadValueFromUserData(dataLocation, cacheFile).then(async (value) => {
             let addedElements = [];
             if (value !== null) {
+                for (const key of Object.keys(this.configurableValuesToAlwaysBeThere)) {
+                    if (!(key in value)) {
+                        value[key] = this.configurableValuesToAlwaysBeThere[key];
+                    }
+                }
                 addedElements = await this.updateWithValue(value);
             } else {
                 addedElements = await this.updateWithValue(this.originalValue);
             }
             await Promise.all(addedElements.map(async (el) => {
-                // @ts-expect-error
-                await el.isReady();
+                await el?.isReady();
             }));
             await this.checkValue();
             // @ts-expect-error
@@ -591,17 +680,27 @@ class NonRepeatingTagList extends HTMLElement {
      */
     async updateWithValue(value) {
         this.originalValue = value;
-        const addedElements = [];
+        /**
+         * @type {any[]}
+         */
+        let addedElements = [];
         if (this.childrenSchema) {
             for (const val of Object.keys(value)) {
-                addedElements.push(await this.addOne(val));
+                // @ts-expect-error
+                const newElements = await this.addOne(val, value[val]);
+                if (newElements) {
+                    addedElements = addedElements.concat(Array.from(newElements));
+                }
             }
         } else {
             for (const val of value) {
-                addedElements.push(await this.addOne(val));
+                const newElements = await this.addOne(val, null);
+                if (newElements) {
+                    addedElements = addedElements.concat(Array.from(newElements));
+                }
             }
         }
-        return addedElements;
+        return addedElements.filter(el => el !== null);
     }
 
     render() {
@@ -689,7 +788,7 @@ class NonRepeatingTagList extends HTMLElement {
             box-shadow: 0 0 10px rgba(255,107,107,0.8);
         }
   .error-message {
-            font-size: 4vh;
+            font-size: 2vh;
             height: 4vh;
             text-align: left;
             color: #FF6B6B;
@@ -723,6 +822,7 @@ class NonRepeatingTagList extends HTMLElement {
                 align-items: center;
                 justify-content: center;
                 flex: 1 1 auto;
+                position: relative;
             }
 
             .with-children-schema .tag {
@@ -738,6 +838,14 @@ class NonRepeatingTagList extends HTMLElement {
     padding-left: 10vh;
     width: 100%;
     box-sizing: border-box;
+    }
+    .script-notice {
+        font-size: 2vh;
+        color: #ccc;
+        width: 100%;
+        text-align: left;
+        position: absolute;
+        bottom: -3vh;
     }
 
       </style>

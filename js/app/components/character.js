@@ -101,6 +101,17 @@ const WIZARD_SECTIONS = [
         fields: []
     },
     {
+        title: "Properties",
+        fields: [
+            [
+                "Character Properties",
+                [
+                    "properties",
+                ]
+            ]
+        ]
+    },
+    {
         title: "Advanced",
         fields: [
             [
@@ -128,7 +139,7 @@ class CharacterOverlay extends HTMLElement {
         this.onCancel = this.onCancel.bind(this);
     }
 
-    connectedCallback() {
+    async connectedCallback() {
         this.currentCharacterFile = this.getAttribute("character-file") || "";
         this.currentCharacterName = "";
 
@@ -147,7 +158,7 @@ class CharacterOverlay extends HTMLElement {
 
         this.render();
         playPauseSound();
-        this.buildChildrenMap();
+        await this.buildChildrenMap();
         // @ts-expect-error
         this.root.querySelector('app-overlay').addEventListener('special-button-click', () => {
             const dialog = document.createElement('app-dialog');
@@ -312,12 +323,28 @@ class CharacterOverlay extends HTMLElement {
         `;
     }
 
-    buildChildrenMap() {
+    async buildChildrenMap() {
         const sectionToDisplay = WIZARD_SECTIONS[this.currentSectionIndex];
         if (sectionToDisplay.testing) {
             this.buildTestingSection();
             return;
         }
+        if (sectionToDisplay.title === "Bonds") {
+            // check if bonds are frozen
+            // @ts-ignore
+            const frozenBonds = await window.electronAPI.areBondsFrozenForCharacterFile(this.currentCharacterFile);
+            if (frozenBonds) {
+                // bonds are frozen, show message instead
+                // @ts-expect-error
+                this.root.querySelector('app-overlay-tabs').innerHTML = `
+                    <app-overlay-section section-title="Character Bonds">
+                        <p>The bonds for this character are frozen by a script and cannot be modified.</p>
+                    </app-overlay-section>
+                `;
+                return;
+            }
+        }
+        
         const fields = sectionToDisplay.fields;
         const fieldsAsHTML = fields.map(fieldGroup => {
             const fieldName = fieldGroup[0];
@@ -376,15 +403,30 @@ class CharacterOverlay extends HTMLElement {
                                     input-number-unit="${schema.properties[fieldName].unit || ''}"
                                 >
                                 </app-overlay-input>`;
-                } else if (schema.properties[fieldName].real_type === "arbitrary_property_object" || schema.properties[fieldName].real_type === "arbitrary_state_object" ||
-                    schema.properties[fieldName].real_type === "arbitrary_emotion_string" || schema.properties[fieldName].real_type === "arbitrary_string" ||
-                    schema.properties[fieldName].real_type === "not_known_state_string" || schema.properties[fieldName].real_type === "known_state_string") {
-                    let inputType = schema.properties[fieldName].real_type === "arbitrary_string" ? "arbitrary" :
-                                    (schema.properties[fieldName].real_type === "arbitrary_property_object" ? 'property' : (schema.properties[fieldName].real_type === "arbitrary_state_object" ? 'state' : 'emotion'));
-                    if (schema.properties[fieldName].real_type === "not_known_state_string") {
-                        inputType = "not_known_state";
-                    } else if (schema.properties[fieldName].real_type === "known_state_string") {
+                } else if (
+                    schema.properties[fieldName].real_type === "arbitrary_property_object" ||
+                    schema.properties[fieldName].real_type === "arbitrary_state_object" ||
+                    schema.properties[fieldName].real_type === "known_state_string" ||
+                    schema.properties[fieldName].real_type === "arbitrary_object" ||
+                    schema.properties[fieldName].real_type === "for_properties_input" ||
+                    schema.properties[fieldName].real_type === "arbitrary_emotion_object" ||
+                    schema.properties[fieldName].real_type === "not_known_state_string"
+                ) {
+                    let inputType = "";
+                    if (schema.properties[fieldName].real_type === "known_state_string") {
                         inputType = "known_state";
+                    } else if (schema.properties[fieldName].real_type === "arbitrary_state_object") {
+                        inputType = "state";
+                    } else if (schema.properties[fieldName].real_type === "arbitrary_property_object") {
+                        inputType = "property";
+                    } else if (schema.properties[fieldName].real_type === "arbitrary_object") {
+                        inputType = "arbitrary";
+                    } else if (schema.properties[fieldName].real_type === "not_known_state_string") {
+                        inputType = "not_known_state";
+                    } else if (schema.properties[fieldName].real_type === "for_properties_input") {
+                        inputType = "for_properties_input";
+                    } else if (schema.properties[fieldName].real_type === "arbitrary_emotion_object") {
+                        inputType = "emotion";
                     }
                     return `<non-repeat-taglist
                                 class="${fieldName}"
@@ -394,7 +436,8 @@ class CharacterOverlay extends HTMLElement {
                                 input-data-file="${this.currentCharacterFile}"
                                 input-data-type="character"
                                 input-type="${inputType}"
-                                children-schema='${escapeHTML(JSON.stringify(schema.properties[fieldName].additionalProperties.properties))}'
+                                children-schema='${schema.properties[fieldName].additionalProperties ? escapeHTML(JSON.stringify(schema.properties[fieldName].additionalProperties.properties)) : ""}'
+                                input-default-value='${escapeHTML(JSON.stringify(schema.properties[fieldName].default || {}))}'
                             >
                             </non-repeat-taglist>`;
                 }
@@ -410,7 +453,82 @@ class CharacterOverlay extends HTMLElement {
         if (bondsTagList) {
             // @ts-expect-error
             bondsTagList.setMoreErrorsFunction((currentValue) => {
-                console.log(currentValue)
+                // we are going to check whether there are missing bond gaps or overlaps
+                const entries = Object.entries(currentValue);
+                const strengthValues = entries.map(entry => {
+                    const entryName = entry[0];
+                    const minBondValue = entry[1].min_bond_level;
+                    const maxBondValue = entry[1].max_bond_level;
+                    const min2BondValue = entry[1].min_2nd_bond_level;
+                    const max2BondValue = entry[1].max_2nd_bond_level;
+                    return [entryName, minBondValue, maxBondValue, min2BondValue, max2BondValue];
+                });
+
+                // find overlaps on the first bond levels
+                for (let i = 0; i < strengthValues.length; i++) {
+                    const [nameA, minA, maxA, min2A, max2A] = strengthValues[i];
+                    for (let j = i + 1; j < strengthValues.length; j++) {
+                        if (i === j) continue;
+                        const [nameB, minB, maxB, min2B, max2B] = strengthValues[j];
+                        // check for overlap on both bond levels, the overlap is inclusive of the min value,
+                        // so the max of one bond can be the same as the min of another bond without overlapping
+                        const overlapOnFirstBond = (minA < maxB) && (maxA > minB);
+                        const overlapOnSecondBond = (min2A < max2B) && (max2A > min2B);
+                        if (overlapOnFirstBond && overlapOnSecondBond) {
+                            return `Bond strength levels for "${nameA}" and "${nameB}" overlap on the primary and secondary bonds.`;
+                        }
+                    }
+                }
+
+                // now we need to check that there are no gaps in the bonds level
+                const minBoxBondLevel = -100;
+                const maxBoxBondLevel = 100;
+                const min2BoxBondLevel = 0;
+                const max2BoxBondLevel = 100;
+
+                // Mathematically complete coverage check using sweep line algorithm
+                // Collect all unique x-coordinates from rectangle boundaries
+                const xCoords = new Set([minBoxBondLevel, maxBoxBondLevel]);
+                for (const [name, min1, max1, min2, max2] of strengthValues) {
+                    xCoords.add(min1);
+                    xCoords.add(max1);
+                }
+                const sortedXCoords = Array.from(xCoords).sort((a, b) => a - b);
+                
+                // For each x-interval, check if y-dimension is fully covered
+                for (let i = 0; i < sortedXCoords.length - 1; i++) {
+                    const xStart = sortedXCoords[i];
+                    const xEnd = sortedXCoords[i + 1];
+                    
+                    // Collect all y-intervals that cover this x-range
+                    const yIntervals = [];
+                    for (const [name, min1, max1, min2, max2] of strengthValues) {
+                        // Rectangle covers this x-range if xStart and xEnd are both within [min1, max1]
+                        if (min1 <= xStart && xEnd <= max1) {
+                            yIntervals.push([min2, max2]);
+                        }
+                    }
+                    
+                    // Sort y-intervals by start point
+                    yIntervals.sort((a, b) => a[0] - b[0]);
+                    
+                    // Check if y-intervals cover [min2BoxBondLevel, max2BoxBondLevel] without gaps
+                    let currentY = min2BoxBondLevel;
+                    for (const [yStart, yEnd] of yIntervals) {
+                        if (yStart > currentY) {
+                            // Gap found between currentY and yStart
+                            return `Bond strength levels have a gap at x∈[${xStart}, ${xEnd}], y∈[${currentY}, ${yStart}]. Ensure bond ranges touch at boundaries.`;
+                        }
+                        currentY = Math.max(currentY, yEnd);
+                    }
+                    
+                    if (currentY < max2BoxBondLevel) {
+                        // Gap at the end
+                        return `Bond strength levels have a gap at x∈[${xStart}, ${xEnd}], y∈[${currentY}, ${max2BoxBondLevel}]. The y-dimension is not fully covered.`;
+                    }
+                }
+                
+                return null; // No errors
             });
         }
     }

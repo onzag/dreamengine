@@ -76,6 +76,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
         return result;
     },
     /**
+     * 
+     * @param {string} characterFile 
+     * @returns 
+     */
+    areBondsFrozenForCharacterFile: async (characterFile) => {
+        const result = await ipcRenderer.invoke('areBondsFrozenForCharacterFile', characterFile);
+        return result;
+    },
+    /**
+     * 
+     * @param {string} characterFile 
+     * @returns 
+     */
+    getScriptManagedPropertiesForCharacterFile: async (characterFile) => {
+        const result = await ipcRenderer.invoke('getScriptManagedPropertiesForCharacterFile', characterFile);
+        return result;
+    },
+    /**
      * @param {string} scriptFile 
      * @returns 
      */

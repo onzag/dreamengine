@@ -44,7 +44,7 @@ const schema = {
         "general": {
             "type": "object",
             "properties": {
-                "src": {
+                "script": {
                     "type": "string",
                 },
                 "js": {
@@ -224,19 +224,6 @@ const schema = {
                         "type": "boolean",
                         "title": "Common State Experienced by Character",
                         "description": "Indicates if this state is commonly experienced by the character"
-                    },
-                    "has_custom_viewables": {
-                        "type": "boolean",
-                        "title": "Has Custom Viewables",
-                        "description": "Indicates if this state affects the character's viewables, it will make the character look different when in this state"
-                    },
-                    "custom_viewables_priority": {
-                        "type": "number",
-                        "title": "Custom Viewables Priority",
-                        "description": "The priority of the custom viewables for this state, higher values indicate higher priority",
-                        "minimum": 0,
-                        "maximum": 100,
-                        "must_have": ["has_custom_viewables"],
                     },
                     "lays_down_state": {
                         "type": "boolean",
@@ -469,7 +456,7 @@ const schema = {
                                 },
                             }
                         },
-                        "real_type": "arbitrary_string",
+                        "real_type": "arbitrary_object",
                     },
                     "manual_intensifiers": {
                         "type": "object",
@@ -504,7 +491,7 @@ const schema = {
                                 },
                             }
                         },
-                        "real_type": "arbitrary_string",
+                        "real_type": "arbitrary_object",
                     },
                     "manual_relievers": {
                         "type": "object",
@@ -539,7 +526,7 @@ const schema = {
                                 },
                             },
                         },
-                        "real_type": "arbitrary_string",
+                        "real_type": "arbitrary_object",
                     },
                     "binary_behaviour": {
                         "type": "boolean",
@@ -681,9 +668,9 @@ const schema = {
                                 }
                             }
                         },
-                        "real_type": "arbitrary_string",
+                        "real_type": "arbitrary_object",
                     },
-                    "2nd_bond_conditions": {
+                    "second_bond_conditions": {
                         "type": "object",
                         "title": "2nd Bond Conditions",
                         "description": "Conditions for increasing the second bond level when this bond is active",
@@ -732,7 +719,7 @@ const schema = {
                                 },
                             }
                         },
-                        "real_type": "arbitrary_string",
+                        "real_type": "arbitrary_object",
                     },
                     "description": {
                         "type": "object",
@@ -762,7 +749,7 @@ const schema = {
                     "max_2nd_bond_level"
                 ]
             },
-            "real_type": "arbitrary_string",
+            "real_type": "arbitrary_object",
             "minItems": 1
         },
         "emotions": {
@@ -792,19 +779,37 @@ const schema = {
                     "common"
                 ]
             },
-            "real_type": "arbitrary_emotion_string",
+            "real_type": "arbitrary_emotion_object",
         },
         "properties": {
             "type": "object",
             "title": "Character Properties",
             "description": "Custom properties for the character, used for advanced scripting and behaviour customization",
             "additionalProperties": {
-                "type": "string"
+                "type": "object",
+                "properties": {
+                    "value": {
+                        "type": "object",
+                        "properties": {
+                            "ts": {
+                                "type": "string",
+                            },
+                            "script": {
+                                "type": "string",
+                            },
+                        },
+                        "title": "Property Value",
+                        "description": "The value of the property, can be any TypeScript expression that returns a value",
+                        "multiline": true,
+                        "code_language": "typescript",
+                    },
+                }
             },
             "default": {
-                "race": "human",
-                "age": 30,
-            }
+                "race": {value: {ts: "return \"human\";", script: "return \"human\";"}},
+                "age": {value: {ts: "return 30;", script: "return 30;"}},
+            },
+            "real_type": "for_properties_input",
         },
         "advanced_spawn_script": {
             "type": "object",

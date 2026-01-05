@@ -28,6 +28,8 @@ declare interface ElectronAPI {
   listWorldFiles(): Promise<string[]>;
   listStatesForCharacterFile(characterFile: string): Promise<Array<{name: string, frozen: boolean}>>;
   listScriptStatesForCharacterFile(characterFile: string): Promise<Array<{name: string, frozen: boolean}>>;
+  areBondsFrozenForCharacterFile(characterFile: string): Promise<boolean>;
+  getScriptManagedPropertiesForCharacterFile(characterFile: string): Promise<Array<{property: string; default_value: string; frozen: boolean; configurable: boolean}>>;
 
   getDreamEnginePath(): Promise<string>;
   uploadFileToDEPath(dePath: string, file: File | Blob): Promise<boolean>;

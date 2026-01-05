@@ -115,6 +115,62 @@ ipcMain.handle('toggleFullScreen', () => {
     }
 });
 
+ipcMain.handle("areBondsFrozenForCharacterFile", async (event, characterFile) => {
+    const characterData = CHARACTER_CACHE[characterFile];
+    if (!characterData) {
+        return false;
+    }
+    const includedScripts = characterData.advanced_spawn_script?.imports || [];
+    let freezeBonds = false;
+    // @ts-ignore
+    includedScripts.forEach(scriptName => {
+        const scriptData = SCRIPT_CACHE[scriptName];
+        if (scriptData && scriptData.freeze_bonds) {
+            freezeBonds = true;
+        }
+    });
+    return freezeBonds;
+});
+
+ipcMain.handle("getScriptManagedPropertiesForCharacterFile", async (event, characterFile) => {
+    const characterData = CHARACTER_CACHE[characterFile];
+    if (!characterData) {
+        return [];
+    }
+    const includedScripts = characterData.advanced_spawn_script?.imports || [];
+    /**
+     * @type Array<{property: string, default_value: string, frozen: boolean, configurable: boolean}>
+     */
+    const managedProperties = [];
+    // @ts-ignore
+    includedScripts.forEach(scriptName => {
+        const scriptData = SCRIPT_CACHE[scriptName];
+        if (scriptData && scriptData.configurable_properties) {
+            const props = scriptData.configurable_properties;
+            Object.entries(props).forEach(([propName, propData]) => {
+                managedProperties.push({
+                    property: propName,
+                    default_value: propData.default || "",
+                    frozen: ((scriptData.freeze_root_properties || []).includes(propName) || false),
+                    configurable: true,
+                });
+            });
+        }
+        for (const property of scriptData.freeze_root_properties || []) {
+            if (managedProperties.find(p => p.property === property)) {
+                continue;
+            }
+            managedProperties.push({
+                property: property,
+                default_value: characterData[property] || "",
+                frozen: true,
+                configurable: false,
+            });
+        }
+    });
+    return managedProperties;
+});
+
 ipcMain.on('openDevTools', () => {
     const win = BrowserWindow.getFocusedWindow();
     if (win) {

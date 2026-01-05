@@ -65,6 +65,7 @@ const WIZARD_SECTIONS = [
                 [
                     "freeze_states",
                     "freeze_root_properties",
+                    "freeze_bonds",
                 ],
             ],
         ]
@@ -111,7 +112,7 @@ class ScriptOverlay extends HTMLElement {
         // @ts-expect-error
         this.root.querySelector('app-overlay').addEventListener('confirm', () => {
             // check everything is valid
-            const someInvalid = Array.from(this.root.querySelectorAll('app-overlay-input, app-overlay-select, non-repeat-taglist')).some(inputComponent => {
+            const someInvalid = Array.from(this.root.querySelectorAll('app-overlay-input, app-overlay-select, non-repeat-taglist, app-overlay-input-boolean')).some(inputComponent => {
                 // @ts-expect-error
                 inputComponent.hasErrorsPresent();
             });
@@ -157,7 +158,7 @@ class ScriptOverlay extends HTMLElement {
      */
     onCheckForUnsavedChanges(onceDoneFn, onceDoneFnNoResistance, resistanceAppliedFn, onAllowFn, onceCancelFn) {
         let hasUnsavedChanges = false;
-        Array.from(this.root.querySelectorAll('app-overlay-input, app-overlay-select, non-repeat-taglist')).forEach(inputComponent => {
+        Array.from(this.root.querySelectorAll('app-overlay-input, app-overlay-select, non-repeat-taglist, app-overlay-input-boolean')).forEach(inputComponent => {
             // @ts-expect-error
             if (inputComponent.hasBeenModified()) {
                 hasUnsavedChanges = true;
@@ -252,7 +253,19 @@ class ScriptOverlay extends HTMLElement {
                                     input-is-percentage="${schema.properties[fieldName].percentage ? 'true' : ''}"
                                 >
                                 </app-overlay-input>`;
-                } else if (schema.properties[fieldName].real_type === "arbitrary_property_string" || schema.properties[fieldName].real_type === "arbitrary_state_string") {
+                } else if (schema.properties[fieldName].type === "boolean") {
+                    return `<app-overlay-input-boolean
+                                    class="${fieldName}"
+                                    label="${escapeHTML(schema.properties[fieldName].title)}" 
+                                    title="${escapeHTML(schema.properties[fieldName].description || '')}"
+                                    input-data-location="${fieldName}"
+                                    input-data-file="${this.currentScriptFile}"
+                                    input-data-type="script"
+                                    input-default-value="${schema.properties[fieldName].default || ''}"
+                                >
+                                </app-overlay-input-boolean>`;
+                } else if (schema.properties[fieldName].real_type === "arbitrary_property_object" || schema.properties[fieldName].real_type === "arbitrary_state_object") {
+                    const childrenSchema = schema.properties[fieldName]?.additionalProperties?.properties;
                     return `<non-repeat-taglist
                                 class="${fieldName}"
                                 label="${escapeHTML(schema.properties[fieldName].title)}"
@@ -260,20 +273,8 @@ class ScriptOverlay extends HTMLElement {
                                 input-data-location="${fieldName}"
                                 input-data-file="${this.currentScriptFile}"
                                 input-data-type="script"
-                                input-type="${schema.properties[fieldName].real_type === "arbitrary_property_string" ? 'property' : 'state'}"
-
-                            >
-                            </non-repeat-taglist>`;
-                } else if (schema.properties[fieldName].real_type === "arbitrary_property_object") {
-                    return `<non-repeat-taglist
-                                class="${fieldName}"
-                                label="${escapeHTML(schema.properties[fieldName].title)}"
-                                title="${escapeHTML(schema.properties[fieldName].description || '')}"
-                                input-data-location="${fieldName}"
-                                input-data-file="${this.currentScriptFile}"
-                                input-data-type="script"
-                                input-type="property"
-                                children-schema='${escapeHTML(JSON.stringify(schema.properties[fieldName].additionalProperties.properties))}'
+                                input-type="${schema.properties[fieldName].real_type === "arbitrary_property_object" ? 'property' : 'state'}"
+                                children-schema="${childrenSchema ? escapeHTML(JSON.stringify(childrenSchema)) : ''}"
                             >
                             </non-repeat-taglist>`;
                 }
@@ -293,7 +294,7 @@ class ScriptOverlay extends HTMLElement {
 
     async updateScriptFileOnDisk() {
         // save each field
-        await Promise.all(Array.from(this.root.querySelectorAll('app-overlay-input, app-overlay-select, non-repeat-taglist')).map(inputComponent =>
+        await Promise.all(Array.from(this.root.querySelectorAll('app-overlay-input, app-overlay-select, non-repeat-taglist, app-overlay-input-boolean')).map(inputComponent =>
             // @ts-ignore
             inputComponent.saveValueToUserData()
         ));

@@ -75,8 +75,14 @@ declare interface EmotionDefinition {
     triggeredByStates: string[];
 }
 
+declare type DEPropertyValueGetter = (DE: DEObject, char: CompleteCharacterReference) => Promise<any> | any;
+
+declare interface DEPropertyValue {
+    value: DEPropertyValueGetter;
+}
+
 declare interface CompleteCharacterReference extends MinimalCharacterReference {
-    properties?: Record<string, any>;
+    properties?: Record<string, DEPropertyValue>;
     injectableInGeneralText?: Record<string, DEStringTemplate>;
     injectableInStateTextBefore?: Record<string, DEStringTemplate>;
     injectableInStateTextAfter?: Record<string, DEStringTemplate>;
@@ -256,8 +262,8 @@ declare interface DEScript {
     name: string;
     execute: () => void | Promise<void>;
 }
-declare type DEStringTemplate = (DE: DEObject) => string;
-declare type DEPotentiallyNullReturningStringTemplate = (DE: DEObject) => string | null;
+declare type DEStringTemplate = (DE: DEObject, char: CompleteCharacterReference) => Promise<string> | string;
+declare type DEPotentiallyNullReturningStringTemplate = (DE: DEObject, char: CompleteCharacterReference) => Promise<string | null> | string | null;
 
 declare interface DEObject {
     user: MinimalCharacterReference;

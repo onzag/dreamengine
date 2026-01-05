@@ -343,17 +343,16 @@ class OverlayInput extends HTMLElement {
         const newMode = this.editorInitializedInMode === "typescript" ? "handlebars" : "typescript";
         const currentValue = this.editor.state.doc.toString();
         this.editor.destroy();
-        this.initializeEditor(newMode, currentValue, false, false);
+        this.initializeEditor(newMode, currentValue, false);
     }
 
     /**
      * 
      * @param {string} mode 
      * @param {string} doc 
-     * @param {boolean} updateOriginalValue 
-     * @param {boolean} allowUseDefault 
+     * @param {boolean} updateOriginalValue
      */
-    async initializeEditor(mode, doc, updateOriginalValue, allowUseDefault) {
+    async initializeEditor(mode, doc, updateOriginalValue) {
         const extensions = [basicSetup, keymap.of(indentWithTab), null, placeholder(mode === "typescript" ? this.getAttribute("input-placeholder-ts") || this.getAttribute("input-placeholder") : this.getAttribute("input-placeholder")), EditorView.lineWrapping]
         if (mode === "handlebars") {
             extensions[2] = handlebarsLanguage;
@@ -375,29 +374,17 @@ class OverlayInput extends HTMLElement {
             extensions.push(autocompletion({ override: [tsComplete] }));
             extensions.push(tsvfsViewPlugin(this));
         }
-        if (allowUseDefault && this.getAttribute("input-default-value")) {
-            this.editor = new EditorView({
-                lineWrapping: true,
-                doc: doc || this.getAttribute("input-default-value"),
-                extensions,
-                parent: this.root.querySelector('.codemirror-wrapper'),
-            });
-            if (updateOriginalValue) {
-                this.originalValue = doc || this.getAttribute("input-default-value") || "";
-            }
-            this.editorInitializedInMode = mode;
-        } else {
-            this.editor = new EditorView({
-                lineWrapping: true,
-                doc: doc || '',
-                extensions,
-                parent: this.root.querySelector('.codemirror-wrapper'),
-            });
-            if (updateOriginalValue) {
-                this.originalValue = doc || '';
-            }
-            this.editorInitializedInMode = mode;
+
+        this.editor = new EditorView({
+            lineWrapping: true,
+            doc: doc || '',
+            extensions,
+            parent: this.root.querySelector('.codemirror-wrapper'),
+        });
+        if (updateOriginalValue) {
+            this.originalValue = doc || '';
         }
+        this.editorInitializedInMode = mode;
 
         const modeSwitcherButton = this.root.querySelector('.code-mirror-mode-switcher');
         if (modeSwitcherButton) {
@@ -563,7 +550,7 @@ class OverlayInput extends HTMLElement {
         if (isCodeMirror === "typescript") {
             dataLocation += ".ts";
         } else if (isCodeMirror) {
-            dataLocation += ".src";
+            dataLocation += ".script";
         }
 
         if (!dataLocation) {
@@ -582,17 +569,19 @@ class OverlayInput extends HTMLElement {
             if (value !== null) {
                 if (isCodeMirror) {
                     const newValue = value.toString();
+                    let defaultToInitializeWith = JSON.parse(this.getAttribute("input-default-value") || "null");
 
                     if (isCodeMirror === "typescript") {
-                        this.initializeEditor("typescript", newValue, true, true);
+                        defaultToInitializeWith = defaultToInitializeWith?.ts || "";
+                        this.initializeEditor("typescript", newValue || defaultToInitializeWith, true);
                     } else {
                         // check the mode
                         // @ts-ignore
-                        window.electronAPI.loadValueFromUserData(dataLocationOriginal + ".js", cacheFile).then((value) => {
-                            if (value !== null) {
-                                this.initializeEditor("typescript", newValue, true, true);
+                        window.electronAPI.loadValueFromUserData(dataLocationOriginal + ".ts", cacheFile).then((tsValue) => {
+                            if (tsValue !== null) {
+                                this.initializeEditor("typescript", tsValue || newValue || defaultToInitializeWith, true);
                             } else {
-                                this.initializeEditor("handlebars", newValue, true, true);
+                                this.initializeEditor("handlebars", tsValue || newValue || defaultToInitializeWith, true);
                             }
                         });
                     }
@@ -620,10 +609,12 @@ class OverlayInput extends HTMLElement {
                     }
                 }
             } else if (isCodeMirror) {
+                let defaultToInitializeWith = JSON.parse(this.getAttribute("input-default-value") || "null");
+                defaultToInitializeWith = defaultToInitializeWith?.ts || "";
                 if (isCodeMirror === "typescript") {
-                    this.initializeEditor("typescript", "", true, true);
+                    this.initializeEditor("typescript", defaultToInitializeWith, true);
                 } else {
-                    this.initializeEditor("handlebars", "", true, true);
+                    this.initializeEditor("handlebars", defaultToInitializeWith, true);
                 }
             }
 
@@ -939,7 +930,7 @@ class OverlayInput extends HTMLElement {
             resize: none;
         }
         .error-message {
-            font-size: 4vh;
+            font-size: 2vh;
             height: 4vh;
             text-align: left;
             color: #FF6B6B;
@@ -1247,7 +1238,7 @@ class OverlayInputSelect extends HTMLElement {
   cursor: pointer;
         }
   .error-message {
-            font-size: 4vh;
+            font-size: 2vh;
             height: 4vh;
             text-align: left;
             color: #FF6B6B;
@@ -1405,6 +1396,7 @@ class OverlayTabs extends HTMLElement {
             padding: 2vh 4vh;
             font-size: 3vh;
             cursor: pointer;
+            white-space: nowrap;
         }
         .tab.active {
             border-bottom: solid 4px #FF6B6B;

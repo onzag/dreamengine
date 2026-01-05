@@ -53,24 +53,27 @@ const schema = {
             "additionalProperties": {
                 "type": "object",
                 "properties": {
-                    "type": {
-                        "type": "string",
-                        "title": "Property Type",
-                        "enum": ["string", "number", "boolean", "json"],
-                        "default": "string"
-                    },
                     "placeholder": {
                         "type": "string",
                         "title": "Placeholder",
                         "default": ""
                     },
                     "default": {
-                        "type": "string",
+                        "type": "object",
+                        "description": "Default Value",
+                        "properties": {
+                            "ts": {
+                                "type": "string",
+                            },
+                            "script": {
+                                "type": "string",
+                            },
+                        },
                         "title": "Default Value",
                         "default": "",
                         "multiline": true,
-                        "code_language": "json",
-                        "placeholder": "Default value for this property, json encoded"
+                        "code_language": "typescript",
+                        "placeholder": "Default value for this property"
                     },
                 },
             },
@@ -83,7 +86,13 @@ const schema = {
             "items": {
                 "type": "string",
             },
-            "real_type": "arbitrary_state_string",
+            "real_type": "arbitrary_state_object",
+        },
+        "freeze_bonds": {
+            "type": "boolean",
+            "title": "Freeze Bonds",
+            "description": "Will freeze the bonds of the character, preventing the user from setting bonds in the character configuration",
+            "default": false,
         },
         "freeze_root_properties": {
             "type": "array",
@@ -92,7 +101,7 @@ const schema = {
             "items": {
                 "type": "string",
             },
-            "real_type": "arbitrary_property_string",
+            "real_type": "arbitrary_property_object",
         },
     },
     "required": ["name", "script"],
