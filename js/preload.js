@@ -59,6 +59,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
     /**
      * 
+     * @param {string} characterFile 
+     * @returns 
+     */
+    listStatesForCharacterFile: async (characterFile) => {
+        const result = await ipcRenderer.invoke('listStatesForCharacterFile', characterFile);
+        return result;
+    },
+    /**
      * @param {string} scriptFile 
      * @returns 
      */

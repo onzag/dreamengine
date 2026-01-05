@@ -495,6 +495,7 @@ class OverlayInput extends HTMLElement {
 
         const isNumber = this.getAttribute('input-type') === 'number';
         const isPercentage = this.getAttribute('input-is-percentage') === 'true';
+        const isInteger = this.getAttribute('input-is-integer') === 'true';
         const isCodeMirror = this.getAttribute('multiline') === 'true' && this.getAttribute("input-is-codemirror");
 
         if (!isCodeMirror) {
@@ -510,6 +511,9 @@ class OverlayInput extends HTMLElement {
                     if (isPercentage) {
                         // @ts-expect-error
                         inputElement.value = (numericValue * 100).toString();
+                    } else if (isInteger) {
+                        // @ts-expect-error
+                        inputElement.value = Math.round(numericValue).toString();
                     } else {
                         // @ts-expect-error
                         inputElement.value = numericValue.toString();
@@ -534,6 +538,14 @@ class OverlayInput extends HTMLElement {
                 textarea.addEventListener('input', function () {
                     this.style.height = 'auto';
                     this.style.height = this.scrollHeight + 'px';
+                    this.dispatchEvent(new Event('input-detected', { bubbles: true }));
+                });
+            }
+
+            const input = this.root.querySelector('input');
+            if (input) {
+                input.addEventListener('input', () => {
+                    this.dispatchEvent(new Event('input-detected', { bubbles: true }));
                 });
             }
         }
@@ -580,6 +592,10 @@ class OverlayInput extends HTMLElement {
                         const numberValue = parseFloat(value);
                         // @ts-expect-error
                         potentialTextArea.value = (numberValue * 100).toString();
+                    } else if (isInteger && isNumber) {
+                        const numberValue = parseFloat(value);
+                        // @ts-expect-error
+                        potentialTextArea.value = Math.round(numberValue).toString();
                     } else {
                         // @ts-expect-error
                         potentialTextArea.value = value.toString();
@@ -588,9 +604,9 @@ class OverlayInput extends HTMLElement {
 
                     if (potentialTextArea && this.getAttribute('multiline') === 'true') {
                         // @ts-expect-error
-                        textarea.style.height = 'auto';
+                        potentialTextArea.style.height = 'auto';
                         // @ts-expect-error
-                        textarea.style.height = textarea.scrollHeight + 'px';
+                        potentialTextArea.style.height = potentialTextArea.scrollHeight + 'px';
                     }
                 }
             } else if (isCodeMirror) {
@@ -671,7 +687,35 @@ class OverlayInput extends HTMLElement {
     getValue() {
         const isCodeMirror = this.getAttribute('multiline') === 'true' && this.getAttribute("input-is-codemirror");
         if (isCodeMirror) {
-            throw new Error("Not supported for CodeMirror inputs");
+            // it will only return the doc when called this way
+            const isTypescript = this.getAttribute("input-is-codemirror") === "typescript";
+            if (isTypescript) {
+                return {
+                    ts: this.editor.state.doc.toString(),
+                    script: convertTsToJs(this.editor.state.doc.toString()),
+                };
+            }
+            return {
+                ts: null,
+                script: this.editor.state.doc.toString(),
+            }
+        }
+        const isNumber = this.getAttribute('input-type') === 'number';
+        const isInteger = this.getAttribute('input-is-integer') === 'true';
+        const isPercentage = this.getAttribute('input-is-percentage') === 'true';
+        if (isNumber) {
+            // @ts-expect-error
+            let value = parseFloat(this.root.querySelector('input').value);
+            if (isNaN(value)) {
+                value = 0;
+            }
+            if (isPercentage) {
+                value = value / 100;
+            }
+            if (isInteger) {
+                value = Math.round(value);
+            }
+            return value;
         }
         // @ts-expect-error
         return this.root.querySelector('input, textarea').value;
@@ -815,6 +859,10 @@ class OverlayInput extends HTMLElement {
             }
             if (max !== null && max !== '') {
                 extraAttributes += ` max="${max}"`;
+            }
+
+            if (this.getAttribute('input-is-integer') === 'true') {
+                extraAttributes += ` step="1"`;
             }
 
             if (this.getAttribute('input-is-percentage') === 'true') {
@@ -1417,3 +1465,113 @@ class OverlayButton extends HTMLElement {
 }
 
 customElements.define('app-overlay-button', OverlayButton);
+
+class OverlayInputBoolean extends HTMLElement {
+    constructor() {
+        super();
+        /**
+         * @type {ShadowRoot}
+         */
+        this.root = this.attachShadow({ mode: 'open' });
+        this.onCheckboxChange = this.onCheckboxChange.bind(this);
+        this.originalValue = false;
+        this.saveValueToUserData = this.saveValueToUserData.bind(this);
+    }
+    async saveValueToUserData() {
+        const cacheFile = this.getAttribute("input-data-file") ? {
+            fileName: this.getAttribute("input-data-file"),
+            fileType: this.getAttribute("input-data-type"),
+        } : null;
+        const dataLocation = this.getAttribute('input-data-location');
+        if (!dataLocation) {
+            throw new Error("input-data-location attribute is required");
+        }
+        const value = this.getValue();
+        // @ts-ignore
+        await window.electronAPI.setValueIntoUserData(dataLocation, cacheFile, value);
+        this.originalValue = value;
+    }
+    checkValue() {
+        return;
+    }
+    connectedCallback() {
+        this.render();
+        const inputElement = this.root.querySelector('input[type="checkbox"]');
+        if (this.getAttribute("input-default-value") === "true") {
+            // @ts-expect-error
+            inputElement.checked = true;
+            this.originalValue = true;
+        }
+        // @ts-expect-error
+        inputElement.addEventListener('change', () => {
+            this.onCheckboxChange();
+            this.dispatchEvent(new Event('input-detected', { bubbles: true }));
+        });
+
+        const dataLocation = this.getAttribute('input-data-location');
+        if (!dataLocation) {
+            return;
+        }
+
+        const cacheFile = this.getAttribute("input-data-file") ? {
+            fileName: this.getAttribute("input-data-file"),
+            fileType: this.getAttribute("input-data-type"),
+        } : null;
+
+        // @ts-ignore
+        window.electronAPI.loadValueFromUserData(dataLocation, cacheFile).then((value) => {
+            if (value !== null) {
+                const boolValue = value === true || value === "true";
+                // @ts-expect-error
+                inputElement.checked = boolValue;
+                this.originalValue = boolValue;
+            }
+        });
+    }
+    onCheckboxChange() {
+        this.dispatchEvent(new CustomEvent('input-change'));
+    }
+    getValue() {
+        const inputElement = this.root.querySelector('input[type="checkbox"]');
+        // @ts-expect-error
+        return inputElement.checked;
+    }
+    hasBeenModified() {
+        const inputElement = this.root.querySelector('input[type="checkbox"]');
+        // @ts-expect-error
+        return inputElement.checked !== this.originalValue;
+    }
+    hasErrorsPresent() {
+        return false;
+    }
+    render() {
+        const label = this.getAttribute('label') || 'Input Label';
+        this.root.innerHTML = `
+      <style>
+        .overlay-input-boolean {
+            display: flex;
+            align-items: center;
+            margin-bottom: 2vh;
+            margin-top: 2vh;
+            font-size: 4vh;
+        }
+        .overlay-input-boolean label {
+            font-size: 4vh;
+            margin-left: 1vh;
+            user-select: none;
+        }
+        .overlay-input-boolean input[type="checkbox"] {
+            width: 4vh;
+            height: 4vh;
+            cursor: pointer;
+        }
+      </style>
+      <div class="overlay-input-boolean">
+        <input type="checkbox" />
+        <label>${label}</label>
+      </div>
+    `;
+    }
+}
+
+customElements.define('app-overlay-input-boolean', OverlayInputBoolean);

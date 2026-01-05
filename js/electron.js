@@ -400,6 +400,38 @@ ipcMain.handle('listCharacterFiles', async (event, group) => {
     });
 });
 
+ipcMain.handle("listStatesForCharacterFile", async (event, characterFile) => {
+    const data = CHARACTER_CACHE[characterFile];
+    if (!data) {
+        return [];
+    }
+    const givenStates = new Set(Object.keys(data.states || {}));
+    const frozenStates = new Set();
+    const includedScripts = data.advanced_spawn_script?.imports || [];
+    // @ts-ignore
+    includedScripts.forEach(scriptName => {
+        const scriptData = SCRIPT_CACHE[scriptName];
+        if (scriptData && scriptData.freeze_states) {
+            // @ts-ignore
+            scriptData.freeze_states.forEach(stateName => {
+                frozenStates.add(stateName);
+            });
+        }
+    });
+    const combinedStates = new Set([...givenStates, ...frozenStates]);
+    /**
+     * @type {Array<{name: string, frozen: boolean}>}
+     */
+    const finalStates = [];
+    combinedStates.forEach(stateName => {
+        finalStates.push({
+            name: stateName,
+            frozen: frozenStates.has(stateName),
+        });
+    });
+    return finalStates;
+});
+
 ipcMain.handle('listScriptContexts', async (event) => {
     const contexts = new Set();
     Object.values(SCRIPT_CACHE).forEach(scriptData => {

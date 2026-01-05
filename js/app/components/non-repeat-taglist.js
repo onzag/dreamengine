@@ -27,16 +27,25 @@ class NonRepeatingTagList extends HTMLElement {
      * 
      * @param {string | null} value 
      */
-    addOne(value) {
+    async addOne(value) {
         const container = this.root.querySelector('.input-list-container');
         const tagDiv = document.createElement('div');
+
+        const isKnownStateInputs = this.getAttribute('input-type') === 'known_state';
+
         /**
          * @type {string[]}
          */
-        const allPossibleValues = JSON.parse(this.getAttribute('all-possible-values') || "[]");
+        let allPossibleValues = JSON.parse(this.getAttribute('all-possible-values') || "[]");
+        if (isKnownStateInputs) {
+            // @ts-expect-error
+            const givenValues = await window.electronAPI.listStatesForCharacterFile(this.getAttribute("input-data-file"));
+            allPossibleValues = givenValues.map(v => v.name);
+        }
+
         tagDiv.classList.add('tag');
 
-        if (allPossibleValues.length > 0) {
+        if (allPossibleValues.length > 0 || isKnownStateInputs) {
             // Create a select dropdown
             let optionsHtml = '<option value=""></option>'; // empty option
             allPossibleValues.forEach((possibleValue) => {
@@ -64,6 +73,7 @@ class NonRepeatingTagList extends HTMLElement {
             tagDiv.remove();
             playConfirmSound();
             this.checkValue();
+            this.dispatchEvent(new Event('input-detected', { bubbles: true }));
         });
         // @ts-expect-error
         removeButton.title = "Remove this value";
@@ -74,9 +84,13 @@ class NonRepeatingTagList extends HTMLElement {
         // @ts-expect-error
         container.appendChild(tagDiv);
 
-        // @ts-expect-error
-        tagDiv.querySelector('input').addEventListener('input', () => {
+        tagDiv.querySelector('input')?.addEventListener('input', () => {
             this.checkValue();
+            this.dispatchEvent(new Event('input-detected', { bubbles: true }));
+        });
+        tagDiv.querySelector('select')?.addEventListener('change', () => {
+            this.checkValue();
+            this.dispatchEvent(new Event('input-detected', { bubbles: true }));
         });
 
         if (this.childrenSchema) {
@@ -118,17 +132,19 @@ class NonRepeatingTagList extends HTMLElement {
                                     input-data-type="${this.getAttribute('input-data-type')}"
                                     input-placeholder="${childSchema.placeholder || ''}"
                                     input-default-value="${childSchema.default || ''}"
-                                    ${isMultiline ? 'multiline="true"' : ''}
+                                    input-placeholder-ts="${childSchema.placeholder_ts || ''}"
+                                    ${isMultiline ? 'multiline="true"' + (childSchema.code_language ? ' input-is-codemirror="' + (childSchema.code_language) + '"' : '') : ''}
                                     input-key="${childKey}"
                                 >
                                 </app-overlay-input>`;
                     }
-                } else if (childSchema.type === "number") {
-                    return `<app-overlay-input
+                } else if (childSchema.type === "number" || childSchema.type === "integer") {
+                    childHTML = `<app-overlay-input
                                     class="${childKey}"
                                     label="${childSchema.title}" 
                                     title="${childSchema.description || ''}"
                                     input-type="number"
+                                    input-is-integer="${childSchema.type === 'integer' ? 'true' : ''}"
                                     input-number-min="${childSchema.minimum !== undefined ? childSchema.minimum : ''}"
                                     input-number-max="${childSchema.maximum !== undefined ? childSchema.maximum : ''}"
                                     input-data-location="${wholePath}"
@@ -140,15 +156,35 @@ class NonRepeatingTagList extends HTMLElement {
                                     input-key="${childKey}"
                                 >
                                 </app-overlay-input>`;
-                } else if (childSchema.real_type === "arbitrary_property_string_array" || childSchema.real_type === "arbitrary_state_string_array") {
-                    return `<non-repeat-taglist
+                } else if (childSchema.type === "boolean") {
+                    childHTML = `<app-overlay-input-boolean
+                                    class="${childKey}"
+                                    label="${childSchema.title}" 
+                                    title="${childSchema.description || ''}"
+                                    input-data-location="${wholePath}"
+                                    input-data-file="${this.getAttribute('input-data-file')}"
+                                    input-data-type="${this.getAttribute('input-data-type')}"
+                                    input-default-value="${childSchema.default || ''}"
+                                    input-key="${childKey}"
+                                >
+                                </app-overlay-input-boolean>`;
+                } else if (
+                    childSchema.real_type === "arbitrary_property_string_array" ||
+                    childSchema.real_type === "arbitrary_state_string_array" ||
+                    childSchema.real_type === "known_state_string_array" ||
+                    childSchema.real_type === "arbitrary_string_object"
+                ) {
+                    childHTML = `<non-repeat-taglist
                                 class="${childKey}"
                                 label="${childSchema.title}"
                                 title="${childSchema.description || ''}"
                                 input-data-location="${wholePath}"
                                 input-data-file="${this.getAttribute('input-data-file')}"
                                 input-data-type="${this.getAttribute('input-data-type')}"
-                                input-type="${childSchema.real_type === "arbitrary_property_string_array" ? 'property' : 'state'}"
+                                input-type="${childSchema.real_type === "arbitrary_string_object" ? "arbitrary" : (childSchema.real_type === "arbitrary_property_string_array" ? 'property' : (
+                                    childSchema.real_type === "known_state_string_array" ? 'known_state' : 'state'
+                                ))}"
+                                children-schema='${childSchema.additionalProperties ? JSON.stringify(childSchema.additionalProperties.properties) : ""}'
                                 input-key="${childKey}"
                             >
                             </non-repeat-taglist>`;
@@ -158,14 +194,22 @@ class NonRepeatingTagList extends HTMLElement {
             }
 
             childrenSchemaDiv.innerHTML = finalInnerHTML;
+
+            childrenSchemaDiv.querySelectorAll('app-overlay-input, app-overlay-select, non-repeat-taglist, app-overlay-input-boolean').forEach((childInput) => {
+                childInput.addEventListener('input-detected', () => {
+                    this.checkValue();
+                });
+            });
         }
     }
 
     checkValue() {
         const inputs = this.root.querySelectorAll('.tag input, .tag select');
 
-        const isStateInputs = this.getAttribute('input-type') === 'state';
+        const isStateInputs = this.getAttribute('input-type') === 'state' || this.getAttribute('input-type') === 'known_state';
         const isPropertyInputs = this.getAttribute('input-type') === 'property';
+        const isEmotionInputs = this.getAttribute('input-type') === 'emotion';
+        const isArbitraryInputs = this.getAttribute('input-type') === 'arbitrary';
 
         /**
          * @type {string[]}
@@ -209,6 +253,20 @@ class NonRepeatingTagList extends HTMLElement {
                     // @ts-expect-error
                     input.parentElement.classList.remove('error');
                 }
+            } else if (isEmotionInputs) {
+                // validate they can only be alphanumeric characters small letters
+                const emotionNameRegex = /^[a-z]*$/;
+                if (!emotionNameRegex.test(value) && value !== '') {
+                    // Mark as error
+                    // @ts-expect-error
+                    input.parentElement.classList.add('error');
+                    hasInvalidValueError = true;
+                } else {
+                    // @ts-expect-error
+                    input.parentElement.classList.remove('error');
+                }
+            } else if (isArbitraryInputs) {
+                // No validation
             }
 
             if (allPossibleValues.length > 0 && !allPossibleValues.includes(value) && value !== '') {
@@ -252,6 +310,9 @@ class NonRepeatingTagList extends HTMLElement {
             } else if (isPropertyInputs) {
                 // @ts-expect-error
                 errorMessageDiv.textContent = 'Error: Property names must start with a lowercase letter or underscore, and can only contain lowercase letters, numbers, and underscores.';
+            } else if (isEmotionInputs) {
+                // @ts-expect-error
+                errorMessageDiv.textContent = 'Error: Emotion names can only contain lowercase letters.';
             }
         } else if (hasNotFoundValueErrorAll) {
             // @ts-expect-error
@@ -263,7 +324,7 @@ class NonRepeatingTagList extends HTMLElement {
         this.hasErrors = hasErrorAll || hasInvalidValueErrorAll || hasNotFoundValueErrorAll;
 
         if (this.childrenSchema) {
-            this.root.querySelectorAll("app-overlay-input, app-overlay-select, non-repeat-taglist").forEach((childInput) => {
+            this.root.querySelectorAll("app-overlay-input, app-overlay-select, non-repeat-taglist, app-overlay-input-boolean").forEach((childInput) => {
                 // @ts-expect-error
                 const hasError = childInput.checkValue();
                 if (hasError) {
@@ -271,6 +332,23 @@ class NonRepeatingTagList extends HTMLElement {
                 }
             });
         }
+
+        if (!this.hasErrors) {
+            const valueGiven = this.onMoreErrorsFunction && this.onMoreErrorsFunction(this.getValue());
+            if (valueGiven) {
+                this.hasErrors = true;
+                // @ts-expect-error
+                errorMessageDiv.textContent = valueGiven;
+            }
+        }
+    }
+
+    /**
+     * 
+     * @param {Function} func 
+     */
+    setMoreErrorsFunction(func) {
+        this.onMoreErrorsFunction = func.bind(this);
     }
 
     connectedCallback() {
@@ -296,7 +374,7 @@ class NonRepeatingTagList extends HTMLElement {
 
         const dataLocation = this.getAttribute('input-data-location');
         if (!dataLocation) {
-            throw new Error("input-data-location attribute is required");
+            return;
         }
 
         const cacheFile = this.getAttribute("input-data-file") ? {
@@ -337,7 +415,7 @@ class NonRepeatingTagList extends HTMLElement {
             for (let i = 0; i < childValues.length; i++) {
                 // @ts-expect-error
                 valueObject[valueArray[i]] = {};
-                const childInputs = childValues[i].querySelectorAll('app-overlay-input, app-overlay-select, non-repeat-taglist');
+                const childInputs = childValues[i].querySelectorAll('app-overlay-input, app-overlay-select, non-repeat-taglist, app-overlay-input-boolean');
                 childInputs.forEach((childInput) => {
                     // @ts-expect-error
                     valueObject[valueArray[i]][childInput.getAttribute('input-key')] = childInput.getValue();

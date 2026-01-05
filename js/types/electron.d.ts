@@ -26,6 +26,7 @@ declare interface ElectronAPI {
   listCharacterFiles(group: string): Promise<Array<{ file: string; name: string;}>>;
   listCharacterGroups(): Promise<string[]>;
   listWorldFiles(): Promise<string[]>;
+  listStatesForCharacterFile(characterFile: string): Promise<Array<{name: string, frozen: boolean}>>;
 
   getDreamEnginePath(): Promise<string>;
   uploadFileToDEPath(dePath: string, file: File | Blob): Promise<boolean>;

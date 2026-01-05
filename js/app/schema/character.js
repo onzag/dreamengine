@@ -140,11 +140,11 @@ const schema = {
                         "title": "State Dominance",
                         "default": "Coexisting",
                         "description": "A Dominant behaviour state will take over and prevent other dominant behaviours from activating, while coexisting states can coexist with among themselves and other" +
-                        " dominant states; a hyper dominant state will override all other states including other dominant states and does not coexist " +
-                        "with anything else; avoid using hyper dominant states unless the state is drastic and overrides anything else, a very common example is a sleeping" + 
-                        " state that overrides everything else but the character does not do anything else while sleeping, an example of a good usecase for a dominant behaviour is being extremely angry," +
-                        " which prevents other dominant states from activating but allows coexisting states like being very tired which would prevent another dominant state like " +
-                        "being hyperactive from activating at the same time. The inference would often prevent this so coexisting behaviours are often the most flexible choice.",
+                            " dominant states; a hyper dominant state will override all other states including other dominant states and does not coexist " +
+                            "with anything else; avoid using hyper dominant states unless the state is drastic and overrides anything else, a very common example is a sleeping" +
+                            " state that overrides everything else but the character does not do anything else while sleeping, an example of a good usecase for a dominant behaviour is being extremely angry," +
+                            " which prevents other dominant states from activating but allows coexisting states like being very tired which would prevent another dominant state like " +
+                            "being hyperactive from activating at the same time. The inference would often prevent this so coexisting behaviours are often the most flexible choice.",
                     },
                     "relieving_description": {
                         "type": "string",
@@ -446,80 +446,159 @@ const schema = {
         "bonds": {
             "title": "Character Bonds",
             "description": "Defines the bonds associated with the character.",
-            "type": "array",
-            "items": {
+            "type": "object",
+            "additionalProperties": {
                 "type": "object",
                 "properties": {
                     "min_bond_level": {
                         "type": "integer",
+                        "title": "Min Bond Level",
                         "description": "The minimum bond level this bond applies to.",
                         "minimum": -100,
                         "maximum": 100
                     },
                     "max_bond_level": {
                         "type": "integer",
+                        "title": "Max Bond Level",
                         "description": "The maximum bond level this bond applies to.",
                         "minimum": -100,
                         "maximum": 100
                     },
                     "min_2nd_bond_level": {
                         "type": "integer",
+                        "title": "Min 2nd Bond Level",
                         "description": "The minimum second bond level this bond applies to.",
                         "minimum": 0,
                         "maximum": 100
                     },
                     "max_2nd_bond_level": {
                         "type": "integer",
+                        "title": "Max 2nd Bond Level",
                         "description": "The maximum second bond level this bond applies to.",
                         "minimum": 0,
                         "maximum": 100
                     },
                     "bond_conditions": {
                         "type": "object",
+                        "title": "Bond Conditions",
                         "description": "Conditions for increasing the bond level when this bond is active.",
-                        "properties": {
-                            "increase_if": {
-                                "type": "array",
-                                "items": {
-                                    "type": "string",
-                                },
-                                "description": "The ensure rule to add into the prompt to increase the bond level, always starts as if, eg. {{other}} and {{char}} share a deep emotional connection"
-                            },
-                            "decrease_if": {
-                                "type": "array",
-                                "items": {
-                                    "type": "string",
-                                },
-                                "description": "The ensure rule to add into the prompt to increase the bond level, always starts as if, eg. {{other}} and {{char}} share a deep emotional connection"
-                            }
-                        }
-                    },
-                    "2nd_bond_conditions": {
-                        "type": "array",
-                        "description": "Conditions for increasing the second bond level when this bond is active.",
-                        "items": {
+                        "additionalProperties": {
                             "type": "object",
                             "properties": {
                                 "increase_if": {
-                                    "type": "array",
-                                    "items": {
-                                        "type": "string",
+                                    "type": "object",
+                                    "additionalProperties": {
+                                        "type": "object",
+                                        "properties": {
+                                            "ts": {
+                                                "type": "string",
+                                            },
+                                            "script": {
+                                                "type": "string",
+                                            }
+                                        }
                                     },
-                                    "description": "The ensure rule to add into the prompt to increase the bond level, always starts as if, eg. {{other}} and {{char}} share a deep emotional connection"
+                                    "title": "Bond Increase Condition (If)",
+                                    "description": "The ensure rule to add into the prompt to increase the bond level, always starts as if, eg. {{other}} and {{char}} share a deep emotional connection",
+                                    "placeholder": "{{char}} and {{other}} have spent quality time together recently and share personal stories",
+                                    "placeholder_ts": "return `${char.name} and ${other.name} have spent quality time together recently and share personal stories`;",
+                                    "multiline": true,
+                                    "code_language": "handlebars",
                                 },
                                 "decrease_if": {
-                                    "type": "array",
-                                    "items": {
-                                        "type": "string",
+                                    "type": "object",
+                                    "additionalProperties": {
+                                        "type": "object",
+                                        "properties": {
+                                            "ts": {
+                                                "type": "string",
+                                            },
+                                            "script": {
+                                                "type": "string",
+                                            }
+                                        }
                                     },
-                                    "description": "The ensure rule to add into the prompt to increase the bond level, always starts as if, eg. {{other}} and {{char}} share a deep emotional connection"
+                                    "title": "Bond Decrease Condition (If)",
+                                    "description": "The ensure rule to add into the prompt to increase the bond level, always starts as if, eg. {{other}} and {{char}} share a deep emotional connection",
+                                    "placeholder": "{{char}} and {{other}} have not interacted in a long time and feel distant",
+                                    "placeholder_ts": "return `${char.name} and ${other.name} have not interacted in a long time and feel distant`;",
+                                    "multiline": true,
+                                    "code_language": "handlebars",
                                 }
                             }
-                        }
+                        },
+                        "real_type": "arbitrary_string_object",
+                    },
+                    "2nd_bond_conditions": {
+                        "type": "object",
+                        "title": "2nd Bond Conditions",
+                        "description": "Conditions for increasing the second bond level when this bond is active.",
+                        "additionalProperties": {
+                            "type": "object",
+                            "properties": {
+                                "increase_if": {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                        "type": "object",
+                                        "properties": {
+                                            "ts": {
+                                                "type": "string",
+                                            },
+                                            "script": {
+                                                "type": "string",
+                                            }
+                                        }
+                                    },
+                                    "title": "2nd Bond Increase Condition (If)",
+                                    "description": "The ensure rule to add into the prompt to increase the bond level, always starts as if, eg. {{other}} and {{char}} share a deep emotional connection",
+                                    "placeholder": "{{char}} and {{other}} have spent quality time together recently and share personal stories",
+                                    "placeholder_ts": "return `${char.name} and ${other.name} have spent quality time together recently and share personal stories`;",
+                                    "multiline": true,
+                                    "code_language": "handlebars",
+                                },
+                                "decrease_if": {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                        "type": "object",
+                                        "properties": {
+                                            "ts": {
+                                                "type": "string",
+                                            },
+                                            "script": {
+                                                "type": "string",
+                                            }
+                                        }
+                                    },
+                                    "placeholder": "{{char}} and {{other}} have not interacted in a long time and feel distant",
+                                    "placeholder_ts": "return `${char.name} and ${other.name} have not interacted in a long time and feel distant`;",
+                                    "multiline": true,
+                                    "code_language": "handlebars",
+                                    "title": "2nd Bond Decrease Condition (If)",
+                                    "description": "The ensure rule to add into the prompt to increase the bond level, always starts as if, eg. {{other}} and {{char}} share a deep emotional connection"
+                                },
+                            }
+                        },
+                        "real_type": "arbitrary_string_object",
                     },
                     "description": {
-                        "type": "string",
-                        "description": "The description of the bond, use {{char}} and {{other}} as placeholders."
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "object",
+                            "properties": {
+                                "ts": {
+                                    "type": "string",
+                                },
+                                "script": {
+                                    "type": "string",
+                                }
+                            }
+                        },
+                        "title": "Bond Description",
+                        "description": "The description of the bond, use {{char}} and {{other}} as placeholders.",
+                        "multiline": true,
+                        "code_language": "handlebars",
+                        "placeholder": "{{char}} feels a deep connection with {{other}}, always eager to spend time together and share experiences.",
+                        "placeholder_ts": "return `${char.name} feels a deep connection with ${other.name}, always eager to spend time together and share experiences.`;",
                     }
                 },
                 "required": [
@@ -529,6 +608,7 @@ const schema = {
                     "max_2nd_bond_level"
                 ]
             },
+            "real_type": "arbitrary_string_object",
             "minItems": 1
         },
         "emotions": {
@@ -540,22 +620,25 @@ const schema = {
                 "properties": {
                     "common": {
                         "type": "boolean",
+                        "title": "Common Emotion",
                         "description": "Indicates if this emotion is commonly experienced by the character."
                     },
                     "triggered_by_states": {
                         "type": "array",
+                        "title": "Triggered By States",
                         "description": "States that can trigger this emotion.",
                         "items": {
                             "type": "string",
                             "description": "The name of the state that can trigger this emotion."
                         },
-                        "minItems": 1
+                        "real_type": "known_state_string_array",
                     },
                 },
                 "required": [
                     "common"
                 ]
-            }
+            },
+            "real_type": "arbitrary_emotion_object",
         },
         "properties": {
             "type": "object",

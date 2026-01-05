@@ -66,10 +66,30 @@ const WIZARD_SECTIONS = [
     },
     {
         title: "Emotions",
-        fields: []
+        description: "Emotions are feelings that your character experiences, they do not influence behaviour as they are more akin what other characters perceive about your character's current mood or feelings.\n\n" +
+        "Emotions are based on the rolling text model using text analysis to pick emptions from your character's dialogue, as well as emotions shown by the character states; note that emotions should be assigned an image that represents them visually when displayed in the chat interface.",
+        fields: [
+            [
+                "Emotional Configuration",
+                [
+                    "emotions",
+                ]
+            ]
+        ]
     },
     {
         title: "Bonds",
+        fields: [
+            [
+                "Character Bonds",
+                [
+                    "bonds",
+                ]
+            ],
+        ],
+    },
+    {
+        title: "Image and Video",
         fields: []
     },
     {
@@ -173,7 +193,7 @@ class CharacterOverlay extends HTMLElement {
         // @ts-expect-error
         this.root.querySelector('app-overlay').addEventListener('confirm', () => {
             // check everything is valid
-            const someInvalid = Array.from(this.root.querySelectorAll('app-overlay-input, app-overlay-select, non-repeat-taglist')).some(inputComponent => {
+            const someInvalid = Array.from(this.root.querySelectorAll('app-overlay-input, app-overlay-select, non-repeat-taglist, app-overlay-input-boolean')).some(inputComponent => {
                 // @ts-expect-error
                 return inputComponent.hasErrorsPresent();
             });
@@ -218,7 +238,7 @@ class CharacterOverlay extends HTMLElement {
      */
     onCheckForUnsavedChanges(onceDoneFn, onceDoneFnNoResistance, resistanceAppliedFn, onAllowFn, onceCancelFn) {
         let hasUnsavedChanges = false;
-        Array.from(this.root.querySelectorAll('app-overlay-input, app-overlay-select, non-repeat-taglist')).forEach(inputComponent => {
+        Array.from(this.root.querySelectorAll('app-overlay-input, app-overlay-select, non-repeat-taglist, app-overlay-input-boolean')).forEach(inputComponent => {
             // @ts-expect-error
             if (inputComponent.hasBeenModified()) {
                 hasUnsavedChanges = true;
@@ -330,11 +350,12 @@ class CharacterOverlay extends HTMLElement {
                                 >
                                 </app-overlay-input>`;
                     }
-                } else if (schema.properties[fieldName].type === "number") {
+                } else if (schema.properties[fieldName].type === "number" || schema.properties[fieldName].type === "integer") {
                     return `<app-overlay-input
                                     class="${fieldName}"
                                     label="${escapeHTML(schema.properties[fieldName].title)}" 
                                     title="${escapeHTML(schema.properties[fieldName].description || '')}"
+                                    input-is-integer="${schema.properties[fieldName].type === 'integer' ? 'true' : ''}"
                                     input-type="number"
                                     input-number-min="${schema.properties[fieldName].minimum !== undefined ? schema.properties[fieldName].minimum : ''}"
                                     input-number-max="${schema.properties[fieldName].maximum !== undefined ? schema.properties[fieldName].maximum : ''}"
@@ -346,6 +367,20 @@ class CharacterOverlay extends HTMLElement {
                                     input-is-percentage="${schema.properties[fieldName].percentage ? 'true' : ''}"
                                 >
                                 </app-overlay-input>`;
+                } else if (schema.properties[fieldName].real_type === "arbitrary_property_object" || schema.properties[fieldName].real_type === "arbitrary_state_object" ||
+                    schema.properties[fieldName].real_type === "arbitrary_emotion_object" || schema.properties[fieldName].real_type === "arbitrary_string_object") {
+                    return `<non-repeat-taglist
+                                class="${fieldName}"
+                                label="${escapeHTML(schema.properties[fieldName].title)}"
+                                title="${escapeHTML(schema.properties[fieldName].description || '')}"
+                                input-data-location="${fieldName}"
+                                input-data-file="${this.currentCharacterFile}"
+                                input-data-type="character"
+                                input-type="${schema.properties[fieldName].real_type === "arbitrary_string_object" ? "arbitrary" :
+                                    (schema.properties[fieldName].real_type === "arbitrary_property_object" ? 'property' : (schema.properties[fieldName].real_type === "arbitrary_state_object" ? 'state' : 'emotion'))}"
+                                children-schema='${escapeHTML(JSON.stringify(schema.properties[fieldName].additionalProperties.properties))}'
+                            >
+                            </non-repeat-taglist>`;
                 }
             }).join('');
 
@@ -354,6 +389,14 @@ class CharacterOverlay extends HTMLElement {
 
         // @ts-expect-error
         this.root.querySelector('app-overlay-tabs').innerHTML = fieldsAsHTML;
+
+        const bondsTagList = this.root.querySelector('non-repeat-taglist.bonds');
+        if (bondsTagList) {
+            // @ts-expect-error
+            bondsTagList.setMoreErrorsFunction((currentValue) => {
+                console.log(currentValue)
+            });
+        }
     }
 
     async saveCurrent() {
@@ -363,7 +406,7 @@ class CharacterOverlay extends HTMLElement {
 
     async updateCharacterFileOnDisk() {
         // save each field
-        await Promise.all(Array.from(this.root.querySelectorAll('app-overlay-input, app-overlay-select, non-repeat-taglist')).map(inputComponent =>
+        await Promise.all(Array.from(this.root.querySelectorAll('app-overlay-input, app-overlay-select, non-repeat-taglist, app-overlay-input-boolean')).map(inputComponent =>
             // @ts-expect-error
             inputComponent.saveValueToUserData()
         ));
