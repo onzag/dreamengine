@@ -41,6 +41,7 @@ const WIZARD_SECTIONS = [
                     "group",
                     "gender",
                     "sex",
+                    "height",
                     "general",
                     "short"
                 ],
@@ -62,7 +63,14 @@ const WIZARD_SECTIONS = [
         description: "States are not emotions, they are mental or physical conditions that affect your character's behavior and interactions. They can influence how your character reacts to situations and other characters.\n\n" +
             "Note that each state behavioural effect must be defined in the character bonds section. For example, if your character has the 'needs_affection' state, you should define how other characters respond to this state in their bonds towards your character. Some characters may be stoic and not show it, while others may display it more openly. This adds depth to character interactions and relationships and is defined by the bond strength and type.\n\n" +
             "A state or behaviour that isn't defined here does not mean the character won't display it, that depends on the underlying AI Model, you should always ensure to deny behaviours or states that you don't want explicilty in the bonds section; having the behaviours that you want as states just helps to guide the AI better and adds depth to the character; but it is not a strict limitation, for that reason be sure to limit unwanted behaviours in the bonds section.",
-        fields: []
+        fields: [
+            [
+                "Character States",
+                [
+                    "states",
+                ]
+            ]
+        ]
     },
     {
         title: "Emotions",
@@ -365,10 +373,19 @@ class CharacterOverlay extends HTMLElement {
                                     input-placeholder="${escapeHTML(schema.properties[fieldName].placeholder || '')}"
                                     input-default-value="${escapeHTML(schema.properties[fieldName].default)}"
                                     input-is-percentage="${schema.properties[fieldName].percentage ? 'true' : ''}"
+                                    input-number-unit="${schema.properties[fieldName].unit || ''}"
                                 >
                                 </app-overlay-input>`;
                 } else if (schema.properties[fieldName].real_type === "arbitrary_property_object" || schema.properties[fieldName].real_type === "arbitrary_state_object" ||
-                    schema.properties[fieldName].real_type === "arbitrary_emotion_object" || schema.properties[fieldName].real_type === "arbitrary_string_object") {
+                    schema.properties[fieldName].real_type === "arbitrary_emotion_string" || schema.properties[fieldName].real_type === "arbitrary_string" ||
+                    schema.properties[fieldName].real_type === "not_known_state_string" || schema.properties[fieldName].real_type === "known_state_string") {
+                    let inputType = schema.properties[fieldName].real_type === "arbitrary_string" ? "arbitrary" :
+                                    (schema.properties[fieldName].real_type === "arbitrary_property_object" ? 'property' : (schema.properties[fieldName].real_type === "arbitrary_state_object" ? 'state' : 'emotion'));
+                    if (schema.properties[fieldName].real_type === "not_known_state_string") {
+                        inputType = "not_known_state";
+                    } else if (schema.properties[fieldName].real_type === "known_state_string") {
+                        inputType = "known_state";
+                    }
                     return `<non-repeat-taglist
                                 class="${fieldName}"
                                 label="${escapeHTML(schema.properties[fieldName].title)}"
@@ -376,8 +393,7 @@ class CharacterOverlay extends HTMLElement {
                                 input-data-location="${fieldName}"
                                 input-data-file="${this.currentCharacterFile}"
                                 input-data-type="character"
-                                input-type="${schema.properties[fieldName].real_type === "arbitrary_string_object" ? "arbitrary" :
-                                    (schema.properties[fieldName].real_type === "arbitrary_property_object" ? 'property' : (schema.properties[fieldName].real_type === "arbitrary_state_object" ? 'state' : 'emotion'))}"
+                                input-type="${inputType}"
                                 children-schema='${escapeHTML(JSON.stringify(schema.properties[fieldName].additionalProperties.properties))}'
                             >
                             </non-repeat-taglist>`;

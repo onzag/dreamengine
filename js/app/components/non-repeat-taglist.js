@@ -13,7 +13,7 @@ class NonRepeatingTagList extends HTMLElement {
 
         this.saveValueToUserData = this.saveValueToUserData.bind(this);
         this.addOne = this.addOne.bind(this);
-        this.onAddOneClicked = this.addOne.bind(this, null);
+        this.onAddOneClicked = this.onAddOneClicked.bind(this);
         this.checkValue = this.checkValue.bind(this);
         this.hasErrors = false
         /**
@@ -21,6 +21,20 @@ class NonRepeatingTagList extends HTMLElement {
          */
         this.originalValue = [];
         this.childrenSchema = null;
+
+        this.readyPromise = new Promise((resolve) => {
+            this._resolveReady = resolve;
+        });
+    }
+
+    isReady() {
+        return this.readyPromise;
+    }
+
+    async onAddOneClicked() {
+        await this.addOne(null);
+        await this.checkValue();
+        this.dispatchEvent(new Event('input-detected', { bubbles: true }));
     }
 
     /**
@@ -39,8 +53,24 @@ class NonRepeatingTagList extends HTMLElement {
         let allPossibleValues = JSON.parse(this.getAttribute('all-possible-values') || "[]");
         if (isKnownStateInputs) {
             // @ts-expect-error
-            const givenValues = await window.electronAPI.listStatesForCharacterFile(this.getAttribute("input-data-file"));
+            const givenValues = this.knownStatesForCharacterFile || await window.electronAPI.listStatesForCharacterFile(this.getAttribute("input-data-file"));
+            /**
+             * @type {{name: string, description?: string}[]}
+             */
+            this.knownStatesForCharacterFile = givenValues;
             allPossibleValues = givenValues.map(v => v.name);
+
+            // @ts-expect-error
+            const mountedNonRepeatingTaglistWithStates = document.querySelector('app-character')?.root.querySelector("non-repeat-taglist.states")
+            if (mountedNonRepeatingTaglistWithStates) {
+                // Update its known states cache as well
+                const valuesFromMounted = mountedNonRepeatingTaglistWithStates.getValueAsArray();
+                for (const val of valuesFromMounted) {
+                    if (!allPossibleValues.includes(val)) {
+                        allPossibleValues.push(val);
+                    }
+                }
+            }
         }
 
         tagDiv.classList.add('tag');
@@ -69,10 +99,10 @@ class NonRepeatingTagList extends HTMLElement {
         }
         const removeButton = tagDiv.querySelector('.remove-button');
         // @ts-expect-error
-        removeButton.addEventListener('click', () => {
+        removeButton.addEventListener('click', async () => {
             tagDiv.remove();
             playConfirmSound();
-            this.checkValue();
+            await this.checkValue();
             this.dispatchEvent(new Event('input-detected', { bubbles: true }));
         });
         // @ts-expect-error
@@ -84,12 +114,12 @@ class NonRepeatingTagList extends HTMLElement {
         // @ts-expect-error
         container.appendChild(tagDiv);
 
-        tagDiv.querySelector('input')?.addEventListener('input', () => {
-            this.checkValue();
+        tagDiv.querySelector('input')?.addEventListener('input', async () => {
+            await this.checkValue();
             this.dispatchEvent(new Event('input-detected', { bubbles: true }));
         });
-        tagDiv.querySelector('select')?.addEventListener('change', () => {
-            this.checkValue();
+        tagDiv.querySelector('select')?.addEventListener('change', async () => {
+            await this.checkValue();
             this.dispatchEvent(new Event('input-detected', { bubbles: true }));
         });
 
@@ -104,7 +134,7 @@ class NonRepeatingTagList extends HTMLElement {
                 const wholePath = currentKey ? `${this.getAttribute('input-data-location')}.${currentKey}.${childKey}` : "";
                 let childHTML = "";
 
-                if (childSchema.type === "string") {
+                if (childSchema.type === "string" || childSchema.code_language) {
                     if (childSchema.enum) {
                         // It's a select input
                         childHTML = `<app-overlay-select
@@ -151,9 +181,10 @@ class NonRepeatingTagList extends HTMLElement {
                                     input-data-file="${this.getAttribute('input-data-file')}"
                                     input-data-type="${this.getAttribute('input-data-type')}"
                                     input-placeholder="${childSchema.placeholder || ''}"
-                                    input-default-value="${childSchema.default || ''}"
+                                    input-default-value="${typeof childSchema.default !== 'undefined' && childSchema.default !== null ? childSchema.default : ''}"
                                     input-is-percentage="${childSchema.percentage ? 'true' : ''}"
                                     input-key="${childKey}"
+                                    input-number-unit="${childSchema.unit || ''}"
                                 >
                                 </app-overlay-input>`;
                 } else if (childSchema.type === "boolean") {
@@ -169,11 +200,23 @@ class NonRepeatingTagList extends HTMLElement {
                                 >
                                 </app-overlay-input-boolean>`;
                 } else if (
-                    childSchema.real_type === "arbitrary_property_string_array" ||
-                    childSchema.real_type === "arbitrary_state_string_array" ||
-                    childSchema.real_type === "known_state_string_array" ||
-                    childSchema.real_type === "arbitrary_string_object"
+                    childSchema.real_type === "arbitrary_property_string" ||
+                    childSchema.real_type === "arbitrary_state_string" ||
+                    childSchema.real_type === "known_state_string" ||
+                    childSchema.real_type === "arbitrary_string"
                 ) {
+                    let inputType = "";
+                    if (childSchema.real_type === "known_state_string") {
+                        inputType = "known_state";
+                    } else if (childSchema.real_type === "arbitrary_state_string") {
+                        inputType = "state";
+                    } else if (childSchema.real_type === "arbitrary_property_string") {
+                        inputType = "property";
+                    } else if (childSchema.real_type === "arbitrary_string") {
+                        inputType = "arbitrary";
+                    } else if (childSchema.real_type === "not_known_state_string") {
+                        inputType = "not_known_state";
+                    }
                     childHTML = `<non-repeat-taglist
                                 class="${childKey}"
                                 label="${childSchema.title}"
@@ -181,9 +224,7 @@ class NonRepeatingTagList extends HTMLElement {
                                 input-data-location="${wholePath}"
                                 input-data-file="${this.getAttribute('input-data-file')}"
                                 input-data-type="${this.getAttribute('input-data-type')}"
-                                input-type="${childSchema.real_type === "arbitrary_string_object" ? "arbitrary" : (childSchema.real_type === "arbitrary_property_string_array" ? 'property' : (
-                                    childSchema.real_type === "known_state_string_array" ? 'known_state' : 'state'
-                                ))}"
+                                input-type="${inputType}"
                                 children-schema='${childSchema.additionalProperties ? JSON.stringify(childSchema.additionalProperties.properties) : ""}'
                                 input-key="${childKey}"
                             >
@@ -200,13 +241,18 @@ class NonRepeatingTagList extends HTMLElement {
                     this.checkValue();
                 });
             });
+
+            return childrenSchemaDiv;
         }
+        return null;
     }
 
-    checkValue() {
+    async checkValue() {
         const inputs = this.root.querySelectorAll('.tag input, .tag select');
 
-        const isStateInputs = this.getAttribute('input-type') === 'state' || this.getAttribute('input-type') === 'known_state';
+        const isStateInputs = this.getAttribute('input-type') === 'state' ||
+            this.getAttribute('input-type') === 'known_state' ||
+            this.getAttribute('input-type') === 'not_known_state';
         const isPropertyInputs = this.getAttribute('input-type') === 'property';
         const isEmotionInputs = this.getAttribute('input-type') === 'emotion';
         const isArbitraryInputs = this.getAttribute('input-type') === 'arbitrary';
@@ -216,18 +262,35 @@ class NonRepeatingTagList extends HTMLElement {
          */
         const allPossibleValues = JSON.parse(this.getAttribute('all-possible-values') || "[]");
 
+        /**
+         * @type {string[]}
+         */
+        let notAllowedValues = [];
+        if (this.getAttribute('input-type') === 'not_known_state') {
+            // @ts-expect-error
+            const givenValues = this.knownScriptStatesForCharacterFile || await window.electronAPI.listScriptStatesForCharacterFile(this.getAttribute("input-data-file"));
+            /**
+             * @type {{name: string, description?: string}[]}
+             */
+            this.knownScriptStatesForCharacterFile = givenValues;
+            notAllowedValues = givenValues.map(v => v.name);
+        }
+
         const seenValues = new Set();
         let hasErrorAll = false;
         let hasInvalidValueErrorAll = false;
         let hasNotFoundValueErrorAll = false;
+        let hasNotAllowedValueErrorAll = false;
+        let lastNotAllowedValue = '';
 
-        inputs.forEach((input) => {
+        for (const input of inputs) {
             // @ts-expect-error
             const value = input.value.trim();
 
             let hasError = false;
             let hasInvalidValueError = false;
             let hasNotFoundValueError = false;
+            let hasNotAllowedValueError = false;
 
             if (isStateInputs) {
                 // validate they can only be uppercase characters, and underscores
@@ -269,11 +332,19 @@ class NonRepeatingTagList extends HTMLElement {
                 // No validation
             }
 
+            if (notAllowedValues.length > 0 && notAllowedValues.includes(value) && value !== '') {
+                // Mark as error
+                // @ts-expect-error
+                input.parentElement.classList.add('error');
+                hasNotAllowedValueError = true;
+            }
+
             if (allPossibleValues.length > 0 && !allPossibleValues.includes(value) && value !== '') {
                 // Mark as error
                 // @ts-expect-error
                 input.parentElement.classList.add('error');
                 hasNotFoundValueError = true;
+                lastNotAllowedValue = value;
             }
 
             const tagDiv = input.parentElement;
@@ -297,7 +368,10 @@ class NonRepeatingTagList extends HTMLElement {
             if (hasNotFoundValueError) {
                 hasNotFoundValueErrorAll = true;
             }
-        });
+            if (hasNotAllowedValueError) {
+                hasNotAllowedValueErrorAll = true;
+            }
+        };
 
         const errorMessageDiv = this.root.querySelector('.error-message');
         if (hasErrorAll) {
@@ -317,28 +391,59 @@ class NonRepeatingTagList extends HTMLElement {
         } else if (hasNotFoundValueErrorAll) {
             // @ts-expect-error
             errorMessageDiv.textContent = 'Error: Invalid value(s) found, not in the list of possible values.';
+        } else if (hasNotAllowedValueErrorAll) {
+            // @ts-expect-error
+            errorMessageDiv.textContent = `Error: The value "${lastNotAllowedValue}", is not allowed; as it is controlled by a script.`;
         } else {
             // @ts-expect-error
             errorMessageDiv.textContent = '';
         }
-        this.hasErrors = hasErrorAll || hasInvalidValueErrorAll || hasNotFoundValueErrorAll;
+        this.hasErrors = hasErrorAll || hasInvalidValueErrorAll || hasNotFoundValueErrorAll || hasNotAllowedValueErrorAll;
 
         if (this.childrenSchema) {
-            this.root.querySelectorAll("app-overlay-input, app-overlay-select, non-repeat-taglist, app-overlay-input-boolean").forEach((childInput) => {
+            for (const childInput of this.root.querySelectorAll("app-overlay-input, app-overlay-select, non-repeat-taglist, app-overlay-input-boolean")) {
                 // @ts-expect-error
-                const hasError = childInput.checkValue();
+                const hasError = await childInput.checkValue();
                 if (hasError) {
                     this.hasErrors = true;
                 }
-            });
+            };
         }
 
+        const currentValue = this.getValue();
         if (!this.hasErrors) {
-            const valueGiven = this.onMoreErrorsFunction && this.onMoreErrorsFunction(this.getValue());
+            const valueGiven = this.onMoreErrorsFunction && this.onMoreErrorsFunction(currentValue);
             if (valueGiven) {
                 this.hasErrors = true;
                 // @ts-expect-error
                 errorMessageDiv.textContent = valueGiven;
+            }
+        }
+
+        if (this.childrenSchema) {
+            // we are going to loop over this children schema to see if one of them has this must_have array
+            for (const [childKey, childSchema] of Object.entries(this.childrenSchema)) {
+                const valueArray = this.getValueAsArray();
+                const childValues = this.root.querySelectorAll('.tag:not(.error) .children-schema');
+                for (let i = 0; i < childValues.length; i++) {
+                    const childInputsContainer = childValues[i];
+
+                    let hasAll = true;
+                    if (childSchema.must_have) {
+                        for (const mustHaveKey of childSchema.must_have) {
+                            // @ts-expect-error
+                            if (!(mustHaveKey in currentValue[valueArray[i]]) || !currentValue[valueArray[i]][mustHaveKey]) {
+                                hasAll = false;
+                            }
+                        }
+                    }
+
+                    const element = childInputsContainer.querySelector(`.${childKey}`);
+                    if (element) {
+                        // @ts-expect-error
+                        element.style.display = hasAll ? 'block' : 'none';
+                    }
+                }
             }
         }
     }
@@ -374,6 +479,8 @@ class NonRepeatingTagList extends HTMLElement {
 
         const dataLocation = this.getAttribute('input-data-location');
         if (!dataLocation) {
+            // @ts-expect-error
+            this._resolveReady();
             return;
         }
 
@@ -387,13 +494,20 @@ class NonRepeatingTagList extends HTMLElement {
         }
 
         // @ts-ignore
-        window.electronAPI.loadValueFromUserData(dataLocation, cacheFile).then((value) => {
+        window.electronAPI.loadValueFromUserData(dataLocation, cacheFile).then(async (value) => {
+            let addedElements = [];
             if (value !== null) {
-                this.updateWithValue(value);
+                addedElements = await this.updateWithValue(value);
             } else {
-                this.updateWithValue(this.originalValue);
+                addedElements = await this.updateWithValue(this.originalValue);
             }
-            this.checkValue();
+            await Promise.all(addedElements.map(async (el) => {
+                // @ts-expect-error
+                await el.isReady();
+            }));
+            await this.checkValue();
+            // @ts-expect-error
+            this._resolveReady();
         }).catch(err => {
             console.error(err);
         });
@@ -423,6 +537,19 @@ class NonRepeatingTagList extends HTMLElement {
             }
             return valueObject;
         }
+        return valueArray;
+    }
+
+    getValueAsArray() {
+        const value = this.root.querySelectorAll('.tag:not(.error) input, .tag:not(.error) select');
+        /**
+         * @type {string[]}
+         */
+        const valueArray = [];
+        value.forEach((input) => {
+            // @ts-expect-error
+            valueArray.push(input.value.trim());
+        });
         return valueArray;
     }
 
@@ -462,18 +589,19 @@ class NonRepeatingTagList extends HTMLElement {
      * 
      * @param {string[]} value 
      */
-    updateWithValue(value) {
+    async updateWithValue(value) {
         this.originalValue = value;
-
+        const addedElements = [];
         if (this.childrenSchema) {
             for (const val of Object.keys(value)) {
-                this.addOne(val);
+                addedElements.push(await this.addOne(val));
             }
         } else {
             for (const val of value) {
-                this.addOne(val);
+                addedElements.push(await this.addOne(val));
             }
         }
+        return addedElements;
     }
 
     render() {

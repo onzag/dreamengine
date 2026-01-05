@@ -175,6 +175,18 @@ export const specials = [
         "Only available at bonds and relationships, the name of the other character in the bond or relationship",
         "eg. Aria, Thalon, Mira",
         (DE, character, otherCharacter) => otherCharacter,
+    ],
+    [
+        "causant",
+        "Only available at description and relieving description for states, the name of the causant character or object that activated the state; note that causant can be an object as well",
+        "eg. Aria, Thalon, The Ancient Sword",
+        (DE, character, causant) => causant,
+    ],
+    [
+        "cause",
+        "Only available at description and relieving description for states, the cause/reason provided for the state activation",
+        "eg. helped me with my chores, betrayed me in the past",
+        (DE, character, cause) => cause,
     ]
 ]
 

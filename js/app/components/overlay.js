@@ -329,6 +329,14 @@ class OverlayInput extends HTMLElement {
         this.switchCodeMirrorMode = this.switchCodeMirrorMode.bind(this);
 
         this.hasError = false;
+
+        this.readyPromise = new Promise((resolve) => {
+            this._resolveReady = resolve;
+        });
+    }
+
+    isReady() {
+        return this.readyPromise;
     }
 
     switchCodeMirrorMode() {
@@ -559,6 +567,8 @@ class OverlayInput extends HTMLElement {
         }
 
         if (!dataLocation) {
+            // @ts-ignore
+            this._resolveReady();
             return;
         }
 
@@ -618,6 +628,8 @@ class OverlayInput extends HTMLElement {
             }
 
             this.checkValue();
+            // @ts-ignore
+            this._resolveReady();
         }).catch(err => {
             console.error(err);
         });
@@ -664,6 +676,11 @@ class OverlayInput extends HTMLElement {
                     errorMessage = `Value must be at most ${max}.`;
                 }
             }
+            const isInteger = this.getAttribute('input-is-integer') === 'true';
+            if (isInteger && !Number.isInteger(value)) {
+                hasError = true;
+                errorMessage = `Value must be an integer.`;
+            }
         } else {
             const minLength = this.getAttribute('input-minlength');
             const maxLength = this.getAttribute('input-maxlength');
@@ -687,6 +704,13 @@ class OverlayInput extends HTMLElement {
     getValue() {
         const isCodeMirror = this.getAttribute('multiline') === 'true' && this.getAttribute("input-is-codemirror");
         if (isCodeMirror) {
+            // this can happen if called before editor is initialized
+            if (!this.editor) {
+                return {
+                    ts: null,
+                    script: this.originalValue,
+                };
+            }
             // it will only return the doc when called this way
             const isTypescript = this.getAttribute("input-is-codemirror") === "typescript";
             if (isTypescript) {
@@ -976,6 +1000,14 @@ input {
   content: 'km';
 }
 
+.input-wrapper.min-input::after {
+  content: 'minutes';
+}
+
+.input-wrapper.hour-input::after {
+  content: 'hours';
+}
+
 .code-mirror-importer {
     width: 100%;
 }
@@ -1087,6 +1119,13 @@ class OverlayInputSelect extends HTMLElement {
 
         this.saveValueToUserData = this.saveValueToUserData.bind(this);
         this.originalValue = "";
+        this.readyPromise = new Promise((resolve) => {
+            this._resolveReady = resolve;
+        });
+    }
+
+    isReady() {
+        return this.readyPromise;
     }
 
     hasErrorsPresent() {
@@ -1113,6 +1152,8 @@ class OverlayInputSelect extends HTMLElement {
 
         const dataLocation = this.getAttribute('input-data-location');
         if (!dataLocation) {
+            // @ts-ignore
+            this._resolveReady();
             return;
         }
 
@@ -1128,6 +1169,8 @@ class OverlayInputSelect extends HTMLElement {
                 this.root.querySelector('select').value = value;
                 this.originalValue = value;
             }
+            // @ts-ignore
+            this._resolveReady();
         }).catch(err => {
             console.error(err);
         });
@@ -1476,7 +1519,15 @@ class OverlayInputBoolean extends HTMLElement {
         this.onCheckboxChange = this.onCheckboxChange.bind(this);
         this.originalValue = false;
         this.saveValueToUserData = this.saveValueToUserData.bind(this);
+        this.readyPromise = new Promise((resolve) => {
+            this._resolveReady = resolve;
+        });
     }
+
+    isReady() {
+        return this.readyPromise;
+    }
+
     async saveValueToUserData() {
         const cacheFile = this.getAttribute("input-data-file") ? {
             fileName: this.getAttribute("input-data-file"),
@@ -1510,6 +1561,8 @@ class OverlayInputBoolean extends HTMLElement {
 
         const dataLocation = this.getAttribute('input-data-location');
         if (!dataLocation) {
+            // @ts-ignore
+            this._resolveReady();
             return;
         }
 
@@ -1526,6 +1579,8 @@ class OverlayInputBoolean extends HTMLElement {
                 inputElement.checked = boolValue;
                 this.originalValue = boolValue;
             }
+            // @ts-ignore
+            this._resolveReady();
         });
     }
     onCheckboxChange() {

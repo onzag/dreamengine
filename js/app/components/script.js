@@ -252,7 +252,7 @@ class ScriptOverlay extends HTMLElement {
                                     input-is-percentage="${schema.properties[fieldName].percentage ? 'true' : ''}"
                                 >
                                 </app-overlay-input>`;
-                } else if (schema.properties[fieldName].real_type === "arbitrary_property_string_array" || schema.properties[fieldName].real_type === "arbitrary_state_string_array") {
+                } else if (schema.properties[fieldName].real_type === "arbitrary_property_string" || schema.properties[fieldName].real_type === "arbitrary_state_string") {
                     return `<non-repeat-taglist
                                 class="${fieldName}"
                                 label="${escapeHTML(schema.properties[fieldName].title)}"
@@ -260,7 +260,7 @@ class ScriptOverlay extends HTMLElement {
                                 input-data-location="${fieldName}"
                                 input-data-file="${this.currentScriptFile}"
                                 input-data-type="script"
-                                input-type="${schema.properties[fieldName].real_type === "arbitrary_property_string_array" ? 'property' : 'state'}"
+                                input-type="${schema.properties[fieldName].real_type === "arbitrary_property_string" ? 'property' : 'state'}"
 
                             >
                             </non-repeat-taglist>`;

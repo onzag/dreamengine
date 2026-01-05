@@ -83,7 +83,7 @@ const schema = {
             "items": {
                 "type": "string",
             },
-            "real_type": "arbitrary_state_string_array",
+            "real_type": "arbitrary_state_string",
         },
         "freeze_root_properties": {
             "type": "array",
@@ -92,7 +92,7 @@ const schema = {
             "items": {
                 "type": "string",
             },
-            "real_type": "arbitrary_property_string_array",
+            "real_type": "arbitrary_property_string",
         },
     },
     "required": ["name", "script"],

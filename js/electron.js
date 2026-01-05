@@ -58,7 +58,7 @@ const createWindow = () => {
     win.loadFile('./js/app/index.html')
 
     // Open dev tools with Ctrl+Shift+I (or Cmd+Option+I on macOS)
-    //win.webContents.openDevTools();
+    win.webContents.openDevTools();
 }
 
 const ALLOWED_BASE_PATHS = [
@@ -427,6 +427,36 @@ ipcMain.handle("listStatesForCharacterFile", async (event, characterFile) => {
         finalStates.push({
             name: stateName,
             frozen: frozenStates.has(stateName),
+        });
+    });
+    return finalStates;
+});
+
+ipcMain.handle("listScriptStatesForCharacterFile", async (event, characterFile) => {
+    const data = CHARACTER_CACHE[characterFile];
+    if (!data) {
+        return [];
+    }
+    const frozenStates = new Set();
+    const includedScripts = data.advanced_spawn_script?.imports || [];
+    // @ts-ignore
+    includedScripts.forEach(scriptName => {
+        const scriptData = SCRIPT_CACHE[scriptName];
+        if (scriptData && scriptData.freeze_states) {
+            // @ts-ignore
+            scriptData.freeze_states.forEach(stateName => {
+                frozenStates.add(stateName);
+            });
+        }
+    });
+    /**
+     * @type {Array<{name: string, frozen: boolean}>}
+     */
+    const finalStates = [];
+    frozenStates.forEach(stateName => {
+        finalStates.push({
+            name: stateName,
+            frozen: true,
         });
     });
     return finalStates;

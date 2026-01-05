@@ -6,6 +6,11 @@ declare interface MinimalCharacterReference {
     shortDescription: string;
 }
 
+interface DEStringTemplateWithIntensity {
+    template: DEStringTemplate;
+    intensity: number;
+}
+
 declare interface CharacterStateDefinition {
     general: DEStringTemplate;
     relieving: DEStringTemplate;
@@ -22,9 +27,9 @@ declare interface CharacterStateDefinition {
     randomSpawnRate: number;
     conflictStates: string[];
     requiredStates: string[];
-    triggersStates: string[];
-    relievesStates: string[];
-    triggersStatesOnRelieve: string[];
+    triggersStates: {[stateName: string]: {intensity: number}};
+    relievesStates: {[stateName: string]: {intensity: number}};
+    triggersStatesOnRelieve: {[stateName: string]: {intensity: number}};
     potentialCausantNegativeDescription: DEStringTemplate;
     potentialCausantPositiveDescription: DEStringTemplate;
     potentialCausantMinBondRequired: number;
@@ -35,8 +40,9 @@ declare interface CharacterStateDefinition {
     automaticRelieve: boolean;
     decayRatePerInferenceCycle: number;
     manualTriggerLikelihood: number;
-    manualTriggers: Array<DEStringTemplate>;
-    manualRelievers: Array<DEStringTemplate>;
+    manualTriggers: Array<DEStringTemplateWithIntensity>;
+    manualIntensifiers: Array<DEStringTemplateWithIntensity>;
+    manualRelievers: Array<DEStringTemplateWithIntensity>;
     binaryBehaviour: boolean;
     startingIntensity: 0 | 1 | 2 | 3 | 4;
     bondMini: boolean;
