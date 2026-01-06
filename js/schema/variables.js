@@ -1,4 +1,4 @@
-import { generateIntSeedFromString } from "../util/random.js";
+import { generateIntSeedFromString } from "../app/util/random.js";
 
 /**
  * @type Array<[string, string, string, (DEObject: DEObject, character: CompleteCharacterReference) => any]>

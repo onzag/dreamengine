@@ -1,4 +1,4 @@
-import schema from '../schema/script.js';
+import schema from '../../schema/script.js';
 import { playCancelSound, playConfirmSound, playHoverSound, playPauseSound } from '../sound.js';
 import "./non-repeat-taglist.js";
 

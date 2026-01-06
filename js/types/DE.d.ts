@@ -75,25 +75,27 @@ declare interface EmotionDefinition {
     triggeredByStates: string[];
 }
 
-declare type DEPropertyValueGetter = (DE: DEObject, char: CompleteCharacterReference) => Promise<any> | any;
+declare type DEPropertyValueGetter = (DE: DEObject, char: CompleteCharacterReference) => any;
 
 declare interface DEPropertyValue {
     value: DEPropertyValueGetter;
 }
 
+// confronted 
+
 declare interface CompleteCharacterReference extends MinimalCharacterReference {
-    properties?: Record<string, DEPropertyValue>;
-    injectableInGeneralText?: Record<string, DEStringTemplate>;
-    injectableInStateTextBefore?: Record<string, DEStringTemplate>;
-    injectableInStateTextAfter?: Record<string, DEStringTemplate>;
-    general?: DEStringTemplate;
-    initiative?: number;
-    strangerInitiative?: number;
-    strangerRejection?: number;
-    autisticResponse?: number;
-    schizophrenia?: number;
-    states?: Record<string, CharacterStateDefinition>;
-    bonds?: Array<BondDeclaration>;
+    properties: Record<string, DEPropertyValue>;
+    injectableInGeneralText: Record<string, DEStringTemplate>;
+    injectableInStateTextBefore: Record<string, DEStringTemplate>;
+    injectableInStateTextAfter: Record<string, DEStringTemplate>;
+    general: DEStringTemplate;
+    initiative: number;
+    strangerInitiative: number;
+    strangerRejection: number;
+    autisticResponse: number;
+    schizophrenia: number;
+    states: Record<string, CharacterStateDefinition>;
+    bonds: Array<BondDeclaration>;
     emotions?: Record<string, EmotionDefinition>;
 }
 
@@ -158,6 +160,8 @@ declare interface StateForDescription {
     messageId: string | null;
     surroundingNonStrangers: Array<string>;
     surroundingStrangers: Array<string>;
+    partiallyExposedToWeather: string | null;
+    fullyExposedToWeather: string | null;
 }
 
 declare interface StateForDescriptionWithHistory extends StateForDescription {
@@ -170,13 +174,111 @@ declare interface LocationSlot {
     description: DEStringTemplate;
     isRestingSpot: boolean;
     isLayingDownSpot: boolean;
+    isVehicleSpot: boolean;
+    vehicularVolumeCapacity: number | null;
+    vehicleTypeLimitations: Array<string>;
+    /**
+     * Names of weather systems that are fully blocked by this slot
+     */
+    slotFullyBlocksWeather: Array<string>;
+    /**
+     * Names of weather systems that are only partially blocked by this slot
+     */
+    slotPartiallyBlocksWeather: Array<string>;
 }
 
 declare interface WeatherSystem {
+    /**
+     * Name of the weather system, eg. "Rain", "Sunny", "Snow"
+     */
     name: string;
+    /**
+     * Sum of these likelihoods should be 1 for all weather systems in a location
+     */
     likelyhood: number;
+    /**
+     * Duration of the weather system in hours on average
+     */
+    usualDurationInHours: number;
+    /**
+     * Maximum duration of the weather system in hours
+     */
+    maxDurationInHours: number;
+    /**
+     * Description of the weather system's full effects on an unsheltered location
+     */
     fullEffectDescription: DEStringTemplate;
+    /**
+     * Description of the weather system's partial effects on a partially sheltered location
+     */
     partialEffectDescription: DEStringTemplate;
+    /**
+     * Description when there is no effect on a fully sheltered location
+     */
+    noEffectDescription: DEStringTemplate;
+    /**
+     * Whether the weather system's full effects will cause character death
+     */
+    fullEffectKills: boolean;
+    /**
+     * If fullEffectKills is true, after how many hours of exposure will the character die
+     */
+    fullEffectKillsExposureHours: number;
+    /**
+     * Whether the weather system's partial effects will cause character death
+     */
+    partialEffectKills: boolean;
+    /**
+     * If partialEffectKills is true, after how many hours of exposure will the character die
+     */
+    partialEffectKillsExposureHours: number;
+    /**
+     * Whether when the character is in negatively affecting states, they will die from the weather system's effects
+     */
+    negativeEffectKills: boolean;
+    /**
+     * If negativeEffectKills is true, after how many hours of exposure will the character die
+     */
+    negativeEffectKillsExposureHours: number;
+    /**
+     * If a character is in this state, they are fully protected from the weather system's effects
+     * eg. "WEARING_RAINCOAT" "WEARING_FULL_BODY_ARMOR" "WEARING_SPACE_SUIT"
+     */
+    fullyProtectingStates: Array<string>;
+    /**
+     * If a character is in this state, they are partially protected from the weather system's effects
+     * eg. "HOLDING_UMBRELLA" "WEARING_LIGHT_JACKET"
+     */
+    partiallyProtectingStates: Array<string>;
+    /**
+     * If a character is in this state, they are negatively affected by the weather system's effects
+     * eg. "SICK" "NAKED" "INJURED"
+     */
+    negativelyAffectingStates: Array<string>;
+    /**
+     * Names of states that are applied to characters while they are fully exposed to the weather system
+     * eg. "WET" for rain, "SUNBURNED" for sunny weather
+     */
+    applyingStatesDuringFullEffect: Array<string>;
+    /**
+     * Names of states that are applied to characters while they are partially exposed to the weather system
+     * eg. "SLIGHTLY_WET" for rain, "SLIGHTLY_SUNBURNED" for sunny weather
+     */
+    applyingStatesDuringPartialEffect: Array<string>;
+    /**
+     * Names of states that are applied to characters while they are not exposed to the weather system
+     * and fully sheltered from it
+     */
+    applyingStatesDuringNoEffect: Array<string>;
+    /**
+     * Names of states that are added if they are in a negative effect state and exposed to the weather system
+     */
+    applyingStatesDuringNegativeEffect: Array<string>;
+    /**
+     * Whether to apply the states in the order they are listed in the arrays above along the duration of exposure
+     * or to apply them all at once on contact with the weather system
+     */
+    applyStatesInOrder: boolean;
 }
 
 declare interface LocationDefinition {
@@ -184,6 +286,8 @@ declare interface LocationDefinition {
     name: string;
     description: DEStringTemplate;
     isVehicle: boolean;
+    vehicleType: string | null;
+    vehicleVolume: number;
     isSafe: boolean;
     isPrivate: boolean;
     isIndoors: boolean;
@@ -195,13 +299,64 @@ declare interface LocationDefinition {
     canBeUnlockedFromInside: boolean;
     unlockConditions: Array<DEStringTemplate>;
     slots: Array<LocationSlot>;
-    shelterFullyBlocksWeather: Array<string>;
-    shelterPartiallyBlocksWeather: Array<string>;
-    ownWeatherSystem: Array<string> | null;
+    /**
+     * Names of weather systems that are fully blocked by this location
+     * this will be overridden by slot-based blocking
+     */
+    locationFullyBlocksWeather: Array<string>;
+    /**
+     * Names of weather systems that are only partially blocked by this location
+     * this will be overridden by slot-based blocking
+     */
+    locationPartiallyBlocksWeather: Array<string>;
+    /**
+     * Weather systems that only affect this location, if not specified the parent location
+     * weather systems will apply here too
+     */
+    ownWeatherSystem: Array<WeatherSystem> | null;
+    /**
+     * Description of the current weather's full effects on this location
+     * will override the general weather full effect description if present
+     */
+    locationWeatherFullEffectDescription: DEStringTemplate | null;
+    /**
+     * Description of the current weather's partial effects on this location
+     * will override the general weather partial effect description if present
+     */
+    locationWeatherPartialEffectDescription: DEStringTemplate | null;
+    /**
+     * Description when there is no weather effect on this location, aka is fully sheltered
+     * will override the general weather no effect description if present
+     */
+    locationWeatherNoEffectDescription: DEStringTemplate | null;
 
+    // STATEFUL PROPERTIES
+    /**
+     * The current weather system affecting this location
+     * children of this location will have the same weather unless they have their own weather system
+     */
     currentWeather: string;
+    /**
+     * How long the current weather has been ongoing for
+     */
+    currentWeatherHasBeenOngoingFor: TimeDurationDescription;
+    /**
+     * Either the location-specific full effect description or the general weather full effect description
+     */
     currentWeatherFullEffectDescription: DEStringTemplate;
+    /**
+     * Either the location-specific partial effect description or the general weather partial effect description
+     */
     currentWeatherPartialEffectDescription: DEStringTemplate;
+    /**
+     * Either the location-specific no effect description or the general weather no effect description
+     */
+    currentWeatherNoEffectDescription: DEStringTemplate;
+    /**
+     * Names of the characters that are spawned in this location with instantiable names
+     * child connections will inherit these names
+     */
+    locationNames?: NamePool;
 }
 
 declare interface DEConversationMessage {

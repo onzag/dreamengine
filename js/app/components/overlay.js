@@ -1,4 +1,4 @@
-import { ALL_VARIABLES_FNS } from "../schema/variables.js";
+import { ALL_VARIABLES_FNS } from "../../schema/variables.js";
 
 import "../../codemirror/bundle.js";
 

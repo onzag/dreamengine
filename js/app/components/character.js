@@ -1,5 +1,5 @@
-import schema from '../schema/character.js';
-import { character, world, utils, specials } from '../schema/variables.js';
+import schema from '../../schema/character.js';
+import { character, world, utils, specials } from '../../schema/variables.js';
 import { playCancelSound, playConfirmSound, playHoverSound, playPauseSound } from '../sound.js';
 
 /**
