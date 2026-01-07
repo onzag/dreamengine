@@ -6,5 +6,5 @@
     "target": "es2020"
   },
   "typeAcquisition": {"enable": true},
-  "include": ["js/**/*.js", "js/types/**/*.d.ts"]
+  "include": ["js/**/*.js", "js/types/**/*.d.ts", "js/schema/functions.js", "js/schema/internal-make-function-types.js"]
 }

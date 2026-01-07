@@ -1,0 +1,3 @@
+// Due to buggy typescript behaviour that could not make work no matter what, one is forced to hack the types this way
+
+Get-Content js\tslib\hack\*.d.ts | Out-File js\tslib\lib.es5.d.ts -Encoding utf8

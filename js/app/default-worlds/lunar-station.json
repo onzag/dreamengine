@@ -1,0 +1,188 @@
+{
+    "name": "Lunar Station",
+    "description": "A serene lunar station orbiting earth, featuring advanced technology and breathtaking views of space.",
+    "initial_scenes": {
+        "default": {
+            "drop_location": "LUNAR_MODULE",
+            "drop_location_slot": "AIRLOCK_ENTRANCE",
+            "user_initialization_message": {
+                "script": "{{user}} is a visitor to the Lunar Station, eager to explore this small outpost in space, yet {{format_pronoun user}} didn't expect to find someone else here, but it so happens that {{format_and all_world_characters_but_user}} {{format_verb_to_be all_world_characters_but_user}} also visiting the station at this time, now they face each other in the common area near the airlock."
+            }
+        }
+    },
+    "locations": {
+        "OUTSIDE": {
+            "name": "Outside the Lunar Station",
+            "description": "The vast expanse of space surrounds the lunar station, with Earth visible in the distance. The station's exterior is sleek and metallic, reflecting the light of the sun.",
+            "is_safe": false,
+            "slots": {}
+        },
+        "LUNAR_MODULE_COMMON_AREA": {
+            "name": "Lunar Module (Common Area)",
+            "description": "The main habitat module of the Lunar Station, equipped with life support systems and living quarters.",
+            "is_safe": true,
+            "size_limit_cm": 300,
+            "slots": {
+                "AIRLOCK_ENTRANCE": {
+                    "name": "Airlock Entrance",
+                    "description": {
+                        "script": "The entrance to the lunar module, leading to the airlock that connects to the outside of the station."
+                    },
+                    "laying_down_spot": "Ground Near Airlock",
+                    "shared_laying_down_spot": false
+                },
+                "COMMON_AREA_REGION_1": {
+                    "name": "Common Area Region 1",
+                    "description": {
+                        "script": "A communal space area, furnished with seating and a view of Earth through large windows; with a television and communication console."
+                    },
+                    "laying_down_spot": {
+                        "script": "Sofa by the Window"
+                    },
+                    "sitting_spot": {
+                        "script": "Sofa by the Window"
+                    },
+                    "shared_sitting_spot": true,
+                    "shared_laying_down_spot": false,
+                    "laying_down_size_limit_cm": 200,
+                    "sitting_size_limit_cm": 250,
+                    "items": {
+                        "KEYCARD": {
+                            "name": "Keycard",
+                            "description": "A small electronic keycard used to unlock private bedrooms within the lunar module.",
+                            "amount": 2,
+                            "weight_kg": 0,
+                            "volume_liters": 0.1
+                        }
+                    }
+                },
+                "COMMON_AREA_REGION_2": {
+                    "name": "Common Area Region 2",
+                    "description": {
+                        "script": "Another section of the common area, featuring a small kitchenette and dining table and a storage cabinet stocked with food and water."
+                    },
+                    "laying_down_spot": {
+                        "script": "Dining Table Bench"
+                    },
+                    "sitting_spot": {
+                        "script": "Dining Table Chairs"
+                    },
+                    "shared_sitting_spot": true,
+                    "shared_laying_down_spot": false,
+                    "laying_down_size_limit_cm": 200,
+                    "sitting_size_limit_cm": 250,
+                    "items": {
+                        "FOOD": {
+                            "name": "Packaged Food",
+                            "description": "An assortment of packaged space food for consumption.",
+                            "amount": 999999,
+                            "weight_kg": 0.5,
+                            "volume_liters": 0.5,
+                            "consumable": true,
+                            "is_food": true
+                        },
+                        "WATER": {
+                            "name": "Water Bottle",
+                            "description": "A sealed bottle of water for hydration.",
+                            "amount": 999999,
+                            "weight_kg": 1,
+                            "volume_liters": 1,
+                            "consumable": true,
+                            "is_water": true
+                        }
+                    }
+                }
+            }
+        },
+        "LUNAR_MODULE_BEDROOM_A": {
+            "name": "Lunar Module (Private Bedroom)",
+            "description": "A private bedroom within the lunar module, furnished with a bed, storage, and personal items.",
+            "is_safe": true,
+            "is_private": true,
+            "size_limit_cm": 200,
+            "slots": {
+                "BEDROOM_REGION_1": {
+                    "name": "Bedroom Region 1",
+                    "description": {
+                        "script": "The sleeping area, featuring a compact bed with blankets and personal storage."
+                    },
+                    "laying_down_spot": {
+                        "script": "Bed"
+                    },
+                    "sitting_spot": {
+                        "script": "Bed"
+                    },
+                    "shared_sitting_spot": true,
+                    "shared_laying_down_spot": true,
+                    "laying_down_size_limit_cm": 200,
+                    "sitting_size_limit_cm": 200
+                }
+            }
+        },
+        "LUNAR_MODULE_BEDROOM_B": {
+            "name": "Lunar Module (Private Bedroom)",
+            "description": "A private bedroom within the lunar module, furnished with a bed, storage, and personal items.",
+            "is_safe": true,
+            "is_private": true,
+            "size_limit_cm": 200,
+            "slots": {
+                "BEDROOM_REGION_1": {
+                    "name": "Bedroom Region 1",
+                    "description": {
+                        "script": "The sleeping area, featuring a compact bed with blankets and personal storage."
+                    },
+                    "laying_down_spot": {
+                        "script": "Bed"
+                    },
+                    "sitting_spot": {
+                        "script": "Bed"
+                    },
+                    "shared_sitting_spot": true,
+                    "shared_laying_down_spot": true,
+                    "laying_down_size_limit_cm": 200,
+                    "sitting_size_limit_cm": 200
+                }
+            }
+        }
+    },
+    "connections": {
+        "LUNAR_MODULE_COMMON_AREA_TO_OUTSIDE": {
+            "location_a": "LUNAR_MODULE",
+            "slot_a": "AIRLOCK_ENTRANCE",
+            "location_b": "OUTSIDE",
+            "slot_b": null,
+            "is_two_way": true,
+            "default_locked": true,
+            "can_be_locked_unlocked": false,
+            "distance_meters": 0
+        },
+        "LUNAR_MODULE_BEDROOM_A_TO_COMMON_AREA": {
+            "location_a": "LUNAR_MODULE_COMMON_AREA",
+            "slot_a": null,
+            "location_b": "LUNAR_MODULE_BEDROOM_A",
+            "slot_b": null,
+            "is_two_way": true,
+            "default_locked": false,
+            "can_be_locked_unlocked": true,
+            "free_lock_unlock": "LUNAR_MODULE_BEDROOM_A",
+            "other_unlock_conditions": {
+                "script": "{{char}} use the keycard to unlock the bedroom door."
+            },
+            "distance_meters": 2
+        },
+        "LUNAR_MODULE_BEDROOM_B_TO_COMMON_AREA": {
+            "location_a": "LUNAR_MODULE_COMMON_AREA",
+            "slot_a": null,
+            "location_b": "LUNAR_MODULE_BEDROOM_B",
+            "slot_b": null,
+            "is_two_way": true,
+            "default_locked": false,
+            "can_be_locked_unlocked": true,
+            "free_lock_unlock": "LUNAR_MODULE_BEDROOM_B",
+            "other_unlock_conditions": {
+                "script": "{{char}} use the keycard to unlock the bedroom door."
+            },
+            "distance_meters": 2
+        }
+    }
+}

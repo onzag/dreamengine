@@ -28,6 +28,13 @@ const worldSchema = {
                         "default": "",
                         "real_type": "location",
                     },
+                    "drop_location_slot": {
+                        "type": "string",
+                        "title": "Drop Location Slot",
+                        "real_type": "location_slot",
+                        "default": "",
+                        "description": "The specific slot within the location where the user will be placed upon entering the scene.",
+                    },
                     "user_initialization_message": {
                         "type": "object",
                         "properties": {

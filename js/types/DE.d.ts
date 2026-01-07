@@ -1,8 +1,11 @@
-declare interface MinimalCharacterReference {
+declare interface DEMinimalCharacterReference {
     name: Readonly<string>;
     sex: "male" | "female" | "intersex";
     gender: "male" | "female" | "ambiguous";
     heightCm: number;
+    weightKg: number;
+    carryingCapacityLiters: number;
+    carryingCapacityKg: number;
     shortDescription: string;
 }
 
@@ -12,8 +15,13 @@ interface DEStringTemplateWithIntensity {
 }
 
 declare interface CharacterStateDefinition {
+    dominance: number;
     general: DEStringTemplate;
-    relieving: DEStringTemplate;
+    systemPromptInjection: DEStringTemplate | null;
+    userPromptInjection: DEStringTemplate | null;
+    relieving: DEStringTemplate | null;
+    relievingSystemPromptInjection: DEStringTemplate | null;
+    relievingUserPromptInjection: DEStringTemplate | null;
     triggersDeadEnd: string;
     deadEndIsDeath: boolean;
     triggersDeadEndRandomChance: number;
@@ -36,15 +44,12 @@ declare interface CharacterStateDefinition {
     potentialCausantMaxBondAllowed: number;
     potentialCausantMin2BondRequired: number;
     potentialCausantMax2BondAllowed: number;
-    automaticTrigger: boolean
-    automaticRelieve: boolean;
     decayRatePerInferenceCycle: number;
-    manualTriggerLikelihood: number;
-    manualTriggers: Array<DEStringTemplateWithIntensity>;
-    manualIntensifiers: Array<DEStringTemplateWithIntensity>;
-    manualRelievers: Array<DEStringTemplateWithIntensity>;
+    triggerLikelihood: number;
+    triggers: Array<DEStringTemplateWithIntensity>;
+    intensifiers: Array<DEStringTemplateWithIntensity>;
+    relievers: Array<DEStringTemplateWithIntensity>;
     binaryBehaviour: boolean;
-    startingIntensity: 0 | 1 | 2 | 3 | 4;
     bondMini: boolean;
     reliefUsesDecayRate: boolean;
     decayRateAfterRelief: number;
@@ -54,6 +59,13 @@ declare interface CharacterStateDefinition {
     trackCause: boolean;
 }
 
+declare interface BondIncreaseQuestion {
+    question_increase: DEPotentiallyNullReturningStringTemplate;
+    question_decrease: DEPotentiallyNullReturningStringTemplate;
+    increase_weight: number;
+    decrease_weight: number;
+}
+
 declare interface BondDeclaration {
     minBondLevel: number;
     maxBondLevel: number;
@@ -61,30 +73,59 @@ declare interface BondDeclaration {
     max2BondLevel: number;
     description: DEStringTemplate;
     bondConditions: {
-        increaseIf: Array<DEPotentiallyNullReturningStringTemplate | string>;
-        decreaseIf: Array<DEPotentiallyNullReturningStringTemplate | string>;
+        increaseQuestions: Array<BondIncreaseQuestion>;
+        decreaseQuestions: Array<BondIncreaseQuestion>;
     }
     secondBondConditions: {
-        increaseIf: Array<DEPotentiallyNullReturningStringTemplate | string>;
-        decreaseIf: Array<DEPotentiallyNullReturningStringTemplate | string>;
+        increaseQuestions: Array<BondIncreaseQuestion>;
+        decreaseQuestions: Array<BondIncreaseQuestion>;
     }
 }
 
-declare interface EmotionDefinition {
-    common: boolean;
-    triggeredByStates: string[];
+declare interface DEAssetLocationAndPlacement {
+    filePath: string;
+    scale: number;
+    offsetX: number;
+    offsetY: number;
 }
 
-declare type DEPropertyValueGetter = (DE: DEObject, char: CompleteCharacterReference) => any;
+declare interface DEAssetInfo {
+    assets: Array<DEAssetLocationAndPlacement>;
+    type: string;
+}
+
+declare type DEAssetDeclaration = (DE: DEObject, char: DECompleteCharacterReference) => DEAssetInfo;
+
+declare interface DEEmotionDefinition {
+    common: boolean;
+    triggeredByStates: string[];
+    asset: DEEmotionAssetDeclaration;
+}
+
+declare type DEPropertyValueGetterInCharSpace = (DE: DEObject, char: DECompleteCharacterReference) => any;
+
+declare interface DEPropertyValueInCharSpace {
+    value: DEPropertyValueGetterInCharSpace;
+}
+
+declare type DEPropertyValueGetter = (DE: DEObject) => any;
 
 declare interface DEPropertyValue {
     value: DEPropertyValueGetter;
 }
 
+declare type DEPropertyValueGetterInItemSpace = (DE: DEObject, item: DEItem) => any;
+
+declare interface DEPropertyValueInItemSpace {
+    value: DEPropertyValueGetterInItemSpace;
+}
+
+
+
 // confronted 
 
-declare interface CompleteCharacterReference extends MinimalCharacterReference {
-    properties: Record<string, DEPropertyValue>;
+declare interface DECompleteCharacterReference extends DEMinimalCharacterReference {
+    properties: Record<string, DEPropertyValueInCharSpace>;
     injectableInGeneralText: Record<string, DEStringTemplate>;
     injectableInStateTextBefore: Record<string, DEStringTemplate>;
     injectableInStateTextAfter: Record<string, DEStringTemplate>;
@@ -96,10 +137,18 @@ declare interface CompleteCharacterReference extends MinimalCharacterReference {
     schizophrenia: number;
     states: Record<string, CharacterStateDefinition>;
     bonds: Array<BondDeclaration>;
-    emotions?: Record<string, EmotionDefinition>;
+    emotions: Record<string, EmotionDefinition>;
+    scripts: {
+        spawn: Array<DEScript>;
+        preStateCheck: Array<DEScript>;
+        preInference: Array<DEScript>;
+        firstInteract: Array<DEScript>;
+        postInference: Array<DEScript>;
+        postAnyInference: Array<DEScript>;
+    };
 }
 
-declare interface NamePool {
+declare interface DENamePool {
     mal: Array<string>;
     fem: Array<string>;
     amb: Array<string>;
@@ -132,9 +181,24 @@ declare interface StateDescription {
     intensity: number;
     causants: Array<StateCausant> | null;
     causes: Array<StateCause> | null;
+
+    /**
+     * The time when this state was first activated that was contiguous with the current state
+     * as in the character did not relieve or have the state removed in between inference cycles
+     * it just keeped being active
+     */
+    contiguousStartActivationTime: DETimeDescription;
+    /**
+     * The amount of inference cycles ago when this state was first activated that was contiguous with the current state
+     * as in the character did not relieve or have the state removed in between inference cycles
+     * it just keeped being active
+     * 
+     * This number is zero for states that were activated during this inference cycle
+     */
+    contiguousStartActivationCyclesAgo: number;
 }
 
-declare interface TimeDescription {
+declare interface DETimeDescription {
     time: number;
     hourOfDay: number;
     dayOfWeek: number;
@@ -143,30 +207,77 @@ declare interface TimeDescription {
     year: number;
 }
 
-declare interface TimeDurationDescription {
+declare interface DETimeDurationDescription {
     inMinutes: number;
     inHours: number;
     inDays: number;
 }
 
+declare interface DEItem {
+    name: string;
+    volumeLiters: number;
+    weightKg: number;
+    capacityLiters: number;
+    capacityKg: number;
+    description: string;
+    compartimentName: string | null;
+    isSeeThrough: boolean;
+    properties: Record<string, DEPropertyValue>;
+    isClothing: boolean;
+    isFoodOrWater: boolean;
+    clothingProperties: {
+        type: string;
+        canBeWornByCharactersWithStates: Array<string>;
+        canBeWornByCharactersWithProperties: Array<string>;
+        incompatibleWith: Array<string>;
+        wearerMinHeightCm: number | null;
+        wearerMaxHeightCm: number | null;
+        wearerMinWeightKg: number | null;
+        wearerMaxWeightKg: number | null;
+    } | null;
+    foodProperties: {
+        calories: number;
+        hydrationLiters: number;
+    } | null;
+    containing: Array<DEItem>;
+}
+
 declare interface StateForDescription {
     id: string;
     location: string;
-    slot: number;
+    locationSlot: string;
     states: Array<StateDescription>;
     type: "INTERACTING" | "BACKGROUND";
-    time: TimeDescription;
+    time: DETimeDescription;
     conversationId: string | null;
+    /**
+     * The message ID of the last message the character sent in the current conversation,
+     * when this state was added
+     */
     messageId: string | null;
     surroundingNonStrangers: Array<string>;
     surroundingStrangers: Array<string>;
     partiallyExposedToWeather: string | null;
     fullyExposedToWeather: string | null;
+    posture: "standing" | "sitting" | "laying_down";
+    carrying: DEItem[];
+    wearing: DEItem[];
 }
 
 declare interface StateForDescriptionWithHistory extends StateForDescription {
     history: Array<StateForDescription>;
+    /**
+     * Indicates if the character is dead, aka its deadEnd was a death scenario
+     */
     dead: boolean;
+    /**
+     * Indicates if the character has reached a dead end that results in their permanent removal from the story
+     */
+    deadEnded: boolean;
+    /**
+     * If the character has deadEnded, the reason why it happened
+     */
+    deadEndReason: string | null;
 }
 
 declare interface LocationSlot {
@@ -197,9 +308,9 @@ declare interface WeatherSystem {
      */
     likelyhood: number;
     /**
-     * Duration of the weather system in hours on average
+     * minimum duration of the weather system in hours
      */
-    usualDurationInHours: number;
+    minDurationInHours: number;
     /**
      * Maximum duration of the weather system in hours
      */
@@ -281,7 +392,7 @@ declare interface WeatherSystem {
     applyStatesInOrder: boolean;
 }
 
-declare interface LocationDefinition {
+declare interface DELocationDefinition {
     id: string;
     name: string;
     description: DEStringTemplate;
@@ -298,6 +409,8 @@ declare interface LocationDefinition {
     isCurrentlyLocked: boolean;
     canBeUnlockedFromInside: boolean;
     unlockConditions: Array<DEStringTemplate>;
+    canBeUnlockedByCharactersWithStates: Array<string>;
+    canBeUnlockedByCharactersWithProperties: Array<string>;
     slots: Array<LocationSlot>;
     /**
      * Names of weather systems that are fully blocked by this location
@@ -329,6 +442,14 @@ declare interface LocationDefinition {
      * will override the general weather no effect description if present
      */
     locationWeatherNoEffectDescription: DEStringTemplate | null;
+    /**
+     * Names of the characters that are spawned in this location with instantiable names
+     * child connections will inherit these names
+     */
+    locationNames?: NamePool;
+}
+
+declare interface DEStatefulLocationDefinition extends DELocationDefinition {
 
     // STATEFUL PROPERTIES
     /**
@@ -339,7 +460,7 @@ declare interface LocationDefinition {
     /**
      * How long the current weather has been ongoing for
      */
-    currentWeatherHasBeenOngoingFor: TimeDurationDescription;
+    currentWeatherHasBeenOngoingFor: DETimeDurationDescription;
     /**
      * Either the location-specific full effect description or the general weather full effect description
      */
@@ -352,11 +473,6 @@ declare interface LocationDefinition {
      * Either the location-specific no effect description or the general weather no effect description
      */
     currentWeatherNoEffectDescription: DEStringTemplate;
-    /**
-     * Names of the characters that are spawned in this location with instantiable names
-     * child connections will inherit these names
-     */
-    locationNames?: NamePool;
 }
 
 declare interface DEConversationMessage {
@@ -369,7 +485,7 @@ declare interface DEConversationMessage {
     isHiddenSystemMessage: boolean;
     isSchizophrenicVoice: boolean;
     schizophrenicVoiceSourceCharacter: string | null;
-    time: TimeDescription;
+    time: DETimeDescription;
     content: string;
 }
 
@@ -392,14 +508,14 @@ declare interface DEConversation {
      * The location where the conversation is happening
      */
     location: string;
-    startTime: TimeDescription;
-    endTime: TimeDescription;
+    startTime: DETimeDescription;
+    endTime: DETimeDescription;
     isOngoing: boolean;
-    duration: TimeDurationDescription;
+    duration: DETimeDurationDescription;
     /**
      * The list of messages that were exchanged in the conversation
      */
-    messages?: Array<DEConversationMessage>;
+    messages: Array<DEConversationMessage>;
     /**
      * Whether this conversation is a pseudo-conversation,
      * i.e., not an actual interactive conversation but an interaction
@@ -415,39 +531,39 @@ declare interface DEConversation {
 
 declare interface DEScript {
     name: string;
-    execute: () => void | Promise<void>;
+    execute: (DE: DEObject, char: DECompleteCharacterReference) => void | Promise<void>;
 }
-declare type DEStringTemplate = (DE: DEObject, char: CompleteCharacterReference) => Promise<string> | string;
-declare type DEPotentiallyNullReturningStringTemplate = (DE: DEObject, char: CompleteCharacterReference) => Promise<string | null> | string | null;
+declare type DEStringTemplate = (DE: DEObject, char: DECompleteCharacterReference) => Promise<string> | string;
+declare type DEPotentiallyNullReturningStringTemplate = (DE: DEObject, char: DECompleteCharacterReference) => Promise<string | null> | string | null;
 
 declare interface DEObject {
-    user: MinimalCharacterReference;
-    characters: Record<string, CompleteCharacterReference>;
+    user: DEMinimalCharacterReference;
+    characters: Record<string, DECompleteCharacterReference>;
     social: {
-        everyone: Array<string>;
         bonds: Record<string, BondDescription>;
     };
     allNames: NamePool;
-    worldNames?: NamePool;
+    worldNames: NamePool;
     stateFor: Record<string, StateForDescriptionWithHistory>;
     world: {
         currentLocation: string;
-        locations: Array<LocationDefinition>;
-    };
-    scripts: {
-        spawn: Array<DEScript>;
-        preStateCheck: Array<DEScript>;
-        preInference: Array<DEScript>;
-        firstInteract: Array<DEScript>;
-        postInference: Array<DEScript>;
-        postAnyInference: Array<DEScript>;
+        currentLocationSlot: string;
+        locations: Array<DEStatefulLocationDefinition>;
     };
     conversations: Record<string, DEConversation>;
+    functions: FunctionTypes;
+    initialTime: DETimeDescription;
 }
 
 declare type DE = DEObject;
 declare var DE: DEObject;
-declare var char: CompleteCharacterReference;
-declare var other: MinimalCharacterReference;
-declare var causant: MinimalCharacterReference;
+declare var char: DECompleteCharacterReference;
+declare var other: DEMinimalCharacterReference;
+declare var causant: DEMinimalCharacterReference;
 declare var cause: string;
+
+// RAW types below used to create the DEObject
+
+declare interface DERawWorldDefinition {
+
+}

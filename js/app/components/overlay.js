@@ -1,4 +1,4 @@
-import { ALL_VARIABLES_FNS } from "../../schema/variables.js";
+import { ALL_FUNCTIONS_WITH_SPECIALS } from "../../schema/functions.js";
 
 import "../../codemirror/bundle.js";
 
@@ -41,7 +41,7 @@ let IS_TVSFS_INITIALIZED = false;
  */
 let TVSFS_INITIALIZE_PROMISE = null;
 
-const usedMatchDecorator = getMatchDecorator(ALL_VARIABLES_FNS);
+const usedMatchDecorator = getMatchDecorator(ALL_FUNCTIONS_WITH_SPECIALS.map(f => f[0].split(" ")[0].trim()));
 
 class Overlay extends HTMLElement {
     constructor() {
@@ -362,8 +362,10 @@ class OverlayInput extends HTMLElement {
             if (!IS_TVSFS_INITIALIZED) {
                 if (!TVSFS_INITIALIZE_PROMISE) {
                     TVSFS_INITIALIZE_PROMISE = fetch("../types/DE.d.ts").then(res => res.text()).then(async tsDecls => {
-                        await initializeTVSFS(tsDecls);
-                        IS_TVSFS_INITIALIZED = true;
+                        await fetch("../types/functypes.d.ts").then(res => res.text()).then(async funcTypes => {
+                            await initializeTVSFS(tsDecls, funcTypes);
+                            IS_TVSFS_INITIALIZED = true;
+                        });
                     });
                 }
                 await TVSFS_INITIALIZE_PROMISE;
@@ -977,6 +979,14 @@ input {
 
 .input-wrapper.percent-input::after {
   content: '%';
+}
+
+.input-wrapper.L-input::after {
+  content: 'Liters';
+}
+
+.input-wrapper.kg-input::after {
+  content: 'kg';
 }
 
 .input-wrapper.cm-input::after {

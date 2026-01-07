@@ -1,5 +1,5 @@
 import schema from '../../schema/character.js';
-import { character, world, utils, specials } from '../../schema/variables.js';
+import { character, world, utils, specials } from '../../schema/functions.js';
 import { playCancelSound, playConfirmSound, playHoverSound, playPauseSound } from '../sound.js';
 
 /**
@@ -41,7 +41,10 @@ const WIZARD_SECTIONS = [
                     "group",
                     "gender",
                     "sex",
-                    "height",
+                    "heightCm",
+                    "weightKg",
+                    "carryingCapacityLiters",
+                    "carryingCapacityKg",
                     "general",
                     "short"
                 ],

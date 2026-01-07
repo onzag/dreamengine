@@ -69,14 +69,59 @@ const schema = {
             "placeholder": "A muscular woman with short brown hair and green eyes, wearing a leather jacket and boots",
             "multiline": true,
         },
-        "height": {
+        "heightCm": {
             "type": "integer",
             "title": "Character Height",
-            "description": "The height of the character in centimeters",
+            "description": "The height of the character in centimeters, used to determine if they fit in certain locations (eg. a small cave or a vehicle)",
             "minimum": 30,
             "maximum": 300,
             "default": 170,
             "unit": "cm",
+        },
+        "weightKg": {
+            "type": "integer",
+            "title": "Character Weight",
+            "description": "The weight of the character in kilograms, used to determine if they can be carried by others (eg. a dragon carrying a person)",
+            "minimum": 0,
+            "maximum": 3000,
+            "default": 70,
+            "unit": "kg",
+        },
+        "maintenanceCaloriesPerDay": {
+            "type": "integer",
+            "title": "Maintenance Calories Per Day",
+            "description": "The number of calories the character needs to maintain their weight per day, note by default characters do not lose/gain weight or starve, a script needs to be added to enforce this behaviour",
+            "minimum": 0,
+            "maximum": 10000,
+            "default": 2000,
+            "unit": "kcal",
+        },
+        "maintenanceWaterLitersPerDay": {
+            "type": "number",
+            "title": "Maintenance Water Per Day",
+            "description": "The amount of water the character needs to maintain their hydration per day, note by default characters do not dehydrate, a script needs to be added to enforce this behaviour",
+            "minimum": 0,
+            "maximum": 300,
+            "default": 2,
+            "unit": "liters",
+        },
+        "carryingCapacityKg": {
+            "type": "integer",
+            "title": "Carrying Capacity",
+            "description": "The carrying capacity of the character in kilograms",
+            "minimum": 0,
+            "maximum": 10000,
+            "default": 20,
+            "unit": "kg",
+        },
+        "carryingCapacityLiters": {
+            "type": "integer",
+            "title": "Carrying Capacity",
+            "description": "The carrying capacity of the character in liters",
+            "minimum": 0,
+            "maximum": 1000,
+            "default": 3,
+            "unit": "liters",
         },
         "initiative": {
             "type": "number",
@@ -156,17 +201,51 @@ const schema = {
                         "placeholder": "{{char}} is feeling very anxious and on edge",
                         "placeholder_ts": "return `${char.name} is feeling very anxious and on edge.`;",
                     },
+                    "system_prompt_injection": {
+                        "type": "object",
+                        "properties": {
+                            "ts": {
+                                "type": "string",
+                            },
+                            "script": {
+                                "type": "string",
+                            },
+                        },
+                        "code_language": "handlebars",
+                        "multiline": true,
+                        "title": "System Prompt Injection",
+                        "description": "A system prompt injection to add to the character prompt when this state is active, useful for defining behaviour changes when in this state. Use {{char}}, {{causant}}, and {{cause}} as placeholders",
+                        "placeholder": "You are {{char}} and you are feeling very anxious and on edge, this makes you fidgety and nervous in your actions and speech",
+                        "placeholder_ts": "return `You are ${char.name} and you are feeling very anxious and on edge, this makes you fidgety and nervous in your actions and speech.`;",
+                    },
+                    "user_prompt_injection": {
+                        "type": "object",
+                        "properties": {
+                            "ts": {
+                                "type": "string",
+                            },
+                            "script": {
+                                "type": "string",
+                            },
+                        },
+                        "code_language": "handlebars",
+                        "multiline": true,
+                        "title": "User Prompt Injection",
+                        "description": "A user prompt injection to add to the character prompt when this state is active, useful for defining behaviour changes when in this state. Use {{char}}, {{causant}}, and {{cause}} as placeholders",
+                        "placeholder": "{{char}} will now proceed to cry and fidget nervously",
+                        "placeholder_ts": "return `${char.name} will now proceed to cry and fidget nervously.`;",
+                    },
                     "dominance": {
-                        "type": "string",
-                        "enum": ["Hyper Dominant", "Dominant", "Coexisting"],
+                        "type": "integer",
                         "title": "State Dominance",
-                        "default": "Coexisting",
-                        "description": "A Dominant behaviour state will take over and prevent other dominant behaviours from activating, while coexisting states can coexist with among themselves and other" +
-                            " dominant states; a hyper dominant state will override all other states including other dominant states and does not coexist " +
-                            "with anything else; avoid using hyper dominant states unless the state is drastic and overrides anything else, a very common example is a sleeping" +
-                            " state that overrides everything else but the character does not do anything else while sleeping, an example of a good usecase for a dominant behaviour is being extremely angry," +
-                            " which prevents other dominant states from activating but allows coexisting states like being very tired which would prevent another dominant state like " +
-                            "being hyperactive from activating at the same time. The inference would often prevent this so coexisting behaviours are often the most flexible choice",
+                        "default": 0,
+                        "minimum": 0,
+                        "maximum": 100,
+                        "description": "A value between 0 to 100 indicating how dominant this state is over other states when multiple states are active, higher values indicate more dominance; " +
+                        "states with the same dominance value will inject their prompt parts and override all other states with lower dominance values, useful for prioritizing certain states over others; " +
+                        "for example a PANIC state may have a dominance of 2, while a BEING_FRIENDLY state may have a dominance of 0, when both are active the PANIC state will take precedence in prompt injections " +
+                        "but the SCARED behaviour may have a dominance of 2 as well, in this case both states will inject their prompt parts and override the BEING_FRIENDLY state; that saying BEING_FRIENDLY will still be present " +
+                        "but the prompts for it will not be injected",
                     },
                     "relief_uses_decay_rate": {
                         "type": "boolean",
@@ -191,15 +270,51 @@ const schema = {
                         "placeholder": "{{char}} feels a wave of relief as {{causant}} helps {{format_object_pronoun char}}",
                         "placeholder_ts": "return `${char.name} feels a wave of relief as {{causant}} helps ${DE.util.formatObjectPronoun(char)}`;",
                     },
+                    "relieving_system_prompt_injection": {
+                        "type": "object",
+                        "properties": {
+                            "ts": {
+                                "type": "string",
+                            },
+                            "script": {
+                                "type": "string",
+                            },
+                        },
+                        "code_language": "handlebars",
+                        "multiline": true,
+                        "title": "System Prompt Injection",
+                        "description": "A system prompt injection to add to the character prompt when this state is active, useful for defining behaviour changes when in this state. Use {{char}}, {{causant}}, and {{cause}} as placeholders",
+                        "placeholder": "You are {{char}} and you are feeling very anxious and on edge, this makes you fidgety and nervous in your actions and speech",
+                        "placeholder_ts": "return `You are ${char.name} and you are feeling very anxious and on edge, this makes you fidgety and nervous in your actions and speech.`;",
+                        "must_have": ["relief_uses_decay_rate"],
+                    },
+                    "relieving_user_prompt_injection": {
+                        "type": "object",
+                        "properties": {
+                            "ts": {
+                                "type": "string",
+                            },
+                            "script": {
+                                "type": "string",
+                            },
+                        },
+                        "code_language": "handlebars",
+                        "multiline": true,
+                        "title": "User Prompt Injection",
+                        "description": "A user prompt injection to add to the character prompt when this state is active, useful for defining behaviour changes when in this state. Use {{char}}, {{causant}}, and {{cause}} as placeholders",
+                        "placeholder": "{{char}} will now proceed to cry and fidget nervously",
+                        "placeholder_ts": "return `${char.name} will now proceed to cry and fidget nervously.`;",
+                        "must_have": ["relief_uses_decay_rate"],
+                    },
                     "triggers_dead_end": {
                         "type": "string",
                         "title": "Triggers Dead End",
-                        "description": "Describes a dead end that is triggered when this state activates"
+                        "description": "Describes a dead end that is triggered when this state activates, if a stateful dead end is given to the user character object, the game will end"
                     },
                     "dead_end_is_death": {
                         "type": "boolean",
                         "title": "Dead End Is Death",
-                        "description": "Indicates if this dead end is a death of character scenario",
+                        "description": "Indicates if this dead end is a death of character scenario, death would be the main outcome of the dead end, basically the character is taken out of the story permanently",
                         "must_have": ["triggers_dead_end"],
                     },
                     "triggers_dead_end_random_chance": {
@@ -386,16 +501,6 @@ const schema = {
                         "multiline": true,
                         "code_language": "handlebars",
                     },
-                    "automatic_trigger": {
-                        "type": "boolean",
-                        "title": "Automatic Trigger",
-                        "description": "Indicates if this state can be triggered automatically by the criteria of the LLM, useful for generic states that indicate emotions for example"
-                    },
-                    "automatic_relieve": {
-                        "type": "boolean",
-                        "title": "Automatic Relieve",
-                        "description": "Indicates if this state can be relieved automatically by the criteria of the LLM, useful for generic states that indicate emotions for example"
-                    },
                     "decay_rate_per_inference_cycle": {
                         "type": "number",
                         "title": "Decay Rate Per Inference Cycle",
@@ -413,19 +518,19 @@ const schema = {
                         "title": "Decay Rate After Relief",
                         "must_have": ["relief_uses_decay_rate"]
                     },
-                    "manual_trigger_likelihood": {
+                    "trigger_likelihood": {
                         "type": "number",
-                        "title": "Manual Trigger Likelihood",
-                        "description": "The likelihood for this state to be triggered manually per inference, a value between 0 and 1",
+                        "title": "Trigger Likelihood",
+                        "description": "The likelihood for this state to be triggered per inference, a value between 0 and 1",
                         "minimum": 0,
                         "maximum": 1,
                         "percentage": true,
                         "default": 0,
                     },
-                    "manual_triggers": {
+                    "triggers": {
                         "type": "object",
-                        "description": "Manual triggers that can activate this state",
-                        "title": "Manual Triggers",
+                        "description": "Triggers that can activate this state",
+                        "title": "Triggers",
                         "additionalProperties": {
                             "type": "object",
                             "properties": {
@@ -447,7 +552,7 @@ const schema = {
                                     "title": "If Condition",
                                 },
                                 "intensity": {
-                                    "description": "The intensity to set the state to when manually triggered",
+                                    "description": "The intensity to set the state to when triggered",
                                     "type": "number",
                                     "minimum": 0.1,
                                     "maximum": 4,
@@ -458,10 +563,10 @@ const schema = {
                         },
                         "real_type": "arbitrary_object",
                     },
-                    "manual_intensifiers": {
+                    "intensifiers": {
                         "type": "object",
-                        "title": "Manual Intensifiers/Decreasers",
-                        "description": "Manual Intensifiers that can increase/decrease the intensity of this state",
+                        "title": "Intensifiers/Decreasers",
+                        "description": "Intensifiers that can increase/decrease the intensity of this state",
                         "additionalProperties": {
                             "type": "object",
                             "properties": {
@@ -482,7 +587,7 @@ const schema = {
                                     "code_language": "handlebars",
                                 },
                                 "intensity": {
-                                    "description": "The intensity to increase/decrease the state by when manually triggered, use negative values to decrease intensity",
+                                    "description": "The intensity to increase/decrease the state by when triggered, use negative values to decrease intensity",
                                     "type": "number",
                                     "minimum": -4,
                                     "maximum": 4,
@@ -493,10 +598,10 @@ const schema = {
                         },
                         "real_type": "arbitrary_object",
                     },
-                    "manual_relievers": {
+                    "relievers": {
                         "type": "object",
-                        "description": "Manual relievers that can deactivate this state",
-                        "title": "Manual Relievers",
+                        "description": "Relievers that can deactivate this state",
+                        "title": "Relievers",
                         "additionalProperties": {
                             "type": "object",
                             "properties": {
@@ -517,7 +622,7 @@ const schema = {
                                     "code_language": "handlebars",
                                 },
                                 "intensity": {
-                                    "description": "The intensity to decrease the state by when manually triggered",
+                                    "description": "The intensity to decrease the state by when triggered",
                                     "type": "number",
                                     "minimum": -4,
                                     "maximum": 0,
@@ -532,14 +637,6 @@ const schema = {
                         "type": "boolean",
                         "title": "Binary Behaviour",
                         "description": "Indicates if this state describes an action the character takes, useful for states that indicate binary behaviours. When it is an action, there is no intensity associated with it",
-                    },
-                    "starting_intensity": {
-                        "type": "number",
-                        "title": "Starting Intensity",
-                        "description": "The starting intensity of the state when it is first triggered, a value between 0 and 4; this is mostly for automatic triggers, manual triggers can override this value",
-                        "minimum": 0,
-                        "maximum": 4,
-                        "default": 1,
                     },
                     "bond_mini": {
                         "type": "boolean",
@@ -580,7 +677,6 @@ const schema = {
                 },
                 "required": [
                     "common_state_experienced_by_character",
-                    "has_custom_viewables"
                 ]
             }
         },
@@ -626,7 +722,7 @@ const schema = {
                         "additionalProperties": {
                             "type": "object",
                             "properties": {
-                                "increase_if": {
+                                "increase_question": {
                                     "type": "object",
                                     "additionalProperties": {
                                         "type": "object",
@@ -639,14 +735,14 @@ const schema = {
                                             }
                                         }
                                     },
-                                    "title": "Bond Increase Condition (If)",
+                                    "title": "Bond Increase Question",
                                     "description": "The ensure rule to add into the prompt to increase the bond level, always starts as if, eg. {{other}} and {{char}} share a deep emotional connection",
-                                    "placeholder": "{{char}} and {{other}} have spent quality time together recently and share personal stories",
-                                    "placeholder_ts": "return `${char.name} and ${other.name} have spent quality time together recently and share personal stories`;",
+                                    "placeholder": "have {{char}} and {{other}} have spent quality time together recently and share personal stories?",
+                                    "placeholder_ts": "return `have ${char.name} and ${other.name} have spent quality time together recently and share personal stories?`;",
                                     "multiline": true,
                                     "code_language": "handlebars",
                                 },
-                                "decrease_if": {
+                                "decrease_question": {
                                     "type": "object",
                                     "additionalProperties": {
                                         "type": "object",
@@ -659,13 +755,29 @@ const schema = {
                                             }
                                         }
                                     },
-                                    "title": "Bond Decrease Condition (If)",
+                                    "title": "Bond Decrease Question",
                                     "description": "The ensure rule to add into the prompt to increase the bond level, always starts as if, eg. {{other}} and {{char}} share a deep emotional connection",
-                                    "placeholder": "{{char}} and {{other}} have not interacted in a long time and feel distant",
-                                    "placeholder_ts": "return `${char.name} and ${other.name} have not interacted in a long time and feel distant`;",
+                                    "placeholder": "have {{char}} and {{other}} have not interacted in a long time and feel distant?",
+                                    "placeholder_ts": "return `have ${char.name} and ${other.name} have not interacted in a long time and feel distant?`;",
                                     "multiline": true,
                                     "code_language": "handlebars",
-                                }
+                                },
+                                "increase_weight": {
+                                    "type": "number",
+                                    "title": "Increase Weight",
+                                    "description": "The weight to apply when increasing the bond level, higher values make it more likely to increase",
+                                    "minimum": 0,
+                                    "maximum": 10,
+                                    "default": 1,
+                                },
+                                "decrease_weight": {
+                                    "type": "number",
+                                    "title": "Decrease Weight",
+                                    "description": "The weight to apply when decreasing the bond level, higher values make it more likely to decrease",
+                                    "minimum": 0,
+                                    "maximum": 10,
+                                    "default": 1,
+                                },
                             }
                         },
                         "real_type": "arbitrary_object",
@@ -677,7 +789,7 @@ const schema = {
                         "additionalProperties": {
                             "type": "object",
                             "properties": {
-                                "increase_if": {
+                                "increase_question": {
                                     "type": "object",
                                     "additionalProperties": {
                                         "type": "object",
@@ -690,14 +802,14 @@ const schema = {
                                             }
                                         }
                                     },
-                                    "title": "2nd Bond Increase Condition (If)",
+                                    "title": "2nd Bond Increase Question",
                                     "description": "The ensure rule to add into the prompt to increase the bond level, always starts as if, eg. {{other}} and {{char}} share a deep emotional connection",
-                                    "placeholder": "{{char}} and {{other}} have spent quality time together recently and share personal stories",
-                                    "placeholder_ts": "return `${char.name} and ${other.name} have spent quality time together recently and share personal stories`;",
+                                    "placeholder": "have {{char}} and {{other}} have spent quality time together recently and share personal stories?",
+                                    "placeholder_ts": "return `have ${char.name} and ${other.name} have spent quality time together recently and share personal stories?`;",
                                     "multiline": true,
                                     "code_language": "handlebars",
                                 },
-                                "decrease_if": {
+                                "decrease_question": {
                                     "type": "object",
                                     "additionalProperties": {
                                         "type": "object",
@@ -710,12 +822,28 @@ const schema = {
                                             }
                                         }
                                     },
-                                    "placeholder": "{{char}} and {{other}} have not interacted in a long time and feel distant",
-                                    "placeholder_ts": "return `${char.name} and ${other.name} have not interacted in a long time and feel distant`;",
+                                    "placeholder": "have {{char}} and {{other}} have not interacted in a long time and feel distant?",
+                                    "placeholder_ts": "return `have ${char.name} and ${other.name} have not interacted in a long time and feel distant?`;",
                                     "multiline": true,
                                     "code_language": "handlebars",
-                                    "title": "2nd Bond Decrease Condition (If)",
+                                    "title": "2nd Bond Decrease Question",
                                     "description": "The ensure rule to add into the prompt to increase the bond level, always starts as if, eg. {{other}} and {{char}} share a deep emotional connection"
+                                },
+                                "increase_weight": {
+                                    "type": "number",
+                                    "title": "Increase Weight",
+                                    "description": "The weight to apply when increasing the bond level, higher values make it more likely to increase",
+                                    "minimum": 0,
+                                    "maximum": 10,
+                                    "default": 1,
+                                },
+                                "decrease_weight": {
+                                    "type": "number",
+                                    "title": "Decrease Weight",
+                                    "description": "The weight to apply when decreasing the bond level, higher values make it more likely to decrease",
+                                    "minimum": 0,
+                                    "maximum": 10,
+                                    "default": 1,
                                 },
                             }
                         },

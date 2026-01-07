@@ -352,9 +352,9 @@ class BondsHandler:
             return general_instructions
 
         return general_instructions + f"\n\nBe very descriptive" + \
-            f"\n\nIMPORTANT: Keep your response 3 paragraphs maximum. Do NOT write actions or dialogue for {self.username}. Only roleplay as {self.character_name}." + \
-            f"\n\n{self.character_name} should be proactive and propose ideas, activities, and things to do with {self.username} based on the circumstances and their bond" + \
-            f"\n\n{self.character_name} may change the scenario and setting to keep things interesting for both parties"
+            f"\n\nIMPORTANT: Keep your response 3 paragraphs maximum. Do NOT write actions or dialogue for {self.username}. Only roleplay as {self.character_name}."# + \
+            #f"\n\n{self.character_name} should be proactive and propose ideas, activities, and things to do with {self.username} based on the circumstances and their bond" + \
+            #f"\n\n{self.character_name} may change the scenario and setting to keep things interesting for both parties"
         
     def calculate_bond_change(self, current_bond: float, current_2nd_bond: float, current_stranger: bool, total_messages_exchanged: int, change: int, change_2nd: int, minis: int) -> tuple[float, bool]:
         next_bond_amount = current_bond

@@ -52,10 +52,11 @@ const REQUIRED_LIBS = [
 let IS_TVSFS_INITIALIZED = false;
 /**
  * 
- * @param {string} globalsDefinitions 
+ * @param {string} globalsDefinitions
+ * @param {string} funcTypes
  * @returns 
  */
-async function initializeTVSFS(globalsDefinitions) {
+async function initializeTVSFS(globalsDefinitions, funcTypes) {
     if (IS_TVSFS_INITIALIZED) return;
     const fsMap = new Map();
     for (const libName of REQUIRED_LIBS) {
@@ -64,12 +65,13 @@ async function initializeTVSFS(globalsDefinitions) {
     }
     fsMap.set('index.ts', ' ');
     fsMap.set('globals.d.ts', globalsDefinitions);
+    fsMap.set('functypes.d.ts', funcTypes);
 
     const system = tsvfs.createSystem(fsMap);
 //    try {
     const env = tsvfs.createVirtualTypeScriptEnvironment(
         system,
-        ['index.ts', 'globals.d.ts'],
+        ['index.ts', 'globals.d.ts', 'functypes.d.ts'],
         ts,
     );
 //} catch (e) {

@@ -99,13 +99,68 @@ class Settings extends HTMLElement {
                 <app-overlay-input
                     label="Height"
                     title="This is your character's height, in centimeters, which may influence how other characters perceive and interact with you in the game world."
-                    input-data-location="user.height"
+                    input-data-location="user.heightCm"
                     input-placeholder="175"
+                    input-type="number"
+                    input-number-min="50"
+                    input-number-max="3000"
+                    input-number-step="1"
+                    input-number-unit="cm"
+                ></app-overlay-input>
+                <app-overlay-input
+                    label="Weight"
+                    title="This is your character's weight, in kilograms, which may influence how other characters perceive and interact with you in the game world."
+                    input-data-location="user.weightKg"
+                    input-placeholder="70"
+                    input-type="number"
+                    input-number-min="50"
+                    input-number-max="3000"
+                    input-number-step="1"
+                    input-number-unit="kg"
+                ></app-overlay-input>
+                <app-overlay-input
+                    label="Mantenience Calories per day"
+                    title="Mantenience Calories per day"
+                    input-data-location="user.maintenanceCaloriesPerDay"
+                    input-placeholder="2000"
+                    input-type="number"
+                    input-number-min="0"
+                    input-number-max="30000"
+                    input-number-step="1"
+                    input-number-unit="kcal"
+                ></app-overlay-input>
+                <app-overlay-input
+                    label="Mantenience Water per day"
+                    title="Mantenience Water per day"
+                    input-data-location="user.maintenanceWaterLitersPerDay"
+                    input-placeholder="2"
+                    input-type="number"
+                    input-number-min="0"
+                    input-number-max="300"
+                    input-number-step="1"
+                    input-number-unit="L"
+                ></app-overlay-input>
+                <app-overlay-input
+                    label="Carrying Capacity (Liters)"
+                    title="This is your character's carrying capacity in liters"
+                    input-data-location="user.carryingCapacityLiters"
+                    input-placeholder="50"
                     input-type="number"
                     input-number-min="50"
                     input-number-max="300"
                     input-number-step="1"
-                    input-number-unit="cm"
+                    input-number-unit="L"
+                ></app-overlay-input>
+                <app-overlay-input
+                    label="Carrying Capacity (Kilograms)"
+                    title="This is your character's carrying capacity in kilograms"
+                    input-data-location="user.carryingCapacityKg"
+                    input-placeholder="50"
+                    input-type="number"
+                    input-number-min="50"
+                    input-number-max="300"
+                    input-number-step="1"
+                    input-number-unit="L"
                 ></app-overlay-input>
                 <app-overlay-input
                     label="Short Description"
