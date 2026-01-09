@@ -10,17 +10,69 @@ declare interface DEMinimalCharacterReference {
 }
 
 interface DEStringTemplateWithIntensity {
+    /**
+     * Relevant template in question
+     */
     template: DEStringTemplate;
+    /**
+     * Intensity of the template effect
+     */
     intensity: number;
 }
 
 declare interface CharacterStateDefinition {
+    /**
+     * How dominant this state is compared to other states
+     * used to determine which state takes precedence in case of conflicts
+     */
     dominance: number;
+    /**
+     * Description of the state, used for reasoning about the state
+     */
     general: DEStringTemplate;
+    /**
+     * Used for descriptions of the character general state
+     * get applied at system prompt level
+     */
     systemPromptInjection: DEStringTemplate | null;
+    /**
+     * Very strong, used for instructions that the character must follow
+     * make sure that it is not kept every inference cycle unless intended
+     * as the character will be forced to follow it no matter what
+     * you may use a randomizing function to return an empty string sometimes
+     * to avoid the character being stuck in a loop of following the same instruction
+     * or you may choose to give different instructions each time
+     * 
+     * Setting the user prompt injection will disable reasoning in the character about
+     * what they will do next as they will be forced to follow the instructions
+     * 
+     * If two injections are set at the same time by different states, the one from the state with higher dominance will take precedence,
+     * if they have the same dominance, one will be chosen at random
+     */
     userPromptInjection: DEStringTemplate | null;
+    /**
+     * Description of the state, used for reasoning about the state
+     */
     relieving: DEStringTemplate | null;
+    /**
+     * Used for descriptions of the character general state
+     * get applied at system prompt level when relieving the state
+     */
     relievingSystemPromptInjection: DEStringTemplate | null;
+    /**
+     * Very strong, used for instructions that the character must follow
+     * make sure that it is not kept every inference cycle unless intended
+     * as the character will be forced to follow it no matter what
+     * you may use a randomizing function to return an empty string sometimes
+     * to avoid the character being stuck in a loop of following the same instruction
+     * or you may choose to give different instructions each time
+     * 
+     * Setting the user prompt injection will disable reasoning in the character about
+     * what they will do next as they will be forced to follow the instructions
+     * 
+     * If two injections are set at the same time by different states, the one from the state with higher dominance will take precedence,
+     * if they have the same dominance, one will be chosen at random
+     */
     relievingUserPromptInjection: DEStringTemplate | null;
     triggersDeadEnd: string;
     deadEndIsDeath: boolean;
@@ -50,7 +102,6 @@ declare interface CharacterStateDefinition {
     intensifiers: Array<DEStringTemplateWithIntensity>;
     relievers: Array<DEStringTemplateWithIntensity>;
     binaryBehaviour: boolean;
-    bondMini: boolean;
     reliefUsesDecayRate: boolean;
     decayRateAfterRelief: number;
     permanent: boolean;
@@ -60,10 +111,12 @@ declare interface CharacterStateDefinition {
 }
 
 declare interface BondIncreaseQuestion {
-    question_increase: DEPotentiallyNullReturningStringTemplate;
-    question_decrease: DEPotentiallyNullReturningStringTemplate;
-    increase_weight: number;
-    decrease_weight: number;
+    questionIncrease: DEStringTemplate | null;
+    questionDecrease: DEStringTemplate | null;
+    increaseFromStateWithCausant: string | null;
+    decreaseFromStateWithCausant: string | null;
+    increaseWeight: number;
+    decreaseWeight: number;
 }
 
 declare interface BondDeclaration {
@@ -72,14 +125,8 @@ declare interface BondDeclaration {
     min2BondLevel: number;
     max2BondLevel: number;
     description: DEStringTemplate;
-    bondConditions: {
-        increaseQuestions: Array<BondIncreaseQuestion>;
-        decreaseQuestions: Array<BondIncreaseQuestion>;
-    }
-    secondBondConditions: {
-        increaseQuestions: Array<BondIncreaseQuestion>;
-        decreaseQuestions: Array<BondIncreaseQuestion>;
-    }
+    bondConditions: BondIncreaseQuestion[];
+    secondBondConditions: BondIncreaseQuestion[];
 }
 
 declare interface DEAssetLocationAndPlacement {
@@ -178,6 +225,10 @@ declare interface StateCause {
 
 declare interface StateDescription {
     state: string;
+    /**
+     * Whether the state is currently in a relieving state
+     */
+    relieving: boolean;
     intensity: number;
     causants: Array<StateCausant> | null;
     causes: Array<StateCause> | null;
@@ -220,26 +271,31 @@ declare interface DEItem {
     capacityLiters: number;
     capacityKg: number;
     description: string;
+    descriptionWhenWorn: string | null;
+    descriptionWhenCarried: string | null;
     compartimentName: string | null;
     isSeeThrough: boolean;
+    canSitOn: boolean;
+    canLieOn: boolean;
     properties: Record<string, DEPropertyValue>;
-    isClothing: boolean;
-    isFoodOrWater: boolean;
-    clothingProperties: {
-        type: string;
-        canBeWornByCharactersWithStates: Array<string>;
-        canBeWornByCharactersWithProperties: Array<string>;
-        incompatibleWith: Array<string>;
-        wearerMinHeightCm: number | null;
-        wearerMaxHeightCm: number | null;
-        wearerMinWeightKg: number | null;
-        wearerMaxWeightKg: number | null;
-    } | null;
+    isConsumable: boolean;
     foodProperties: {
         calories: number;
         hydrationLiters: number;
     } | null;
     containing: Array<DEItem>;
+
+    /**
+     * The placement of the item in the location or on the character
+     * or within the container item
+     */
+    placement: string;
+    /**
+     * Use this to prevent characters from picking up this item, this is useful
+     * for example with furniture and other fixed items in the location
+     * that the character should not be able to pick up and carry around
+     */
+    nonPickable: boolean;
 }
 
 declare interface StateForDescription {
@@ -283,19 +339,24 @@ declare interface StateForDescriptionWithHistory extends StateForDescription {
 declare interface LocationSlot {
     name: string;
     description: DEStringTemplate;
-    isRestingSpot: boolean;
-    isLayingDownSpot: boolean;
-    isVehicleSpot: boolean;
+    /**
+     * Maximum vehicular volume capacity in liters for vehicles parked in this slot
+     * Make it null for no vehicle capacity
+     */
     vehicularVolumeCapacity: number | null;
-    vehicleTypeLimitations: Array<string>;
+    /**
+     * Types of vehicles that can be parked in this slot
+     */
+    vehicleTypeLimitations: Array<string> | null;
     /**
      * Names of weather systems that are fully blocked by this slot
      */
-    slotFullyBlocksWeather: Array<string>;
+    slotFullyBlocksWeather: Array<string> | null;
     /**
      * Names of weather systems that are only partially blocked by this slot
      */
-    slotPartiallyBlocksWeather: Array<string>;
+    slotPartiallyBlocksWeather: Array<string> | null;
+    items: Array<DEItem>;
 }
 
 declare interface WeatherSystem {
@@ -487,6 +548,8 @@ declare interface DEConversationMessage {
     schizophrenicVoiceSourceCharacter: string | null;
     time: DETimeDescription;
     content: string;
+    startTime: DETimeDescription;
+    endTime: DETimeDescription;
 }
 
 declare interface DEConversation {
@@ -530,11 +593,19 @@ declare interface DEConversation {
 }
 
 declare interface DEScript {
-    name: string;
+    id: string;
     execute: (DE: DEObject, char: DECompleteCharacterReference) => void | Promise<void>;
 }
-declare type DEStringTemplate = (DE: DEObject, char: DECompleteCharacterReference) => Promise<string> | string;
-declare type DEPotentiallyNullReturningStringTemplate = (DE: DEObject, char: DECompleteCharacterReference) => Promise<string | null> | string | null;
+declare interface DEScriptSource {
+    id: string;
+    source: string;
+    type: "handlebars" | "typescript";
+}
+declare type DEStringTemplateFunction = (DE: DEObject, char: DECompleteCharacterReference) => Promise<string> | string;
+declare type DEStringTemplate = DEStringTemplateFunction |{
+    id: string;
+    execute: DEStringTemplateFunction;
+}
 
 declare interface DEObject {
     user: DEMinimalCharacterReference;
@@ -553,6 +624,8 @@ declare interface DEObject {
     conversations: Record<string, DEConversation>;
     functions: FunctionTypes;
     initialTime: DETimeDescription;
+    scriptSources: DEScriptSource[];
+    userWorldRules: Array<DEStringTemplate>;
 }
 
 declare type DE = DEObject;
@@ -561,9 +634,3 @@ declare var char: DECompleteCharacterReference;
 declare var other: DEMinimalCharacterReference;
 declare var causant: DEMinimalCharacterReference;
 declare var cause: string;
-
-// RAW types below used to create the DEObject
-
-declare interface DERawWorldDefinition {
-
-}

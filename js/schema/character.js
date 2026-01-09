@@ -63,10 +63,10 @@ const schema = {
         "short": {
             "type": "string",
             "title": "Short Description",
-            "description": "A short mostly physical (on the surface) description of the character, used in lists and overviews",
+            "description": "A short mostly physical (on the surface) description of the character, used in lists and overviews, do not include clothing here",
             "maxLength": 250,
             "minLength": 20,
-            "placeholder": "A muscular woman with short brown hair and green eyes, wearing a leather jacket and boots",
+            "placeholder": "A muscular woman with short brown hair and green eyes",
             "multiline": true,
         },
         "heightCm": {
@@ -938,6 +938,10 @@ const schema = {
                 "age": {value: {ts: "return 30;", script: "return 30;"}},
             },
             "real_type": "for_properties_input",
+        },
+        // TODO wearing items, and carrying items default loadout
+        "items": {
+
         },
         "advanced_spawn_script": {
             "type": "object",
