@@ -135,10 +135,10 @@ const schema = {
         "stranger_initiative": {
             "type": "number",
             "title": "Stranger Initiative",
-            "description": "A percentage that determines how often per turn the character takes initiative in conversations with strangers",
+            "description": "A percentage that determines how often per turn the character takes initiative in conversations with strangers, should probably be very small, otherwise they are very extroverted and annoying",
             "minimum": 0,
             "maximum": 1,
-            "default": 0.05,
+            "default": 0.01,
             "percentage": true,
         },
         "stranger_rejection": {

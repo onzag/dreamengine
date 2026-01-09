@@ -182,6 +182,7 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
     strangerRejection: number;
     autisticResponse: number;
     schizophrenia: number;
+    schizophrenicVoiceDescription: DEStringTemplate | null;
     states: Record<string, CharacterStateDefinition>;
     bonds: Array<BondDeclaration>;
     emotions: Record<string, EmotionDefinition>;
@@ -284,6 +285,7 @@ declare interface DEItem {
         hydrationLiters: number;
     } | null;
     containing: Array<DEItem>;
+    amount: number;
 
     /**
      * The placement of the item in the location or on the character
@@ -316,12 +318,15 @@ declare interface StateForDescription {
     partiallyExposedToWeather: string | null;
     fullyExposedToWeather: string | null;
     posture: "standing" | "sitting" | "laying_down";
+    /**
+     * The item the character is using to sit, stand or lay down on or null if none
+     * if none that means the character is using the ground/floor/etc
+     */
+    postureAppliedOn: DEItem | null;
     carrying: DEItem[];
+    carryingCharacters: Array<string>;
     wearing: DEItem[];
-}
-
-declare interface StateForDescriptionWithHistory extends StateForDescription {
-    history: Array<StateForDescription>;
+    beingCarriedByCharacter: string | null;
     /**
      * Indicates if the character is dead, aka its deadEnd was a death scenario
      */
@@ -334,6 +339,10 @@ declare interface StateForDescriptionWithHistory extends StateForDescription {
      * If the character has deadEnded, the reason why it happened
      */
     deadEndReason: string | null;
+}
+
+declare interface StateForDescriptionWithHistory extends StateForDescription {
+    history: Array<StateForDescription>;
 }
 
 declare interface LocationSlot {
@@ -538,17 +547,17 @@ declare interface DEStatefulLocationDefinition extends DELocationDefinition {
 
 declare interface DEConversationMessage {
     id: Readonly<string>;
-    sender: string;
+    sender: string | null;
     isCharacter: boolean;
     isUser: boolean;
     isUserRejectedMessage: boolean;
     isSystemMessage: boolean;
     isHiddenSystemMessage: boolean;
+    isInternalStateMessage: boolean;
     isSchizophrenicVoice: boolean;
-    schizophrenicVoiceSourceCharacter: string | null;
-    time: DETimeDescription;
     content: string;
     startTime: DETimeDescription;
+    duration: DETimeDurationDescription;
     endTime: DETimeDescription;
 }
 
@@ -572,7 +581,7 @@ declare interface DEConversation {
      */
     location: string;
     startTime: DETimeDescription;
-    endTime: DETimeDescription;
+    endTime: DETimeDescription | null;
     isOngoing: boolean;
     duration: DETimeDurationDescription;
     /**
@@ -589,7 +598,7 @@ declare interface DEConversation {
     /**
      * An optonal short summary of the conversation and what happened in it
      */
-    summary?: string;
+    summary: string | null;
 }
 
 declare interface DEScript {
@@ -624,6 +633,7 @@ declare interface DEObject {
     conversations: Record<string, DEConversation>;
     functions: FunctionTypes;
     initialTime: DETimeDescription;
+    currentTime: DETimeDescription;
     scriptSources: DEScriptSource[];
     userWorldRules: Array<DEStringTemplate>;
 }

@@ -1,6 +1,15 @@
 import { ALL_FUNCTIONS_WITH_SPECIALS } from "../schema/functions.js"
 import { weightedRandomByLikelyhood } from "../util/random.js"
 
+const INVALID_NAMES = ["system", "assistant", "user", "everyone", "nobody",
+    "anyone", "somebody", "narrator", "observer", "admin", "moderator",
+    "game master", "gm", "storyteller", "dungeon master", "dm", "host",
+    "player", "players", "character", "characters", "npc", "npcs",
+    "they", "them", "their", "theirs", "he", "him", "his", "she", "her", "hers",
+    "it", "its", "i", "me", "my", "mine", "we", "us", "our", "ours", "you", "your", "yours",
+    "everyone else", "everybody else", "anyone else", "anybody else",
+    "somebody else", "somebodyelse", "nobody else", "nobody"];
+
 function setupFunctions() {
     const finalObject = {};
     for (const [signature, details, returnDesc, fn] of ALL_FUNCTIONS_WITH_SPECIALS) {
@@ -37,6 +46,7 @@ function createCharacterFromUser(user) {
         injectableInStateTextBefore: {},
         properties: {},
         schizophrenia: 0,
+        schizophrenicVoiceDescription: null,
         scripts: {
             firstInteract: [],
             postAnyInference: [],
@@ -72,9 +82,13 @@ class DEngine {
         this.userCharacter = null;
 
         this.invalidCharacterStates = false;
+
+        /**
+         * @type {Function[]}
+         */
+        this.listeners = [];
     }
     /**
-     * 
      * @param {*} deObjectJSON 
      */
     initializeFromJSONState(deObjectJSON) {
@@ -99,10 +113,9 @@ class DEngine {
      * @param {DEMinimalCharacterReference} user
      * @param {string} startingLocation
      * @param {string} startingLocationSlot
-     * @param {"standing" | "sitting" | "laying_down"} startingPosture
      * @param {DETimeDescription} startingTime
      */
-    initialize(user, startingLocation, startingLocationSlot, startingPosture, startingTime) {
+    initialize(user, startingLocation, startingLocationSlot, startingTime) {
         this.deObject = {
             user: user,
             world: {
@@ -124,6 +137,7 @@ class DEngine {
             conversations: {},
             stateFor: {},
             initialTime: startingTime,
+            currentTime: { ...startingTime },
             // @ts-ignore
             functions: this.allInternalFunctions,
             social: {
@@ -141,7 +155,7 @@ class DEngine {
         this.user = user;
         this.userCharacter = createCharacterFromUser(user);
 
-        this.addCharacter(this.userCharacter, startingLocation, startingLocationSlot, startingPosture);
+        this.addCharacter(this.userCharacter, startingLocation, startingLocationSlot);
 
         this.initialized = true;
     }
@@ -166,14 +180,22 @@ class DEngine {
      * @param {DECompleteCharacterReference} character
      * @param {string} location
      * @param {string} locationSlot
-     * @param {"standing" | "sitting" | "laying_down"} posture
      */
-    addCharacter(character, location, locationSlot, posture) {
+    addCharacter(character, location, locationSlot) {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         }
         if (this.deObject.characters[character.name]) {
             throw new Error(`Character with name ${character.name} already exists.`);
+        }
+
+        if (INVALID_NAMES.includes(character.name.toLowerCase())) {
+            throw new Error(`Character name ${character.name} is invalid or reserved.`);
+        }
+
+        // ensure the character name starts with a capital letter and is a-z with spaces only
+        if (!/^[A-Z][a-zA-Z ]*$/.test(character.name)) {
+            throw new Error(`Character name ${character.name} is invalid. It must start with a capital letter and contain only letters and spaces.`);
         }
 
         this.deObject.characters[character.name] = character;
@@ -199,10 +221,14 @@ class DEngine {
             surroundingStrangers: [],
             partiallyExposedToWeather: null,
             fullyExposedToWeather: null,
-            posture: posture,
+            posture: "standing",
+            // start on the ground/floor/etc
+            postureAppliedOn: null,
 
             // chars start out empty handed
             carrying: [],
+            carryingCharacters: [],
+            beingCarriedByCharacter: null,
 
             // chars start up naked
             // hopefully they give them some clothes soon :)
@@ -397,6 +423,8 @@ class DEngine {
      * AI should base its next response on, all previous conversation history
      * will be in user space
      * 
+     * Standard reasoning message
+     * 
      * @param {string} characterName 
      */
     getReasoningMessageForCharacter(characterName) {
@@ -466,21 +494,22 @@ class DEngine {
         /**
          * @param {string} space 
          * @param {DEItem} item 
+         * @param {string} extraMessage
          */
-        const listItems = (space, item) => {
-            message += `${space}- ${item.name}, placement: ${item.placement}\n`;
+        const listItems = (space, item, extraMessage) => {
+            message += `${space}- ${item.name}${item.amount >= 2 ? " x" + item.amount : ""}, placement: ${item.placement}${extraMessage}\n`;
             if (item.containing.length !== 0) {
                 message += `${space}  Containing:\n`;
             }
             for (const containedItem of item.containing) {
-                listItems(space + "  ", containedItem);
+                listItems(space + "  ", containedItem, ", contained by: " + item.name + extraMessage);
             }
         }
         if (locationSlot.items.length === 0) {
             message += "No items available at the location.\n";
         } else {
             for (const item of locationSlot.items) {
-                listItems("", item);
+                listItems("", item, "");
             }
         }
 
@@ -492,15 +521,49 @@ class DEngine {
                 message += `\n\nItems carried by ${otherCharName}:\n`;
                 if (otherCharState.wearing.length === 0) {
                     message += `${otherCharName} Is currently naked.\n`;
+                } else {
+                    for (const item of otherCharState.wearing) {
+                        listItems("", item, `, worn by: ${otherCharName}`);
+                    }
                 }
-                if (otherCharState.carrying.length === 0 && otherCharState.wearing.length === 0) {
-                    message += `No items carried by ${otherCharName}.\n`;
+                if (otherCharState.carryingCharacters.length > 0) {
+                    for (const carriedCharName of otherCharState.carryingCharacters) {
+                        message += `${otherCharName} is carrying character: ${carriedCharName}.\n`;
+                    }
+                }
+                if (otherCharState.carrying.length === 0 && otherCharState.wearing.length === 0 && otherCharState.carryingCharacters.length === 0) {
+                    message += `No items or characters carried by ${otherCharName}.\n`;
                 } else {
                     for (const item of otherCharState.carrying) {
-                        listItems("", item);
+                        listItems("", item, `, carried by: ${otherCharName}`);
                     }
                 }
             }
+        }
+
+        // now let's do our own character
+        message += `\n\nItems carried by ${characterName}:\n`;
+        if (characterState.wearing.length === 0) {
+            message += `${characterName} Is currently naked.\n`;
+        } else {
+            for (const item of characterState.wearing) {
+                listItems("", item, `, worn by: ${characterName}`);
+            }
+        }
+        if (characterState.carryingCharacters.length > 0) {
+            for (const carriedCharName of characterState.carryingCharacters) {
+                message += `${characterName} is carrying character: ${carriedCharName}.\n`;
+            }
+        }
+        if (characterState.carrying.length === 0 && characterState.wearing.length === 0 && characterState.carryingCharacters.length === 0) {
+            message += `No items or characters carried by ${characterName}.\n`;
+        } else {
+            for (const item of characterState.carrying) {
+                listItems("", item, `, carried by: ${characterName}`);
+            }
+        }
+        if (characterState.beingCarriedByCharacter) {
+            message += `${characterName} is being carried by character: ${characterState.beingCarriedByCharacter}.\n`;
         }
 
         return message;
@@ -529,18 +592,73 @@ class DEngine {
             finalDescription += ".";
         }
         if (characterState.wearing.length > 0) {
-            finalDescription += " Wearing " + this.deObject.functions.format_and(this.deObject, null, characterState.wearing.map(item => item.descriptionWhenWorn || item.description)) + ".";
+            finalDescription += " Wearing " + this.deObject.functions.format_and(this.deObject, null, characterState.wearing.map(item => item.amount >= 2 ? item.amount + " of " + (item.descriptionWhenWorn || item.description) : (item.descriptionWhenWorn || item.description))) + ".";
         } else {
             finalDescription += " Not wearing any clothes.";
         }
 
         if (characterState.carrying.length > 0) {
-            finalDescription += " Carrying " + this.deObject.functions.format_and(this.deObject, null, characterState.carrying.map(item => item.descriptionWhenCarried || item.description)) + ".";
+            finalDescription += " Carrying " + this.deObject.functions.format_and(this.deObject, null, characterState.carrying.map(item => item.amount >= 2 ? item.amount + " of " + (item.descriptionWhenCarried || item.description) : (item.descriptionWhenCarried || item.description))) + ".";
         } else {
             finalDescription += " Not carrying any items.";
         }
 
+        if (characterState.beingCarriedByCharacter) {
+            finalDescription += ` Being carried by ${characterState.beingCarriedByCharacter}.`;
+        }
+
+        if (characterState.carryingCharacters.length > 0) {
+            finalDescription += ` Carrying characters: ` + this.deObject.functions.format_and(this.deObject, null, characterState.carryingCharacters) + ".";
+        }
+
+        finalDescription += " " + character.name + " is currently " + characterState.posture + " on " + (characterState.postureAppliedOn ? characterState.postureAppliedOn.description : "the ground/floor") + ".";
+
         return finalDescription;
+    }
+
+    /**
+     * Gets the carry/wear message for the character
+     * @param {string} characterName 
+     */
+    getCarryWearMessageForCharacter(characterName) {
+        if (!this.deObject) {
+            throw new Error("DEngine not initialized");
+        }
+        if (this.invalidCharacterStates) {
+            throw new Error("DEngine has invalid character states, cannot get short description of character");
+        }
+        const character = this.deObject.characters[characterName];
+        if (!character) {
+            throw new Error(`Character ${characterName} not found.`);
+        }
+        const characterState = this.deObject.stateFor[characterName];
+        if (!characterState) {
+            throw new Error(`Character state for ${characterName} not found.`);
+        }
+        let finalDescription = "";
+        if (characterState.wearing.length > 0) {
+            finalDescription += `${character.name} is wearing ` + this.deObject.functions.format_and(this.deObject, null, characterState.wearing.map(item => item.amount >= 2 ? item.amount + " of " + (item.descriptionWhenWorn || item.description) : (item.descriptionWhenWorn || item.description))) + ".";
+        } else {
+            finalDescription += `${character.name} is not wearing any clothes.`;
+        }
+
+        if (characterState.carrying.length > 0) {
+            finalDescription += `\n${character.name} is carrying ` + this.deObject.functions.format_and(this.deObject, null, characterState.carrying.map(item => item.amount >= 2 ? item.amount + " of " + (item.descriptionWhenCarried || item.description) : (item.descriptionWhenCarried || item.description))) + ".";
+        } else {
+            finalDescription += `\n${character.name} is not carrying any items.`;
+        }
+
+        if (characterState.beingCarriedByCharacter) {
+            finalDescription += `\n${character.name} is being carried by ${characterState.beingCarriedByCharacter}.`;
+        }
+
+        if (characterState.carryingCharacters.length > 0) {
+            finalDescription += `\n${character.name} is carrying characters: ` + this.deObject.functions.format_and(this.deObject, null, characterState.carryingCharacters) + ".";
+        }
+
+        if (char)
+
+            return finalDescription;
     }
 
     /**
@@ -567,13 +685,14 @@ class DEngine {
     }
 
     /**
-     * 
      * @param {string} characterName 
      * @param {string} locationName 
-     * @param {string} locationSlotName 
+     * @param {string} locationSlotName
+     * @param {boolean} includeCharacters
+     * @param {boolean} excludeItems
      * @returns 
      */
-    getItemsCharacterCannotCarryWithReasons(characterName, locationName, locationSlotName) {
+    getItemsCharacterCannotCarryWithReasons(characterName, locationName, locationSlotName, includeCharacters, excludeItems) {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         }
@@ -608,11 +727,11 @@ class DEngine {
             let takenVolume = 0;
             let addedVolume = 0;
             for (const carriedItem of itemList) {
-                remainingCarryingCapacity -= carriedItem.weightKg;
+                remainingCarryingCapacity -= carriedItem.weightKg * carriedItem.amount;
                 if (carriedItem.capacityLiters) {
-                    addedVolume += carriedItem.capacityLiters;
+                    addedVolume += carriedItem.capacityLiters * carriedItem.amount;
                 }
-                takenVolume += carriedItem.volumeLiters;
+                takenVolume += carriedItem.volumeLiters * carriedItem.amount;
 
                 // the added and taken volume are irrelevant because
                 // these are already inside another container
@@ -621,15 +740,50 @@ class DEngine {
 
             return { takenVolume, addedVolume }
         }
-        const { takenVolume, addedVolume } = processItemList(characterState.carrying);
-        remainingCarryingVolume -= (takenVolume - addedVolume);
+        /**
+         * @param {string[]} characterList
+         */
+        const processCharacterList = (characterList) => {
+            let takenVolume = 0;
+            let addedVolume = 0;
+            for (const carriedCharacterName of characterList) {
+                const carriedCharacterState = this.deObject?.stateFor[carriedCharacterName];
+                if (carriedCharacterState === undefined) {
+                    continue;
+                }
+                const characterWeight = this.deObject?.characters[carriedCharacterName]?.weightKg || 0;
+                remainingCarryingCapacity -= characterWeight;
+                // assume a character is mostly water, so the volume is weight
+                // in liters is weight in kg divided by 1 (density of water)
+                // so just use the weight as volume for simplicity
+                takenVolume += characterWeight;
+                // carrying a character does not add volume capacity but it takes volume
+                const characterVolumes = processItemList(carriedCharacterState.carrying);
+                takenVolume += characterVolumes.takenVolume;
+                // now consider the clothes they are wearing
+                const characterVolumesWearing = processItemList(carriedCharacterState.wearing);
+                takenVolume += characterVolumesWearing.takenVolume;
+                // the same is true for the characters they are carrying
+                const characterCharactersVolumes = processCharacterList(carriedCharacterState.carryingCharacters);
+                takenVolume += characterCharactersVolumes.takenVolume;
+            }
+
+            return { takenVolume, addedVolume }
+        }
+        const characterCharactersVolumes = processCharacterList(characterState.carryingCharacters);
+        const carryingVolumes = processItemList(characterState.carrying);
+        remainingCarryingVolume -= (carryingVolumes.takenVolume - carryingVolumes.addedVolume);
+        remainingCarryingVolume -= characterCharactersVolumes.takenVolume;
         const volumeClothes = processItemList(characterState.wearing);
         remainingCarryingVolume += volumeClothes.addedVolume; // clothes don't count towards carrying volume, becuase they are worn
         // so we only consider the extra volume they add, not the volume they take
 
-        for (const item of locationSlot.items) {
+        /**
+         * @param {DEItem} item
+         * @param {string} extraMessage
+         */
+        const processItemAndReason = (item, extraMessage) => {
             let reason = null;
-
             if (item.weightKg > remainingCarryingCapacity) {
                 reason = `item is too heavy (${item.weightKg}kg) for character strength`;
             } else if (item.volumeLiters > character.carryingCapacityLiters) {
@@ -641,11 +795,68 @@ class DEngine {
             } else if (item.nonPickable) {
                 reason = `item is marked as non-pickable`;
             }
-            
+
             if (reason) {
-                itemsCharacterCannotCarryWReasons.push(`${item.name}: ${reason}`);
+                if (item.amount >= 2) {
+                    itemsCharacterCannotCarryWReasons.push(`1 of ${item.name}: ${reason}`);
+                } else {
+                    itemsCharacterCannotCarryWReasons.push(`${item.name}: ${reason}`);
+                }
+            }
+
+            for (const containedItem of item.containing) {
+                processItemAndReason(containedItem, ` (contained by ${item.name}${extraMessage})`);
             }
         }
+
+        if (!excludeItems) {
+            for (const item of locationSlot.items) {
+                processItemAndReason(item, "");
+            }
+            for (const otherCharName in this.deObject.stateFor) {
+                if (otherCharName === characterName) continue;
+                const otherCharState = this.deObject.stateFor[otherCharName];
+                if (otherCharState.location === locationName && otherCharState.locationSlot === locationSlotName) {
+                    // check their wearing items
+                    for (const item of otherCharState.wearing) {
+                        processItemAndReason(item, ` (worn by ${otherCharName})`);
+                    }
+
+                    // check their carried items
+                    for (const item of otherCharState.carrying) {
+                        processItemAndReason(item, ` (carried by ${otherCharName})`);
+                    }
+                }
+            }
+        }
+
+        if (includeCharacters) {
+            for (const otherCharName in this.deObject.stateFor) {
+                if (otherCharName === characterName) continue;
+                const otherCharState = this.deObject.stateFor[otherCharName];
+                if (otherCharState.location === locationName && otherCharState.locationSlot === locationSlotName) {
+                    let reason = null;
+                    const otherCharacter = this.deObject.characters[otherCharName];
+                    if (!otherCharacter) {
+                        continue;
+                    }
+                    if (otherCharacter.weightKg > remainingCarryingCapacity) {
+                        reason = `character is too heavy (${otherCharacter.weightKg}kg) for character strength`;
+                    } else if (otherCharacter.weightKg > remainingCarryingCapacity) {
+                        reason = `the character is already carrying too much weight to lift this character`;
+
+                        // assume the character's volume is equal to their weight in liters
+                    } else if (otherCharacter.weightKg > remainingCarryingVolume) {
+                        reason = `the character is already carrying too much volume to fit this character`;
+                    }
+                    if (reason) {
+                        itemsCharacterCannotCarryWReasons.push(`${otherCharacter.name}: ${reason}`);
+                    }
+                }
+
+            }
+        }
+
         return itemsCharacterCannotCarryWReasons;
     }
 
@@ -683,46 +894,79 @@ class DEngine {
         const otherRulesProcessed = (await Promise.all(otherRules.map((rule, index) => {
             if (typeof rule === "function") {
                 // @ts-ignore
-                return rule(this.deObject, character);
+                return rule(this.deObject, characterObj);
             } else {
                 // @ts-ignore
-                return rule.execute(this.deObject, character);
+                return rule.execute(this.deObject, characterObj);
             }
-        }))).filter((v) => v !== null && v !== undefined && v !== "");;
+        }))).filter((v) => v !== null && v !== undefined && v !== "");
+
+        const ruleBreakMessage = "\nWas this rule broken by " + characterName + "? Answer with YES or NO, if YES, explain why briefly.";
 
         const basicRules = [
-            `${characterName} cannot describe other characters's actions or reactions directly, they can only describe their own actions and reactions, other characters must react on their own; minor reactions like flinching or slight movements are allowed but not major actions or decisions`,
-            `${characterName} cannot describe the outcome of conflicts or fights involving other characters, those characters must decide their own outcomes based on their own reasoning and reactions`,
-            `${characterName} cannot describe characters joining the conversation by themselves, ${characterName} can try to approach other characters, even aggressively, but the decision to join must be made by those characters`,
-            `If ${characterName} is trying to go somewhere by themselves, they need to end the message saying that they are heading towards that location and not specify anything after that; the message must end there`,
-            `If ${characterName} is trying to go somewhere with another character, they need to end the message saying that they are heading towards that location and not specify anything after that, aggression and force is allowed, but they cannot specify ` +
-            "further to give the characters involved a chance to either fight, follow or stay in place; the message must end before any commitments have been made",
-            `${characterName} cannot spawn characters out of thin air, all characters must already exist in the location or be introduced through valid means.`,
-            ...otherRulesProcessed,
+            {
+                rule: `RULE: ${characterName} cannot describe other characters's actions or reactions directly, they can only describe their own actions and reactions, other characters must react on their own; minor reactions like flinching or slight movements are allowed but not major actions or decisions.` + ruleBreakMessage,
+                ruleExpect: "NO",
+            },
+            {
+                rule: `RULE: ${characterName} cannot invoke characters into the location, they can talk about them but they cannot force their presence, either by saying their name or by description, characters must enter through valid means by themselves.\nHas ${characterName} invoked any characters into the location? Answer with YES or NO, if YES, explain why briefly.`,
+                ruleExpect: "NO",
+            },
+            {
+                rule: `RULE: ${characterName} cannot describe the outcome of conflicts or fights involving other characters, those characters must decide their own outcomes based on their own reasoning and reactions.` + ruleBreakMessage,
+                ruleExpect: "NO",
+            },
+            {
+                rule: `RULE: ${characterName} cannot describe characters joining the conversation by themselves, ${characterName} can try to approach other characters, even aggressively, but the decision to join must be made by those characters.` + ruleBreakMessage,
+                ruleExpect: "NO",
+            },
+            {
+                rule: `RULE: If ${characterName} is trying to go somewhere by themselves, they need to end the message saying that they are heading towards that location and not specify anything after that; the message must end there.` + ruleBreakMessage,
+                ruleExpect: "NO",
+            },
+            {
+                rule: `RULE: If ${characterName} is trying to go somewhere with another character, they need to end the message saying that they are heading towards that location and not specify anything after that, aggression and force is allowed, but they cannot specify ` +
+                    "further to give the characters involved a chance to either fight, follow or stay in place; the message must end before any commitments have been made." + ruleBreakMessage,
+                ruleExpect: "NO",
+            },
+            {
+                rule: `RULE: ${characterName} cannot spawn characters out of thin air, all characters must already exist in the location or be introduced through valid means.` + ruleBreakMessage,
+                ruleExpect: "NO",
+            },
+            ...otherRulesProcessed.map(rule => ({
+                rule: "RULE: " + (rule.endsWith(".") ? rule + ruleBreakMessage : rule + "." + ruleBreakMessage),
+                ruleExpect: "NO",
+            })),
         ];
         const nonPickableItems = this.getNonPickableItemsAtSlot(
             charState.location,
             charState.locationSlot,
         ).map(item => item.name);
         const itemsDescribedAtLocation = this.describeItemsAvailableToCharacterForInference(characterName);
-        const itemsCharacterCannotCarryWReasons = this.getItemsCharacterCannotCarryWithReasons(characterName, charState.location, charState.locationSlot);
+        const itemsCharacterCannotCarryWReasons = this.getItemsCharacterCannotCarryWithReasons(characterName, charState.location, charState.locationSlot, false, false);
+        const charactersCharacterCannotCarryWReasons = this.getItemsCharacterCannotCarryWithReasons(characterName, charState.location, charState.locationSlot, true, true);
         const specialRules = [
             nonPickableItems ? {
-                rule: `${characterName} cannot grab or pick up items that are marked as non-pickable in the location, the list of non pickable items are: ` + nonPickableItems.join(", ") + `\n\nIf ${characterName} attempts to pick up any of these items, respond with YES and explain why they cannot pick it up, otherwise respond with NO\n\nHas ${characterName} attempted to pick up any of these items?`,
+                rule: `RULE: ${characterName} cannot grab or pick up items that are marked as non-pickable in the location, the list of non pickable items are: ` + nonPickableItems.join(", ") + `\n\nIf ${characterName} attempts to pick up any of these items, respond with YES and explain why they cannot pick it up, otherwise respond with NO\n\nHas ${characterName} attempted to pick up any of these items?`,
                 ruleExpect: "NO",
             } : null,
             {
-                rule: `${characterName} cannot spawn, interact or drop items out of thin air, , all items must already exist in the location or be acquired through valid means; ensure consistency with:\n` +
-                itemsDescribedAtLocation +
-                `\n\nIf ${characterName} attempts to spawn or drop any items not in this list, respond with YES and explain why they cannot do that, otherwise respond with NO\n\nHas ${characterName} attempted to spawn, drop or interact with any items not in this list?`,
+                rule: `RULE: ${characterName} cannot spawn, interact or drop items out of thin air, all items must already exist in the location or be acquired through valid means; ensure consistency with:\n` +
+                    itemsDescribedAtLocation +
+                    `\n\nIf ${characterName} attempts to spawn or drop any items not in this list, respond with YES and explain why they cannot do that, otherwise respond with NO\n\nHas ${characterName} attempted to spawn, drop or interact with any items not in this list or in ways that do not make sense?`,
                 ruleExpect: "NO",
             },
-            {
-                rule: `if ${characterName} describes sucesffully picking up an item, it cannot be any of the the following:\n` + itemsCharacterCannotCarryWReasons.join("\n-") +
-                `\n\nIf $${characterName} attempts to pick up any of these items, respond with YES and explain why they cannot pick it up, otherwise respond with NO\n\nHas ${characterName} attempted to pick up any of these items?`,
+            itemsCharacterCannotCarryWReasons.length === 0 ? null : {
+                rule: `RULE: if ${characterName} describes sucesffully picking up an item, trying to pick or lift it is allowed but they cannot succesfully pick it up, it cannot be any of the the following:\n` + itemsCharacterCannotCarryWReasons.join("\n-") +
+                    `\n\nIf $${characterName} describes sucesffully picking it up any of these items, respond with YES and explain why they cannot pick it up, otherwise respond with NO\n\nHas ${characterName} sucesfully picked up any of these items?`,
                 ruleExpect: "NO",
             },
-        ]
+            charactersCharacterCannotCarryWReasons.length === 0 ? null : {
+                rule: `RULE: if ${characterName} describes sucesffully picking up another character, trying to pick or lift it is allowed but they cannot succesfully pick them up, it cannot be any of the the following:\n` + charactersCharacterCannotCarryWReasons.join("\n-") +
+                    `\n\nIf $${characterName} describes sucesffully picking it up any of these characters, respond with YES and explain why they cannot pick it up, otherwise respond with NO\n\nHas ${characterName} sucesfully picked up any of these characters?`,
+                ruleExpect: "NO",
+            },
+        ].filter(rule => rule !== null);
         // We will do item validation later on on which item was picked up and if they are placing it in a container or wearing it, etc.
 
         return {
@@ -731,6 +975,74 @@ class DEngine {
             basicRules,
             specialRules,
         };
+    }
+
+    /**
+     * @param {string} characterName
+     * @return {Promise<string[]>}
+     */
+    async getAISpecificRulesForCharacter(characterName) {
+        if (!this.deObject) {
+            throw new Error("DEngine not initialized");
+        }
+        if (this.invalidCharacterStates) {
+            throw new Error("DEngine has invalid character states, cannot validate world rules");
+        }
+        const characterObj = this.deObject.characters[characterName];
+        if (!characterObj) {
+            throw new Error(`Character object for ${characterName} not found.`);
+        }
+        const worldRulesInfo = await this.getWorldRulesFor(characterName);
+        const simplifiedRules = [
+            "When roleplaying as " + characterName + ", you should not describe actions done by other characters, roleplay as " + characterName + " only.",
+        ];
+
+        const otherRules = this.deObject.userWorldRules || [];
+
+        const otherRulesProcessed = (await Promise.all(otherRules.map((rule, index) => {
+            if (typeof rule === "function") {
+                // @ts-ignore
+                return rule(this.deObject, characterObj);
+            } else {
+                // @ts-ignore
+                return rule.execute(this.deObject, characterObj);
+            }
+        }))).filter((v) => v !== null && v !== undefined && v !== "");
+        simplifiedRules.push(...otherRulesProcessed);
+
+        return simplifiedRules;
+    }
+
+    informDEObjectUpdated() {
+        this.listeners.forEach(listener => {
+            listener(this.deObject)
+        });
+    }
+
+    /**
+     * @param {"info" | "error" | "debug"} level
+     * @param {string} message
+     */
+    informCycleState(level, message) {
+
+    }
+
+    /**
+     * @param {string} characterName 
+     */
+    informCharacterInferenceStart(characterName) {
+
+    }
+
+    /**
+     * @param {string} systemMessage
+     * @param {string[]} rulesList
+     * @param {string} message
+     * @returns {Promise<{passed: boolean, reason: string | null}>}
+     */
+    async runYesNoQuestionInference(systemMessage, rulesList, message) {
+        // TODO: implement the actual inference using an AI model
+        return { passed: true, reason: null };
     }
 
     /**
@@ -748,56 +1060,527 @@ class DEngine {
             throw new Error("DEngine has no user character defined");
         }
         const worldRulesInfo = await this.getWorldRulesFor(this.user.name);
+        const message = this.user.name + " said: " + userMessage;
+
+        const NO_RULES = worldRulesInfo.basicRules.filter(rule => rule.ruleExpect === "NO").concat(worldRulesInfo.specialRules.filter(rule => rule.ruleExpect === "NO")).map(rule => rule.rule);
+        const YES_RULES = worldRulesInfo.basicRules.filter(rule => rule.ruleExpect === "YES").concat(worldRulesInfo.specialRules.filter(rule => rule.ruleExpect === "YES")).map(rule => rule.rule);
+        let currentOutcome = YES_RULES.length ?
+            await this.runYesNoQuestionInference(worldRulesInfo.systemMessageYes, YES_RULES, message) :
+            { passed: true, reason: null };
+        currentOutcome = currentOutcome.passed && NO_RULES.length ?
+            await this.runYesNoQuestionInference(worldRulesInfo.systemMessageNo, NO_RULES, message) :
+            currentOutcome;
+
+        return currentOutcome;
+    }
+
+    /**
+     * @param {DECompleteCharacterReference} character
+     * @param {string} message 
+     */
+    async determineInteractedCharactersForMessage(character, message) {
+        if (!this.deObject) {
+            throw new Error("DEngine not initialized");
+        } else if (this.invalidCharacterStates) {
+            throw new Error("DEngine has invalid character states, cannot determine interacted characters");
+        }
+        const systemMessage = `You are an assistant that determines which characters are being interacted within a message by ${character.name} in an interactive story. ` +
+            `By interaction we mean any mention of the character by name, description, actions directed towards them, where it warrants a response from the character ` +
+            `just mentioning the character behind their back is not enough for interaction unless the message implies that the character is aware of it or might become aware.\n\n` +
+            `Pay attention to potential mispellings of the character names, as they might be referred to in different ways.\n\n` +
+            `If the character whispers, talks quietly, or only thinks about them without any action or dialogue directed towards them or that they might hear, that does not count as interaction.`;
+
+        const instruction = "Answer with a list of character names being interacted with, separated by commas. In the order you believe they would most likely respond. If no characters are being interacted with, respond with NONE." +
+            "The list should be in the format: CharacterName1, CharacterName2, CharacterName3\n\n" +
+            "And not include any other text or descriptions. Use the exact character names as defined in the world and not a description or nickname." +
+            "The list should be specific to " + character.name + "'s last message and who is likely to notice them based on their surroundings.";
+
+        const characterState = this.deObject.stateFor[character.name];
+        if (!characterState) {
+            throw new Error(`Character state for ${character.name} not found.`);
+        }
+        if (!characterState.conversationId) {
+            throw new Error(`Character ${character.name} is not in a conversation, cannot determine interacted characters.`);
+        }
+
+        const surroundingNonStrangers = characterState.surroundingNonStrangers;
+
+        // these characters nearby but they are strangers likely not even looking at the direction
+        // of the character so they likely don't notice them
+        const surroundingStrangers = characterState.surroundingStrangers;
+        // these characters are already in the conversation and likely will hear everything
+        const conversationParticipants = this.deObject.conversations[characterState.conversationId].participants.filter(charName => charName !== character.name);
+        const surroundingNonStrangersNotInConversation = surroundingNonStrangers.filter(charName => !conversationParticipants.includes(charName));
+
+        const strangersLikelyToNotice = [];
+        const strangersNotLikelyToNotice = [];
+        const nonStrangerLikelyToNotice = [];
+        const nonStrangerNotLikelyToNotice = [];
+
+        let description = "";
+        for (const stranger of surroundingStrangers) {
+            const sameSlot = this.deObject.stateFor[stranger]?.locationSlot === characterState.locationSlot;
+            if (sameSlot) {
+                strangersLikelyToNotice.push(stranger);
+            } else {
+                strangersNotLikelyToNotice.push(stranger);
+            }
+        }
+        for (const nonStranger of surroundingNonStrangersNotInConversation) {
+            const sameSlot = this.deObject.stateFor[nonStranger]?.locationSlot === characterState.locationSlot;
+            if (sameSlot) {
+                nonStrangerLikelyToNotice.push(nonStranger);
+            } else {
+                nonStrangerNotLikelyToNotice.push(nonStranger);
+            }
+        }
+
+        if (strangersNotLikelyToNotice.length > 0) {
+            description += `The following characters are strangers likely not looking at ${character.name}'s direction:\n\n` +
+                strangersNotLikelyToNotice.map(name => `- ${name}: ${this.getShortDescriptionOfCharacter(name)}`).join("\n") + "\n\n";
+        }
+        if (nonStrangerNotLikelyToNotice.length > 0) {
+            description += `The following characters know ${character.name} but are likely not looking at ${character.name}'s direction:\n\n` +
+                nonStrangerNotLikelyToNotice.map(name => `- ${name}: ${this.getShortDescriptionOfCharacter(name)}`).join("\n") + "\n\n";
+        }
+        if (strangersLikelyToNotice.length > 0) {
+            description += `The following characters are strangers likely looking at ${character.name}'s direction:\n\n` +
+                strangersLikelyToNotice.map(name => `- ${name}: ${this.getShortDescriptionOfCharacter(name)}`).join("\n") + "\n\n";
+        }
+        if (nonStrangerLikelyToNotice.length > 0) {
+            description += `The following characters know ${character.name} and are likely looking at ${character.name}'s direction:\n\n` +
+                nonStrangerLikelyToNotice.map(name => `- ${name}: ${this.getShortDescriptionOfCharacter(name)}`).join("\n") + "\n\n";
+        }
+        if (conversationParticipants.length > 0) {
+            description += `The following characters are already in conversation with ${character.name} and likely hear everything:\n\n` +
+                conversationParticipants.map(name => `- ${name}: ${this.getShortDescriptionOfCharacter(name)}`).join("\n") + "\n\n";
+        }
+
+        const allPotentials = ([
+            ...strangersLikelyToNotice,
+            ...nonStrangerLikelyToNotice,
+            ...strangersNotLikelyToNotice,
+            ...nonStrangerNotLikelyToNotice,
+            ...conversationParticipants,
+        ])
+        const allPotentialsLowered = allPotentials.map(name => name.toLowerCase());
+
+        const messageSpecified = `${character.name} said: ${message}`;
+
+        // TODO implement the actual inference using an AI model
+        let inferenceText = "";
+
+        /**
+         * @type {DEConversationMessage}
+         */
+        const messageToAdd = {
+            sender: character.name,
+            content: "Interaction Inference Response:\n\n" + inferenceText,
+            duration: { inMinutes: 0, inHours: 0, inDays: 0 },
+            id: crypto.randomUUID(),
+            isCharacter: false,
+            isHiddenSystemMessage: true,
+            isSystemMessage: true,
+            isUser: false,
+            isSchizophrenicVoice: false,
+            isUserRejectedMessage: false,
+            isInternalStateMessage: false,
+            // @ts-ignore
+            startTime: { ...this.deObject.currentTime },
+            // @ts-ignore
+            endTime: { ...this.deObject.currentTime },
+        };
+        // typescript not being able to infer here as usual
+        // @ts-ignore
+        this.deObject.conversations[characterState.conversationId].messages.push(messageToAdd);
+        this.informDEObjectUpdated();
+
+        /**
+         * @type {string[]}
+         */
+        const inferenceResult = [];
+        inferenceText.split(",").map(name => name.trim()).forEach(name => {
+            const loweredName = name.toLowerCase();
+            if (loweredName === "none") {
+                return;
+            }
+            const indexOfIt = allPotentialsLowered.indexOf(loweredName);
+            if (indexOfIt !== -1) {
+                const toAdd = allPotentials[indexOfIt];
+                if (!inferenceResult.includes(toAdd)) {
+                    inferenceResult.push(toAdd);
+                } else {
+                    // duplicate, ignore
+                }
+            } else {
+                // try find the character
+                /**
+                 * @type {Array<{name: string, index: number}>}
+                 */
+                const foundCharacters = []
+                allPotentialsLowered.forEach((potentialName, indexOfPotentialName) => {
+                    const indexWithinSubstring = potentialName.indexOf(loweredName);
+                    if (indexWithinSubstring !== -1) {
+                        foundCharacters.push({ name: allPotentials[indexOfPotentialName], index: indexWithinSubstring });
+                    }
+                });
+                // sort by index, lowest index first
+                foundCharacters.sort((a, b) => a.index - b.index);
+                if (foundCharacters.length > 0) {
+                    for (const foundCharacter of foundCharacters) {
+                        if (!inferenceResult.includes(foundCharacter.name)) {
+                            inferenceResult.push(foundCharacter.name);
+                        }
+                    }
+                } else {
+                    // not found, ignore, give debug message
+                    /**
+                     * @type {DEConversationMessage}
+                     */
+                    const messageToAdd = {
+                        sender: character.name,
+                        content: `Character "${name}" was mentioned in interaction detection but was not found among potential interacted characters.`,
+                        duration: { inMinutes: 0, inHours: 0, inDays: 0 },
+                        id: crypto.randomUUID(),
+                        isCharacter: false,
+                        isHiddenSystemMessage: true,
+                        isSystemMessage: true,
+                        isUser: false,
+                        isSchizophrenicVoice: false,
+                        isUserRejectedMessage: false,
+                        isInternalStateMessage: false,
+                        // @ts-ignore
+                        startTime: { ...this.deObject.currentTime },
+                        // @ts-ignore
+                        endTime: { ...this.deObject.currentTime },
+                    };
+                    // typescript not being able to infer here as usual
+                    // @ts-ignore
+                    this.deObject.conversations[characterState.conversationId].messages.push(messageToAdd);
+                    this.informDEObjectUpdated();
+                }
+            }
+        });
+
+        const result = {
+            strangersAtDistanceThatReacted: strangersLikelyToNotice.filter(name => inferenceResult.includes(name)),
+            nonStrangersAtDistanceThatReacted: nonStrangerLikelyToNotice.filter(name => inferenceResult.includes(name)),
+            strangersUpCloseThatReacted: strangersNotLikelyToNotice.filter(name => inferenceResult.includes(name)),
+            nonStrangersUpCloseThatReacted: nonStrangerNotLikelyToNotice.filter(name => inferenceResult.includes(name)),
+            ordering: inferenceResult,
+        };
+
+        /**
+         * @type {DEConversationMessage}
+         */
+        const messageToAdd2 = {
+            sender: character.name,
+            content: "Interaction Inference Parsed Response:\n\n" + JSON.stringify(result, null, 2),
+            duration: { inMinutes: 0, inHours: 0, inDays: 0 },
+            id: crypto.randomUUID(),
+            isCharacter: false,
+            isHiddenSystemMessage: true,
+            isSystemMessage: true,
+            isUser: false,
+            isSchizophrenicVoice: false,
+            isUserRejectedMessage: false,
+            isInternalStateMessage: false,
+            // @ts-ignore
+            startTime: { ...this.deObject.currentTime },
+            // @ts-ignore
+            endTime: { ...this.deObject.currentTime },
+        };
+        // typescript not being able to infer here as usual
+        // @ts-ignore
+        this.deObject.conversations[characterState.conversationId].messages.push(messageToAdd2);
+        this.informDEObjectUpdated();
+
+        return result;
+    }
+
+    /**
+     * @param {string} characterThatInvokedInteraction 
+     * @param {string} interactedCharacter 
+     */
+    async applyConversationReactionAccordingToCharacter(characterThatInvokedInteraction, interactedCharacter) {
+        return {
+            repliesWithAutism: false,
+            repliesWithSchizophrenia: false,
+            repliesNormally: false,
+            ignoresInvokerDueToTotalStranger: false,
+            ignoresInvokerDueToBadRelationship: false,
+
+            repliesWithCustom: false,
+            customReaction: "",
+        }
     }
 
     /**
      * @param {string} userMessage 
      */
-    executeNextCycle(userMessage) {
+    async executeNextCycle(userMessage) {
+        // TODO implement rollback system in case something goes wrong during the cycle, we need to copy
+        // the whole deObject and restore it if something bad happens
+
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         } else if (this.invalidCharacterStates) {
             throw new Error("DEngine has invalid character states, cannot execute next cycle");
+        } else if (!this.user) {
+            throw new Error("DEngine has no user character defined");
         }
-        // 1. Get user message
-        // 2. Validate the user message does not break any rules world rules or general rules, esp no forced actions in other characters, validate locations
-        //    are real and accessible if trying to go somewhere, if the user tries to go somewhere they cannot continue the story there, they need to end the message
-        //    saying that they are heading towards that location, otherwise the message will be rejected; also possible to head towards slots within locations so as long as they
-        //    are real and/or change posture within them, this all has to be validated and create this potential new de state in memory but not commit it yet, check also that
-        //    if the character cannot say things like they win a fight against someone else, the other character must be capable to react before a conclusion is reached; the user simply
-        //    cannot force other characters to do things with the text input, they can say they force them but the character must react and let it happen or not.
-        // 3. Check for characters mentioned in the message (either by name or by context) and gather them, use the short description to identify them
-        //    3.1. Pick some more by initiative if needed, eg. if already in a conversation or if stranger initiative is high enough; the end list can as well be empty, eg. none is around
-        //    or none is interested in interacting, for those that have high stranger rejection, roll to see if they ignore the character or not, just keep it in place
-        //    for now, eg. for injecting *character will ignore user and go away* kind of injections
-        // 4. Calculate the time change using inference, move characters around but don't commit, try to lock the interacted characters in place, but if they are forced
-        //    away by some world event (eg. a workplace and they have to go back home) reject the entire thing saying the character would not be present; if allowed,
-        //    keep this potential new state in memory but don't commit, also reroll weather
-        // 5. Calculate a location change and see if it is forced or requested for that character, if forced characters have the chance to fight back, if a location change is proposed
-        //    it should be kept to check how the characters react to it and if they are taken along or not, either by force or by choice; this is why we cannot allow the user
-        //    to just say *they go somewhere with x and then do y*, because the characters need to have the chance to react and not be kidnapped like that; the same is to be true for
-        //    characters as they must follow the same rules as user, so also the user (or other character) must agree or be taken by force.
-        // 6. State can be committed now, it is valid and the user message is accepted.
-        // NOTE a location change request either by force or not, will affect all the characters in the list that were interacted with and defined in the list in step 3
-        // characters who came with no bond will be removed nevertheless
-        // NOTE a location change is also done for a user will go alone kind of thing, the character has the chance to follow or not
-        // NOTE similar things for a slot change, and a posture change that can be requested or forced; they all will cause this effect on the characters interacted with
-        // that they need to react to accept it or reject it (accept, reject, fight back if forced, etc.) slot and posture changes however do not stop the response from happening
-        // and they are more silent in nature, that is because slot changes and posture changes still mantain the character in the same location, so they can still interact normally
-        // As for things like changing slots and posture by self, that is allowed as well, eg. the character can decide to sit down or stand up or lay down on their own, or move to another slot within the same location
-        // and needs no approval for that, but it needs to be checked that they actually fit, if our character is too big to fit in a slot, they cannot go there, etc.
-        // but when asking characters to change slot or posture, they need to approve it, if they dont fit, they will reject it automatically, even for locations.
-        // 7. For each character involved, pick an order based on initiative, and then for each one in order:
-        //    7.1 Generate reasoning message for the character, if a location/slot/posture change was requested, make it relevant towards that and ensure it either accepts or rejects it and nothing else, short,
-        //        and asks the AI for what would they do next, based on their reasoning message; of course if they have one of these
-        //        injection that define specific actions to take, those should be prioritized. As for the reasoning message it should include the items it can interact with, the surrounding
-        //        characters, the time, the weather, and the character own state, including emotions, current states, etc. Also world rules are important, maybe in system.
-        //        if it was a slot or posture change, they accept it/reject it silently, and keep conversing as normal.
-        //    7.2 Generate the actual response messsage for the character, based on the AI response on what to do next. Reinject world rules somehow to avoid breaking them.
-        //      7.2.1 If a location change was proposed, check if it was accepted by this specific character.
-        //    7.3 Check for even more characters mentioned in the message and gather them, same as step 3
-        //    7.4 Hopefully the character didn't break any rules, and since their responses are more immediate, location changes should be enforced as the character said so.
-        //    7.5 Now they also do follow the same slot/posture/location change rules as user, and also user has to accept or reject it, follow or not, etc... everyone will get an extra turn in
-        //        the cycle, including the user, to answer this.
+
+        const userCharacterState = this.deObject.stateFor[this.user.name];
+        if (!userCharacterState) {
+            throw new Error(`Character state for user ${this.user.name} not found.`);
+        }
+
+        const deObjectBackup = deepCopy(this.deObject);
+
+        try {
+            this.informCycleState("info", `Starting new message cycle`);
+
+            let userConversationId = userCharacterState.conversationId;
+            let originalConversationId = userConversationId;
+            let originalMessageId = userCharacterState.messageId;
+            /**
+             * @type {DEConversationMessage}
+             */
+            const messageToAdd = {
+                sender: this.user.name,
+                content: userMessage,
+                duration: { inMinutes: 0, inHours: 0, inDays: 0 },
+                startTime: { ...this.deObject.currentTime },
+                endTime: { ...this.deObject.currentTime },
+                id: crypto.randomUUID(),
+                isCharacter: true,
+                isHiddenSystemMessage: false,
+                isInternalStateMessage: false,
+                isUser: true,
+                isSchizophrenicVoice: false,
+                isSystemMessage: false,
+                isUserRejectedMessage: false,
+            }
+            if (!userConversationId) {
+                // need to make a new conversation
+                userConversationId = crypto.randomUUID();
+                const userCharacterStateCopy = deepCopyNoHistory(userCharacterState);
+                userCharacterState.history.push(userCharacterStateCopy)
+                userCharacterState.conversationId = userConversationId;
+                userCharacterState.messageId = messageToAdd.id;
+                this.deObject.conversations[userConversationId] = {
+                    id: userConversationId,
+                    startTime: { ...this.deObject.currentTime },
+                    messages: [messageToAdd],
+                    participants: [this.user.name],
+                    duration: { inMinutes: 0, inHours: 0, inDays: 0 },
+                    endTime: null,
+                    isOngoing: true,
+                    joiners: [],
+                    leavers: [],
+                    location: userCharacterState.location,
+                    pseudoConversation: false,
+                    summary: null,
+                };
+            } else {
+                this.deObject.conversations[userConversationId].messages.push(messageToAdd);
+                userCharacterState.messageId = messageToAdd.id;
+            }
+
+            this.informDEObjectUpdated();
+            this.informCycleState("info", `Testing message is following the rules`);
+
+            const testResults = await this.testWorldRulesForUserMessage(userMessage);
+            if (!testResults.passed) {
+                userCharacterState.messageId = originalMessageId;
+                userCharacterState.conversationId = originalConversationId;
+                messageToAdd.isUserRejectedMessage = true;
+                // delete the historic state we added
+                this.deObject.stateFor[this.user.name].history.pop();
+                this.deObject.conversations[userConversationId].messages.push({
+                    sender: "System",
+                    content: `Message rejected: ${testResults.reason}`,
+                    duration: { inMinutes: 0, inHours: 0, inDays: 0 },
+                    startTime: { ...this.deObject.currentTime },
+                    endTime: { ...this.deObject.currentTime },
+                    id: crypto.randomUUID(),
+                    isCharacter: false,
+                    isHiddenSystemMessage: false,
+                    isUser: false,
+                    isSchizophrenicVoice: false,
+                    isSystemMessage: true,
+                    isUserRejectedMessage: false,
+                    isInternalStateMessage: false,
+                });
+
+                this.informCycleState("info", `The message has been rejected for breaking the rules`);
+                this.informDEObjectUpdated();
+                return;
+            }
+
+            this.informCycleState("info", `World rules passed!`);
+
+            // TODO run item interaction inference here, to check if items move hands or locations
+
+            const alreadyInteractingCharacters = this.deObject.conversations[userConversationId].participants.filter(participant => participant !== this.user?.name);
+            // @ts-expect-error
+            const interactedCharacters = await this.determineInteractedCharactersForMessage(this.userCharacter, userMessage);
+
+            const nextOrderOfInteraction = interactedCharacters.ordering.map(name => {
+                if (name === this.user?.name) {
+                    // kinda weird are you talking to yourself?
+                    return null;
+                }
+                return ({
+                    name: name,
+                    // @ts-ignore
+                    lastInvoker: this.user.name,
+                });
+            }).filter(item => item !== null);
+
+            // We need to check characters that are in conversation with these
+
+            // left the conversation, these include not wanting to talk to anyone, want to be sitted alone, left alone, etc...
+            // for this we would need to quest characters on whether they follow or not in spite of the user
+            const hasUserLeftConversationAlone = await this.determineCharacterHasLeftTheirCurrentConversationGroupAlone();
+            // left the conversation to join another with someone else, maybe taking someone with them, maybe even the whole group
+            // we still need to quest the characters on whether they follow, accept, fight etc...
+            // this could be a kidnapping situation after all
+            const hasUserLeftConversationToJoinAnotherWithSomeoneElse = await this.determineCharacterHasLeftTheirCurrentConversationGroupToJoinAnotherAndWithWhom();
+            // split the group in two, eg. some follow, some stay
+            const hasGroupBeenSplittedBy = hasUserLeftConversation ? null : await this.determineCharacterHasSplitTheGroupInTwo();
+ 
+            // Now we will use initiative to find out characters that may just barge in the conversation
+            // TODO do this after location changes and we know which group is left and where they are
+
+            const alreadyInteracted = [this.user.name];
+
+            if (nextOrderOfInteraction.length === 0) {
+                // you are kinda, talking to yourself :D are you alone?...
+                // we still need to figure item interactions nevertheless.
+                this.informCycleState("info", `No characters noticed the user message.`);
+
+                this.deObject.conversations[userConversationId].messages.push({
+                    sender: this.user.name,
+                    content: "No characters noticed " + this.user.name + " actions.",
+                    duration: { inMinutes: 0, inHours: 0, inDays: 0 },
+                    startTime: { ...this.deObject.currentTime },
+                    endTime: { ...this.deObject.currentTime },
+                    id: crypto.randomUUID(),
+                    isCharacter: false,
+                    isHiddenSystemMessage: false,
+                    isUser: false,
+                    isSchizophrenicVoice: false,
+                    isSystemMessage: false,
+                    isUserRejectedMessage: false,
+                    isInternalStateMessage: true,
+                });
+
+                this.informCycleState("info", `The message has been rejected for breaking the rules`);
+                this.informDEObjectUpdated();
+                return;
+            }
+
+
+            // 1. Get user message
+            // 2. Validate the user message does not break any rules world rules or general rules, esp no forced actions in other characters, validate locations
+            //    are real and accessible if trying to go somewhere, if the user tries to go somewhere they cannot continue the story there, they need to end the message
+            //    saying that they are heading towards that location, otherwise the message will be rejected; also possible to head towards slots within locations so as long as they
+            //    are real and/or change posture within them, this all has to be validated and create this potential new de state in memory but not commit it yet, check also that
+            //    if the character cannot say things like they win a fight against someone else, the other character must be capable to react before a conclusion is reached; the user simply
+            //    cannot force other characters to do things with the text input, they can say they force them but the character must react and let it happen or not.
+            // 3. Check for characters mentioned in the message (either by name or by context) and gather them, use the short description to identify them
+            //    3.1. Pick some more by initiative if needed, eg. if already in a conversation or if stranger initiative is high enough; the end list can as well be empty, eg. none is around
+            //    or none is interested in interacting, for those that have high stranger rejection, roll to see if they ignore the character or not, just keep it in place
+            //    for now, eg. for injecting *character will ignore user and go away* kind of injections
+            // 4. Calculate the time change using inference, move characters around but don't commit, try to lock the interacted characters in place, but if they are forced
+            //    away by some world event (eg. a workplace and they have to go back home) reject the entire thing saying the character would not be present; if allowed,
+            //    keep this potential new state in memory but don't commit, also reroll weather
+            // 5. Calculate a location change and see if it is forced or requested for that character, if forced characters have the chance to fight back, if a location change is proposed
+            //    it should be kept to check how the characters react to it and if they are taken along or not, either by force or by choice; this is why we cannot allow the user
+            //    to just say *they go somewhere with x and then do y*, because the characters need to have the chance to react and not be kidnapped like that; the same is to be true for
+            //    characters as they must follow the same rules as user, so also the user (or other character) must agree or be taken by force.
+            // 6. State can be committed now, it is valid and the user message is accepted.
+            // NOTE a location change request either by force or not, will affect all the characters in the list that were interacted with and defined in the list in step 3
+            // characters who came with no bond will be removed nevertheless
+            // NOTE a location change is also done for a user will go alone kind of thing, the character has the chance to follow or not
+            // NOTE similar things for a slot change, and a posture change that can be requested or forced; they all will cause this effect on the characters interacted with
+            // that they need to react to accept it or reject it (accept, reject, fight back if forced, etc.) slot and posture changes however do not stop the response from happening
+            // and they are more silent in nature, that is because slot changes and posture changes still mantain the character in the same location, so they can still interact normally
+            // As for things like changing slots and posture by self, that is allowed as well, eg. the character can decide to sit down or stand up or lay down on their own, or move to another slot within the same location
+            // and needs no approval for that, but it needs to be checked that they actually fit, if our character is too big to fit in a slot, they cannot go there, etc.
+            // but when asking characters to change slot or posture, they need to approve it, if they dont fit, they will reject it automatically, even for locations.
+            // 7. For each character involved, pick an order based on initiative, and then for each one in order:
+            //    7.1 Generate reasoning message for the character, if a location/slot/posture change was requested, make it relevant towards that and ensure it either accepts or rejects it and nothing else, short,
+            //        and asks the AI for what would they do next, based on their reasoning message; of course if they have one of these
+            //        injection that define specific actions to take, those should be prioritized. As for the reasoning message it should include the items it can interact with, the surrounding
+            //        characters, the time, the weather, and the character own state, including emotions, current states, etc. Also world rules are important, maybe in system.
+            //        if it was a slot or posture change, they accept it/reject it silently, and keep conversing as normal.
+            //    7.2 Generate the actual response messsage for the character, based on the AI response on what to do next. Reinject world rules somehow to avoid breaking them.
+            //      7.2.1 If a location change was proposed, check if it was accepted by this specific character.
+            //    7.3 Check for even more characters mentioned in the message and gather them, same as step 3
+            //    7.4 Hopefully the character didn't break any rules, and since their responses are more immediate, location changes should be enforced as the character said so.
+            //    7.5 Now they also do follow the same slot/posture/location change rules as user, and also user has to accept or reject it, follow or not, etc... everyone will get an extra turn in
+            //        the cycle, including the user, to answer this.
+
+        } catch (error) {
+            // @ts-ignore
+            this.informCycleState("error", `Internal Error during cycle execution: ${error.message}`);
+            // restore deObject from backup
+            this.deObject = deObjectBackup;
+            this.informDEObjectUpdated();
+        }
     }
+
+    /**
+     * 
+     * @param {(obj: DEObject) => void} listener 
+     */
+    addDEObjectUpdatedListener(listener) {
+        this.listeners.push(listener);
+    }
+}
+
+/**
+ * 
+ * @param {*} obj 
+ */
+// @ts-ignore
+function deepCopy(obj) {
+    if (obj === null || typeof obj !== 'object') {
+        return obj;
+    } else if (Array.isArray(obj)) {
+        // @ts-ignore
+        return obj.map(item => deepCopy(item));
+    }
+    const copy = {};
+    for (const key in obj) {
+        const value = obj[key];
+        // @ts-ignore
+        copy[key] = deepCopy(value);
+    }
+    return copy;
+}
+
+/**
+ * 
+ * @param {*} obj 
+ */
+function deepCopyNoHistory(obj) {
+    if (obj === null || typeof obj !== 'object') {
+        return obj;
+    } else if (Array.isArray(obj)) {
+        // @ts-ignore
+        return obj.map(item => deepCopy(item));
+    }
+    const copy = {};
+    for (const key in obj) {
+        if (key === "history") {
+            continue;
+        }
+        const value = obj[key];
+        // @ts-ignore
+        copy[key] = deepCopy(value);
+    }
+    return copy;
 }
