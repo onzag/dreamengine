@@ -152,18 +152,23 @@ declare interface DEEmotionDefinition {
 declare type DEPropertyValueGetterInCharSpace = (DE: DEObject, char: DECompleteCharacterReference) => any;
 
 declare interface DEPropertyValueInCharSpace {
+    type: "value_getter_char_space",
+    id: string;
     value: DEPropertyValueGetterInCharSpace;
 }
 
 declare type DEPropertyValueGetter = (DE: DEObject) => any;
 
 declare interface DEPropertyValue {
+    type: "value_getter",
+    id: string;
     value: DEPropertyValueGetter;
 }
 
 declare type DEPropertyValueGetterInItemSpace = (DE: DEObject, item: DEItem) => any;
 
 declare interface DEPropertyValueInItemSpace {
+    id: string;
     value: DEPropertyValueGetterInItemSpace;
 }
 
@@ -174,8 +179,21 @@ declare interface DEPropertyValueInItemSpace {
 declare interface DECompleteCharacterReference extends DEMinimalCharacterReference {
     properties: Record<string, DEPropertyValueInCharSpace>;
     injectableInGeneralText: Record<string, DEStringTemplate>;
-    injectableInStateTextBefore: Record<string, DEStringTemplate>;
-    injectableInStateTextAfter: Record<string, DEStringTemplate>;
+    injectableInReasoningTextBefore: Record<string, DEStringTemplate>;
+    injectableInReasoningTextAfter: Record<string, DEStringTemplate>;
+
+    /**
+     * These are similar to user prompt injections in the state but they don't need any
+     * state, use them with caution as they will override the character's reasoning every inference cycle
+     * they are intended for temporary use during specific scenarios, and these don't even have a state
+     * condition to be applied, they will just be applied as long as they are set
+     * 
+     * They will get overridden by state-based user prompt injections if those are present
+     * since the ones here are for general purposes and may conflict with state-based ones
+     * 
+     * These will override reasoning just like state-based user prompt injections do
+     */
+    injectableInUserPrompt: Record<string, DEStringTemplate>;
     general: DEStringTemplate;
     initiative: number;
     strangerInitiative: number;
@@ -602,6 +620,7 @@ declare interface DEConversation {
 }
 
 declare interface DEScript {
+    type: "script";
     id: string;
     execute: (DE: DEObject, char: DECompleteCharacterReference) => void | Promise<void>;
 }
@@ -612,6 +631,7 @@ declare interface DEScriptSource {
 }
 declare type DEStringTemplateFunction = (DE: DEObject, char: DECompleteCharacterReference) => Promise<string> | string;
 declare type DEStringTemplate = DEStringTemplateFunction |{
+    type: "template";
     id: string;
     execute: DEStringTemplateFunction;
 }
