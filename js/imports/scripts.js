@@ -42,7 +42,7 @@ export function importScript(name, type, args, script, mustReturn) {
  * @returns {DEStringTemplate}
  */
 export function importScriptAsTemplate(id, name, type, script) {
-    const execute = importScript(name, type, ["DE", "character"], script, "string");
+    const execute = importScript(name, type, ["DE", "character", "causant", "potentialCausant"], script, "string");
     return {
         id,
         type: "template",

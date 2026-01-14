@@ -1,6 +1,6 @@
+import { EMOTIONS_LIST } from '../engine/rolling-emotion.js';
 import schema from '../schema/character.js';
-import { importScriptAsTemplate } from './scripts';
-
+import { importScriptAsPropertyValueInCharacterSpace, importScriptAsPropertyValueInItemSpace, importScriptAsScript, importScriptAsTemplate } from './scripts';
 
 /**
  * @param {any} internalSchema
@@ -165,7 +165,7 @@ function extractArrayOfTemplateWithIntensityFromJSON(internalSchema, prefix, obj
                 item,
                 "determineCause",
             );
-            
+
             // @ts-ignore
             resultArray.push({
                 intensity: item.intensity,
@@ -280,6 +280,119 @@ function importScriptAsTemplateFromJSON(internalSchema, prefix, json, propertyNa
 }
 
 /**
+ * @param {any} internalSchema
+ * @param {string} prefix
+ * @param {*} json 
+ * @param {string} propertyName 
+ * @param {"value_getter_char_space" | "value_getter_item_space"} valueGetterType
+ * @returns {[DEPropertyValueInCharSpace | DEPropertyValueInItemSpace, DEScriptSource]}
+ */
+function importScriptAsValueGetterFromJSON(internalSchema, prefix, json, propertyName, valueGetterType) {
+    const schemaValue = internalSchema.properties[propertyName];
+
+    if (json.hasOwnProperty(propertyName)) {
+        const value = json[propertyName];
+        if (value === null || value === undefined) {
+            throw new Error(`Property ${propertyName} cannot be null or undefined for script template import.`);
+        }
+
+        if (typeof value.script !== "string") {
+            throw new Error(`Property ${propertyName}.script must be a string for script template import.`);
+        }
+        if (typeof value.ts !== "string") {
+            throw new Error(`Property ${propertyName}.ts must be a string for script template import.`);
+        }
+
+        if (value.script.trim().length === 0) {
+            return [{
+                id: "?INTERNAL_NOOP_VALUE_GETTER",
+                // @ts-ignore
+                value: null,
+                type: valueGetterType,
+            }, {
+                id: "?INTERNAL_NOOP_VALUE_GETTER",
+                type: "javascript",
+                source: "",
+                run: () => null,
+            }];
+        }
+
+        if (valueGetterType === "value_getter_char_space") {
+            const importedGetter = importScriptAsPropertyValueInCharacterSpace("?VALUE_GETTER_CHAR_SPACE_" + prefix + "_" + propertyName.toUpperCase(), prefix + " " + propertyName + " Value Getter Char Space", value.script);
+            return [importedGetter, {
+                id: importedGetter.id,
+                type: "javascript",
+                source: value.script,
+                run: importedGetter.value,
+            }];
+        } else {
+            const importedGetter = importScriptAsPropertyValueInItemSpace("?VALUE_GETTER_ITEM_SPACE_" + prefix + "_" + propertyName.toUpperCase(), prefix + " " + propertyName + " Value Getter Item Space", value.script);
+            return [importedGetter, {
+                id: importedGetter.id,
+                type: "javascript",
+                source: value.script,
+                run: importedGetter.value,
+            }];
+        }
+    } else {
+        throw new Error(`Missing property ${propertyName} for script template import.`);
+    }
+}
+
+/**
+ * 
+ * @param {string} characterName 
+ * @param {*} json 
+ * @param {string} scriptName 
+ * @returns {[DEScript[], DEScriptSource[]]}
+ */
+function importScriptsWithImportsFromJSON(characterName, json, scriptName) {
+    /**
+     * @type {DEScript[]}
+     */
+    const scriptsArray = [];
+    /**
+     * @type {DEScriptSource[]}
+     */
+    const scriptSources = [];
+
+    // @ts-ignore
+    const givenScript = json[scriptName];
+    if (typeof givenScript !== "object" || givenScript === null) {
+        throw new Error(`Property ${scriptName} must be an object.`);
+    } else if (!givenScript.hasOwnProperty("script") || typeof givenScript["script"] !== "string") {
+        throw new Error(`Property ${scriptName}.script must be a string.`);
+    } else if (!givenScript.hasOwnProperty("ts") || typeof givenScript["ts"] !== "string") {
+        throw new Error(`Property ${scriptName}.ts must be a string.`);
+    }
+    const scriptContent = givenScript["script"];
+    if (scriptContent.trim().length === 0) {
+        return [scriptsArray, scriptSources];
+    }
+
+    const importedScript = importScriptAsScript("?SCRIPT_" + characterName + "_" + scriptName.toUpperCase(), characterName + " " + scriptName + " Script", scriptContent);
+    const imports = givenScript["imports"];
+    if (Array.isArray(imports)) {
+        imports.forEach((importName) => {
+            scriptsArray.push({
+                id: importName,
+                type: "script",
+                // @ts-ignore
+                execute: null,
+            });
+        });
+    }
+    scriptsArray.push(importedScript);
+    scriptSources.push({
+        id: importedScript.id,
+        type: "javascript",
+        source: scriptContent,
+        run: importedScript.execute,
+    });
+    return [scriptsArray, scriptSources];
+}
+
+/**
  * @param {string} characterName
  * @param {any} json 
  * @returns {[Record<string, CharacterStateDefinition>, DEScriptSource[]]}
@@ -368,7 +481,7 @@ function importCharacterStatesFromJSON(characterName, json) {
             requiresCharacterCausants: extractSimpleProperty(schemaForStates, stateJson, "requires_character_causants"),
             requiresObjectCausants: extractSimpleProperty(schemaForStates, stateJson, "requires_object_causants"),
             triggerLikelihood: extractSimpleProperty(schemaForStates, stateJson, "trigger_likelihood"),
-            
+
             conflictStates: extractArrayProperty(schemaForStates, stateJson, "conflict_states"),
         };
 
@@ -378,6 +491,77 @@ function importCharacterStatesFromJSON(characterName, json) {
 
     // @ts-ignore
     return [states, scriptSources]
+}
+
+/**
+ * @param {string} characterName
+ * @param {any} json 
+ * @returns {[Record<string, DEPropertyValueInCharSpace>, DEScriptSource[]]}
+ */
+function importCharacterPropertiesFromJSON(characterName, json) {
+    /**
+     * @type {Record<string, DEPropertyValueInCharSpace>}
+     */
+    const properties = {};
+    const scriptSources = [];
+    const propertiesJson = json["properties"];
+    if (typeof propertiesJson !== "object" || propertiesJson === null) {
+        throw new Error(`Property properties must be an object.`);
+    }
+    for (const [propertyName, propertyJson] of Object.entries(propertiesJson)) {
+        if (typeof propertyJson !== "object" || propertyJson === null) {
+            throw new Error(`Property properties.${propertyName} must be an object.`);
+        }
+
+        const [propertyValue, propertyValueSource] = importScriptAsValueGetterFromJSON(
+            schema.properties["properties"]["value"].additionalProperties,
+            characterName + "_PROPERTY_" + propertyName,
+            propertyJson,
+            "value",
+            "value_getter_char_space",
+        );
+        scriptSources.push(propertyValueSource);
+        // @ts-ignore
+        properties[propertyName] = propertyValue;
+    }
+
+    return [properties, scriptSources];
+}
+
+/**
+ * @param {*} json
+ * @returns {Partial<Record<DEEmotionNames, DEEmotionDefinition>>}
+ */
+function importCharacterEmotionsFromJSON(json) {
+    const emotionsJson = json["emotions"];
+    if (typeof emotionsJson !== "object" || emotionsJson === null) {
+        throw new Error(`Property emotions must be an object.`);
+    }
+    /**
+     * @type {any}
+     */
+    const emotions = {};
+    for (const [emotionName, emotionJson] of Object.entries(emotionsJson)) {
+        if (typeof emotionJson !== "object" || emotionJson === null) {
+            throw new Error(`Property emotions.${emotionName} must be an object.`);
+        }
+        // @ts-expect-error
+        if (!EMOTIONS_LIST.includes(emotionName)) {
+            throw new Error(`Emotion name ${emotionName} is not a valid emotion.`);
+        }
+        const commonEmotion = extractSimpleProperty(schema.properties["emotions"].additionalProperties, emotionJson, "common");
+        const uncommonEmotion = extractSimpleProperty(schema.properties["emotions"].additionalProperties, emotionJson, "uncommon");
+        const triggeredByStates = extractArrayProperty(schema.properties["emotions"].additionalProperties, emotionJson, "triggered_by_states");
+
+        // @ts-ignore
+        emotions[emotionName] = /**@type {DEEmotionDefinition}*/ {
+            common: commonEmotion,
+            uncommon: uncommonEmotion,
+            triggeredByStates: triggeredByStates,
+        };
+    }
+
+    return emotions;
 }
 
 /**
@@ -400,6 +584,11 @@ export function importCharacterFromJSON(json) {
     }
 
     const [characterStatesResult, characterStatesSources] = importCharacterStatesFromJSON(characterName, json);
+
+    const [properties, propertiesSources] = importCharacterPropertiesFromJSON(characterName, json);
+
+
+    const [spawnScript, spawnScriptSources] = importScriptsWithImportsFromJSON(characterName, json, "spawn_script");
 
     /**
      * @type {DECompleteCharacterReference}
@@ -428,11 +617,11 @@ export function importCharacterFromJSON(json) {
         maintenanceHydrationLitersPerDay: extractSimpleProperty(schema, json, "maintenance_hydration_liters_per_day"),
 
         states: characterStatesResult,
-        properties: {},
+        properties: properties,
         bonds: [],
-        emotions: {},
+        emotions: importCharacterEmotionsFromJSON(json),
         scripts: {
-            spawn: [],
+            spawn: spawnScript,
             preInference: [],
             preStateCheck: [],
             postInference: [],
@@ -450,6 +639,8 @@ export function importCharacterFromJSON(json) {
         generalTemplateSource,
         schizophrenicVoiceDescriptionSource,
         ...characterStatesSources,
+        ...propertiesSources,
+        ...spawnScriptSources,
     ];
 
     return { character, scriptSources: scriptsSources };

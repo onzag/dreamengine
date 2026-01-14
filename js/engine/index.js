@@ -210,6 +210,12 @@ class DEngine {
                     source: "",
                     run: (/*DE, character*/) => "",
                 },
+                {
+                    type: "javascript",
+                    id: "?INTERNAL_NOOP_VALUE_GETTER",
+                    source: "",
+                    run: (/*DE, character*/) => null,
+                },
             ],
         }
 
