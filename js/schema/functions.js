@@ -218,15 +218,15 @@ function formatAnd(list) {
  */
 function getCausantsHelper(DE, character, stateName) {
     const actualStateName = stateName.trim().toUpperCase().replace(/\s+/, "_");
-    const characterHistory = DE.stateFor[character.name].history;
+    const characterHistoryAndCurrent = [DE.stateFor[character.name], ...DE.stateFor[character.name].history];
 
     /**
      * @type {StateForDescription | null}
      */
     let lastEntryWithActivation = null;
     // loop in reverse to find the last activation of the state
-    for (let i = characterHistory.length - 1; i >= 0; i--) {
-        const entry = characterHistory[i];
+    for (let i = characterHistoryAndCurrent.length - 1; i >= 0; i--) {
+        const entry = characterHistoryAndCurrent[i];
         if (entry.type === "INTERACTING" && entry.states.find(s => s.state === actualStateName)) {
             lastEntryWithActivation = entry;
             break;
@@ -262,7 +262,7 @@ export const utils = [
         "eg. 'helped me with my chores', 'betrayed me in the past'",
         (DE, character, stateName) => {
             const actualStateName = stateName.trim().toUpperCase().replace(/\s+/, "_");
-            const characterHistory = DE.stateFor[character.name].history;
+            const characterHistoryAndCurrent = [DE.stateFor[character.name], ...DE.stateFor[character.name].history];
 
             /**
              * @type {StateForDescription | null}
@@ -270,8 +270,8 @@ export const utils = [
             let lastEntryWithActivation = null;
             // loop in reverse to find the last activation of the state
             // this will include current as the history contains the current session too
-            for (let i = characterHistory.length - 1; i >= 0; i--) {
-                const entry = characterHistory[i];
+            for (let i = characterHistoryAndCurrent.length - 1; i >= 0; i--) {
+                const entry = characterHistoryAndCurrent[i];
                 if (entry.type === "INTERACTING" && entry.states.find(s => s.state === actualStateName)) {
                     lastEntryWithActivation = entry;
                     break;
@@ -338,7 +338,7 @@ export const utils = [
             const stateObject = DE.stateFor[character.name].states.find(state => state.state === stateName);
             if (!stateObject) {
                 // find it in the history to see if it was ever activated
-                const stateHistory = DE.stateFor[character.name].history;
+                const stateHistory = [DE.stateFor[character.name], ...DE.stateFor[character.name].history];
                 let cycle = -1;
                 for (let i = stateHistory.length - 1; i >= 0; i--) {
                     // yes I know this can be calculated with i, but this is more explicit
@@ -592,9 +592,9 @@ export const utils = [
         "String indicating a location where another character should be at according to the character's knowledge",
         "true or false",
         (DE, character, characterQuestioned) => {
-            const charHistory = DE.stateFor[character.name].history;
-            for (let i = charHistory.length - 1; i >= 0; i--) {
-                const entry = charHistory[i];
+            const charHistoryAndCurrent = [DE.stateFor[character.name], ...DE.stateFor[character.name].history];
+            for (let i = charHistoryAndCurrent.length - 1; i >= 0; i--) {
+                const entry = charHistoryAndCurrent[i];
                 if (entry.surroundingNonStrangers.includes(characterQuestioned)) {
                     return entry.location;
                 }
@@ -609,10 +609,10 @@ export const utils = [
         "true or false",
         (DE, character, characterQuestioned) => {
             let shouldBeAt = null;
-            const charHistory = DE.stateFor[character.name].history;
+            const charHistoryAndCurrent = [DE.stateFor[character.name], ...DE.stateFor[character.name].history];
             let foundAtIndex = -1;
-            for (let i = charHistory.length - 1; i >= 0; i--) {
-                const entry = charHistory[i];
+            for (let i = charHistoryAndCurrent.length - 1; i >= 0; i--) {
+                const entry = charHistoryAndCurrent[i];
                 if (entry.surroundingNonStrangers.includes(characterQuestioned)) {
                     shouldBeAt = entry.location;
                     foundAtIndex = i;
@@ -627,8 +627,8 @@ export const utils = [
             };
 
             // check if there is a history entry more recent for that location
-            for (let j = foundAtIndex + 1; j < charHistory.length; j++) {
-                const entry = charHistory[j];
+            for (let j = foundAtIndex + 1; j < charHistoryAndCurrent.length; j++) {
+                const entry = charHistoryAndCurrent[j];
                 if (entry.location === shouldBeAt) {
                     // character has been at the location more recently, and the character questioned was not with them, they must have lost them
                     return true;

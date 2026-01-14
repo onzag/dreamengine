@@ -4,20 +4,66 @@ declare interface DEMinimalCharacterReference {
     gender: "male" | "female" | "ambiguous";
     heightCm: number;
     weightKg: number;
+    ageYears: number;
     carryingCapacityLiters: number;
     carryingCapacityKg: number;
+    maintenanceCaloriesPerDay: number;
+    maintenanceHydrationLitersPerDay: number;
+    /**
+     * Short description of the character, assume they may have accessories
+     * or clothes on them but it must not detail those
+     */
     shortDescription: string;
+    /**
+     * Short description when the character is completely naked
+     * aka no clothes or accessories on them at all, useful for
+     * animals or scenarios where the character is stripped of all clothing
+     */
+    shortDescriptionNaked: string | null;
 }
 
-interface DEStringTemplateWithIntensity {
+interface DEStringTemplateWithIntensityAndCausants {
     /**
-     * Relevant template in question
+     * Relevant template in question,
+     * should be a yes/no question or similar, yes
+     * will increase intensity, no will decrease it
      */
     template: DEStringTemplate;
     /**
      * Intensity of the template effect
      */
     intensity: number;
+    /**
+     * If the template holds true, how are causants handled
+     * this should be a comma-separated list of causant names
+     * if however the value ends with "?" it means that it is a question
+     * that will be answered by the LLM to determine the causants
+     * 
+     * for example, say the template is "{{char}} is feeling scared and threatened by someone"
+     * triggering the state FEARFUL
+     * and the determineCausants is "who is {{char}} threatened by?"
+     * 
+     * It is also possible to just give it a static name eg.
+     * for example, "{{char}} is in the dark forest"
+     * triggering the state FEARFUL
+     * and the determineCausants is "the dark forest"
+     */
+    determineCausants: DEStringTemplate;
+    /**
+     * If the template holds true, how to determine the cause of the state
+     * if it ends with "?" it means that it is a question
+     * that will be answered by the LLM to determine the cause
+     * 
+     * for example, say the template is "{{char}} is feeling scared and threatened by someone"
+     * triggering the state FEARFUL
+     * and the determineCause is "why is {{char}} feeling scared by {{causant}}?"
+     * 
+     * It is also possible to just give it a static cause eg.
+     * for example, "{{char}} is in the dark forest"
+     * triggering the state FEARFUL
+     * and the determineCause is "{{char}} is alone in the dark forest"
+     */
+    determineCause: DEStringTemplate;
 }
 
 declare interface CharacterStateDefinition {
@@ -34,7 +80,7 @@ declare interface CharacterStateDefinition {
      * Used for descriptions of the character general state
      * get applied at system prompt level
      */
-    systemPromptInjection: DEStringTemplate | null;
+    systemPromptInjection: DEStringTemplate;
     /**
      * Very strong, used for instructions that the character must follow
      * make sure that it is not kept every inference cycle unless intended
@@ -43,22 +89,22 @@ declare interface CharacterStateDefinition {
      * to avoid the character being stuck in a loop of following the same instruction
      * or you may choose to give different instructions each time
      * 
-     * Setting the user prompt injection will disable reasoning in the character about
+     * Setting the reason prompt injection will disable reasoning in the character about
      * what they will do next as they will be forced to follow the instructions
      * 
      * If two injections are set at the same time by different states, the one from the state with higher dominance will take precedence,
      * if they have the same dominance, one will be chosen at random
      */
-    userPromptInjection: DEStringTemplate | null;
+    promptInjection: DEStringTemplate;
     /**
      * Description of the state, used for reasoning about the state
      */
-    relieving: DEStringTemplate | null;
+    relieving: DEStringTemplate;
     /**
      * Used for descriptions of the character general state
      * get applied at system prompt level when relieving the state
      */
-    relievingSystemPromptInjection: DEStringTemplate | null;
+    relievingSystemPromptInjection: DEStringTemplate;
     /**
      * Very strong, used for instructions that the character must follow
      * make sure that it is not kept every inference cycle unless intended
@@ -67,47 +113,139 @@ declare interface CharacterStateDefinition {
      * to avoid the character being stuck in a loop of following the same instruction
      * or you may choose to give different instructions each time
      * 
-     * Setting the user prompt injection will disable reasoning in the character about
+     * Setting the prompt injection will disable reasoning in the character about
      * what they will do next as they will be forced to follow the instructions
      * 
      * If two injections are set at the same time by different states, the one from the state with higher dominance will take precedence,
      * if they have the same dominance, one will be chosen at random
      */
-    relievingUserPromptInjection: DEStringTemplate | null;
-    triggersDeadEnd: string;
+    relievingPromptInjection: DEStringTemplate;
+    /**
+     * Whether this state triggers a dead end that causes the character to be permanently removed from the story
+     * use this for the description of the dead end scenario
+     */
+    triggersDeadEnd: DEStringTemplate;
+    /**
+     * Whether the dead end scenario is a death scenario
+     */
     deadEndIsDeath: boolean;
     triggersDeadEndRandomChance: number;
     triggersDeadEndWhileRelievingRandomChance: number;
     commonState: boolean;
-    hasCustomViewables: boolean;
-    customViewablesPriority: number;
-    laysDownState: boolean;
-    laysDownStateIsSuddenOnset: boolean;
-    restsState: boolean;
+    requiresPosture: "standing" | "sitting" | "laying_down" | null;
+    fallsDown: boolean;
     randomSpawnRate: number;
     conflictStates: string[];
     requiredStates: string[];
     triggersStates: {[stateName: string]: {intensity: number}};
     relievesStates: {[stateName: string]: {intensity: number}};
     triggersStatesOnRelieve: {[stateName: string]: {intensity: number}};
+    /**
+     * An instruction that gets added to the character description where a potential causant that does not fit
+     * the criteria is set, for example, say the state is HUGGING, but the character has a low bond level, the
+     * negative description could be "{{char}} would feel uncomfortable hugging {{potential_causant}}" this would
+     * get injected into the system prompt, and reasoning step to help the character reason their behaviour
+     */
     potentialCausantNegativeDescription: DEStringTemplate;
+    /**
+     * An instruction that gets added to the character description where a potential causant that fits
+     * the criteria is set, for example, say the state is HUGGING, and the character has a high bond level, the
+     * positive description could be "{{char}} would feel happy hugging {{potential_causant}}" this would
+     * get injected into the system prompt, and reasoning step to help the character reason their behaviour
+     */
     potentialCausantPositiveDescription: DEStringTemplate;
+    /**
+     * Minimum bond level required for a potential character causant to be considered valid to activate this state
+     * if no characters are around, no questions are asked about triggering the state if requiresCausant is true
+     */
     potentialCausantMinBondRequired: number;
+    /**
+     * Maximum bond level allowed for a potential causant to be considered valid to activate this state
+     * if no characters are around, no questions are asked about triggering the state if requiresCausant is true
+     */
     potentialCausantMaxBondAllowed: number;
+    /**
+     * Minimum 2-bond level required for a potential causant to be considered valid to activate this state
+     * if no characters are around, no questions are asked about triggering the state if requiresCausant is true
+     */
     potentialCausantMin2BondRequired: number;
+    /**
+     * Maximum 2-bond level allowed for a potential causant to be considered valid to activate this state
+     * if no characters are around, no questions are asked about triggering the state if requiresCausant is true
+     */
     potentialCausantMax2BondAllowed: number;
+    /**
+     * Whether a potential causant that is a stranger (no bond) is allowed to be a causant of this state
+     * if no characters are around, no questions are asked about triggering the state if requiresCausant is true
+     */
+    potentialCausantStrangerAllowed: boolean;
+    /**
+     * Whether a potential causant that is not a stranger (has some bond) is allowed to be a causant of this state
+     * if no characters are around, no questions are asked about triggering the state if requiresCausant is true
+     */
+    potentialCausantNonStrangerAllowed: boolean;
+    /**
+     * The decay rate per inference cycle when the state is active
+     */
     decayRatePerInferenceCycle: number;
+    /**
+     * If the answer to the triggers question is yes, this is the likelihood that the state will actually get triggered
+     * anyway even if the condition holds true.
+     * 
+     * Statistically the check is not even done if this doesn't pass the likelihood check
+     */
     triggerLikelihood: number;
-    triggers: Array<DEStringTemplateWithIntensity>;
-    intensifiers: Array<DEStringTemplateWithIntensity>;
-    relievers: Array<DEStringTemplateWithIntensity>;
+    /**
+     * The triggers that can cause this state to pop up
+     */
+    triggers: Array<DEStringTemplateWithIntensityAndCausants>;
+    /**
+     * The intensifiers once the state is active, what might intensify it further
+     */
+    intensifiers: Array<DEStringTemplateWithIntensityAndCausants>;
+    /**
+     * The relievers do the opposite of the intensifiers and reduce the state intensity, they may even make it go away
+     */
+    relievers: Array<DEStringTemplateWithIntensityAndCausants>;
+    /**
+     * Whether this represents a binary behaviour of sorts, in such a case, while the intensity still may vary
+     * it doesn't say things like Overwhemingly or extremely (STATE_NAME) for example if the state is SLEEPING vs SCARED
+     * Sleeping may be deeming binary behaviour. Susan is sleeping.
+     * But scared may allow intensity expressiongs, Susan is scared, susan is very scared, Susan is extremely scared, Susan is overwhelmingly scared.
+     */
     binaryBehaviour: boolean;
+    /**
+     * Whether the releif uses a decay rate that reduces intensity over time
+     * this is only regarding states that have relief mechanisms
+     */
     reliefUsesDecayRate: boolean;
+    /**
+     * The decay rate applied to the relief mechanism if reliefUsesDecayRate is true
+     */
     decayRateAfterRelief: number;
+    /**
+     * A permanent state never goes away and only get to 1 intensity level
+     */
     permanent: boolean;
+    /**
+     * Whether this state is about injury and death scenarios
+     * this is important to track separately for the world simulation
+     */
     injuryAndDeath: boolean;
-    trackCausants: boolean;
-    trackCause: boolean;
+    /**
+     * Whether this state requires character causants to be triggered,
+     * for example, say a state named IN_LOVE you may want to require a causant
+     * you should have trackCausants enabled for this to work properly
+     */
+    requiresCharacterCausants: boolean;
+    /**
+     * Whether this state requires object causants to be triggered,
+     * for example, say a state named HATING_THE_FOREST you may want to require a causant
+     * that is an inanimate object like "the forest" or "trees"
+     * 
+     * Honestly mostly useless to require object causants but here for completeness
+     */
+    requiresObjectCausants: boolean;
 }
 
 declare interface BondIncreaseQuestion {
@@ -170,6 +308,7 @@ declare type DEPropertyValueGetterInItemSpace = (DE: DEObject, item: DEItem) => 
 declare interface DEPropertyValueInItemSpace {
     id: string;
     value: DEPropertyValueGetterInItemSpace;
+    type: "value_getter_item_space";
 }
 
 
@@ -179,21 +318,17 @@ declare interface DEPropertyValueInItemSpace {
 declare interface DECompleteCharacterReference extends DEMinimalCharacterReference {
     properties: Record<string, DEPropertyValueInCharSpace>;
     injectableInGeneralText: Record<string, DEStringTemplate>;
-    injectableInReasoningTextBefore: Record<string, DEStringTemplate>;
-    injectableInReasoningTextAfter: Record<string, DEStringTemplate>;
 
     /**
      * These are similar to user prompt injections in the state but they don't need any
      * state, use them with caution as they will override the character's reasoning every inference cycle
-     * they are intended for temporary use during specific scenarios, and these don't even have a state
-     * condition to be applied, they will just be applied as long as they are set
      * 
-     * They will get overridden by state-based user prompt injections if those are present
+     * They will get overridden by state-based reason prompt injections if those are present
      * since the ones here are for general purposes and may conflict with state-based ones
      * 
-     * These will override reasoning just like state-based user prompt injections do
+     * These will override reasoning just like state-based reason prompt injections do
      */
-    injectableInUserPrompt: Record<string, DEStringTemplate>;
+    injectableInReasoning: Record<string, DEStringTemplate>;
     general: DEStringTemplate;
     initiative: number;
     strangerInitiative: number;
@@ -201,6 +336,7 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
     autisticResponse: number;
     schizophrenia: number;
     schizophrenicVoiceDescription: DEStringTemplate | null;
+    wanderPotential: number;
     states: Record<string, CharacterStateDefinition>;
     bonds: Array<BondDeclaration>;
     emotions: Record<string, EmotionDefinition>;
@@ -274,6 +410,7 @@ declare interface DETimeDescription {
     dayOfWeek: number;
     dayOfMonth: number;
     monthOfYear: number;
+    minuteOfHour: number;
     year: number;
 }
 
@@ -296,7 +433,7 @@ declare interface DEItem {
     isSeeThrough: boolean;
     canSitOn: boolean;
     canLieOn: boolean;
-    properties: Record<string, DEPropertyValue>;
+    properties: Record<string, DEPropertyValueInItemSpace>;
     isConsumable: boolean;
     foodProperties: {
         calories: number;
@@ -345,6 +482,8 @@ declare interface StateForDescription {
     carryingCharacters: Array<string>;
     wearing: DEItem[];
     beingCarriedByCharacter: string | null;
+    currentAgeMinutes: number;
+    currentWeightKg: number;
     /**
      * Indicates if the character is dead, aka its deadEnd was a death scenario
      */
@@ -565,42 +704,35 @@ declare interface DEStatefulLocationDefinition extends DELocationDefinition {
 
 declare interface DEConversationMessage {
     id: Readonly<string>;
-    sender: string | null;
+    sender: string;
     isCharacter: boolean;
     isUser: boolean;
-    isUserRejectedMessage: boolean;
+    isRejectedMessage: boolean;
     isSystemMessage: boolean;
-    isHiddenSystemMessage: boolean;
-    isInternalStateMessage: boolean;
-    isSchizophrenicVoice: boolean;
+    isDebugMessage: boolean;
     content: string;
     startTime: DETimeDescription;
     duration: DETimeDurationDescription;
     endTime: DETimeDescription;
+    canOnlyBeSeenByCharacter: string | null;
 }
 
 declare interface DEConversation {
     id: Readonly<string>;
     /**
-     * The list oc current participants of the conversation
+     * The list of participants of the conversation
      */
     participants: Array<string>;
     /**
-     * Names of the characters that have left the conversation while it was happening
+     * The previous conversation IDs for each participant before this conversation started
      */
-    leavers: Array<string>;
-    /**
-     * Names of the characters that have joined the conversation
-     * while it was happening and may not have full context
-     */
-    joiners: Array<string>;
+    previousConversationIdsPerParticipant: Record<string, string | null>;
     /**
      * The location where the conversation is happening
      */
     location: string;
     startTime: DETimeDescription;
     endTime: DETimeDescription | null;
-    isOngoing: boolean;
     duration: DETimeDurationDescription;
     /**
      * The list of messages that were exchanged in the conversation
@@ -615,6 +747,10 @@ declare interface DEConversation {
     pseudoConversation: boolean;
     /**
      * An optonal short summary of the conversation and what happened in it
+     * it should be available when it is a pseudoConversation
+     * 
+     * if one is not found, the LLM will be prompted to generate one
+     * randomly
      */
     summary: string | null;
 }
@@ -627,13 +763,38 @@ declare interface DEScript {
 declare interface DEScriptSource {
     id: string;
     source: string;
-    type: "handlebars" | "typescript";
+    type: "handlebars" | "javascript";
+    run: (...args: any[]) => any;
 }
 declare type DEStringTemplateFunction = (DE: DEObject, char: DECompleteCharacterReference) => Promise<string> | string;
-declare type DEStringTemplate = DEStringTemplateFunction |{
+declare type DEStringTemplate = {
     type: "template";
     id: string;
     execute: DEStringTemplateFunction;
+}
+
+declare interface DEWanderHeuristic {
+    /**
+     * Names of locations where the character can wander around freely
+     * this should set by the world, not by the character creator, as it depends on the world design
+     * make it null to allow wandering everywhere, the character will just keep wandering around the world
+     * otherwise it will only wander within the specified locations
+     * 
+     * If a character is not within its wanderConfinement locations, it will try to go to the nearest one
+     * before wandering around it, characters only wander when they are free of the user
+     */
+    wanderConfinement: string[] | null;
+    /**
+     * Primary location where the character wanders when no other location is specified
+     * this should set by the world upon the character, not by the character creator
+     */
+    wanderPrimaryLocation: string | null;
+    /**
+     * If the character is interacting with the user and is outside its wanderConfinement locations,
+     * it will activate a specific state, use this state to make the character try to leave user and
+     * go to the nearest wanderConfinement location
+     */
+    wanderOutsideConfinementActivatesState: string | null;
 }
 
 declare interface DEObject {
@@ -650,12 +811,14 @@ declare interface DEObject {
         currentLocationSlot: string;
         locations: Array<DEStatefulLocationDefinition>;
     };
+    worldScripts: Array<DEScript>;
     conversations: Record<string, DEConversation>;
     functions: FunctionTypes;
     initialTime: DETimeDescription;
     currentTime: DETimeDescription;
     scriptSources: DEScriptSource[];
-    userWorldRules: Array<DEStringTemplate>;
+    worldRules: Array<DEStringTemplate>;
+    wanderHeuristics: Record<string, DEWanderHeuristic>;
 }
 
 declare type DE = DEObject;

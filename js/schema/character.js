@@ -41,13 +41,22 @@ const schema = {
                 "intersex"
             ]
         },
+        "age_years": {
+            "type": "integer",
+            "title": "Character Age",
+            "description": "The age of the character in years",
+            "minimum": 0,
+            "maximum": 100000,
+            "default": 25,
+            "unit": "years",
+        },
         "general": {
             "type": "object",
             "properties": {
                 "script": {
                     "type": "string",
                 },
-                "js": {
+                "ts": {
                     "type": "string",
                 },
             },
@@ -69,7 +78,7 @@ const schema = {
             "placeholder": "A muscular woman with short brown hair and green eyes",
             "multiline": true,
         },
-        "heightCm": {
+        "height_cm": {
             "type": "integer",
             "title": "Character Height",
             "description": "The height of the character in centimeters, used to determine if they fit in certain locations (eg. a small cave or a vehicle)",
@@ -78,7 +87,7 @@ const schema = {
             "default": 170,
             "unit": "cm",
         },
-        "weightKg": {
+        "weight_kg": {
             "type": "integer",
             "title": "Character Weight",
             "description": "The weight of the character in kilograms, used to determine if they can be carried by others (eg. a dragon carrying a person)",
@@ -87,7 +96,7 @@ const schema = {
             "default": 70,
             "unit": "kg",
         },
-        "maintenanceCaloriesPerDay": {
+        "maintenance_calories_per_day": {
             "type": "integer",
             "title": "Maintenance Calories Per Day",
             "description": "The number of calories the character needs to maintain their weight per day, note by default characters do not lose/gain weight or starve, a script needs to be added to enforce this behaviour",
@@ -96,16 +105,16 @@ const schema = {
             "default": 2000,
             "unit": "kcal",
         },
-        "maintenanceWaterLitersPerDay": {
+        "maintenance_hydration_liters_per_day": {
             "type": "number",
-            "title": "Maintenance Water Per Day",
+            "title": "Maintenance Hydration Liters Per Day",
             "description": "The amount of water the character needs to maintain their hydration per day, note by default characters do not dehydrate, a script needs to be added to enforce this behaviour",
             "minimum": 0,
             "maximum": 300,
             "default": 2,
             "unit": "liters",
         },
-        "carryingCapacityKg": {
+        "carrying_capacity_kg": {
             "type": "integer",
             "title": "Carrying Capacity",
             "description": "The carrying capacity of the character in kilograms",
@@ -114,7 +123,7 @@ const schema = {
             "default": 20,
             "unit": "kg",
         },
-        "carryingCapacityLiters": {
+        "carrying_capacity_liters": {
             "type": "integer",
             "title": "Carrying Capacity",
             "description": "The carrying capacity of the character in liters",
@@ -637,11 +646,6 @@ const schema = {
                         "type": "boolean",
                         "title": "Binary Behaviour",
                         "description": "Indicates if this state describes an action the character takes, useful for states that indicate binary behaviours. When it is an action, there is no intensity associated with it",
-                    },
-                    "bond_mini": {
-                        "type": "boolean",
-                        "title": "Bond Mini Bonus",
-                        "description": "Indicates if this state gives a mini bond bonus when active, useful for states that indicate positive emotions or behaviours",
                     },
                     "permanent": {
                         "type": "boolean",

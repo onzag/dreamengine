@@ -1,3 +1,4 @@
+import { importScriptAsPropertyValueInCharacterSpace, importScriptAsPropertyValueInItemSpace, importScriptAsScript, importScriptAsTemplate } from "../imports/scripts.js";
 import { ALL_FUNCTIONS_WITH_SPECIALS } from "../schema/functions.js"
 import { weightedRandomByLikelyhood } from "../util/random.js"
 
@@ -71,20 +72,21 @@ function createCharacterFromUser(user) {
         gender: user.gender,
         heightCm: user.heightCm,
         weightKg: user.weightKg,
+        ageYears: user.ageYears,
         carryingCapacityLiters: user.carryingCapacityLiters,
         carryingCapacityKg: user.carryingCapacityKg,
         bonds: [],
         shortDescription: user.shortDescription,
+        shortDescriptionNaked: user.shortDescriptionNaked,
         general: {
             type: "template",
             id: "?INTERNAL_NOOP_TEMPLATE",
-            execute: () => "",
+            // @ts-expect-error
+            execute: null,
         },
         initiative: 1,
         injectableInGeneralText: {},
-        injectableInReasoningTextAfter: {},
-        injectableInReasoningTextBefore: {},
-        injectableInUserPrompt: {},
+        injectableInReasoning: {},
         properties: {},
         schizophrenia: 0,
         schizophrenicVoiceDescription: null,
@@ -129,10 +131,23 @@ class DEngine {
         this.talkingTurnRequested = false;
 
         /**
+         * @type {((deObject: DEObject, characters: DECompleteCharacterReference, conversation: DEConversation) => Promise<string>) | null}
+         */
+        this.pseudoConversationSummaryGenerator = null;
+
+        /**
          * @type {Function[]}
          */
         this.listeners = [];
     }
+
+    /**
+     * @param {((deObject: DEObject, characters: DECompleteCharacterReference, conversation: DEConversation) => Promise<string>)} pseudoConversationSummaryGenerator
+     */
+    setPseudoConversationGenerator(pseudoConversationSummaryGenerator) {
+        this.pseudoConversationSummaryGenerator = pseudoConversationSummaryGenerator;
+    }
+
     /**
      * @param {*} deObjectJSON 
      */
@@ -193,6 +208,7 @@ class DEngine {
                     type: "handlebars",
                     id: "?INTERNAL_NOOP_TEMPLATE",
                     source: "",
+                    run: (/*DE, character*/) => "",
                 },
             ],
         }
@@ -219,6 +235,16 @@ class DEngine {
             throw new Error("DEngine not initialized");
         }
         return this.deObject;
+    }
+
+    /**
+     * @param {string} id 
+     */
+    getScriptSourceForId(id) {
+        if (!this.deObject) {
+            throw new Error("DEngine not initialized");
+        }
+        return this.deObject.scriptSources.find(src => src.id === id) || null;
     }
 
     /**
@@ -274,10 +300,18 @@ class DEngine {
             carrying: [],
             carryingCharacters: [],
             beingCarriedByCharacter: null,
+            currentAgeMinutes: character.ageYears * 525600, // approximate minutes in a year
+            currentWeightKg: character.weightKg,
 
             // chars start up naked
             // hopefully they give them some clothes soon :)
             wearing: [],
+        };
+
+        this.deObject.wanderHeuristics[character.name] = {
+            wanderConfinement: null,
+            wanderPrimaryLocation: null,
+            wanderOutsideConfinementActivatesState: null,
         };
 
         // we need to set up surroundingNonStrangers and surroundingStrangers, partiallyExposedToWeather and fullyExposedToWeather properly later
@@ -337,41 +371,45 @@ class DEngine {
     }
 
     /**
-     * 
-     * @param {DEScriptSource} scriptSource
+     * @param {string} id
+     * @param {string} source
      * @return {DEScript} 
      */
-    addDEScriptSource(scriptSource) {
+    addDEScript(id, source) {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         }
-        if (scriptSource.id.startsWith("?")) {
-            throw new Error(`Script source id cannot start with '?', as it is reserved for internal use.`);
+        if (id.startsWith("?")) {
+            throw new Error(`Script id cannot start with '?', as it is reserved for internal use.`);
         }
         // check if source with the same id already exists
-        const existingSource = this.deObject.scriptSources.find(src => src.id === scriptSource.id);
+        const existingSource = this.deObject.scriptSources.find(src => src.id === id);
         if (existingSource) {
             // check if it is identical
-            if (existingSource.source === scriptSource.source && existingSource.type === scriptSource.type) {
-                // TODO return already existing DEScript that uses this source
-                //return existingSource;
+            if (existingSource.source === source && existingSource.type === "javascript") {
+                return {
+                    type: "script",
+                    id: existingSource.id,
+                    execute: existingSource.run,
+                }
             }
-            throw new Error(`Script source with id ${scriptSource.id} already exists.`);
+            throw new Error(`Script source with id ${id} already exists.`);
         }
-        this.deObject.scriptSources.push(scriptSource);
-        return {
-            type: "script",
-            id: scriptSource.id,
-            // TODO: implement execute properly
-            execute: async () => undefined,
-        };
+        const importedScript = importScriptAsScript(id, id, source);
+        this.deObject.scriptSources.push({
+            type: "javascript",
+            id: id,
+            source: source,
+            run: importedScript.execute,
+        });
+        return importedScript;
     }
 
     /**
-     * @param {"handlebars" | "typescript"} type
+     * @param {"handlebars" | "javascript"} type
      * @param {string} source
      */
-    async addDEStringTemplateSource(type, source) {
+    async addDEStringTemplate(type, source) {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         }
@@ -380,10 +418,12 @@ class DEngine {
         const hashBuffer = await crypto.subtle.digest('SHA-256', data);
         const hashArray = Array.from(new Uint8Array(hashBuffer));
         const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        const importedScript = importScriptAsTemplate("?TEMPLATE_" + hashHex, "?TEMPLATE_" + hashHex, type, source);
         const scriptSource = {
             type: type,
             id: "?TEMPLATE_" + hashHex,
             source: source,
+            run: importedScript.execute,
         };
         // check if it already exists
         const existingSource = this.deObject.scriptSources.find(src => src.id === scriptSource.id);
@@ -396,20 +436,15 @@ class DEngine {
             throw new Error(`Value getter source with id ${scriptSource.id} already exists.`);
         }
         this.deObject.scriptSources.push(scriptSource);
-        return {
-            type: "template",
-            id: scriptSource.id,
-            // TODO: implement execute properly
-            execute: async () => undefined,
-        };
+        return importedScript;
     }
 
     /**
-     * @param {"handlebars" | "typescript"} type
+     * @param {"handlebars" | "javascript"} type
      * @param {string} source
-     * @returns {Promise<DEPropertyValue>}
+     * @returns {Promise<DEPropertyValueInCharSpace>}
      */
-    async addDEValueTemplateSource(type, source) {
+    async addDEValueInCharacterSpace(type, source) {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         }
@@ -418,10 +453,12 @@ class DEngine {
         const hashBuffer = await crypto.subtle.digest('SHA-256', data);
         const hashArray = Array.from(new Uint8Array(hashBuffer));
         const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        const importedScript = importScriptAsPropertyValueInCharacterSpace("?VALUE_GETTER_" + hashHex, "?VALUE_GETTER_" + hashHex, source);
         const scriptSource = {
             type: type,
             id: "?VALUE_GETTER_" + hashHex,
             source: source,
+            run: importedScript.value,
         };
         // check if it already exists
         const existingSource = this.deObject.scriptSources.find(src => src.id === scriptSource.id);
@@ -434,20 +471,15 @@ class DEngine {
             throw new Error(`Value getter source with id ${scriptSource.id} already exists.`);
         }
         this.deObject.scriptSources.push(scriptSource);
-        return {
-            type: "value_getter",
-            id: scriptSource.id,
-            // TODO: implement value properly
-            value: async () => undefined,
-        };
+        return importedScript;
     }
 
     /**
-     * @param {"handlebars" | "typescript"} type
+     * @param {"handlebars" | "javascript"} type
      * @param {string} source
-     * @returns {Promise<DEPropertyValueInCharSpace>}
+     * @returns {Promise<DEPropertyValueInItemSpace>}
      */
-    async addDEValueTemplateInCharSpaceSource(type, source) {
+    async addDEValueInItemSpace(type, source) {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         }
@@ -456,28 +488,25 @@ class DEngine {
         const hashBuffer = await crypto.subtle.digest('SHA-256', data);
         const hashArray = Array.from(new Uint8Array(hashBuffer));
         const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        const importedScript = importScriptAsPropertyValueInItemSpace("?VALUE_GETTER_" + hashHex, "New Value Getter " + hashHex, source);
         const scriptSource = {
             type: type,
-            id: "?VALUE_GETTER_CHAR_SPACE_" + hashHex,
+            id: "?VALUE_GETTER_" + hashHex,
             source: source,
+            run: importedScript.value,
         };
         // check if it already exists
         const existingSource = this.deObject.scriptSources.find(src => src.id === scriptSource.id);
         if (existingSource) {
             // check if it is identical
             if (existingSource.source === scriptSource.source && existingSource.type === scriptSource.type) {
-                // TODO return already existing DEPropertyValueInCharSpace that uses this source
+                // TODO return already existing DEPropertyValue that uses this source
                 //return existingSource;
             }
             throw new Error(`Value getter source with id ${scriptSource.id} already exists.`);
         }
         this.deObject.scriptSources.push(scriptSource);
-        return {
-            type: "value_getter_char_space",
-            id: scriptSource.id,
-            // TODO: implement value properly
-            value: async () => undefined,
-        };
+        return importedScript;
     }
 
     /**
@@ -512,13 +541,70 @@ class DEngine {
     }
 
     async runAllWorldScripts() {
-        // TODO: implement running world scripts
+        if (!this.deObject) {
+            throw new Error("DEngine not initialized");
+        }
+        if (this.invalidCharacterStates) {
+            throw new Error("DEngine has invalid character states, cannot run world scripts");
+        }
+        if (!this.userCharacter) {
+            throw new Error("DEngine user character not initialized");
+        }
+        for (const script of this.deObject.worldScripts) {
+            await script.execute(this.deObject, this.userCharacter);
+        }
     }
 
     async prepareInitialCycle() {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         }
+
+        // now let's check that all function are defined
+        checkObjectRecursively(null, this.deObject, (parent, obj) => {
+            if (obj.type === "script" || obj.type === "template") {
+                if (typeof obj.execute !== "function") {
+                    // see if it was defined one with the same id in the parent, provided it is an array
+                    if (Array.isArray(parent)) {
+                        const definedInParent = parent.find(item => item.id === obj.id && typeof item.execute === "function");
+                        if (definedInParent) {
+                            // we accept that and we will drop these without a warning
+                            // they are already defined in the parent array, likely added by a character script
+                            // when it executed, meaning our state has been resolved properly
+                            return;
+                        }
+                    }
+
+                    // find the script in the deObject.scriptSources and see if we can set it up
+                    // @ts-ignore
+                    const scriptSourceFound = this.deObject.scriptSources.find(src => src.id === obj.id);
+                    if (scriptSourceFound) {
+                        obj.execute = scriptSourceFound.run;
+                    }
+                }
+            } else if (obj.type === "value_getter" || obj.type === "value_getter_char_space") {
+                if (typeof obj.value !== "function") {
+                    // see if it was defined one with the same id in the parent, provided it is an array
+                    if (Array.isArray(parent)) {
+                        const definedInParent = parent.find(item => item.id === obj.id && typeof item.value === "function");
+                        if (definedInParent) {
+                            // we accept that and we will drop these without a warning
+                            // they are already defined in the parent array, likely added by a character script
+                            // when it executed, meaning our state has been resolved properly
+                            return;
+                        }
+                    }
+
+                    // find the script in the deObject.scriptSources and see if we can set it up
+                    // @ts-ignore
+                    const scriptSourceFound = this.deObject.scriptSources.find(src => src.id === obj.id);
+                    if (scriptSourceFound) {
+                        obj.value = scriptSourceFound.run;
+                    }
+                }
+            }
+        });
+
         await this.runAllWorldScripts();
         await this.runAllSpawnScripts();
 
@@ -536,7 +622,20 @@ class DEngine {
                             return;
                         }
                     }
-                    throw new Error(`Script with id ${obj.id} does not have a valid execute function.`);
+
+                    // find the script in the deObject.scriptSources and see if we can set it up
+                    // @ts-ignore
+                    const scriptSourceFound = this.deObject.scriptSources.find(src => src.id === obj.id);
+                    if (scriptSourceFound) {
+                        obj.execute = scriptSourceFound.run;
+                    } else {
+                        throw new Error(`Script with id ${obj.id} does not have a valid execute function.`);
+                    }
+                } else {
+                    const scriptSourceFound = this.deObject?.scriptSources.find(src => src.id === obj.id);
+                    if (!scriptSourceFound) {
+                        throw new Error(`Value getter with id ${obj.id} does not have a valid source.`);
+                    }
                 }
             } else if (obj.type === "value_getter" || obj.type === "value_getter_char_space") {
                 if (typeof obj.value !== "function") {
@@ -550,7 +649,20 @@ class DEngine {
                             return;
                         }
                     }
-                    throw new Error(`Value getter with id ${obj.id} does not have a valid value retrieval function.`);
+                    
+                    // find the script in the deObject.scriptSources and see if we can set it up
+                    // @ts-ignore
+                    const scriptSourceFound = this.deObject.scriptSources.find(src => src.id === obj.id);
+                    if (scriptSourceFound) {
+                        obj.value = scriptSourceFound.run;
+                    } else {
+                        throw new Error(`Value getter with id ${obj.id} does not have a valid value function.`);
+                    }
+                } else {
+                    const scriptSourceFound = this.deObject?.scriptSources.find(src => src.id === obj.id);
+                    if (!scriptSourceFound) {
+                        throw new Error(`Value getter with id ${obj.id} does not have a valid source.`);
+                    }
                 }
             }
         });
@@ -560,6 +672,7 @@ class DEngine {
             if (array.length === 0) return;
             const firstItem = array[0];
             if (firstItem.type === "script" || firstItem.type === "template" || firstItem.type === "value_getter" || firstItem.type === "value_getter_char_space") {
+                // iterates backwards to allow safe removal
                 for (let i = array.length - 1; i >= 0; i--) {
                     const item = array[i];
                     if (typeof item.execute !== "function" && typeof item.value !== "function") {
@@ -868,13 +981,13 @@ class DEngine {
         if (!characterState) {
             throw new Error(`Character state for ${characterName} not found.`);
         }
-        let finalDescription = character.shortDescription;
+        let finalDescription = characterState.wearing.length > 0 ? character.shortDescription : character.shortDescriptionNaked || character.shortDescription;
         if (!finalDescription.endsWith(".")) {
             finalDescription += ".";
         }
         if (characterState.wearing.length > 0) {
             finalDescription += " Wearing " + this.deObject.functions.format_and(this.deObject, null, characterState.wearing.map(item => item.amount >= 2 ? item.amount + " of " + (item.descriptionWhenWorn || item.description) : (item.descriptionWhenWorn || item.description))) + ".";
-        } else {
+        } else if (!character.shortDescriptionNaked) {
             finalDescription += " Not wearing any clothes.";
         }
 
@@ -1170,16 +1283,11 @@ class DEngine {
         const systemMessageNo = `You are a assistant that validates if ${characterName} is currently breaking any world rules or general rules in an interactive story, ` +
             `you will be questioned on each rule separately, and you will answer with YES or NO, and if the answer is NO, you will explain why briefly.`;
 
-        const otherRules = this.deObject.userWorldRules || [];
+        const otherRules = this.deObject.worldRules || [];
 
-        const otherRulesProcessed = (await Promise.all(otherRules.map((rule, index) => {
-            if (typeof rule === "function") {
-                // @ts-ignore
-                return rule(this.deObject, characterObj);
-            } else {
-                // @ts-ignore
-                return rule.execute(this.deObject, characterObj);
-            }
+        const otherRulesProcessed = (await Promise.all(otherRules.map(async (rule, index) => {
+            // @ts-ignore
+            return await rule.execute(this.deObject, characterObj);
         }))).filter((v) => v !== null && v !== undefined && v !== "");
 
         const ruleBreakMessage = "\nWas this rule broken by " + characterName + "? Answer with YES or NO, if YES, explain why briefly.";
@@ -1286,16 +1394,11 @@ class DEngine {
             "When roleplaying as " + characterName + ", you should not describe actions done by other characters, roleplay as " + characterName + " only.",
         ];
 
-        const otherRules = this.deObject.userWorldRules || [];
+        const otherRules = this.deObject.worldRules || [];
 
         const otherRulesProcessed = (await Promise.all(otherRules.map((rule, index) => {
-            if (typeof rule === "function") {
-                // @ts-ignore
-                return rule(this.deObject, characterObj);
-            } else {
-                // @ts-ignore
-                return rule.execute(this.deObject, characterObj);
-            }
+            // @ts-ignore
+            return rule.execute(this.deObject, characterObj);
         }))).filter((v) => v !== null && v !== undefined && v !== "");
         simplifiedRules.push(...otherRulesProcessed);
 
@@ -1424,10 +1527,144 @@ class DEngine {
     }
 
     /**
+     * @param {DECompleteCharacterReference} character 
+     * @param {boolean} characterIsSolo 
+     */
+    async determineCharacterHasMergedIntoAnotherConversationGroup(character, characterIsSolo) {
+        if (!this.deObject) {
+            throw new Error("DEngine not initialized");
+        } else if (this.invalidCharacterStates) {
+            throw new Error("DEngine has invalid character states, cannot determine if character has left conversation group to join another");
+        }
+
+        const characterState = this.deObject.stateFor[character.name];
+        if (!characterState) {
+            throw new Error(`Character state for ${character.name} not found.`);
+        }
+
+        const systemMessage = `You are an assistant that determines if ${character.name} approached a conversation group together with all ` +
+            `the members of their current conversation group and has merged into that other conversation group in a friedly manner as they are closeby.\n\n` +
+            `if ${character.name} has gone with their conversation group towards another, say the name of the group, the people in the group, and mention the new people ` +
+            `that will conform this new conversation group.`;
+        const systemMessageSolo = `You are an assistant that determines if ${character.name} has decided to join a new conversation group ` +
+            `if ${character.name} has joined a new conversation group, say the name of the group, and mention the people in the group`;
+
+        const currentConversation = characterState.conversationId ? this.deObject.conversations[characterState.conversationId] : null;
+        if (!currentConversation) {
+            throw new Error(`Character ${character.name} is not in a conversation, cannot determine if they have left the conversation group.`);
+        }
+
+        const participantsThatAreNotCharacter = currentConversation.participants.filter(charName => charName !== character.name);
+        if (participantsThatAreNotCharacter.length === 0) {
+            throw new Error(`Character ${character.name} is the only participant in the conversation, cannot determine if they have left the conversation group.`);
+        }
+
+        let groupsList = `The list of groups is as follows:\n\n${character.name}'s own group:\n - ${character.name}: ${this.getShortDescriptionOfCharacter(character.name)}\n`;
+
+        for (const ownGroupParticipant of currentConversation.participants) {
+            groupsList += ` - ${ownGroupParticipant}: ${this.getShortDescriptionOfCharacter(ownGroupParticipant)}\n`;
+        }
+
+        const allCharactersAround = characterState.surroundingNonStrangers.concat(characterState.surroundingStrangers);
+
+        /**
+         * @type {string[][]}
+         */
+        const groups = [];
+        const solos = [];
+        for (const surrondingCharacterName of allCharactersAround) {
+            if (surrondingCharacterName === character.name) continue;
+            if (participantsThatAreNotCharacter.includes(surrondingCharacterName)) continue;
+
+            // check if already in one of the groups
+            let foundInGroup = false;
+            for (const group of groups) {
+                if (group.includes(surrondingCharacterName)) {
+                    foundInGroup = true;
+                    break;
+                }
+            }
+            if (foundInGroup) continue;
+
+            const surrondingCharacterState = this.deObject.stateFor[surrondingCharacterName];
+            if (surrondingCharacterState.conversationId) {
+                const conv = this.deObject.conversations[surrondingCharacterState.conversationId];
+                const participants = conv.participants;
+                if (participants.length === 1) {
+                    solos.push(surrondingCharacterName);
+                } else {
+                    groups.push(participants);
+                }
+            } else {
+                solos.push(surrondingCharacterName);
+            }
+        }
+
+        groups.forEach((group, index) => {
+            const strongestCharacterBond = this.getCharacterWithClosestBondToCharacter(character, group);
+            groupsList += `\n\n${strongestCharacterBond}'s group:\n`;
+            for (const member of group) {
+                groupsList += ` - ${member}: ${this.getShortDescriptionOfCharacter(member)}\n`;
+            }
+        });
+
+        groupsList += `\n\nNow take into account the last message from ${character.name} and determine if they have merged into another conversation group together with all the members of their current conversation group. ` +
+            `If they have approach a new group, say the new people that conform the new group that ${character.name} has joined, including any characters from the previous conversation that have joined as well. ` +
+            `DO NOT say everyone in case it is everyone, use the specific names; if they have not merged into another group, say "NO, ${character.name} has not approached another group."`;
+
+        // TODO inference to determine which group they have joined and with whom
+        // TODO determine no
+        let inferenceText = "";
+
+        const inferenceTextLowered = inferenceText.toLowerCase();
+        /**
+         * @type {string[]}
+         */
+        const newPeopleOfTheGroup = [];
+        for (const char of allCharactersAround) {
+            if (char === character.name) continue;
+            const lowered = char.toLowerCase();
+            if (inferenceTextLowered.includes(lowered) && !newPeopleOfTheGroup.includes(char)) {
+                newPeopleOfTheGroup.push(char);
+
+                // now let's readd potential people from the groups that are conversing together that the LLM may have missed
+                for (const group of groups) {
+                    if (group.includes(char)) {
+                        for (const member of group) {
+                            if (!newPeopleOfTheGroup.includes(member)) {
+                                newPeopleOfTheGroup.push(member);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (!newPeopleOfTheGroup.includes(character.name)) {
+            // add to the list
+            newPeopleOfTheGroup.push(character.name);
+        }
+
+        if (newPeopleOfTheGroup.length === 1) {
+            // well, :| this is not good, the LLM must have missed everything
+            // we will be alone I guess
+            return { merged: false, newGroupMembers: currentConversation.participants };
+        }
+
+        return {
+            merged: true,
+            newGroupMembers: newPeopleOfTheGroup,
+        }
+    }
+
+    /**
      * @param {DECompleteCharacterReference} character
      * @param {boolean} characterIsSolo
      */
     async determineCharacterHasLeftTheirCurrentConversationGroupToJoinAnotherAndWithWhom(character, characterIsSolo) {
+        // character is solo wont be really used here because we will use merged into another conversation group
+        // to figure that out
+
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         } else if (this.invalidCharacterStates) {
@@ -1453,8 +1690,6 @@ class DEngine {
         const systemMessage = `You are an assistant that determines if ${character.name} has left or decided to leave their current conversation group to join another group. ` +
             `if ${character.name} has left their current conversation group to join another group, say the name of the group, the people in the group, or solo people, and if ` +
             `anyone from the current conversation group is taken there or asked to go there as well. either asked if they want to go there, willingly of by force\n\n`;
-        const systemMessageSolo = `You are an assistant that determines if ${character.name} has decided to join a new conversation group ` +
-            `if ${character.name} has joined a new conversation group, say the name of the group, and mention the people in the group`;
 
         let groupsList = `The list of groups is as follows:\n\n${character.name}'s own group:\n - ${character.name}: ${this.getShortDescriptionOfCharacter(character.name)}\n`;
 
@@ -1504,10 +1739,11 @@ class DEngine {
             }
         });
 
-        groupsList += `\n\nNow take into account the last message from ${character.name} and determine who are the characters that conform the new group that ${character.name} has joined, ` +
-            `including any characters from the previous conversation that have been taken along. DO NOT say everyone in case it is everyone, use the specific names.`;
+        groupsList += `\n\nNow take into account the last message from ${character.name} and if they left the current conversation to join another determine who are the characters that conform the new group that ${character.name} has joined, ` +
+            `including any characters from the previous conversation that have been taken along. DO NOT say everyone in case it is everyone, use the specific names; if they have not left to join another group, say "NO, ${character.name} has not left."`;
 
         // TODO inference to determine which group they have joined and with whom
+        // TODO determine no
         let inferenceText = "";
 
         const inferenceTextLowered = inferenceText.toLowerCase();
@@ -1675,16 +1911,15 @@ class DEngine {
             duration: { inMinutes: 0, inHours: 0, inDays: 0 },
             id: crypto.randomUUID(),
             isCharacter: false,
-            isHiddenSystemMessage: true,
+            isDebugMessage: true,
             isSystemMessage: true,
             isUser: false,
-            isSchizophrenicVoice: false,
-            isUserRejectedMessage: false,
-            isInternalStateMessage: false,
+            isRejectedMessage: false,
             // @ts-ignore
             startTime: { ...this.deObject.currentTime },
             // @ts-ignore
             endTime: { ...this.deObject.currentTime },
+            canOnlyBeSeenByCharacter: null,
         };
         // typescript not being able to infer here as usual
         // @ts-ignore
@@ -1739,16 +1974,15 @@ class DEngine {
                         duration: { inMinutes: 0, inHours: 0, inDays: 0 },
                         id: crypto.randomUUID(),
                         isCharacter: false,
-                        isHiddenSystemMessage: true,
+                        isDebugMessage: true,
                         isSystemMessage: true,
                         isUser: false,
-                        isSchizophrenicVoice: false,
-                        isUserRejectedMessage: false,
-                        isInternalStateMessage: false,
+                        isRejectedMessage: false,
                         // @ts-ignore
                         startTime: { ...this.deObject.currentTime },
                         // @ts-ignore
                         endTime: { ...this.deObject.currentTime },
+                        canOnlyBeSeenByCharacter: null,
                     };
                     // typescript not being able to infer here as usual
                     // @ts-ignore
@@ -1775,16 +2009,15 @@ class DEngine {
             duration: { inMinutes: 0, inHours: 0, inDays: 0 },
             id: crypto.randomUUID(),
             isCharacter: false,
-            isHiddenSystemMessage: true,
+            isDebugMessage: true,
             isSystemMessage: true,
             isUser: false,
-            isSchizophrenicVoice: false,
-            isUserRejectedMessage: false,
-            isInternalStateMessage: false,
+            isRejectedMessage: false,
             // @ts-ignore
             startTime: { ...this.deObject.currentTime },
             // @ts-ignore
             endTime: { ...this.deObject.currentTime },
+            canOnlyBeSeenByCharacter: null,
         };
         // typescript not being able to infer here as usual
         // @ts-ignore
@@ -1840,8 +2073,208 @@ class DEngine {
         }
     }
 
+    /**
+     * @param {DETimeDescription | null} time
+     */
+    makeTimestamp(time) {
+        if (!time) {
+            return "Now";
+        }
+        if (this.deObject?.currentTime.time === time.time) {
+            return "Now";
+        }
+        // We want something like; Monday, June 5th, 2023 at 3:45 PM
+        const date = new Date(time.time);
+        return date.toLocaleString('en-US', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            hour: 'numeric',
+            minute: 'numeric',
+            hour12: true,
+        });
+    }
+
     async requestTalkingTurnFromUser() {
         this.talkingTurnRequested = true;
+    }
+
+    /**
+     * Returns the whole history for the character up to the specified depth, if the depth
+     * is 0, returns all history.
+     * 
+     * TODO something for optimizing long histories, like summarization of non-pseudo conversations
+     * when it starts to get too long, even sumarization of many conversations into a single summary message
+     * this will ensure the LLM can handle the context window properly without losing important information
+     * 
+     * @param {DECompleteCharacterReference} character
+     * @param {number} depth
+     * @return {Promise<Array<{name: string, message: string}>>}
+     */
+    async getHistoryForCharacterForInference(character, depth) {
+        if (!this.deObject) {
+            throw new Error("DEngine not initialized");
+        } else if (this.invalidCharacterStates) {
+            throw new Error("DEngine has invalid character states, cannot get history for character");
+        } else if (!this.deObject.stateFor[character.name]) {
+            throw new Error(`Character state for ${character.name} not found.`);
+        } else if (!this.pseudoConversationSummaryGenerator) {
+            throw new Error("Pseudo conversation summary generator not initialized.");
+        }
+
+        const characterState = this.deObject.stateFor[character.name];
+        const characterStateWithCurrent = [characterState, ...characterState.history];
+
+        let currentConversationId = characterState.conversationId;
+
+        let statesAccumulated = new Set();
+        /**
+         * @type {string | null}
+         */
+        let statesAccumulatedAtLocation = null;
+        /**
+         * @type {DETimeDescription | null}
+         */
+        let statesAccumulatedFromTime = null;
+        let lastStateObjectHandled = null;
+        const consumedConversationIds = new Set();
+
+        /**
+         * @type {Array<{name: string, message: string}>}
+         */
+        const historyMessages = [];
+
+        /**
+         * @param {DETimeDescription} fromTime
+         */
+        const consumeAccumulatedStatesAndLocations = (fromTime) => {
+            // because we are looping from newest to oldest, lastConversationStartTime is actually before
+            // thisConversationEndTime
+            let message = `From ${this.makeTimestamp(fromTime)} to ${this.makeTimestamp(statesAccumulatedFromTime)}, ` + character.name;
+            if (statesAccumulated.size > 0) {
+                message += ` was in the following states: `;
+                let statesList = "";
+                statesAccumulated.forEach(s => {
+                    if (statesList.length > 0) {
+                        statesList += ", ";
+                    }
+                    statesList += s.toLowerCase();
+                });
+                message += statesList;
+                message += ` while at location: "${statesAccumulatedAtLocation || "unknown location"}".`;
+            } else {
+                message += ` was at location: "${statesAccumulatedAtLocation || "unknown location"}".`;
+            }
+
+            historyMessages.push({
+                name: "Story Master",
+                message: message,
+            });
+
+            statesAccumulated = new Set();
+            statesAccumulatedAtLocation = null;
+            statesAccumulatedFromTime = null;
+        };
+
+        for (const state of characterStateWithCurrent) {
+            if (state.conversationId && !consumedConversationIds.has(state.conversationId)) {
+                consumedConversationIds.add(state.conversationId);
+                const currentConversationObject = this.deObject.conversations[state.conversationId];
+
+                if (!currentConversationId) {
+                    // time skipped and now we are into this conversation
+                    // calculate time skipped, and specify in which state the character was
+                    // maybe they were sleeping, eating, working, etc
+                    // who knows what happened
+                    consumeAccumulatedStatesAndLocations(state.time);
+
+                    if (depth > 0 && historyMessages.length >= depth) {
+                        break;
+                    }
+                }
+
+                // process the conversation messages
+                const conversationMessages = currentConversationObject.messages.filter(msg => !msg.isRejectedMessage && !msg.isDebugMessage &&
+                    (!msg.canOnlyBeSeenByCharacter || msg.canOnlyBeSeenByCharacter === character.name));
+
+                const conversationLocation = currentConversationObject.location || "an unknown location";
+                const conversationStartTime = currentConversationObject.startTime;
+                const firstMessageIsStoryMaster = conversationMessages.length > 0 && conversationMessages[0].sender === "Story Master";
+
+                if (currentConversationObject.summary || currentConversationObject.pseudoConversation) {
+                    if (!currentConversationObject.summary) {
+                        // generate summary, it doesn't exist yet, but we need to have a conversation for what this
+                        // character has been through and been doing
+                        currentConversationObject.summary = await this.pseudoConversationSummaryGenerator(
+                            this.deObject,
+                            // @ts-expect-error
+                            currentConversationObject.participants.map((v) => this.deObject?.characters[v]),
+                            currentConversationObject,
+                        );
+                    }
+                    historyMessages.push({
+                        name: "Story Master",
+                        message: "At " + this.makeTimestamp(conversationStartTime) + ", " + character.name + " is at " + conversationLocation + " with " +
+                            this.deObject.functions.format_and(this.deObject, null, currentConversationObject.participants.filter(p => p !== character.name)) + ".\n\nConversation summary: " + currentConversationObject.summary,
+                    });
+                    if (depth > 0 && historyMessages.length >= depth) {
+                        break;
+                    }
+                } else {
+                    if (!firstMessageIsStoryMaster) {
+                        historyMessages.push({
+                            name: "Story Master",
+                            message: "The following interaction took place at " + this.makeTimestamp(conversationStartTime) + ", " + character.name + " is at " + conversationLocation + " with " +
+                                this.deObject.functions.format_and(this.deObject, null, currentConversationObject.participants.filter(p => p !== character.name)) + ".",
+                        });
+                        if (depth > 0 && historyMessages.length >= depth) {
+                            break;
+                        }
+                    }
+
+                    for (const message of conversationMessages) {
+                        historyMessages.push({
+                            name: message.sender,
+                            message: message.content,
+                        });
+                        if (depth > 0 && historyMessages.length >= depth) {
+                            break;
+                        }
+                    }
+                }
+
+                currentConversationId = state.conversationId;
+            } else if (!state.conversationId) {
+                currentConversationId = null;
+                if (statesAccumulatedAtLocation && statesAccumulatedAtLocation !== state.location) {
+                    // location changed, consume accumulated states
+                    consumeAccumulatedStatesAndLocations(state.time);
+                    if (depth > 0 && historyMessages.length >= depth) {
+                        break;
+                    }
+                } else {
+                    statesAccumulatedAtLocation = state.location;
+                    statesAccumulatedFromTime = state.time;
+                }
+                state.states.map(s => s.state).forEach(s => {
+                    statesAccumulated.add(s);
+                })
+                // time skip until next conversation found
+            }
+            lastStateObjectHandled = state;
+        }
+
+        if (depth > 0 && historyMessages.length >= depth) {
+            return historyMessages;
+        }
+
+        // consume any remaining accumulated states
+        if ((statesAccumulated.size > 0 || statesAccumulatedAtLocation) && lastStateObjectHandled) {
+            consumeAccumulatedStatesAndLocations(lastStateObjectHandled.time);
+        }
+
+        return historyMessages;
     }
 
     /**
@@ -1964,19 +2397,21 @@ class DEngine {
         if (alreadyInteractingCharacters.length > 0) {
             // left the conversation, these include not wanting to talk to anyone, want to be sitted alone, left alone, etc...
             // for this we would need to quest characters on whether they follow or not in spite of the user
-            const hasUserLeftConversationAlone = await this.determineCharacterHasLeftTheirCurrentConversationGroupAlone(character);
+            const hasCharLeftConversationAlone = await this.determineCharacterHasLeftTheirCurrentConversationGroupAlone(character);
+            const hasCharMergedIntoAnotherConversationGroup = hasCharLeftConversationAlone ? null :
+                await this.determineCharacterHasMergedIntoAnotherConversationGroup(character, alreadyInteractingCharacters.length === 0);
             // left the conversation to join another with someone else, maybe taking someone with them, maybe even the whole group
             // we still need to quest the characters on whether they follow, accept, fight etc...
             // this could be a kidnapping situation after all
-            const hasUserLeftConversationToJoinAnotherWithSomeoneElse = hasUserLeftConversationAlone ? null :
+            const hasCharLeftConversationToJoinAnotherWithSomeoneElse = hasCharLeftConversationAlone || hasCharMergedIntoAnotherConversationGroup?.merged ? null :
                 await this.determineCharacterHasLeftTheirCurrentConversationGroupToJoinAnotherAndWithWhom(character, alreadyInteractingCharacters.length === 0);
             // split the group in two, eg. some follow, some stay
             // this usually happens when characters are kicked out of the conversation and told to go
             // for one reason or another, or when the user says "some follow me, others stay"
-            const hasGroupBeenSplittedBy = hasUserLeftConversationAlone || hasUserLeftConversationToJoinAnotherWithSomeoneElse?.left ?
+            const hasGroupBeenSplittedBy = hasCharLeftConversationAlone || hasCharMergedIntoAnotherConversationGroup?.merged || hasCharLeftConversationToJoinAnotherWithSomeoneElse?.left ?
                 null : await this.determineCharacterHasSplitTheGroup(character);
 
-            if (hasUserLeftConversationAlone) {
+            if (hasCharLeftConversationAlone) {
                 nextOrderOfInteraction.forEach(interaction => {
                     interaction.messageWillBeAboutAgreeFollow = true;
                     // @ts-ignore
@@ -1994,7 +2429,109 @@ class DEngine {
                         });
                     }
                 }
-            } else if (hasUserLeftConversationToJoinAnotherWithSomeoneElse?.left) {
+            } else if (hasCharMergedIntoAnotherConversationGroup?.merged) {
+                // this one is very simple, everyone just goes along
+                // there is no particular reasoning to be made here
+                // we just will add them to the new conversation group
+                // add people from the group based on, their initiative
+                // provided they are not already in the list
+                let wasSomeoneAdded = false;
+                hasCharMergedIntoAnotherConversationGroup.newGroupMembers.forEach(newGroupMemberName => {
+                    if (newGroupMemberName === character.name) return;
+                    if (!nextOrderOfInteraction.find(interaction => interaction.name === newGroupMemberName)) {
+                        // @ts-ignore
+                        const characterReference = this.deObject.characters[newGroupMemberName];
+                        if (Math.random() < characterReference.initiative) {
+                            wasSomeoneAdded = true;
+                            nextOrderOfInteraction.push({
+                                name: newGroupMemberName,
+                                lastInvoker: null,
+                                messageWillBeAboutAgreeFollow: false,
+                                messageWillBeAboutFightFollow: false,
+                                // messageWillBeAboutAcceptingJoiners: false,
+                                expectedReasoning: null,
+                            });
+                        }
+                    }
+                });
+
+                if (!wasSomeoneAdded) {
+                    // forcefully add the character with the highest initiative from the new group
+                    let highestInitiativeCharacter = null;
+                    let highestInitiativeValue = -1;
+                    hasCharMergedIntoAnotherConversationGroup.newGroupMembers.forEach(newGroupMemberName => {
+                        if (newGroupMemberName === character.name) return;
+                        if (!nextOrderOfInteraction.find(interaction => interaction.name === newGroupMemberName)) {
+                            // @ts-ignore
+                            const characterReference = this.deObject.characters[newGroupMemberName];
+                            if (characterReference.initiative > highestInitiativeValue) {
+                                highestInitiativeValue = characterReference.initiative;
+                                highestInitiativeCharacter = newGroupMemberName;
+                            }
+                        }
+                    });
+                    if (highestInitiativeCharacter) {
+                        nextOrderOfInteraction.push({
+                            name: highestInitiativeCharacter,
+                            lastInvoker: null,
+                            messageWillBeAboutAgreeFollow: false,
+                            messageWillBeAboutFightFollow: false,
+                            // messageWillBeAboutAcceptingJoiners: false,
+                            expectedReasoning: null,
+                        });
+                    }
+                }
+
+                // the new conversation group is formed succesfully, everyone goes along
+                // including the user, who must be there
+                const newConversationId = crypto.randomUUID();
+                this.deObject.conversations[newConversationId] = {
+                    id: newConversationId,
+                    participants: hasCharMergedIntoAnotherConversationGroup.newGroupMembers,
+                    messages: [],
+                    duration: { inMinutes: 0, inHours: 0, inDays: 0 },
+                    startTime: { ...this.deObject.currentTime },
+                    endTime: { ...this.deObject.currentTime },
+                    location: expectedNextLocation,
+                    summary: null,
+                    pseudoConversation: false,
+                    previousConversationIdsPerParticipant: {},
+                };
+                hasCharMergedIntoAnotherConversationGroup.newGroupMembers.forEach(memberName => {
+                    // @ts-ignore
+                    const memberState = this.deObject.stateFor[memberName];
+                    memberState.history.unshift(deepCopyNoHistory(memberState));
+                    // @ts-ignore
+                    this.deObject.conversations[newConversationId].previousConversationIdsPerParcipant[memberName] = memberState.conversationId;
+                    // @ts-expect-error
+                    this.deObject.conversations[memberState.conversationId].endTime = { ...this.deObject.currentTime };
+                    memberState.conversationId = newConversationId;
+                    // TODO update member location, slot, and posture according to the new conversation
+                });
+
+                const participantsThatJoinWithUser = this.deObject.conversations[characterState.conversationId].participants;
+                const allOthers = hasCharMergedIntoAnotherConversationGroup.newGroupMembers.filter(name => !participantsThatJoinWithUser.includes(name));
+
+                /**
+                 * @type {DEConversationMessage}
+                 */
+                const initialMessage = {
+                    sender: "Story Master",
+                    content: this.deObject.functions.format_and(this.deObject, character, participantsThatJoinWithUser) + " have approached for a conversation with " + this.deObject.functions.format_and(this.deObject, character, allOthers),
+                    duration: { inMinutes: 0, inHours: 0, inDays: 0 },
+                    id: crypto.randomUUID(),
+                    isCharacter: false,
+                    isDebugMessage: false,
+                    isSystemMessage: true,
+                    isRejectedMessage: false,
+                    endTime: { ...this.deObject.currentTime },
+                    startTime: { ...this.deObject.currentTime },
+                    isUser: false,
+                    canOnlyBeSeenByCharacter: null,
+                };
+                this.deObject.conversations[newConversationId].messages.push(initialMessage);
+                this.informDEObjectUpdated();
+            } else if (hasCharLeftConversationToJoinAnotherWithSomeoneElse?.left) {
                 await Promise.all(nextOrderOfInteraction.map(async interaction => {
                     const isParticipantCurrently = alreadyInteractingCharacters.includes(interaction.name);
                     interaction.messageWillBeAboutFightFollow = isParticipantCurrently &&
@@ -2005,19 +2542,19 @@ class DEngine {
                             `join another group`,
                         );
                     interaction.messageWillBeAboutAgreeFollow = !interaction.messageWillBeAboutFightFollow &&
-                        !hasUserLeftConversationToJoinAnotherWithSomeoneElse.newGroupMembers.includes(interaction.name) &&
+                        !hasCharLeftConversationToJoinAnotherWithSomeoneElse.newGroupMembers.includes(interaction.name) &&
                         isParticipantCurrently;
                     if (interaction.messageWillBeAboutAgreeFollow) {
                         // @ts-ignore
-                        interaction.expectedReasoning = `${character.name} is going to join another group with: ${hasUserLeftConversationToJoinAnotherWithSomeoneElse.newGroupMembers.join(", ")}. Will ${interaction.name} decide to follow/stay with ${character.name} or not?`;
+                        interaction.expectedReasoning = `${character.name} is going to join another group with: ${hasCharLeftConversationToJoinAnotherWithSomeoneElse.newGroupMembers.join(", ")}. Will ${interaction.name} decide to follow/stay with ${character.name} or not?`;
                     } else if (interaction.messageWillBeAboutFightFollow) {
                         // @ts-ignore
-                        interaction.expectedReasoning = `${character.name} is going to take ${interaction.name} to join with ${hasUserLeftConversationToJoinAnotherWithSomeoneElse.newGroupMembers.join(", ")} by force. Will ${interaction.name} decide to fight back or be compliant?`;
+                        interaction.expectedReasoning = `${character.name} is going to take ${interaction.name} to join with ${hasCharLeftConversationToJoinAnotherWithSomeoneElse.newGroupMembers.join(", ")} by force. Will ${interaction.name} decide to fight back or be compliant?`;
                     }
                 }));
                 for (const alreadyInteractingCharacterName of alreadyInteractingCharacters) {
                     if (!nextOrderOfInteraction.find(interaction => interaction.name === alreadyInteractingCharacterName)) {
-                        if (!hasUserLeftConversationToJoinAnotherWithSomeoneElse.newGroupMembers.includes(alreadyInteractingCharacterName)) {
+                        if (!hasCharLeftConversationToJoinAnotherWithSomeoneElse.newGroupMembers.includes(alreadyInteractingCharacterName)) {
                             const interactionWillBeAboutFightFollow = await this.determineForceUsedForAction(
                                 // @ts-ignore
                                 character,
@@ -2032,8 +2569,8 @@ class DEngine {
                                 messageWillBeAboutAgreeFollow: interactionWillBeAboutFightFollow ? false : true,
                                 messageWillBeAboutFightFollow: interactionWillBeAboutFightFollow,
                                 expectedReasoning: interactionWillBeAboutFightFollow ?
-                                    `${character.name} is going to take ${alreadyInteractingCharacterName} to join with ${hasUserLeftConversationToJoinAnotherWithSomeoneElse.newGroupMembers.join(", ")} by force. Will ${alreadyInteractingCharacterName} decide to fight back or be compliant?` :
-                                    `${character.name} is going to join another group with: ${hasUserLeftConversationToJoinAnotherWithSomeoneElse.newGroupMembers.join(", ")}. Will ${alreadyInteractingCharacterName} decide to follow/stay with ${character.name} or not?`,
+                                    `${character.name} is going to take ${alreadyInteractingCharacterName} to join with ${hasCharLeftConversationToJoinAnotherWithSomeoneElse.newGroupMembers.join(", ")} by force. Will ${alreadyInteractingCharacterName} decide to fight back or be compliant?` :
+                                    `${character.name} is going to join another group with: ${hasCharLeftConversationToJoinAnotherWithSomeoneElse.newGroupMembers.join(", ")}. Will ${alreadyInteractingCharacterName} decide to follow/stay with ${character.name} or not?`,
                             });
                         }
                     }
@@ -2061,7 +2598,7 @@ class DEngine {
                 // add people from the group based on, their initiative
                 // provided they are not already in the list
                 let wasSomeoneAdded = false;
-                hasUserLeftConversationToJoinAnotherWithSomeoneElse.newGroupMembers.forEach(newGroupMemberName => {
+                hasCharLeftConversationToJoinAnotherWithSomeoneElse.newGroupMembers.forEach(newGroupMemberName => {
                     if (newGroupMemberName === character.name) return;
                     if (!nextOrderOfInteraction.find(interaction => interaction.name === newGroupMemberName)) {
                         // @ts-ignore
@@ -2084,7 +2621,7 @@ class DEngine {
                     // forcefully add the character with the highest initiative from the new group
                     let highestInitiativeCharacter = null;
                     let highestInitiativeValue = -1;
-                    hasUserLeftConversationToJoinAnotherWithSomeoneElse.newGroupMembers.forEach(newGroupMemberName => {
+                    hasCharLeftConversationToJoinAnotherWithSomeoneElse.newGroupMembers.forEach(newGroupMemberName => {
                         if (newGroupMemberName === character.name) return;
                         if (!nextOrderOfInteraction.find(interaction => interaction.name === newGroupMemberName)) {
                             // @ts-ignore
@@ -2114,12 +2651,12 @@ class DEngine {
                 // they decided not to follow, they will be left behind in the previous conversation; the conversation
                 // joining will always be succesful from the character's point of view, but the other characters may
                 // decide not to follow or fight back successfully
-                
+
             } else if (hasGroupBeenSplittedBy?.splitted) {
                 await Promise.all(nextOrderOfInteraction.map(async interaction => {
                     const isParticipantCurrently = alreadyInteractingCharacters.includes(interaction.name);
                     const followsTheCharacter = hasGroupBeenSplittedBy.followed.includes(interaction.name);
-                    const staysWithCharacter = hasGroupBeenSplittedBy.stayed.includes(interaction.name);
+                    const staysWithRemainingCharacters = hasGroupBeenSplittedBy.stayed.includes(interaction.name);
                 }));
             }
         } else {
@@ -2137,19 +2674,18 @@ class DEngine {
             this.informCycleState("info", `No characters noticed the user message.`);
 
             this.deObject.conversations[characterState.conversationId].messages.push({
-                sender: character.name,
+                sender: "Story Master",
                 content: "No characters noticed " + character.name + " messages/actions.",
                 duration: { inMinutes: 0, inHours: 0, inDays: 0 },
                 startTime: { ...this.deObject.currentTime },
                 endTime: { ...this.deObject.currentTime },
                 id: crypto.randomUUID(),
                 isCharacter: false,
-                isHiddenSystemMessage: false,
+                isDebugMessage: false,
                 isUser: false,
-                isSchizophrenicVoice: false,
-                isSystemMessage: false,
-                isUserRejectedMessage: false,
-                isInternalStateMessage: true,
+                isSystemMessage: true,
+                isRejectedMessage: false,
+                canOnlyBeSeenByCharacter: null,
             });
 
             this.informDEObjectUpdated();
@@ -2171,6 +2707,8 @@ class DEngine {
             throw new Error("DEngine is not ready for the next cycle, did you forget to call prepareInitialCycle()?");
         } else if (this.executingCycle) {
             throw new Error("DEngine is already executing a cycle, cannot execute another one concurrently.");
+        } else if (!this.pseudoConversationSummaryGenerator) {
+            throw new Error("DEngine has no pseudo conversation summary generator defined, cannot execute cycle.");
         }
         this.executingCycle = true;
 
@@ -2198,30 +2736,29 @@ class DEngine {
                 endTime: { ...this.deObject.currentTime },
                 id: crypto.randomUUID(),
                 isCharacter: true,
-                isHiddenSystemMessage: false,
-                isInternalStateMessage: false,
+                isDebugMessage: false,
                 isUser: true,
-                isSchizophrenicVoice: false,
                 isSystemMessage: false,
-                isUserRejectedMessage: false,
+                isRejectedMessage: false,
+                canOnlyBeSeenByCharacter: null,
             }
             if (!userConversationId) {
                 // need to make a new conversation
                 userConversationId = crypto.randomUUID();
                 const userCharacterStateCopy = deepCopyNoHistory(userCharacterState);
-                userCharacterState.history.push(userCharacterStateCopy)
+                userCharacterState.history.unshift(userCharacterStateCopy)
                 userCharacterState.conversationId = userConversationId;
                 userCharacterState.messageId = messageToAdd.id;
                 this.deObject.conversations[userConversationId] = {
                     id: userConversationId,
+                    previousConversationIdsPerParticipant: {
+                        [this.user.name]: null,
+                    },
                     startTime: { ...this.deObject.currentTime },
                     messages: [messageToAdd],
                     participants: [this.user.name],
                     duration: { inMinutes: 0, inHours: 0, inDays: 0 },
                     endTime: null,
-                    isOngoing: true,
-                    joiners: [],
-                    leavers: [],
                     location: userCharacterState.location,
                     pseudoConversation: false,
                     summary: null,
@@ -2237,13 +2774,13 @@ class DEngine {
             const simpleRollbackWithReason = (reason) => {
                 userCharacterState.messageId = originalMessageId;
                 userCharacterState.conversationId = originalConversationId;
-                messageToAdd.isUserRejectedMessage = true;
+                messageToAdd.isRejectedMessage = true;
                 // delete the historic state we added
                 // @ts-ignore
                 this.deObject.stateFor[this.user.name].history.pop();
                 // @ts-ignore
                 this.deObject.conversations[userConversationId].messages.push({
-                    sender: "System",
+                    sender: "Story Master",
                     content: `Message rejected: ${reason}`,
                     duration: { inMinutes: 0, inHours: 0, inDays: 0 },
                     // @ts-ignore
@@ -2252,12 +2789,11 @@ class DEngine {
                     endTime: { ...this.deObject.currentTime },
                     id: crypto.randomUUID(),
                     isCharacter: false,
-                    isHiddenSystemMessage: false,
+                    isDebugMessage: false,
                     isUser: false,
-                    isSchizophrenicVoice: false,
                     isSystemMessage: true,
-                    isUserRejectedMessage: false,
-                    isInternalStateMessage: false,
+                    // make it rejected so that characters don't pick it up when they check conversations
+                    isRejectedMessage: true,
                 });
             }
 

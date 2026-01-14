@@ -43,7 +43,7 @@ async function load_model(model) {
     console.log('Model loaded successfully');
 }
 
-const wss = new WebSocket.Server({ port: 8000 });
+const wss = new WebSocket.Server({ port: 8000, host: '0.0.0.0'});
 
 async function generateCompletion(data, onToken, onDone, onError) {
     let prompt = data.prompt;
