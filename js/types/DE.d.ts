@@ -248,23 +248,25 @@ declare interface CharacterStateDefinition {
     requiresObjectCausants: boolean;
 }
 
-declare interface BondIncreaseQuestion {
-    questionIncrease: DEStringTemplate | null;
-    questionDecrease: DEStringTemplate | null;
-    increaseFromStateWithCausant: string | null;
-    decreaseFromStateWithCausant: string | null;
+declare interface DEBondIncreaseDecreaseQuestion {
+    questionIncrease: DEStringTemplate;
+    questionDecrease: DEStringTemplate;
+    increaseFromStateWithCausant: string;
+    decreaseFromStateWithCausant: string;
     increaseWeight: number;
     decreaseWeight: number;
 }
 
-declare interface BondDeclaration {
+declare interface DEBondDeclaration {
+    name: string;
+    strangerBond: boolean;
     minBondLevel: number;
     maxBondLevel: number;
     min2BondLevel: number;
     max2BondLevel: number;
     description: DEStringTemplate;
-    bondConditions: BondIncreaseQuestion[];
-    secondBondConditions: BondIncreaseQuestion[];
+    bondConditions: DEBondIncreaseDecreaseQuestion[];
+    secondBondConditions: DEBondIncreaseDecreaseQuestion[];
 }
 
 declare interface DEEmotionDefinition {
@@ -356,7 +358,7 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
     schizophrenicVoiceDescription: DEStringTemplate | null;
     wanderPotential: number;
     states: Record<string, CharacterStateDefinition>;
-    bonds: Array<BondDeclaration>;
+    bonds: Array<DEBondDeclaration>;
     emotions: Partial<Record<DEEmotionNames, DEEmotionDefinition>>;
     scripts: {
         spawn: Array<DEScript>;

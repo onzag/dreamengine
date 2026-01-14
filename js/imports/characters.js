@@ -565,6 +565,150 @@ function importCharacterEmotionsFromJSON(json) {
 }
 
 /**
+ * @param {any} internalSchema
+ * @param {string} prefix 
+ * @param {*} json 
+ * @param {string} propertyName
+ * @returns {[DEBondIncreaseDecreaseQuestion[], DEScriptSource[]]}
+ */
+function importBondConditionsFromJSON(internalSchema, prefix, json, propertyName) {
+    /**
+     * @type {DEBondIncreaseDecreaseQuestion[]}
+     */
+    const bondConditions = [];
+    /**
+     * @type {DEScriptSource[]}
+     */
+    const scriptSources = [];
+    const bondConditionsJson = json[propertyName];
+    if (typeof bondConditionsJson !== "object" || bondConditionsJson === null || Array.isArray(bondConditionsJson)) {
+        throw new Error(`Property ${propertyName} must be an object.`);
+    }
+
+    for (const [conditionName, conditionJson] of Object.entries(bondConditionsJson)) {
+        // we ignore the condition name as it is used only as a key for managing the condition in the json
+        if (typeof conditionJson !== "object" || conditionJson === null) {
+            throw new Error(`Property ${propertyName}.${conditionName} must be an object.`);
+        }
+
+        const [questionIncreaseTemplate, questionIncreaseTemplateSource] = importScriptAsTemplateFromJSON(
+            internalSchema.additionalProperties,
+            prefix + "_BOND_CONDITION_" + conditionName + "_QUESTION_INCREASE",
+            conditionJson,
+            "question_increase",
+        );
+        scriptSources.push(questionIncreaseTemplateSource);
+
+        const [questionDecreaseTemplate, questionDecreaseTemplateSource] = importScriptAsTemplateFromJSON(
+            internalSchema.additionalProperties,
+            prefix + "_BOND_CONDITION_" + conditionName + "_QUESTION_DECREASE",
+            conditionJson,
+            "question_decrease",
+        );
+        scriptSources.push(questionDecreaseTemplateSource);
+
+        /** @type {DEBondIncreaseDecreaseQuestion} */
+        const conditionObject = {
+            questionIncrease: questionIncreaseTemplate,
+            increaseWeight: extractSimpleProperty(internalSchema.additionalProperties, conditionJson, "increase_weight"),
+            questionDecrease: questionDecreaseTemplate,
+            decreaseWeight: extractSimpleProperty(internalSchema.additionalProperties, conditionJson, "decrease_weight"),
+            decreaseFromStateWithCausant: extractSimpleProperty(internalSchema.additionalProperties, conditionJson, "decrease_from_state_with_causant"),
+            increaseFromStateWithCausant: extractSimpleProperty(internalSchema.additionalProperties, conditionJson, "increase_from_state_with_causant"),
+        };
+
+        // check A-Z_ regex for the increaseFromStateWithCausant and decreaseFromStateWithCausant
+        if (conditionObject.decreaseFromStateWithCausant) {
+            if (!/^[A-Z_]*$/.test(conditionObject.decreaseFromStateWithCausant)) {
+                throw new Error(`decrease_from_state_with_causant ${conditionObject.decreaseFromStateWithCausant} is invalid. Must match /^[A-Z_]*$/ regex.`);
+            }
+        }
+        if (conditionObject.increaseFromStateWithCausant) {
+            if (!/^[A-Z_]*$/.test(conditionObject.increaseFromStateWithCausant)) {
+                throw new Error(`increase_from_state_with_causant ${conditionObject.increaseFromStateWithCausant} is invalid. Must match /^[A-Z_]*$/ regex.`);
+            }
+        }
+
+        bondConditions.push(conditionObject);
+    }
+
+    return [bondConditions, scriptSources];
+}
+
+/**
+ * 
+ * @param {string} characterName 
+ * @param {*} json 
+ * @param {string} propertyName
+ * @returns {[DEBondDeclaration[], DEScriptSource[]]}
+ */
+function importBondsFromJSON(characterName, json, propertyName) {
+    /**
+     * @type {DEBondDeclaration[]}
+     */
+    const bonds = [];
+    /**
+     * @type {DEScriptSource[]}
+     */
+    const scriptSources = [];
+    const bondsJson = json[propertyName];
+
+    if (typeof bondsJson !== "object" || bondsJson === null || Array.isArray(bondsJson)) {
+        throw new Error(`Property ${propertyName} must be an object.`);
+    }
+
+    for (const [bondName, bondJson] of Object.entries(bondsJson)) {
+        // we ignore the bond name as it is used only as a key for managing the bond in the json
+        if (typeof bondJson !== "object" || bondJson === null) {
+            throw new Error(`Property ${propertyName}.${bondName} must be an object.`);
+        }
+
+        const [description, descriptionSource] = importScriptAsTemplateFromJSON(
+            schema.properties[propertyName].additionalProperties,
+            characterName + "_BOND_" + bondName,
+            bondJson,
+            "description",
+        );
+        scriptSources.push(descriptionSource);
+
+        const [bondConditions, bondConditionsSources] = importBondConditionsFromJSON(
+            schema.properties[propertyName].additionalProperties["bond_conditions"],
+            characterName + "_BOND_" + bondName,
+            bondJson,
+            "bond_conditions",
+        );
+        scriptSources.push(...bondConditionsSources);
+
+        const [secondBondConditions, secondBondConditionsSources] = importBondConditionsFromJSON(
+            schema.properties[propertyName].additionalProperties["second_bond_conditions"],
+            characterName + "_2BOND_" + bondName,
+            bondJson,
+            "second_bond_conditions",
+        );
+        scriptSources.push(...secondBondConditionsSources);
+
+        /**
+         * @type {DEBondDeclaration}
+         */
+        const bond = {
+            name: bondName,
+            strangerBond: extractSimpleProperty(schema.properties[propertyName].additionalProperties, bondJson, "stranger_bond"),
+            maxBondLevel: extractSimpleProperty(schema.properties[propertyName].additionalProperties, bondJson, "max_bond_level"),
+            max2BondLevel: extractSimpleProperty(schema.properties[propertyName].additionalProperties, bondJson, "max_2_bond_level"),
+            min2BondLevel: extractSimpleProperty(schema.properties[propertyName].additionalProperties, bondJson, "min_2_bond_level"),
+            minBondLevel: extractSimpleProperty(schema.properties[propertyName].additionalProperties, bondJson, "min_bond_level"),
+            description: description,
+            bondConditions: bondConditions,
+            secondBondConditions: secondBondConditions,
+        }
+
+        bonds.push(bond);
+    }
+
+    return [bonds, scriptSources];
+}
+
+/**
  * Imports a character from a JSON representation.
  * @param {DECompleteCharacterReference} json
  * @returns {{character: DECompleteCharacterReference, scriptSources: DEScriptSource[]}}
@@ -586,9 +730,9 @@ export function importCharacterFromJSON(json) {
     const [characterStatesResult, characterStatesSources] = importCharacterStatesFromJSON(characterName, json);
 
     const [properties, propertiesSources] = importCharacterPropertiesFromJSON(characterName, json);
-
-
     const [spawnScript, spawnScriptSources] = importScriptsWithImportsFromJSON(characterName, json, "spawn_script");
+
+    const [bonds, bondScriptSources] = importBondsFromJSON(characterName, json, "bonds");
 
     /**
      * @type {DECompleteCharacterReference}
@@ -618,7 +762,7 @@ export function importCharacterFromJSON(json) {
 
         states: characterStatesResult,
         properties: properties,
-        bonds: [],
+        bonds: bonds,
         emotions: importCharacterEmotionsFromJSON(json),
         scripts: {
             spawn: spawnScript,
@@ -632,6 +776,8 @@ export function importCharacterFromJSON(json) {
         general: generalTemplate,
     }
 
+    validateBondsCoverage(character);
+
     /**
      * @type {DEScriptSource[]}
      */
@@ -641,7 +787,102 @@ export function importCharacterFromJSON(json) {
         ...characterStatesSources,
         ...propertiesSources,
         ...spawnScriptSources,
+        ...bondScriptSources,
     ];
 
     return { character, scriptSources: scriptsSources };
+}
+
+/**
+ * 
+ * @param {DECompleteCharacterReference} character 
+ * @param {boolean} strangerBondValue 
+ * @returns 
+ */
+function validateBondsCoverageHelper(character, strangerBondValue) {
+    /**
+     * @type {Array<[string, number, number, number, number]>}
+     */
+    const strengthValues = character.bonds.filter((b) => b.strangerBond === strangerBondValue).map(entry => {
+        const entryName = entry.name;
+        const minBondValue = entry.minBondLevel;
+        const maxBondValue = entry.maxBondLevel;
+        const min2BondValue = entry.min2BondLevel;
+        const max2BondValue = entry.max2BondLevel;
+        return [entryName, minBondValue, maxBondValue, min2BondValue, max2BondValue];
+    });
+
+    // find overlaps on the first bond levels
+    for (let i = 0; i < strengthValues.length; i++) {
+        const [nameA, minA, maxA, min2A, max2A] = strengthValues[i];
+        for (let j = i + 1; j < strengthValues.length; j++) {
+            if (i === j) continue;
+            const [nameB, minB, maxB, min2B, max2B] = strengthValues[j];
+            // check for overlap on both bond levels, the overlap is inclusive of the min value,
+            // so the max of one bond can be the same as the min of another bond without overlapping
+            const overlapOnFirstBond = (minA < maxB) && (maxA > minB);
+            const overlapOnSecondBond = (min2A < max2B) && (max2A > min2B);
+            if (overlapOnFirstBond && overlapOnSecondBond) {
+                throw new Error(`Bond strength levels for "${nameA}" and "${nameB}" overlap on the primary and secondary bonds with stranger_bond=${strangerBondValue}. Ensure bond ranges do not overlap.`);
+            }
+        }
+    }
+
+    // now we need to check that there are no gaps in the bonds level
+    const minBoxBondLevel = -100;
+    const maxBoxBondLevel = 100;
+    const min2BoxBondLevel = 0;
+    const max2BoxBondLevel = 100;
+
+    // Mathematically complete coverage check using sweep line algorithm
+    // Collect all unique x-coordinates from rectangle boundaries
+    const xCoords = new Set([minBoxBondLevel, maxBoxBondLevel]);
+    for (const [name, min1, max1, min2, max2] of strengthValues) {
+        xCoords.add(min1);
+        xCoords.add(max1);
+    }
+    const sortedXCoords = Array.from(xCoords).sort((a, b) => a - b);
+
+    // For each x-interval, check if y-dimension is fully covered
+    for (let i = 0; i < sortedXCoords.length - 1; i++) {
+        const xStart = sortedXCoords[i];
+        const xEnd = sortedXCoords[i + 1];
+
+        // Collect all y-intervals that cover this x-range
+        const yIntervals = [];
+        for (const [name, min1, max1, min2, max2] of strengthValues) {
+            // Rectangle covers this x-range if xStart and xEnd are both within [min1, max1]
+            if (min1 <= xStart && xEnd <= max1) {
+                yIntervals.push([min2, max2]);
+            }
+        }
+
+        // Sort y-intervals by start point
+        yIntervals.sort((a, b) => a[0] - b[0]);
+
+        // Check if y-intervals cover [min2BoxBondLevel, max2BoxBondLevel] without gaps
+        let currentY = min2BoxBondLevel;
+        for (const [yStart, yEnd] of yIntervals) {
+            if (yStart > currentY) {
+                // Gap found between currentY and yStart
+                throw new Error(`Bond strength levels have a gap at x∈[${xStart}, ${xEnd}], y∈[${currentY}, ${yStart}]. Ensure bond ranges touch at boundaries, with stranger_bond=${strangerBondValue}.`);
+            }
+            currentY = Math.max(currentY, yEnd);
+        }
+
+        if (currentY < max2BoxBondLevel) {
+            // Gap at the end
+            throw new Error(`Bond strength levels have a gap at x∈[${xStart}, ${xEnd}], y∈[${currentY}, ${max2BoxBondLevel}]. The y-dimension is not fully covered, with stranger_bond=${strangerBondValue}.`);
+        }
+    }
+
+    return;
+}
+
+/**
+ * @param {DECompleteCharacterReference} character 
+ */
+export function validateBondsCoverage(character) {
+    validateBondsCoverageHelper(character, true);
+    validateBondsCoverageHelper(character, false);
 }

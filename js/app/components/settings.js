@@ -86,13 +86,13 @@ class Settings extends HTMLElement {
                 ></app-overlay-input>
                 <app-overlay-select
                     label="Gender"
-                    input-options='["Male", "Female", "Ambiguous"]'
+                    input-options='["male", "female", "ambiguous"]'
                     title="The gender will affect how the AI interacts with your character in-game, how characters perceive you in appearance and spirit, choose wisely based on your preferred role-playing style."
                     input-data-location="user.gender"
                 ></app-overlay-select>
                 <app-overlay-select
                     label="Sex"
-                    input-options='["Male", "Female", "Intersex"]'
+                    input-options='["male", "female", "intersex", "none"]'
                     title="The sex will affect how the AI interacts with your character in-game, it represents what it's actually physically present in your character's body; some characters may take this into account when interacting with you."
                     input-data-location="user.sex"
                 ></app-overlay-select>

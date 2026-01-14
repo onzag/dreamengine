@@ -1,6 +1,7 @@
 import { importScriptAsPropertyValueInCharacterSpace, importScriptAsPropertyValueInItemSpace, importScriptAsScript, importScriptAsTemplate } from "../imports/scripts.js";
 import { ALL_FUNCTIONS_WITH_SPECIALS } from "../schema/functions.js"
 import { weightedRandomByLikelyhood } from "../util/random.js"
+import { EMOTIONS_LIST } from "./rolling-emotion.js";
 
 const INVALID_NAMES = ["system", "assistant", "user", "everyone", "nobody",
     "anyone", "somebody", "narrator", "observer", "admin", "moderator",
@@ -273,6 +274,14 @@ class DEngine {
         // ensure the character name starts with a capital letter and is a-z with spaces only
         if (!/^[A-Z][a-zA-Z ]*$/.test(character.name)) {
             throw new Error(`Character name ${character.name} is invalid. It must start with a capital letter and contain only letters and spaces.`);
+        }
+
+        // check all the emotion names are in our rolling emotion list
+        for (const emotionName in character.emotions) {
+            // @ts-ignore
+            if (!EMOTIONS_LIST.includes(emotionName)) {
+                throw new Error(`Character ${character.name} has invalid emotion name ${emotionName}.`);
+            }
         }
 
         this.deObject.characters[character.name] = character;

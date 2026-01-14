@@ -38,7 +38,8 @@ const schema = {
             "enum": [
                 "male",
                 "female",
-                "intersex"
+                "intersex",
+                "none"
             ]
         },
         "age_years": {
@@ -691,6 +692,11 @@ const schema = {
             "additionalProperties": {
                 "type": "object",
                 "properties": {
+                    "stranger_bond": {
+                        "type": "boolean",
+                        "title": "Stranger Bond Type",
+                        "description": "The type of bond, for strangers or not",
+                    },
                     "min_bond_level": {
                         "type": "integer",
                         "title": "Min Bond Level",

@@ -52,6 +52,12 @@ export const character = [
         "true or false",
         (DE, character) => character.sex.toLowerCase() === "intersex",
     ],
+    [
+        "char_sex_is_none -> boolean",
+        "Boolean indicating if the character has no sex",
+        "true or false",
+        (DE, character) => character.sex.toLowerCase() === "none",
+    ],
 ];
 
 /**
@@ -499,6 +505,15 @@ export const utils = [
         }
     ],
     [
+        "is_sex_none character:string -> boolean",
+        "Boolean indicating if the character has no sex",
+        "true or false",
+        (DE, character, characterQuestioned) => {
+            const charRef = DE.characters[characterQuestioned];
+            return charRef.sex.toLowerCase() === "none";
+        }
+    ],
+    [
         "is_char potential_character:string -> boolean",
         "Boolean indicating if the string given is a character, this will give true to the user as well",
         "true or false",
@@ -825,15 +840,15 @@ export const utils = [
     [
         "format_verb_to_be list_or_character:string|string[] -> string",
         "Formats the object pronoun for a list of characters or a single character",
-        "eg. him, her, them",
+        "eg. are, is",
         (DE, character, listOrCharacter) => {
             return getPronounHelper(DE, character, listOrCharacter, "are", "is", "is", "are");
         }
     ],
     [
         "format_plural_or_singular list_or_character:string|string[] plural singular -> string",
-        "Formats the object pronoun for a list of characters or a single character",
-        "eg. him, her, them",
+        "Formats the plural or singular form based on the list of characters or a single character",
+        "eg. sword, swords",
         (DE, character, listOrCharacter, plural, singular) => {
             if (Array.isArray(listOrCharacter)) {
                 if (listOrCharacter.length === 1) {
