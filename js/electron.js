@@ -1,7 +1,12 @@
-const { app, BrowserWindow, ipcMain, session } = require('electron')
-const path = require('path')
-const fs = require('fs');
-const os = require('os');
+import { app, BrowserWindow, ipcMain, session } from 'electron';
+import path from 'path';
+import fs from 'fs';
+import os from 'os';
+import { fileURLToPath } from 'url';
+
+// @ts-ignore
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 /**
  * @type any
@@ -58,7 +63,7 @@ const createWindow = () => {
     win.loadFile('./js/app/index.html')
 
     // Open dev tools with Ctrl+Shift+I (or Cmd+Option+I on macOS)
-    win.webContents.openDevTools();
+    //win.webContents.openDevTools();
 }
 
 const ALLOWED_BASE_PATHS = [
