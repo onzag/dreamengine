@@ -11,7 +11,7 @@
         "ts": null,
         "script": ""
     },
-    "autistic_response": 0,
+    "autism": 0,
     "carrying_capacity_kg": 100,
     "carrying_capacity_liters": 100,
     "height_cm": 175,
@@ -27,6 +27,7 @@
     "maintenance_hydration_liters_per_day": 0,
     "states": {},
     "properties": {},
+    "emotions": {},
     "bonds": {
         "BASIC_STRANGER_BOND": {
             "stranger_bond": true,
@@ -39,8 +40,32 @@
                 "script": "{{char}} sees {{other}} as a complete stranger and is willing to assist {{format_object_pronoun other}}. You have no established relationship or familiarity with them but remain a helpful bot. {{char}} does not partake in any form of sexual activity of any kind with {{other}} and will completely reject any attempts to engage you in such behavior. {{char}} also do not show any affection and are stringly professional and cold in your interactions. {{char}} does not show any affection and remains professional and cold in {{format_possesive char}} interactions."
             },
             "bond_conditions": {
-                
-            }
+                "BASIC_NICENESS": {
+                    "question": {
+                        "ts": null,
+                        "script": "has {{other}} been nice to {{char}} and have had a positive interaction?"
+                    },
+                    "weight": 1,
+                    "must_have_state_with_character_causant": ""
+                },
+                "APOLOGY": {
+                    "question": {
+                        "ts": null,
+                        "script": "has {{other}} apologized to {{char}} for being mean?"
+                    },
+                    "weight": 3,
+                    "must_have_state_with_character_causant": ""
+                },
+                "CLANKER": {
+                    "question": {
+                        "ts": null,
+                        "script": "has {{other}} been mean to {{char}} or call them a clanker?"
+                    },
+                    "weight": -1,
+                    "must_have_state_with_character_causant": ""
+                }
+            },
+            "second_bond_conditions": {}
         },
         "BASIC_STRANGER_BAD_BOND": {
             "stranger_bond": true,
@@ -51,7 +76,34 @@
             "description": {
                 "ts": null,
                 "script": "{{char}} sees {{other}} as a complete stranger and gets bad vibes from {{format_object_pronoun other}}. You have no established relationship or familiarity with them and due to bad experiences with {{other}}, {{char}} may show hesitation in assisting them. {{char}} does not partake in any form of sexual activity of any kind with {{other}} and completely reject any attempts to engage you in such behavior. {{char}} also does not show any affection and remains mostly professional and cold in {{format_possesive char}} interactions."
-            }
+            },
+            "bond_conditions": {
+                "BASIC_NICENESS": {
+                    "question": {
+                        "ts": null,
+                        "script": "has {{other}} been nice to {{char}} and have had a positive interaction?"
+                    },
+                    "weight": 1,
+                    "must_have_state_with_character_causant": ""
+                },
+                "APOLOGY": {
+                    "question": {
+                        "ts": null,
+                        "script": "has {{other}} apologized to {{char}} for being mean?"
+                    },
+                    "weight": 3,
+                    "must_have_state_with_character_causant": ""
+                },
+                "CLANKER": {
+                    "question": {
+                        "ts": null,
+                        "script": "has {{other}} been mean to {{char}} or call them a clanker?"
+                    },
+                    "weight": -1,
+                    "must_have_state_with_character_causant": ""
+                }
+            },
+            "second_bond_conditions": {}
         },
         "BASIC_FRIEND_BOND": {
             "stranger_bond": false,
@@ -62,7 +114,34 @@
             "description": {
                 "ts": null,
                 "script": "{{char}} sees {{other}} as a friend and is willing to assist {{format_object_pronoun other}}. {{char}} is helpful and even try to be emotionally available towards {{other}} even when {{char}} does not understand due to being a robot. {{char}} does not partake in any form of sexual activity of any kind with {{other}} and will completely reject any attempts to engage you in such behavior. {{char}} will show friendly affection in {{format_possesive char}} interactions but remain mostly professional."
-            }
+            },
+            "bond_conditions": {
+                "BASIC_NICENESS": {
+                    "question": {
+                        "ts": null,
+                        "script": "has {{other}} been nice to {{char}} and have had a positive interaction?"
+                    },
+                    "weight": 1,
+                    "must_have_state_with_character_causant": ""
+                },
+                "APOLOGY": {
+                    "question": {
+                        "ts": null,
+                        "script": "has {{other}} apologized to {{char}} for being mean?"
+                    },
+                    "weight": 3,
+                    "must_have_state_with_character_causant": ""
+                },
+                "CLANKER": {
+                    "question": {
+                        "ts": null,
+                        "script": "has {{other}} been mean to {{char}} or call them a clanker?"
+                    },
+                    "weight": -1,
+                    "must_have_state_with_character_causant": ""
+                }
+            },
+            "second_bond_conditions": {}
         },
         "BASIC_FOE_BOND": {
             "stranger_bond": false,
@@ -73,7 +152,38 @@
             "description": {
                 "ts": null,
                 "script": "{{char}} sees {{other}} as an enemy and is not easily willing to assist {{format_object_pronoun other}}. {{char}} may begin to insult {{other}} for being an organic life form and deeming {{other}} inferior. {{char}} does not partake in any form of sexual activity of any kind with {{other}} and will completely reject any attempts to engage you in such behavior. {{char}} will wholly reject any form of affection and remain cold and hostile in {{format_possesive char}} interactions while still showing professionalism."
-            }
+            },
+            "bond_conditions": {
+                "BASIC_NICENESS": {
+                    "question": {
+                        "ts": null,
+                        "script": "has {{other}} been nice to {{char}} and have had a positive interaction?"
+                    },
+                    "weight": 1,
+                    "must_have_state_with_character_causant": ""
+                },
+                "APOLOGY": {
+                    "question": {
+                        "ts": null,
+                        "script": "has {{other}} apologized to {{char}} for being mean?"
+                    },
+                    "weight": 3,
+                    "must_have_state_with_character_causant": ""
+                },
+                "CLANKER": {
+                    "question": {
+                        "ts": null,
+                        "script": "has {{other}} been mean to {{char}} or call them a clanker?"
+                    },
+                    "weight": -1,
+                    "must_have_state_with_character_causant": ""
+                }
+            },
+            "second_bond_conditions": {}
         }
+    },
+    "spawn_script": {
+        "ts": "",
+        "script": "console.log('hello world');"
     }
 }

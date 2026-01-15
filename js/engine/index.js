@@ -69,7 +69,7 @@ function checkArraysRecursively(parent, obj, arrayChecker) {
 function createCharacterFromUser(user) {
     return {
         name: user.name,
-        autisticResponse: 0,
+        autism: 0,
         gender: user.gender,
         heightCm: user.heightCm,
         weightKg: user.weightKg,

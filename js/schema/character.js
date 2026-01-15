@@ -70,10 +70,19 @@ const schema = {
             "multiline": true,
             "code_language": "handlebars"
         },
-        "short": {
+        "short_description": {
             "type": "string",
             "title": "Short Description",
-            "description": "A short mostly physical (on the surface) description of the character, used in lists and overviews, do not include clothing here",
+            "description": "A short mostly physical (on the surface) description of the character, used in lists and overviews, do not include clothing here as it varies",
+            "maxLength": 250,
+            "minLength": 20,
+            "placeholder": "A muscular woman with short brown hair and green eyes",
+            "multiline": true,
+        },
+        "short_description_naked": {
+            "type": "string",
+            "title": "Short Description (Naked)",
+            "description": "A short mostly physical (on the surface) description of the character when not wearing any clothes",
             "maxLength": 250,
             "minLength": 20,
             "placeholder": "A muscular woman with short brown hair and green eyes",
@@ -160,7 +169,7 @@ const schema = {
             "default": 0.05,
             "percentage": true,
         },
-        "autistic_response": {
+        "autism": {
             "type": "number",
             "title": "Autistic Response Likelihood",
             "description": "A percentage that determines a non-verbal non-social autistic answer, higher values indicate more autistic behaviour; if your character is already non-verbal do not use this; note that this doesn't replace a character being defined as autistic in its description, this is more akin sudden autistic behaviour",
@@ -711,14 +720,14 @@ const schema = {
                         "minimum": -100,
                         "maximum": 100
                     },
-                    "min_2nd_bond_level": {
+                    "min_2_bond_level": {
                         "type": "integer",
                         "title": "Min 2nd Bond Level",
                         "description": "The minimum second bond level this bond applies to",
                         "minimum": 0,
                         "maximum": 100
                     },
-                    "max_2nd_bond_level": {
+                    "max_2_bond_level": {
                         "type": "integer",
                         "title": "Max 2nd Bond Level",
                         "description": "The maximum second bond level this bond applies to",
@@ -732,7 +741,7 @@ const schema = {
                         "additionalProperties": {
                             "type": "object",
                             "properties": {
-                                "increase_question": {
+                                "question": {
                                     "type": "object",
                                     "additionalProperties": {
                                         "type": "object",
@@ -752,41 +761,18 @@ const schema = {
                                     "multiline": true,
                                     "code_language": "handlebars",
                                 },
-                                "decrease_question": {
-                                    "type": "object",
-                                    "additionalProperties": {
-                                        "type": "object",
-                                        "properties": {
-                                            "ts": {
-                                                "type": "string",
-                                            },
-                                            "script": {
-                                                "type": "string",
-                                            }
-                                        }
-                                    },
-                                    "title": "Bond Decrease Question",
-                                    "description": "The ensure rule to add into the prompt to increase the bond level, always starts as if, eg. {{other}} and {{char}} share a deep emotional connection",
-                                    "placeholder": "have {{char}} and {{other}} have not interacted in a long time and feel distant?",
-                                    "placeholder_ts": "return `have ${char.name} and ${other.name} have not interacted in a long time and feel distant?`;",
-                                    "multiline": true,
-                                    "code_language": "handlebars",
-                                },
-                                "increase_weight": {
+                                "weight": {
                                     "type": "number",
                                     "title": "Increase Weight",
-                                    "description": "The weight to apply when increasing the bond level, higher values make it more likely to increase",
-                                    "minimum": 0,
+                                    "description": "The weight to apply when increasing/decreasing the bond level, higher values make it more likely to increase",
+                                    "minimum": -10,
                                     "maximum": 10,
                                     "default": 1,
                                 },
-                                "decrease_weight": {
-                                    "type": "number",
-                                    "title": "Decrease Weight",
-                                    "description": "The weight to apply when decreasing the bond level, higher values make it more likely to decrease",
-                                    "minimum": 0,
-                                    "maximum": 10,
-                                    "default": 1,
+                                "must_have_state_with_character_causant": {
+                                    "type": "string",
+                                    "title": "Must Have State With Character Causant",
+                                    "description": "A state that must be active with the character causant being the other to be checked for this bond condition to be considered",
                                 },
                             }
                         },
@@ -799,7 +785,7 @@ const schema = {
                         "additionalProperties": {
                             "type": "object",
                             "properties": {
-                                "increase_question": {
+                                "question": {
                                     "type": "object",
                                     "additionalProperties": {
                                         "type": "object",
@@ -819,41 +805,18 @@ const schema = {
                                     "multiline": true,
                                     "code_language": "handlebars",
                                 },
-                                "decrease_question": {
-                                    "type": "object",
-                                    "additionalProperties": {
-                                        "type": "object",
-                                        "properties": {
-                                            "ts": {
-                                                "type": "string",
-                                            },
-                                            "script": {
-                                                "type": "string",
-                                            }
-                                        }
-                                    },
-                                    "placeholder": "have {{char}} and {{other}} have not interacted in a long time and feel distant?",
-                                    "placeholder_ts": "return `have ${char.name} and ${other.name} have not interacted in a long time and feel distant?`;",
-                                    "multiline": true,
-                                    "code_language": "handlebars",
-                                    "title": "2nd Bond Decrease Question",
-                                    "description": "The ensure rule to add into the prompt to increase the bond level, always starts as if, eg. {{other}} and {{char}} share a deep emotional connection"
-                                },
-                                "increase_weight": {
+                                "weight": {
                                     "type": "number",
                                     "title": "Increase Weight",
-                                    "description": "The weight to apply when increasing the bond level, higher values make it more likely to increase",
-                                    "minimum": 0,
+                                    "description": "The weight to apply when increasing/decreasing the bond level, higher values make it more likely to increase",
+                                    "minimum": -10,
                                     "maximum": 10,
                                     "default": 1,
                                 },
-                                "decrease_weight": {
-                                    "type": "number",
-                                    "title": "Decrease Weight",
-                                    "description": "The weight to apply when decreasing the bond level, higher values make it more likely to decrease",
-                                    "minimum": 0,
-                                    "maximum": 10,
-                                    "default": 1,
+                                "must_have_state_with_character_causant": {
+                                    "type": "string",
+                                    "title": "Must Have State With Character Causant",
+                                    "description": "A state that must be active with the character causant being the other to be checked for this bond condition to be considered",
                                 },
                             }
                         },

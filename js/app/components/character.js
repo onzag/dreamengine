@@ -55,7 +55,7 @@ const WIZARD_SECTIONS = [
                     "initiative",
                     "stranger_initiative",
                     "stranger_rejection",
-                    "autistic_response",
+                    "autism",
                     "schizophrenia",
                 ],
             ]

@@ -249,12 +249,9 @@ declare interface CharacterStateDefinition {
 }
 
 declare interface DEBondIncreaseDecreaseQuestion {
-    questionIncrease: DEStringTemplate;
-    questionDecrease: DEStringTemplate;
-    increaseFromStateWithCausant: string;
-    decreaseFromStateWithCausant: string;
-    increaseWeight: number;
-    decreaseWeight: number;
+    question: DEStringTemplate;
+    mustHaveStateWithCharacterCausant: string;
+    weight: number;
 }
 
 declare interface DEBondDeclaration {
@@ -353,7 +350,7 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
     initiative: number;
     strangerInitiative: number;
     strangerRejection: number;
-    autisticResponse: number;
+    autism: number;
     schizophrenia: number;
     schizophrenicVoiceDescription: DEStringTemplate | null;
     wanderPotential: number;

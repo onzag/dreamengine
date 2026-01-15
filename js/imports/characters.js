@@ -1,6 +1,6 @@
 import { EMOTIONS_LIST } from '../engine/rolling-emotion.js';
 import schema from '../schema/character.js';
-import { importScriptAsPropertyValueInCharacterSpace, importScriptAsPropertyValueInItemSpace, importScriptAsScript, importScriptAsTemplate } from './scripts';
+import { importScriptAsPropertyValueInCharacterSpace, importScriptAsPropertyValueInItemSpace, importScriptAsScript, importScriptAsTemplate } from './scripts.js';
 
 /**
  * @param {any} internalSchema
@@ -10,6 +10,9 @@ import { importScriptAsPropertyValueInCharacterSpace, importScriptAsPropertyValu
  */
 function extractSimpleProperty(internalSchema, obj, propertyName) {
     const schemaValue = internalSchema.properties[propertyName];
+    if (!schemaValue) {
+        throw new Error(`Property ${propertyName} is not defined in the schema.`);
+    }
     let type = schemaValue.type;
     if (type === "integer") {
         type = "number";
@@ -366,11 +369,7 @@ function importScriptsWithImportsFromJSON(characterName, json, scriptName) {
         throw new Error(`Property ${scriptName}.ts must be a string.`);
     }
     const scriptContent = givenScript["script"];
-    if (scriptContent.trim().length === 0) {
-        return [scriptsArray, scriptSources];
-    }
 
-    const importedScript = importScriptAsScript("?SCRIPT_" + characterName + "_" + scriptName.toUpperCase(), characterName + " " + scriptName + " Script", scriptContent);
     const imports = givenScript["imports"];
     if (Array.isArray(imports)) {
         imports.forEach((importName) => {
@@ -382,13 +381,16 @@ function importScriptsWithImportsFromJSON(characterName, json, scriptName) {
             });
         });
     }
-    scriptsArray.push(importedScript);
-    scriptSources.push({
-        id: importedScript.id,
-        type: "javascript",
-        source: scriptContent,
-        run: importedScript.execute,
-    });
+    if (scriptContent.trim().length !== 0) {
+        const importedScript = importScriptAsScript("?SCRIPT_" + characterName + "_" + scriptName.toUpperCase(), characterName + " " + scriptName + " Script", scriptContent);
+        scriptsArray.push(importedScript);
+        scriptSources.push({
+            id: importedScript.id,
+            type: "javascript",
+            source: scriptContent,
+            run: importedScript.execute,
+        });
+    }
     return [scriptsArray, scriptSources];
 }
 
@@ -487,6 +489,18 @@ function importCharacterStatesFromJSON(characterName, json) {
 
         // @ts-ignore
         states[stateName] = stateDefinition;
+    }
+
+    // filter script sources with duplicate ids
+    const seenIds = new Set();
+    for (let i = scriptSources.length - 1; i >= 0; i--) {
+        const source = scriptSources[i];
+        // remove ?INTERNAL_NOOP_TEMPLATE and ?INTERNAL_NOOP_VALUE_GETTER sources too
+        if (seenIds.has(source.id) || source.id === "?INTERNAL_NOOP_TEMPLATE" || source.id === "?INTERNAL_NOOP_VALUE_GETTER") {
+            scriptSources.splice(i, 1);
+        } else {
+            seenIds.add(source.id);
+        }
     }
 
     // @ts-ignore
@@ -591,41 +605,25 @@ function importBondConditionsFromJSON(internalSchema, prefix, json, propertyName
             throw new Error(`Property ${propertyName}.${conditionName} must be an object.`);
         }
 
-        const [questionIncreaseTemplate, questionIncreaseTemplateSource] = importScriptAsTemplateFromJSON(
+        const [questionTemplate, questionTemplateScript] = importScriptAsTemplateFromJSON(
             internalSchema.additionalProperties,
-            prefix + "_BOND_CONDITION_" + conditionName + "_QUESTION_INCREASE",
+            prefix + "_BOND_CONDITION_" + conditionName,
             conditionJson,
-            "question_increase",
+            "question",
         );
-        scriptSources.push(questionIncreaseTemplateSource);
-
-        const [questionDecreaseTemplate, questionDecreaseTemplateSource] = importScriptAsTemplateFromJSON(
-            internalSchema.additionalProperties,
-            prefix + "_BOND_CONDITION_" + conditionName + "_QUESTION_DECREASE",
-            conditionJson,
-            "question_decrease",
-        );
-        scriptSources.push(questionDecreaseTemplateSource);
+        scriptSources.push(questionTemplateScript);
 
         /** @type {DEBondIncreaseDecreaseQuestion} */
         const conditionObject = {
-            questionIncrease: questionIncreaseTemplate,
-            increaseWeight: extractSimpleProperty(internalSchema.additionalProperties, conditionJson, "increase_weight"),
-            questionDecrease: questionDecreaseTemplate,
-            decreaseWeight: extractSimpleProperty(internalSchema.additionalProperties, conditionJson, "decrease_weight"),
-            decreaseFromStateWithCausant: extractSimpleProperty(internalSchema.additionalProperties, conditionJson, "decrease_from_state_with_causant"),
-            increaseFromStateWithCausant: extractSimpleProperty(internalSchema.additionalProperties, conditionJson, "increase_from_state_with_causant"),
+            question: questionTemplate,
+            weight: extractSimpleProperty(internalSchema.additionalProperties, conditionJson, "weight"),
+            mustHaveStateWithCharacterCausant: extractSimpleProperty(internalSchema.additionalProperties, conditionJson, "must_have_state_with_character_causant"),
         };
 
-        // check A-Z_ regex for the increaseFromStateWithCausant and decreaseFromStateWithCausant
-        if (conditionObject.decreaseFromStateWithCausant) {
-            if (!/^[A-Z_]*$/.test(conditionObject.decreaseFromStateWithCausant)) {
-                throw new Error(`decrease_from_state_with_causant ${conditionObject.decreaseFromStateWithCausant} is invalid. Must match /^[A-Z_]*$/ regex.`);
-            }
-        }
-        if (conditionObject.increaseFromStateWithCausant) {
-            if (!/^[A-Z_]*$/.test(conditionObject.increaseFromStateWithCausant)) {
-                throw new Error(`increase_from_state_with_causant ${conditionObject.increaseFromStateWithCausant} is invalid. Must match /^[A-Z_]*$/ regex.`);
+        // check A-Z_ regex for the mustHaveStateWithCharacterCausant
+        if (conditionObject.mustHaveStateWithCharacterCausant) {
+            if (!/^[A-Z_]*$/.test(conditionObject.mustHaveStateWithCharacterCausant)) {
+                throw new Error(`must_have_state_with_character_causant ${conditionObject.mustHaveStateWithCharacterCausant} is invalid. Must match /^[A-Z_]*$/ regex.`);
             }
         }
 
@@ -672,7 +670,7 @@ function importBondsFromJSON(characterName, json, propertyName) {
         scriptSources.push(descriptionSource);
 
         const [bondConditions, bondConditionsSources] = importBondConditionsFromJSON(
-            schema.properties[propertyName].additionalProperties["bond_conditions"],
+            schema.properties[propertyName].additionalProperties.properties["bond_conditions"],
             characterName + "_BOND_" + bondName,
             bondJson,
             "bond_conditions",
@@ -680,7 +678,7 @@ function importBondsFromJSON(characterName, json, propertyName) {
         scriptSources.push(...bondConditionsSources);
 
         const [secondBondConditions, secondBondConditionsSources] = importBondConditionsFromJSON(
-            schema.properties[propertyName].additionalProperties["second_bond_conditions"],
+            schema.properties[propertyName].additionalProperties.properties["second_bond_conditions"],
             characterName + "_2BOND_" + bondName,
             bondJson,
             "second_bond_conditions",
@@ -738,7 +736,7 @@ export function importCharacterFromJSON(json) {
      * @type {DECompleteCharacterReference}
      */
     const character = {
-        autisticResponse: extractSimpleProperty(schema, json, "autistic_response"),
+        autism: extractSimpleProperty(schema, json, "autism"),
         carryingCapacityKg: extractSimpleProperty(schema, json, "carrying_capacity_kg"),
         carryingCapacityLiters: extractSimpleProperty(schema, json, "carrying_capacity_liters"),
         heightCm: extractSimpleProperty(schema, json, "height_cm"),
