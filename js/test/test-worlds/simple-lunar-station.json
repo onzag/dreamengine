@@ -26,26 +26,15 @@
                 "AIRLOCK_ENTRANCE": {
                     "name": "Airlock Entrance",
                     "description": {
+                        "ts": null,
                         "script": "The entrance to the lunar module, leading to the airlock that connects to the outside of the station."
-                    },
-                    "laying_down_spot": "Ground Near Airlock",
-                    "shared_laying_down_spot": false
+                    }
                 },
                 "COMMON_AREA_REGION_1": {
                     "name": "Common Area Region 1",
                     "description": {
                         "script": "A communal space area, furnished with seating and a view of Earth through large windows; with a television and communication console."
                     },
-                    "laying_down_spot": {
-                        "script": "Sofa by the Window"
-                    },
-                    "sitting_spot": {
-                        "script": "Sofa by the Window"
-                    },
-                    "shared_sitting_spot": true,
-                    "shared_laying_down_spot": false,
-                    "laying_down_size_limit_cm": 200,
-                    "sitting_size_limit_cm": 250,
                     "items": {
                         "KEYCARD": {
                             "name": "Keycard",

@@ -15,53 +15,49 @@ const worldSchema = {
             "placeholder": "A brief description of the world.",
             "multiline": true,
         },
-        "initial_scenes": {
+        "advanced_world_script": {
             "type": "object",
-            "title": "Initial Scenes",
-            "description": "The initial scenes of the world.",
-            "additionalProperties": {
-                "type": "object",
-                "properties": {
-                    "drop_location": {
-                        "type": "string",
-                        "title": "Drop Location",
-                        "default": "",
-                        "real_type": "location",
-                    },
-                    "drop_location_slot": {
-                        "type": "string",
-                        "title": "Drop Location Slot",
-                        "real_type": "location_slot",
-                        "default": "",
-                        "description": "The specific slot within the location where the user will be placed upon entering the scene.",
-                    },
-                    "user_initialization_message": {
-                        "type": "object",
-                        "properties": {
-                            "ts": {
-                                "type": "string",
-                            },
-                            "script": {
-                                "type": "string",
-                            },
-                        },
-                        "title": "User Initialization Message",
-                        "default": "",
-                        "multiline": true,
-                        "code_language": "handlebars",
-                        "description": "A message shown to the user when they enter this scene for the first time.",
-                        "placeholder": "Use {{user}} to reference the user's name.",
-                    }
+            "properties": {
+                "imports": {
+                    "type": "array",
+                    "title": "Imports",
                 },
+                "script": {
+                    "type": "string",
+                },
+                "ts": {
+                    "type": "string",
+                }
             },
+            "title": "World Script",
+            "description": "A TypeScript script that runs when the character is spawned for the first time, allowing for advanced customization of character initial state. Characters are only spawned once when the world is created and they always exist after that",
+            "multiline": true,
+            "code_language": "typescript",
+            "code_context": "World Script",
+            "placeholder": "// TypeScript code here, use DE only",
         },
-        "locations": {
-            "type": "array",
-            "title": "Locations",
-            "description": "The locations in the world.",
-            "items": {
-                "type": "object",
+        "advanced_all_characters_script": {
+            "type": "object",
+            "properties": {
+                "imports": {
+                    "type": "array",
+                    "title": "Imports",
+                },
+                "script": {
+                    "type": "string",
+                },
+                "ts": {
+                    "type": "string",
+                }
             },
-        }
+            "title": "All characters Spawn Script",
+            "description": "A TypeScript script that gets applied to every character in the world when they are spawned for the first time, allowing for advanced customization of character initial state. Characters are only spawned once when the world is created and they always exist after that",
+            "multiline": true,
+            "code_language": "typescript",
+            "code_context": "Spawn Script",
+            "placeholder": "// TypeScript code here, use char and DE",
+        },
     },
 }
+
+export default worldSchema;

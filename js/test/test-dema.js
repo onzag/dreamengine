@@ -6,5 +6,6 @@ const character = importCharacterFromJSON(json);
 
 (async () => {
     // @ts-ignore
+    character.character.scripts.spawn[0].execute({user: {name: "TestUser"}, functions: {}}, character.character)
     console.log(await character.character.general.execute({user: {name: "TestUser"}, functions: {}}, character.character))
 })();

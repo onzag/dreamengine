@@ -397,119 +397,6 @@ function importScriptsWithImportsFromJSON(characterName, json, scriptName) {
 /**
  * @param {string} characterName
  * @param {any} json 
- * @returns {[Record<string, CharacterStateDefinition>, DEScriptSource[]]}
- */
-function importCharacterStatesFromJSON(characterName, json) {
-    const states = {};
-    const schemaForStates = schema.properties["states"];
-
-    const statesJson = json["states"];
-    if (typeof statesJson !== "object" || statesJson === null) {
-        throw new Error(`Property states must be an object.`);
-    }
-
-    const scriptSources = [];
-
-    for (const [stateName, stateJson] of Object.entries(statesJson)) {
-        // Check A_Z_ regex for the name
-        if (!/^[A-Z_]*$/.test(stateName)) {
-            throw new Error(`State name ${stateName} is invalid. Must match /^[A-Z_]*$/ regex.`);
-        }
-
-        const [general, generalSource] = importScriptAsTemplateFromJSON(schemaForStates, characterName + "_STATE_" + stateName, stateJson, "general");
-        scriptSources.push(generalSource);
-
-        const [intensifiers, intensifiersSources] = extractArrayOfTemplateWithIntensityFromJSON(schemaForStates, characterName + "_STATE_" + stateName, stateJson, "intensifiers");
-        scriptSources.push(...intensifiersSources);
-
-        const [relievers, relieversSources] = extractArrayOfTemplateWithIntensityFromJSON(schemaForStates, characterName + "_STATE_" + stateName, stateJson, "relievers");
-        scriptSources.push(...relieversSources);
-
-        const [triggers, triggersSources] = extractArrayOfTemplateWithIntensityFromJSON(schemaForStates, characterName + "_STATE_" + stateName, stateJson, "triggers");
-        scriptSources.push(...triggersSources);
-
-        const [potentialCausantNegativeDescription, potentialCausantNegativeDescriptionSource] = importScriptAsTemplateFromJSON(schemaForStates, characterName + "_STATE_" + stateName, stateJson, "potential_causant_negative_description");
-        scriptSources.push(potentialCausantNegativeDescriptionSource);
-
-        const [potentialCausantPositiveDescription, potentialCausantPositiveDescriptionSource] = importScriptAsTemplateFromJSON(schemaForStates, characterName + "_STATE_" + stateName, stateJson, "potential_causant_positive_description");
-        scriptSources.push(potentialCausantPositiveDescriptionSource);
-
-        const [triggerDeadEnd, triggerDeadEndSource] = importScriptAsTemplateFromJSON(schemaForStates, characterName + "_STATE_" + stateName, stateJson, "triggers_dead_end");
-        scriptSources.push(triggerDeadEndSource);
-
-        const [relieving, relievingSource] = importScriptAsTemplateFromJSON(schemaForStates, characterName + "_STATE_" + stateName, stateJson, "relieving");
-        scriptSources.push(relievingSource);
-
-        /**
-         * @type {CharacterStateDefinition}
-         */
-        const stateDefinition = {
-            general: general,
-            binaryBehaviour: extractSimpleProperty(schemaForStates, stateJson, "binary_behaviour"),
-            commonState: extractSimpleProperty(schemaForStates, stateJson, "common_state"),
-            requiresPosture: extractSimpleProperty(schemaForStates, stateJson, "requires_posture"),
-            fallsDown: extractSimpleProperty(schemaForStates, stateJson, "falls_down"),
-            decayRateAfterRelief: extractSimpleProperty(schemaForStates, stateJson, "decay_rate_after_relief"),
-            decayRatePerInferenceCycle: extractSimpleProperty(schemaForStates, stateJson, "decay_rate_per_inference_cycle"),
-            dominance: extractSimpleProperty(schemaForStates, stateJson, "dominance"),
-            injuryAndDeath: extractSimpleProperty(schemaForStates, stateJson, "injury_and_death"),
-            intensifiers,
-            relievers,
-            triggers,
-            permanent: extractSimpleProperty(schemaForStates, stateJson, "permanent"),
-            potentialCausantMax2BondAllowed: extractSimpleProperty(schemaForStates, stateJson, "potential_causant_max_2_bond_allowed"),
-            potentialCausantMaxBondAllowed: extractSimpleProperty(schemaForStates, stateJson, "potential_causant_max_bond_allowed"),
-            potentialCausantMin2BondRequired: extractSimpleProperty(schemaForStates, stateJson, "potential_causant_min_2_bond_required"),
-            potentialCausantMinBondRequired: extractSimpleProperty(schemaForStates, stateJson, "potential_causant_min_bond_required"),
-            potentialCausantStrangerAllowed: extractSimpleProperty(schemaForStates, stateJson, "potential_causant_stranger_allowed"),
-            potentialCausantNonStrangerAllowed: extractSimpleProperty(schemaForStates, stateJson, "potential_causant_non_stranger_allowed"),
-            potentialCausantNegativeDescription,
-            potentialCausantPositiveDescription,
-            randomSpawnRate: extractSimpleProperty(schemaForStates, stateJson, "random_spawn_rate"),
-            promptInjection: extractSimpleProperty(schemaForStates, stateJson, "prompt_injection"),
-            relievingPromptInjection: extractSimpleProperty(schemaForStates, stateJson, "relieving_prompt_injection"),
-            systemPromptInjection: extractSimpleProperty(schemaForStates, stateJson, "system_prompt_injection"),
-            relievingSystemPromptInjection: extractSimpleProperty(schemaForStates, stateJson, "relieving_system_prompt_injection"),
-            reliefUsesDecayRate: extractSimpleProperty(schemaForStates, stateJson, "relief_uses_decay_rate"),
-            triggersDeadEnd: triggerDeadEnd,
-            triggersDeadEndRandomChance: extractSimpleProperty(schemaForStates, stateJson, "triggers_dead_end_random_chance"),
-            triggersDeadEndWhileRelievingRandomChance: extractSimpleProperty(schemaForStates, stateJson, "triggers_dead_end_while_relieving_random_chance"),
-            deadEndIsDeath: extractSimpleProperty(schemaForStates, stateJson, "dead_end_is_death"),
-            relievesStates: extractObjectOfIntensityFromJSON(stateJson, "relieves_states"),
-            triggersStates: extractObjectOfIntensityFromJSON(stateJson, "triggers_states"),
-            triggersStatesOnRelieve: extractObjectOfIntensityFromJSON(stateJson, "triggers_states_on_relieve"),
-            relieving,
-            requiredStates: extractArrayProperty(schemaForStates, stateJson, "required_states"),
-            requiresCharacterCausants: extractSimpleProperty(schemaForStates, stateJson, "requires_character_causants"),
-            requiresObjectCausants: extractSimpleProperty(schemaForStates, stateJson, "requires_object_causants"),
-            triggerLikelihood: extractSimpleProperty(schemaForStates, stateJson, "trigger_likelihood"),
-
-            conflictStates: extractArrayProperty(schemaForStates, stateJson, "conflict_states"),
-        };
-
-        // @ts-ignore
-        states[stateName] = stateDefinition;
-    }
-
-    // filter script sources with duplicate ids
-    const seenIds = new Set();
-    for (let i = scriptSources.length - 1; i >= 0; i--) {
-        const source = scriptSources[i];
-        // remove ?INTERNAL_NOOP_TEMPLATE and ?INTERNAL_NOOP_VALUE_GETTER sources too
-        if (seenIds.has(source.id) || source.id === "?INTERNAL_NOOP_TEMPLATE" || source.id === "?INTERNAL_NOOP_VALUE_GETTER") {
-            scriptSources.splice(i, 1);
-        } else {
-            seenIds.add(source.id);
-        }
-    }
-
-    // @ts-ignore
-    return [states, scriptSources]
-}
-
-/**
- * @param {string} characterName
- * @param {any} json 
  * @returns {[Record<string, DEPropertyValueInCharSpace>, DEScriptSource[]]}
  */
 function importCharacterPropertiesFromJSON(characterName, json) {
@@ -634,79 +521,6 @@ function importBondConditionsFromJSON(internalSchema, prefix, json, propertyName
 }
 
 /**
- * 
- * @param {string} characterName 
- * @param {*} json 
- * @param {string} propertyName
- * @returns {[DEBondDeclaration[], DEScriptSource[]]}
- */
-function importBondsFromJSON(characterName, json, propertyName) {
-    /**
-     * @type {DEBondDeclaration[]}
-     */
-    const bonds = [];
-    /**
-     * @type {DEScriptSource[]}
-     */
-    const scriptSources = [];
-    const bondsJson = json[propertyName];
-
-    if (typeof bondsJson !== "object" || bondsJson === null || Array.isArray(bondsJson)) {
-        throw new Error(`Property ${propertyName} must be an object.`);
-    }
-
-    for (const [bondName, bondJson] of Object.entries(bondsJson)) {
-        // we ignore the bond name as it is used only as a key for managing the bond in the json
-        if (typeof bondJson !== "object" || bondJson === null) {
-            throw new Error(`Property ${propertyName}.${bondName} must be an object.`);
-        }
-
-        const [description, descriptionSource] = importScriptAsTemplateFromJSON(
-            schema.properties[propertyName].additionalProperties,
-            characterName + "_BOND_" + bondName,
-            bondJson,
-            "description",
-        );
-        scriptSources.push(descriptionSource);
-
-        const [bondConditions, bondConditionsSources] = importBondConditionsFromJSON(
-            schema.properties[propertyName].additionalProperties.properties["bond_conditions"],
-            characterName + "_BOND_" + bondName,
-            bondJson,
-            "bond_conditions",
-        );
-        scriptSources.push(...bondConditionsSources);
-
-        const [secondBondConditions, secondBondConditionsSources] = importBondConditionsFromJSON(
-            schema.properties[propertyName].additionalProperties.properties["second_bond_conditions"],
-            characterName + "_2BOND_" + bondName,
-            bondJson,
-            "second_bond_conditions",
-        );
-        scriptSources.push(...secondBondConditionsSources);
-
-        /**
-         * @type {DEBondDeclaration}
-         */
-        const bond = {
-            name: bondName,
-            strangerBond: extractSimpleProperty(schema.properties[propertyName].additionalProperties, bondJson, "stranger_bond"),
-            maxBondLevel: extractSimpleProperty(schema.properties[propertyName].additionalProperties, bondJson, "max_bond_level"),
-            max2BondLevel: extractSimpleProperty(schema.properties[propertyName].additionalProperties, bondJson, "max_2_bond_level"),
-            min2BondLevel: extractSimpleProperty(schema.properties[propertyName].additionalProperties, bondJson, "min_2_bond_level"),
-            minBondLevel: extractSimpleProperty(schema.properties[propertyName].additionalProperties, bondJson, "min_bond_level"),
-            description: description,
-            bondConditions: bondConditions,
-            secondBondConditions: secondBondConditions,
-        }
-
-        bonds.push(bond);
-    }
-
-    return [bonds, scriptSources];
-}
-
-/**
  * Imports a character from a JSON representation.
  * @param {DECompleteCharacterReference} json
  * @returns {{character: DECompleteCharacterReference, scriptSources: DEScriptSource[]}}
@@ -725,12 +539,8 @@ export function importCharacterFromJSON(json) {
         throw new Error("Schizophrenic voice description template is required for character import.");
     }
 
-    const [characterStatesResult, characterStatesSources] = importCharacterStatesFromJSON(characterName, json);
-
     const [properties, propertiesSources] = importCharacterPropertiesFromJSON(characterName, json);
     const [spawnScript, spawnScriptSources] = importScriptsWithImportsFromJSON(characterName, json, "spawn_script");
-
-    const [bonds, bondScriptSources] = importBondsFromJSON(characterName, json, "bonds");
 
     /**
      * @type {DECompleteCharacterReference}
@@ -757,10 +567,12 @@ export function importCharacterFromJSON(json) {
         strangerRejection: extractSimpleProperty(schema, json, "stranger_rejection"),
         maintenanceCaloriesPerDay: extractSimpleProperty(schema, json, "maintenance_calories_per_day"),
         maintenanceHydrationLitersPerDay: extractSimpleProperty(schema, json, "maintenance_hydration_liters_per_day"),
+        locomotionSpeedMetersPerSecond: extractSimpleProperty(schema, json, "locomotion_speed_meters_per_second"),
+        rangeMeters: extractSimpleProperty(schema, json, "range_meters"),
 
-        states: characterStatesResult,
+        states: {},
         properties: properties,
-        bonds: bonds,
+        bonds: [],
         emotions: importCharacterEmotionsFromJSON(json),
         scripts: {
             spawn: spawnScript,
@@ -782,10 +594,8 @@ export function importCharacterFromJSON(json) {
     const scriptsSources = [
         generalTemplateSource,
         schizophrenicVoiceDescriptionSource,
-        ...characterStatesSources,
         ...propertiesSources,
         ...spawnScriptSources,
-        ...bondScriptSources,
     ];
 
     return { character, scriptSources: scriptsSources };

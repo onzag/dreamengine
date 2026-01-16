@@ -25,9 +25,17 @@
     "stranger_rejection": 0,
     "maintenance_calories_per_day": 0,
     "maintenance_hydration_liters_per_day": 0,
+    "range_meters": 1000,
+    "locomotion_speed_meters_per_second": 2,
     "states": {},
     "properties": {},
-    "emotions": {},
+    "emotions": {
+        "confident": {
+            "common": true,
+            "uncommon": false,
+            "triggered_by_states": []
+        }
+    },
     "bonds": {
         "BASIC_STRANGER_BOND": {
             "stranger_bond": true,

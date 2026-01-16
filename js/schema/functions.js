@@ -87,7 +87,7 @@ export const world = [
         "Boolean indicating if character is in a vehicle at the current location",
         "true or false",
         (DE, character) => {
-            return DE.world.locations.find(loc => loc.name === DE.stateFor[character.name].location)?.isVehicle || false;
+            return !!DE.world.locations[DE.stateFor[character.name].location]?.vehicleType || false;
         },
     ],
     [
@@ -95,7 +95,7 @@ export const world = [
         "Boolean indicating if the character is in a safe location at the current location",
         "true or false",
         (DE, character) => {
-            return DE.world.locations.find(loc => loc.name === DE.stateFor[character.name].location)?.isSafe || false;
+            return DE.world.locations[DE.stateFor[character.name].location]?.isSafe || false;
         },
     ],
 
@@ -119,7 +119,8 @@ export const world = [
         "Boolean indicating if the provided location is a vehicle",
         "true or false",
         (DE, character, location_name) => {
-            return DE.world.locations.find(loc => loc.name === location_name)?.isVehicle || false;
+            // @ts-ignore
+            return !!DE.world.locations[location_name]?.vehicleType || false;
         }
     ],
     [
@@ -127,7 +128,8 @@ export const world = [
         "Boolean indicating if the provided location is a safe location",
         "true or false",
         (DE, character, location_name) => {
-            return DE.world.locations.find(loc => loc.name === location_name)?.isSafe || false;
+            // @ts-ignore
+            return DE.world.locations[location_name]?.isSafe || false;
         }
     ]
 ];

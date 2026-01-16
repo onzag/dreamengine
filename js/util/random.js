@@ -37,12 +37,12 @@ export function weightedRandom(items, getWeight) {
 }
 
 /**
- * Simplified version when items have a 'weight' or 'likelyhood' property
+ * Simplified version when items have a 'weight' or 'likelihood' property
  * 
  * @template T
- * @param {Array<T & {likelyhood: number}>} items
+ * @param {Array<T & {likelihood: number}>} items
  * @returns {T | null}
  */
-export function weightedRandomByLikelyhood(items) {
-    return weightedRandom(items, item => item.likelyhood);
+export function weightedRandomByLikelihood(items) {
+    return weightedRandom(items, item => item.likelihood);
 }

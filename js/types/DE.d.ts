@@ -1,13 +1,51 @@
 declare interface DEMinimalCharacterReference {
+    /**
+     * Name of the character
+     */
     name: Readonly<string>;
-    sex: "male" | "female" | "intersex";
+    /**
+     * Biological sex of the character
+     */
+    sex: "male" | "female" | "intersex" | "none";
+    /**
+     * Gender identity of the character
+     */
     gender: "male" | "female" | "ambiguous";
+    /**
+     * Height in centimeters
+     */
     heightCm: number;
+    /**
+     * Weight in kilograms
+     */
     weightKg: number;
+    /**
+     * Age in years
+     */
     ageYears: number;
+    /**
+     * Maximum carrying capacity in liters
+     */
     carryingCapacityLiters: number;
+    /**
+     * Maximum carrying capacity in kilograms
+     */
     carryingCapacityKg: number;
+    /**
+     * Daily caloric needs in calories
+     */
     maintenanceCaloriesPerDay: number;
+    /**
+     * Maximum range of locomotion in meters
+     */
+    rangeMeters: number;
+    /**
+     * Maximum speed of locomotion in meters per second
+     */
+    locomotionSpeedMetersPerSecond: number;
+    /**
+     * Daily hydration needs in liters
+     */
     maintenanceHydrationLitersPerDay: number;
     /**
      * Short description of the character, assume they may have accessories
@@ -17,7 +55,10 @@ declare interface DEMinimalCharacterReference {
     /**
      * Short description when the character is completely naked
      * aka no clothes or accessories on them at all, useful for
-     * animals or scenarios where the character is stripped of all clothing
+     * animals or scenarios where the character is stripped of all clothing,
+     * note that you should still not specify the character as being fully nude
+     * just describe their physical appearance without clothes, that is because
+     * they may still have accessories like glasses, jewelry, piercings, bracelet, small shirt, etc...
      */
     shortDescriptionNaked: string | null;
 }
@@ -129,17 +170,25 @@ declare interface CharacterStateDefinition {
      * Whether the dead end scenario is a death scenario
      */
     deadEndIsDeath: boolean;
+    /**
+     * A random chance (0 to 1) that the state will trigger a dead end
+     * every time this state is active
+     */
     triggersDeadEndRandomChance: number;
+    /**
+     * A random chance (0 to 1) that the state will trigger a dead end
+     * every time this state is being relieved
+     */
     triggersDeadEndWhileRelievingRandomChance: number;
-    commonState: boolean;
-    requiresPosture: "standing" | "sitting" | "laying_down" | null;
+    requiresPosture: "standing" | "sitting" | "laying_down" | "";
+    seeksPosture: "standing" | "sitting" | "laying_down" | "";
     fallsDown: boolean;
     randomSpawnRate: number;
     conflictStates: string[];
     requiredStates: string[];
-    triggersStates: {[stateName: string]: {intensity: number}};
-    relievesStates: {[stateName: string]: {intensity: number}};
-    triggersStatesOnRelieve: {[stateName: string]: {intensity: number}};
+    triggersStates: { [stateName: string]: { intensity: number } };
+    relievesStates: { [stateName: string]: { intensity: number } };
+    triggersStatesOnRelieve: { [stateName: string]: { intensity: number } };
     /**
      * An instruction that gets added to the character description where a potential causant that does not fit
      * the criteria is set, for example, say the state is HUGGING, but the character has a low bond level, the
@@ -334,6 +383,12 @@ type DEEmotionNames =
 
 declare interface DECompleteCharacterReference extends DEMinimalCharacterReference {
     properties: Record<string, DEPropertyValueInCharSpace>;
+
+    /**
+     * Injects extra information into the character's general description
+     * every inference cycle, these get applied at a system prompt level
+     * so it should be writte in YOU format to address the assistant identity
+     */
     injectableInGeneralText: Record<string, DEStringTemplate>;
 
     /**
@@ -452,18 +507,28 @@ declare interface DEItem {
     canLieOn: boolean;
     properties: Record<string, DEPropertyValueInItemSpace>;
     isConsumable: boolean;
-    foodProperties: {
+    consumableProperties: {
         calories: number;
         hydrationLiters: number;
     } | null;
+    /**
+     * Whether this item covers nakedness when worn
+     */
+    coversNakedness: boolean;
     containing: Array<DEItem>;
+    /**
+     * The amount of this item in the stack
+     */
     amount: number;
 
     /**
      * The placement of the item in the location or on the character
      * or within the container item
+     * 
+     * this should be generated using the LLM
      */
     placement: string;
+
     /**
      * Use this to prevent characters from picking up this item, this is useful
      * for example with furniture and other fixed items in the location
@@ -491,10 +556,10 @@ declare interface StateForDescription {
     fullyExposedToWeather: string | null;
     posture: "standing" | "sitting" | "laying_down";
     /**
-     * The item the character is using to sit, stand or lay down on or null if none
+     * The id of the item the character is using to sit, stand or lay down on or null if none
      * if none that means the character is using the ground/floor/etc
      */
-    postureAppliedOn: DEItem | null;
+    postureAppliedOn: string | null;
     carrying: DEItem[];
     carryingCharacters: Array<string>;
     wearing: DEItem[];
@@ -520,25 +585,32 @@ declare interface StateForDescriptionWithHistory extends StateForDescription {
 }
 
 declare interface LocationSlot {
-    name: string;
     description: DEStringTemplate;
     /**
-     * Maximum vehicular volume capacity in liters for vehicles parked in this slot
-     * Make it null for no vehicle capacity
+     * Maximum height in centimeters that can fit in this slot
+     * will override location-based max height if specified
      */
-    vehicularVolumeCapacity: number | null;
+    maxHeightCm?: number;
     /**
-     * Types of vehicles that can be parked in this slot
+     * Maximum weight in kilograms that can fit in this slot
+     * will override location-based max weight if specified
      */
-    vehicleTypeLimitations: Array<string> | null;
+    maxWeightKg?: number;
+    /**
+     * Maximum volume in liters that can fit in this slot
+     * will override location-based max volume if specified
+     */
+    maxVolumeLiters?: number;
     /**
      * Names of weather systems that are fully blocked by this slot
+     * will override location-based blocking if specified
      */
-    slotFullyBlocksWeather: Array<string> | null;
+    slotFullyBlocksWeather?: Array<string>;
     /**
      * Names of weather systems that are only partially blocked by this slot
+     * will override location-based blocking if specified
      */
-    slotPartiallyBlocksWeather: Array<string> | null;
+    slotPartiallyBlocksWeather?: Array<string>;
     items: Array<DEItem>;
 }
 
@@ -548,9 +620,11 @@ declare interface WeatherSystem {
      */
     name: string;
     /**
-     * Sum of these likelihoods should be 1 for all weather systems in a location
+     * The likelyhood of the weather system occurring in the world
+     * an arbitrary number, a weather system with double this number will
+     * be double as likely to occur
      */
-    likelyhood: number;
+    likelihood: number;
     /**
      * minimum duration of the weather system in hours
      */
@@ -601,15 +675,43 @@ declare interface WeatherSystem {
      */
     fullyProtectingStates: Array<string>;
     /**
+     * If a character is in this state, they are fully protected from the weather system's effects
+     * eg. "raincoat" "body armor" "space suit"
+     */
+    fullyProtectingWornItems: Array<string>;
+    /**
+     * Whether being naked (no clothes or accessories at all) makes the character fully protected from the weather system's effects
+     * I mean it could be very hot weather right? :D
+     */
+    fullyProtectedNaked: boolean;
+    /**
      * If a character is in this state, they are partially protected from the weather system's effects
      * eg. "HOLDING_UMBRELLA" "WEARING_LIGHT_JACKET"
      */
     partiallyProtectingStates: Array<string>;
     /**
+     * If a character is in this state, they are partially protected from the weather system's effects
+     * eg. "light jacket"
+     */
+    partiallyProtectingWornItems: Array<string>;
+    /**
+     * Whether being naked (no clothes or accessories at all) makes the character partially protected from the weather system's effects
+     */
+    partiallyProtectedNaked: boolean;
+    /**
      * If a character is in this state, they are negatively affected by the weather system's effects
      * eg. "SICK" "NAKED" "INJURED"
      */
     negativelyAffectingStates: Array<string>;
+    /**
+     * If a character is wearing this item, they are negatively affected by the weather system's effects
+     * eg. "torn clothes" "light clothing"
+     */
+    negativelyAffectingWornItems: Array<string>;
+    /**
+     * Whether being naked (no clothes or accessories at all) makes the character negatively affected by the weather system's effects
+     */
+    negativelyAffectedNaked: boolean;
     /**
      * Names of states that are applied to characters while they are fully exposed to the weather system
      * eg. "WET" for rain, "SUNBURNED" for sunny weather
@@ -636,26 +738,66 @@ declare interface WeatherSystem {
     applyStatesInOrder: boolean;
 }
 
-declare interface DELocationDefinition {
-    id: string;
+declare interface DEUnlockCondition {
+    /**
+     * Description of the unlock condition, this will be inferenced with llm
+     * eg. {{char}} inputs the code "1234" into the keypad
+     */
+    opensIf: DEStringTemplate;
+    /**
+     * Mostly meant for the user to check if the condition is met
+     * eg. has {{char}} input "1234" into the keypad?
+     * The answer should be yes for the condition to be considered met
+     * and the entrance to be unlocked
+     */
+    yesNoQuestion: DEStringTemplate;
+}
+
+declare interface DEEntrances {
     name: string;
     description: DEStringTemplate;
-    isVehicle: boolean;
-    vehicleType: string | null;
-    vehicleVolume: number;
+    maxHeightCm: number;
+    maxWeightKg: number;
+    maxVolumeLiters: number;
+    isCurrentlyLocked: boolean;
+    canHearFromInsideOutside: boolean;
+    canBeUnlockedFromInside: boolean;
+    /**
+     * Use this for specifying other unlock conditions like keypads, biometric scanners, etc.
+     * Even locksmithing attempts
+     */
+    otherUnlockConditions: Array<DEUnlockCondition>;
+    canBeUnlockedByCharacters: Array<string>;
+    canBeUnlockedByWithItem: Array<string>;
+    autoLocksWhenClosed: boolean;
+}
+
+declare interface DELocationDefinition {
+    description: DEStringTemplate;
+    vehicleType?: string;
+    vehicleVolumeLiters?: number;
+    vehicleWeightKg?: number;
+    vehicleHeightCm?: number;
+    vehicleRangeMeters?: number;
+    vehicleSpeedMetersPerSecond?: number;
     isSafe: boolean;
     isPrivate: boolean;
     isIndoors: boolean;
-    level: number;
+    maxHeightCm: number;
+    maxWeightKg: number;
+    maxVolumeLiters: number;
     properties: Record<string, any>;
-    connections: Record<string, number>;
-    parentConnection: string | null;
-    isCurrentlyLocked: boolean;
-    canBeUnlockedFromInside: boolean;
-    unlockConditions: Array<DEStringTemplate>;
-    canBeUnlockedByCharactersWithStates: Array<string>;
-    canBeUnlockedByCharactersWithProperties: Array<string>;
-    slots: Array<LocationSlot>;
+    parent: string | null;
+    /**
+     * The entrances to this location
+     * for example, "front_door", "keypad", "garage_door", etc.
+     * these also become interactable location slots, and can have locks
+     */
+    entrances: Array<DEEntrances>;
+    /**
+     * Slots within the location where people can move and interact with the things in the location
+     */
+    slots: Record<string, LocationSlot>;
     /**
      * Names of weather systems that are fully blocked by this location
      * this will be overridden by slot-based blocking
@@ -672,25 +814,56 @@ declare interface DELocationDefinition {
      */
     ownWeatherSystem: Array<WeatherSystem> | null;
     /**
-     * Description of the current weather's full effects on this location
-     * will override the general weather full effect description if present
-     */
-    locationWeatherFullEffectDescription: DEStringTemplate | null;
-    /**
-     * Description of the current weather's partial effects on this location
-     * will override the general weather partial effect description if present
-     */
-    locationWeatherPartialEffectDescription: DEStringTemplate | null;
-    /**
-     * Description when there is no weather effect on this location, aka is fully sheltered
-     * will override the general weather no effect description if present
-     */
-    locationWeatherNoEffectDescription: DEStringTemplate | null;
-    /**
      * Names of the characters that are spawned in this location with instantiable names
      * child connections will inherit these names
      */
-    locationNames?: NamePool;
+    namePool?: NamePool;
+}
+
+declare interface DEConnection {
+    /**
+     * Source location ID
+     */
+    from: string;
+    /**
+     * Destination location ID
+     */
+    to: string;
+    /**
+     * Maximum height capacity in centimeters for vehicles or characters using this connection
+     */
+    maxHeightCm: number;
+    /**
+     * Maximum weight capacity in kilograms for vehicles or characters using this connection
+     */
+    maxWeightKg: number;
+    /**
+     * Maximum volume capacity in liters for vehicles or characters using this connection
+     */
+    maxVolumeLiters: number;
+    /**
+     * Whether only vehicles can use this connection
+     */
+    onlyVehicles: boolean;
+    /**
+     * Types of vehicles that can use this connection
+     */
+    vehicleTypes: Array<string>;
+    /**
+     * Whether the connection is bidirectional or not
+     */
+    bidirectional: boolean;
+    /**
+     * Distance in meters between the two locations connected
+     * this is used for travel time calculations
+     */
+    distanceMeters: number;
+    /**
+     * Conditions that must be met to allow passage through this connection
+     * Using inference to determine if the conditions are met
+     * eg. "{{char}} must be capable of flying or be carried by a flying character to pass through this connection"
+     */
+    otherPassageConditions: Record<string, DEStringTemplate>;
 }
 
 declare interface DEStatefulLocationDefinition extends DELocationDefinition {
@@ -783,7 +956,14 @@ declare interface DEScriptSource {
     type: "handlebars" | "javascript";
     run: (...args: any[]) => any;
 }
-declare type DEStringTemplateFunction = (DE: DEObject, char: DECompleteCharacterReference) => Promise<string> | string;
+declare type DEStringTemplateFunction = (
+    DE: DEObject,
+    char: DECompleteCharacterReference,
+    other: DECompleteCharacterReference,
+    causant: DECompleteCharacterReference,
+    cause: string,
+    potentialCausant: DECompleteCharacterReference,
+) => Promise<string> | string;
 declare type DEStringTemplate = {
     type: "template";
     id: string;
@@ -814,6 +994,78 @@ declare interface DEWanderHeuristic {
     wanderOutsideConfinementActivatesState: string | null;
 }
 
+declare interface DEInitialScene {
+    /**
+     * The starting location ID for the initial scene
+     */
+    startingLocation: string;
+    /**
+     * The starting location slot within the starting location
+     */
+    startingLocationSlot: string;
+    /**
+     * The narration that sets up the initial scene
+     */
+    narration: DEStringTemplate;
+    /**
+     * Characters that will be engaged with the user at the start of the scene
+     * these characters will be in a conversation with the user right away
+     * make sure that the characters are spawned in the location with the user
+     * otherwise they won't be able to interact
+     */
+    startingEngagedCharacters: Array<string>;
+    /**
+     * Whether the characters will interact first in the cycle, rather than the user
+     * this is useful for scenes where the characters start by talking rather than
+     * the user starting the interaction
+     */
+    charactersStart: boolean;
+}
+
+declare interface DEWorld {
+    /**
+     * The current location ID where the user is located
+     * while the user is a character too for optimization reasons this
+     * location is where things happen because the user observes from there
+     */
+    currentLocation: string;
+    /**
+     * The current location slot where the user is located
+     * while the user is a character too for optimization reasons this
+     * location is where things happen because the user observes from there
+     */
+    currentLocationSlot: string;
+    /**
+     * The selected scene id that was selected as the initial scene
+     * for the world at the beginning of the simulation
+     */
+    selectedScene: string | null;
+    /**
+     * All the locations in the world with their current state
+     */
+    locations: Record<string, DEStatefulLocationDefinition>;
+    /**
+     * The connections between locations in the world
+     */
+    connections: Record<string, DEConnection>;
+    /**
+     * Initial scenes that set up the world at the beginning of the simulation
+     */
+    initialScenes: Record<string, DEInitialScene>;
+    /**
+     * Whether it has started the initial scene or not, useful to know
+     * when the world is just starting anew
+     */
+    hasStartedScene: boolean;
+}
+
+declare interface DEUtils {
+    newHandlebarsTemplate(id: string, source: string): DEStringTemplate;
+    newTemplateFromFunction(id: string, func: DEStringTemplateFunction): DEStringTemplate;
+    newLocationFromStaticDefinition(definition: DELocationDefinition): DEStatefulLocationDefinition;
+    newWeatherSystem(definition: WeatherSystem): WeatherSystem;
+}
+
 declare interface DEObject {
     user: DEMinimalCharacterReference;
     characters: Record<string, DECompleteCharacterReference>;
@@ -823,19 +1075,62 @@ declare interface DEObject {
     allNames: NamePool;
     worldNames: NamePool;
     stateFor: Record<string, StateForDescriptionWithHistory>;
-    world: {
-        currentLocation: string;
-        currentLocationSlot: string;
-        locations: Array<DEStatefulLocationDefinition>;
-    };
+    world: DEWorld;
+    /**
+     * World scripts run at the world level when it initializes
+     * they run after each character has been set up and spawned
+     * but before the first inference cycle starts, the character will
+     * be the user character
+     * 
+     * These world scripts run to set up the world and add locations
+     * and items, because the json object representing the world does
+     * not really support that directly
+     */
     worldScripts: Array<DEScript>;
+    /**
+     * Scripts that run when any character spawns in the world
+     * these run for every character that spawns including the user character
+     * these run after the character spawn scripts
+     */
+    worldAllCharacterSpawnScripts: Array<DEScript>;
+    /**
+     * All the conversations that have happened in the world
+     * real or pseudo-conversations
+     */
     conversations: Record<string, DEConversation>;
+    /**
+     * Function utilities available to scripts and other code parts
+     */
     functions: FunctionTypes;
+    /**
+     * The initial time when the world was created
+     */
     initialTime: DETimeDescription;
+    /**
+     * The current time in the world
+     */
     currentTime: DETimeDescription;
+    /**
+     * All the script sources available in the world for dynamic execution
+     * they can be handlebars templates or javascript functions
+     */
     scriptSources: DEScriptSource[];
+    /**
+     * The rules that govern the world simulation
+     * these are used to guide the world simulation LLM reasoning
+     * and help it make decisions about what happens in the world
+     */
     worldRules: Array<DEStringTemplate>;
+    /**
+     * Heuristics that guide character wandering behaviour
+     * as how the character decides where to go when wandering
+     * without a heuristic a character will just stand still forever
+     */
     wanderHeuristics: Record<string, DEWanderHeuristic>;
+    /**
+     * Utility functions for common operations
+     */
+    utils: DEUtils;
 }
 
 declare type DE = DEObject;

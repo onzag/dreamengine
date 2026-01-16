@@ -1,6 +1,6 @@
 import { importScriptAsPropertyValueInCharacterSpace, importScriptAsPropertyValueInItemSpace, importScriptAsScript, importScriptAsTemplate } from "../imports/scripts.js";
 import { ALL_FUNCTIONS_WITH_SPECIALS } from "../schema/functions.js"
-import { weightedRandomByLikelyhood } from "../util/random.js"
+import { weightedRandomByLikelihood } from "../util/random.js"
 import { EMOTIONS_LIST } from "./rolling-emotion.js";
 
 const INVALID_NAMES = ["system", "assistant", "user", "everyone", "nobody",
@@ -182,7 +182,11 @@ class DEngine {
             world: {
                 currentLocation: startingLocation,
                 currentLocationSlot: startingLocationSlot,
-                locations: [],
+                locations: {},
+                connections: {},
+                selectedScene: null,
+                initialScenes: {},
+                hasStartedScene: false,
             },
             characters: {},
             allNames: {
@@ -341,11 +345,11 @@ class DEngine {
             const charState = this.deObject.stateFor[charName];
             const characterLocation = charState.location;
             const characterLocationSlot = charState.locationSlot;
-            const characterLocationObj = this.deObject.world.locations.find(loc => loc.name === characterLocation);
+            const characterLocationObj = this.deObject.world.locations[characterLocation];
             if (!characterLocationObj) {
                 throw new Error(`Character ${charName} is in invalid location ${characterLocation}`);
             }
-            const characterLocationSlotObj = characterLocationObj.slots.find(slot => slot.name === characterLocationSlot);
+            const characterLocationSlotObj = characterLocationObj.slots[characterLocationSlot];
             if (!characterLocationSlotObj) {
                 throw new Error(`Character ${charName} is in invalid location slot ${characterLocationSlot} in location ${characterLocation}`);
             }
@@ -570,6 +574,10 @@ class DEngine {
         }
     }
 
+    async startScene() {
+        
+    }
+
     async prepareInitialCycle() {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
@@ -697,15 +705,22 @@ class DEngine {
             }
         });
 
+        if (!this.deObject.world.hasStartedScene) {
+            // first time setup of the weather in the world
+            this.rerollWorldWeather();
+            this.startScene();
+        }
+
         this.readyForNextCycle = true;
     }
 
     /**
+     * @param {string} locationName
      * @param {DEStatefulLocationDefinition} location 
      * @param {DEStatefulLocationDefinition | null} parentLocation
      * @param {boolean} cascade
      */
-    rerollLocationWeather(location, parentLocation, cascade = true) {
+    rerollLocationWeather(locationName, location, parentLocation, cascade = true) {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         }
@@ -743,7 +758,7 @@ class DEngine {
 
             if (shouldHaveNewWeather) {
                 // pick new weather
-                const newWeatherSystem = weightedRandomByLikelyhood(location.ownWeatherSystem);
+                const newWeatherSystem = weightedRandomByLikelihood(location.ownWeatherSystem);
                 if (!newWeatherSystem) {
                     throw new Error("Failed to pick new weather system. Are there any weather systems defined?");
                 }
@@ -759,9 +774,10 @@ class DEngine {
 
                 // find every children locations and reroll their weather
                 if (cascade) {
-                    for (const potentialChildLocation of this.deObject.world.locations) {
-                        if (potentialChildLocation.parentConnection === location.id) {
-                            this.rerollLocationWeather(potentialChildLocation, location, true);
+                    for (const potentialChildLocationKey in this.deObject.world.locations) {
+                        const potentialChildLocation = this.deObject.world.locations[potentialChildLocationKey];
+                        if (potentialChildLocation.parent === locationName) {
+                            this.rerollLocationWeather(potentialChildLocationKey, potentialChildLocation, location, true);
                         }
                     }
                 }
@@ -775,55 +791,12 @@ class DEngine {
         }
 
         // find every top level location and reroll their weather
-        for (const location of this.deObject.world.locations) {
-            if (!location.parentConnection) {
-                this.rerollLocationWeather(location, null, true);
+        for (const locationKey in this.deObject.world.locations) {
+            const location = this.deObject.world.locations[locationKey];
+            if (!location.parent) {
+                this.rerollLocationWeather(locationKey, location, null, true);
             }
         }
-    }
-
-    /**
-     * @param {DELocationDefinition} location 
-     */
-    addLocation(location) {
-        if (!this.deObject) {
-            throw new Error("DEngine not initialized");
-        }
-
-        const parentConnection = location.parentConnection;
-        /**
-         * @type {DEStatefulLocationDefinition | null}
-         */
-        let parentLocation = null;
-        if (parentConnection) {
-            parentLocation = this.deObject.world.locations.find(loc => loc.id === parentConnection) || null;
-            if (!parentLocation) {
-                throw new Error(`Parent location with id ${parentConnection} not found.`);
-            }
-        }
-        /**
-         * @type {DEStatefulLocationDefinition}
-         */
-        const statefulLocation = {
-            ...location,
-
-            // @ts-ignore
-            currentWeather: null,
-            // @ts-ignore
-            currentWeatherFullEffectDescription: null,
-            // @ts-ignore
-            currentWeatherHasBeenOngoingFor: {
-                inMinutes: 0,
-                inHours: 0,
-                inDays: 0,
-            },
-            // @ts-ignore
-            currentWeatherNoEffectDescription: null,
-            // @ts-ignore
-            currentWeatherPartialEffectDescription: null,
-        };
-        this.deObject.world.locations.push(statefulLocation);
-        this.rerollLocationWeather(statefulLocation, parentLocation);
     }
 
     /**
@@ -889,11 +862,11 @@ class DEngine {
         const locationName = characterState.location;
         const slotName = characterState.locationSlot;
 
-        const location = this.deObject.world.locations.find(loc => loc.name === locationName);
+        const location = this.deObject.world.locations[locationName];
         if (!location) {
             throw new Error(`Location ${locationName} not found.`);
         }
-        const locationSlot = location.slots.find(slot => slot.name === slotName);
+        const locationSlot = location.slots[slotName];
         if (!locationSlot) {
             throw new Error(`Location slot ${slotName} not found in location ${locationName}.`);
         }
@@ -996,13 +969,14 @@ class DEngine {
         if (!characterState) {
             throw new Error(`Character state for ${characterName} not found.`);
         }
-        let finalDescription = characterState.wearing.length > 0 ? character.shortDescription : character.shortDescriptionNaked || character.shortDescription;
+        const hasItemsCoveringNakedness = characterState.wearing.some(item => item.coversNakedness);
+        let finalDescription = hasItemsCoveringNakedness ? character.shortDescription : character.shortDescriptionNaked || character.shortDescription;
         if (!finalDescription.endsWith(".")) {
             finalDescription += ".";
         }
         if (characterState.wearing.length > 0) {
             finalDescription += " Wearing " + this.deObject.functions.format_and(this.deObject, null, characterState.wearing.map(item => item.amount >= 2 ? item.amount + " of " + (item.descriptionWhenWorn || item.description) : (item.descriptionWhenWorn || item.description))) + ".";
-        } else if (!character.shortDescriptionNaked) {
+        } else {
             finalDescription += " Not wearing any clothes.";
         }
 
@@ -1020,7 +994,41 @@ class DEngine {
             finalDescription += ` Carrying characters: ` + this.deObject.functions.format_and(this.deObject, null, characterState.carryingCharacters) + ".";
         }
 
-        finalDescription += " " + character.name + " is currently " + characterState.posture + " on " + (characterState.postureAppliedOn ? characterState.postureAppliedOn.description : "the ground/floor") + ".";
+        let postureAppliedOnDescription = "the ground/floor";
+        if (characterState.postureAppliedOn) {
+            postureAppliedOnDescription = characterState.postureAppliedOn;
+            if (characterState.beingCarriedByCharacter) {
+                // let's see if we can be more specific
+                const carryingCharacterState = this.deObject.stateFor[characterState.beingCarriedByCharacter];
+                if (carryingCharacterState) {
+                    const itemCarriedOn = carryingCharacterState.carrying.find(item => item.name === characterState.postureAppliedOn);
+                    if (itemCarriedOn) {
+                        postureAppliedOnDescription = itemCarriedOn.descriptionWhenCarried || itemCarriedOn.description;
+                        postureAppliedOnDescription += ` (carried by ${characterState.beingCarriedByCharacter})`;
+                    } else {
+                        const itemWearing = carryingCharacterState.wearing.find(item => item.name === characterState.postureAppliedOn);
+                        if (itemWearing) {
+                            postureAppliedOnDescription = itemWearing.descriptionWhenWorn || itemWearing.description;
+                            postureAppliedOnDescription += ` (worn by ${characterState.beingCarriedByCharacter})`;
+                        }
+                    }
+                }
+            } else {
+                // find items in the location slot
+                const location = this.deObject.world.locations[characterState.location];
+                if (location) {
+                    const locationSlot = location.slots[characterState.locationSlot];
+                    if (locationSlot) {
+                        const itemAtLocation = locationSlot.items.find(item => item.name === characterState.postureAppliedOn);
+                        if (itemAtLocation) {
+                            postureAppliedOnDescription = itemAtLocation.description;
+                        }
+                    }
+                }
+            }
+        }
+
+        finalDescription += " " + character.name + " is currently " + characterState.posture + " on " + postureAppliedOnDescription + ".";
 
         return finalDescription;
     }
@@ -1081,11 +1089,11 @@ class DEngine {
         if (this.invalidCharacterStates) {
             throw new Error("DEngine has invalid character states, cannot get non pickable items at slot");
         }
-        const location = this.deObject.world.locations.find(loc => loc.name === locationName);
+        const location = this.deObject.world.locations[locationName]
         if (!location) {
             throw new Error(`Location ${locationName} not found.`);
         }
-        const locationSlot = location.slots.find(slot => slot.name === locationSlotName);
+        const locationSlot = location.slots[locationSlotName]
         if (!locationSlot) {
             throw new Error(`Location slot ${locationSlotName} not found in location ${locationName}.`);
         }
@@ -1112,11 +1120,11 @@ class DEngine {
         if (!character) {
             throw new Error(`Character ${characterName} not found.`);
         }
-        const location = this.deObject.world.locations.find(loc => loc.name === locationName);
+        const location = this.deObject.world.locations[locationName];
         if (!location) {
             throw new Error(`Location ${locationName} not found.`);
         }
-        const locationSlot = location.slots.find(slot => slot.name === locationSlotName);
+        const locationSlot = location.slots[locationSlotName];
         if (!locationSlot) {
             throw new Error(`Location slot ${locationSlotName} not found in location ${locationName}.`);
         }
@@ -2708,14 +2716,21 @@ class DEngine {
         }
     }
 
+    async prepareNextCycle() {
+        if (!this.deObject) {
+            throw new Error("DEngine not initialized");
+        }
+        this.refreshCharacterStates();
+    }
+
     /**
      * @param {string} userMessage 
      */
     async executeNextCycle(userMessage) {
+        this.prepareNextCycle();
+        
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
-        } else if (this.invalidCharacterStates) {
-            throw new Error("DEngine has invalid character states, cannot execute next cycle");
         } else if (!this.user) {
             throw new Error("DEngine has no user character defined");
         } else if (!this.readyForNextCycle) {
