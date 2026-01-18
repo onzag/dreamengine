@@ -321,6 +321,15 @@ export const utils = [
         }
     ],
     [
+        "get_state_intensity state_name:string -> number",
+        "Get the intensity of the specified active state for the current character, intensities are integer numbers from 0 to 4",
+        "eg. 0, 1, 2, 3, 4",
+        (DE, character, stateName) => {
+            const stateObject = DE.stateFor[character.name].states.find(state => state.state === stateName);
+            return stateObject ? stateObject.intensity : 0;
+        }
+    ],
+    [
         "has_state state_name:string -> boolean",
         "Check if the current character has the specified active state",
         "eg. true or false",
@@ -441,6 +450,33 @@ export const utils = [
                 const secondaryBond = bond.bond2;
                 return bondValue >= minBondLevel && bondValue <= maxBondLevel && secondaryBond >= min2BondLevel && secondaryBond <= max2BondLevel;
             }).map(bond => bond.towards);
+        }
+    ],
+    [
+        "get_age character:string -> number",
+        "Get the age of the character",
+        "eg. 25",
+        (DE, character, characterQuestioned) => {
+            const charRef = DE.characters[characterQuestioned];
+            return charRef.ageYears;
+        }
+    ],
+    [
+        "get_weight character:string -> number",
+        "Get the weight of the character",
+        "eg. 70",
+        (DE, character, characterQuestioned) => {
+            const charRef = DE.characters[characterQuestioned];
+            return charRef.weightKg;
+        }
+    ],
+    [
+        "get_height character:string -> number",
+        "Get the height of the character",
+        "eg. 170",
+        (DE, character, characterQuestioned) => {
+            const charRef = DE.characters[characterQuestioned];
+            return charRef.heightCm;
         }
     ],
     [
@@ -685,6 +721,34 @@ export const utils = [
         }
     ],
     [
+        "get_bond_towards character:string -> number",
+        "Get the bond value of our character towards the questioned character",
+        "eg. 50",
+        (DE, character, characterQuestioned) => {
+            const bonds = DE.social.bonds[character.name].active;
+            for (const bond of bonds) {
+                if (bond.towards === characterQuestioned) {
+                    return bond.bond;
+                }
+            }
+            return 0;
+        }
+    ],
+    [
+        "get_secondary_bond_towards character:string -> number",
+        "Get the secondary bond value of our character towards the questioned character",
+        "eg. 30",
+        (DE, character, characterQuestioned) => {
+            const bonds = DE.social.bonds[character.name].active;
+            for (const bond of bonds) {
+                if (bond.towards === characterQuestioned) {
+                    return bond.bond2;
+                }
+            }
+            return 0;
+        }
+    ],
+    [
         "is_at_same_location character:string -> boolean",
         "Boolean indicating if our character is at the same location of the questioned character",
         "true or false",
@@ -910,7 +974,16 @@ export const utils = [
         (DE, character, options_number, input_string) => {
             return generateIntSeedFromString(options_number, input_string);
         }
-    ]
+    ],
+    [
+        "get_random_seed_from_time options_number:number -> number",
+        "Generates a random seed based on the current world time, the range will be from 0 to options_number - 1, useful for creating random events that change over time",
+        "integer",
+        (DE, character, options_number) => {
+            const currentTimeString = DE.currentTime.time.toString();
+            return generateIntSeedFromString(options_number, currentTimeString);
+        }
+    ],
 ];
 
 export const ALL_FUNCTIONS = [

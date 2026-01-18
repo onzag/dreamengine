@@ -110,6 +110,11 @@ get_last_state_object_causants(DE: DEObject, char: CompleteCharacterReference, s
 */
 get_states(DE: DEObject, char: CompleteCharacterReference, ): string[];
 /**
+  Get the intensity of the specified active state for the current character, intensities are integer numbers from 0 to 4
+  @returns eg. 0, 1, 2, 3, 4
+*/
+get_state_intensity(DE: DEObject, char: CompleteCharacterReference, state_name:string): number;
+/**
   Check if the current character has the specified active state
   @returns eg. true or false
 */
@@ -149,6 +154,21 @@ get_difference_of_present_social_group(DE: DEObject, char: CompleteCharacterRefe
   @returns eg. [Thalon, Mira]
 */
 get_ex_social_group(DE: DEObject, char: CompleteCharacterReference, min_bond_level:number, max_bond_level:number, min_2_bond_level:number, max_2_bond_level:number): string[];
+/**
+  Get the age of the character
+  @returns eg. 25
+*/
+get_age(DE: DEObject, char: CompleteCharacterReference, character:string): number;
+/**
+  Get the weight of the character
+  @returns eg. 70
+*/
+get_weight(DE: DEObject, char: CompleteCharacterReference, character:string): number;
+/**
+  Get the height of the character
+  @returns eg. 170
+*/
+get_height(DE: DEObject, char: CompleteCharacterReference, character:string): number;
 /**
   Boolean indicating if the character is dead
   @returns true or false
@@ -254,6 +274,16 @@ does_not_know(DE: DEObject, char: CompleteCharacterReference, character:string):
   @returns true or false
 */
 is_strangers_with(DE: DEObject, char: CompleteCharacterReference, character:string): boolean;
+/**
+  Get the bond value of our character towards the questioned character
+  @returns eg. 50
+*/
+get_bond_towards(DE: DEObject, char: CompleteCharacterReference, character:string): number;
+/**
+  Get the secondary bond value of our character towards the questioned character
+  @returns eg. 30
+*/
+get_secondary_bond_towards(DE: DEObject, char: CompleteCharacterReference, character:string): number;
 /**
   Boolean indicating if our character is at the same location of the questioned character
   @returns true or false
@@ -374,4 +404,9 @@ format_ownership_pronoun(DE: DEObject, char: CompleteCharacterReference, list_or
   @returns integer
 */
 get_random_seed_from_string(DE: DEObject, char: CompleteCharacterReference, options_number:number, input_string:string): number;
+/**
+  Generates a random seed based on the current world time, the range will be from 0 to options_number - 1, useful for creating random events that change over time
+  @returns integer
+*/
+get_random_seed_from_time(DE: DEObject, char: CompleteCharacterReference, options_number:number): number;
 }

@@ -9,6 +9,11 @@ DE.world.initialScenes["Default Scene"] = /** @type {DEInitialScene} */ ({
     startingEngagedCharacters: ["Dema"],
 });
 
+DE.world.lore = DE.utils.newHandlebarsTemplate(
+    "LUNAR_STATION_LORE",
+    "The world is set on a small lunar station orbiting the Moon. The station serves as a research outpost and habitat for astronauts and scientists studying the lunar environment. The station is equipped with life support systems, scientific laboratories, living quarters, and communication facilities. Outside the station, the barren surface of the Moon stretches out, dotted with craters and rocks. The sky above is a pitch-black void, with the Earth hanging in the distance. The silence is absolute, broken only by the faint hum of the station's machinery."
+);
+
 const vaccuumWeatherSystem = DE.utils.newWeatherSystem({
     name: "Vaccuum",
     likelihood: 1.0,
@@ -126,3 +131,46 @@ DE.world.locations["Surface of the Moon"] = DE.utils.newLocationFromStaticDefini
         },
     },
 });
+
+DE.world.locations["Lunar Station"] = DE.utils.newLocationFromStaticDefinition({
+    description: DE.utils.newHandlebarsTemplate(
+        "LUNAR_STATION_DESCRIPTION",
+        "A small lunar station orbiting the Moon. The station serves as a research outpost and habitat for astronauts and scientists studying the lunar environment. The station is equipped with life support systems, scientific laboratories, living quarters, and communication facilities."
+    ),
+    entrances: [
+        {
+            autoLocksWhenClosed: false,
+            description: DE.utils.newHandlebarsTemplate(
+                "LUNAR_MODULE_AIRLOCK_DESCRIPTION",
+                "A sturdy airlock door that separates the interior of the lunar station from the vacuum of space outside. The door is made of reinforced metal and features a small window for viewing the exterior.",
+            ),
+            canBeUnlockedByCharacters: [],
+            canBeUnlockedByWithItems: [
+                "Lunar Station Airlock Keycard",
+            ],
+            isCurrentlyLocked: true,
+            canBeUnlockedFromInsideWithoutRequirements: false,
+            otherUnlockConditions: [],
+            canHearFromInsideOutside: false,
+            maxHeightCm: 500,
+            maxVolumeLiters: 500,
+            maxWeightKg: 500,
+            name: "Lunar Module Airlock",
+        },
+    ],
+    isIndoors: true,
+    isPrivate: false,
+    isSafe: true,
+    locationFullyBlocksWeather: [
+        "Vaccuum",
+    ],
+    locationPartiallyBlocksWeather: [],
+    maxHeightCm: 500,
+    maxVolumeLiters: 500,
+    maxWeightKg: 500,
+    ownWeatherSystem: [],
+    parent: "Surface of the Moon",
+    properties: {},
+    slots: {},
+});
+

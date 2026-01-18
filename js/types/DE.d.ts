@@ -67,11 +67,67 @@ interface DEStringTemplateWithIntensityAndCausants {
     /**
      * Relevant template in question,
      * should be a yes/no question or similar, yes
-     * will increase intensity, no will decrease it
+     * will increase/decrease intensity to the specified level
+     * 
+     * Remember to make use of the bond system to determine
+     * if a potential causant is good or not for triggering
+     * the state (or increasing intensity)
+     * 
+     * For example, say the state is NEEDS_AFFECTION
+     * it may not be good for the state to be triggered by complete strangers
+     * so you may want to write a template like:
+     * 
+     * """
+     * {{#with (get_present_conversing_social_group 20 100 20 100) as |potential_causants|}}
+     *    {{#if potential_causants}}
+     *       Is {{char}} getting a hug from {{format_or potential_causants}}?"
+     *    {{/if}}
+     * {{/with}}
+     * """
+     * 
+     * Depending on the bond system, this basically means the state will only trigger
+     * if someone the character has a good bond with and they know them and has
+     * some romantic interest (if the second bond was used that way) is giving them a hug
+     * then only the NEEDS_AFFECTION state will trigger
+     * 
+     * You may also add an opposite state, like DISGUSTED_BY_AFFECTION that triggers
+     * for the opposite characters with bonds that just don't clear the threshold
+     * for this state
+     * 
+     * """
+     * {{#with (difference (get_present_conversing_social_group 20 100 20 100) (get_present_conversing_social_group -100 100 0 100)) as |potential_causants|}}
+     *    {{#if potential_causants}}
+     *       Is {{char}} receiving affection from {{format_or potential_causants}}?"
+     *    {{/if}}
+     * {{/with}}
+     * """
+     * 
+     * You may wonder why the state description also has potentialCausantMinBondRequired, potentialCausantMaxBondRequired, etc...
+     * That is because those are used to help the character reason and do not imply state activation, so say, you meet a character for the first time
+     * as the reason, the potentialCausantNegativeDescription may help her reason with "{{char}} would feel uncomfortable hugging {{potential_causant}}"
+     * meaning this character will not hug and will not allow hug, and the state won't even be considered for activation if none of the characters around
+     * her fit the criteria
+     * 
+     * But if one does, that consumes inference LLM calls as the LLM will have to answer the questions, once a character is going to interact and speak,
+     * the logic goes as follows:
+     * 
+     * 1. Determine all potential causants in the vicinity
+     * 2. Are there any potentialCausants that fit the criteria? If not, skip to 4.
+     * 3. If yes, ask the LLM the questions in the template to determine if the state triggers or its intensity modifies; update the state accordingly.
+     * 4. Generate all the messages for the potentialCausantNegativeDescription and potentialCausantPositiveDescription and inject them into reasoning message, as well as the state the character is in, and
+     * everything required for reasoning.
+     * 5. Generate a short reasoning about what the character will do next, at this point the state is already updated OR if actionPromptInjection is set and one returns, that will override reasoning
+     * 6. Proceed with the character message generation as usual.
+     * 
+     * This means the state activation and intensity modification is done before reasoning (or the actionPromptInjection), and the potentialCausant descriptions are just to help
+     * reasoning about the character behaviour.
+     * 
+     * These YES/NO questions can be very expensive in terms of LLM calls. Make sure to optimize them well and avoid having too many, keep them as compact as possible; remember it is not just this
+     * state, but all other states are also asking their own YES/NO questions as well, so the total number of LLM calls can skyrocket.
      */
     template: DEStringTemplate;
     /**
-     * Intensity of the template effect
+     * Intensity of the template effect, from -4 to 4
      */
     intensity: number;
     /**
@@ -107,6 +163,44 @@ interface DEStringTemplateWithIntensityAndCausants {
     determineCause: DEStringTemplate;
 }
 
+declare interface DEPromptInjection {
+    /**
+     * The template to inject into the character's action reasoning
+     * remember this applies every inference cycle while the state is active
+     * So be careful check actionPromptInjection documentation description for more details
+     * on a proper use case
+     */
+    template: DEStringTemplate;
+    /**
+     * If the template represents a dead end scenario
+     * use this for the description of the dead end scenario
+     * the character will get removed from the story if this
+     * triggers
+     */
+    isDeadEndScenario: boolean;
+    /**
+     * Whether the dead end scenario is a death scenario
+     */
+    deadEndIsDeath: boolean;
+    /**
+     * Whether this prompt injection should override any other
+     * prompt injections from other states regardless of dominance, so
+     * even a less dominant state can force its prompt injection
+     * over more dominant states
+     */
+    forceDominant: boolean;
+}
+
+declare interface DEPromptInjectionWithIntensity extends DEPromptInjection{
+    /**
+     * The intensity modification this action will cause provided
+     * that something is injected, from -4 to 4
+     * you may use 0 if you just want the character to perform
+     * an action without modifying intensity
+     */
+    intensityModification: number;
+}
+
 declare interface CharacterStateDefinition {
     /**
      * How dominant this state is compared to other states
@@ -115,6 +209,33 @@ declare interface CharacterStateDefinition {
     dominance: number;
     /**
      * Description of the state, used for reasoning about the state
+     * 
+     * You may want to use get_state_intensity function to describe different
+     * behaviours at different intensities, it is recommended to use lists
+     * of conditions for this purpose, eg. consider the state is ANGRY
+     * you may want to write something like a handlebars template like this:
+     * 
+     * """
+     * {{#if (<= (get_state_intensity "ANGRY") 2)}}
+     * {{char}} is annoyed and irritated.
+     * Because of this the following conditions apply:
+     * 1. {{char}} will raise their voice when speaking.
+     * 2. {{char}} may frown or scowl.
+     * 3. {{char}} may cross their arms or tap their foot impatiently.
+     * {{else if (<= (get_state_intensity "ANGRY") 3)}}
+     * {{char}} is angry and frustrated.
+     * Because of this the following conditions apply:
+     * 1. {{char}} will speak in a harsh and curt tone.
+     * 2. {{char}} may clench their fists or grit their teeth.
+     * 3. {{char}} may pace around or slam objects down.
+     * {{else if (<= (get_state_intensity "ANGRY") 4)}}
+     * {{char}} is very angry and furious.
+     * Because of this the following conditions apply:
+     * 1. {{char}} will shout and yell.
+     * 2. {{char}} will throw objects at those that angered {{format_object_pronoun char}}
+     * 3. {{char}} may become physically aggressive.
+     * {{/if}}
+     * """
      */
     general: DEStringTemplate;
     /**
@@ -130,13 +251,31 @@ declare interface CharacterStateDefinition {
      * to avoid the character being stuck in a loop of following the same instruction
      * or you may choose to give different instructions each time
      * 
-     * Setting the reason prompt injection will disable reasoning in the character about
+     * Setting the action prompt injection will disable reasoning in the character about
      * what they will do next as they will be forced to follow the instructions
      * 
      * If two injections are set at the same time by different states, the one from the state with higher dominance will take precedence,
      * if they have the same dominance, one will be chosen at random
+     * 
+     * Example use case:
+     * say the state is NEEDS_TO_URINATE, you may want to set an action prompt injection like:
+     * 
+     * """
+     * {{#if (== (get_state_intensity "NEEDS_TO_URINATE") 4)}}
+     * {{#if (== (get_random_seed_from_time 3) 0)}}
+     * {{char}} suddenly pees themselves right now, they cannot hold it anymore!
+     * {{/if}}
+     * {{/if}}
+     * """
+     * 
+     * This basically means that they have a 1 in 3 chance of peeing themselves when
+     * they are at maximum intensity of the NEEDS_TO_URINATE state, this will override
+     * any reasoning the LLM may otherwise do about what to do next
+     * 
+     * The injection can have intensity levels as well to allow for different instructions
+     * allowing it to be more dynamic
      */
-    promptInjection: DEStringTemplate;
+    actionPromptInjection: Record<string, DEPromptInjectionWithIntensity>;
     /**
      * Description of the state, used for reasoning about the state
      */
@@ -154,13 +293,15 @@ declare interface CharacterStateDefinition {
      * to avoid the character being stuck in a loop of following the same instruction
      * or you may choose to give different instructions each time
      * 
-     * Setting the prompt injection will disable reasoning in the character about
+     * Setting the action prompt injection will disable reasoning in the character about
      * what they will do next as they will be forced to follow the instructions
      * 
      * If two injections are set at the same time by different states, the one from the state with higher dominance will take precedence,
      * if they have the same dominance, one will be chosen at random
+     * 
+     * Check the actionPromptInjection description for an example use case
      */
-    relievingPromptInjection: DEStringTemplate;
+    relievingActionPromptInjection: Record<string, DEPromptInjectionWithIntensity>;
     /**
      * Whether this state triggers a dead end that causes the character to be permanently removed from the story
      * use this for the description of the dead end scenario
@@ -249,13 +390,15 @@ declare interface CharacterStateDefinition {
      */
     triggers: Array<DEStringTemplateWithIntensityAndCausants>;
     /**
-     * The intensifiers once the state is active, what might intensify it further
+     * The intensity modifiers once the state is active, what might intensify it further
+     * or relieve it
      */
-    intensifiers: Array<DEStringTemplateWithIntensityAndCausants>;
+    intensityModifiers: Array<DEStringTemplateWithIntensityAndCausants>;
     /**
-     * The relievers do the opposite of the intensifiers and reduce the state intensity, they may even make it go away
+     * The intensity modifiers when the state is being relieved, what might intensify it further
+     * or relieve it
      */
-    relievers: Array<DEStringTemplateWithIntensityAndCausants>;
+    intensityModifiersDuringRelief: Array<DEStringTemplateWithIntensityAndCausants>;
     /**
      * Whether this represents a binary behaviour of sorts, in such a case, while the intensity still may vary
      * it doesn't say things like Overwhemingly or extremely (STATE_NAME) for example if the state is SLEEPING vs SCARED
@@ -382,6 +525,9 @@ type DEEmotionNames =
 // confronted 
 
 declare interface DECompleteCharacterReference extends DEMinimalCharacterReference {
+    /**
+     * Arbitrary properties attached to the character
+     */
     properties: Record<string, DEPropertyValueInCharSpace>;
 
     /**
@@ -389,7 +535,7 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
      * every inference cycle, these get applied at a system prompt level
      * so it should be writte in YOU format to address the assistant identity
      */
-    injectableInGeneralText: Record<string, DEStringTemplate>;
+    systemPromptInjection: Record<string, DEStringTemplate>;
 
     /**
      * These are similar to user prompt injections in the state but they don't need any
@@ -399,17 +545,181 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
      * since the ones here are for general purposes and may conflict with state-based ones
      * 
      * These will override reasoning just like state-based reason prompt injections do
+     * 
+     * This applies every time, and every time a state didn't provide an action prompt injection
+     * so be careful when using these to avoid locking the character into a specific behaviour
+     * 
+     * For example, let's say your character has an epilepsy condition and they may just
+     * have a seizure randomly, you may want to set an action prompt injection like:
+     * 
+     * """
+     * {{#if (== (get_random_seed_from_time 100) 0)}}
+     * {{char}} suddenly has an epileptic seizure right now! Disable all movement and actions and have the character convulse uncontrollably!
+     * {{/if}}
+     * """
+     * 
+     * Now the bad thing about making this a general character action prompt injection, is that a seizure
+     * should probably happen regardless of the character's current state, so forceDominant should be set to true
+     * making it a dominant behaviour that will apply regardless of other states, you can have less dominant states
+     * like a tic or similar condition that is okay being overriden by other states
+     * 
+     * """
+     * {{#if (== (get_random_seed_from_time 10) 0)}}
+     * {{char}} will suddenly check their surroundings nervously and twitch a bit uncontrollably!
+     * {{/if}}
+     * """
+     * 
+     * Now if forceDominant is set to false for this one, this way the character may have a tic sometimes but it won't override other more important states that are
+     * keeping them busy and their behaviour in check
      */
-    injectableInReasoning: Record<string, DEStringTemplate>;
+    actionPromptInjection: Record<string, DEPromptInjection>;
+
+    /**
+     * Just the general description of the character and the base of the system prompt,
+     * It should describe the character in detail including personality, appearance, background, quirks, etc...
+     * Do not use to describe clothing or accessories on the character, those are handled separately
+     * 
+     * A good format is, remember to use YOU format as this will be used in the system prompt directly, as well
+     * as using the templating in order to allow for dynamic descriptions, I mean, even aging is possible
+     * if you add a script for it that ages the character over time (by default characters are ageless)
+     * their weight is static, and their height too, but you can change those via scripts if you want to simulate growth
+     * 
+     * """
+     * You are {{char}} a {{get_age char}} {{#if (== (get_age char) 1)}}year old {{else}}years old{{/if}} weighting {{get_weight char}}kg and measuring {{get_height char}}cm tall.
+     * 
+     * You are a very curious and adventurous individual, always eager to explore new places and meet new people. You have a knack for getting into trouble, but your quick wit and resourcefulness always help you find a way out.
+     * 
+     * When roleplaying as {{char}}, make sure to embody {{format_object_pronoun char}} adventurous spirit and insatiable curiosity. Embrace {{format_object_pronoun char}} love for exploration and discovery, and let that drive your interactions and decisions.
+     * """
+     */
     general: DEStringTemplate;
+    /**
+     * An initiative score from 0 to 1 that determines how likely the character is to participate in conversations
+     * they are not being directly addressed in, higher means more likely to participate, the character must be in a conversation
+     * so they are not just bursting in a conversation they are not part of.
+     * 
+     * A value of 1 means that they still wait their turn to talk, provided they have a chance to talk, but they will try to participate
+     * in every single opportunity they get, in every opening every time
+     * 
+     * A value of 0 means that they will never participate in conversations they are not directly addressed in, they just stand still
+     * if they are not being talked to directly; this is useful for very shy or introverted characters
+     */
     initiative: number;
+    /**
+     * Stranger initiative is different from regular initiative, it applies when the character is a stranger and it actually
+     * represents the initiative to approach and interact with strangers; now these characters will actually approach strangers
+     * and get in their conversations if the situation allows for it
+     * 
+     * A value of 1 means that they will try to approach and interact with strangers at every opportunity they get, they can become
+     * very forward and intrusive
+     * 
+     * A value of 0 means that they will never approach or interact with strangers, they will just ignore them completely
+     * this is useful for very shy, introverted or socially anxious characters; but they may never really make social connections like this
+     * however, they may still get approached by strangers, hence why strangerRejection exists
+     * 
+     * For the purposes of this engine, since you can have stranger bonds, a stranger is defined as someone with whom the character has no bond at all
+     * or a stranger bond with very few interactions
+     */
     strangerInitiative: number;
+    /**
+     * Stranger rejection represents how likely the character is to reject interactions from strangers
+     * when approached or interacted with by them; higher means more likely to reject
+     * 
+     * A value of 1 means that they will always reject interactions from strangers, they may be very standoffish or socially anxious
+     * 
+     * A value of 0 means that they will always accept interactions from strangers, they may be very open and friendly to new people
+     * 
+     * For the purposes of this engine, since you can have stranger bonds, a stranger is defined as someone with whom the character has no bond at all
+     * or a stranger bond with very few interactions
+     */
     strangerRejection: number;
+    /**
+     * Represents the likelihood of the character to perform an stereotypical autistic reaction in a conversation or social interaction
+     * Note that this doesn't mean you shouldn't specify autism as part of the character general description if the character is autistic
+     * this is just a numeric representation of how likely they are to perform non-verbal autistic reactions, and this value should
+     * not be used in high if the character is not autistic at all
+     * 
+     * A value of 1 means that they will always perform an autistic reaction in social interactions and conversations and be nonverbal, a full
+     * value of 1 means that they will most likely never mutter a word in conversations and social interactions
+     * 
+     * A value of 0 means that they will never perform an autistic reaction in social interactions and conversations
+     */
     autism: number;
+    /**
+     * A schizophrenia score from 0 to 1 that determines how likely the character is to experience schizophrenic symptoms
+     * such as delusions and hallucinations, higher means more likely to experience symptoms
+     * 
+     * A value of 1 means that they will experience symptoms very frequently, potentially every inference cycle
+     * 
+     * A value of 0 means that they will never experience symptoms
+     * 
+     * Because LLM basically can hallucinate on its own, you do not need to specify the chararacter as being shcizophrenic or hearing voices
+     * in the general description, it may give the character more natural delusions like that; as the LLM itself will be unaware that it is
+     * hearing voices or experiencing delusions; good luck trying to convice them they are not hearing things!
+     * 
+     * While there are ways to simulate more deep schizophrenic symptoms like disorganized thinking, negative symptoms, and cognitive impairments
+     * those are more complex to simulate and may require more advanced prompt engineering and state management to achieve a convincing effect
+     * this may be a simplified approach to just have the character hear voices and have delusions, it should be good enough for most scenarios
+     * And for the motives of a RPG game.
+     * 
+     * It may seem insulting if you are schizophrenic yourself, but this is just a simplified approach; tried to make it as well as I could
+     * without overcomplicating things too much based on a family member that is schizophrenic and my own research on the topic
+     */
     schizophrenia: number;
-    schizophrenicVoiceDescription: DEStringTemplate | null;
+    /**
+     * The description of the schizophrenic voices the character hears, they could be nice or mean, for example, and inject them with ideas
+     * 
+     * For schizophrenic delusions, you may want to include those in the general description of the character instead, the voices are different
+     * as they actually act as separate entities that interact with the character, sometimes even conversing with them, while other characters
+     * cannot hear them, so even other LLM characters will be confused when the schizophrenic character talks to themselves
+     * 
+     * This is a "system prompt" as it behaves as its own character, so you should write it in YOU format addressing the assistant identity
+     * 
+     * For example
+     * """
+     * You are a voice in {{char}}'s head. You often talk to {{char}} and sometimes argue with {{format_object_pronoun char}}. You can be supportive at times, but you also like to mess with {{format_object_pronoun char}}'s mind. You enjoy making {{char}} question reality and doubt {{format_object_pronoun char}} own thoughts. You often suggest ideas to {{char}}, some of which are helpful, while others are downright dangerous. Your tone can vary from playful to sinister, depending on your mood.
+     * """
+     * 
+     * If schizophrenia is given, but no voice description is provided, a default one will be used
+     */
+    schizophrenicVoiceDescription: DEStringTemplate;
+    /**
+     * How much the character likes to wander around aimlessly in locations
+     * without a specific goal, from 0 to 1, higher means more likely to wander
+     * 
+     * A value of 1 means that the character will often wander around locations
+     * exploring them without a specific goal or purpose, they may just walk around
+     * looking at things and interacting with the environment randomly
+     * 
+     * A value of 0 means that the character will never wander around aimlessly,
+     * they will always have a specific goal or purpose in mind when moving around
+     */
     wanderPotential: number;
+    /**
+     * The crux of the engine, the states that define the character's behaviours
+     * and how they react to different situations, the more states a character has
+     * the more complex and nuanced their behaviour will be
+     * 
+     * Be careful, they may become deeply unpredictable with too many states
+     * as states may conflict with each other and create unexpected behaviours
+     * 
+     * Because of how complex states may be, they should be added with scripts
+     * for example, there are many default scripts to give the character, social behaviours,
+     * hunger, sleep, thirst, etc... all of these are states that get added via scripts
+     * 
+     * You may want to create custom states for specific behaviours and you can add them
+     * to many characters via their spawn script
+     */
     states: Record<string, CharacterStateDefinition>;
+    /**
+     * The bonds this character develops towards other characters in the world and how
+     * it evolves.
+     * 
+     * The bond system is a 3 dimensional grid of sorts, basically there is a stranger bond
+     * type, which is the bond towards strangers, it should probably not be very well defined, for example
+     * just have bond between -100 to 0 (for stranger that give negative interactions) and 0 to 100 (for strangers that give positive interactions)
+     * you can refer to bonds in the state conditions
+     */
     bonds: Array<DEBondDeclaration>;
     emotions: Partial<Record<DEEmotionNames, DEEmotionDefinition>>;
     scripts: {
@@ -761,14 +1071,14 @@ declare interface DEEntrances {
     maxVolumeLiters: number;
     isCurrentlyLocked: boolean;
     canHearFromInsideOutside: boolean;
-    canBeUnlockedFromInside: boolean;
+    canBeUnlockedFromInsideWithoutRequirements: boolean;
     /**
      * Use this for specifying other unlock conditions like keypads, biometric scanners, etc.
      * Even locksmithing attempts
      */
     otherUnlockConditions: Array<DEUnlockCondition>;
     canBeUnlockedByCharacters: Array<string>;
-    canBeUnlockedByWithItem: Array<string>;
+    canBeUnlockedByWithItems: Array<string>;
     autoLocksWhenClosed: boolean;
 }
 
@@ -1057,6 +1367,13 @@ declare interface DEWorld {
      * when the world is just starting anew
      */
     hasStartedScene: boolean;
+    /**
+     * This is a template that describes the overall world lore and setting
+     * it gets injected into various prompts to help ground the world simulation
+     * it is also used by characters to understand the world they are in
+     * and detect lies or inconsistencies
+     */
+    lore: DEStringTemplate;
 }
 
 declare interface DEUtils {

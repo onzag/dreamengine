@@ -187,6 +187,11 @@ class DEngine {
                 selectedScene: null,
                 initialScenes: {},
                 hasStartedScene: false,
+                lore: {
+                    type: "template",
+                    id: "?INTERNAL_NOOP_TEMPLATE",
+                    execute: () => "",
+                },
             },
             characters: {},
             allNames: {
@@ -587,17 +592,6 @@ class DEngine {
         checkObjectRecursively(null, this.deObject, (parent, obj) => {
             if (obj.type === "script" || obj.type === "template") {
                 if (typeof obj.execute !== "function") {
-                    // see if it was defined one with the same id in the parent, provided it is an array
-                    if (Array.isArray(parent)) {
-                        const definedInParent = parent.find(item => item.id === obj.id && typeof item.execute === "function");
-                        if (definedInParent) {
-                            // we accept that and we will drop these without a warning
-                            // they are already defined in the parent array, likely added by a character script
-                            // when it executed, meaning our state has been resolved properly
-                            return;
-                        }
-                    }
-
                     // find the script in the deObject.scriptSources and see if we can set it up
                     // @ts-ignore
                     const scriptSourceFound = this.deObject.scriptSources.find(src => src.id === obj.id);
@@ -607,17 +601,6 @@ class DEngine {
                 }
             } else if (obj.type === "value_getter" || obj.type === "value_getter_char_space") {
                 if (typeof obj.value !== "function") {
-                    // see if it was defined one with the same id in the parent, provided it is an array
-                    if (Array.isArray(parent)) {
-                        const definedInParent = parent.find(item => item.id === obj.id && typeof item.value === "function");
-                        if (definedInParent) {
-                            // we accept that and we will drop these without a warning
-                            // they are already defined in the parent array, likely added by a character script
-                            // when it executed, meaning our state has been resolved properly
-                            return;
-                        }
-                    }
-
                     // find the script in the deObject.scriptSources and see if we can set it up
                     // @ts-ignore
                     const scriptSourceFound = this.deObject.scriptSources.find(src => src.id === obj.id);
@@ -635,17 +618,6 @@ class DEngine {
         checkObjectRecursively(null, this.deObject, (parent, obj) => {
             if (obj.type === "script" || obj.type === "template") {
                 if (typeof obj.execute !== "function") {
-                    // see if it was defined one with the same id in the parent, provided it is an array
-                    if (Array.isArray(parent)) {
-                        const definedInParent = parent.find(item => item.id === obj.id && typeof item.execute === "function");
-                        if (definedInParent) {
-                            // we accept that and we will drop these without a warning
-                            // they are already defined in the parent array, likely added by a character script
-                            // when it executed, meaning our state has been resolved properly
-                            return;
-                        }
-                    }
-
                     // find the script in the deObject.scriptSources and see if we can set it up
                     // @ts-ignore
                     const scriptSourceFound = this.deObject.scriptSources.find(src => src.id === obj.id);
@@ -662,17 +634,6 @@ class DEngine {
                 }
             } else if (obj.type === "value_getter" || obj.type === "value_getter_char_space") {
                 if (typeof obj.value !== "function") {
-                    // see if it was defined one with the same id in the parent, provided it is an array
-                    if (Array.isArray(parent)) {
-                        const definedInParent = parent.find(item => item.id === obj.id && typeof item.value === "function");
-                        if (definedInParent) {
-                            // we accept that and we will drop these without a warning
-                            // they are already defined in the parent array, likely added by a character script
-                            // when it executed, meaning our state has been resolved properly
-                            return;
-                        }
-                    }
-                    
                     // find the script in the deObject.scriptSources and see if we can set it up
                     // @ts-ignore
                     const scriptSourceFound = this.deObject.scriptSources.find(src => src.id === obj.id);
@@ -685,21 +646,6 @@ class DEngine {
                     const scriptSourceFound = this.deObject?.scriptSources.find(src => src.id === obj.id);
                     if (!scriptSourceFound) {
                         throw new Error(`Value getter with id ${obj.id} does not have a valid source.`);
-                    }
-                }
-            }
-        });
-
-        // Time to drop invalid getters and scripts that have no execute/value function
-        checkArraysRecursively(null, this.deObject, (parent, array) => {
-            if (array.length === 0) return;
-            const firstItem = array[0];
-            if (firstItem.type === "script" || firstItem.type === "template" || firstItem.type === "value_getter" || firstItem.type === "value_getter_char_space") {
-                // iterates backwards to allow safe removal
-                for (let i = array.length - 1; i >= 0; i--) {
-                    const item = array[i];
-                    if (typeof item.execute !== "function" && typeof item.value !== "function") {
-                        array.splice(i, 1);
                     }
                 }
             }
