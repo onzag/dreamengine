@@ -226,7 +226,7 @@ function formatAnd(list) {
  */
 function getCausantsHelper(DE, character, stateName) {
     const actualStateName = stateName.trim().toUpperCase().replace(/\s+/, "_");
-    const characterHistoryAndCurrent = [DE.stateFor[character.name], ...DE.stateFor[character.name].history];
+    const characterHistoryAndCurrent = [...DE.stateFor[character.name].history, DE.stateFor[character.name]];
 
     /**
      * @type {StateForDescription | null}
@@ -270,7 +270,7 @@ export const utils = [
         "eg. 'helped me with my chores', 'betrayed me in the past'",
         (DE, character, stateName) => {
             const actualStateName = stateName.trim().toUpperCase().replace(/\s+/, "_");
-            const characterHistoryAndCurrent = [DE.stateFor[character.name], ...DE.stateFor[character.name].history];
+            const characterHistoryAndCurrent = [...DE.stateFor[character.name].history, DE.stateFor[character.name]];
 
             /**
              * @type {StateForDescription | null}
@@ -355,7 +355,7 @@ export const utils = [
             const stateObject = DE.stateFor[character.name].states.find(state => state.state === stateName);
             if (!stateObject) {
                 // find it in the history to see if it was ever activated
-                const stateHistory = [DE.stateFor[character.name], ...DE.stateFor[character.name].history];
+                const stateHistory = [...DE.stateFor[character.name].history, DE.stateFor[character.name]];
                 let cycle = -1;
                 for (let i = stateHistory.length - 1; i >= 0; i--) {
                     // yes I know this can be calculated with i, but this is more explicit
@@ -645,7 +645,7 @@ export const utils = [
         "String indicating a location where another character should be at according to the character's knowledge",
         "true or false",
         (DE, character, characterQuestioned) => {
-            const charHistoryAndCurrent = [DE.stateFor[character.name], ...DE.stateFor[character.name].history];
+            const charHistoryAndCurrent = [...DE.stateFor[character.name].history, DE.stateFor[character.name]];
             for (let i = charHistoryAndCurrent.length - 1; i >= 0; i--) {
                 const entry = charHistoryAndCurrent[i];
                 if (entry.surroundingNonStrangers.includes(characterQuestioned)) {
@@ -662,7 +662,7 @@ export const utils = [
         "true or false",
         (DE, character, characterQuestioned) => {
             let shouldBeAt = null;
-            const charHistoryAndCurrent = [DE.stateFor[character.name], ...DE.stateFor[character.name].history];
+            const charHistoryAndCurrent = [...DE.stateFor[character.name].history, DE.stateFor[character.name]];
             let foundAtIndex = -1;
             for (let i = charHistoryAndCurrent.length - 1; i >= 0; i--) {
                 const entry = charHistoryAndCurrent[i];

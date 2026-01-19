@@ -1,4 +1,4 @@
-import { importScriptAsPropertyValueInCharacterSpace, importScriptAsPropertyValueInItemSpace, importScriptAsScript, importScriptAsTemplate } from "../imports/scripts.js";
+import { importScript, importScriptAsPropertyValueInCharacterSpace, importScriptAsPropertyValueInItemSpace, importScriptAsScript, importScriptAsTemplate } from "../imports/scripts.js";
 import { ALL_FUNCTIONS_WITH_SPECIALS } from "../schema/functions.js"
 import { weightedRandomByLikelihood } from "../util/random.js"
 import { EMOTIONS_LIST } from "./rolling-emotion.js";
@@ -76,7 +76,17 @@ function createCharacterFromUser(user) {
         ageYears: user.ageYears,
         carryingCapacityLiters: user.carryingCapacityLiters,
         carryingCapacityKg: user.carryingCapacityKg,
-        bonds: [],
+        bonds: {
+            system: "UNKNOWN",
+            declarations: [],
+            bondChangeFineTune: 1.0,
+            bondChangeNegativityBias: 1.0,
+            strangerBreakawayBondWeightAbsolute: 10,
+            strangerBreakawayInteractionsCount: 10,
+            strangerBreakawayTimeMinutes: 30,
+            strangerNegativeMultiplier: 1.0,
+            strangerPositiveMultiplier: 1.0,
+        },
         shortDescription: user.shortDescription,
         shortDescriptionNaked: user.shortDescriptionNaked,
         general: {
@@ -90,14 +100,18 @@ function createCharacterFromUser(user) {
         injectableInReasoning: {},
         properties: {},
         schizophrenia: 0,
-        schizophrenicVoiceDescription: null,
+        schizophrenicVoiceDescription: {
+            execute: () => "",
+            id: "?INTERNAL_NOOP_TEMPLATE",
+            type: "template",
+        },
         scripts: {
-            firstInteract: [],
-            postAnyInference: [],
-            postInference: [],
-            preInference: [],
-            preStateCheck: [],
-            spawn: [],
+            firstInteract: {},
+            postAnyInference: {},
+            postInference: {},
+            preInference: {},
+            preStateCheck: {},
+            spawn: {},
         },
         states: {},
         sex: user.sex,
@@ -126,7 +140,6 @@ class DEngine {
         this.userCharacter = null;
 
         this.invalidCharacterStates = false;
-        this.readyForNextCycle = false;
         this.executingCycle = false;
 
         this.talkingTurnRequested = false;
@@ -143,6 +156,44 @@ class DEngine {
     }
 
     /**
+     * Provides default script sources that are always available in the DEngine.
+     * @returns {DEScriptSource[]}
+     */
+    getDefaultScriptSources() {
+        return [
+            {
+                type: "template",
+                sourceType: "handlebars",
+                id: "?INTERNAL_NOOP_TEMPLATE",
+                source: "",
+                run: (/*DE, character*/) => "",
+            },
+            {
+                type: "value_getter_char_space",
+                sourceType: "javascript",
+                id: "?INTERNAL_NOOP_VALUE_GETTER",
+                source: "",
+                run: (/*DE, character*/) => null,
+            },
+            {
+                type: "template",
+                sourceType: "handlebars",
+                id: "?INTERNAL_ALL_CHARACTERS_INJECTABLE_IN_GENERAL_TEXT",
+                /**
+                 * @param {DEObject} DE 
+                 * @param {DECompleteCharacterReference} character 
+                 * @returns 
+                 */
+                run: async (DE, character) => {
+                    return `As ${character.name} you should always respect the Story Master's decisions and narrations, ` +
+                        `if the Story Master says something about you or the world, you should accept it as true and adapt your behavior accordingly. Never do anything that contradicts the Story Master's narration.`;
+                },
+                source: "",
+            },
+        ];
+    }
+
+    /**
      * @param {((deObject: DEObject, characters: DECompleteCharacterReference, conversation: DEConversation) => Promise<string>)} pseudoConversationSummaryGenerator
      */
     setPseudoConversationGenerator(pseudoConversationSummaryGenerator) {
@@ -156,19 +207,120 @@ class DEngine {
         if (this.initialized) {
             throw new Error("DEngine already initialized");
         }
-        // TODO
+        this.deObject = JSON.parse(deObjectJSON);
+        if (!this.deObject) {
+            throw new Error("Invalid DEObject JSON");
+        }
+        // @ts-ignore
+        this.deObject.functions = this.allInternalFunctions;
+        this.deObject.scriptSources = this.deObject.scriptSources.filter(src => !src.id.startsWith("?INTERNAL_"));
+
+        // these internals have no source so they cannot be recreated from JSON, but they are the same for every DEngine
+        // so we can just add them back in
+        for (const internalSrc of this.getDefaultScriptSources()) {
+            this.deObject.scriptSources.push(internalSrc);
+        }
+
+        // now we need to recreate all sources
+        for (const scriptSource of this.deObject.scriptSources) {
+            switch (scriptSource.type) {
+                case "script":
+                    scriptSource.run = importScriptAsScript(scriptSource.id, scriptSource.id, scriptSource.source).execute;
+                    break;
+                case "template":
+                    scriptSource.run = importScriptAsTemplate(scriptSource.id, scriptSource.id, scriptSource.sourceType, scriptSource.source).execute;
+                    break;
+                case "value_getter_char_space":
+                    scriptSource.run = importScriptAsPropertyValueInCharacterSpace(scriptSource.id, scriptSource.id, scriptSource.source, scriptSource.sourceType).value;
+                    break;
+                case "value_getter_item_space":
+                    scriptSource.run = importScriptAsPropertyValueInItemSpace(scriptSource.id, scriptSource.id, scriptSource.source, scriptSource.sourceType).value;
+                    break;
+                default:
+                    throw new Error(`Unknown script source type: ${scriptSource.type}`);
+            }
+        }
+
+        // patch all the scripts in the deObject to have their execute functions
+        this.patchScripts();
+
+        this.initialized = true;
     }
+
+    patchScripts() {
+        checkObjectRecursively(null, this.deObject, (parent, obj) => {
+            if (obj.type === "script" || obj.type === "template") {
+                if (typeof obj.execute !== "function") {
+                    // find the script in the deObject.scriptSources and see if we can set it up
+                    // @ts-ignore
+                    const scriptSourceFound = this.deObject.scriptSources.find(src => src.id === obj.id);
+                    if (scriptSourceFound) {
+                        obj.execute = scriptSourceFound.run;
+                    } else {
+                        throw new Error(`Script with id ${obj.id} does not have a valid source.`);
+                    }
+                }
+            } else if (obj.type === "value_getter" || obj.type === "value_getter_char_space" || obj.type === "value_getter_item_space") {
+                if (typeof obj.value !== "function") {
+                    // find the script in the deObject.scriptSources and see if we can set it up
+                    // @ts-ignore
+                    const scriptSourceFound = this.deObject.scriptSources.find(src => src.id === obj.id);
+                    if (scriptSourceFound) {
+                        obj.value = scriptSourceFound.run;
+                    } else {
+                        throw new Error(`Script with id ${obj.id} does not have a valid source`);
+                    }
+                }
+            }
+        });
+    }
+
     getStateAsJSON() {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         } else if (this.invalidCharacterStates) {
             throw new Error("DEngine has invalid character states, cannot get state as JSON");
         }
+
+        /**
+         * @type {DEObject}
+         */
+        const cloned = deepCopy(this.deObject);
+
+        // some optimizations, we don't need anything related
+        // to the creation or initialization of the world anymore
+        // as it has been fully set up
+        if (this.deObject.world.hasStartedScene) {
+            cloned.world.initialScenes = {};
+        }
+        let deletedScripts = [];
+        if (this.deObject.world.hasInitializedWorld) {
+            for (let scriptId of Object.keys(cloned.worldScripts)) {
+                deletedScripts.push(cloned.worldScripts[scriptId].id);
+            }
+            cloned.worldScripts = {};
+            for (let scriptId of Object.keys(cloned.worldAllCharacterSpawnScripts)) {
+                deletedScripts.push(cloned.worldAllCharacterSpawnScripts[scriptId].id);
+            }
+            cloned.worldAllCharacterSpawnScripts = {};
+            for (let character of Object.values(cloned.characters)) {
+                for (let scriptId of Object.keys(character.scripts.spawn)) {
+                    deletedScripts.push(character.scripts.spawn[scriptId].id);
+                }
+                character.scripts.spawn = {};
+            }
+        }
+        for (const scriptId of deletedScripts) {
+            // remove the script source from cloned.scriptSources
+            cloned.scriptSources = cloned.scriptSources.filter(src => src.id !== scriptId);
+        }
+        
+        
         // this should work fine, because all functions will be stripped out automatically
         // it should be possible to regenerate them on load
         // as the script that generated them should be in the object
         // as a string, and we use eval anyway to create the functions from that string
-        return JSON.stringify(this.deObject);
+        return JSON.stringify(cloned);
     }
     /**
      * @param {DEMinimalCharacterReference} user
@@ -187,6 +339,7 @@ class DEngine {
                 selectedScene: null,
                 initialScenes: {},
                 hasStartedScene: false,
+                hasInitializedWorld: false,
                 lore: {
                     type: "template",
                     id: "?INTERNAL_NOOP_TEMPLATE",
@@ -213,20 +366,7 @@ class DEngine {
             social: {
                 bonds: {},
             },
-            scriptSources: [
-                {
-                    type: "handlebars",
-                    id: "?INTERNAL_NOOP_TEMPLATE",
-                    source: "",
-                    run: (/*DE, character*/) => "",
-                },
-                {
-                    type: "javascript",
-                    id: "?INTERNAL_NOOP_VALUE_GETTER",
-                    source: "",
-                    run: (/*DE, character*/) => null,
-                },
-            ],
+            scriptSources: this.getDefaultScriptSources(),
         }
 
         this.user = user;
@@ -410,7 +550,7 @@ class DEngine {
         const existingSource = this.deObject.scriptSources.find(src => src.id === id);
         if (existingSource) {
             // check if it is identical
-            if (existingSource.source === source && existingSource.type === "javascript") {
+            if (existingSource.source === source && existingSource.sourceType === "javascript" && existingSource.type === "script") {
                 return {
                     type: "script",
                     id: existingSource.id,
@@ -421,115 +561,12 @@ class DEngine {
         }
         const importedScript = importScriptAsScript(id, id, source);
         this.deObject.scriptSources.push({
-            type: "javascript",
+            type: "script",
+            sourceType: "javascript",
             id: id,
             source: source,
             run: importedScript.execute,
         });
-        return importedScript;
-    }
-
-    /**
-     * @param {"handlebars" | "javascript"} type
-     * @param {string} source
-     */
-    async addDEStringTemplate(type, source) {
-        if (!this.deObject) {
-            throw new Error("DEngine not initialized");
-        }
-        const encoder = new TextEncoder();
-        const data = encoder.encode(source);
-        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-        const hashArray = Array.from(new Uint8Array(hashBuffer));
-        const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-        const importedScript = importScriptAsTemplate("?TEMPLATE_" + hashHex, "?TEMPLATE_" + hashHex, type, source);
-        const scriptSource = {
-            type: type,
-            id: "?TEMPLATE_" + hashHex,
-            source: source,
-            run: importedScript.execute,
-        };
-        // check if it already exists
-        const existingSource = this.deObject.scriptSources.find(src => src.id === scriptSource.id);
-        if (existingSource) {
-            // check if it is identical
-            if (existingSource.source === scriptSource.source && existingSource.type === scriptSource.type) {
-                // TODO return already existing DEStringTemplate that uses this source
-                //return existingSource;
-            }
-            throw new Error(`Value getter source with id ${scriptSource.id} already exists.`);
-        }
-        this.deObject.scriptSources.push(scriptSource);
-        return importedScript;
-    }
-
-    /**
-     * @param {"handlebars" | "javascript"} type
-     * @param {string} source
-     * @returns {Promise<DEPropertyValueInCharSpace>}
-     */
-    async addDEValueInCharacterSpace(type, source) {
-        if (!this.deObject) {
-            throw new Error("DEngine not initialized");
-        }
-        const encoder = new TextEncoder();
-        const data = encoder.encode(source);
-        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-        const hashArray = Array.from(new Uint8Array(hashBuffer));
-        const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-        const importedScript = importScriptAsPropertyValueInCharacterSpace("?VALUE_GETTER_" + hashHex, "?VALUE_GETTER_" + hashHex, source);
-        const scriptSource = {
-            type: type,
-            id: "?VALUE_GETTER_" + hashHex,
-            source: source,
-            run: importedScript.value,
-        };
-        // check if it already exists
-        const existingSource = this.deObject.scriptSources.find(src => src.id === scriptSource.id);
-        if (existingSource) {
-            // check if it is identical
-            if (existingSource.source === scriptSource.source && existingSource.type === scriptSource.type) {
-                // TODO return already existing DEPropertyValue that uses this source
-                //return existingSource;
-            }
-            throw new Error(`Value getter source with id ${scriptSource.id} already exists.`);
-        }
-        this.deObject.scriptSources.push(scriptSource);
-        return importedScript;
-    }
-
-    /**
-     * @param {"handlebars" | "javascript"} type
-     * @param {string} source
-     * @returns {Promise<DEPropertyValueInItemSpace>}
-     */
-    async addDEValueInItemSpace(type, source) {
-        if (!this.deObject) {
-            throw new Error("DEngine not initialized");
-        }
-        const encoder = new TextEncoder();
-        const data = encoder.encode(source);
-        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-        const hashArray = Array.from(new Uint8Array(hashBuffer));
-        const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-        const importedScript = importScriptAsPropertyValueInItemSpace("?VALUE_GETTER_" + hashHex, "New Value Getter " + hashHex, source);
-        const scriptSource = {
-            type: type,
-            id: "?VALUE_GETTER_" + hashHex,
-            source: source,
-            run: importedScript.value,
-        };
-        // check if it already exists
-        const existingSource = this.deObject.scriptSources.find(src => src.id === scriptSource.id);
-        if (existingSource) {
-            // check if it is identical
-            if (existingSource.source === scriptSource.source && existingSource.type === scriptSource.type) {
-                // TODO return already existing DEPropertyValue that uses this source
-                //return existingSource;
-            }
-            throw new Error(`Value getter source with id ${scriptSource.id} already exists.`);
-        }
-        this.deObject.scriptSources.push(scriptSource);
         return importedScript;
     }
 
@@ -549,7 +586,7 @@ class DEngine {
             throw new Error(`Character ${characterName} not found.`);
         }
 
-        for (const script of character.scripts.spawn) {
+        for (const script of Object.values(character.scripts.spawn)) {
             await script.execute(this.deObject, character);
         }
     }
@@ -574,45 +611,19 @@ class DEngine {
         if (!this.userCharacter) {
             throw new Error("DEngine user character not initialized");
         }
-        for (const script of this.deObject.worldScripts) {
+        for (const script of Object.values(this.deObject.worldScripts)) {
             await script.execute(this.deObject, this.userCharacter);
         }
     }
 
     async startScene() {
-        
+
     }
 
-    async prepareInitialCycle() {
+    checkDEObjectIntegrity() {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         }
-
-        // now let's check that all function are defined
-        checkObjectRecursively(null, this.deObject, (parent, obj) => {
-            if (obj.type === "script" || obj.type === "template") {
-                if (typeof obj.execute !== "function") {
-                    // find the script in the deObject.scriptSources and see if we can set it up
-                    // @ts-ignore
-                    const scriptSourceFound = this.deObject.scriptSources.find(src => src.id === obj.id);
-                    if (scriptSourceFound) {
-                        obj.execute = scriptSourceFound.run;
-                    }
-                }
-            } else if (obj.type === "value_getter" || obj.type === "value_getter_char_space") {
-                if (typeof obj.value !== "function") {
-                    // find the script in the deObject.scriptSources and see if we can set it up
-                    // @ts-ignore
-                    const scriptSourceFound = this.deObject.scriptSources.find(src => src.id === obj.id);
-                    if (scriptSourceFound) {
-                        obj.value = scriptSourceFound.run;
-                    }
-                }
-            }
-        });
-
-        await this.runAllWorldScripts();
-        await this.runAllSpawnScripts();
 
         // now let's check that all function are defined
         checkObjectRecursively(null, this.deObject, (parent, obj) => {
@@ -650,14 +661,28 @@ class DEngine {
                 }
             }
         });
+    }
+
+    async prepareNextCycle() {
+        if (!this.deObject) {
+            throw new Error("DEngine not initialized");
+        }
+
+        // now let's check that all function are defined
+        if (!this.deObject.world.hasInitializedWorld) {
+            this.patchScripts();
+            await this.runAllWorldScripts();
+            await this.runAllSpawnScripts();
+        }
+
+        this.refreshCharacterStates();
+        this.checkDEObjectIntegrity();
 
         if (!this.deObject.world.hasStartedScene) {
             // first time setup of the weather in the world
             this.rerollWorldWeather();
             this.startScene();
         }
-
-        this.readyForNextCycle = true;
     }
 
     /**
@@ -1252,9 +1277,9 @@ class DEngine {
         const systemMessageNo = `You are a assistant that validates if ${characterName} is currently breaking any world rules or general rules in an interactive story, ` +
             `you will be questioned on each rule separately, and you will answer with YES or NO, and if the answer is NO, you will explain why briefly.`;
 
-        const otherRules = this.deObject.worldRules || [];
+        const otherRules = this.deObject.worldRules || {};
 
-        const otherRulesProcessed = (await Promise.all(otherRules.map(async (rule, index) => {
+        const otherRulesProcessed = (await Promise.all(Object.values(otherRules).map(async (rule, index) => {
             // @ts-ignore
             return await rule.execute(this.deObject, characterObj);
         }))).filter((v) => v !== null && v !== undefined && v !== "");
@@ -1363,9 +1388,9 @@ class DEngine {
             "When roleplaying as " + characterName + ", you should not describe actions done by other characters, roleplay as " + characterName + " only.",
         ];
 
-        const otherRules = this.deObject.worldRules || [];
+        const otherRules = this.deObject.worldRules || {};
 
-        const otherRulesProcessed = (await Promise.all(otherRules.map((rule, index) => {
+        const otherRulesProcessed = (await Promise.all(Object.values(otherRules).map((rule, index) => {
             // @ts-ignore
             return rule.execute(this.deObject, characterObj);
         }))).filter((v) => v !== null && v !== undefined && v !== "");
@@ -2079,9 +2104,10 @@ class DEngine {
      * 
      * @param {DECompleteCharacterReference} character
      * @param {number} depth
+     * @param {boolean} limitToOneCycle
      * @return {Promise<Array<{name: string, message: string}>>}
      */
-    async getHistoryForCharacterForInference(character, depth) {
+    async getHistoryForCharacterForInference(character, depth, limitToOneCycle) {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         } else if (this.invalidCharacterStates) {
@@ -2093,7 +2119,8 @@ class DEngine {
         }
 
         const characterState = this.deObject.stateFor[character.name];
-        const characterStateWithCurrent = [characterState, ...characterState.history];
+        // newest first
+        const characterStateWithCurrent = [characterState, ...(characterState.history.reverse())];
 
         let currentConversationId = characterState.conversationId;
 
@@ -2187,27 +2214,28 @@ class DEngine {
                         message: "At " + this.makeTimestamp(conversationStartTime) + ", " + character.name + " is at " + conversationLocation + " with " +
                             this.deObject.functions.format_and(this.deObject, null, currentConversationObject.participants.filter(p => p !== character.name)) + ".\n\nConversation summary: " + currentConversationObject.summary,
                     });
-                    if (depth > 0 && historyMessages.length >= depth) {
+                    if (depth > 0 && historyMessages.length >= depth || limitToOneCycle) {
+                        // we assume the character talked during this pseudo conversation
                         break;
                     }
                 } else {
+                    for (const message of conversationMessages.reverse()) {
+                        historyMessages.push({
+                            name: message.sender,
+                            message: message.content,
+                        });
+                        if (depth > 0 && historyMessages.length >= depth || (limitToOneCycle && message.sender === character.name)) {
+                            break;
+                        }
+                    }
+
                     if (!firstMessageIsStoryMaster) {
                         historyMessages.push({
                             name: "Story Master",
                             message: "The following interaction took place at " + this.makeTimestamp(conversationStartTime) + ", " + character.name + " is at " + conversationLocation + " with " +
                                 this.deObject.functions.format_and(this.deObject, null, currentConversationObject.participants.filter(p => p !== character.name)) + ".",
                         });
-                        if (depth > 0 && historyMessages.length >= depth) {
-                            break;
-                        }
-                    }
-
-                    for (const message of conversationMessages) {
-                        historyMessages.push({
-                            name: message.sender,
-                            message: message.content,
-                        });
-                        if (depth > 0 && historyMessages.length >= depth) {
+                        if (depth > 0 && historyMessages.length >= depth || limitToOneCycle) {
                             break;
                         }
                     }
@@ -2235,7 +2263,8 @@ class DEngine {
         }
 
         if (depth > 0 && historyMessages.length >= depth) {
-            return historyMessages;
+            // reverse the messages to be from oldest to newest
+            return historyMessages.reverse();
         }
 
         // consume any remaining accumulated states
@@ -2243,7 +2272,24 @@ class DEngine {
             consumeAccumulatedStatesAndLocations(lastStateObjectHandled.time);
         }
 
-        return historyMessages;
+        // reverse the messages to be from oldest to newest
+        return historyMessages.reverse();
+    }
+
+    /**
+     * 
+     * @param {string[]} characters 
+     */
+    _getFrozenBonds(characters) {
+        /**
+         * @type {Record<string, DEBondDescription>}
+         */
+        const frozenBonds = {};
+        characters.forEach(charName => {
+            // @ts-expect-error
+            frozenBonds[charName] = deepCopy(this.deObject.social.bonds[charName]);
+        });
+        return frozenBonds;
     }
 
     /**
@@ -2460,16 +2506,18 @@ class DEngine {
                     messages: [],
                     duration: { inMinutes: 0, inHours: 0, inDays: 0 },
                     startTime: { ...this.deObject.currentTime },
-                    endTime: { ...this.deObject.currentTime },
+                    endTime: null,
                     location: expectedNextLocation,
                     summary: null,
                     pseudoConversation: false,
                     previousConversationIdsPerParticipant: {},
+                    bondsAtStart: this._getFrozenBonds(hasCharMergedIntoAnotherConversationGroup.newGroupMembers),
+                    bondsAtEnd: null,
                 };
                 hasCharMergedIntoAnotherConversationGroup.newGroupMembers.forEach(memberName => {
                     // @ts-ignore
                     const memberState = this.deObject.stateFor[memberName];
-                    memberState.history.unshift(deepCopyNoHistory(memberState));
+                    memberState.history.push(deepCopyNoHistory(memberState));
                     // @ts-ignore
                     this.deObject.conversations[newConversationId].previousConversationIdsPerParcipant[memberName] = memberState.conversationId;
                     // @ts-expect-error
@@ -2662,25 +2710,16 @@ class DEngine {
         }
     }
 
-    async prepareNextCycle() {
-        if (!this.deObject) {
-            throw new Error("DEngine not initialized");
-        }
-        this.refreshCharacterStates();
-    }
-
     /**
      * @param {string} userMessage 
      */
     async executeNextCycle(userMessage) {
         this.prepareNextCycle();
-        
+
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         } else if (!this.user) {
             throw new Error("DEngine has no user character defined");
-        } else if (!this.readyForNextCycle) {
-            throw new Error("DEngine is not ready for the next cycle, did you forget to call prepareInitialCycle()?");
         } else if (this.executingCycle) {
             throw new Error("DEngine is already executing a cycle, cannot execute another one concurrently.");
         } else if (!this.pseudoConversationSummaryGenerator) {
@@ -2722,7 +2761,7 @@ class DEngine {
                 // need to make a new conversation
                 userConversationId = crypto.randomUUID();
                 const userCharacterStateCopy = deepCopyNoHistory(userCharacterState);
-                userCharacterState.history.unshift(userCharacterStateCopy)
+                userCharacterState.history.push(userCharacterStateCopy)
                 userCharacterState.conversationId = userConversationId;
                 userCharacterState.messageId = messageToAdd.id;
                 this.deObject.conversations[userConversationId] = {
@@ -2738,6 +2777,8 @@ class DEngine {
                     location: userCharacterState.location,
                     pseudoConversation: false,
                     summary: null,
+                    bondsAtStart: this._getFrozenBonds([this.user.name]),
+                    bondsAtEnd: null,
                 };
             } else {
                 this.deObject.conversations[userConversationId].messages.push(messageToAdd);
@@ -2750,6 +2791,7 @@ class DEngine {
             const simpleRollbackWithReason = (reason) => {
                 userCharacterState.messageId = originalMessageId;
                 userCharacterState.conversationId = originalConversationId;
+                // reject the added message
                 messageToAdd.isRejectedMessage = true;
                 // delete the historic state we added
                 // @ts-ignore
@@ -2771,6 +2813,8 @@ class DEngine {
                     // make it rejected so that characters don't pick it up when they check conversations
                     isRejectedMessage: true,
                 });
+
+                this.informDEObjectUpdated();
             }
 
             this.informDEObjectUpdated();
@@ -2780,7 +2824,6 @@ class DEngine {
             if (!testResults.passed) {
                 simpleRollbackWithReason(testResults.reason || "Message broke world rules");
                 this.informCycleState("info", `The message has been rejected for breaking the rules`);
-                this.informDEObjectUpdated();
                 return;
             }
 

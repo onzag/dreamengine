@@ -145,7 +145,7 @@ interface DEStringTemplateWithIntensityAndCausants {
      * triggering the state FEARFUL
      * and the determineCausants is "the dark forest"
      */
-    determineCausants: DEStringTemplate;
+    determineCausants: DEStringTemplate | null;
     /**
      * If the template holds true, how to determine the cause of the state
      * if it ends with "?" it means that it is a question
@@ -153,14 +153,19 @@ interface DEStringTemplateWithIntensityAndCausants {
      * 
      * for example, say the template is "{{char}} is feeling scared and threatened by someone"
      * triggering the state FEARFUL
-     * and the determineCause is "why is {{char}} feeling scared by {{causant}}?"
+     * and the determineCause is "why is {{char}} feeling scared by {{format_and causants}}?"
+     * 
+     * Remember that causants is an array that may contain objects and characters
      * 
      * It is also possible to just give it a static cause eg.
      * for example, "{{char}} is in the dark forest"
      * triggering the state FEARFUL
      * and the determineCause is "{{char}} is alone in the dark forest"
+     * 
+     * The engine will check if it is a question or a static cause by looking at question mark at the end
+     * if it is a question, it will ask the LLM to answer it
      */
-    determineCause: DEStringTemplate;
+    determineCause: DEStringTemplate | null;
 }
 
 declare interface DEPromptInjection {
@@ -191,7 +196,7 @@ declare interface DEPromptInjection {
     forceDominant: boolean;
 }
 
-declare interface DEPromptInjectionWithIntensity extends DEPromptInjection{
+declare interface DEPromptInjectionWithIntensity extends DEPromptInjection {
     /**
      * The intensity modification this action will cause provided
      * that something is injected, from -4 to 4
@@ -207,6 +212,10 @@ declare interface CharacterStateDefinition {
      * used to determine which state takes precedence in case of conflicts
      */
     dominance: number;
+    /**
+     * How dominant this state is after being relieved
+     */
+    dominanceAfterRelief?: number;
     /**
      * Description of the state, used for reasoning about the state
      * 
@@ -242,7 +251,7 @@ declare interface CharacterStateDefinition {
      * Used for descriptions of the character general state
      * get applied at system prompt level
      */
-    systemPromptInjection: DEStringTemplate;
+    systemPromptInjection?: DEStringTemplate;
     /**
      * Very strong, used for instructions that the character must follow
      * make sure that it is not kept every inference cycle unless intended
@@ -279,12 +288,12 @@ declare interface CharacterStateDefinition {
     /**
      * Description of the state, used for reasoning about the state
      */
-    relieving: DEStringTemplate;
+    relieving?: DEStringTemplate;
     /**
      * Used for descriptions of the character general state
      * get applied at system prompt level when relieving the state
      */
-    relievingSystemPromptInjection: DEStringTemplate;
+    relievingSystemPromptInjection?: DEStringTemplate;
     /**
      * Very strong, used for instructions that the character must follow
      * make sure that it is not kept every inference cycle unless intended
@@ -301,79 +310,121 @@ declare interface CharacterStateDefinition {
      * 
      * Check the actionPromptInjection description for an example use case
      */
-    relievingActionPromptInjection: Record<string, DEPromptInjectionWithIntensity>;
+    relievingActionPromptInjection?: Record<string, DEPromptInjectionWithIntensity>;
     /**
      * Whether this state triggers a dead end that causes the character to be permanently removed from the story
      * use this for the description of the dead end scenario
      */
-    triggersDeadEnd: DEStringTemplate;
+    triggersDeadEnd?: DEStringTemplate;
     /**
      * Whether the dead end scenario is a death scenario
      */
-    deadEndIsDeath: boolean;
+    deadEndIsDeath?: boolean;
+    /**
+     * Whether the dead end triggers after a certain time being in the state
+     * meaning that the character has a time limit to relieve the state
+     */
+    deadEndByTimeInMinutes?: number;
     /**
      * A random chance (0 to 1) that the state will trigger a dead end
      * every time this state is active
      */
-    triggersDeadEndRandomChance: number;
+    triggersDeadEndRandomChance?: number;
     /**
      * A random chance (0 to 1) that the state will trigger a dead end
      * every time this state is being relieved
      */
-    triggersDeadEndWhileRelievingRandomChance: number;
-    requiresPosture: "standing" | "sitting" | "laying_down" | "";
-    seeksPosture: "standing" | "sitting" | "laying_down" | "";
+    triggersDeadEndWhileRelievingRandomChance?: number;
+    /**
+     * Whether the state requires a specific posture to trigger
+     * or to be active, for example, SLEEPING may require laying_down posture
+     * if null, posture is not required
+     */
+    requiresPosture: "standing" | "sitting" | "laying_down" | null;
+    /**
+     * Whether the state seeks a specific posture once triggered
+     * for example the TIRED state may seek laying_down posture
+     * if null, posture is not sought
+     */
+    seeksPosture: "standing" | "sitting" | "laying_down" | null;
+    /**
+     * Whether the character falls down to the ground when the state is triggered
+     * for example, the UNCONSCIOUS state may cause the character to fall down
+     * when triggered
+     */
     fallsDown: boolean;
+    /**
+     * A random spawn rate (0 to 1) that the state will trigger spontaneously
+     * every inference cycle
+     */
     randomSpawnRate: number;
+    /**
+     * States that conflict with this state, if any are active, this state cannot be active
+     * or even be considered for activation
+     */
     conflictStates: string[];
+    /**
+     * States that are required for this state to be active, if any are not active, this state cannot be active
+     * or even be considered for activation
+     */
     requiredStates: string[];
+    /**
+     * States that this state triggers when it gets activated
+     */
     triggersStates: { [stateName: string]: { intensity: number } };
+    /**
+     * States that this state relieves when it gets activated
+     */
     relievesStates: { [stateName: string]: { intensity: number } };
-    triggersStatesOnRelieve: { [stateName: string]: { intensity: number } };
+    /**
+     * States that this state triggers when it gets relieved provided it has
+     * a relief mechanism, as in the relieving description exists
+     */
+    triggersStatesOnRelieve?: { [stateName: string]: { intensity: number } };
     /**
      * An instruction that gets added to the character description where a potential causant that does not fit
      * the criteria is set, for example, say the state is HUGGING, but the character has a low bond level, the
      * negative description could be "{{char}} would feel uncomfortable hugging {{potential_causant}}" this would
      * get injected into the system prompt, and reasoning step to help the character reason their behaviour
      */
-    potentialCausantNegativeDescription: DEStringTemplate;
+    potentialCausantNegativeDescription?: DEStringTemplate;
     /**
      * An instruction that gets added to the character description where a potential causant that fits
      * the criteria is set, for example, say the state is HUGGING, and the character has a high bond level, the
      * positive description could be "{{char}} would feel happy hugging {{potential_causant}}" this would
      * get injected into the system prompt, and reasoning step to help the character reason their behaviour
      */
-    potentialCausantPositiveDescription: DEStringTemplate;
+    potentialCausantPositiveDescription?: DEStringTemplate;
     /**
      * Minimum bond level required for a potential character causant to be considered valid to activate this state
      * if no characters are around, no questions are asked about triggering the state if requiresCausant is true
      */
-    potentialCausantMinBondRequired: number;
+    potentialCausantMinBondRequired?: number;
     /**
      * Maximum bond level allowed for a potential causant to be considered valid to activate this state
      * if no characters are around, no questions are asked about triggering the state if requiresCausant is true
      */
-    potentialCausantMaxBondAllowed: number;
+    potentialCausantMaxBondAllowed?: number;
     /**
      * Minimum 2-bond level required for a potential causant to be considered valid to activate this state
      * if no characters are around, no questions are asked about triggering the state if requiresCausant is true
      */
-    potentialCausantMin2BondRequired: number;
+    potentialCausantMin2BondRequired?: number;
     /**
      * Maximum 2-bond level allowed for a potential causant to be considered valid to activate this state
      * if no characters are around, no questions are asked about triggering the state if requiresCausant is true
      */
-    potentialCausantMax2BondAllowed: number;
+    potentialCausantMax2BondAllowed?: number;
     /**
      * Whether a potential causant that is a stranger (no bond) is allowed to be a causant of this state
      * if no characters are around, no questions are asked about triggering the state if requiresCausant is true
      */
-    potentialCausantStrangerAllowed: boolean;
+    potentialCausantStrangerAllowed?: boolean;
     /**
      * Whether a potential causant that is not a stranger (has some bond) is allowed to be a causant of this state
      * if no characters are around, no questions are asked about triggering the state if requiresCausant is true
      */
-    potentialCausantNonStrangerAllowed: boolean;
+    potentialCausantNonStrangerAllowed?: boolean;
     /**
      * The decay rate per inference cycle when the state is active
      */
@@ -398,7 +449,7 @@ declare interface CharacterStateDefinition {
      * The intensity modifiers when the state is being relieved, what might intensify it further
      * or relieve it
      */
-    intensityModifiersDuringRelief: Array<DEStringTemplateWithIntensityAndCausants>;
+    intensityModifiersDuringRelief?: Array<DEStringTemplateWithIntensityAndCausants>;
     /**
      * Whether this represents a binary behaviour of sorts, in such a case, while the intensity still may vary
      * it doesn't say things like Overwhemingly or extremely (STATE_NAME) for example if the state is SLEEPING vs SCARED
@@ -410,11 +461,11 @@ declare interface CharacterStateDefinition {
      * Whether the releif uses a decay rate that reduces intensity over time
      * this is only regarding states that have relief mechanisms
      */
-    reliefUsesDecayRate: boolean;
+    reliefUsesDecayRate?: boolean;
     /**
      * The decay rate applied to the relief mechanism if reliefUsesDecayRate is true
      */
-    decayRateAfterRelief: number;
+    decayRateAfterRelief?: number;
     /**
      * A permanent state never goes away and only get to 1 intensity level
      */
@@ -428,6 +479,8 @@ declare interface CharacterStateDefinition {
      * Whether this state requires character causants to be triggered,
      * for example, say a state named IN_LOVE you may want to require a causant
      * you should have trackCausants enabled for this to work properly
+     * 
+     * check out the potentialCausant... properties to help the character reason
      */
     requiresCharacterCausants: boolean;
     /**
@@ -441,21 +494,74 @@ declare interface CharacterStateDefinition {
 }
 
 declare interface DEBondIncreaseDecreaseQuestion {
-    question: DEStringTemplate;
-    mustHaveStateWithCharacterCausant: string;
+    /**
+     * The question to ask to determine if the bond increases or decreases
+     * it should be a yes/no question
+     * 
+     * If nothing is returned, the bond does not change
+     * 
+     * If instead of a question it is "yes, ..." and does not end with "?" the bond increases by weight
+     * as it is considered a static increase, emtpy string or "no, ..." means no change
+     * 
+     * In this template the value of {{other}} is the other character involved in the interaction
+     */
+    template: DEStringTemplate;
+    /**
+     * The weight of the bond increase or decrease
+     */
     weight: number;
+    /**
+     * Whether this question affects the primary bond, secondary bond or both
+     */
+    affectsBonds: "primary" | "secondary" | "both";
 }
 
 declare interface DEBondDeclaration {
+    /**
+     * Name of the bond, useful to identify it
+     */
     name: string;
+    /**
+     * Whether it is a stranger bond or not, stranger bonds are used
+     * when characters have just met and have no prior relationship
+     */
     strangerBond: boolean;
+    /**
+     * The min primary bond level for this bond declaration, it should be a value
+     * between -100 and 100 to specify the fragment of the bond spectrum this bond declaration covers
+     */
     minBondLevel: number;
+    /**
+     * The max primary bond level for this bond declaration, it should be a value
+     * between -100 and 100 to specify the fragment of the bond spectrum this bond declaration covers
+     */
     maxBondLevel: number;
+    /**
+     * The min secondary bond level for this bond declaration, it should be a value
+     * between 0 and 100 to specify the fragment of the bond spectrum this bond declaration covers
+     * useful for romantic interest or similar secondary bond systems
+     */
     min2BondLevel: number;
+    /**
+     * The max secondary bond level for this bond declaration, it should be a value
+     * between 0 and 100 to specify the fragment of the bond spectrum this bond declaration covers
+     * useful for romantic interest or similar secondary bond systems
+     */
     max2BondLevel: number;
+    /**
+     * Description of the bond declaration
+     * this gets injected into reasoning prompts to help the character reason about
+     * their relationships
+     * 
+     * You need to be explicit in each bond declaration if no sexual or romantic interactions should happen
+     * in the bond description, otherwise the LLM may assume romantic/sexual interactions are allowed
+     */
     description: DEStringTemplate;
+    /**
+     * The questions to ask to determine bond increases or decreases
+     * based on interactions and events happening in the story
+     */
     bondConditions: DEBondIncreaseDecreaseQuestion[];
-    secondBondConditions: DEBondIncreaseDecreaseQuestion[];
 }
 
 declare interface DEEmotionDefinition {
@@ -720,15 +826,135 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
      * just have bond between -100 to 0 (for stranger that give negative interactions) and 0 to 100 (for strangers that give positive interactions)
      * you can refer to bonds in the state conditions
      */
-    bonds: Array<DEBondDeclaration>;
+    bonds: {
+        /**
+         * The bond system type, an arbitrary string to identify the bond system
+         * by default DE engine will provide "DEFAULT" and "DEFAULT_WITH_ROMANCE"
+         * this helps potential scripts and systems identify which bond system is being used
+         * and apply specific logic if needed
+         */
+        system: string;
+        /**
+         * The bond declarations that define how bonds evolve and their descriptions
+         * these get injected into reasoning prompts to help the character reason about
+         * their relationships
+         * 
+         * It is recommended to use a bond declaration template after all covering the entire bond spectrum
+         * can be very tedious, so using DE.utils.generateFrienshipOnlyBondDeclarationTemplate or
+         * DE.utils.generateRomanticEnabledBondDeclarationTemplate is recommended
+         * 
+         * The default is -100 to 0 for stranger bad bond, called the stranger bad bond.
+         * 0 to 5 for neutral stranger bond, called the stranger neutral bond.
+         * 5 to 100 for stranger good bond, called the stranger good bond.
+         * 
+         * It is recommended to set the stranger bond breakaway values to 10 by absolute weight,
+         * and something like 30 minutes to break away from stranger bonds to regular bonds and
+         * turn them into aquintance bonds (or unpleasant bonds if negative)
+         * 
+         * None of the stranger bonds have secondary bond levels
+         * 
+         * Other normal bonds are divided as follows by default:
+         * -100 to -50: foe bond
+         * -50 to -35: hostile bond
+         * -35 to -20: antagonistic bond
+         * -20 to -10: unfriendly bond
+         * -10 to 0: unpleasant bond
+         * 0 to 10: acquaintance bond
+         * 10 to 20: friendly bond
+         * 20 to 35: good friend bond
+         * 35 to 50: close friend bond
+         * 50 to 100: best friend bond
+         * 
+         * By default the negative side has no secondary bond graduation, while the positive side has:
+         * 0 to 10: no romantic interest
+         * 10 to 20: slight romantic interest
+         * 20 to 35: romantic interest
+         * 35 to 50: strong romantic interest
+         * 50 to 100: deeply in love
+         * 
+         * It is recommended to use the DE.utils.generateRomanticEnabledBondDeclarationTemplate function
+         * to generate a bond declaration template that covers the entire bond spectrum with both primary
+         * and secondary bonds
+         * 
+         * If you have characters (eg. children) that should not have romantic bonds, you may use
+         * the DE.utils.generateFrienshipOnlyBondDeclarationTemplate function instead
+         * 
+         * You need to be explicit in each bond declaration that no sexual or romantic interactions should happen
+         * in the bond description, otherwise the LLM may assume romantic/sexual interactions are allowed
+         */
+        declarations: Array<DEBondDeclaration>;
+        /**
+         * The absolute weight that a bond has before breaking away from a stranger bond to a regular bond
+         * once the character has interacted enough with a stranger and the bond weight surpasses this value
+         * the bond type changes from stranger bond to regular bond
+         * 
+         * This is an absolute value, so both positive and negative bonds can break away from stranger bonds
+         * once they surpass this weight
+         */
+        strangerBreakawayBondWeightAbsolute: number;
+        /**
+         * The amount of interactions required with a stranger to break away from a stranger bond to a regular bond
+         * once the character has interacted enough with a stranger and the interaction count surpasses this value
+         * the bond type changes from stranger bond to regular bond
+         */
+        strangerBreakawayInteractionsCount: number;
+        /**
+         * The amount of time in minutes required with a stranger to break away from a stranger bond to a regular bond
+         * once the character has spent enough time with a stranger and the time spent surpasses this value
+         * the bond type changes from stranger bond to regular bond
+         */
+        strangerBreakawayTimeMinutes: number;
+        /**
+         * Once a stranger bond is broken away from, the bond weight is multiplied by this value
+         * to determine the starting bond weight of the new regular bond
+         * 
+         * For example, if the stranger bond was -10, and the multiplier is 1.5, the new regular bond
+         * will start at -15
+         * 
+         * It is recommended to have a value higher than 1 to emulate negative bias towards strangers that had a 
+         * negative first impression
+         */
+        strangerNegativeMultiplier: number;
+        /**
+         * Once a stranger bond is broken away from, the bond weight is multiplied by this value
+         * to determine the starting bond weight of the new regular bond
+         * 
+         * For example, if the stranger bond was 10, and the multiplier is 0.5, the new regular bond
+         * will start at 5
+         * 
+         * It is recommended to have a value lower than 1 to emulate the difficulty of building strong relationships
+         * from first impressions alone
+         */
+        strangerPositiveMultiplier: number;
+        /**
+         * A fine tune value that is multiplied to bond changes to make bonds evolve slightly faster or slower
+         * for example, a value of 1.2 makes bonds evolve 20% faster, while a value of 0.8 makes bonds evolve 20% slower
+         * this is useful to adjust the overall pacing of bond evolution in the story
+         * 
+         * The default value is 1.0 which means no fine tuning is applied
+         */
+        bondChangeFineTune: number;
+        /**
+         * A fine tune value that is multiplied to negative bond changes to make negative reactions have a stronger impact
+         * on bond evolution, for example, a value of 1.5 makes negative bond changes 50% stronger, while a value of 1.0 means no change
+         * this is useful to simulate negativity bias in human relationships where negative interactions tend to have a stronger impact
+         * than positive ones.
+         * 
+         * While these should be cooked in the bond declarations via their weight, this global multiplier allows to adjust the overall negativity bias
+         * in the story without having to modify each bond declaration individually
+         * 
+         * The default value is 1.0 which means no negativity bias is applied
+         */
+        bondChangeNegativityBias: number;
+    };
     emotions: Partial<Record<DEEmotionNames, DEEmotionDefinition>>;
     scripts: {
-        spawn: Array<DEScript>;
-        preStateCheck: Array<DEScript>;
-        preInference: Array<DEScript>;
-        firstInteract: Array<DEScript>;
-        postInference: Array<DEScript>;
-        postAnyInference: Array<DEScript>;
+        spawn: Record<string, DEScript>;
+        preStateCheck: Record<string, DEScript>;
+        preInference: Record<string, DEScript>;
+        firstInteract: Record<string, DEScript>;
+        postInference: Record<string, DEScript>;
+        postAnyInference: Record<string, DEScript>;
     };
 }
 
@@ -738,37 +964,37 @@ declare interface DENamePool {
     amb: Array<string>;
 }
 
-declare interface SingleBondDescription {
+declare interface DESingleBondDescription {
     towards: string;
     stranger: boolean;
     bond: number;
     bond2: number;
 }
 
-declare interface BondDescription {
-    active: Array<SingleBondDescription>;
-    ex: Array<SingleBondDescription>;
+declare interface DEBondDescription {
+    active: Array<DESingleBondDescription>;
+    ex: Array<DESingleBondDescription>;
 }
 
-declare interface StateCausant {
+declare interface DEStateCausant {
     name: string;
     type: "character" | "object";
 }
 
-declare interface StateCause {
+declare interface DEStateCause {
     description: string;
     causant: string | null;
 }
 
-declare interface StateDescription {
+declare interface DEStateDescription {
     state: string;
     /**
      * Whether the state is currently in a relieving state
      */
     relieving: boolean;
     intensity: number;
-    causants: Array<StateCausant> | null;
-    causes: Array<StateCause> | null;
+    causants: Array<DEStateCausant> | null;
+    causes: Array<DEStateCause> | null;
 
     /**
      * The time when this state was first activated that was contiguous with the current state
@@ -851,7 +1077,7 @@ declare interface StateForDescription {
     id: string;
     location: string;
     locationSlot: string;
-    states: Array<StateDescription>;
+    states: Array<DEStateDescription>;
     type: "INTERACTING" | "BACKGROUND";
     time: DETimeDescription;
     conversationId: string | null;
@@ -924,6 +1150,11 @@ declare interface LocationSlot {
     items: Array<DEItem>;
 }
 
+declare interface WeatherSystemApplyingStateWithIntensity {
+    stateName: string;
+    intensity: number;
+}
+
 declare interface WeatherSystem {
     /**
      * Name of the weather system, eg. "Rain", "Sunny", "Snow"
@@ -956,30 +1187,6 @@ declare interface WeatherSystem {
      */
     noEffectDescription: DEStringTemplate;
     /**
-     * Whether the weather system's full effects will cause character death
-     */
-    fullEffectKills: boolean;
-    /**
-     * If fullEffectKills is true, after how many hours of exposure will the character die
-     */
-    fullEffectKillsExposureHours: number;
-    /**
-     * Whether the weather system's partial effects will cause character death
-     */
-    partialEffectKills: boolean;
-    /**
-     * If partialEffectKills is true, after how many hours of exposure will the character die
-     */
-    partialEffectKillsExposureHours: number;
-    /**
-     * Whether when the character is in negatively affecting states, they will die from the weather system's effects
-     */
-    negativeEffectKills: boolean;
-    /**
-     * If negativeEffectKills is true, after how many hours of exposure will the character die
-     */
-    negativeEffectKillsExposureHours: number;
-    /**
      * If a character is in this state, they are fully protected from the weather system's effects
      * eg. "WEARING_RAINCOAT" "WEARING_FULL_BODY_ARMOR" "WEARING_SPACE_SUIT"
      */
@@ -994,6 +1201,15 @@ declare interface WeatherSystem {
      * I mean it could be very hot weather right? :D
      */
     fullyProtectedNaked: boolean;
+    /**
+     * If otherwise you need more custom logic use this script to apply states to the character
+     * this function runs first, and if returns true, the engine stops any weather effect logic as it considers
+     * it handled by the script
+     * 
+     * If it returns false or nothing, the engine continues with its default weather effect logic, even if the script
+     * did something
+     */
+    weatherEffectScript: DEScript | null;
     /**
      * If a character is in this state, they are partially protected from the weather system's effects
      * eg. "HOLDING_UMBRELLA" "WEARING_LIGHT_JACKET"
@@ -1026,21 +1242,21 @@ declare interface WeatherSystem {
      * Names of states that are applied to characters while they are fully exposed to the weather system
      * eg. "WET" for rain, "SUNBURNED" for sunny weather
      */
-    applyingStatesDuringFullEffect: Array<string>;
+    applyingStatesDuringFullEffect: Array<WeatherSystemApplyingStateWithIntensity>;
     /**
      * Names of states that are applied to characters while they are partially exposed to the weather system
      * eg. "SLIGHTLY_WET" for rain, "SLIGHTLY_SUNBURNED" for sunny weather
      */
-    applyingStatesDuringPartialEffect: Array<string>;
+    applyingStatesDuringPartialEffect: Array<WeatherSystemApplyingStateWithIntensity>;
     /**
      * Names of states that are applied to characters while they are not exposed to the weather system
      * and fully sheltered from it
      */
-    applyingStatesDuringNoEffect: Array<string>;
+    applyingStatesDuringNoEffect: Array<WeatherSystemApplyingStateWithIntensity>;
     /**
      * Names of states that are added if they are in a negative effect state and exposed to the weather system
      */
-    applyingStatesDuringNegativeEffect: Array<string>;
+    applyingStatesDuringNegativeEffect: Array<WeatherSystemApplyingStateWithIntensity>;
     /**
      * Whether to apply the states in the order they are listed in the arrays above along the duration of exposure
      * or to apply them all at once on contact with the weather system
@@ -1064,39 +1280,140 @@ declare interface DEUnlockCondition {
 }
 
 declare interface DEEntrances {
+    /**
+     * Name of the entrance, eg. "front door", "keypad door", "bridge", "garage door"
+     */
     name: string;
+    /**
+     * Description of the entrance
+     */
     description: DEStringTemplate;
+    /**
+     * Maximum height in centimeters that can fit through this entrance
+     */
     maxHeightCm: number;
+    /**
+     * Maximum weight in kilograms that can fit through this entrance
+     */
     maxWeightKg: number;
+    /**
+     * Maximum volume in liters that can fit through this entrance
+     */
     maxVolumeLiters: number;
+    /**
+     * Whether the entrance is currently locked or not
+     */
     isCurrentlyLocked: boolean;
+    /**
+     * Whether sounds can be heard from inside to outside and viceversa
+     */
     canHearFromInsideOutside: boolean;
+    /**
+     * Whether the entrance can be unlocked from the inside without any requirements
+     * eg. some doors can just be opened from the inside without a key or code
+     */
     canBeUnlockedFromInsideWithoutRequirements: boolean;
     /**
      * Use this for specifying other unlock conditions like keypads, biometric scanners, etc.
-     * Even locksmithing attempts
+     * Even locksmithing attempts, these would be yes/no questions that would be inferred to determine
+     * if a character succeeded in unlocking the entrance
      */
     otherUnlockConditions: Array<DEUnlockCondition>;
+    /**
+     * Names of characters that can unlock this entrance regardless of other conditions
+     * eg. the door may be primed to open by certain characters only
+     */
     canBeUnlockedByCharacters: Array<string>;
+    /**
+     * Names of items that can unlock this entrance regardless of other conditions
+     * eg. keys, keycards, etc.
+     */
     canBeUnlockedByWithItems: Array<string>;
-    autoLocksWhenClosed: boolean;
+    /**
+     * Whether the entrance automatically locks itself when interacted, as in characters
+     * pass through and then it locks itself again
+     * 
+     * Useful for security doors and doors that should not be left open, otherwise intruders
+     * could just walk in after someone else opened the door and forgot to close it
+     */
+    autoLocks: boolean;
 }
 
 declare interface DELocationDefinition {
+    /**
+     * Description of the location
+     */
     description: DEStringTemplate;
+    /**
+     * Type of vehicle the location is, yes a location can be a vehicle too
+     * eg. "car", "spaceship", "boat", etc...
+     */
     vehicleType?: string;
+    /**
+     * Volume in liters of the vehicle for location that are vehicles
+     */
     vehicleVolumeLiters?: number;
+    /**
+     * Weight in kilograms of the vehicle for location that are vehicles
+     */
     vehicleWeightKg?: number;
+    /**
+     * Height in centimeters of the vehicle for location that are vehicles
+     */
     vehicleHeightCm?: number;
+    /**
+     * Range in meters of the vehicle for location that are vehicles, this
+     * is what allows vehicles to travel between locations that would otherwise
+     * be unreachable
+     */
     vehicleRangeMeters?: number;
+    /**
+     * Speed in meters per second of the vehicle for locations that are vehicles
+     * this means you have a travel time when moving between locations using this vehicle
+     * in which you cannot exit the vehicle until the travel time is over
+     */
     vehicleSpeedMetersPerSecond?: number;
+    /**
+     * Whether the location is considered safe for characters
+     * for example, a home is usually safe, while a dark alley is not
+     */
     isSafe: boolean;
+    /**
+     * Whether the location is considered private,
+     * often that means only a few characters have access to it at once or it can be locked
+     * eg. a bedroom is usually private, while a park is not
+     */
     isPrivate: boolean;
+    /**
+     * Whether the location is indoors or outdoors
+     */
     isIndoors: boolean;
+    /**
+     * Maximum height in centimeters that can fit in this location
+     */
     maxHeightCm: number;
+    /**
+     * Maximum weight in kilograms that can fit in this location
+     */
     maxWeightKg: number;
+    /**
+     * Maximum volume in liters that can fit in this location
+     */
     maxVolumeLiters: number;
+    /**
+     * Arbitrary properties of the location that can be used for various purposes
+     * eg. "has_fireplace": true, "number_of_windows": 3, etc...
+     */
     properties: Record<string, any>;
+    /**
+     * The parent location ID, null if none, this means that the location is inside another location
+     * for example, a bedroom is inside a house, so the bedroom's parent would be the house location ID
+     * and if the house has a city location as parent, the bedroom's grandparent would be the city location ID
+     * they will share the same weather unless the child location has its own weather system
+     * 
+     * This is also how vehicles move, as they are locations and their parent location is the location they are currently in
+     * for example, a car location's parent could be a garage location, and when the car moves, its parent location changes to the road location, etc...
+     */
     parent: string | null;
     /**
      * The entrances to this location
@@ -1126,6 +1443,19 @@ declare interface DELocationDefinition {
     /**
      * Names of the characters that are spawned in this location with instantiable names
      * child connections will inherit these names
+     * 
+     * This is useful when creating characters dinamically as a template, using the templating system; since
+     * each character needs a unique name, the location can provide a name pool to draw from, this is useful
+     * for example if you have different countries and each country has its own set of common names
+     * eg. a location representing Japan may have a name pool with Japanese names, while a location
+     * representing Finland may have a name pool with Finnish names
+     * 
+     * There is a default name pool at the world level that applies to all locations that do not have their own name pool
+     * if a location has its own name pool, it will override the world name pool for characters spawned in that location, it will
+     * go from parent to parent until it finds a name pool
+     * 
+     * The name pool should not use last names by default because the LLM can get confused with two characters having the same first or last name
+     * so it is recommended to use first names only, unless you have a very specific reason to use last names too
      */
     namePool?: NamePool;
 }
@@ -1203,36 +1533,105 @@ declare interface DEStatefulLocationDefinition extends DELocationDefinition {
 }
 
 declare interface DEConversationMessage {
+    /**
+     * Id of the message
+     */
     id: Readonly<string>;
+    /**
+     * Who sent this message
+     */
     sender: string;
+    /**
+     * Whether the sender is a character
+     * this is also true for the user since the user is a character too
+     */
     isCharacter: boolean;
+    /**
+     * Whether the sender is the user
+     */
     isUser: boolean;
+    /**
+     * Whether the message was rejected by world rules or other constraints
+     * and thus not actually sent
+     */
     isRejectedMessage: boolean;
+    /**
+     * Whether the message is a system message, eg. narration, scene description, etc.
+     */
     isSystemMessage: boolean;
+    /**
+     * Whether the message is a debug message, eg. internal engine messages not meant to be seen by characters
+     * or the user
+     * 
+     * They can be seen if the character or user is in debug mode
+     */
     isDebugMessage: boolean;
+    /**
+     * The content of the message
+     */
     content: string;
+    /**
+     * The time when the message was sent
+     */
     startTime: DETimeDescription;
+    /**
+     * The duration of time it took to do what the message describes
+     * in game time
+     */
     duration: DETimeDurationDescription;
+    /**
+     * The time when the message action ended
+     */
     endTime: DETimeDescription;
+    /**
+     * If the message can only be seen by a specific character, their Name
+     * eg. for private thoughts, state changes, or secret messages; basically representing the character's internal monologue
+     * Also true for schizophrenic characters that hear voices that no one else can hear
+     * 
+     * if null, the message can be seen by all participants in the conversation
+     */
     canOnlyBeSeenByCharacter: string | null;
 }
 
+/**
+ * Note that a conversation doesn't really have to be about speaking, it can be any kind of interaction
+ * between characters, including non-verbal interactions, actions, etc...
+ * 
+ * A conversation is simply a record of an interaction that happened between characters
+ * it can include messages, actions, etc...
+ */
 declare interface DEConversation {
+    /**
+     * The unique ID of the conversation
+     */
     id: Readonly<string>;
     /**
      * The list of participants of the conversation
+     * The participants of a given conversation never change, each conversation is unique to its participants
+     * if a new participant joins, a new conversation is created including the new participants
      */
     participants: Array<string>;
     /**
      * The previous conversation IDs for each participant before this conversation started
+     * This basically specifies the chain of conversations that led to this one
+     * for each participant individually
      */
     previousConversationIdsPerParticipant: Record<string, string | null>;
     /**
      * The location where the conversation is happening
      */
     location: string;
+    /**
+     * The start time of the conversation
+     */
     startTime: DETimeDescription;
+    /**
+     * The end time of the conversation, null if still ongoing
+     */
     endTime: DETimeDescription | null;
+    /**
+     * The duration of the conversation thus far, or total duration if ended
+     */
     duration: DETimeDurationDescription;
     /**
      * The list of messages that were exchanged in the conversation
@@ -1246,11 +1645,26 @@ declare interface DEConversation {
      */
     pseudoConversation: boolean;
     /**
+     * The bonds at the start and end of the conversation for each participant
+     * towards each other participant this allows to track how bonds evolved during the conversation
+     */
+    bondsAtStart: Record<string, DEBondDescription>;
+    /**
+     * The bonds at the start and end of the conversation for each participant
+     * towards each other participant this allows to track how bonds evolved during the conversation
+     */
+    bondsAtEnd: Record<string, DEBondDescription> | null;
+    /**
      * An optonal short summary of the conversation and what happened in it
      * it should be available when it is a pseudoConversation
      * 
      * if one is not found, the LLM will be prompted to generate one
-     * randomly
+     * randomly, or whatever is set as the pseudoConversation generator in the world scripts
+     * 
+     * Generating summaries can be costly in terms of tokens, so it is recommended to
+     * set up a pseudoConversation generator script that generates summaries
+     * as part of the world scripts after each pseudo-conversation ends
+     * to avoid having to generate them on demand later
      */
     summary: string | null;
 }
@@ -1258,12 +1672,13 @@ declare interface DEConversation {
 declare interface DEScript {
     type: "script";
     id: string;
-    execute: (DE: DEObject, char: DECompleteCharacterReference) => void | Promise<void>;
+    execute: (DE: DEObject, char: DECompleteCharacterReference) => any | Promise<any>;
 }
 declare interface DEScriptSource {
     id: string;
+    type: "template" | "script" | "value_getter_char_space" | "value_getter_item_space";
     source: string;
-    type: "handlebars" | "javascript";
+    sourceType: "handlebars" | "javascript";
     run: (...args: any[]) => any;
 }
 declare type DEStringTemplateFunction = (
@@ -1368,6 +1783,12 @@ declare interface DEWorld {
      */
     hasStartedScene: boolean;
     /**
+     * Whether the world has finished initializing or not, basically if
+     * all spawn scripts have ran and the world is ready for the first inference cycle
+     * and starting the scene
+     */
+    hasInitializedWorld: boolean;
+    /**
      * This is a template that describes the overall world lore and setting
      * it gets injected into various prompts to help ground the world simulation
      * it is also used by characters to understand the world they are in
@@ -1377,17 +1798,41 @@ declare interface DEWorld {
 }
 
 declare interface DEUtils {
-    newHandlebarsTemplate(id: string, source: string): DEStringTemplate;
-    newTemplateFromFunction(id: string, func: DEStringTemplateFunction): DEStringTemplate;
-    newLocationFromStaticDefinition(definition: DELocationDefinition): DEStatefulLocationDefinition;
-    newWeatherSystem(definition: WeatherSystem): WeatherSystem;
+    newHandlebarsTemplate(DE: DEObject, id: string, source: string): DEStringTemplate;
+    newTemplateFromFunction(DE: DEObject, id: string, func: DEStringTemplateFunction): DEStringTemplate;
+    newLocationFromStaticDefinition(DE: DEObject, definition: DELocationDefinition): DEStatefulLocationDefinition;
+    /**
+     * Important anything created with this function cannot access variables outside its scope
+     * due to the way the function is created and sandboxed for security reasons
+     * @param DE 
+     * @param id 
+     * @param execute 
+     */
+    newValueGetterScriptForCharacterSpace(DE: DEObject, id: string, value: DEPropertyValueGetterInCharSpace): DEPropertyValueInCharSpace;
+    /**
+     * Important anything created with this function cannot access variables outside its scope
+     * due to the way the function is created and sandboxed for security reasons
+     * @param DE 
+     * @param id 
+     * @param execute 
+     */
+    newValueGetterScriptForItemSpace(DE: DEObject, id: string, value: DEPropertyValueGetterInItemSpace): DEPropertyValueInItemSpace;
+    /**
+     * Important anything created with this function cannot access variables outside its scope
+     * due to the way the function is created and sandboxed for security reasons
+     * @param DE 
+     * @param id 
+     * @param execute 
+     */
+    newScript(DE: DEObject, id: string, execute: (DE: DEObject, char: DECompleteCharacterReference) => any | Promise<any>): DEScript;
+    newWeatherSystem(DE: DEObject, definition: WeatherSystem): WeatherSystem;
 }
 
 declare interface DEObject {
     user: DEMinimalCharacterReference;
     characters: Record<string, DECompleteCharacterReference>;
     social: {
-        bonds: Record<string, BondDescription>;
+        bonds: Record<string, DEBondDescription>;
     };
     allNames: NamePool;
     worldNames: NamePool;
@@ -1403,13 +1848,13 @@ declare interface DEObject {
      * and items, because the json object representing the world does
      * not really support that directly
      */
-    worldScripts: Array<DEScript>;
+    worldScripts: Record<string, DEScript>;
     /**
      * Scripts that run when any character spawns in the world
      * these run for every character that spawns including the user character
      * these run after the character spawn scripts
      */
-    worldAllCharacterSpawnScripts: Array<DEScript>;
+    worldAllCharacterSpawnScripts: Record<string, DEScript>;
     /**
      * All the conversations that have happened in the world
      * real or pseudo-conversations
@@ -1437,7 +1882,7 @@ declare interface DEObject {
      * these are used to guide the world simulation LLM reasoning
      * and help it make decisions about what happens in the world
      */
-    worldRules: Array<DEStringTemplate>;
+    worldRules: Record<string, DEStringTemplate>;
     /**
      * Heuristics that guide character wandering behaviour
      * as how the character decides where to go when wandering

@@ -256,26 +256,21 @@ const schema = {
             "additionalProperties": {
                 "type": "object",
                 "properties": {
-                    "value": {
-                        "type": "object",
-                        "properties": {
-                            "ts": {
-                                "type": "string",
-                            },
-                            "script": {
-                                "type": "string",
-                            },
-                        },
-                        "title": "Property Value",
-                        "description": "The value of the property, can be any TypeScript expression that returns a value",
-                        "multiline": true,
-                        "code_language": "typescript",
+                    "ts": {
+                        "type": "string",
                     },
-                }
+                    "script": {
+                        "type": "string",
+                    },
+                },
+                "title": "Property Value",
+                "description": "The value of the property, can be any TypeScript expression that returns a value",
+                "multiline": true,
+                "code_language": "handlebars",
             },
             "default": {
-                "race": {value: {ts: "return \"human\";", script: "return \"human\";"}},
-                "age": {value: {ts: "return 30;", script: "return 30;"}},
+                "race": { ts: "return \"human\";", script: "return \"human\";" },
+                "age": { ts: "return 30;", script: "return 30;" },
             },
             "real_type": "for_properties_input",
         },

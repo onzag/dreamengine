@@ -27,8 +27,12 @@
     "maintenance_hydration_liters_per_day": 0,
     "range_meters": 1000,
     "locomotion_speed_meters_per_second": 2,
-    "states": {},
-    "properties": {},
+    "properties": {
+        "IS_ROBOT": {
+            "ts": "return true;",
+            "script": "return true;"
+        }
+    },
     "emotions": {
         "confident": {
             "common": true,
@@ -191,6 +195,10 @@
         }
     },
     "spawn_script": {
+        "imports": [
+            "standard-bond-system.js",
+            "social-behaviour.js"
+        ],
         "ts": "",
         "script": "console.log('hello world');"
     }

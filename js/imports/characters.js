@@ -118,115 +118,6 @@ function extractArrayProperty(internalSchema, obj, propertyName) {
 /**
  * @param {any} internalSchema
  * @param {string} prefix
- * @param {string} obj 
- * @param {string} propertyName 
- * @returns {[array: DEStringTemplateWithIntensityAndCausants[], sources: DEScriptSource[]]}
- */
-function extractArrayOfTemplateWithIntensityFromJSON(internalSchema, prefix, obj, propertyName) {
-    const schemaValue = internalSchema.additionalProperties;
-    if (obj.hasOwnProperty(propertyName)) {
-        // @ts-ignore
-        const value = obj[propertyName];
-        if (value === null || value === undefined) {
-            throw new Error(`Property ${propertyName} cannot be null or undefined for template with intensity array import.`);
-        }
-        if (Array.isArray(value) || typeof value !== "object") {
-            throw new Error(`Property ${propertyName} must be an object for template with intensity array import.`);
-        }
-        /**
-         * @type {DEStringTemplateWithIntensityAndCausants[]}
-         */
-        const resultArray = [];
-        /**
-         * @type {DEScriptSource[]}
-         */
-        const resultSources = [];
-
-        Object.keys(value).forEach((key) => {
-            const item = value[key];
-            if (typeof item !== "object" || item === null) {
-                throw new Error(`Property ${propertyName} must be an object of objects for template with intensity array import, but got ${typeof item} at key ${key}.`);
-            } else if (typeof item.intensity !== "number") {
-                throw new Error(`Property ${propertyName}.${key}.intensity must be a number for template with intensity array import.`);
-            }
-
-            const [importedTemplate, importedTemplateSource] = importScriptAsTemplateFromJSON(
-                schemaValue.additionalProperties.properties.template,
-                prefix + "_INTENSITY_" + key,
-                item,
-                "template",
-            );
-            const [importedDetermineCausants, importedDetermineCausantsSource] = importScriptAsTemplateFromJSON(
-                schemaValue.additionalProperties.properties.determineCausants,
-                prefix + "_INTENSITY_" + key,
-                item,
-                "determineCausants",
-            );
-            const [importedDetermineCause, importedDetermineCauseSource] = importScriptAsTemplateFromJSON(
-                schemaValue.additionalProperties.properties.determineCause,
-                prefix + "_INTENSITY_" + key,
-                item,
-                "determineCause",
-            );
-
-            // @ts-ignore
-            resultArray.push({
-                intensity: item.intensity,
-                template: importedTemplate,
-                determineCausants: importedDetermineCausants,
-                determineCause: importedDetermineCause,
-            });
-            // @ts-ignore
-            resultSources.push(importedTemplateSource);
-            resultSources.push(importedDetermineCausantsSource);
-            resultSources.push(importedDetermineCauseSource);
-        });
-        return [resultArray, resultSources];
-    } else {
-        throw new Error(`Missing property ${propertyName} for template with intensity array import.`);
-    }
-}
-
-/**
- * Extracts an object with has an intensity in a parent object
- * @param {*} obj 
- * @param {string} propertyName
- * @return {{[stateName: string]: {intensity: number}}}
- */
-function extractObjectOfIntensityFromJSON(obj, propertyName) {
-    if (obj.hasOwnProperty(propertyName)) {
-        // @ts-ignore
-        const value = obj[propertyName];
-        if (value === null || value === undefined) {
-            throw new Error(`Property ${propertyName} cannot be null or undefined for intensity object import.`);
-        }
-        if (typeof value !== "object" || Array.isArray(value)) {
-            throw new Error(`Property ${propertyName} must be an object for intensity object import.`);
-        }
-        /**
-         * @type {{[stateName: string]: {intensity: number}}}
-         */
-        const resultObject = {};
-        Object.keys(value).forEach((key) => {
-            const item = value[key];
-            if (typeof item !== "object" || item === null) {
-                throw new Error(`Property ${propertyName} must be an object of objects for intensity object import, but got ${typeof item} at key ${key}.`);
-            }
-            if (typeof item.intensity !== "number") {
-                throw new Error(`Property ${propertyName}.${key}.intensity must be a number for intensity object import.`);
-            }
-            // @ts-ignore
-            resultObject[key] = { intensity: item.intensity };
-        });
-        return resultObject;
-    } else {
-        throw new Error(`Missing property ${propertyName} for intensity object import.`);
-    }
-}
-
-/**
- * @param {any} internalSchema
- * @param {string} prefix
  * @param {*} json 
  * @param {string} propertyName 
  * @returns {[DEStringTemplate, DEScriptSource]}
@@ -254,7 +145,8 @@ function importScriptAsTemplateFromJSON(internalSchema, prefix, json, propertyNa
                 type: "template",
             }, {
                 id: "?INTERNAL_NOOP_TEMPLATE",
-                type: "handlebars",
+                type: "script",
+                sourceType: "handlebars",
                 source: "",
                 run: () => "",
             }];
@@ -264,7 +156,8 @@ function importScriptAsTemplateFromJSON(internalSchema, prefix, json, propertyNa
             const importedTemplate = importScriptAsTemplate("?TEMPLATE_" + prefix + "_" + propertyName.toUpperCase(), prefix + " " + propertyName + " Template", "javascript", value.script);
             return [importedTemplate, {
                 id: importedTemplate.id,
-                type: "javascript",
+                type: "script",
+                sourceType: "javascript",
                 source: value.script,
                 run: importedTemplate.execute,
             }];
@@ -272,7 +165,8 @@ function importScriptAsTemplateFromJSON(internalSchema, prefix, json, propertyNa
             const importedTemplate = importScriptAsTemplate("?TEMPLATE_" + prefix + "_" + propertyName.toUpperCase(), prefix + " " + propertyName + " Template", "handlebars", value.script);
             return [importedTemplate, {
                 id: importedTemplate.id,
-                type: "handlebars",
+                type: "script",
+                sourceType: "handlebars",
                 source: value.script,
                 run: importedTemplate.execute,
             }];
@@ -302,9 +196,6 @@ function importScriptAsValueGetterFromJSON(internalSchema, prefix, json, propert
         if (typeof value.script !== "string") {
             throw new Error(`Property ${propertyName}.script must be a string for script template import.`);
         }
-        if (typeof value.ts !== "string") {
-            throw new Error(`Property ${propertyName}.ts must be a string for script template import.`);
-        }
 
         if (value.script.trim().length === 0) {
             return [{
@@ -314,25 +205,38 @@ function importScriptAsValueGetterFromJSON(internalSchema, prefix, json, propert
                 type: valueGetterType,
             }, {
                 id: "?INTERNAL_NOOP_VALUE_GETTER",
-                type: "javascript",
+                type: "script",
+                sourceType: "javascript",
                 source: "",
                 run: () => null,
             }];
         }
 
         if (valueGetterType === "value_getter_char_space") {
-            const importedGetter = importScriptAsPropertyValueInCharacterSpace("?VALUE_GETTER_CHAR_SPACE_" + prefix + "_" + propertyName.toUpperCase(), prefix + " " + propertyName + " Value Getter Char Space", value.script);
+            const importedGetter = importScriptAsPropertyValueInCharacterSpace(
+                "?VALUE_GETTER_CHAR_SPACE_" + prefix + "_" + propertyName.toUpperCase(),
+                prefix + " " + propertyName + " Value Getter Char Space",
+                value.script,
+                value.ts ? "javascript" : "handlebars",
+            );
             return [importedGetter, {
                 id: importedGetter.id,
-                type: "javascript",
+                type: "script",
+                sourceType: value.ts ? "javascript" : "handlebars",
                 source: value.script,
                 run: importedGetter.value,
             }];
         } else {
-            const importedGetter = importScriptAsPropertyValueInItemSpace("?VALUE_GETTER_ITEM_SPACE_" + prefix + "_" + propertyName.toUpperCase(), prefix + " " + propertyName + " Value Getter Item Space", value.script);
+            const importedGetter = importScriptAsPropertyValueInItemSpace(
+                "?VALUE_GETTER_ITEM_SPACE_" + prefix + "_" + propertyName.toUpperCase(),
+                prefix + " " + propertyName + " Value Getter Item Space",
+                value.script,
+                value.ts ? "javascript" : "handlebars",
+            );
             return [importedGetter, {
                 id: importedGetter.id,
-                type: "javascript",
+                type: "script",
+                sourceType: value.ts ? "javascript" : "handlebars",
                 source: value.script,
                 run: importedGetter.value,
             }];
@@ -386,7 +290,8 @@ function importScriptsWithImportsFromJSON(characterName, json, scriptName) {
         scriptsArray.push(importedScript);
         scriptSources.push({
             id: importedScript.id,
-            type: "javascript",
+            type: "script",
+            sourceType: "javascript",
             source: scriptContent,
             run: importedScript.execute,
         });
@@ -415,10 +320,10 @@ function importCharacterPropertiesFromJSON(characterName, json) {
         }
 
         const [propertyValue, propertyValueSource] = importScriptAsValueGetterFromJSON(
-            schema.properties["properties"]["value"].additionalProperties,
-            characterName + "_PROPERTY_" + propertyName,
-            propertyJson,
-            "value",
+            schema.properties["properties"].additionalProperties,
+            characterName + "_PROPERTY_",
+            propertiesJson,
+            propertyName,
             "value_getter_char_space",
         );
         scriptSources.push(propertyValueSource);
@@ -466,61 +371,6 @@ function importCharacterEmotionsFromJSON(json) {
 }
 
 /**
- * @param {any} internalSchema
- * @param {string} prefix 
- * @param {*} json 
- * @param {string} propertyName
- * @returns {[DEBondIncreaseDecreaseQuestion[], DEScriptSource[]]}
- */
-function importBondConditionsFromJSON(internalSchema, prefix, json, propertyName) {
-    /**
-     * @type {DEBondIncreaseDecreaseQuestion[]}
-     */
-    const bondConditions = [];
-    /**
-     * @type {DEScriptSource[]}
-     */
-    const scriptSources = [];
-    const bondConditionsJson = json[propertyName];
-    if (typeof bondConditionsJson !== "object" || bondConditionsJson === null || Array.isArray(bondConditionsJson)) {
-        throw new Error(`Property ${propertyName} must be an object.`);
-    }
-
-    for (const [conditionName, conditionJson] of Object.entries(bondConditionsJson)) {
-        // we ignore the condition name as it is used only as a key for managing the condition in the json
-        if (typeof conditionJson !== "object" || conditionJson === null) {
-            throw new Error(`Property ${propertyName}.${conditionName} must be an object.`);
-        }
-
-        const [questionTemplate, questionTemplateScript] = importScriptAsTemplateFromJSON(
-            internalSchema.additionalProperties,
-            prefix + "_BOND_CONDITION_" + conditionName,
-            conditionJson,
-            "question",
-        );
-        scriptSources.push(questionTemplateScript);
-
-        /** @type {DEBondIncreaseDecreaseQuestion} */
-        const conditionObject = {
-            question: questionTemplate,
-            weight: extractSimpleProperty(internalSchema.additionalProperties, conditionJson, "weight"),
-            mustHaveStateWithCharacterCausant: extractSimpleProperty(internalSchema.additionalProperties, conditionJson, "must_have_state_with_character_causant"),
-        };
-
-        // check A-Z_ regex for the mustHaveStateWithCharacterCausant
-        if (conditionObject.mustHaveStateWithCharacterCausant) {
-            if (!/^[A-Z_]*$/.test(conditionObject.mustHaveStateWithCharacterCausant)) {
-                throw new Error(`must_have_state_with_character_causant ${conditionObject.mustHaveStateWithCharacterCausant} is invalid. Must match /^[A-Z_]*$/ regex.`);
-            }
-        }
-
-        bondConditions.push(conditionObject);
-    }
-
-    return [bondConditions, scriptSources];
-}
-
-/**
  * Imports a character from a JSON representation.
  * @param {DECompleteCharacterReference} json
  * @returns {{character: DECompleteCharacterReference, scriptSources: DEScriptSource[]}}
@@ -543,6 +393,14 @@ export function importCharacterFromJSON(json) {
     const [spawnScript, spawnScriptSources] = importScriptsWithImportsFromJSON(characterName, json, "spawn_script");
 
     /**
+     * @type {Record<string, DEScript>}
+     */
+    const spawnScriptsObject = {};
+    spawnScript.forEach((script) => {
+        spawnScriptsObject[script.id] = script;
+    });
+
+    /**
      * @type {DECompleteCharacterReference}
      */
     const character = {
@@ -556,8 +414,8 @@ export function importCharacterFromJSON(json) {
         weightKg: extractSimpleProperty(schema, json, "weight_kg"),
         name: characterName,
         initiative: extractSimpleProperty(schema, json, "initiative"),
-        injectableInGeneralText: {},
-        injectableInReasoning: {},
+        actionPromptInjection: {},
+        systemPromptInjection: {},
         schizophrenia: extractSimpleProperty(schema, json, "schizophrenia"),
         schizophrenicVoiceDescription: schizophrenicVoiceDescription,
         wanderPotential: extractSimpleProperty(schema, json, "wander_potential"),
@@ -572,21 +430,29 @@ export function importCharacterFromJSON(json) {
 
         states: {},
         properties: properties,
-        bonds: [],
+        bonds: {
+            declarations: [],
+            bondChangeFineTune: 1.0,
+            bondChangeNegativityBias: 1.0,
+            strangerBreakawayBondWeightAbsolute: 10,
+            strangerBreakawayInteractionsCount: 10,
+            strangerBreakawayTimeMinutes: 30,
+            strangerNegativeMultiplier: 1.0,
+            strangerPositiveMultiplier: 1.0,
+            system: "UNKNOWN",
+        },
         emotions: importCharacterEmotionsFromJSON(json),
         scripts: {
-            spawn: spawnScript,
-            preInference: [],
-            preStateCheck: [],
-            postInference: [],
-            postAnyInference: [],
-            firstInteract: [],
+            spawn: spawnScriptsObject,
+            preInference: {},
+            preStateCheck: {},
+            postInference: {},
+            postAnyInference: {},
+            firstInteract: {},
         },
 
         general: generalTemplate,
     }
-
-    validateBondsCoverage(character);
 
     /**
      * @type {DEScriptSource[]}
@@ -611,7 +477,7 @@ function validateBondsCoverageHelper(character, strangerBondValue) {
     /**
      * @type {Array<[string, number, number, number, number]>}
      */
-    const strengthValues = character.bonds.filter((b) => b.strangerBond === strangerBondValue).map(entry => {
+    const strengthValues = character.bonds.declarations.filter((b) => b.strangerBond === strangerBondValue).map(entry => {
         const entryName = entry.name;
         const minBondValue = entry.minBondLevel;
         const maxBondValue = entry.maxBondLevel;

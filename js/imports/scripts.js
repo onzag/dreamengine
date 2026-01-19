@@ -17,11 +17,11 @@ export function importScript(name, type, args, script, mustReturn) {
          * @param {DEObject} DE
          * @param {DECompleteCharacterReference} character
          * @param {DECompleteCharacterReference|null} other
-         * @param {DECompleteCharacterReference|null} causant
+         * @param {DEStateCausant[]} causants
          * @param {string|null} cause
          * @param {DECompleteCharacterReference|null} potentialCausant
          */
-        compiled = async (DE, character, other, causant, cause, potentialCausant) => {
+        compiled = async (DE, character, other, causants, cause, potentialCausant) => {
             /**
              * @type {any}
              */
@@ -32,8 +32,8 @@ export function importScript(name, type, args, script, mustReturn) {
             if (other) {
                 handlebarObj["other"] = other.name;
             }
-            if (causant) {
-                handlebarObj["causant"] = causant.name;
+            if (causants) {
+                handlebarObj["causants"] = causants.map(c => c.name );
             }
             if (cause) {
                 handlebarObj["cause"] = cause;
@@ -77,7 +77,7 @@ export function importScript(name, type, args, script, mustReturn) {
  * @returns {DEStringTemplate}
  */
 export function importScriptAsTemplate(id, name, type, script) {
-    const execute = importScript(name, type, ["DE", "character", "other", "causant", "cause", "potentialCausant"], script, "string");
+    const execute = importScript(name, type, ["DE", "character", "other", "causants", "cause", "potentialCausant"], script, "string");
     return {
         id,
         type: "template",
@@ -104,10 +104,11 @@ export function importScriptAsScript(id, name, script) {
  * @param {string} id
  * @param {string} name
  * @param {string} script
+ * @param {"javascript" | "handlebars"} type
  * @returns {DEPropertyValueInCharSpace}
  */
-export function importScriptAsPropertyValueInCharacterSpace(id, name, script) {
-    const execute = importScript(name, "javascript", ["DE", "character"], script, null);
+export function importScriptAsPropertyValueInCharacterSpace(id, name, script, type) {
+    const execute = importScript(name, type, ["DE", "character"], script, null);
     return {
         id,
         value: execute,
@@ -119,10 +120,11 @@ export function importScriptAsPropertyValueInCharacterSpace(id, name, script) {
  * @param {string} id
  * @param {string} name
  * @param {string} script
+ * @param {"javascript" | "handlebars"} type
  * @returns {DEPropertyValueInItemSpace}
  */
-export function importScriptAsPropertyValueInItemSpace(id, name, script) {
-    const execute = importScript(name, "javascript", ["DE", "item"], script, null);
+export function importScriptAsPropertyValueInItemSpace(id, name, script, type) {
+    const execute = importScript(name, type, ["DE", "item"], script, null);
     return {
         id,
         value: execute,

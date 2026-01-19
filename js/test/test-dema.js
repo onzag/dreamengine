@@ -6,6 +6,9 @@ const character = importCharacterFromJSON(json);
 
 (async () => {
     // @ts-ignore
-    character.character.scripts.spawn[0].execute({user: {name: "TestUser"}, functions: {}}, character.character)
+    console.log(character.character.scripts);
+    character.character.scripts.spawn['?SCRIPT_Dema_SPAWN_SCRIPT'].execute({user: {name: "TestUser"}, functions: {}}, character.character)
     console.log(await character.character.general.execute({user: {name: "TestUser"}, functions: {}}, character.character))
+    console.log(await character.character.properties.IS_ROBOT.value({user: {name: "TestUser"}, functions: {}}, character.character))
+    console.log(character.scriptSources);
 })();
