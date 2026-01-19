@@ -546,7 +546,39 @@ for (let i = 0; i < 2; i++) {
         ownWeatherSystem: [],
         parent: "Lunar Station",
         properties: {},
-        slots: {},
+        slots: {
+            "BEDROOM_AREA": {
+                description: DE.utils.newHandlebarsTemplate(
+                    DE,
+                    "LUNAR_STATION_BEDROOM_SLOT_DESCRIPTION_" + letter,
+                    "The bedroom area of the lunar station, featuring a bunk bed, a small desk, and a locker for personal belongings."
+                ),
+                items: [
+                    {
+                        name: "Bunk Bed",
+                        description: "A sturdy bunk bed designed for use in the confined space of the lunar station. It features a simple mattress and bedding.",
+                        weightKg: 20,
+                        volumeLiters: 100,
+                        properties: {},
+                        placement: "In the bedroom area",
+                        capacityKg: 200,
+                        capacityLiters: 200,
+                        amount: 1,
+                        canLieOn: true,
+                        canSitOn: true,
+                        compartimentName: null,
+                        consumableProperties: null,
+                        containing: [],
+                        coversNakedness: false,
+                        descriptionWhenCarried: null,
+                        descriptionWhenWorn: null,
+                        isConsumable: false,
+                        isSeeThrough: false,
+                        nonPickable: false,
+                    }
+                ],
+            },
+        },
     });
 }
 
