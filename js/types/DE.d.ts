@@ -1881,6 +1881,10 @@ declare interface DEInitialScene {
      * the user starting the interaction
      */
     charactersStart: boolean;
+    /**
+     * The initial time when the scene starts
+     */
+    initialTime: DETimeDescription | null;
 }
 
 declare interface DEWorld {

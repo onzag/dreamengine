@@ -121,7 +121,7 @@ function createCharacterFromUser(user) {
     }
 }
 
-class DEngine {
+export class DEngine {
     constructor() {
         // constructor code
         this.allInternalFunctions = setupFunctions();
@@ -290,30 +290,25 @@ class DEngine {
     }
     /**
      * @param {DEMinimalCharacterReference} user
-     * @param {string} startingLocation
-     * @param {string} startingLocationSlot
-     * @param {DETimeDescription} startingTime
+     * @param {DEWorld} world
      */
-    initialize(user, startingLocation, startingLocationSlot, startingTime) {
+    initialize(user, world) {
+        const defaultTime = new Date();
+        /**
+         * @type {DETimeDescription}
+         */
+        const defaultTimeDEFormat = {
+            dayOfMonth: defaultTime.getUTCDate(),
+            monthOfYear: defaultTime.getUTCMonth() + 1,
+            year: defaultTime.getUTCFullYear(),
+            hourOfDay: defaultTime.getUTCHours(),
+            minuteOfHour: defaultTime.getUTCMinutes(),
+            time: defaultTime.getTime(),
+            dayOfWeek: defaultTime.getUTCDay(),
+        }
         this.deObject = {
             user: user,
-            world: {
-                currentLocation: startingLocation,
-                currentLocationSlot: startingLocationSlot,
-                locations: {},
-                connections: {},
-                selectedScene: null,
-                initialScenes: {},
-                hasStartedScene: false,
-                hasInitializedWorld: false,
-                lore: {
-                    type: "template",
-                    id: "?INTERNAL_NOOP_TEMPLATE",
-                    execute: () => "",
-                },
-                worldAllCharacterSpawnScripts: {},
-                worldScripts: {},
-            },
+            world: world,
             characters: {},
             allNames: {
                 mal: [],
@@ -327,20 +322,22 @@ class DEngine {
             },
             conversations: {},
             stateFor: {},
-            initialTime: startingTime,
-            currentTime: { ...startingTime },
+            initialTime: defaultTimeDEFormat,
+            currentTime: { ...defaultTimeDEFormat },
             // @ts-ignore
             functions: this.allInternalFunctions,
             social: {
                 bonds: {},
             },
             scriptSources: this.getDefaultScriptSources(),
+            wanderHeuristics: {},
         }
 
         this.user = user;
         this.userCharacter = createCharacterFromUser(user);
 
-        this.addCharacter(this.userCharacter, startingLocation, startingLocationSlot);
+        // @ts-ignore
+        this.addCharacter(this.userCharacter, null, null);
 
         this.initialized = true;
     }
@@ -373,10 +370,8 @@ class DEngine {
 
     /**
      * @param {DECompleteCharacterReference} character
-     * @param {string} location
-     * @param {string} locationSlot
      */
-    addCharacter(character, location, locationSlot) {
+    addCharacter(character) {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         }
@@ -413,8 +408,10 @@ class DEngine {
             deadEnded: false,
             deadEndReason: null,
             id: crypto.randomUUID(),
-            location: location,
-            locationSlot: locationSlot,
+            // @ts-ignore
+            location: null,
+            // @ts-ignore
+            locationSlot: null,
             states: [],
             type: "BACKGROUND",
             time: this.deObject.initialTime,
@@ -599,7 +596,7 @@ class DEngine {
 
     }
 
-    checkDEObjectIntegrity() {
+    checkDEObjectIntegrity(unitializedWorld = false) {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         }
@@ -660,7 +657,7 @@ class DEngine {
         this.deObject.scriptSources = this.deObject.scriptSources.filter(src => usedScriptSourceIds.has(src.id));
     }
 
-    async prepareNextCycle() {
+    async initializeWorld() {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         }
@@ -671,6 +668,17 @@ class DEngine {
             await this.runAllWorldCreationScripts();
             await this.runAllSpawnScripts();
             this.deleteOrphanedScriptSources();
+        }
+
+        this.checkDEObjectIntegrity(true);
+        this.refreshCharacterStates();
+    }
+
+    async prepareNextCycle() {
+        if (!this.deObject) {
+            throw new Error("DEngine not initialized");
+        } else if (!this.deObject.world.hasInitializedWorld) {
+            throw new Error("DEngine world not initialized");
         }
 
         this.refreshCharacterStates();
