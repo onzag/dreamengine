@@ -79,7 +79,7 @@ const AMBIENCES = []
  * @param {number} volume 
  * @returns 
  */
-async function playAmbience(src, volume = 0.5) {
+async function playAmbience(src, volume = 0.75) {
   currentAmbience = (currentAmbience || []).concat(src);
   if (!ambienceEnabled) {
     return;
@@ -135,7 +135,7 @@ let isFading = null;
  * @param {number} durationMs 
  * @returns 
  */
-async function stopAmbienceWithFade(durationMs) {
+async function stopAmbienceWithFade(durationMs, volume = 0.75) {
   if (isFading === "OUT") {
     return;
   }
@@ -143,7 +143,7 @@ async function stopAmbienceWithFade(durationMs) {
   const steps = 20;
   const stepDuration = durationMs / steps;
 
-  const volumeStepSize = 0.5 / steps;
+  const volumeStepSize = volume / steps;
   while (true) {
     if (isFading !== "OUT") {
       return;
@@ -179,7 +179,7 @@ async function stopAmbienceWithFade(durationMs) {
  * @param {number} durationMs 
  * @returns 
  */
-async function startAmbienceWithFade(src, durationMs) {
+async function startAmbienceWithFade(src, durationMs, volume = 0.75) {
   if (isFading === "IN") {
     return;
   }
@@ -187,7 +187,7 @@ async function startAmbienceWithFade(src, durationMs) {
   await playAmbience(src, 0);
   const steps = 20;
   const stepDuration = durationMs / steps;
-  const volumeStepSize = 0.5 / steps;
+  const volumeStepSize = volume / steps;
 
   while (true) {
     if (isFading !== "IN") {
@@ -196,13 +196,13 @@ async function startAmbienceWithFade(src, durationMs) {
 
     let updatedOne = false;
     AMBIENCES.forEach(amb => {
-      if (amb.gainNode.gain.value === 0.5) {
+      if (amb.gainNode.gain.value === volume) {
         return;
       }
       let newValue = amb.gainNode.gain.value + volumeStepSize;
       updatedOne = true;
-      if (newValue > 0.5) {
-        newValue = 0.5;
+      if (newValue > volume) {
+        newValue = volume;
       }
       amb.gainNode.gain.setValueAtTime(newValue, amb.context.currentTime);
       amb.gainNode.gain.value = newValue;

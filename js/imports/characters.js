@@ -8,7 +8,7 @@ import { importScriptAsPropertyValueInCharacterSpace, importScriptAsPropertyValu
  * @param {string} propertyName 
  * @returns 
  */
-function extractSimpleProperty(internalSchema, obj, propertyName) {
+export function extractSimpleProperty(internalSchema, obj, propertyName) {
     const schemaValue = internalSchema.properties[propertyName];
     if (!schemaValue) {
         throw new Error(`Property ${propertyName} is not defined in the schema.`);
@@ -253,7 +253,7 @@ function importScriptAsValueGetterFromJSON(internalSchema, prefix, json, propert
  * @param {string} scriptName 
  * @returns {[DEScript[], DEScriptSource[]]}
  */
-function importScriptsWithImportsFromJSON(characterName, json, scriptName) {
+export function importScriptsWithImportsFromJSON(characterName, json, scriptName) {
     /**
      * @type {DEScript[]}
      */

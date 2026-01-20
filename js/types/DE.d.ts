@@ -865,16 +865,42 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
          * 35 to 50: close friend bond
          * 50 to 100: best friend bond
          * 
-         * By default the negative side has no secondary bond graduation, while the positive side has:
+         * By default the secondary bond graduation goes as follows:
          * 0 to 10: no romantic interest
          * 10 to 20: slight romantic interest
          * 20 to 35: romantic interest
          * 35 to 50: strong romantic interest
          * 50 to 100: deeply in love
          * 
+         * In the negative side of the primary bond it could be used in a one-sided manner
+         * which basically indicates a romantic creep or stalker type of bond
+         * 0 to 10: no romance
+         * 10 to 20: creepy interest
+         * 20 to 35: obsessive interest
+         * 35 to 50: stalking interest
+         * 50 to 100: abuser interest
+         * 
          * It is recommended to use the DE.utils.generateRomanticEnabledBondDeclarationTemplate function
          * to generate a bond declaration template that covers the entire bond spectrum with both primary
-         * and secondary bonds
+         * and secondary bonds, these bond systems can get very complex so they are expected to be defined
+         * manually in the spawn scripts of characters
+         * 
+         * There is also DE.utils.generateFrienshipOnlyBondDeclarationTemplate function that generates a bond declaration template
+         * without any romantic possibilities, this is useful for characters that should not have romantic bonds
+         * for example, children or asexual characters; still it is required that you define these hard limitations
+         * in each bond declaration description to avoid the LLM assuming romantic/sexual interactions are allowed
+         * 
+         * A romantic enabled bond declaration can also be used with children or asexual characters but
+         * used to find out creepy or obsessive bonds using the secondary graduation in both sides, so the characters
+         * can actually react to creepy or obsessive bonds towards them and react to consistent sexual or romantic advances
+         * that way if they break a threshold you may have the character go away from the abuser or stalker even if the interactions
+         * may seem well intentioned but accumulate into a creepy or obsessive bond over time; for example, a parent with a great
+         * bond towards their child may have a creepy bond if they keep making sexual advances towards them, and if you have a romatic
+         * enabled bond declaration template you can have the child character react to that creepy bond and try to avoid the parent
+         * and seek help from others even if it is in the positive graduation of the primary bond.
+         * 
+         * These will also affect the user so you can literally get the player character arrested if you use bonds
+         * this way to detect this and then have a NPC script that makes them call the police or similar authorities
          * 
          * If you have characters (eg. children) that should not have romantic bonds, you may use
          * the DE.utils.generateFrienshipOnlyBondDeclarationTemplate function instead
@@ -1028,6 +1054,92 @@ declare interface DETimeDurationDescription {
     inDays: number;
 }
 
+/**
+ * The alias is meant mostly for adding a character such as
+ * eg. the contact is "Alice" but the alias is "Police Station"
+ * but Alice is the dispatcher at the police station, this needs
+ * a character to operate the communication device
+ */
+declare interface DECommunicationContact {
+    character: string;
+    alias: string | null;
+}
+
+declare interface DEDisableCommunicationDeviceQuestionWithReason {
+    question: DEStringTemplate;
+    reason: string;
+    enableBackQuestion: DEStringTemplate | null;
+}
+
+declare interface DEItemCommunicationDeviceProperties {
+    /**
+     * Whether this item is a communication device like a phone, radio, computer, etc...
+     * that allows the character to communicate with others remotely
+     */
+    isCommunicationDevice: boolean;
+    /**
+     * Whether the communication device is enabled or not, if not enabled
+     * the character cannot use it to communicate with others
+     */
+    disabled: boolean;
+    /**
+     * The reason why the communication device is disabled, null if enabled
+     * eg. ran out of battery, no signal, broken, etc...
+     */
+    disabledReason: string | null;
+    /**
+     * The communication lines (eg. phone numbers, radio frequencies, user IDs, etc...) associated with this communication device
+     * that the character can use to communicate with others remotely, another character must have a communication device
+     * of the same type in order to communicate with them
+     */
+    communicationLines: Array<string>;
+    /**
+     * A distance limit in kilometers for this communication device, null means no limit
+     */
+    distanceLimitKm: number | null;
+    /**
+     * The IDs of characters that can be contacted using this communication device
+     * this is useful to restrict communication to specific characters only
+     */
+    canContact: Array<DECommunicationContact>;
+    /**
+     * A question template to ask about a character use {{other}} to refer to the other character, for example
+     * if this is a phone: "has {{char}} sucessfully recieved {{other}}'s phone number?"
+     * or "has {{char}} transferred {{other}}'s contact info to their phone?"
+     */
+    addContactQuestions: Record<string, DEStringTemplate>;
+    /**
+     * A question template to ask about why the communication device is disabled
+     */
+    disableQuestionsWithReasons: Record<string, DEDisableCommunicationDeviceQuestionWithReason>;
+    reenableQuestion: DEStringTemplate | null;
+    /**
+     * eg. for a phone it could be "{{char}} is getting a call from {{other}}, will {{char}} answer?"
+     * allow for multiple templates for variety, the key is an identifier
+     * and should be shared with beingContactedPersonalToPublic
+     * 
+     * Note that for beingContactedPersonal to trigger, the item must have an owner
+     * 
+     * if the template doesn't end in a question mark it should be an statement
+     * such as "yes" or "no" specifying if the character answers or not
+     */
+    beingContactedPersonal: Record<string, DEStringTemplate>;
+    /**
+     * eg. for a phone it could be "{{char}}'s phone is ringing"
+     * 
+     * If specified as a question it should be a yes/no question such as
+     * "{{char}}'s phone is ringing, will {{other}} answer for them?"
+     * 
+     * A bit rude but it may be useful in some scenarios
+     * 
+     * This triggers when the character is not carrying or wearing the communication device
+     * but others can see/hear it ringing/alerting/etc...
+     * 
+     * If the item doesn't have an owner this is the default way to handle any contact
+     */
+    beingContactedPublic: Record<string, DEStringTemplate>;
+}
+
 declare interface DEItem {
     name: string;
     volumeLiters: number;
@@ -1053,6 +1165,14 @@ declare interface DEItem {
     coversNakedness: boolean;
     containing: Array<DEItem>;
     /**
+     * The items that this item is made of, for example a wooden table
+     * may be made of planks and nails
+     * 
+     * This is currently not used natively by the engine but it may be useful
+     * by scripts or external systems that want to do crafting or similar mechanics
+     */
+    madeOf?: Array<DEItem>;
+    /**
      * The amount of this item in the stack
      */
     amount: number;
@@ -1071,6 +1191,16 @@ declare interface DEItem {
      * that the character should not be able to pick up and carry around
      */
     nonPickable: boolean;
+    /**
+     * The id of the character that owns this item, null if no owner
+     * this is useful for items that are owned by specific characters
+     */
+    owner: string | null;
+    /**
+     * If this item is a communication device, these are its properties
+     * otherwise null or not specified
+     */
+    communicator?: DEItemCommunicationDeviceProperties | null;
 }
 
 declare interface StateForDescription {
@@ -1612,6 +1742,12 @@ declare interface DEConversation {
      */
     participants: Array<string>;
     /**
+     * List of the remote participants in the conversation
+     * these are participants that are not physically present in the same location as the other participants
+     * for example, if two characters are talking on the phone
+     */
+    remoteParticipants: Array<string>;
+    /**
      * The previous conversation IDs for each participant before this conversation started
      * This basically specifies the chain of conversations that led to this one
      * for each participant individually
@@ -1794,13 +1930,31 @@ declare interface DEWorld {
      * it is also used by characters to understand the world they are in
      * and detect lies or inconsistencies
      */
-    lore: DEStringTemplate;
+    lore: DEStringTemplate | null;
+    /**
+     * World scripts run at the world level when it initializes
+     * they run after each character has been set up and spawned
+     * but before the first inference cycle starts, the character will
+     * be the user character
+     * 
+     * These world scripts run to set up the world and add locations
+     * and items, because the json object representing the world does
+     * not really support that directly
+     */
+    worldScripts: Record<string, DEScript>;
+    /**
+     * Scripts that run when any character spawns in the world
+     * these run for every character that spawns including the user character
+     * these run after the character spawn scripts
+     */
+    worldAllCharacterSpawnScripts: Record<string, DEScript>;
 }
 
 declare interface DEUtils {
     newHandlebarsTemplate(DE: DEObject, id: string, source: string): DEStringTemplate;
     newTemplateFromFunction(DE: DEObject, id: string, func: DEStringTemplateFunction): DEStringTemplate;
     newLocationFromStaticDefinition(DE: DEObject, definition: DELocationDefinition): DEStatefulLocationDefinition;
+    newConnectionFromStaticDefinition(DE: DEObject, definition: DEConnection): DEConnection;
     /**
      * Important anything created with this function cannot access variables outside its scope
      * due to the way the function is created and sandboxed for security reasons
@@ -1826,6 +1980,12 @@ declare interface DEUtils {
      */
     newScript(DE: DEObject, id: string, execute: (DE: DEObject, char: DECompleteCharacterReference) => any | Promise<any>): DEScript;
     newWeatherSystem(DE: DEObject, definition: WeatherSystem): WeatherSystem;
+    /**
+     * Converts the given property value into a template that can be executed
+     * @param value 
+     * @returns 
+     */
+    propertyValueToTemplate: (value: DEPropertyValueInCharSpace | DEPropertyValueInItemSpace) => DEStringTemplate;
 }
 
 declare interface DEObject {
@@ -1838,23 +1998,6 @@ declare interface DEObject {
     worldNames: NamePool;
     stateFor: Record<string, StateForDescriptionWithHistory>;
     world: DEWorld;
-    /**
-     * World scripts run at the world level when it initializes
-     * they run after each character has been set up and spawned
-     * but before the first inference cycle starts, the character will
-     * be the user character
-     * 
-     * These world scripts run to set up the world and add locations
-     * and items, because the json object representing the world does
-     * not really support that directly
-     */
-    worldScripts: Record<string, DEScript>;
-    /**
-     * Scripts that run when any character spawns in the world
-     * these run for every character that spawns including the user character
-     * these run after the character spawn scripts
-     */
-    worldAllCharacterSpawnScripts: Record<string, DEScript>;
     /**
      * All the conversations that have happened in the world
      * real or pseudo-conversations

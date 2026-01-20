@@ -131,3 +131,47 @@ export function importScriptAsPropertyValueInItemSpace(id, name, script, type) {
         type: "value_getter_item_space",
     };
 }
+
+/**
+ * @param {string} id
+ * @param {*} json 
+ * @returns {[DEScript, DEScriptSource]}
+ */
+export function importScriptFromJSON(id, json) {
+    const scriptValue = json.script.script;
+    const deScript = importScriptAsScript(id, id, scriptValue);
+    /**
+     * @type {DEScriptSource}
+     */
+    const source = {
+        id,
+        run: deScript.execute,
+        source: scriptValue,
+        sourceType: "javascript",
+        type: "script",
+    };
+    return [deScript, source];
+}
+
+/**
+ * 
+ * @param {string} id 
+ * @param {*} json 
+ * @param {string} src 
+ * @returns {[DEScript, DEScriptSource]}
+ */
+export function importScriptFromSplitJSON(id, json, src) {
+    const scriptValue = src;
+    const deScript = importScriptAsScript(id, id, scriptValue);
+    /**
+     * @type {DEScriptSource}
+     */
+    const source = {
+        id,
+        run: deScript.execute,
+        source: scriptValue,
+        sourceType: "javascript",
+        type: "script",
+    };
+    return [deScript, source];
+}

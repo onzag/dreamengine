@@ -20,12 +20,13 @@ const schema = {
         "context": {
             "type": "string",
             "title": "Execution Context",
-            "enum": ["Character Spawn"],
+            "enum": ["Character Spawn", "World Creation"],
             "enum_definitions": [
                 "Useful to set additional attributes and properties when the character is first created, eg. mark a character a certain race and add to their backstory for this world, add behaviours etc...",
+                "Useful to set up world-level properties, locations, connections, global variables, etc...",
             ],
             "default": "Character Spawn",
-            "description": "Defines where this script runs. 'global' scripts run once for the entire application, 'character' scripts run per character, and 'scene' scripts run per scene."
+            "description": "Defines where this script runs. 'world creation' scripts run once for the entire application, 'character spawn' scripts run per character"
         },
         "script": {
             "type": "object",
@@ -76,30 +77,6 @@ const schema = {
                         "placeholder": "Default value for this property"
                     },
                 },
-            },
-            "real_type": "arbitrary_property_object",
-        },
-        "freeze_states": {
-            "type": "array",
-            "title": "Freeze States",
-            "description": "List of character states that this script does not allow to be modified, by the user configuration",
-            "items": {
-                "type": "string",
-            },
-            "real_type": "arbitrary_state_object",
-        },
-        "freeze_bonds": {
-            "type": "boolean",
-            "title": "Freeze Bonds",
-            "description": "Will freeze the bonds of the character, preventing the user from setting bonds in the character configuration",
-            "default": false,
-        },
-        "freeze_root_properties": {
-            "type": "array",
-            "title": "Freeze Root Properties",
-            "description": "List of root character properties that this script does not allow to be modified, by the user configuration",
-            "items": {
-                "type": "string",
             },
             "real_type": "arbitrary_property_object",
         },

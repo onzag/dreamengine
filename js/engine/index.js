@@ -281,46 +281,12 @@ class DEngine {
         } else if (this.invalidCharacterStates) {
             throw new Error("DEngine has invalid character states, cannot get state as JSON");
         }
-
-        /**
-         * @type {DEObject}
-         */
-        const cloned = deepCopy(this.deObject);
-
-        // some optimizations, we don't need anything related
-        // to the creation or initialization of the world anymore
-        // as it has been fully set up
-        if (this.deObject.world.hasStartedScene) {
-            cloned.world.initialScenes = {};
-        }
-        let deletedScripts = [];
-        if (this.deObject.world.hasInitializedWorld) {
-            for (let scriptId of Object.keys(cloned.worldScripts)) {
-                deletedScripts.push(cloned.worldScripts[scriptId].id);
-            }
-            cloned.worldScripts = {};
-            for (let scriptId of Object.keys(cloned.worldAllCharacterSpawnScripts)) {
-                deletedScripts.push(cloned.worldAllCharacterSpawnScripts[scriptId].id);
-            }
-            cloned.worldAllCharacterSpawnScripts = {};
-            for (let character of Object.values(cloned.characters)) {
-                for (let scriptId of Object.keys(character.scripts.spawn)) {
-                    deletedScripts.push(character.scripts.spawn[scriptId].id);
-                }
-                character.scripts.spawn = {};
-            }
-        }
-        for (const scriptId of deletedScripts) {
-            // remove the script source from cloned.scriptSources
-            cloned.scriptSources = cloned.scriptSources.filter(src => src.id !== scriptId);
-        }
-        
         
         // this should work fine, because all functions will be stripped out automatically
         // it should be possible to regenerate them on load
         // as the script that generated them should be in the object
         // as a string, and we use eval anyway to create the functions from that string
-        return JSON.stringify(cloned);
+        return JSON.stringify(this.deObject);
     }
     /**
      * @param {DEMinimalCharacterReference} user
@@ -345,6 +311,8 @@ class DEngine {
                     id: "?INTERNAL_NOOP_TEMPLATE",
                     execute: () => "",
                 },
+                worldAllCharacterSpawnScripts: {},
+                worldScripts: {},
             },
             characters: {},
             allNames: {
@@ -586,9 +554,15 @@ class DEngine {
             throw new Error(`Character ${characterName} not found.`);
         }
 
+        for (const script of Object.values(this.deObject.world.worldAllCharacterSpawnScripts)) {
+            await script.execute(this.deObject, character);
+        }
+
         for (const script of Object.values(character.scripts.spawn)) {
             await script.execute(this.deObject, character);
         }
+        // save memory by clearing out the spawn scripts after they have run
+        character.scripts.spawn = {};
     }
 
     async runAllSpawnScripts() {
@@ -599,9 +573,11 @@ class DEngine {
             throw new Error("DEngine has invalid character states, cannot run spawn scripts");
         }
         await Promise.all(Object.keys(this.deObject.characters).map(charName => this.runSpawnScriptsForCharacter(charName)));
+        // save memory by clearing out the worldAllCharacterSpawnScripts after they have run
+        this.deObject.world.worldAllCharacterSpawnScripts = {};
     }
 
-    async runAllWorldScripts() {
+    async runAllWorldCreationScripts() {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         }
@@ -611,9 +587,12 @@ class DEngine {
         if (!this.userCharacter) {
             throw new Error("DEngine user character not initialized");
         }
-        for (const script of Object.values(this.deObject.worldScripts)) {
+        for (const script of Object.values(this.deObject.world.worldScripts)) {
             await script.execute(this.deObject, this.userCharacter);
         }
+
+        // save memory by clearing out the worldScripts after they have run
+        this.deObject.world.worldScripts = {};
     }
 
     async startScene() {
@@ -663,6 +642,24 @@ class DEngine {
         });
     }
 
+    deleteOrphanedScriptSources() {
+        if (!this.deObject) {
+            throw new Error("DEngine not initialized");
+        }
+        // find all script source ids that are used in the deObject
+        /** @type {Set<string>} */
+        const usedScriptSourceIds = new Set();
+        checkObjectRecursively(null, this.deObject, (parent, obj) => {
+            if (obj.type === "script" || obj.type === "template") {
+                usedScriptSourceIds.add(obj.id);
+            } else if (obj.type === "value_getter" || obj.type === "value_getter_char_space" || obj.type === "value_getter_item_space") {
+                usedScriptSourceIds.add(obj.id);
+            }
+        });
+        // now remove all script sources that are not used
+        this.deObject.scriptSources = this.deObject.scriptSources.filter(src => usedScriptSourceIds.has(src.id));
+    }
+
     async prepareNextCycle() {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
@@ -671,8 +668,9 @@ class DEngine {
         // now let's check that all function are defined
         if (!this.deObject.world.hasInitializedWorld) {
             this.patchScripts();
-            await this.runAllWorldScripts();
+            await this.runAllWorldCreationScripts();
             await this.runAllSpawnScripts();
+            this.deleteOrphanedScriptSources();
         }
 
         this.refreshCharacterStates();
@@ -850,7 +848,7 @@ class DEngine {
          * @param {string} extraMessage
          */
         const listItems = (space, item, extraMessage) => {
-            message += `${space}- ${item.name}${item.amount >= 2 ? " x" + item.amount : ""}, placement: ${item.placement}${extraMessage}\n`;
+            message += `${space}- ${item.owner ? item.owner + "'s " : ""}${item.name}${item.amount >= 2 ? " x" + item.amount : ""}, placement: ${item.placement}${extraMessage}\n`;
             if (item.containing.length !== 0) {
                 message += `${space}  Containing:\n`;
             }

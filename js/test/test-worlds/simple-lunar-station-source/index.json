@@ -1,0 +1,14 @@
+{
+    "name": "Simple Lunar Station Script Source",
+    "description": "Script source file for the simple lunar station world.",
+    "context": "World Creation",
+    "configurable_properties": {
+        "IS_ROBOT": {
+            "placeholder": "Whether the character is considered a robot and should be immune to vaccuum and radiation effects.",
+            "default": {
+                "ts": "return false;",
+                "script": "return false;"
+            }
+        }
+    }
+}

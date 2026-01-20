@@ -113,8 +113,13 @@ const spaceSuit = {
     isConsumable: false,
     isSeeThrough: false,
     nonPickable: false,
+    owner: null,
+    communicator: null,
 }
 
+/**
+ * @type {DEItem}
+ */
 const locker = {
     name: "Locker",
     description: "A sturdy locker used for storing personal belongings and equipment within the lunar station.",
@@ -137,8 +142,13 @@ const locker = {
     isSeeThrough: false,
     // part of the environment, cannot be picked up
     nonPickable: true,
+    owner: null,
+    communicator: null,
 };
 
+/**
+ * @type {DEItem}
+ */
 const stove = {
     name: "Stove",
     description: "A compact stove designed for cooking meals in the confined space of the lunar station. It features multiple burners and a small oven.",
@@ -161,8 +171,13 @@ const stove = {
     isSeeThrough: false,
     // part of the environment, cannot be picked up
     nonPickable: true,
+    owner: null,
+    communicator: null,
 };
 
+/**
+ * @type {DEItem}
+ */
 const fork = {
     name: "Fork",
     description: "A standard eating utensil with four tines, used for picking up and eating food.",
@@ -184,6 +199,8 @@ const fork = {
     isConsumable: false,
     isSeeThrough: false,
     nonPickable: false,
+    owner: null,
+    communicator: null,
 };
 
 const spoon = {
@@ -207,6 +224,8 @@ const spoon = {
     isConsumable: false,
     isSeeThrough: false,
     nonPickable: false,
+    owner: null,
+    communicator: null,
 };
 
 const cabinetDrawerKitchenware = {
@@ -230,6 +249,8 @@ const cabinetDrawerKitchenware = {
     isConsumable: false,
     isSeeThrough: false,
     nonPickable: false,
+    owner: null,
+    communicator: null,
 };
 
 const bowl = {
@@ -253,6 +274,8 @@ const bowl = {
     isConsumable: false,
     isSeeThrough: false,
     nonPickable: false,
+    owner: null,
+    communicator: null,
 };
 
 const cabinetDrawerBowls = {
@@ -276,6 +299,8 @@ const cabinetDrawerBowls = {
     isConsumable: false,
     isSeeThrough: false,
     nonPickable: false,
+    owner: null,
+    communicator: null,
 };
 
 const cabinet = {
@@ -300,6 +325,8 @@ const cabinet = {
     isSeeThrough: false,
     // part of the environment, cannot be picked up
     nonPickable: true,
+    owner: null,
+    communicator: null,
 };
 
 /**
@@ -329,6 +356,8 @@ const spaceFoodPack = {
     isConsumable: true,
     isSeeThrough: false,
     nonPickable: false,
+    owner: null,
+    communicator: null,
 };
 
 const largeCabinet = {
@@ -353,6 +382,8 @@ const largeCabinet = {
     isSeeThrough: false,
     // part of the environment, cannot be picked up
     nonPickable: true,
+    owner: null,
+    communicator: null,
 };
 
 /**
@@ -379,6 +410,8 @@ const chair = {
     isConsumable: false,
     isSeeThrough: false,
     nonPickable: false,
+    owner: null,
+    communicator: null,
 };
 
 DE.world.locations["Surface of the Moon"] = DE.utils.newLocationFromStaticDefinition(DE, {
@@ -428,6 +461,8 @@ DE.world.locations["Surface of the Moon"] = DE.utils.newLocationFromStaticDefini
                     isSeeThrough: false,
                     nonPickable: false,
                     placement: "In the ground",
+                    owner: null,
+                    communicator: null,
                 }
             ],
         },
@@ -476,7 +511,7 @@ DE.world.locations["Lunar Station"] = DE.utils.newLocationFromStaticDefinition(D
     parent: "Surface of the Moon",
     properties: {},
     slots: {
-        "COMMON_AREA": {
+        "Common Area": {
             description: DE.utils.newHandlebarsTemplate(
                 DE,
                 "LUNAR_STATION_COMMON_AREA_SLOT_DESCRIPTION",
@@ -487,7 +522,7 @@ DE.world.locations["Lunar Station"] = DE.utils.newLocationFromStaticDefinition(D
                 chair,
             ],
         },
-        "COOKING_AREA": {
+        "Cooking Area": {
             description: DE.utils.newHandlebarsTemplate(
                 DE,
                 "LUNAR_STATION_COOKING_AREA_SLOT_DESCRIPTION",
@@ -501,6 +536,19 @@ DE.world.locations["Lunar Station"] = DE.utils.newLocationFromStaticDefinition(D
             ],
         },
     },
+});
+
+DE.world.connections["LUNAR_STATION_TO_MOON_SURFACE"] = DE.utils.newConnectionFromStaticDefinition(DE, {
+    from: "Lunar Station",
+    to: "Surface of the Moon",
+    bidirectional: true,
+    distanceMeters: 0,
+    maxHeightCm: 0,
+    maxVolumeLiters: 0,
+    maxWeightKg: 0,
+    onlyVehicles: false,
+    otherPassageConditions: {},
+    vehicleTypes: [],
 });
 
 for (let i = 0; i < 2; i++) {
@@ -547,7 +595,7 @@ for (let i = 0; i < 2; i++) {
         parent: "Lunar Station",
         properties: {},
         slots: {
-            "BEDROOM_AREA": {
+            "Bedroom Area": {
                 description: DE.utils.newHandlebarsTemplate(
                     DE,
                     "LUNAR_STATION_BEDROOM_SLOT_DESCRIPTION_" + letter,
@@ -560,7 +608,7 @@ for (let i = 0; i < 2; i++) {
                         weightKg: 20,
                         volumeLiters: 100,
                         properties: {},
-                        placement: "In the bedroom area",
+                        placement: "In the Bedroom Area",
                         capacityKg: 200,
                         capacityLiters: 200,
                         amount: 1,
@@ -575,14 +623,29 @@ for (let i = 0; i < 2; i++) {
                         isConsumable: false,
                         isSeeThrough: false,
                         nonPickable: false,
+                        owner: null,
+                        communicator: null,
                     }
                 ],
             },
         },
     });
+
+    DE.world.connections["LUNAR_STATION_BEDROOM_" + letter + "_TO_LUNAR_STATION"] = DE.utils.newConnectionFromStaticDefinition(DE, {
+        from: "Lunar Station Bedroom " + letter,
+        to: "Lunar Station",
+        bidirectional: true,
+        distanceMeters: 0,
+        maxHeightCm: 0,
+        maxVolumeLiters: 0,
+        maxWeightKg: 0,
+        onlyVehicles: false,
+        otherPassageConditions: {},
+        vehicleTypes: [],
+    });
 }
 
-DE.worldAllCharacterSpawnScripts["LUNAR_STATION_INITIAL_SCRIPT"] = DE.utils.newScript(DE, "LUNAR_STATION_INITIAL_SCRIPT", async (DE, char) => {
+DE.world.worldAllCharacterSpawnScripts["LUNAR_STATION_INITIAL_SCRIPT"] = DE.utils.newScript(DE, "LUNAR_STATION_INITIAL_SCRIPT", async (DE, char) => {
     // give all characters the ASPHYXIATING_VACCUUM and FREEZING_VACCUUM states
     char.states["ASPHYXIATING_VACCUUM"] = {
         randomSpawnRate: 0,
