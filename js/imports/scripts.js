@@ -135,10 +135,15 @@ export function importScriptAsPropertyValueInItemSpace(id, name, script, type) {
 /**
  * @param {string} id
  * @param {*} json 
+ * @param {string} [scriptPropertyName]
  * @returns {[DEScript, DEScriptSource]}
  */
-export function importScriptFromJSON(id, json) {
-    const scriptValue = json.script.script;
+export function importScriptFromJSON(id, json, scriptPropertyName = "script") {
+    if (!json[scriptPropertyName] || typeof json[scriptPropertyName].script !== "string") {
+        throw new Error(`Script JSON for id ${id} is missing a valid "${scriptPropertyName}.script" property.`);
+    }
+    
+    const scriptValue = json[scriptPropertyName].script;
     const deScript = importScriptAsScript(id, id, scriptValue);
     /**
      * @type {DEScriptSource}
@@ -149,6 +154,7 @@ export function importScriptFromJSON(id, json) {
         source: scriptValue,
         sourceType: "javascript",
         type: "script",
+        imports: json[scriptPropertyName].imports || [],
     };
     return [deScript, source];
 }
@@ -161,6 +167,12 @@ export function importScriptFromJSON(id, json) {
  * @returns {[DEScript, DEScriptSource]}
  */
 export function importScriptFromSplitJSON(id, json, src) {
+    if (!json.script || typeof json.script !== "object") {
+        throw new Error(`Script JSON for id ${id} is missing the script property, which is still required even if the source is separate; it is where imports would be specified.`);
+    }
+
+    
+
     const scriptValue = src;
     const deScript = importScriptAsScript(id, id, scriptValue);
     /**
@@ -172,6 +184,8 @@ export function importScriptFromSplitJSON(id, json, src) {
         source: scriptValue,
         sourceType: "javascript",
         type: "script",
+        imports: json.script.imports || [],
     };
+    
     return [deScript, source];
 }

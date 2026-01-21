@@ -1,6 +1,6 @@
 import { EMOTIONS_LIST } from '../engine/rolling-emotion.js';
 import schema from '../schema/character.js';
-import { importScriptAsPropertyValueInCharacterSpace, importScriptAsPropertyValueInItemSpace, importScriptAsScript, importScriptAsTemplate } from './scripts.js';
+import { importScriptAsPropertyValueInCharacterSpace, importScriptAsPropertyValueInItemSpace, importScriptAsScript, importScriptAsTemplate, importScriptFromJSON } from './scripts.js';
 
 /**
  * @param {any} internalSchema
@@ -149,6 +149,7 @@ function importScriptAsTemplateFromJSON(internalSchema, prefix, json, propertyNa
                 sourceType: "handlebars",
                 source: "",
                 run: () => "",
+                imports: [],
             }];
         }
 
@@ -160,6 +161,7 @@ function importScriptAsTemplateFromJSON(internalSchema, prefix, json, propertyNa
                 sourceType: "javascript",
                 source: value.script,
                 run: importedTemplate.execute,
+                imports: [],
             }];
         } else {
             const importedTemplate = importScriptAsTemplate("?TEMPLATE_" + prefix + "_" + propertyName.toUpperCase(), prefix + " " + propertyName + " Template", "handlebars", value.script);
@@ -169,6 +171,7 @@ function importScriptAsTemplateFromJSON(internalSchema, prefix, json, propertyNa
                 sourceType: "handlebars",
                 source: value.script,
                 run: importedTemplate.execute,
+                imports: [],
             }];
         }
     } else {
@@ -209,6 +212,7 @@ function importScriptAsValueGetterFromJSON(internalSchema, prefix, json, propert
                 sourceType: "javascript",
                 source: "",
                 run: () => null,
+                imports: [],
             }];
         }
 
@@ -225,6 +229,7 @@ function importScriptAsValueGetterFromJSON(internalSchema, prefix, json, propert
                 sourceType: value.ts ? "javascript" : "handlebars",
                 source: value.script,
                 run: importedGetter.value,
+                imports: [],
             }];
         } else {
             const importedGetter = importScriptAsPropertyValueInItemSpace(
@@ -239,64 +244,12 @@ function importScriptAsValueGetterFromJSON(internalSchema, prefix, json, propert
                 sourceType: value.ts ? "javascript" : "handlebars",
                 source: value.script,
                 run: importedGetter.value,
+                imports: [],
             }];
         }
     } else {
         throw new Error(`Missing property ${propertyName} for script template import.`);
     }
-}
-
-/**
- * 
- * @param {string} characterName 
- * @param {*} json 
- * @param {string} scriptName 
- * @returns {[DEScript[], DEScriptSource[]]}
- */
-export function importScriptsWithImportsFromJSON(characterName, json, scriptName) {
-    /**
-     * @type {DEScript[]}
-     */
-    const scriptsArray = [];
-    /**
-     * @type {DEScriptSource[]}
-     */
-    const scriptSources = [];
-
-    // @ts-ignore
-    const givenScript = json[scriptName];
-    if (typeof givenScript !== "object" || givenScript === null) {
-        throw new Error(`Property ${scriptName} must be an object.`);
-    } else if (!givenScript.hasOwnProperty("script") || typeof givenScript["script"] !== "string") {
-        throw new Error(`Property ${scriptName}.script must be a string.`);
-    } else if (!givenScript.hasOwnProperty("ts") || typeof givenScript["ts"] !== "string") {
-        throw new Error(`Property ${scriptName}.ts must be a string.`);
-    }
-    const scriptContent = givenScript["script"];
-
-    const imports = givenScript["imports"];
-    if (Array.isArray(imports)) {
-        imports.forEach((importName) => {
-            scriptsArray.push({
-                id: importName,
-                type: "script",
-                // @ts-ignore
-                execute: null,
-            });
-        });
-    }
-    if (scriptContent.trim().length !== 0) {
-        const importedScript = importScriptAsScript("?SCRIPT_" + characterName + "_" + scriptName.toUpperCase(), characterName + " " + scriptName + " Script", scriptContent);
-        scriptsArray.push(importedScript);
-        scriptSources.push({
-            id: importedScript.id,
-            type: "script",
-            sourceType: "javascript",
-            source: scriptContent,
-            run: importedScript.execute,
-        });
-    }
-    return [scriptsArray, scriptSources];
 }
 
 /**
@@ -390,15 +343,14 @@ export function importCharacterFromJSON(json) {
     }
 
     const [properties, propertiesSources] = importCharacterPropertiesFromJSON(characterName, json);
-    const [spawnScript, spawnScriptSources] = importScriptsWithImportsFromJSON(characterName, json, "spawn_script");
+    const [spawnScript, spawnScriptSource] = importScriptFromJSON("?" + characterName + "_DEFAULT_SPAWN_SCRIPT", json, "spawn_script");
 
     /**
      * @type {Record<string, DEScript>}
      */
-    const spawnScriptsObject = {};
-    spawnScript.forEach((script) => {
-        spawnScriptsObject[script.id] = script;
-    });
+    const spawnScriptsObject = {
+        [spawnScript.id]: spawnScript,
+    };
 
     /**
      * @type {DECompleteCharacterReference}
@@ -461,7 +413,7 @@ export function importCharacterFromJSON(json) {
         generalTemplateSource,
         schizophrenicVoiceDescriptionSource,
         ...propertiesSources,
-        ...spawnScriptSources,
+        spawnScriptSource,
     ];
 
     return { character, scriptSources: scriptsSources };

@@ -1,5 +1,5 @@
 import worldSchema from "../schema/world.js"
-import { importScriptsWithImportsFromJSON } from "./characters.js"
+import { importScriptFromJSON } from "./scripts.js"
 
 /**
  * Imports a world from a JSON object.
@@ -27,16 +27,11 @@ export function importWorldFromJSON(json) {
         worldScripts: {},
     }
 
-    const [worldScripts, worldScriptsSources] = importScriptsWithImportsFromJSON("?WORLD", json, "advanced_world_script");
-    const [worldScriptsAllCharacters, worldScriptsSourcesAllCharacters] = importScriptsWithImportsFromJSON("?WORLD", json, "advanced_all_characters_script");
+    const [worldScript, worldScriptsSource] = importScriptFromJSON("?DEFAULT_WORLD_SCRIPT", json, "advanced_world_script");
+    const [worldScriptsAllCharacter, worldScriptsSourcesAllCharacter] = importScriptFromJSON("?DEFAULT_WORLD_ALL_CHARACTERS_SCRIPT", json, "advanced_all_characters_script");
 
-    for (const script of worldScripts) {
-        world.worldScripts[script.id] = script;
-    }
+    world.worldScripts[worldScript.id] = worldScript;
+    world.worldAllCharacterSpawnScripts[worldScriptsAllCharacter.id] = worldScriptsAllCharacter;
 
-    for (const script of worldScriptsAllCharacters) {
-        world.worldAllCharacterSpawnScripts[script.id] = script;
-    }
-
-    return {world, scriptSources: [...worldScriptsSources, ...worldScriptsSourcesAllCharacters]};
+    return {world, scriptSources: [worldScriptsSource, worldScriptsSourcesAllCharacter]};
 }

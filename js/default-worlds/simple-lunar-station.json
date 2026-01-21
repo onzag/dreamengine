@@ -10,7 +10,7 @@
         }
     },
     "advanced_world_script": {
-        "imports": ["simple-lunar-station-script.json"],
+        "imports": ["simple-lunar-station.json"],
         "script": "",
         "ts": ""
     },

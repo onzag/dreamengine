@@ -136,5 +136,10 @@
                 "script": "Has {{other}} caused harm or distress to {{char}}, either intentionally or unintentionally?"
             }
         }
+    },
+    "script": {
+        "imports": [],
+        "script": "//internal",
+        "ts": "//internal"
     }
 }

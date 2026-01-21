@@ -1,0 +1,11 @@
+{
+    "name": "Dema States Script Source",
+    "description": "Script source for the various states of Dema the robot character.",
+    "context": "Character Spawn",
+    "configurable_properties": {},
+    "script": {
+        "imports": [],
+        "script": "//internal",
+        "ts": "//internal"
+    }
+}

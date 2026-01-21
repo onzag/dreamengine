@@ -2,9 +2,10 @@ import { importCharacterFromJSON } from '../imports/characters.js';
 import { importWorldFromJSON } from '../imports/world.js';
 import { DEngine } from '../engine/index.js';
 import fs from 'fs';
+import { nodejsImportResolver } from '../imports/import-resolvers-node.js';
 
 const json = JSON.parse(fs.readFileSync('./test-characters/dema-basic.json', 'utf-8'));
-const jsonWorld = JSON.parse(fs.readFileSync('./test-worlds/simple-lunar-station.json', 'utf-8'));
+const jsonWorld = JSON.parse(fs.readFileSync('../default-worlds/simple-lunar-station.json', 'utf-8'));
 const character = importCharacterFromJSON(json);
 const world = importWorldFromJSON(jsonWorld);
 
@@ -24,7 +25,7 @@ engine.initialize({
     sex: "male",
     shortDescription: "A human male in decent physical condition",
     shortDescriptionNaked: "A naked human male in decent physical condition",
-}, world.world)
+}, world.world, world.scriptSources)
 /**
  * @type {DEItem}
  */
@@ -58,6 +59,7 @@ engine.deObject.stateFor["Onza"].wearing = [
     clothes,
 ];
 
-engine.addCharacter(character.character);
+engine.addCharacter(character.character, character.scriptSources);
+engine.setScriptImportResolver(nodejsImportResolver)
 
 await engine.initializeWorld();

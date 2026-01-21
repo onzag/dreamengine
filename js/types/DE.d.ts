@@ -1815,6 +1815,7 @@ declare interface DEScriptSource {
     type: "template" | "script" | "value_getter_char_space" | "value_getter_item_space";
     source: string;
     sourceType: "handlebars" | "javascript";
+    imports: string[];
     run: (...args: any[]) => any;
 }
 declare type DEStringTemplateFunction = (

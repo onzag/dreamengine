@@ -47,18 +47,21 @@ function checkObjectRecursively(parent, obj, objChecker) {
 /**
  * @param {*} obj 
  * @param {*} parent
- * @param {(parent: any, value: any) => void} arrayChecker
+ * @param {(parent: any, value: any) => Promise<void>} objChecker
  */
-function checkArraysRecursively(parent, obj, arrayChecker) {
+async function checkObjectRecursivelyAsync(parent, obj, objChecker) {
     if (typeof obj !== "object" || obj === null) {
         return;
     }
     if (Array.isArray(obj)) {
-        arrayChecker(parent, obj);
+        for (const item of obj) {
+            await checkObjectRecursivelyAsync(obj, item, objChecker);
+        }
         return;
     }
+    await objChecker(parent, obj);
     for (const key in obj) {
-        checkArraysRecursively(obj, obj[key], arrayChecker);
+        await checkObjectRecursivelyAsync(obj, obj[key], objChecker);
     }
 }
 
@@ -153,6 +156,11 @@ export class DEngine {
          * @type {Function[]}
          */
         this.listeners = [];
+
+        /**
+         * @type {((scriptId: string, scriptType: "script" | "template" | "value_getter_char_space" | "value_getter_item_space", existingScriptSources: DEScriptSource[]) => Promise<DEScriptSource>) | null}
+         */
+        this.scriptImportResolver = null;
     }
 
     /**
@@ -166,6 +174,7 @@ export class DEngine {
                 sourceType: "handlebars",
                 id: "?INTERNAL_NOOP_TEMPLATE",
                 source: "",
+                imports: [],
                 run: (/*DE, character*/) => "",
             },
             {
@@ -173,6 +182,7 @@ export class DEngine {
                 sourceType: "javascript",
                 id: "?INTERNAL_NOOP_VALUE_GETTER",
                 source: "",
+                imports: [],
                 run: (/*DE, character*/) => null,
             },
             {
@@ -189,6 +199,7 @@ export class DEngine {
                         `if the Story Master says something about you or the world, you should accept it as true and adapt your behavior accordingly. Never do anything that contradicts the Story Master's narration.`;
                 },
                 source: "",
+                imports: [],
             },
         ];
     }
@@ -203,7 +214,7 @@ export class DEngine {
     /**
      * @param {*} deObjectJSON 
      */
-    initializeFromJSONState(deObjectJSON) {
+    async initializeFromJSONState(deObjectJSON) {
         if (this.initialized) {
             throw new Error("DEngine already initialized");
         }
@@ -242,13 +253,20 @@ export class DEngine {
         }
 
         // patch all the scripts in the deObject to have their execute functions
-        this.patchScripts();
+        await this.patchScripts(true);
 
         this.initialized = true;
     }
 
-    patchScripts() {
-        checkObjectRecursively(null, this.deObject, (parent, obj) => {
+    /**
+     * @param {(scriptId: string, scriptType: "script" | "template" | "value_getter_char_space" | "value_getter_item_space", existingScriptSources: DEScriptSource[]) => Promise<DEScriptSource>} fn 
+     */
+    setScriptImportResolver(fn) {
+        this.scriptImportResolver = fn
+    }
+
+    async patchScripts(noImport = false) {
+        await checkObjectRecursivelyAsync(null, this.deObject, async (parent, obj) => {
             if (obj.type === "script" || obj.type === "template") {
                 if (typeof obj.execute !== "function") {
                     // find the script in the deObject.scriptSources and see if we can set it up
@@ -256,23 +274,88 @@ export class DEngine {
                     const scriptSourceFound = this.deObject.scriptSources.find(src => src.id === obj.id);
                     if (scriptSourceFound) {
                         obj.execute = scriptSourceFound.run;
-                    } else {
+                    } else if (noImport || !this.scriptImportResolver) {
                         throw new Error(`Script with id ${obj.id} does not have a valid source.`);
+                    } else {
+                        // @ts-ignore
+                        const scriptSource = await this.scriptImportResolver(obj.id, obj.type, this.deObject.scriptSources);
+                        if (!scriptSource || scriptSource.id !== obj.id || scriptSource.type !== obj.type) {
+                            throw new Error(`Imported script source for id ${obj.id} is invalid.`);
+                        } else {
+                            // add the script source to the deObject script sources
+                            // @ts-ignore
+                            this.deObject.scriptSources.push(scriptSource);
+                            obj.execute = scriptSource.run;
+                        }
                     }
                 }
-            } else if (obj.type === "value_getter" || obj.type === "value_getter_char_space" || obj.type === "value_getter_item_space") {
+            } else if (obj.type === "value_getter_char_space" || obj.type === "value_getter_item_space") {
                 if (typeof obj.value !== "function") {
                     // find the script in the deObject.scriptSources and see if we can set it up
                     // @ts-ignore
                     const scriptSourceFound = this.deObject.scriptSources.find(src => src.id === obj.id);
                     if (scriptSourceFound) {
                         obj.value = scriptSourceFound.run;
-                    } else {
+                    } else if (noImport || !this.scriptImportResolver) {
                         throw new Error(`Script with id ${obj.id} does not have a valid source`);
+                    } else {
+                        // @ts-ignore
+                        const scriptSource = await this.scriptImportResolver(obj.id, obj.type, this.deObject.scriptSources);
+                        if (!scriptSource || scriptSource.id !== obj.id || scriptSource.type !== obj.type) {
+                            throw new Error(`Imported script source for id ${obj.id} is invalid.`);
+                        } else {
+                            // add the script source to the deObject script sources
+                            // @ts-ignore
+                            this.deObject.scriptSources.push(scriptSource);
+                            obj.value = scriptSource.run;
+                        }
                     }
                 }
             }
         });
+
+        // now we will check the imports of all script sources and ensure they are also imported
+        let hasMissingImports = false;
+        do {
+            /**
+             * @type {Set<string>}
+             */
+            const missingImports = new Set();
+            // @ts-ignore
+            for (const scriptSource of this.deObject.scriptSources) {
+                if (scriptSource.imports && scriptSource.imports.length > 0) {
+                    for (const importId of scriptSource.imports) {
+                        // @ts-ignore
+                        const found = this.deObject.scriptSources.find(src => src.id === importId);
+                        if (!found) {
+                            missingImports.add(importId);
+                        }
+                    }
+                }
+            }
+
+            // @ts-ignore
+            hasMissingImports = missingImports.size > 0;
+            if (hasMissingImports) {
+                for (const importId of missingImports) {
+                    if (noImport) {
+                        throw new Error(`Cannot find missing imported script ${importId}`);
+                    } else if (!this.scriptImportResolver) {
+                        throw new Error(`Script import resolver not set, cannot import missing script ${importId}`);
+                    } else {
+                        // @ts-ignore
+                        const scriptSource = await this.scriptImportResolver(importId, "script", this.deObject.scriptSources);
+                        if (!scriptSource || scriptSource.id !== importId || scriptSource.type !== "script") {
+                            throw new Error(`Imported script source for id ${importId} is invalid.`);
+                        } else {
+                            // add the script source to the deObject script sources
+                            // @ts-ignore
+                            this.deObject.scriptSources.push(scriptSource);
+                        }
+                    }
+                }
+            }
+        } while (hasMissingImports);
     }
 
     getStateAsJSON() {
@@ -291,8 +374,9 @@ export class DEngine {
     /**
      * @param {DEMinimalCharacterReference} user
      * @param {DEWorld} world
+     * @param {DEScriptSource[]} worldScriptsSources
      */
-    initialize(user, world) {
+    initialize(user, world, worldScriptsSources = []) {
         const defaultTime = new Date();
         /**
          * @type {DETimeDescription}
@@ -329,7 +413,7 @@ export class DEngine {
             social: {
                 bonds: {},
             },
-            scriptSources: this.getDefaultScriptSources(),
+            scriptSources: [...this.getDefaultScriptSources(), ...worldScriptsSources],
             wanderHeuristics: {},
         }
 
@@ -337,7 +421,7 @@ export class DEngine {
         this.userCharacter = createCharacterFromUser(user);
 
         // @ts-ignore
-        this.addCharacter(this.userCharacter, null, null);
+        this.addCharacter(this.userCharacter, []);
 
         this.initialized = true;
     }
@@ -370,8 +454,9 @@ export class DEngine {
 
     /**
      * @param {DECompleteCharacterReference} character
+     * @param {DEScriptSource[]} scriptSources
      */
-    addCharacter(character) {
+    addCharacter(character, scriptSources) {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         }
@@ -443,6 +528,12 @@ export class DEngine {
             wanderOutsideConfinementActivatesState: null,
         };
 
+        if (scriptSources && scriptSources.length > 0) {
+            for (const scriptSource of scriptSources) {
+                this.deObject.scriptSources.push(scriptSource);
+            }
+        }
+
         // we need to set up surroundingNonStrangers and surroundingStrangers, partiallyExposedToWeather and fullyExposedToWeather properly later
         this.invalidCharacterStates = true;
     }
@@ -500,42 +591,6 @@ export class DEngine {
     }
 
     /**
-     * @param {string} id
-     * @param {string} source
-     * @return {DEScript} 
-     */
-    addDEScript(id, source) {
-        if (!this.deObject) {
-            throw new Error("DEngine not initialized");
-        }
-        if (id.startsWith("?")) {
-            throw new Error(`Script id cannot start with '?', as it is reserved for internal use.`);
-        }
-        // check if source with the same id already exists
-        const existingSource = this.deObject.scriptSources.find(src => src.id === id);
-        if (existingSource) {
-            // check if it is identical
-            if (existingSource.source === source && existingSource.sourceType === "javascript" && existingSource.type === "script") {
-                return {
-                    type: "script",
-                    id: existingSource.id,
-                    execute: existingSource.run,
-                }
-            }
-            throw new Error(`Script source with id ${id} already exists.`);
-        }
-        const importedScript = importScriptAsScript(id, id, source);
-        this.deObject.scriptSources.push({
-            type: "script",
-            sourceType: "javascript",
-            id: id,
-            source: source,
-            run: importedScript.execute,
-        });
-        return importedScript;
-    }
-
-    /**
      * @param {string} characterName 
      */
     async runSpawnScriptsForCharacter(characterName) {
@@ -569,23 +624,64 @@ export class DEngine {
         if (this.invalidCharacterStates) {
             throw new Error("DEngine has invalid character states, cannot run spawn scripts");
         }
-        await Promise.all(Object.keys(this.deObject.characters).map(charName => this.runSpawnScriptsForCharacter(charName)));
+
+        for (const script of Object.values(this.deObject.world.worldAllCharacterSpawnScripts)) {
+            let scriptsRan = new Set();
+            for (const charName in this.deObject.characters) {
+                const character = this.deObject.characters[charName];
+                await this.runScriptById(script.id, character, scriptsRan);
+            }
+        }
+
         // save memory by clearing out the worldAllCharacterSpawnScripts after they have run
         this.deObject.world.worldAllCharacterSpawnScripts = {};
+    }
+
+    /**
+     * @param {string} scriptId
+     * @param {DECompleteCharacterReference} character
+     * @param {Set<string>} scriptsRanInAnotherContext
+     */
+    async runScriptById(scriptId, character, scriptsRanInAnotherContext = new Set()) {
+        if (!this.deObject) {
+            throw new Error("DEngine not initialized");
+        }
+        const scriptsRan = new Set(scriptsRanInAnotherContext);
+
+        /**
+         * 
+         * @param {string} internalScriptId 
+         * @returns 
+         */
+        const runScriptInternal = async (internalScriptId) => {
+            if (scriptsRan.has(internalScriptId)) {
+                return;
+            }
+            const source = this.getScriptSourceForId(internalScriptId);
+            if (!source) {
+                throw new Error(`Script source with id ${internalScriptId} not found.`);
+            }
+            const imports = source.imports || [];
+            for (const importId of imports) {
+                await runScriptInternal(importId);
+            }
+            await source.run(this.deObject, character);
+            scriptsRan.add(internalScriptId);
+        }
+        await runScriptInternal(scriptId);
+        return scriptsRan;
     }
 
     async runAllWorldCreationScripts() {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         }
-        if (this.invalidCharacterStates) {
-            throw new Error("DEngine has invalid character states, cannot run world scripts");
-        }
         if (!this.userCharacter) {
             throw new Error("DEngine user character not initialized");
         }
+        let scriptsRan = new Set();
         for (const script of Object.values(this.deObject.world.worldScripts)) {
-            await script.execute(this.deObject, this.userCharacter);
+            scriptsRan = await this.runScriptById(script.id, this.userCharacter, scriptsRan);
         }
 
         // save memory by clearing out the worldScripts after they have run
@@ -596,7 +692,7 @@ export class DEngine {
 
     }
 
-    checkDEObjectIntegrity(unitializedWorld = false) {
+    checkDEObjectIntegrity(initialization = false) {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         }
@@ -644,17 +740,34 @@ export class DEngine {
             throw new Error("DEngine not initialized");
         }
         // find all script source ids that are used in the deObject
-        /** @type {Set<string>} */
-        const usedScriptSourceIds = new Set();
-        checkObjectRecursively(null, this.deObject, (parent, obj) => {
-            if (obj.type === "script" || obj.type === "template") {
-                usedScriptSourceIds.add(obj.id);
-            } else if (obj.type === "value_getter" || obj.type === "value_getter_char_space" || obj.type === "value_getter_item_space") {
-                usedScriptSourceIds.add(obj.id);
+        let deletedSomething = false;
+        while (true) {
+            /** @type {Set<string>} */
+            const usedScriptSourceIds = new Set();
+            checkObjectRecursively(null, this.deObject, (parent, obj) => {
+                if (obj.type === "script" || obj.type === "template") {
+                    usedScriptSourceIds.add(obj.id);
+                } else if (obj.type === "value_getter" || obj.type === "value_getter_char_space" || obj.type === "value_getter_item_space") {
+                    usedScriptSourceIds.add(obj.id);
+                }
+            });
+            // I know it is not the most efficient way, but it is simple and works
+            // and easy to understand should be bombproof against bugs
+            this.deObject.scriptSources.forEach(src => {
+                for (const importId of src.imports) {
+                    usedScriptSourceIds.add(importId);
+                }
+            });
+            // now remove all script sources that are not used
+            const newScriptSources = this.deObject.scriptSources.filter(src => usedScriptSourceIds.has(src.id));
+            if (newScriptSources.length < this.deObject.scriptSources.length) {
+                deletedSomething = true;
+                this.deObject.scriptSources = newScriptSources;
             }
-        });
-        // now remove all script sources that are not used
-        this.deObject.scriptSources = this.deObject.scriptSources.filter(src => usedScriptSourceIds.has(src.id));
+            if (!deletedSomething) {
+                break;
+            }
+        }
     }
 
     async initializeWorld() {
@@ -664,7 +777,7 @@ export class DEngine {
 
         // now let's check that all function are defined
         if (!this.deObject.world.hasInitializedWorld) {
-            this.patchScripts();
+            await this.patchScripts();
             await this.runAllWorldCreationScripts();
             await this.runAllSpawnScripts();
             this.deleteOrphanedScriptSources();
