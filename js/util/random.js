@@ -37,7 +37,7 @@ export function weightedRandom(items, getWeight) {
 }
 
 /**
- * Simplified version when items have a 'weight' or 'likelihood' property
+ * Simplified version when items have a 'likelihood' property
  * 
  * @template T
  * @param {Array<T & {likelihood: number}>} items

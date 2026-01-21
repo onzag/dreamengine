@@ -1,5 +1,7 @@
 import Handlebars from "../../node_modules/handlebars/dist/handlebars.js";
 
+const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
+
 /**
  * @param {string} name
  * @param {"javascript" | "handlebars"} type 
@@ -51,7 +53,7 @@ export function importScript(name, type, args, script, mustReturn) {
     } else {
         const functionArgs = args.join(", ") + ", window, global, globalThis, self, document, require";
         const functionBody = script;
-        const basic = new Function(functionArgs, functionBody + `\n//# sourceURL=script://imported/${name}`);
+        const basic = new AsyncFunction(functionArgs, functionBody + `\n//# sourceURL=script://imported/${name}`);
         /**
          * @param  {...any} functionArgsValues
          */

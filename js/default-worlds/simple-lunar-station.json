@@ -6,7 +6,9 @@
             "import": "dema-basic.json",
             "properties": {},
             "spawn_location": "Lunar Station",
-            "spawn_location_slot": "Common Area"
+            "spawn_location_slot": "Common Area",
+            "spawn_spread_to_children_locations": false,
+            "instances": 1
         }
     },
     "advanced_world_script": {

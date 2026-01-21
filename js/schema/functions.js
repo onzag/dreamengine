@@ -158,7 +158,10 @@ function getPronounHelper(DE, character, listOrCharacter, they, he, she, they_si
         } else {
             return they;
         }
+    } else {
+        nameOne = listOrCharacter;
     }
+
     const references = DE.characters;
     const charRef = references[nameOne];
     if (!charRef) {
@@ -822,7 +825,7 @@ export const utils = [
         "formats a list with commas and 'and'",
         "eg. Arya, Thalon, and Mira",
         (DE, character, list) => {
-            formatAnd(list);
+            return formatAnd(list);
         }
     ],
     [
@@ -908,7 +911,7 @@ export const utils = [
         "Formats the object pronoun for a list of characters or a single character",
         "eg. are, is",
         (DE, character, listOrCharacter) => {
-            return getPronounHelper(DE, character, listOrCharacter, "are", "is", "is", "are");
+            return getPronounHelper(DE, character, listOrCharacter, "are", "is", "is", "is");
         }
     ],
     [

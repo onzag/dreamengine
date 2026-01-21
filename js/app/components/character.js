@@ -303,9 +303,9 @@ class CharacterOverlay extends HTMLElement {
         // @ts-expect-error
         this.root.querySelector('app-overlay-tabs').innerHTML = `
             <app-overlay-section section-title="Singular Testing Environment">
-                You will be placed with your character in a temporary chat session in the Lunar Module world; you and your character are alone in this world, and can interact freely to test how your character behaves based on the settings you have configured so far.
+                You will be placed with your character in a temporary chat session in the Lunar Station world; you and your character are alone in this world, and can interact freely to test how your character behaves based on the settings you have configured so far.
                 <br><br>
-                The Lunar Module world is a simple enclosed environment that has no extra world rules, so you can focus on interacting with your character without any distractions.
+                The Lunar Station world is a simple enclosed environment that has no extra world rules, so you can focus on interacting with your character without any distractions.
                 <br><br>
                 <div>
                     <app-overlay-button id="startTestingButton">Start Testing Session</app-overlay-button>

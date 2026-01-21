@@ -55,13 +55,25 @@ const worldSchema = {
                     "spawn_location": {
                         "type": "string",
                         "title": "Spawn Location",
-                        "description": "The Name of the location where the character will spawn",
+                        "description": "The Name of the location where the character will spawn, can be left empty to spawn in a random location, can use comma separated list for multiple locations (one picked randomly).",
                     },
                     "spawn_location_slot": {
                         "type": "string",
                         "title": "Spawn Location Slot",
-                        "description": "The specific slot within the location where the character will spawn",
+                        "description": "The specific slot within the location where the character will spawn, can be left empty to spawn in a random slot, can use comma separated list for multiple potential slots (one picked randomly).",
                     },
+                    "spawn_spread_to_children_locations": {
+                        "type": "boolean",
+                        "title": "Spread to Children Locations",
+                        "description": "If true, the character can spawn in child locations of the specified spawn location(s) as well.",
+                        "default": false,
+                    },
+                    "instances": {
+                        "type": "number",
+                        "title": "Instances",
+                        "description": "The number of instances of this character to create in the world, if more than one each will get a different name",
+                        "default": 1,
+                    }
                 },
             },
         },

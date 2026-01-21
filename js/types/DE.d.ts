@@ -1155,14 +1155,41 @@ declare interface DEItem {
     canLieOn: boolean;
     properties: Record<string, DEPropertyValueInItemSpace>;
     isConsumable: boolean;
-    consumableProperties: {
+    consumableProperties?: {
         calories: number;
         hydrationLiters: number;
     } | null;
     /**
      * Whether this item covers nakedness when worn
      */
-    coversNakedness: boolean;
+    wearableProperties?: {
+        coversNakedness: boolean;
+        /**
+         * The minimum and maximum volume in liters that this item is meant to fit when worn by the character
+         */
+        volumeRangeMinLiters: number;
+        volumeRangeMaxLiters: number;
+        /**
+         * The extra body volume in liters that this item adds
+         * when worn by the character, useful for bulky clothing
+         * or armor that adds volume to the character wearing it
+         * this also prevents too much layering of clothing or anything
+         * akin to that
+         */
+        extraBodyVolumeWhenWornLiters: number;
+        /**
+         * Useful for mecha suits and similar items that may be very heavy
+         * but weightless when worn by the character, basically the item
+         * provides extra strength to the character wearing it, maybe
+         * even exceeding
+         */
+        addedCarryingCapacityKg: number;
+        /**
+         * Useful again for mecha suits and similar items that provide
+         * extra carrying volume to the character wearing it
+         */
+        addedCarryingCapacityLiters: number;
+    } | null;
     containing: Array<DEItem>;
     /**
      * The items that this item is made of, for example a wooden table
@@ -1259,14 +1286,19 @@ declare interface LocationSlot {
     maxHeightCm?: number;
     /**
      * Maximum weight in kilograms that can fit in this slot
-     * will override location-based max weight if specified
+     * 
+     * this will also be used to check how many people can fit at
+     * once in the given slot
      */
-    maxWeightKg?: number;
+    maxWeightKg: number;
     /**
      * Maximum volume in liters that can fit in this slot
      * will override location-based max volume if specified
+     * 
+     * this will also be used to check how many people can fit at
+     * once in the given slot
      */
-    maxVolumeLiters?: number;
+    maxVolumeLiters: number;
     /**
      * Names of weather systems that are fully blocked by this slot
      * will override location-based blocking if specified
@@ -1587,7 +1619,7 @@ declare interface DELocationDefinition {
      * The name pool should not use last names by default because the LLM can get confused with two characters having the same first or last name
      * so it is recommended to use first names only, unless you have a very specific reason to use last names too
      */
-    namePool?: NamePool;
+    namePool?: DENamePool;
 }
 
 declare interface DEConnection {
@@ -1688,7 +1720,7 @@ declare interface DEConversationMessage {
     /**
      * Whether the message is a system message, eg. narration, scene description, etc.
      */
-    isSystemMessage: boolean;
+    isStoryMasterMessage: boolean;
     /**
      * Whether the message is a debug message, eg. internal engine messages not meant to be seen by characters
      * or the user
@@ -1953,6 +1985,11 @@ declare interface DEWorld {
      * these run after the character spawn scripts
      */
     worldAllCharacterSpawnScripts: Record<string, DEScript>;
+    /**
+     * Scripts to run when the world scene initializes, the key
+     * being the scene id
+     */
+    worldSceneInitializationScripts: Record<string, DEScript>;
 }
 
 declare interface DEUtils {
@@ -1990,7 +2027,7 @@ declare interface DEUtils {
      * @param value 
      * @returns 
      */
-    propertyValueToTemplate: (value: DEPropertyValueInCharSpace | DEPropertyValueInItemSpace) => DEStringTemplate;
+    propertyValueToTemplate: (DE: DEObject, value: DEPropertyValueInCharSpace) => DEStringTemplate;
 }
 
 declare interface DEObject {
@@ -1999,8 +2036,8 @@ declare interface DEObject {
     social: {
         bonds: Record<string, DEBondDescription>;
     };
-    allNames: NamePool;
-    worldNames: NamePool;
+    allNames: DENamePool;
+    worldNames: DENamePool;
     stateFor: Record<string, StateForDescriptionWithHistory>;
     world: DEWorld;
     /**

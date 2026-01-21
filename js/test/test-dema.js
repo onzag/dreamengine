@@ -1,19 +1,17 @@
-import { importCharacterFromJSON } from '../imports/characters.js';
 import { importWorldFromJSON } from '../imports/world.js';
 import { DEngine } from '../engine/index.js';
 import fs from 'fs';
-import { nodejsImportResolver } from '../imports/import-resolvers-node.js';
+import { nodejsImportResolver, nodejsCharacterImportResolver } from '../imports/import-resolvers-node.js';
+import { TextOnlyUI } from '../textonlyapp/ui.js';
 
-const json = JSON.parse(fs.readFileSync('./test-characters/dema-basic.json', 'utf-8'));
 const jsonWorld = JSON.parse(fs.readFileSync('../default-worlds/simple-lunar-station.json', 'utf-8'));
-const character = importCharacterFromJSON(json);
 const world = importWorldFromJSON(jsonWorld);
 
 const engine = new DEngine();
 engine.initialize({
     ageYears: 30,
-    carryingCapacityKg: 20,
-    carryingCapacityLiters: 20,
+    carryingCapacityKg: 30,
+    carryingCapacityLiters: 100,
     gender: "male",
     heightCm: 180,
     weightKg: 75,
@@ -25,7 +23,7 @@ engine.initialize({
     sex: "male",
     shortDescription: "A human male in decent physical condition",
     shortDescriptionNaked: "A naked human male in decent physical condition",
-}, world.world, world.scriptSources)
+}, world.world, world.scriptSources, world.characters)
 /**
  * @type {DEItem}
  */
@@ -39,7 +37,14 @@ const clothes = {
     compartimentName: null,
     consumableProperties: null,
     containing: [],
-    coversNakedness: true,
+    wearableProperties: {
+        coversNakedness: true,
+        volumeRangeMinLiters: 70,
+        volumeRangeMaxLiters: 90,
+        addedCarryingCapacityKg: 0,
+        addedCarryingCapacityLiters: 0,
+        extraBodyVolumeWhenWornLiters: 1,
+    },
     descriptionWhenCarried: null,
     descriptionWhenWorn: null,
     isConsumable: false,
@@ -59,7 +64,10 @@ engine.deObject.stateFor["Onza"].wearing = [
     clothes,
 ];
 
-engine.addCharacter(character.character, character.scriptSources);
 engine.setScriptImportResolver(nodejsImportResolver)
+engine.setCharacterImportResolver(nodejsCharacterImportResolver)
 
 await engine.initializeWorld();
+
+const ui = new TextOnlyUI(engine, "Onza");
+ui.run();

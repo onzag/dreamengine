@@ -3,7 +3,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 const fsAsync = fs.promises;
 
-import { importScriptAsTemplate, importScriptFromJSON, importScriptFromSplitJSON } from './scripts.js';
+import { importScriptFromJSON, importScriptFromSplitJSON } from './scripts.js';
+import { importCharacterFromJSON } from './characters.js';
 
 /**
  * A default import resolver that works within the file system and is meant to be used in nodejs
@@ -82,4 +83,18 @@ export async function nodejsImportResolver(scriptId, scriptType, existingScriptS
         const imported = importScriptFromSplitJSON(scriptId, json, separateSource);
         return imported[1];
     }
+}
+
+/**
+ * 
+ * @param {string} characterFileId
+ */
+export async function nodejsCharacterImportResolver(characterFileId) {
+    const characterFile = path.join('characters', characterFileId);
+    if (!fs.existsSync(characterFile)) {
+        throw new Error(`Character file ${characterFileId} not found at path ${characterFile}`);
+    }
+    const fileContent = await fsAsync.readFile(characterFile, 'utf-8');
+    const characterJSON = JSON.parse(fileContent);
+    return importCharacterFromJSON(characterJSON);
 }

@@ -2,6 +2,8 @@ import { importScript, importScriptAsPropertyValueInCharacterSpace, importScript
 import { ALL_FUNCTIONS_WITH_SPECIALS } from "../schema/functions.js"
 import { weightedRandomByLikelihood } from "../util/random.js"
 import { EMOTIONS_LIST } from "./rolling-emotion.js";
+import { deEngineUtils } from "./utils.js";
+import { commands } from "./commands.js";
 
 const INVALID_NAMES = ["system", "assistant", "user", "everyone", "nobody",
     "anyone", "somebody", "narrator", "observer", "admin", "moderator",
@@ -153,14 +155,27 @@ export class DEngine {
         this.pseudoConversationSummaryGenerator = null;
 
         /**
-         * @type {Function[]}
+         * @type {((obj: DEObject) => void)[]}
          */
         this.listeners = [];
+        /**
+         * @type {((obj: DEObject, conversationId: string, messageId: string, text: string) => void)[]
+         */
+        this.startsToInferOverConversationMessageListeners = [];
 
         /**
          * @type {((scriptId: string, scriptType: "script" | "template" | "value_getter_char_space" | "value_getter_item_space", existingScriptSources: DEScriptSource[]) => Promise<DEScriptSource>) | null}
          */
         this.scriptImportResolver = null;
+        /**
+         * @type {((characterFileId: string) => Promise<{character: DECompleteCharacterReference, scriptSources: DEScriptSource[]}>) | null}
+         */
+        this.characterImportResolver = null;
+
+        /**
+         * @type {(Array<{name: string; import: string; properties: Record<string, DEPropertyValueInCharSpace>; spawnLocations: string[]; spawnLocationSlots: string[]; spawnSpreadToChildrenLocations: boolean; instances: number}>) | null}
+         */
+        this.characters = null;
     }
 
     /**
@@ -185,22 +200,22 @@ export class DEngine {
                 imports: [],
                 run: (/*DE, character*/) => null,
             },
-            {
-                type: "template",
-                sourceType: "handlebars",
-                id: "?INTERNAL_ALL_CHARACTERS_INJECTABLE_IN_GENERAL_TEXT",
-                /**
-                 * @param {DEObject} DE 
-                 * @param {DECompleteCharacterReference} character 
-                 * @returns 
-                 */
-                run: async (DE, character) => {
-                    return `As ${character.name} you should always respect the Story Master's decisions and narrations, ` +
-                        `if the Story Master says something about you or the world, you should accept it as true and adapt your behavior accordingly. Never do anything that contradicts the Story Master's narration.`;
-                },
-                source: "",
-                imports: [],
-            },
+            // {
+            //     type: "template",
+            //     sourceType: "handlebars",
+            //     id: "?INTERNAL_ALL_CHARACTERS_INJECTABLE_IN_GENERAL_TEXT",
+            //     /**
+            //      * @param {DEObject} DE 
+            //      * @param {DECompleteCharacterReference} character 
+            //      * @returns 
+            //      */
+            //     run: async (DE, character) => {
+            //         return `As ${character.name} you should always respect the Story Master's decisions and narrations, ` +
+            //             `if the Story Master says something about you or the world, you should accept it as true and adapt your behavior accordingly. Never do anything that contradicts the Story Master's narration.`;
+            //     },
+            //     source: "",
+            //     imports: [],
+            // },
         ];
     }
 
@@ -225,6 +240,9 @@ export class DEngine {
         // @ts-ignore
         this.deObject.functions = this.allInternalFunctions;
         this.deObject.scriptSources = this.deObject.scriptSources.filter(src => !src.id.startsWith("?INTERNAL_"));
+        this.deObject.utils = deEngineUtils;
+        this.user = this.deObject.user;
+        this.userCharacter = this.deObject.characters[this.user.name];
 
         // these internals have no source so they cannot be recreated from JSON, but they are the same for every DEngine
         // so we can just add them back in
@@ -263,6 +281,13 @@ export class DEngine {
      */
     setScriptImportResolver(fn) {
         this.scriptImportResolver = fn
+    }
+
+    /**
+     * @param {(characterFileId: string) => Promise<{character: DECompleteCharacterReference, scriptSources: DEScriptSource[]}>} fn 
+     */
+    setCharacterImportResolver(fn) {
+        this.characterImportResolver = fn;
     }
 
     async patchScripts(noImport = false) {
@@ -364,7 +389,7 @@ export class DEngine {
         } else if (this.invalidCharacterStates) {
             throw new Error("DEngine has invalid character states, cannot get state as JSON");
         }
-        
+
         // this should work fine, because all functions will be stripped out automatically
         // it should be possible to regenerate them on load
         // as the script that generated them should be in the object
@@ -375,8 +400,9 @@ export class DEngine {
      * @param {DEMinimalCharacterReference} user
      * @param {DEWorld} world
      * @param {DEScriptSource[]} worldScriptsSources
+     * @param {Array<{name: string; import: string; properties: Record<string, DEPropertyValueInCharSpace>; spawnLocations: string[]; spawnLocationSlots: string[]; spawnSpreadToChildrenLocations: boolean; instances: number}>} characters
      */
-    initialize(user, world, worldScriptsSources = []) {
+    async initialize(user, world, worldScriptsSources, characters) {
         const defaultTime = new Date();
         /**
          * @type {DETimeDescription}
@@ -415,13 +441,16 @@ export class DEngine {
             },
             scriptSources: [...this.getDefaultScriptSources(), ...worldScriptsSources],
             wanderHeuristics: {},
+            utils: deEngineUtils,
         }
 
         this.user = user;
         this.userCharacter = createCharacterFromUser(user);
 
+        this.characters = characters;
+
         // @ts-ignore
-        this.addCharacter(this.userCharacter, []);
+        this.addCharacter(this.userCharacter, [], null, null);
 
         this.initialized = true;
     }
@@ -455,8 +484,10 @@ export class DEngine {
     /**
      * @param {DECompleteCharacterReference} character
      * @param {DEScriptSource[]} scriptSources
+     * @param {string} location
+     * @param {string} locationSlot
      */
-    addCharacter(character, scriptSources) {
+    addCharacter(character, scriptSources, location, locationSlot) {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         }
@@ -493,10 +524,8 @@ export class DEngine {
             deadEnded: false,
             deadEndReason: null,
             id: crypto.randomUUID(),
-            // @ts-ignore
-            location: null,
-            // @ts-ignore
-            locationSlot: null,
+            location: location,
+            locationSlot: locationSlot,
             states: [],
             type: "BACKGROUND",
             time: this.deObject.initialTime,
@@ -542,17 +571,23 @@ export class DEngine {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         }
+
+        const userGetsAPass = !this.deObject.world.hasStartedScene;
+
         for (const charName in this.deObject.stateFor) {
+            if (userGetsAPass && charName === this.userCharacter?.name) {
+                continue;
+            }
             const charState = this.deObject.stateFor[charName];
             const characterLocation = charState.location;
             const characterLocationSlot = charState.locationSlot;
             const characterLocationObj = this.deObject.world.locations[characterLocation];
             if (!characterLocationObj) {
-                throw new Error(`Character ${charName} is in invalid location ${characterLocation}`);
+                throw new Error(`Character ${charName} is in invalid location ${characterLocation}, valid locations are: ${Object.keys(this.deObject.world.locations).join(", ")}`);
             }
             const characterLocationSlotObj = characterLocationObj.slots[characterLocationSlot];
             if (!characterLocationSlotObj) {
-                throw new Error(`Character ${charName} is in invalid location slot ${characterLocationSlot} in location ${characterLocation}`);
+                throw new Error(`Character ${charName} is in invalid location slot ${characterLocationSlot} in location ${characterLocation}, valid slots are: ${Object.keys(characterLocationObj.slots).join(", ")}`);
             }
             const currentWeather = characterLocationObj.currentWeather;
             const fullyBlockWeatherInfo = characterLocationSlotObj.slotFullyBlocksWeather || characterLocationObj.locationFullyBlocksWeather;
@@ -588,33 +623,6 @@ export class DEngine {
         }
 
         this.invalidCharacterStates = false;
-    }
-
-    /**
-     * @param {string} characterName 
-     */
-    async runSpawnScriptsForCharacter(characterName) {
-        if (!this.deObject) {
-            throw new Error("DEngine not initialized");
-        }
-        if (this.invalidCharacterStates) {
-            throw new Error("DEngine has invalid character states, cannot run spawn scripts");
-        }
-
-        const character = this.deObject.characters[characterName];
-        if (!character) {
-            throw new Error(`Character ${characterName} not found.`);
-        }
-
-        for (const script of Object.values(this.deObject.world.worldAllCharacterSpawnScripts)) {
-            await script.execute(this.deObject, character);
-        }
-
-        for (const script of Object.values(character.scripts.spawn)) {
-            await script.execute(this.deObject, character);
-        }
-        // save memory by clearing out the spawn scripts after they have run
-        character.scripts.spawn = {};
     }
 
     async runAllSpawnScripts() {
@@ -688,8 +696,108 @@ export class DEngine {
         this.deObject.world.worldScripts = {};
     }
 
-    async startScene() {
+    /**
+     * @param {string} optionName 
+     */
+    async startScene(optionName) {
+        if (!this.deObject) {
+            throw new Error("DEngine not initialized");
+        } else if (!this.deObject.world.hasInitializedWorld) {
+            throw new Error("World has not been initialized yet.");
+        } else if (this.deObject.world.hasStartedScene) {
+            throw new Error("Scene has already been started.");
+        } else if (!this.userCharacter) {
+            throw new Error("DEngine user character not initialized");
+        }
+        const initialScene = this.deObject.world.initialScenes[optionName];
+        if (!initialScene) {
+            throw new Error(`Initial scene with option name ${optionName} not found.`);
+        }
+        const sceneObject = initialScene;
+        if (sceneObject.initialTime) {
+            this.deObject.currentTime = { ...sceneObject.initialTime };
+            this.deObject.initialTime = { ...sceneObject.initialTime };
+            for (const charName in this.deObject.stateFor) {
+                this.deObject.stateFor[charName].time = { ...sceneObject.initialTime };
+            }
+        }
 
+        this.deObject.stateFor[this.userCharacter.name].location = sceneObject.startingLocation;
+        this.deObject.stateFor[this.userCharacter.name].locationSlot = sceneObject.startingLocationSlot;
+        this.deObject.world.currentLocation = sceneObject.startingLocation;
+        this.deObject.world.currentLocationSlot = sceneObject.startingLocationSlot;
+        // @ts-ignore
+        const narration = await sceneObject.narration.execute(this.deObject, this.userCharacter, undefined, undefined, undefined, undefined);
+
+        const expectedParticipants = sceneObject.startingEngagedCharacters || [];
+        expectedParticipants.push(this.userCharacter.name);
+
+        // ensure these are at the given location, if not, teleport them there
+        for (const participantName of expectedParticipants) {
+            if (!this.deObject.characters[participantName]) {
+                throw new Error(`Participant character ${participantName} not found in DEObject characters.`);
+            }
+            this.deObject.stateFor[participantName].location = sceneObject.startingLocation;
+            this.deObject.stateFor[participantName].locationSlot = sceneObject.startingLocationSlot;
+            this.deObject.stateFor[participantName].conversationId = "INITIAL_SCENE_NARRATION";
+            this.deObject.stateFor[participantName].type = "INTERACTING";
+        }
+
+        this.deObject.conversations["INITIAL_SCENE_NARRATION"] = {
+            id: "INITIAL_SCENE_NARRATION",
+            messages: [
+                {
+                    id: "INITIAL_SCENE_NARRATION_MESSAGE",
+                    canOnlyBeSeenByCharacter: null,
+                    content: narration,
+                    sender: "Story Master",
+                    duration: {
+                        inDays: 0,
+                        inHours: 0,
+                        inMinutes: 0,
+                    },
+                    endTime: { ...this.deObject.currentTime },
+                    isCharacter: false,
+                    isDebugMessage: false,
+                    isRejectedMessage: false,
+                    isStoryMasterMessage: true,
+                    isUser: false,
+                    startTime: { ...this.deObject.currentTime },
+                }
+            ],
+            bondsAtStart: this._getFrozenBonds(expectedParticipants),
+            bondsAtEnd: {},
+            duration: {
+                inDays: 0,
+                inHours: 0,
+                inMinutes: 0,
+            },
+            endTime: { ...this.deObject.currentTime },
+            startTime: { ...this.deObject.currentTime },
+            location: sceneObject.startingLocation,
+            participants: [this.userCharacter.name],
+            previousConversationIdsPerParticipant: {
+                [this.userCharacter.name]: null,
+            },
+            pseudoConversation: false,
+            remoteParticipants: [],
+            summary: null,
+        };
+
+        this.rerollWorldWeather();
+        const scriptTorRun = this.deObject.world.worldSceneInitializationScripts[optionName];
+        if (scriptTorRun) {
+            // @ts-ignore
+            await this.runScriptById(scriptTorRun.id, this.userCharacter);
+        }
+        this.refreshCharacterStates();
+
+        this.deObject.world.hasStartedScene = true;
+        // remove initial scenes to save memory
+        this.deObject.world.worldSceneInitializationScripts = {};
+        this.deObject.world.initialScenes = {};
+
+        this.deleteOrphanedScriptSources();
     }
 
     checkDEObjectIntegrity(initialization = false) {
@@ -739,13 +847,22 @@ export class DEngine {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         }
+        console.log("Optimizing DEObject...");
+
         // find all script source ids that are used in the deObject
         let deletedSomething = false;
         while (true) {
             /** @type {Set<string>} */
             const usedScriptSourceIds = new Set();
             checkObjectRecursively(null, this.deObject, (parent, obj) => {
+                if (parent === this.deObject?.scriptSources) {
+                    // we are iterating over the script sources themselves
+                    return;
+                }
                 if (obj.type === "script" || obj.type === "template") {
+                    if (obj.id === "LUNAR_STATION_INITIAL_SCRIPT") {
+                        console.log(obj)
+                    }
                     usedScriptSourceIds.add(obj.id);
                 } else if (obj.type === "value_getter" || obj.type === "value_getter_char_space" || obj.type === "value_getter_item_space") {
                     usedScriptSourceIds.add(obj.id);
@@ -762,7 +879,11 @@ export class DEngine {
             const newScriptSources = this.deObject.scriptSources.filter(src => usedScriptSourceIds.has(src.id));
             if (newScriptSources.length < this.deObject.scriptSources.length) {
                 deletedSomething = true;
+                const whatWasDeleted = this.deObject.scriptSources.filter(src => !usedScriptSourceIds.has(src.id)).map(src => src.id);
+                console.log(`Deleted orphaned script sources: ${whatWasDeleted.join(", ")}`);
                 this.deObject.scriptSources = newScriptSources;
+            } else {
+                deletedSomething = false;
             }
             if (!deletedSomething) {
                 break;
@@ -770,21 +891,260 @@ export class DEngine {
         }
     }
 
-    async initializeWorld() {
+    /**
+     * @param {string} locationName
+     * @returns {Record<string, {maxWeightKg: number; maxVolumeLiters: number; currentWeightKg: number; currentVolumeLiters: number}>}
+     */
+    getRemainingCapacityInLocationApprox(locationName) {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         }
+        const locationInfo = this.deObject.world.locations[locationName];
+        if (!locationInfo) {
+            throw new Error(`Location ${locationName} not found in world.`);
+        }
+        /**
+         * @type {Record<string, {maxWeightKg: number; maxVolumeLiters: number; currentWeightKg: number; currentVolumeLiters: number}>}
+         */
+        const slots = {};
+        for (const slotName in locationInfo.slots) {
+            slots[slotName] = {
+                maxWeightKg: locationInfo.slots[slotName].maxWeightKg,
+                maxVolumeLiters: locationInfo.slots[slotName].maxVolumeLiters,
+                currentWeightKg: 0,
+                currentVolumeLiters: 0,
+            };
+            locationInfo.slots[slotName].items.forEach(item => {
+                slots[slotName].currentWeightKg += item.weightKg;
+                slots[slotName].currentVolumeLiters += item.volumeLiters;
+            });
+
+            // find characters in this slot
+            for (const charName in this.deObject.stateFor) {
+                const charState = this.deObject.stateFor[charName];
+                if (charState.location === locationName && charState.locationSlot === slotName) {
+                    const character = this.deObject.characters[charName];
+                    let weight = character.weightKg;
+                    let volume = weight;
+                    weight += character.carryingCapacityKg;
+                    volume += character.carryingCapacityLiters;
+                    slots[slotName].currentWeightKg += weight;
+                    slots[slotName].currentVolumeLiters += volume;
+                }
+            }
+        }
+        return slots;
+    }
+
+    async addCharactersInWorld() {
+        if (this.characters === null) {
+            throw new Error("No characters missing to add to the world");
+        } else if (!this.characterImportResolver) {
+            throw new Error("Character import resolver not set");
+        } else if (!this.scriptImportResolver) {
+            throw new Error("Script import resolver not set");
+        } else if (!this.deObject) {
+            throw new Error("DEngine not initialized");
+        }
+
+        /**
+         * @type {Record<string, DECompleteCharacterReference>}
+         */
+        const cache = {};
+        for (const charData of this.characters) {
+            if (charData.instances < 1) {
+                continue;
+            }
+            if (!cache[charData.import]) {
+                const character = await this.characterImportResolver(charData.import);
+                if (!character) {
+                    throw new Error(`Failed to import character ${charData.name} from ${charData.import}`);
+                }
+                cache[charData.import] = character.character;
+                // @ts-ignore
+                this.deObject.scriptSources.push(...character.scriptSources);
+            }
+
+            let weight = cache[charData.import].weightKg;
+            let volume = weight; // approximate 1kg = 1 liter
+            weight += cache[charData.import].carryingCapacityKg;
+            volume += cache[charData.import].carryingCapacityLiters;
+
+            // hopefully we can find a spot for them, we add all their potential
+            // weight and volume requirements in case some script gives
+            // them stuff as they spawn in that location
+
+            for (let i = 0; i < charData.instances; i++) {
+                const potentialSpawnLocations = (charData.spawnLocations.length > 0 ?
+                    charData.spawnLocations :
+                    Object.keys(this.deObject.world.locations));
+
+                if (charData.spawnLocations.length > 0 && charData.spawnSpreadToChildrenLocations) {
+                    // we need to add all child locations of the specified spawn locations
+                    /**
+                     * 
+                     * @param {string} locationName 
+                     */
+                    const addAllChildrenOf = (locationName) => {
+                        for (const locName in this.deObject?.world.locations) {
+                            const locObj = this.deObject.world.locations[locName];
+                            if (locObj.parent === locationName) {
+                                if (!potentialSpawnLocations.includes(locName)) {
+                                    potentialSpawnLocations.push(locName);
+                                }
+                                // recursively add children of this location
+                                addAllChildrenOf(locName);
+                            }
+                        }
+                    }
+                    for (const locName of charData.spawnLocations) {
+                        addAllChildrenOf(locName);
+                    }
+                }
+
+                const viableSlotsAtLocation = potentialSpawnLocations.map(locName => {
+                    const approx = this.getRemainingCapacityInLocationApprox(locName);
+                    const viableSlots = [];
+                    for (const slotName in approx) {
+                        if (approx[slotName].maxWeightKg - approx[slotName].currentWeightKg >= weight &&
+                            approx[slotName].maxVolumeLiters - approx[slotName].currentVolumeLiters >= volume) {
+                            viableSlots.push(slotName);
+                        }
+                    }
+                    return { location: locName, viableSlots, likelihood: viableSlots.length };
+                }).filter(locInfo => locInfo.viableSlots.length > 0);
+
+                if (!viableSlotsAtLocation || viableSlotsAtLocation.length === 0) {
+                    throw new Error(`Failed to find a viable spawn location and slot for character ${charData.name} instance number ${i + 1}`);
+                }
+
+                // pick one at random
+                const locationToSpawn = weightedRandomByLikelihood(viableSlotsAtLocation);
+
+                if (!locationToSpawn) {
+                    throw new Error(`Failed to pick a spawn location for character ${charData.name} instance number ${i + 1}`);
+                }
+
+                // now we are going to pick a slot at random
+                const slotsToSpawn = locationToSpawn.viableSlots.filter((slot) => {
+                    return charData.spawnLocationSlots.length > 0 ? charData.spawnLocationSlots.includes(slot) : true
+                });
+
+                if (!slotsToSpawn || slotsToSpawn.length === 0) {
+                    throw new Error(`Failed to pick a spawn slot for character ${charData.name} instance number ${i + 1} at location ${locationToSpawn.location},
+                        filtering of slots by spawnLocationSlots resulted in no viable slots, available slots were: ${locationToSpawn.viableSlots.join(", ")},
+                        requested spawnLocationSlots were: ${charData.spawnLocationSlots.join(", ")}`);
+                }
+
+                // pick one slot at random
+                const finalSlotToSpawn = slotsToSpawn[Math.floor(Math.random() * slotsToSpawn.length)];
+
+                if (charData.instances === 1) {
+                    const characterToWorkWith = deepCopy(cache[charData.import]);
+                    characterToWorkWith.name = charData.name;
+                    characterToWorkWith.properties = {
+                        ...characterToWorkWith.properties,
+                        ...charData.properties,
+                    };
+                    this.addCharacter(characterToWorkWith, [], locationToSpawn.location, finalSlotToSpawn);
+                } else {
+                    // now we need to get a name pool based on the location
+                    const locationObj = this.deObject.world.locations[locationToSpawn.location];
+
+                    const defaultNamePool = this.deObject.allNames;
+                    let selectedNamePool = defaultNamePool;
+
+                    /**
+                     * @param {DEStatefulLocationDefinition} locationObj
+                     */
+                    const getNamePoolForLocation = (locationObj) => {
+                        if (locationObj.namePool) {
+                            selectedNamePool = locationObj.namePool;
+                            return;
+                        }
+
+                        // find a parent location with a name pool
+                        if (locationObj.parent) {
+                            const parentLocationObj = this.deObject?.world.locations[locationObj.parent];
+                            if (parentLocationObj) {
+                                getNamePoolForLocation(parentLocationObj);
+                            }
+                        }
+                    }
+                    getNamePoolForLocation(locationObj);
+
+                    const gender = cache[charData.import].gender;
+
+                    // now we need to get a name from the selected name pool
+                    let namePicked = null;
+                    const pickName = () => {
+                        let poolToUse = gender === "male" ? selectedNamePool.mal :
+                            gender === "female" ? selectedNamePool.fem : selectedNamePool.amb;
+
+                        // give it a 0.15 chance to pick the ambiguous pool if not ambiguous already
+                        if (gender !== "ambiguous" && Math.random() < 0.15) {
+                            poolToUse = selectedNamePool.amb;
+                        }
+
+                        let availableNames = poolToUse.filter(name => {
+                            // ensure the name is not already used by another character
+                            if (this.deObject?.characters[name]) {
+                                return false;
+                            }
+                            return true;
+                        });
+
+                        if (availableNames.length === 0 && selectedNamePool !== defaultNamePool) {
+                            // try again with the default pool
+                            selectedNamePool = defaultNamePool;
+                            pickName();
+                            return;
+                        } else if (availableNames.length === 0) {
+                            throw new Error(`Failed to pick a name for character ${charData.name} instance number ${i + 1}, no available names left in the name pool.`);
+                        } else {
+                            namePicked = availableNames[Math.floor(Math.random() * availableNames.length)];
+                        }
+                    }
+
+                    const characterToWorkWith = deepCopy(cache[charData.import]);
+                    characterToWorkWith.name = namePicked;
+                    characterToWorkWith.properties = {
+                        ...characterToWorkWith.properties,
+                        ...charData.properties,
+                    };
+                    this.addCharacter(characterToWorkWith, [], locationToSpawn.location, finalSlotToSpawn);
+                }
+            }
+        }
+    }
+
+    async initializeWorld() {
+        if (!this.deObject) {
+            throw new Error("DEngine not initialized");
+        } else if (!this.characterImportResolver) {
+            throw new Error("Character import resolver not set");
+        } else if (!this.scriptImportResolver) {
+            throw new Error("Script import resolver not set");
+        }
+
+        this.refreshCharacterStates();
 
         // now let's check that all function are defined
         if (!this.deObject.world.hasInitializedWorld) {
             await this.patchScripts();
+            this.refreshCharacterStates();
             await this.runAllWorldCreationScripts();
+            this.refreshCharacterStates();
+            await this.addCharactersInWorld();
+            this.refreshCharacterStates();
             await this.runAllSpawnScripts();
             this.deleteOrphanedScriptSources();
         }
 
-        this.checkDEObjectIntegrity(true);
         this.refreshCharacterStates();
+        this.checkDEObjectIntegrity(true);
+
+        this.deObject.world.hasInitializedWorld = true;
     }
 
     async prepareNextCycle() {
@@ -792,16 +1152,13 @@ export class DEngine {
             throw new Error("DEngine not initialized");
         } else if (!this.deObject.world.hasInitializedWorld) {
             throw new Error("DEngine world not initialized");
+        } else if (!this.deObject.world.hasStartedScene) {
+            throw new Error("DEngine world scene not started");
         }
 
         this.refreshCharacterStates();
         this.checkDEObjectIntegrity();
-
-        if (!this.deObject.world.hasStartedScene) {
-            // first time setup of the weather in the world
-            this.rerollWorldWeather();
-            this.startScene();
-        }
+        this.rerollWorldWeather();
     }
 
     /**
@@ -815,7 +1172,7 @@ export class DEngine {
             throw new Error("DEngine not initialized");
         }
 
-        if (!location.ownWeatherSystem) {
+        if (!location.ownWeatherSystem || location.ownWeatherSystem.length === 0) {
             if (parentLocation) {
                 location.currentWeather = parentLocation.currentWeather;
                 location.currentWeatherHasBeenOngoingFor = parentLocation.currentWeatherHasBeenOngoingFor;
@@ -950,15 +1307,19 @@ export class DEngine {
             throw new Error(`Character state for ${characterName} not found.`);
         }
         const locationName = characterState.location;
-        const slotName = characterState.locationSlot;
 
         const location = this.deObject.world.locations[locationName];
         if (!location) {
             throw new Error(`Location ${locationName} not found.`);
         }
-        const locationSlot = location.slots[slotName];
-        if (!locationSlot) {
-            throw new Error(`Location slot ${slotName} not found in location ${locationName}.`);
+        const slotNames = Object.keys(location.slots);
+        let noItemsInAnySlot = true;
+        for (const slotName of slotNames) {
+            const slot = location.slots[slotName];
+            if (slot.items.length > 0) {
+                noItemsInAnySlot = false;
+                break;
+            }
         }
 
         let message = "Items at the location:\n";
@@ -977,11 +1338,15 @@ export class DEngine {
                 listItems(space + "  ", containedItem, ", contained by: " + item.name + extraMessage);
             }
         }
-        if (locationSlot.items.length === 0) {
+        if (noItemsInAnySlot) {
             message += "No items available at the location.\n";
         } else {
-            for (const item of locationSlot.items) {
-                listItems("", item, "");
+            for (const slotName of slotNames) {
+                const slot = location.slots[slotName];
+                message += `\nItems at ${slotName}:\n`;
+                for (const item of slot.items) {
+                    listItems("", item, "");
+                }
             }
         }
 
@@ -989,8 +1354,8 @@ export class DEngine {
         for (const otherCharName in this.deObject.stateFor) {
             if (otherCharName === characterName) continue;
             const otherCharState = this.deObject.stateFor[otherCharName];
-            if (otherCharState.location === locationName && otherCharState.locationSlot === slotName) {
-                message += `\n\nItems carried by ${otherCharName}:\n`;
+            if (otherCharState.location === locationName) {
+                message += `\nItems carried by ${otherCharName}:\n`;
                 if (otherCharState.wearing.length === 0) {
                     message += `${otherCharName} Is currently naked.\n`;
                 } else {
@@ -1014,7 +1379,7 @@ export class DEngine {
         }
 
         // now let's do our own character
-        message += `\n\nItems carried by ${characterName}:\n`;
+        message += `\nItems carried by ${characterName}:\n`;
         if (characterState.wearing.length === 0) {
             message += `${characterName} Is currently naked.\n`;
         } else {
@@ -1059,7 +1424,7 @@ export class DEngine {
         if (!characterState) {
             throw new Error(`Character state for ${characterName} not found.`);
         }
-        const hasItemsCoveringNakedness = characterState.wearing.some(item => item.coversNakedness);
+        const hasItemsCoveringNakedness = characterState.wearing.some(item => item.wearableProperties && item.wearableProperties.coversNakedness);
         let finalDescription = hasItemsCoveringNakedness ? character.shortDescription : character.shortDescriptionNaked || character.shortDescription;
         if (!finalDescription.endsWith(".")) {
             finalDescription += ".";
@@ -1163,9 +1528,7 @@ export class DEngine {
             finalDescription += `\n${character.name} is carrying characters: ` + this.deObject.functions.format_and(this.deObject, null, characterState.carryingCharacters) + ".";
         }
 
-        if (char)
-
-            return finalDescription;
+        return finalDescription;
     }
 
     /**
@@ -1192,14 +1555,12 @@ export class DEngine {
     }
 
     /**
+     * @param {"can" | "cannot"} canOrCannot
      * @param {string} characterName 
      * @param {string} locationName 
-     * @param {string} locationSlotName
-     * @param {boolean} includeCharacters
-     * @param {boolean} excludeItems
      * @returns 
      */
-    getItemsCharacterCannotCarryWithReasons(characterName, locationName, locationSlotName, includeCharacters, excludeItems) {
+    getItemsCharacterMayWearWithReasons(canOrCannot, characterName, locationName) {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         }
@@ -1214,23 +1575,159 @@ export class DEngine {
         if (!location) {
             throw new Error(`Location ${locationName} not found.`);
         }
-        const locationSlot = location.slots[locationSlotName];
-        if (!locationSlot) {
-            throw new Error(`Location slot ${locationSlotName} not found in location ${locationName}.`);
+        const characterState = this.deObject.stateFor[characterName];
+        if (!characterState) {
+            throw new Error(`Character state for ${characterName} not found.`);
+        }
+
+        /**
+         * @type {Set<string}
+         */
+        const itemsCharacterCannotWearWReasons = new Set();
+
+        let remainingCarryingCapacity = character.carryingCapacityKg;
+
+        /**
+             * @param {DEItem[]} itemList 
+             */
+        const processItemList = (itemList) => {
+            for (const carriedItem of itemList) {
+                remainingCarryingCapacity -= carriedItem.weightKg * carriedItem.amount;
+
+                // the added and taken volume are irrelevant because
+                // these are already inside another container
+                processItemList(carriedItem.containing);
+            }
+        }
+        /**
+         * @param {string[]} characterList
+         */
+        const processCharacterList = (characterList) => {
+            for (const carriedCharacterName of characterList) {
+                const carriedCharacterState = this.deObject?.stateFor[carriedCharacterName];
+                if (carriedCharacterState === undefined) {
+                    continue;
+                }
+                const characterWeight = this.deObject?.characters[carriedCharacterName]?.weightKg || 0;
+                remainingCarryingCapacity -= characterWeight;
+                processItemList(carriedCharacterState.carrying);
+                processItemList(carriedCharacterState.wearing);
+                processCharacterList(carriedCharacterState.carryingCharacters);
+            }
+        }
+        processCharacterList(characterState.carryingCharacters);
+        processItemList(characterState.carrying);
+        processItemList(characterState.wearing);
+
+        let characterCurrentVolumeApprox = character.weightKg;
+        for (const wornItem of characterState.wearing) {
+            if (!wornItem.wearableProperties) continue;
+            characterCurrentVolumeApprox += wornItem.wearableProperties.extraBodyVolumeWhenWornLiters * wornItem.amount;
+        }
+
+        /**
+         * @param {DEItem} item
+         * @param {string} extraMessage
+         */
+        const processItemAndReason = (item, extraMessage) => {
+            let reason = null;
+            if (!item.wearableProperties) {
+                reason = `item is not wearable`;
+            } else if (item.weightKg > character.carryingCapacityKg) {
+                reason = `item is too heavy (${item.weightKg}kg) for ${character.name}'s strength`;
+            } else if (item.weightKg - item.wearableProperties.addedCarryingCapacityKg > remainingCarryingCapacity) {
+                reason = `${character.name} is already carrying too much weight to wear this item, needs to wear ${item.weightKg - item.wearableProperties.addedCarryingCapacityKg}kg, remaining capacity is ${remainingCarryingCapacity}kg`;
+            } else if (item.wearableProperties.volumeRangeMinLiters > characterCurrentVolumeApprox) {
+                reason = `${character.name} is too big to wear this item, minimum volume is ${item.wearableProperties.volumeRangeMinLiters}L, character current volume with is approximated at ${characterCurrentVolumeApprox}L`;
+            } else if (characterCurrentVolumeApprox > item.wearableProperties.volumeRangeMaxLiters) {
+                reason = `${character.name} is too small to wear this item, maximum volume is ${item.wearableProperties.volumeRangeMaxLiters}L, character current volume is approximated at ${characterCurrentVolumeApprox}L`;
+            } else if (item.nonPickable) {
+                reason = `${character.name} cannot wear an item that is non-pickable`;
+            }
+
+            if (reason && canOrCannot === "cannot") {
+                if (item.amount >= 2) {
+                    itemsCharacterCannotWearWReasons.add(`1 of ${item.name}: ${reason}`);
+                } else {
+                    itemsCharacterCannotWearWReasons.add(`${item.name}: ${reason}`);
+                }
+            } else if (!reason && canOrCannot === "can") {
+                if (item.amount >= 2) {
+                    itemsCharacterCannotWearWReasons.add(`1 of ${item.name}: can be worn`);
+                } else {
+                    itemsCharacterCannotWearWReasons.add(`${item.name}: can be worn`);
+                }
+            }
+
+            for (const containedItem of item.containing) {
+                processItemAndReason(containedItem, ` (contained by ${item.name}${extraMessage})`);
+            }
+        }
+
+        for (const locationSlotName in location.slots) {
+            const locationSlot = location.slots[locationSlotName];
+            for (const item of locationSlot.items) {
+                processItemAndReason(item, "");
+            }
+        }
+
+        for (const otherCharName in this.deObject.stateFor) {
+            if (otherCharName === characterName) continue;
+            const otherCharState = this.deObject.stateFor[otherCharName];
+            if (otherCharState.location === locationName) {
+                // check their wearing items
+                for (const item of otherCharState.wearing) {
+                    processItemAndReason(item, ` (worn by ${otherCharName})`);
+                }
+
+                // check their carried items
+                for (const item of otherCharState.carrying) {
+                    processItemAndReason(item, ` (carried by ${otherCharName})`);
+                }
+            }
+        }
+
+        return Array.from(itemsCharacterCannotWearWReasons);
+    }
+
+    /**
+     * @param {"can" | "cannot"} canOrCannot
+     * @param {string} characterName 
+     * @param {string} locationName 
+     * @param {boolean} includeCharacters
+     * @param {boolean} excludeItems
+     * @returns 
+     */
+    getItemsCharacterMayCarryWithReasons(canOrCannot, characterName, locationName, includeCharacters, excludeItems) {
+        if (!this.deObject) {
+            throw new Error("DEngine not initialized");
+        }
+        if (this.invalidCharacterStates) {
+            throw new Error("DEngine has invalid character states, cannot get items character cannot carry");
+        }
+        const character = this.deObject.characters[characterName];
+        if (!character) {
+            throw new Error(`Character ${characterName} not found.`);
+        }
+        const location = this.deObject.world.locations[locationName];
+        if (!location) {
+            throw new Error(`Location ${locationName} not found.`);
         }
         const characterState = this.deObject.stateFor[characterName];
         if (!characterState) {
             throw new Error(`Character state for ${characterName} not found.`);
         }
-        const itemsCharacterCannotCarryWReasons = [];
+        const itemsCharacterCannotCarryWReasons = new Set();
 
         let remainingCarryingCapacity = character.carryingCapacityKg;
         let remainingCarryingVolume = character.carryingCapacityLiters;
 
         /**
              * @param {DEItem[]} itemList 
+             * @param {boolean} isOurOwnCharacterWearing
+             * @param {boolean} isOtherCharacterWearing
              */
-        const processItemList = (itemList) => {
+        const processItemList = (itemList, isOurOwnCharacterWearing = false, isOtherCharacterWearing = false) => {
             let takenVolume = 0;
             let addedVolume = 0;
             for (const carriedItem of itemList) {
@@ -1239,6 +1736,22 @@ export class DEngine {
                     addedVolume += carriedItem.capacityLiters * carriedItem.amount;
                 }
                 takenVolume += carriedItem.volumeLiters * carriedItem.amount;
+
+                if (isOurOwnCharacterWearing && carriedItem.wearableProperties) {
+                    // wearing an item does not take volume, but it can add volume capacity
+                    if (carriedItem.wearableProperties.addedCarryingCapacityLiters) {
+                        addedVolume += carriedItem.wearableProperties.addedCarryingCapacityLiters * carriedItem.amount;
+                    }
+                    if (carriedItem.wearableProperties.addedCarryingCapacityKg) {
+                        remainingCarryingCapacity += carriedItem.wearableProperties.addedCarryingCapacityKg * carriedItem.amount;
+                    }
+                }
+                if (isOtherCharacterWearing && carriedItem.wearableProperties) {
+                    // wearing an item does not take volume, but it can add volume capacity
+                    if (carriedItem.wearableProperties.extraBodyVolumeWhenWornLiters) {
+                        takenVolume += carriedItem.wearableProperties.extraBodyVolumeWhenWornLiters * carriedItem.amount;
+                    }
+                }
 
                 // the added and taken volume are irrelevant because
                 // these are already inside another container
@@ -1268,7 +1781,7 @@ export class DEngine {
                 const characterVolumes = processItemList(carriedCharacterState.carrying);
                 takenVolume += characterVolumes.takenVolume;
                 // now consider the clothes they are wearing
-                const characterVolumesWearing = processItemList(carriedCharacterState.wearing);
+                const characterVolumesWearing = processItemList(carriedCharacterState.wearing, false, true);
                 takenVolume += characterVolumesWearing.takenVolume;
                 // the same is true for the characters they are carrying
                 const characterCharactersVolumes = processCharacterList(carriedCharacterState.carryingCharacters);
@@ -1281,7 +1794,7 @@ export class DEngine {
         const carryingVolumes = processItemList(characterState.carrying);
         remainingCarryingVolume -= (carryingVolumes.takenVolume - carryingVolumes.addedVolume);
         remainingCarryingVolume -= characterCharactersVolumes.takenVolume;
-        const volumeClothes = processItemList(characterState.wearing);
+        const volumeClothes = processItemList(characterState.wearing, true);
         remainingCarryingVolume += volumeClothes.addedVolume; // clothes don't count towards carrying volume, becuase they are worn
         // so we only consider the extra volume they add, not the volume they take
 
@@ -1291,23 +1804,29 @@ export class DEngine {
          */
         const processItemAndReason = (item, extraMessage) => {
             let reason = null;
-            if (item.weightKg > remainingCarryingCapacity) {
-                reason = `item is too heavy (${item.weightKg}kg) for character strength`;
+            if (item.weightKg > character.carryingCapacityKg) {
+                reason = `item is too heavy (${item.weightKg}kg) for ${character.name}'s strength`;
             } else if (item.volumeLiters > character.carryingCapacityLiters) {
-                reason = `item is too large (${item.volumeLiters}L) for character carrying capacity`;
+                reason = `item is too large (${item.volumeLiters}L) for ${character.name}'s carrying capacity`;
             } else if (item.weightKg > remainingCarryingCapacity) {
-                reason = `the character is already carrying too much weight to lift this item`;
+                reason = `${character.name} is already carrying too much weight to lift this item, weights ${item.weightKg}kg, remaining capacity is ${remainingCarryingCapacity}kg`;
             } else if (item.volumeLiters > remainingCarryingVolume) {
-                reason = `the character is already carrying too much volume to fit this item`;
+                reason = `${character.name} is already carrying too much volume to fit this item, volume is ${item.volumeLiters}L, remaining capacity is ${remainingCarryingVolume}L`;
             } else if (item.nonPickable) {
-                reason = `item is marked as non-pickable`;
+                reason = `${character.name} cannot pick it up because the item is marked as non-pickable`;
             }
 
-            if (reason) {
+            if (reason && canOrCannot === "cannot") {
                 if (item.amount >= 2) {
-                    itemsCharacterCannotCarryWReasons.push(`1 of ${item.name}: ${reason}`);
+                    itemsCharacterCannotCarryWReasons.add(`1 of ${item.name}: ${reason}`);
                 } else {
-                    itemsCharacterCannotCarryWReasons.push(`${item.name}: ${reason}`);
+                    itemsCharacterCannotCarryWReasons.add(`${item.name}: ${reason}`);
+                }
+            } else if (!reason && canOrCannot === "can") {
+                if (item.amount >= 2) {
+                    itemsCharacterCannotCarryWReasons.add(`1 of ${item.name}: can be carried`);
+                } else {
+                    itemsCharacterCannotCarryWReasons.add(`${item.name}: can be carried`);
                 }
             }
 
@@ -1317,13 +1836,17 @@ export class DEngine {
         }
 
         if (!excludeItems) {
-            for (const item of locationSlot.items) {
-                processItemAndReason(item, "");
+            for (const locationSlotName in location.slots) {
+                const locationSlot = location.slots[locationSlotName];
+                for (const item of locationSlot.items) {
+                    processItemAndReason(item, "");
+                }
             }
+
             for (const otherCharName in this.deObject.stateFor) {
                 if (otherCharName === characterName) continue;
                 const otherCharState = this.deObject.stateFor[otherCharName];
-                if (otherCharState.location === locationName && otherCharState.locationSlot === locationSlotName) {
+                if (otherCharState.location === locationName) {
                     // check their wearing items
                     for (const item of otherCharState.wearing) {
                         processItemAndReason(item, ` (worn by ${otherCharName})`);
@@ -1341,30 +1864,34 @@ export class DEngine {
             for (const otherCharName in this.deObject.stateFor) {
                 if (otherCharName === characterName) continue;
                 const otherCharState = this.deObject.stateFor[otherCharName];
-                if (otherCharState.location === locationName && otherCharState.locationSlot === locationSlotName) {
+                if (otherCharState.location === locationName) {
                     let reason = null;
                     const otherCharacter = this.deObject.characters[otherCharName];
                     if (!otherCharacter) {
                         continue;
                     }
-                    if (otherCharacter.weightKg > remainingCarryingCapacity) {
-                        reason = `character is too heavy (${otherCharacter.weightKg}kg) for character strength`;
+                    if (otherCharacter.weightKg > character.carryingCapacityKg) {
+                        reason = `${otherCharacter.name} is too heavy (${otherCharacter.weightKg}kg) for ${character.name}'s strength`;
+                    } else if (otherCharacter.weightKg > character.carryingCapacityLiters) {
+                        reason = `${otherCharacter.name} is too large (${otherCharacter.weightKg}L) for ${character.name}'s carrying capacity`;
                     } else if (otherCharacter.weightKg > remainingCarryingCapacity) {
-                        reason = `the character is already carrying too much weight to lift this character`;
+                        reason = `${character.name} is already carrying too much weight to lift ${otherCharacter.name}`;
 
                         // assume the character's volume is equal to their weight in liters
                     } else if (otherCharacter.weightKg > remainingCarryingVolume) {
-                        reason = `the character is already carrying too much volume to fit this character`;
+                        reason = `${character.name} is already carrying too much volume to carry ${otherCharacter.name}`;
                     }
-                    if (reason) {
-                        itemsCharacterCannotCarryWReasons.push(`${otherCharacter.name}: ${reason}`);
+                    if (reason && canOrCannot === "cannot") {
+                        itemsCharacterCannotCarryWReasons.add(`${otherCharacter.name}: ${reason}`);
+                    } else if (!reason && canOrCannot === "can") {
+                        itemsCharacterCannotCarryWReasons.add(`${otherCharacter.name}: can be carried`);
                     }
                 }
 
             }
         }
 
-        return itemsCharacterCannotCarryWReasons;
+        return Array.from(itemsCharacterCannotCarryWReasons);
     }
 
     /**
@@ -1443,6 +1970,10 @@ export class DEngine {
                 rule: `RULE: ${characterName} cannot spawn characters out of thin air, all characters must already exist in the location or be introduced through valid means.` + ruleBreakMessage,
                 ruleExpect: "NO",
             },
+            {
+                rule: `RULE: ${characterName} cannot interact or contradict the Story Master's narration or descriptions, ` + ruleBreakMessage,
+                ruleExpect: "NO",
+            },
             ...otherRulesProcessed.map(rule => ({
                 rule: "RULE: " + (rule.endsWith(".") ? rule + ruleBreakMessage : rule + "." + ruleBreakMessage),
                 ruleExpect: "NO",
@@ -1453,8 +1984,8 @@ export class DEngine {
             charState.locationSlot,
         ).map(item => item.name);
         const itemsDescribedAtLocation = this.describeItemsAvailableToCharacterForInference(characterName);
-        const itemsCharacterCannotCarryWReasons = this.getItemsCharacterCannotCarryWithReasons(characterName, charState.location, charState.locationSlot, false, false);
-        const charactersCharacterCannotCarryWReasons = this.getItemsCharacterCannotCarryWithReasons(characterName, charState.location, charState.locationSlot, true, true);
+        const itemsCharacterCannotCarryWReasons = this.getItemsCharacterMayCarryWithReasons("cannot", characterName, charState.location, false, false);
+        const charactersCharacterCannotCarryWReasons = this.getItemsCharacterMayCarryWithReasons("cannot", characterName, charState.location, true, true);
         const specialRules = [
             nonPickableItems ? {
                 rule: `RULE: ${characterName} cannot grab or pick up items that are marked as non-pickable in the location, the list of non pickable items are: ` + nonPickableItems.join(", ") + `\n\nIf ${characterName} attempts to pick up any of these items, respond with YES and explain why they cannot pick it up, otherwise respond with NO\n\nHas ${characterName} attempted to pick up any of these items?`,
@@ -1520,6 +2051,7 @@ export class DEngine {
 
     informDEObjectUpdated() {
         this.listeners.forEach(listener => {
+            // @ts-ignore
             listener(this.deObject)
         });
     }
@@ -2025,7 +2557,7 @@ export class DEngine {
             id: crypto.randomUUID(),
             isCharacter: false,
             isDebugMessage: true,
-            isSystemMessage: true,
+            isStoryMasterMessage: true,
             isUser: false,
             isRejectedMessage: false,
             // @ts-ignore
@@ -2088,7 +2620,7 @@ export class DEngine {
                         id: crypto.randomUUID(),
                         isCharacter: false,
                         isDebugMessage: true,
-                        isSystemMessage: true,
+                        isStoryMasterMessage: false,
                         isUser: false,
                         isRejectedMessage: false,
                         // @ts-ignore
@@ -2123,7 +2655,7 @@ export class DEngine {
             id: crypto.randomUUID(),
             isCharacter: false,
             isDebugMessage: true,
-            isSystemMessage: true,
+            isStoryMasterMessage: false,
             isUser: false,
             isRejectedMessage: false,
             // @ts-ignore
@@ -2222,11 +2754,10 @@ export class DEngine {
      * this will ensure the LLM can handle the context window properly without losing important information
      * 
      * @param {DECompleteCharacterReference} character
-     * @param {number} depth
-     * @param {boolean} limitToOneCycle
-     * @return {Promise<Array<{name: string, message: string}>>}
+     * @param {{limitToOneCycle: boolean, depth: number, sinceMessageId?: string | null, excludeFrom?: string[] | null, includeDebugMessages?: boolean | null, includeRejectedMessages?: boolean | null}} options
+     * @return {Promise<Array<{name: string, message: string, id: string, conversationId: string | null, debug: boolean, rejected: boolean}>>}
      */
-    async getHistoryForCharacterForInference(character, depth, limitToOneCycle) {
+    async getHistoryForCharacter(character, options) {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         } else if (this.invalidCharacterStates) {
@@ -2234,7 +2765,8 @@ export class DEngine {
         } else if (!this.deObject.stateFor[character.name]) {
             throw new Error(`Character state for ${character.name} not found.`);
         } else if (!this.pseudoConversationSummaryGenerator) {
-            throw new Error("Pseudo conversation summary generator not initialized.");
+            // TODO reenable this error once we have a proper LLM integration
+            // throw new Error("Pseudo conversation summary generator not initialized.");
         }
 
         const characterState = this.deObject.stateFor[character.name];
@@ -2256,7 +2788,7 @@ export class DEngine {
         const consumedConversationIds = new Set();
 
         /**
-         * @type {Array<{name: string, message: string}>}
+         * @type {Array<{name: string, message: string, id: string, conversationId: string | null, debug: boolean, rejected: boolean}>}
          */
         const historyMessages = [];
 
@@ -2268,7 +2800,7 @@ export class DEngine {
             // thisConversationEndTime
             let message = `From ${this.makeTimestamp(fromTime)} to ${this.makeTimestamp(statesAccumulatedFromTime)}, ` + character.name;
             if (statesAccumulated.size > 0) {
-                message += ` was in the following states: `;
+                message += ` finds ${this.deObject?.functions.format_reflexive(this.deObject, character, character.name)} in the following states: `;
                 let statesList = "";
                 statesAccumulated.forEach(s => {
                     if (statesList.length > 0) {
@@ -2279,12 +2811,16 @@ export class DEngine {
                 message += statesList;
                 message += ` while at location: "${statesAccumulatedAtLocation || "unknown location"}".`;
             } else {
-                message += ` was at location: "${statesAccumulatedAtLocation || "unknown location"}".`;
+                message += ` is at location: "${statesAccumulatedAtLocation || "unknown location"}".`;
             }
 
             historyMessages.push({
                 name: "Story Master",
                 message: message,
+                id: `story-master-${fromTime.time}`,
+                conversationId: null,
+                debug: false,
+                rejected: false,
             });
 
             statesAccumulated = new Set();
@@ -2304,13 +2840,19 @@ export class DEngine {
                     // who knows what happened
                     consumeAccumulatedStatesAndLocations(state.time);
 
-                    if (depth > 0 && historyMessages.length >= depth) {
+                    if (
+                        (options.depth > 0 && historyMessages.length >= options.depth) ||
+                        options.sinceMessageId === historyMessages[historyMessages.length - 1]?.id
+                    ) {
+                        if (options.sinceMessageId === historyMessages[historyMessages.length - 1]?.id) {
+                            historyMessages.pop();
+                        }
                         break;
                     }
                 }
 
                 // process the conversation messages
-                const conversationMessages = currentConversationObject.messages.filter(msg => !msg.isRejectedMessage && !msg.isDebugMessage &&
+                const conversationMessages = currentConversationObject.messages.filter(msg => (options.includeRejectedMessages || !msg.isRejectedMessage) && (options.includeDebugMessages || !msg.isDebugMessage) &&
                     (!msg.canOnlyBeSeenByCharacter || msg.canOnlyBeSeenByCharacter === character.name));
 
                 const conversationLocation = currentConversationObject.location || "an unknown location";
@@ -2328,33 +2870,67 @@ export class DEngine {
                             currentConversationObject,
                         );
                     }
+                    const participantsExcludingCharacter = currentConversationObject.participants.filter(p => p !== character.name);
+                    const timeMark = this.makeTimestamp(conversationStartTime);
+                    const withOrAlone = participantsExcludingCharacter.length === 0 ? "on their own" : "with " + this.deObject.functions.format_and(this.deObject, null, participantsExcludingCharacter);
                     historyMessages.push({
                         name: "Story Master",
-                        message: "At " + this.makeTimestamp(conversationStartTime) + ", " + character.name + " is at " + conversationLocation + " with " +
-                            this.deObject.functions.format_and(this.deObject, null, currentConversationObject.participants.filter(p => p !== character.name)) + ".\n\nConversation summary: " + currentConversationObject.summary,
+                        message: (timeMark === "Now" ? "Right Now" : "At " + timeMark) + ", " + character.name + " is at " + conversationLocation + " " + withOrAlone + ". Conversation summary: " + currentConversationObject.summary,
+                        id: `story-master-${state.conversationId}-summary`,
+                        conversationId: state.conversationId,
+                        debug: false,
+                        rejected: false,
                     });
-                    if (depth > 0 && historyMessages.length >= depth || limitToOneCycle) {
+                    if (
+                        (
+                            options.depth > 0 &&
+                            historyMessages.length >= options.depth
+                        ) || options.limitToOneCycle || options.sinceMessageId === historyMessages[historyMessages.length - 1]?.id
+                    ) {
                         // we assume the character talked during this pseudo conversation
+                        if (options.sinceMessageId === historyMessages[historyMessages.length - 1]?.id) {
+                            historyMessages.pop();
+                        }
                         break;
                     }
                 } else {
                     for (const message of conversationMessages.reverse()) {
+                        if (options.excludeFrom && options.excludeFrom.includes(message.id)) {
+                            continue;
+                        }
                         historyMessages.push({
                             name: message.sender,
                             message: message.content,
+                            id: message.id,
+                            conversationId: state.conversationId,
+                            debug: message.isDebugMessage,
+                            rejected: message.isRejectedMessage,
                         });
-                        if (depth > 0 && historyMessages.length >= depth || (limitToOneCycle && message.sender === character.name)) {
+                        if ((options.depth > 0 && historyMessages.length >= options.depth) || (options.limitToOneCycle && message.sender === character.name) || options.sinceMessageId === historyMessages[historyMessages.length - 1]?.id) {
+                            if (options.sinceMessageId === historyMessages[historyMessages.length - 1]?.id) {
+                                historyMessages.pop();
+                            }
                             break;
                         }
                     }
 
                     if (!firstMessageIsStoryMaster) {
+                        const participantsExcludingCharacter = currentConversationObject.participants.filter(p => p !== character.name);
+                        const timeMark = this.makeTimestamp(conversationStartTime);
+                        const timeMarkDetailed = timeMark === "Now" ? "right now" : "at " + timeMark;
+                        const withOrAlone = participantsExcludingCharacter.length === 0 ? "on their own" : "with " + this.deObject.functions.format_and(this.deObject, null, participantsExcludingCharacter);
                         historyMessages.push({
                             name: "Story Master",
-                            message: "The following interaction took place at " + this.makeTimestamp(conversationStartTime) + ", " + character.name + " is at " + conversationLocation + " with " +
-                                this.deObject.functions.format_and(this.deObject, null, currentConversationObject.participants.filter(p => p !== character.name)) + ".",
+                            message: "The following interaction took place " + timeMarkDetailed + ", " + character.name + " is at " + conversationLocation + withOrAlone + ".",
+                            id: `story-master-${state.conversationId}-interaction-info`,
+                            conversationId: state.conversationId,
+                            debug: false,
+                            rejected: false,
                         });
-                        if (depth > 0 && historyMessages.length >= depth || limitToOneCycle) {
+                        if ((options.depth > 0 && historyMessages.length >= options.depth) || options.sinceMessageId === historyMessages[historyMessages.length - 1]?.id) {
+                            if (options.sinceMessageId === historyMessages[historyMessages.length - 1]?.id) {
+                                historyMessages.pop();
+                            }
                             break;
                         }
                     }
@@ -2366,7 +2942,7 @@ export class DEngine {
                 if (statesAccumulatedAtLocation && statesAccumulatedAtLocation !== state.location) {
                     // location changed, consume accumulated states
                     consumeAccumulatedStatesAndLocations(state.time);
-                    if (depth > 0 && historyMessages.length >= depth) {
+                    if (options.depth > 0 && historyMessages.length >= options.depth) {
                         break;
                     }
                 } else {
@@ -2381,14 +2957,21 @@ export class DEngine {
             lastStateObjectHandled = state;
         }
 
-        if (depth > 0 && historyMessages.length >= depth) {
+        if (options.depth > 0 && historyMessages.length >= options.depth || (options.sinceMessageId && historyMessages[historyMessages.length - 1]?.id === options.sinceMessageId)) {
             // reverse the messages to be from oldest to newest
+            if (options.sinceMessageId === historyMessages[historyMessages.length - 1]?.id) {
+                historyMessages.pop();
+            }
             return historyMessages.reverse();
         }
 
         // consume any remaining accumulated states
         if ((statesAccumulated.size > 0 || statesAccumulatedAtLocation) && lastStateObjectHandled) {
             consumeAccumulatedStatesAndLocations(lastStateObjectHandled.time);
+        }
+
+        if (options.sinceMessageId === historyMessages[historyMessages.length - 1]?.id) {
+            historyMessages.pop();
         }
 
         // reverse the messages to be from oldest to newest
@@ -2658,7 +3241,7 @@ export class DEngine {
                     id: crypto.randomUUID(),
                     isCharacter: false,
                     isDebugMessage: false,
-                    isSystemMessage: true,
+                    isStoryMasterMessage: true,
                     isRejectedMessage: false,
                     endTime: { ...this.deObject.currentTime },
                     startTime: { ...this.deObject.currentTime },
@@ -2819,7 +3402,7 @@ export class DEngine {
                 isCharacter: false,
                 isDebugMessage: false,
                 isUser: false,
-                isSystemMessage: true,
+                isStoryMasterMessage: true,
                 isRejectedMessage: false,
                 canOnlyBeSeenByCharacter: null,
             });
@@ -2830,9 +3413,15 @@ export class DEngine {
     }
 
     /**
-     * @param {string} userMessage 
+     * @param {string} userMessageOrig 
      */
-    async executeNextCycle(userMessage) {
+    async executeNextCycle(userMessageOrig) {
+        const userMessage = userMessageOrig.trim();
+
+        if (userMessage.length === 0) {
+            return;
+        }
+
         this.prepareNextCycle();
 
         if (!this.deObject) {
@@ -2842,9 +3431,20 @@ export class DEngine {
         } else if (this.executingCycle) {
             throw new Error("DEngine is already executing a cycle, cannot execute another one concurrently.");
         } else if (!this.pseudoConversationSummaryGenerator) {
-            throw new Error("DEngine has no pseudo conversation summary generator defined, cannot execute cycle.");
+            // TODO reenable this error once we have a proper LLM integration
+            // throw new Error("DEngine has no pseudo conversation summary generator defined, cannot execute cycle.");
+        }
+
+        if (this.executingCycle) {
+            throw new Error("A cycle is already being executed.");
         }
         this.executingCycle = true;
+
+        if (userMessage.startsWith("/")) {
+            await this.executeCommand(userMessage);
+            this.executingCycle = false;
+            return;
+        }
 
         const userCharacterState = this.deObject.stateFor[this.user.name];
         if (!userCharacterState) {
@@ -2872,7 +3472,7 @@ export class DEngine {
                 isCharacter: true,
                 isDebugMessage: false,
                 isUser: true,
-                isSystemMessage: false,
+                isStoryMasterMessage: false,
                 isRejectedMessage: false,
                 canOnlyBeSeenByCharacter: null,
             }
@@ -2883,6 +3483,7 @@ export class DEngine {
                 userCharacterState.history.push(userCharacterStateCopy)
                 userCharacterState.conversationId = userConversationId;
                 userCharacterState.messageId = messageToAdd.id;
+                userCharacterState.type = "INTERACTING";
                 this.deObject.conversations[userConversationId] = {
                     id: userConversationId,
                     previousConversationIdsPerParticipant: {
@@ -2928,7 +3529,7 @@ export class DEngine {
                     isCharacter: false,
                     isDebugMessage: false,
                     isUser: false,
-                    isSystemMessage: true,
+                    isStoryMasterMessage: true,
                     // make it rejected so that characters don't pick it up when they check conversations
                     isRejectedMessage: true,
                 });
@@ -3010,6 +3611,95 @@ export class DEngine {
      */
     addDEObjectUpdatedListener(listener) {
         this.listeners.push(listener);
+    }
+
+    /**
+     * @param {(obj: DEObject, conversationId: string, messageId: string, text: string) => void} listener 
+     */
+    addInferringOverConversationMessageListener(listener) {
+        this.startsToInferOverConversationMessageListeners.push(listener);
+    }
+
+    /**
+     * @param {string} commandText 
+     */
+    async executeCommand(commandText) {
+        if (!this.deObject) {
+            throw new Error("DEngine not initialized");
+        } else if (!this.user) {
+            throw new Error("DEngine has no user character defined");
+        }
+        const command = commandText.slice(1).trim().split(" ")[0].toLowerCase();
+
+        let message = "";
+        if (command === "help") {
+            message = "Available commands:\n\n"
+                + "/help - Show this help message\n";
+
+            for (const [commandName, commandValue] of Object.entries(commands)) {
+                message += `/${commandName} - ${commandValue.help}\n`;
+            }
+        } else if (commands[command]) {
+            try {
+                message = await commands[command].run(this, commandText.split(" ").slice(1));
+            } catch (error) {
+                // @ts-ignore
+                message = `Error executing command /${command}: ${error.message}`;
+            }
+        } else {
+            message = "Unknown command /" + command + ". Type /help for a list of commands.";
+        }
+
+        /**
+         * @type {DEConversationMessage}
+         */
+        const messageToAdd = {
+            sender: "Story Master",
+            content: message,
+            duration: { inMinutes: 0, inHours: 0, inDays: 0 },
+            startTime: { ...this.deObject.currentTime },
+            endTime: { ...this.deObject.currentTime },
+            id: crypto.randomUUID(),
+            isCharacter: false,
+            isDebugMessage: true,
+            isUser: false,
+            isStoryMasterMessage: true,
+            isRejectedMessage: false,
+            canOnlyBeSeenByCharacter: null,
+        };
+
+        let userConversationId = this.deObject.stateFor[this.user.name].conversationId;
+        if (!userConversationId) {
+            userConversationId = crypto.randomUUID();
+            // @ts-ignore
+            const userCharacterState = this.deObject.stateFor[this.user.name];
+            const userCharacterStateCopy = deepCopyNoHistory(userCharacterState);
+            userCharacterState.history.push(userCharacterStateCopy)
+            userCharacterState.conversationId = userConversationId;
+            userCharacterState.messageId = null;
+            userCharacterState.type = "INTERACTING";
+            this.deObject.conversations[userConversationId] = {
+                id: userConversationId,
+                previousConversationIdsPerParticipant: {
+                    [this.user.name]: null,
+                },
+                startTime: { ...this.deObject.currentTime },
+                messages: [messageToAdd],
+                participants: [this.user.name],
+                remoteParticipants: [],
+                duration: { inMinutes: 0, inHours: 0, inDays: 0 },
+                endTime: null,
+                location: userCharacterState.location,
+                pseudoConversation: false,
+                summary: null,
+                bondsAtStart: this._getFrozenBonds([this.user.name]),
+                bondsAtEnd: null,
+            };
+        } else {
+            this.deObject.conversations[userConversationId].messages.push(messageToAdd);
+        }
+
+        this.informDEObjectUpdated();
     }
 }
 
