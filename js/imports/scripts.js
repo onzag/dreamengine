@@ -31,6 +31,10 @@ export function importScript(name, type, args, script, mustReturn) {
                 char: character.name,
                 user: DE.user.name
             }
+            Object.keys(DE.functions).forEach((key) => {
+                // @ts-ignore
+                handlebarObj[key] = DE.functions[key].bind(null, DE, character);
+            });
             if (other) {
                 handlebarObj["other"] = other.name;
             }
@@ -43,10 +47,6 @@ export function importScript(name, type, args, script, mustReturn) {
             if (potentialCausant) {
                 handlebarObj["potential_causant"] = potentialCausant.name;
             }
-            Object.keys(DE.functions).forEach((key) => {
-                // @ts-ignore
-                handlebarObj[key] = DE.functions[key].bind(null, DE, character);
-            });
             const returnValue = handlebarsCompiled(handlebarObj);
             return returnValue;
         }
@@ -79,7 +79,7 @@ export function importScript(name, type, args, script, mustReturn) {
  * @returns {DEStringTemplate}
  */
 export function importScriptAsTemplate(id, name, type, script) {
-    const execute = importScript(name, type, ["DE", "character", "other", "causants", "cause", "potentialCausant"], script, "string");
+    const execute = importScript(name, type, ["DE", "char", "other", "causants", "cause", "potentialCausant"], script, "string");
     return {
         id,
         type: "template",
@@ -94,7 +94,7 @@ export function importScriptAsTemplate(id, name, type, script) {
  * @returns {DEScript}
  */
 export function importScriptAsScript(id, name, script) {
-    const execute = importScript(name, "javascript", ["DE", "character"], script, null);
+    const execute = importScript(name, "javascript", ["DE", "char"], script, null);
     return {
         id,
         type: "script",
@@ -110,7 +110,7 @@ export function importScriptAsScript(id, name, script) {
  * @returns {DEPropertyValueInCharSpace}
  */
 export function importScriptAsPropertyValueInCharacterSpace(id, name, script, type) {
-    const execute = importScript(name, type, ["DE", "character"], script, null);
+    const execute = importScript(name, type, ["DE", "char"], script, null);
     return {
         id,
         value: execute,

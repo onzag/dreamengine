@@ -617,6 +617,37 @@ export const utils = [
         }
     ],
     [
+        "is_indoors character:string -> boolean",
+        "Boolean indicating if the character is currently indoors",
+        "true or false",
+        (DE, character, characterQuestioned) => {
+            const stateForChar = DE.stateFor[characterQuestioned];
+            const locationOfChar = stateForChar.location;
+            const locationInfo = DE.world.locations[locationOfChar];
+            return locationInfo ? locationInfo.isIndoors : false;
+        }
+    ],
+    [
+        "is_outdoors character:string -> boolean",
+        "Boolean indicating if the character is currently outdoors",
+        "true or false",
+        (DE, character, characterQuestioned) => {
+            const stateForChar = DE.stateFor[characterQuestioned];
+            const locationOfChar = stateForChar.location;   
+            const locationInfo = DE.world.locations[locationOfChar];
+            return locationInfo ? !locationInfo.isIndoors : false;
+        }
+    ],
+    [
+        "has_item character:string item_name:string -> boolean",
+        "Boolean indicating if the character has the specified item in their inventory",
+        "true or false",
+        (DE, character, characterQuestioned, itemName) => {
+            const stateForChar = DE.stateFor[characterQuestioned];
+            return stateForChar.carrying.find(item => item.name === itemName) !== undefined;
+        },
+    ],
+    [
         "is_standing character:string -> boolean",
         "Boolean indicating if the character is currently standing",
         "true or false",

@@ -91,6 +91,7 @@ function createCharacterFromUser(user) {
             strangerBreakawayTimeMinutes: 30,
             strangerNegativeMultiplier: 1.0,
             strangerPositiveMultiplier: 1.0,
+            descriptionGeneralInjection: null,
         },
         shortDescription: user.shortDescription,
         shortDescriptionNaked: user.shortDescriptionNaked,
@@ -531,6 +532,7 @@ export class DEngine {
             time: this.deObject.initialTime,
             conversationId: null,
             messageId: null,
+            isNaked: true,
             surroundingNonStrangers: [],
             surroundingStrangers: [],
             partiallyExposedToWeather: null,
@@ -620,6 +622,13 @@ export class DEngine {
             }
             charState.surroundingNonStrangers = surroundingNonStrangers;
             charState.surroundingStrangers = surroundingStrangers;
+
+            charState.isNaked = true;
+            for (const cloth of charState.wearing) {
+                if (cloth.wearableProperties?.coversNakedness) {
+                    charState.isNaked = false;
+                }
+            }
         }
 
         this.invalidCharacterStates = false;
@@ -633,12 +642,22 @@ export class DEngine {
             throw new Error("DEngine has invalid character states, cannot run spawn scripts");
         }
 
+        /**
+         * @type {Record<string, Set<string>>}
+         */
+        let scriptsRan = {};
         for (const script of Object.values(this.deObject.world.worldAllCharacterSpawnScripts)) {
-            let scriptsRan = new Set();
             for (const charName in this.deObject.characters) {
                 const character = this.deObject.characters[charName];
-                await this.runScriptById(script.id, character, scriptsRan);
+                scriptsRan[character.name] = await this.runScriptById(script.id, character, scriptsRan[character.name] || new Set());
             }
+        }
+        for (const charName in this.deObject.characters) {
+            const character = this.deObject.characters[charName];
+            for (const scriptId of Object.keys(character.scripts.spawn)) {
+                scriptsRan[character.name] = await this.runScriptById(scriptId, character, scriptsRan[character.name] || new Set());
+            }
+            character.scripts.spawn = {};
         }
 
         // save memory by clearing out the worldAllCharacterSpawnScripts after they have run
@@ -775,14 +794,15 @@ export class DEngine {
             endTime: { ...this.deObject.currentTime },
             startTime: { ...this.deObject.currentTime },
             location: sceneObject.startingLocation,
-            participants: [this.userCharacter.name],
-            previousConversationIdsPerParticipant: {
-                [this.userCharacter.name]: null,
-            },
+            participants: expectedParticipants,
+            previousConversationIdsPerParticipant: {},
             pseudoConversation: false,
             remoteParticipants: [],
             summary: null,
         };
+        for (const participantName of expectedParticipants) {
+            this.deObject.conversations["INITIAL_SCENE_NARRATION"].previousConversationIdsPerParticipant[participantName] = null;
+        }
 
         this.rerollWorldWeather();
         const scriptTorRun = this.deObject.world.worldSceneInitializationScripts[optionName];
@@ -1137,6 +1157,7 @@ export class DEngine {
             this.refreshCharacterStates();
             await this.addCharactersInWorld();
             this.refreshCharacterStates();
+            await this.patchScripts();
             await this.runAllSpawnScripts();
             this.deleteOrphanedScriptSources();
         }
@@ -1179,6 +1200,7 @@ export class DEngine {
                 location.currentWeatherNoEffectDescription = parentLocation.currentWeatherNoEffectDescription;
                 location.currentWeatherPartialEffectDescription = parentLocation.currentWeatherPartialEffectDescription;
                 location.currentWeatherFullEffectDescription = parentLocation.currentWeatherFullEffectDescription;
+                location.currentWeatherNegativelyExposedDescription = parentLocation.currentWeatherNegativelyExposedDescription;
             } else {
                 throw new Error("Location has no own weather system and no parent location to inherit weather from.");
             }
@@ -1218,6 +1240,7 @@ export class DEngine {
                 location.currentWeatherNoEffectDescription = newWeatherSystem.noEffectDescription;
                 location.currentWeatherPartialEffectDescription = newWeatherSystem.partialEffectDescription;
                 location.currentWeatherFullEffectDescription = newWeatherSystem.fullEffectDescription;
+                location.currentWeatherNegativelyExposedDescription = newWeatherSystem.negativelyExposedDescription;
 
                 // find every children locations and reroll their weather
                 if (cascade) {
@@ -2485,6 +2508,7 @@ export class DEngine {
         // these characters nearby but they are strangers likely not even looking at the direction
         // of the character so they likely don't notice them
         const surroundingStrangers = characterState.surroundingStrangers;
+
         // these characters are already in the conversation and likely will hear everything
         const conversationParticipants = this.deObject.conversations[characterState.conversationId].participants.filter(charName => charName !== character.name);
         const surroundingNonStrangersNotInConversation = surroundingNonStrangers.filter(charName => !conversationParticipants.includes(charName));
@@ -2551,7 +2575,7 @@ export class DEngine {
          * @type {DEConversationMessage}
          */
         const messageToAdd = {
-            sender: character.name,
+            sender: "System",
             content: "Interaction Inference Response:\n\n" + inferenceText,
             duration: { inMinutes: 0, inHours: 0, inDays: 0 },
             id: crypto.randomUUID(),
@@ -2577,71 +2601,65 @@ export class DEngine {
         const inferenceResult = [];
         inferenceText.split(",").map(name => name.trim()).forEach(name => {
             const loweredName = name.toLowerCase();
-            if (loweredName === "none") {
+            if (loweredName === "none" || loweredName === "noone" || loweredName === "nobody" || !loweredName) {
                 return;
             }
-            const indexOfIt = allPotentialsLowered.indexOf(loweredName);
-            if (indexOfIt !== -1) {
-                const toAdd = allPotentials[indexOfIt];
-                if (!inferenceResult.includes(toAdd)) {
-                    inferenceResult.push(toAdd);
-                } else {
-                    // duplicate, ignore
+
+            // try find the character
+            /**
+             * @type {Array<{name: string, index: number}>}
+             */
+            const foundCharacters = []
+            allPotentialsLowered.forEach((potentialName, indexOfPotentialName) => {
+                // match the string either starts with the name or contains the name with a space before or after or ends
+                // with the name, also a comma or period after
+                let indexWithinSubstring = new RegExp(`(^|[\\s,\\.])${potentialName}([\\s,\\.]|$)`).exec(loweredName)?.index || -1;
+                if (indexWithinSubstring !== -1) {
+                    foundCharacters.push({ name: allPotentials[indexOfPotentialName], index: indexWithinSubstring });
+                }
+            });
+
+            // sort by index, lowest index first
+            foundCharacters.sort((a, b) => a.index - b.index);
+            if (foundCharacters.length > 0) {
+                for (const foundCharacter of foundCharacters) {
+                    if (!inferenceResult.includes(foundCharacter.name)) {
+                        inferenceResult.push(foundCharacter.name);
+                    }
                 }
             } else {
-                // try find the character
+                // not found, ignore, give debug message
                 /**
-                 * @type {Array<{name: string, index: number}>}
+                 * @type {DEConversationMessage}
                  */
-                const foundCharacters = []
-                allPotentialsLowered.forEach((potentialName, indexOfPotentialName) => {
-                    const indexWithinSubstring = potentialName.indexOf(loweredName);
-                    if (indexWithinSubstring !== -1) {
-                        foundCharacters.push({ name: allPotentials[indexOfPotentialName], index: indexWithinSubstring });
-                    }
-                });
-                // sort by index, lowest index first
-                foundCharacters.sort((a, b) => a.index - b.index);
-                if (foundCharacters.length > 0) {
-                    for (const foundCharacter of foundCharacters) {
-                        if (!inferenceResult.includes(foundCharacter.name)) {
-                            inferenceResult.push(foundCharacter.name);
-                        }
-                    }
-                } else {
-                    // not found, ignore, give debug message
-                    /**
-                     * @type {DEConversationMessage}
-                     */
-                    const messageToAdd = {
-                        sender: character.name,
-                        content: `Character "${name}" was mentioned in interaction detection but was not found among potential interacted characters.`,
-                        duration: { inMinutes: 0, inHours: 0, inDays: 0 },
-                        id: crypto.randomUUID(),
-                        isCharacter: false,
-                        isDebugMessage: true,
-                        isStoryMasterMessage: false,
-                        isUser: false,
-                        isRejectedMessage: false,
-                        // @ts-ignore
-                        startTime: { ...this.deObject.currentTime },
-                        // @ts-ignore
-                        endTime: { ...this.deObject.currentTime },
-                        canOnlyBeSeenByCharacter: null,
-                    };
-                    // typescript not being able to infer here as usual
+                const messageToAdd = {
+                    sender: "System",
+                    content: `Character "${name}" was mentioned in interaction detection but was not found among potential interacted characters.`,
+                    duration: { inMinutes: 0, inHours: 0, inDays: 0 },
+                    id: crypto.randomUUID(),
+                    isCharacter: false,
+                    isDebugMessage: true,
+                    isStoryMasterMessage: false,
+                    isUser: false,
+                    isRejectedMessage: false,
                     // @ts-ignore
-                    this.deObject.conversations[characterState.conversationId].messages.push(messageToAdd);
-                    this.informDEObjectUpdated();
-                }
+                    startTime: { ...this.deObject.currentTime },
+                    // @ts-ignore
+                    endTime: { ...this.deObject.currentTime },
+                    canOnlyBeSeenByCharacter: null,
+                };
+                // typescript not being able to infer here as usual
+                // @ts-ignore
+                this.deObject.conversations[characterState.conversationId].messages.push(messageToAdd);
+                this.informDEObjectUpdated();
             }
         });
 
         const result = {
-            strangersAtDistanceThatReacted: strangersLikelyToNotice.filter(name => inferenceResult.includes(name)),
-            nonStrangersAtDistanceThatReacted: nonStrangerLikelyToNotice.filter(name => inferenceResult.includes(name)),
-            strangersUpCloseThatReacted: strangersNotLikelyToNotice.filter(name => inferenceResult.includes(name)),
-            nonStrangersUpCloseThatReacted: nonStrangerNotLikelyToNotice.filter(name => inferenceResult.includes(name)),
+            strangersAtDistanceThatReacted: strangersNotLikelyToNotice.filter(name => inferenceResult.includes(name)),
+            nonStrangersAtDistanceThatReacted: nonStrangerNotLikelyToNotice.filter(name => inferenceResult.includes(name)),
+            strangersUpCloseThatReacted: strangersLikelyToNotice.filter(name => inferenceResult.includes(name)),
+            nonStrangersUpCloseThatReacted: nonStrangerLikelyToNotice.filter(name => inferenceResult.includes(name)),
             ordering: inferenceResult,
         };
 
@@ -2649,7 +2667,7 @@ export class DEngine {
          * @type {DEConversationMessage}
          */
         const messageToAdd2 = {
-            sender: character.name,
+            sender: "System",
             content: "Interaction Inference Parsed Response:\n\n" + JSON.stringify(result, null, 2),
             duration: { inMinutes: 0, inHours: 0, inDays: 0 },
             id: crypto.randomUUID(),
@@ -2719,17 +2737,303 @@ export class DEngine {
     }
 
     /**
-     * @param {DETimeDescription | null} time
+     * Retruns the weather system for a given location and weather name,
+     * taking into account location hierarchy (parent locations).
+     * @param {string} locationName 
+     * @param {string} weatherName 
+     * @returns {DEWeatherSystem}
      */
-    makeTimestamp(time) {
+    getWeatherSystemForLocationAndWeather(locationName, weatherName) {
+        if (!this.deObject) {
+            throw new Error("DEngine not initialized");
+        }
+        const locationInfo = this.deObject.world.locations[locationName];
+        if (!locationInfo) {
+            throw new Error(`Location ${locationName} not found in world.`);
+        }
+        const weatherSystem = locationInfo.ownWeatherSystem?.find(ws => ws.name === weatherName);
+        if (!weatherSystem && locationInfo.parent) {
+            return this.getWeatherSystemForLocationAndWeather(locationInfo.parent, weatherName);
+        } else if (!weatherSystem) {
+            throw new Error(`Weather system ${weatherName} not found in location ${locationName} or its parents.`);
+        }
+        return weatherSystem;
+    }
+
+    /**
+     * Determines if a character is fully or partially sheltered from a certain weather condition
+     * by their current location or surroundings, or by an item they are carrying or wearing.
+     * @param {string} characterName 
+     * @param {string} weatherName
+     * @param {string} locationName
+     * @param {string} slotName
+     */
+    async isCharacterShelteredFromWeather(characterName, weatherName, locationName, slotName) {
+        if (!this.deObject) {
+            throw new Error("DEngine not initialized");
+        }
+        const returnInformation = {
+            fullySheltered: false,
+            partiallySheltered: false,
+            negativelyExposed: false,
+            reason: `${characterName} is fully exposed to the weather condition "${weatherName}"`,
+        }
+
+        const weatherSystem = this.getWeatherSystemForLocationAndWeather(locationName, weatherName);
+
+        const character = this.deObject.characters[characterName];
+        if (!character) {
+            throw new Error(`Character ${characterName} not found in world.`);
+        }
+
+        const locationInfo = this.deObject.world.locations[locationName];
+        if (!locationInfo) {
+            throw new Error(`Location ${locationName} not found in world.`);
+        }
+
+        const slotInfo = locationInfo.slots[slotName];
+        if (!slotInfo) {
+            throw new Error(`Slot ${slotName} not found in location ${locationName}.`);
+        }
+
+        // FULLY PROTECTED CHECKS
+        // check for location based sheltering
+        if ((slotInfo.slotFullyBlocksWeather || locationInfo.locationFullyBlocksWeather).includes(weatherName)) {
+            returnInformation.fullySheltered = true;
+            returnInformation.reason = `The location "${locationName}" fully blocks the weather condition "${weatherName}"`;
+            return returnInformation;
+        }
+
+        // check if an item the character is carrying or wearing provides full sheltering
+        const characterState = this.deObject.stateFor[characterName];
+        if (!characterState) {
+            throw new Error(`Character state for ${characterName} not found.`);
+        }
+        for (const item of characterState.wearing) {
+            if (item.wearableProperties?.fullyProtectsFromWeathers?.includes(weatherName)) {
+                returnInformation.fullySheltered = true;
+                returnInformation.reason = `The item "${item.name}" worn by "${characterName}" fully protects from the weather condition "${weatherName}"`;
+                return returnInformation;
+            }
+        }
+        for (const item of characterState.carrying) {
+            if (item.carriableProperties?.fullyProtectsFromWeathers?.includes(weatherName)) {
+                returnInformation.fullySheltered = true;
+                returnInformation.reason = `The item "${item.name}" carried by "${characterName}" fully protects from the weather condition "${weatherName}"`;
+                return returnInformation;
+            }
+        }
+
+        if (weatherSystem.fullyProtectedNaked) {
+            returnInformation.fullySheltered = true;
+            returnInformation.reason = `Because ${characterName} is naked ${characterName} is immune to the weather condition "${weatherName}"`;
+            return returnInformation;
+        }
+        if (weatherSystem.fullyProtectingWornItems.length > 0) {
+            for (const item of characterState.wearing) {
+                if (weatherSystem.fullyProtectingWornItems.includes(item.name)) {
+                    returnInformation.fullySheltered = true;
+                    returnInformation.reason = `The item "${item.name}" worn by "${characterName}" fully protects from the weather condition "${weatherName}"`;
+                    return returnInformation;
+                }
+            }
+        }
+        if (weatherSystem.fullyProtectingCarriedItems.length > 0) {
+            for (const item of characterState.carrying) {
+                if (weatherSystem.fullyProtectingCarriedItems.includes(item.name)) {
+                    returnInformation.fullySheltered = true;
+                    returnInformation.reason = `The item "${item.name}" carried by "${characterName}" fully protects from the weather condition "${weatherName}"`;
+                    return returnInformation;
+                }
+            }
+        }
+        if (weatherSystem.fullyProtectingStates.length > 0) {
+            for (const state of characterState.states) {
+                if (weatherSystem.fullyProtectingStates.includes(state.state)) {
+                    returnInformation.fullySheltered = true;
+                    // TODO improve this description of the state
+                    returnInformation.reason = `Because "${characterName}" is in a state of "${state.state}", ${characterName} is immune to the weather condition "${weatherName}"`;
+                    return returnInformation;
+                }
+            }
+        }
+        if (weatherSystem.fullyProtectedTemplate) {
+            // @ts-expect-error
+            const hasFullProtect = await weatherSystem.fullyProtectedTemplate.execute(this.deObject, character, undefined, undefined, undefined, undefined);
+            if (hasFullProtect) {
+                returnInformation.fullySheltered = true;
+                returnInformation.reason = `Because ${hasFullProtect}, ${characterName} is immune to the weather condition "${weatherName}"`;
+                return returnInformation;
+            }
+        }
+
+        // PARTIALLY PROTECTED CHECKS
+        // check for location based sheltering
+        if ((slotInfo.slotPartiallyBlocksWeather || locationInfo.locationPartiallyBlocksWeather).includes(weatherName)) {
+            returnInformation.partiallySheltered = true;
+            returnInformation.reason = `The location "${locationName}" partially blocks the weather condition "${weatherName}"`;
+            return returnInformation;
+        }
+
+        //check if an item the character is carrying or wearing provides partial sheltering
+        for (const item of characterState.wearing) {
+            if (item.wearableProperties?.partiallyProtectsFromWeathers?.includes(weatherName)) {
+                returnInformation.partiallySheltered = true;
+                returnInformation.reason = `The item "${item.name}" worn by "${characterName}" partially protects from the weather condition "${weatherName}"`;
+                return returnInformation;
+            }
+        }
+        for (const item of characterState.carrying) {
+            if (item.carriableProperties?.partiallyProtectsFromWeathers?.includes(weatherName)) {
+                returnInformation.partiallySheltered = true;
+                returnInformation.reason = `The item "${item.name}" carried by "${characterName}" partially protects from the weather condition "${weatherName}"`;
+                return returnInformation;
+            }
+        }
+        if (weatherSystem.partiallyProtectedNaked) {
+            const isNaked = characterState.wearing.filter(item => item.wearableProperties?.coversNakedness).length === 0;
+            if (isNaked) {
+                returnInformation.partiallySheltered = true;
+                returnInformation.reason = `Because ${characterName} is naked ${characterName} is partially immune to the weather condition "${weatherName}"`;
+                return returnInformation;
+            }
+        }
+
+        if (weatherSystem.partiallyProtectingWornItems.length > 0) {
+            for (const item of characterState.wearing) {
+                if (weatherSystem.partiallyProtectingWornItems.includes(item.name)) {
+                    returnInformation.partiallySheltered = true;
+                    returnInformation.reason = `The item "${item.name}" worn by "${characterName}" partially protects from the weather condition "${weatherName}"`;
+                    return returnInformation;
+                }
+            }
+        }
+
+        if (weatherSystem.partiallyProtectingCarriedItems.length > 0) {
+            for (const item of characterState.carrying) {
+                if (weatherSystem.partiallyProtectingCarriedItems.includes(item.name)) {
+                    returnInformation.partiallySheltered = true;
+                    returnInformation.reason = `The item "${item.name}" carried by "${characterName}" partially protects from the weather condition "${weatherName}"`;
+                    return returnInformation;
+                }
+            }
+        }
+
+        if (weatherSystem.partiallyProtectingStates.length > 0) {
+            for (const state of characterState.states) {
+                if (weatherSystem.partiallyProtectingStates.includes(state.state)) {
+                    returnInformation.partiallySheltered = true;
+                    // TODO improve this description of the state
+                    returnInformation.reason = `Because "${characterName}" is in a state of "${state.state}", ${characterName} is partially protected from the weather condition "${weatherName}".`;
+                    return returnInformation;
+                }
+            }
+        }
+
+        if (weatherSystem.partiallyProtectedTemplate) {
+            // @ts-expect-error
+            const hasPartialEffect = await weatherSystem.partiallyProtectedTemplate.execute(this.deObject, character, undefined, undefined, undefined, undefined);
+            if (hasPartialEffect) {
+                returnInformation.partiallySheltered = true;
+                returnInformation.reason = `Because ${hasPartialEffect}, ${characterName} is partially protected from the weather condition "${weatherName}".`;
+                return returnInformation;
+            }
+        }
+
+        // NEGATIVELY EXPOSED CHECKS
+        // check for location based negative exposure
+        if ((slotInfo.slotNegativelyExposesCharactersToWeather || locationInfo.locationNegativelyExposesCharactersToWeather).includes(weatherName)) {
+            returnInformation.negativelyExposed = true;
+            returnInformation.reason = `The location "${locationName}" negatively exposes to the weather condition "${weatherName}".`;
+            return returnInformation;
+        }
+
+        // check if an item the character is carrying or wearing provides negative exposure
+        for (const item of characterState.wearing) {
+            if (item.wearableProperties?.negativelyExposesToWeathers?.includes(weatherName)) {
+                returnInformation.negativelyExposed = true;
+                returnInformation.reason = `The item "${item.name}" worn by "${characterName}" negatively exposes to the weather condition "${weatherName}"`;
+                return returnInformation;
+            }
+        }
+
+        for (const item of characterState.carrying) {
+            if (item.carriableProperties?.negativelyExposesToWeathers?.includes(weatherName)) {
+                returnInformation.negativelyExposed = true;
+                returnInformation.reason = `The item "${item.name}" carried by "${characterName}" negatively exposes to the weather condition "${weatherName}"`;
+                return returnInformation;
+            }
+        }
+
+        if (weatherSystem.negativelyAffectedNaked) {
+            const isNaked = characterState.wearing.filter(item => item.wearableProperties?.coversNakedness).length === 0;
+            if (isNaked) {
+                returnInformation.negativelyExposed = true;
+                returnInformation.reason = `Because ${characterName} is naked ${characterName} is negatively exposed to the weather condition "${weatherName}"`;
+                return returnInformation;
+            }
+        }
+
+        if (weatherSystem.negativelyAffectingWornItems.length > 0) {
+            for (const item of characterState.wearing) {
+                if (weatherSystem.negativelyAffectingWornItems.includes(item.name)) {
+                    returnInformation.negativelyExposed = true;
+                    returnInformation.reason = `The item "${item.name}" worn by "${characterName}" negatively exposes to the weather condition "${weatherName}"`;
+                    return returnInformation;
+                }
+            }
+        }
+
+        if (weatherSystem.negativelyAffectingCarriedItems.length > 0) {
+            for (const item of characterState.carrying) {
+                if (weatherSystem.negativelyAffectingCarriedItems.includes(item.name)) {
+                    returnInformation.negativelyExposed = true;
+                    returnInformation.reason = `The item "${item.name}" carried by "${characterName}" negatively exposes to the weather condition "${weatherName}"`;
+                    return returnInformation;
+                }
+            }
+        }
+
+        if (weatherSystem.negativelyAffectingStates.length > 0) {
+            for (const state of characterState.states) {
+                if (weatherSystem.negativelyAffectingStates.includes(state.state)) {
+                    returnInformation.negativelyExposed = true;
+                    // TODO improve this description of the state
+                    returnInformation.reason = `Because "${characterName}" is in a state of "${state.state}", ${characterName} is negatively exposed to the weather condition "${weatherName}"`;
+                    return returnInformation;
+                }
+            }
+        }
+
+        if (weatherSystem.negativelyAffectedTemplate) {
+            // @ts-expect-error
+            const hasNegativeEffect = await weatherSystem.negativelyAffectedTemplate.execute(this.deObject, character, undefined, undefined, undefined, undefined);
+            if (hasNegativeEffect) {
+                returnInformation.negativelyExposed = true;
+                returnInformation.reason = `Because ${hasNegativeEffect}, ${characterName} is negatively exposed to the weather condition "${weatherName}"`;
+                return returnInformation;
+            }
+        }
+
+        return returnInformation;
+    }
+
+    /**
+     * @param {DETimeDescription | null} time
+     * @param {boolean} includeNowLabel
+     */
+    makeTimestamp(time, includeNowLabel = true) {
         if (!time) {
             return "Now";
         }
-        if (this.deObject?.currentTime.time === time.time) {
+        if (includeNowLabel && this.deObject?.currentTime.time === time.time) {
             return "Now";
         }
         // We want something like; Monday, June 5th, 2023 at 3:45 PM
+        // we expect utc time in milliseconds
+        // even in the formatting
         const date = new Date(time.time);
+        // so we want to ensure offset 0
         return date.toLocaleString('en-US', {
             weekday: 'long',
             year: 'numeric',
@@ -2738,6 +3042,7 @@ export class DEngine {
             hour: 'numeric',
             minute: 'numeric',
             hour12: true,
+            timeZone: 'UTC',
         });
     }
 
@@ -2863,6 +3168,7 @@ export class DEngine {
                     if (!currentConversationObject.summary) {
                         // generate summary, it doesn't exist yet, but we need to have a conversation for what this
                         // character has been through and been doing
+                        // @ts-ignore
                         currentConversationObject.summary = await this.pseudoConversationSummaryGenerator(
                             this.deObject,
                             // @ts-expect-error
@@ -2895,7 +3201,7 @@ export class DEngine {
                     }
                 } else {
                     for (const message of conversationMessages.reverse()) {
-                        if (options.excludeFrom && options.excludeFrom.includes(message.id)) {
+                        if (options.excludeFrom && options.excludeFrom.includes(message.sender)) {
                             continue;
                         }
                         historyMessages.push({
@@ -3106,6 +3412,27 @@ export class DEngine {
                 });
             }
         }
+
+        const messageToAdd = {
+            sender: "System",
+            content: "Determined Final of Interaction:\n\n" + JSON.stringify(nextOrderOfInteraction, null, 2),
+            duration: { inMinutes: 0, inHours: 0, inDays: 0 },
+            id: crypto.randomUUID(),
+            isCharacter: false,
+            isDebugMessage: true,
+            isStoryMasterMessage: false,
+            isUser: false,
+            isRejectedMessage: false,
+            // @ts-ignore
+            startTime: { ...this.deObject.currentTime },
+            // @ts-ignore
+            endTime: { ...this.deObject.currentTime },
+            canOnlyBeSeenByCharacter: null,
+        };
+        // typescript not being able to infer here as usual
+        // @ts-ignore
+        this.deObject.conversations[characterState.conversationId].messages.push(messageToAdd);
+        this.informDEObjectUpdated();
 
         let expectedNextLocation = characterState.location;
         let expectedNextLocationSlot = characterState.locationSlot;
@@ -3492,6 +3819,7 @@ export class DEngine {
                     startTime: { ...this.deObject.currentTime },
                     messages: [messageToAdd],
                     participants: [this.user.name],
+                    remoteParticipants: [],
                     duration: { inMinutes: 0, inHours: 0, inDays: 0 },
                     endTime: null,
                     location: userCharacterState.location,
@@ -3637,14 +3965,16 @@ export class DEngine {
                 + "/help - Show this help message\n";
 
             for (const [commandName, commandValue] of Object.entries(commands)) {
-                message += `/${commandName} - ${commandValue.help}\n`;
+                message += `/${commandName} ${commandValue.args.join(", ")} - ${commandValue.help}\n`;
             }
         } else if (commands[command]) {
             try {
-                message = await commands[command].run(this, commandText.split(" ").slice(1));
+                message = await commands[command].run(this, commandText.split(" ").slice(1).join(" ").split(",").map(s => s.trim()));
             } catch (error) {
                 // @ts-ignore
                 message = `Error executing command /${command}: ${error.message}`;
+                // @ts-ignore
+                console.log(error.stack);
             }
         } else {
             message = "Unknown command /" + command + ". Type /help for a list of commands.";

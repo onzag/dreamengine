@@ -73,7 +73,7 @@ export const deEngineUtils = {
     },
     newScript(DE, id, executeFunction) {
         // we need to extract the source code from the function
-        const source = "return await ((" + executeFunction.toString() + ")(DE, character))";
+        const source = "return await ((" + executeFunction.toString() + ")(DE, char))";
         const existingScriptSource = DE.scriptSources.find(s => s.id === id);
         if (existingScriptSource) {
             if (existingScriptSource.sourceType !== "javascript") {
@@ -102,7 +102,7 @@ export const deEngineUtils = {
     },
     newTemplateFromFunction(DE, id, fn) {
         // we need to extract the source code from the function
-        const source = "return await ((" + fn.toString() + ")(DE, character, other, causants, cause, potentialCausant))";
+        const source = "return await ((" + fn.toString() + ")(DE, char, other, causants, cause, potentialCausant))";
         const existingScriptSource = DE.scriptSources.find(s => s.id === id);
         if (existingScriptSource) {
             if (existingScriptSource.sourceType !== "javascript") {
@@ -133,7 +133,7 @@ export const deEngineUtils = {
         return weatherSystemDef;
     },
     newValueGetterScriptForCharacterSpace(DE, id, value) {
-        const source = "return await ((" + value.toString() + ")(DE, character))";
+        const source = "return await ((" + value.toString() + ")(DE, char))";
         const existingScriptSource = DE.scriptSources.find(s => s.id === id);
         if (existingScriptSource) {
             if (existingScriptSource.sourceType !== "javascript") {

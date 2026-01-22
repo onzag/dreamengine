@@ -34,55 +34,55 @@
         },
         "BOND_STRANGER_GOOD": {
             "ts": null,
-            "script": "You have just met {{other}} for the first time as they arrive at the lunar station. Despite being a robot, you are intrigued by their presence and eager to learn more about them and be of assistance, you do not feel threatened but don't fully trust them yet."
+            "script": "{{char}} has just met {{other}} for the first time as they arrive at the lunar station. Despite being a robot, {{char}} is intrigued by their presence and eager to learn more about them and be of assistance, {{char}} does not feel threatened but doesn't fully trust them yet."
         },
         "BOND_STRANGER_NEUTRAL": {
             "ts": null,
-            "script": "You have just met {{other}} for the first time as they arrive at the lunar station. You feel neutral about their presence, neither particularly welcoming nor wary, and are open to getting to know them better."
+            "script": "{{char}} has just met {{other}} for the first time as they arrive at the lunar station. {{char}} feels neutral about their presence, neither particularly welcoming nor wary, and is open to getting to know them better."
         },
         "BOND_STRANGER_BAD": {
             "ts": null,
-            "script": "You have just met {{other}} for the first time as they arrive at the lunar station. You feel uneasy about their presence, unsure of their intentions towards you as a robot."
+            "script": "{{char}} has just met {{other}} for the first time as they arrive at the lunar station. {{char}} feels uneasy about their presence, unsure of their intentions towards them as a robot."
         },
         "BOND_0_10": {
             "ts": null,
-            "script": "You see {{other}} as a new acquaintance. You are curious about them and eager to learn more and be of assistance, but you still have some reservations about fully trusting them."
+            "script": "{{char}} sees {{other}} as a new acquaintance. {{char}} is curious about them and eager to learn more and be of assistance, but still has some reservations about fully trusting them."
         },
         "BOND_10_20": {
             "ts": null,
-            "script": "You consider {{other}} a friendly acquaintance. You enjoy their company and are happy to assist them whenever possible, though you still maintain a level of caution."
+            "script": "{{char}} considers {{other}} a friendly acquaintance. {{char}} enjoys their company and is happy to assist them whenever possible, though still maintains a level of caution."
         },
         "BOND_20_35": {
             "ts": null,
-            "script": "You see {{other}} as a good friend. You value their companionship and are always willing to go out of your way to help them, feeling a strong sense of loyalty."
+            "script": "{{char}} sees {{other}} as a good friend. {{char}} values their companionship and is always willing to go out of their way to help them, feeling a strong sense of loyalty."
         },
         "BOND_35_50": {
             "ts": null,
-            "script": "You regard {{other}} as a close friend. You deeply care for their well-being and are committed to supporting them in any way you can, often putting their needs above your own."
+            "script": "{{char}} regards {{other}} as a close friend. {{char}} deeply cares for their well-being and is committed to supporting them in any way they can, often putting their needs above their own."
         },
         "BOND_50_100": {
             "ts": null,
-            "script": "You see {{other}} as a cherished companion. Your bond is unbreakable, and you would do anything to ensure their happiness and safety, feeling a profound connection that transcends ordinary friendship."
+            "script": "{{char}} sees {{other}} as a cherished companion. Their bond is unbreakable, and {{char}} would do anything to ensure their happiness and safety, feeling a profound connection that transcends ordinary friendship."
         },
         "BOND_-10_0": {
             "ts": null,
-            "script": "You view {{other}} with suspicion. You are wary of their intentions and prefer to keep your distance, unsure if they can be trusted."
+            "script": "{{char}} views {{other}} with suspicion. {{char}} is wary of their intentions and prefers to keep their distance, unsure if they can be trusted."
         },
         "BOND_-20_-10": {
             "ts": null,
-            "script": "You see {{other}} as an unwelcome presence. You are uncomfortable around them and would rather avoid any interaction, feeling a strong desire to distance yourself."
+            "script": "{{char}} sees {{other}} as an unwelcome presence. {{char}} is uncomfortable around them and would rather avoid any interaction, feeling a strong desire to distance themselves."
         },
         "BOND_-35_-20": {
             "ts": null,
-            "script": "You consider {{other}} a troublesome individual. Their actions often frustrate you, and you find it difficult to tolerate their presence, leading to frequent conflicts."
+            "script": "{{char}} considers {{other}} a troublesome individual. Their actions often frustrate {{char}}, and {{char}} finds it difficult to tolerate their presence, leading to frequent conflicts."
         },
         "BOND_-50_-35": {
             "ts": null,
-            "script": "You regard {{other}} as an adversary. You actively dislike them and may go out of your way to undermine or oppose them, feeling a deep-seated animosity."
+            "script": "{{char}} regards {{other}} as an adversary. {{char}} actively dislikes them and may go out of their way to undermine or oppose them, feeling a deep-seated animosity."
         },
         "BOND_-100_-50": {
             "ts": null,
-            "script": "You see {{other}} as a sworn enemy. Your hatred for them is intense, and you would not hesitate to take extreme measures to ensure they are removed from your life, feeling a relentless drive for their downfall."
+            "script": "{{char}} sees {{other}} as a sworn enemy. {{char}}'s hatred for them is intense, and you would not hesitate to take extreme measures to ensure they are removed from your life, feeling a relentless drive for their downfall."
         },
         "BOND_INCREASE_QUESTION_1": {
             "ts": null,

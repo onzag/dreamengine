@@ -248,6 +248,10 @@ declare interface CharacterStateDefinition {
      */
     general: DEStringTemplate;
     /**
+     * Description of the state after being relieved, used for reasoning about the state
+     */
+    generalAfterRelief?: DEStringTemplate;
+    /**
      * Used for descriptions of the character general state
      * get applied at system prompt level
      */
@@ -557,6 +561,28 @@ declare interface DEBondDeclaration {
      * in the bond description, otherwise the LLM may assume romantic/sexual interactions are allowed
      */
     description: DEStringTemplate;
+    /**
+     * An additional description that gets injected into the general description by the bond system
+     * this is used for reasoning about the character relationships and what is possible
+     */
+    bondAdditionalDescription?: DEStringTemplate;
+    /**
+     * Used for descriptions of the character general bond state
+     * get applied at system prompt level, per character that has this bond with this character
+     * mostly used for general information, eg.
+     * 
+     * {{char}} trusts {{other}} a lot and would do anything for {{format_object_pronoun other}}.
+     */
+    systemPromptInjection?: DEStringTemplate;
+    /**
+     * Used for descriptions of the character general bond state when the bond is an ex bond
+     * for the character has been removed from the story but the other character still exists
+     * get applied at system prompt level, per character that has this bond with this character
+     * mostly used for general information, eg.
+     * 
+     * {{char}} used to trust {{other}} a lot and be best friends but now {{other}} is gone and they feel sad about it.
+     */
+    systemPromptInjectionEx?: DEStringTemplate;
     /**
      * The questions to ask to determine bond increases or decreases
      * based on interactions and events happening in the story
@@ -972,6 +998,19 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
          * The default value is 1.0 which means no negativity bias is applied
          */
         bondChangeNegativityBias: number;
+        /**
+         * Used for general description that affect any bond towards anyone, and they do not get specified at a
+         * per character level
+         * 
+         * For example:
+         * 
+         * "{{char}} will not allow anyone to get too close to {{format_object_pronoun char}} and keeps people at arm's length."
+         * 
+         * or
+         * 
+         * "{{char}} is very cautious and takes time to build trust with others."
+         */
+        descriptionGeneralInjection: DEStringTemplate | null;
     };
     emotions: Partial<Record<DEEmotionNames, DEEmotionDefinition>>;
     scripts: {
@@ -1189,6 +1228,14 @@ declare interface DEItem {
          * extra carrying volume to the character wearing it
          */
         addedCarryingCapacityLiters: number;
+        fullyProtectsFromWeathers?: Array<string>;
+        partiallyProtectsFromWeathers?: Array<string>;
+        negativelyExposesToWeathers?: Array<string>;
+    } | null;
+    carriableProperties?: {
+        fullyProtectsFromWeathers?: Array<string>;
+        partiallyProtectsFromWeathers?: Array<string>;
+        negativelyExposesToWeathers?: Array<string>;
     } | null;
     containing: Array<DEItem>;
     /**
@@ -1243,6 +1290,7 @@ declare interface StateForDescription {
      * when this state was added
      */
     messageId: string | null;
+    isNaked: boolean;
     surroundingNonStrangers: Array<string>;
     surroundingStrangers: Array<string>;
     partiallyExposedToWeather: string | null;
@@ -1277,7 +1325,7 @@ declare interface StateForDescriptionWithHistory extends StateForDescription {
     history: Array<StateForDescription>;
 }
 
-declare interface LocationSlot {
+declare interface DELocationSlot {
     description: DEStringTemplate;
     /**
      * Maximum height in centimeters that can fit in this slot
@@ -1309,6 +1357,11 @@ declare interface LocationSlot {
      * will override location-based blocking if specified
      */
     slotPartiallyBlocksWeather?: Array<string>;
+    /**
+     * Names of weather systems that affect this slot negatively
+     * will override location-based negative effects if specified
+     */
+    slotNegativelyExposesCharactersToWeather?: Array<string>;
     items: Array<DEItem>;
 }
 
@@ -1317,7 +1370,7 @@ declare interface WeatherSystemApplyingStateWithIntensity {
     intensity: number;
 }
 
-declare interface WeatherSystem {
+declare interface DEWeatherSystem {
     /**
      * Name of the weather system, eg. "Rain", "Sunny", "Snow"
      */
@@ -1338,16 +1391,32 @@ declare interface WeatherSystem {
     maxDurationInHours: number;
     /**
      * Description of the weather system's full effects on an unsheltered location
+     * 
+     * Note that you can add more nuance to the partial effect description by checking
+     * the character's states, for example by having different partial effects if the character
+     * is very light
+     * 
+     * eg. "{{#if (and (< (get_weight char) 20) (is_outdoors char))}}{{char}} is drenched by the relentless rain, shivering as the cold water soaks through their light clothing.{{else}}...{{/if}}"
      */
     fullEffectDescription: DEStringTemplate;
     /**
      * Description of the weather system's partial effects on a partially sheltered location
+     * 
+     * Note that you can add more nuance to the partial effect description by checking
+     * the character's states, for example by having different partial effects if the character
+     * is very light
+     * 
+     * eg. "{{#if (and (< (get_weight char) 20) (is_outdoors char))}}{{char}} is drenched by the relentless rain, shivering as the cold water soaks through their light clothing.{{else}}...{{/if}}"
      */
     partialEffectDescription: DEStringTemplate;
     /**
      * Description when there is no effect on a fully sheltered location
      */
     noEffectDescription: DEStringTemplate;
+    /**
+     * Description of the weather system effects when it is having an extra negative effect on the character
+     */
+    negativelyExposedDescription: DEStringTemplate;
     /**
      * If a character is in this state, they are fully protected from the weather system's effects
      * eg. "WEARING_RAINCOAT" "WEARING_FULL_BODY_ARMOR" "WEARING_SPACE_SUIT"
@@ -1359,19 +1428,25 @@ declare interface WeatherSystem {
      */
     fullyProtectingWornItems: Array<string>;
     /**
+     * If a character is carrying this item, they are fully protected from the weather system's effects
+     * eg. "large umbrella" "full body shield"
+     */
+    fullyProtectingCarriedItems: Array<string>;
+    /**
      * Whether being naked (no clothes or accessories at all) makes the character fully protected from the weather system's effects
      * I mean it could be very hot weather right? :D
      */
     fullyProtectedNaked: boolean;
     /**
-     * If otherwise you need more custom logic use this script to apply states to the character
-     * this function runs first, and if returns true, the engine stops any weather effect logic as it considers
-     * it handled by the script
+     * Use this script to apply full custom logic to the character when fully exposed to the weather system
+     * for example, if you want to apply damage over time, or other complex effects
      * 
-     * If it returns false or nothing, the engine continues with its default weather effect logic, even if the script
-     * did something
+     * This script will be called if it cannot determine the character is fully protected from the weather system's effects
+     * as a fallback
+     * 
+     * You should return a string value indicating whether the script handled the full effect logic
      */
-    weatherEffectScript: DEScript | null;
+    fullyProtectedTemplate?: DEStringTemplate | null;
     /**
      * If a character is in this state, they are partially protected from the weather system's effects
      * eg. "HOLDING_UMBRELLA" "WEARING_LIGHT_JACKET"
@@ -1383,9 +1458,24 @@ declare interface WeatherSystem {
      */
     partiallyProtectingWornItems: Array<string>;
     /**
+     * If a character is carrying this item, they are partially protected from the weather system's effects
+     * eg. "umbrella" "large shield"
+     */
+    partiallyProtectingCarriedItems: Array<string>;
+    /**
      * Whether being naked (no clothes or accessories at all) makes the character partially protected from the weather system's effects
      */
     partiallyProtectedNaked: boolean;
+    /**
+     * Use this script to apply full custom logic to the character when partially exposed to the weather system
+     * for example, if you want to apply damage over time, or other complex effects
+     * 
+     * This script will be called if it cannot determine the character is partially protected from the weather system's effects
+     * as a fallback
+     * 
+     * You should return a string value indicating whether the script handled the full effect logic
+     */
+    partiallyProtectedTemplate?: DEStringTemplate | null;
     /**
      * If a character is in this state, they are negatively affected by the weather system's effects
      * eg. "SICK" "NAKED" "INJURED"
@@ -1397,9 +1487,23 @@ declare interface WeatherSystem {
      */
     negativelyAffectingWornItems: Array<string>;
     /**
+     * If a character is carrying this item, they are negatively affected by the weather system's effects
+     * eg. "leaking container" "fragile equipment"
+     */
+    negativelyAffectingCarriedItems: Array<string>;
+    /**
      * Whether being naked (no clothes or accessories at all) makes the character negatively affected by the weather system's effects
      */
     negativelyAffectedNaked: boolean;
+    /**
+     * Use this script to apply full custom logic to the character when negatively affected by the weather system
+     * 
+     * This script will be called if it cannot determine the character is negatively affected by the weather system's effects
+     * as a fallback
+     * 
+     * You should return a string value indicating whether the script handled the negative effect logic
+     */
+    negativelyAffectedTemplate?: DEStringTemplate | null;
     /**
      * Names of states that are applied to characters while they are fully exposed to the weather system
      * eg. "WET" for rain, "SUNBURNED" for sunny weather
@@ -1586,7 +1690,7 @@ declare interface DELocationDefinition {
     /**
      * Slots within the location where people can move and interact with the things in the location
      */
-    slots: Record<string, LocationSlot>;
+    slots: Record<string, DELocationSlot>;
     /**
      * Names of weather systems that are fully blocked by this location
      * this will be overridden by slot-based blocking
@@ -1598,10 +1702,15 @@ declare interface DELocationDefinition {
      */
     locationPartiallyBlocksWeather: Array<string>;
     /**
+     * Names of weather systems that negatively expose characters to the weather effects
+     * And put them into a negative effect state
+     */
+    locationNegativelyExposesCharactersToWeather: Array<string>;
+    /**
      * Weather systems that only affect this location, if not specified the parent location
      * weather systems will apply here too
      */
-    ownWeatherSystem: Array<WeatherSystem> | null;
+    ownWeatherSystem: Array<DEWeatherSystem> | null;
     /**
      * Names of the characters that are spawned in this location with instantiable names
      * child connections will inherit these names
@@ -1692,6 +1801,10 @@ declare interface DEStatefulLocationDefinition extends DELocationDefinition {
      * Either the location-specific no effect description or the general weather no effect description
      */
     currentWeatherNoEffectDescription: DEStringTemplate;
+    /**
+     * Either the location-specific negative effect description or the general weather negative effect description
+     */
+    currentWeatherNegativelyExposedDescription: DEStringTemplate;
 }
 
 declare interface DEConversationMessage {
@@ -2021,7 +2134,7 @@ declare interface DEUtils {
      * @param execute 
      */
     newScript(DE: DEObject, id: string, execute: (DE: DEObject, char: DECompleteCharacterReference) => any | Promise<any>): DEScript;
-    newWeatherSystem(DE: DEObject, definition: WeatherSystem): WeatherSystem;
+    newWeatherSystem(DE: DEObject, definition: DEWeatherSystem): DEWeatherSystem;
     /**
      * Converts the given property value into a template that can be executed
      * @param value 

@@ -240,6 +240,21 @@ is_gone(DE: DEObject, char: CompleteCharacterReference, character:string): boole
 */
 is_in_conversation(DE: DEObject, char: CompleteCharacterReference, character:string): boolean;
 /**
+  Boolean indicating if the character is currently indoors
+  @returns true or false
+*/
+is_indoors(DE: DEObject, char: CompleteCharacterReference, character:string): boolean;
+/**
+  Boolean indicating if the character is currently outdoors
+  @returns true or false
+*/
+is_outdoors(DE: DEObject, char: CompleteCharacterReference, character:string): boolean;
+/**
+  Boolean indicating if the character has the specified item in their inventory
+  @returns true or false
+*/
+has_item(DE: DEObject, char: CompleteCharacterReference, character:string, item_name:string): boolean;
+/**
   Boolean indicating if the character is currently standing
   @returns true or false
 */

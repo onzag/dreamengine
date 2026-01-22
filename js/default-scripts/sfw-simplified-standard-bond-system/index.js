@@ -16,7 +16,8 @@ char.bonds = {
     strangerBreakawayTimeMinutes: 30,
     strangerNegativeMultiplier: 1.5,
     strangerPositiveMultiplier: 1.0,
-}
+    descriptionGeneralInjection: DE.utils.newHandlebarsTemplate(DE, "SFW_BOND_DESCRIPTION_GENERAL_INJECTION", "{{char}} is an asexual and aromantic individual and does not form romantic or sexual bonds with others, {{char}} will react negatively to any attempts to form or force such bonds."),
+};
 
 /**
  * @type {DEBondIncreaseDecreaseQuestion[]}
@@ -51,8 +52,20 @@ const basicBondConditions = [
         affectsBonds: "primary",
         weight: -1,
         template: DE.utils.propertyValueToTemplate(DE, char.properties["BOND_DECREASE_QUESTION_3"]),
-    }
+    },
+    {
+        affectsBonds: "primary",
+        weight: -1,
+        template: DE.utils.newHandlebarsTemplate(DE, "SFW_BOND_DECREASE_QUESTION_4", "has {{other}} attempted to form a romantic or sexual bond with {{char}}?"),
+    },
+    {
+        affectsBonds: "primary",
+        weight: -5,
+        template: DE.utils.newHandlebarsTemplate(DE, "SFW_BOND_DECREASE_QUESTION_5", "has {{other}} attempted to have sex with {{char}}?"),
+    },
 ];
+
+const sfwTemplate = DE.utils.newHandlebarsTemplate(DE, "SFW_BOND_ADJUSTMENT_TEMPLATE", "{{char}} is not to ");
 
 char.bonds.declarations.push({
     name: "Stranger (Neutral)",
@@ -95,7 +108,7 @@ char.bonds.declarations.push({
     max2BondLevel: 100,
     description: DE.utils.propertyValueToTemplate(DE, char.properties["BOND_-100_-50"]),
     bondConditions: basicBondConditions,
-    strangerBond: true,
+    strangerBond: false,
 });
 
 char.bonds.declarations.push({
@@ -106,7 +119,7 @@ char.bonds.declarations.push({
     max2BondLevel: 100,
     description: DE.utils.propertyValueToTemplate(DE, char.properties["BOND_-50_-35"]),
     bondConditions: basicBondConditions,
-    strangerBond: true,
+    strangerBond: false,
 });
 
 char.bonds.declarations.push({
@@ -117,7 +130,7 @@ char.bonds.declarations.push({
     max2BondLevel: 100,
     description: DE.utils.propertyValueToTemplate(DE, char.properties["BOND_-35_-20"]),
     bondConditions: basicBondConditions,
-    strangerBond: true,
+    strangerBond: false,
 });
 
 char.bonds.declarations.push({
@@ -128,7 +141,7 @@ char.bonds.declarations.push({
     max2BondLevel: 100,
     description: DE.utils.propertyValueToTemplate(DE, char.properties["BOND_-20_-10"]),
     bondConditions: basicBondConditions,
-    strangerBond: true,
+    strangerBond: false,
 });
 
 char.bonds.declarations.push({
@@ -139,7 +152,7 @@ char.bonds.declarations.push({
     max2BondLevel: 100,
     description: DE.utils.propertyValueToTemplate(DE, char.properties["BOND_-10_0"]),
     bondConditions: basicBondConditions,
-    strangerBond: true,
+    strangerBond: false,
 });
 
 char.bonds.declarations.push({
@@ -150,7 +163,7 @@ char.bonds.declarations.push({
     max2BondLevel: 100,
     description: DE.utils.propertyValueToTemplate(DE, char.properties["BOND_0_10"]),
     bondConditions: basicBondConditions,
-    strangerBond: true,
+    strangerBond: false,
 });
 
 char.bonds.declarations.push({
@@ -161,7 +174,7 @@ char.bonds.declarations.push({
     max2BondLevel: 100,
     description: DE.utils.propertyValueToTemplate(DE, char.properties["BOND_10_20"]),
     bondConditions: basicBondConditions,
-    strangerBond: true,
+    strangerBond: false,
 });
 
 char.bonds.declarations.push({
@@ -172,7 +185,7 @@ char.bonds.declarations.push({
     max2BondLevel: 100,
     description: DE.utils.propertyValueToTemplate(DE, char.properties["BOND_20_35"]),
     bondConditions: basicBondConditions,
-    strangerBond: true,
+    strangerBond: false,
 });
 
 char.bonds.declarations.push({
@@ -183,7 +196,7 @@ char.bonds.declarations.push({
     max2BondLevel: 100,
     description: DE.utils.propertyValueToTemplate(DE, char.properties["BOND_35_50"]),
     bondConditions: basicBondConditions,
-    strangerBond: true,
+    strangerBond: false,
 });
 
 char.bonds.declarations.push({
@@ -194,5 +207,5 @@ char.bonds.declarations.push({
     max2BondLevel: 100,
     description: DE.utils.propertyValueToTemplate(DE, char.properties["BOND_50_100"]),
     bondConditions: basicBondConditions,
-    strangerBond: true,
+    strangerBond: false,
 });

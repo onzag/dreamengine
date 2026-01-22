@@ -4,7 +4,7 @@ DE.world.initialScenes["Default Scene"] = /** @type {DEInitialScene} */ ({
     narration: DE.utils.newHandlebarsTemplate(
         DE,
         "DEFAULT_WORLD_SCENE",
-        "{{user}} is a visitor to the Lunar Station, eager to explore this small outpost in space, yet {{format_pronoun user}} didn't expect to find someone else here, but it so happens that {{format_and (all_world_characters_but_user)}} {{format_verb_to_be (all_world_characters_but_user)}} also visiting the station at this time, now they face each other in the common area near the airlock."
+        "{{user}} is a visitor to the Lunar Station, eager to explore this small outpost in space, yet {{format_pronoun user}} didn't expect to find someone else here, but it so happens that {{format_and (all_world_characters_but_user)}} {{format_verb_to_be (all_world_characters_but_user)}} also visiting the station at this time, now they face each other in the common area near the airlock"
     ),
     charactersStart: true,
     startingEngagedCharacters: ["Dema"],
@@ -13,7 +13,7 @@ DE.world.initialScenes["Default Scene"] = /** @type {DEInitialScene} */ ({
 DE.world.lore = DE.utils.newHandlebarsTemplate(
     DE,
     "LUNAR_STATION_LORE",
-    "The world is set on a small lunar station orbiting the Moon. The station serves as a research outpost and habitat for astronauts and scientists studying the lunar environment. The station is equipped with life support systems, scientific laboratories, living quarters, and communication facilities. Outside the station, the barren surface of the Moon stretches out, dotted with craters and rocks. The sky above is a pitch-black void, with the Earth hanging in the distance. The silence is absolute, broken only by the faint hum of the station's machinery."
+    "The world is set on a small lunar station orbiting the Moon. The station serves as a research outpost and habitat for astronauts and scientists studying the lunar environment. The station is equipped with life support systems, scientific laboratories, living quarters, and communication facilities. Outside the station, the barren surface of the Moon stretches out, dotted with craters and rocks. The sky above is a pitch-black void, with the Earth hanging in the distance. The silence is absolute, broken only by the faint hum of the station's machinery"
 );
 
 const vaccuumWeatherSystem = DE.utils.newWeatherSystem(DE, {
@@ -51,24 +51,29 @@ const vaccuumWeatherSystem = DE.utils.newWeatherSystem(DE, {
     fullyProtectedNaked: false,
     partiallyProtectedNaked: false,
     fullyProtectingWornItems: ["Space Suit"],
-    weatherEffectScript: DE.utils.newScript(
+    fullyProtectingCarriedItems: [],
+    partiallyProtectingCarriedItems: [],
+    fullyProtectedTemplate: DE.utils.newTemplateFromFunction(
         DE,
-        "VACCUUM_WEATHER_EFFECT_SCRIPT",
+        "VACCUUM_WEATHER_EFFECT_PROTECTED_FROM_ROBOTS",
         async (DE, char) => {
-            // apply the vaccuum negative effects based on protection
-            const isRobot = await char.properties.IS_ROBOT.value(DE, char);
-            if (isRobot) {
-                // robots are immune to vaccuum effects
-                // returning true to skip further processing, the script has handled everything
-                return true;
+            if (char.properties["IS_ROBOT"]) {
+                return `"${char.name}" is a robot and is inpervious to the vaccuum of space`;
             }
+            return "";
         }
     ),
     partiallyProtectingWornItems: [],
+    negativelyAffectingCarriedItems: [],
     noEffectDescription: DE.utils.newHandlebarsTemplate(
         DE,
         "VACCUUM_NO_EFFECT",
         "{{char}} is safe from the vaccuum"
+    ),
+    negativelyExposedDescription: DE.utils.newHandlebarsTemplate(
+        DE,
+        "VACCUUM_NEGATIVELY_EXPOSED_EFFECT",
+        "The lack of atmosphere specially asphixiates and freezes {{char}} very quickly",
     ),
 
     applyingStatesDuringFullEffect: [
@@ -94,7 +99,7 @@ const vaccuumWeatherSystem = DE.utils.newWeatherSystem(DE, {
  */
 const spaceSuit = {
     name: "Space Suit",
-    description: "A bulky space suit designed for extra-vehicular activity on the lunar surface. It provides life support and protection from the harsh environment of space.",
+    description: "A bulky space suit designed for extra-vehicular activity on the lunar surface. It provides life support and protection from the harsh environment of space",
     weightKg: 20,
     volumeLiters: 150,
     properties: {},
@@ -114,6 +119,8 @@ const spaceSuit = {
         addedCarryingCapacityKg: 10,
         addedCarryingCapacityLiters: 0,
         extraBodyVolumeWhenWornLiters: 160,
+        fullyProtectsFromWeathers: ["Vaccuum", "Rain", "Snow"],
+        partiallyProtectsFromWeathers: [],
     },
     descriptionWhenCarried: null,
     descriptionWhenWorn: null,
@@ -129,7 +136,7 @@ const spaceSuit = {
  */
 const locker = {
     name: "Locker",
-    description: "A sturdy locker used for storing personal belongings and equipment within the lunar station.",
+    description: "A sturdy locker used for storing personal belongings and equipment within the lunar station",
     weightKg: 1500,
     volumeLiters: 1000,
     properties: {},
@@ -157,7 +164,7 @@ const locker = {
  */
 const stove = {
     name: "Stove",
-    description: "A compact stove designed for cooking meals in the confined space of the lunar station. It features multiple burners and a small oven.",
+    description: "A compact stove designed for cooking meals in the confined space of the lunar station. It features multiple burners and a small oven",
     weightKg: 30,
     volumeLiters: 100,
     properties: {},
@@ -185,7 +192,7 @@ const stove = {
  */
 const fork = {
     name: "Fork",
-    description: "A standard eating utensil with four tines, used for picking up and eating food.",
+    description: "A standard eating utensil with four tines, used for picking up and eating food",
     weightKg: 0.1,
     volumeLiters: 0.05,
     properties: {},
@@ -209,7 +216,7 @@ const fork = {
 
 const spoon = {
     name: "Spoon",
-    description: "A standard eating utensil with a rounded bowl, used for scooping and eating food.",
+    description: "A standard eating utensil with a rounded bowl, used for scooping and eating food",
     weightKg: 0.1,
     volumeLiters: 0.05,
     properties: {},
@@ -233,7 +240,7 @@ const spoon = {
 
 const cabinetDrawerKitchenware = {
     name: "Cabinet Drawer",
-    description: "A small drawer within the lunar station's kitchenette, used for storing utensils and small kitchen items.",
+    description: "A small drawer within the lunar station's kitchenette, used for storing utensils and small kitchen items",
     weightKg: 5,
     volumeLiters: 20,
     properties: {},
@@ -257,7 +264,7 @@ const cabinetDrawerKitchenware = {
 
 const bowl = {
     name: "Bowl",
-    description: "A small bowl used for holding food or liquids.",
+    description: "A small bowl used for holding food or liquids",
     weightKg: 0.2,
     volumeLiters: 0.5,
     properties: {},
@@ -281,7 +288,7 @@ const bowl = {
 
 const cabinetDrawerBowls = {
     name: "Cabinet Drawer",
-    description: "A small drawer within the lunar station's kitchenette, used for storing utensils and small kitchen items.",
+    description: "A small drawer within the lunar station's kitchenette, used for storing utensils and small kitchen items",
     weightKg: 5,
     volumeLiters: 20,
     properties: {},
@@ -305,7 +312,7 @@ const cabinetDrawerBowls = {
 
 const cabinet = {
     name: "Cabinet",
-    description: "A storage cabinet in the lunar station's kitchenette, used for storing food items, utensils, and kitchen supplies.",
+    description: "A storage cabinet in the lunar station's kitchenette, used for storing food items, utensils, and kitchen supplies",
     weightKg: 50,
     volumeLiters: 200,
     properties: {},
@@ -333,7 +340,7 @@ const cabinet = {
  */
 const spaceFoodPack = {
     name: "Space Food Pack",
-    description: "A compact, vacuum-sealed food pack designed for consumption in space. It contains a nutritious meal suitable for astronauts.",
+    description: "A compact, vacuum-sealed food pack designed for consumption in space. It contains a nutritious meal suitable for astronauts",
     weightKg: 0.5,
     volumeLiters: 0.3,
     properties: {},
@@ -360,7 +367,7 @@ const spaceFoodPack = {
 
 const largeCabinet = {
     name: "Large Cabinet",
-    description: "A large storage cabinet in the lunar station's kitchenette, used for storing bulk food items and kitchen supplies.",
+    description: "A large storage cabinet in the lunar station's kitchenette, used for storing bulk food items and kitchen supplies",
     weightKg: 500,
     volumeLiters: spaceFoodPack.volumeLiters * spaceFoodPack.amount + 100,
     properties: {},
@@ -388,7 +395,7 @@ const largeCabinet = {
  */
 const chair = {
     name: "Chair",
-    description: "A simple chair made of metal and plastic, designed for use in the lunar station's common area.",
+    description: "A simple chair made of metal and plastic, designed for use in the lunar station's common area",
     weightKg: 5,
     volumeLiters: 30,
     properties: {},
@@ -414,7 +421,7 @@ DE.world.locations["Surface of the Moon"] = DE.utils.newLocationFromStaticDefini
     description: DE.utils.newHandlebarsTemplate(
         DE,
         "MOON_DESCRIPTION",
-        "The barren, grey surface of the Moon stretches out in all directions, dotted with craters and rocks. The sky above is a pitch-black void, with the Earth hanging in the distance. The silence is absolute, broken only by the faint hum of distant machinery from the lunar station nearby."
+        "The barren, grey surface of the Moon stretches out in all directions, dotted with craters and rocks. The sky above is a pitch-black void, with the Earth hanging in the distance. The silence is absolute, broken only by the faint hum of distant machinery from the lunar station nearby"
     ),
     entrances: [],
     isIndoors: false,
@@ -422,6 +429,7 @@ DE.world.locations["Surface of the Moon"] = DE.utils.newLocationFromStaticDefini
     isSafe: false,
     locationFullyBlocksWeather: [],
     locationPartiallyBlocksWeather: [],
+    locationNegativelyExposesCharactersToWeather: [],
     maxHeightCm: 0,
     maxVolumeLiters: 0,
     maxWeightKg: 0,
@@ -429,18 +437,18 @@ DE.world.locations["Surface of the Moon"] = DE.utils.newLocationFromStaticDefini
     properties: {},
     parent: null,
     slots: {
-        "MOON_SURFACE": {
+        "Moon Surface": {
             description: DE.utils.newHandlebarsTemplate(
                 DE,
                 "MOON_SURFACE_SLOT_DESCRIPTION",
-                "The open expanse of the lunar surface, with its grey dust and scattered rocks."
+                "The open expanse of the lunar surface, with its grey dust and scattered rocks"
             ),
             maxVolumeLiters: 0,
             maxWeightKg: 0,
             items: [
                 {
                     name: "Lunar rock",
-                    description: "A small, jagged rock from the surface of the Moon. It's covered in a fine layer of grey dust.",
+                    description: "A small, jagged rock from the surface of the Moon. It's covered in a fine layer of grey dust",
                     weightKg: 0.5,
                     volumeLiters: 0.2,
                     properties: {},
@@ -470,7 +478,7 @@ DE.world.locations["Lunar Station"] = DE.utils.newLocationFromStaticDefinition(D
     description: DE.utils.newHandlebarsTemplate(
         DE,
         "LUNAR_STATION_DESCRIPTION",
-        "A small lunar station orbiting the Moon. The station serves as a research outpost and habitat for astronauts and scientists studying the lunar environment. The station is equipped with life support systems, scientific laboratories, living quarters, and communication facilities."
+        "A small lunar station orbiting the Moon. The station serves as a research outpost and habitat for astronauts and scientists studying the lunar environment. The station is equipped with life support systems, scientific laboratories, living quarters, and communication facilities"
     ),
     entrances: [
         {
@@ -478,7 +486,7 @@ DE.world.locations["Lunar Station"] = DE.utils.newLocationFromStaticDefinition(D
             description: DE.utils.newHandlebarsTemplate(
                 DE,
                 "LUNAR_MODULE_AIRLOCK_DESCRIPTION",
-                "A sturdy airlock door that separates the interior of the lunar station from the vacuum of space outside. The door is made of reinforced metal and features a small window for viewing the exterior.",
+                "A sturdy airlock door that separates the interior of the lunar station from the vacuum of space outside. The door is made of reinforced metal and features a small window for viewing the exterior",
             ),
             canBeUnlockedByCharacters: [],
             canBeUnlockedByWithItems: [
@@ -501,6 +509,7 @@ DE.world.locations["Lunar Station"] = DE.utils.newLocationFromStaticDefinition(D
         "Vaccuum",
     ],
     locationPartiallyBlocksWeather: [],
+    locationNegativelyExposesCharactersToWeather: [],
     maxHeightCm: 500,
     maxVolumeLiters: 2000,
     maxWeightKg: 2000,
@@ -512,7 +521,7 @@ DE.world.locations["Lunar Station"] = DE.utils.newLocationFromStaticDefinition(D
             description: DE.utils.newHandlebarsTemplate(
                 DE,
                 "LUNAR_STATION_COMMON_AREA_SLOT_DESCRIPTION",
-                "The common area of the lunar station, featuring a few chairs, a table, and a small kitchenette. The walls are lined with control panels and monitors displaying various data about the station's systems."
+                "The common area of the lunar station, featuring a few chairs, a table, and a small kitchenette. The walls are lined with control panels and monitors displaying various data about the station's systems"
             ),
             items: [
                 locker,
@@ -525,7 +534,7 @@ DE.world.locations["Lunar Station"] = DE.utils.newLocationFromStaticDefinition(D
             description: DE.utils.newHandlebarsTemplate(
                 DE,
                 "LUNAR_STATION_COOKING_AREA_SLOT_DESCRIPTION",
-                "A small kitchenette area with a compact stove, a sink, and storage cabinets. There are a few packaged food items and utensils stored here for the crew to use."
+                "A small kitchenette area with a compact stove, a sink, and storage cabinets. There are a few packaged food items and utensils stored here for the crew to use"
             ),
             items: [
                 chair,
@@ -558,7 +567,7 @@ for (let i = 0; i < 2; i++) {
         description: DE.utils.newHandlebarsTemplate(
             DE,
             "LUNAR_STATION_DESCRIPTION_BEDROOM_" + letter,
-            "A small, utilitarian bedroom within the lunar station. The room is sparsely furnished with a bunk bed, a small desk, and a locker for personal belongings. A porthole window offers a view of the lunar surface below."
+            "A small, utilitarian bedroom within the lunar station. The room is sparsely furnished with a bunk bed, a small desk, and a locker for personal belongings. A porthole window offers a view of the lunar surface below"
         ),
         entrances: [
             {
@@ -589,6 +598,7 @@ for (let i = 0; i < 2; i++) {
             "Vaccuum",
         ],
         locationPartiallyBlocksWeather: [],
+        locationNegativelyExposesCharactersToWeather: [],
         maxHeightCm: 500,
         maxVolumeLiters: 500,
         maxWeightKg: 500,
@@ -600,14 +610,14 @@ for (let i = 0; i < 2; i++) {
                 description: DE.utils.newHandlebarsTemplate(
                     DE,
                     "LUNAR_STATION_BEDROOM_SLOT_DESCRIPTION_" + letter,
-                    "The bedroom area of the lunar station, featuring a bunk bed, a small desk, and a locker for personal belongings."
+                    "The bedroom area of the lunar station, featuring a bunk bed, a small desk, and a locker for personal belongings"
                 ),
                 maxVolumeLiters: 2000,
                 maxWeightKg: 2000,
                 items: [
                     {
                         name: "Bunk Bed",
-                        description: "A sturdy bunk bed designed for use in the confined space of the lunar station. It features a simple mattress and bedding.",
+                        description: "A sturdy bunk bed designed for use in the confined space of the lunar station. It features a simple mattress and bedding",
                         weightKg: 20,
                         volumeLiters: 100,
                         properties: {},
@@ -693,7 +703,7 @@ DE.world.worldAllCharacterSpawnScripts["LUNAR_STATION_INITIAL_SCRIPT"] = DE.util
                 template: DE.utils.newHandlebarsTemplate(
                     DE,
                     "RETURN_TO_AIRLOCK_PROMPT",
-                    "{{char}} has an urgent need to return to the airlock and into the lunar station to avoid asphyxiation."
+                    "{{char}} has an urgent need to return to the airlock and into the lunar station to avoid asphyxiation"
                 ),
                 forceDominant: true,
                 intensityModification: 0,
@@ -709,7 +719,7 @@ DE.world.worldAllCharacterSpawnScripts["LUNAR_STATION_INITIAL_SCRIPT"] = DE.util
         triggersDeadEnd: DE.utils.newHandlebarsTemplate(
             DE,
             "ASPHYXIATING_VACCUUM_DEAD_END_TRIGGER",
-            "{{char}} has run out of air and has asphyxiated in the vacuum of space."
+            "{{char}} has run out of air and has asphyxiated in the vacuum of space"
         ),
         decayRatePerInferenceCycle: 0,
         dominance: 10,
@@ -717,7 +727,7 @@ DE.world.worldAllCharacterSpawnScripts["LUNAR_STATION_INITIAL_SCRIPT"] = DE.util
         general: DE.utils.newHandlebarsTemplate(
             DE,
             "ASPHYXIATING_VACCUUM_GENERAL",
-            "{{char}} is struggling to breathe in the vacuum of space."
+            "{{char}} is struggling to breathe in the vacuum of space"
         ),
     };
 
@@ -757,7 +767,7 @@ DE.world.worldAllCharacterSpawnScripts["LUNAR_STATION_INITIAL_SCRIPT"] = DE.util
         relieving: DE.utils.newHandlebarsTemplate(
             DE,
             "FREEZING_VACCUUM_RELIEVING",
-            "{{char}} is recovering from the severe freezing effects of the vacuum of space and should look for warmth."
+            "{{char}} is recovering from the severe freezing effects of the vacuum of space and should look for warmth"
         ),
         decayRateAfterRelief: 0.1,
         intensityModifiersDuringRelief: [
@@ -795,7 +805,7 @@ DE.world.worldAllCharacterSpawnScripts["LUNAR_STATION_INITIAL_SCRIPT"] = DE.util
         triggersDeadEnd: DE.utils.newHandlebarsTemplate(
             DE,
             "FREEZING_VACCUUM_DEAD_END_TRIGGER",
-            "{{char}} has succumbed to the extreme cold of the vacuum of space."
+            "{{char}} has succumbed to the extreme cold of the vacuum of space"
         ),
         decayRatePerInferenceCycle: 0,
         dominance: 10,
@@ -804,7 +814,7 @@ DE.world.worldAllCharacterSpawnScripts["LUNAR_STATION_INITIAL_SCRIPT"] = DE.util
         general: DE.utils.newHandlebarsTemplate(
             DE,
             "FREEZING_VACCUUM_GENERAL",
-            "{{char}} is freezing in the vacuum of space."
+            "{{char}} is freezing in the vacuum of space"
         ),
     };
 });
