@@ -176,7 +176,7 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 
     setTimeout(async () => {
-        await startAmbienceWithFade(['./sounds/dream-ambience.mp3'], 2000, 1);
+        await startAmbienceWithFade(['./sounds/dream-ambience.mp3'], 2000, 3);
         removeLoadingBlur();
     }, 500);
 });

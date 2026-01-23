@@ -665,7 +665,7 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
     /**
      * Injects extra information into the character's general description
      * every inference cycle, these get applied at a system prompt level
-     * so it should be writte in YOU format to address the assistant identity
+     * so it should be writte in 3rd person format
      */
     systemPromptInjection: Record<string, DEStringTemplate>;
 
@@ -711,15 +711,15 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
      * It should describe the character in detail including personality, appearance, background, quirks, etc...
      * Do not use to describe clothing or accessories on the character, those are handled separately
      * 
-     * A good format is, remember to use YOU format as this will be used in the system prompt directly, as well
+     * A good format is, remember to use 3rd person format
      * as using the templating in order to allow for dynamic descriptions, I mean, even aging is possible
      * if you add a script for it that ages the character over time (by default characters are ageless)
      * their weight is static, and their height too, but you can change those via scripts if you want to simulate growth
      * 
      * """
-     * You are {{char}} a {{get_age char}} {{#if (== (get_age char) 1)}}year old {{else}}years old{{/if}} weighting {{get_weight char}}kg and measuring {{get_height char}}cm tall.
+     * {{char}} is a {{get_age char}} {{#if (== (get_age char) 1)}}year old {{else}}years old{{/if}} weighting {{get_weight char}}kg and measuring {{get_height char}}cm tall.
      * 
-     * You are a very curious and adventurous individual, always eager to explore new places and meet new people. You have a knack for getting into trouble, but your quick wit and resourcefulness always help you find a way out.
+     * {{char}} is a very curious and adventurous individual, always eager to explore new places and meet new people. {{char}} has a knack for getting into trouble, but {{char}}'s quick wit and resourcefulness always help {{format_object_pronoun char}} find a way out.
      * 
      * When roleplaying as {{char}}, make sure to embody {{format_object_pronoun char}} adventurous spirit and insatiable curiosity. Embrace {{format_object_pronoun char}} love for exploration and discovery, and let that drive your interactions and decisions.
      * """
@@ -805,11 +805,11 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
      * as they actually act as separate entities that interact with the character, sometimes even conversing with them, while other characters
      * cannot hear them, so even other LLM characters will be confused when the schizophrenic character talks to themselves
      * 
-     * This is a "system prompt" as it behaves as its own character, so you should write it in YOU format addressing the assistant identity
+     * This is a "system prompt" as it behaves as its own character, so you should write it in 3rd person format
      * 
      * For example
      * """
-     * You are a voice in {{char}}'s head. You often talk to {{char}} and sometimes argue with {{format_object_pronoun char}}. You can be supportive at times, but you also like to mess with {{format_object_pronoun char}}'s mind. You enjoy making {{char}} question reality and doubt {{format_object_pronoun char}} own thoughts. You often suggest ideas to {{char}}, some of which are helpful, while others are downright dangerous. Your tone can vary from playful to sinister, depending on your mood.
+     * Chad is a voice in {{char}}'s head. Chad often talks to {{char}} and sometimes argues with {{format_object_pronoun char}}. Chad can be supportive at times, but also likes to mess with {{format_object_pronoun char}}'s mind. Chad enjoys making {{char}} question reality and doubt {{format_object_pronoun char}} own thoughts. Chad often suggests ideas to {{char}}, some of which are helpful, while others are downright dangerous. Chad's tone can vary from playful to sinister, depending on the mood.
      * """
      * 
      * If schizophrenia is given, but no voice description is provided, a default one will be used
