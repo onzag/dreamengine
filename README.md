@@ -10,15 +10,15 @@ AI characters for storytelling are often shallow and exist in one state of relat
 
 But creatures don't work like that, they may have hidden agendas, internal though processes, emotions, mental and physical states they are going through.
 
-Dream Engine purpose is to achieve this depth by defining characters with attribute and behaviour scripts, that affect how they interact and behave for a given condition; it also introduces the concept of a world, where the characters reside, dream engine is also supposed to work with many characters at the same time, and not in 1 to 1 conversations.
+Dream Engine purpose is to achieve this depth by defining characters with attribute and behaviour scripts, that affect how they interact and behave for a given condition; it also introduces the concept of a world, where the characters reside, dream engine is also supposed to work with many characters at the same time, thousands upon thousands, all of them with different potential personalities, and every interactive character must be defined, and not in 1 to 1 conversations.
 
 Originally named Role Story (rstory) when it was just a prototype to see what was possible with hiden states.
 
 ### The user is a character
 
-Dream engine does not make a difference in most cases of who is the user and who is a character, it is not supposed to tell, this is to help prevent compliance with the user and what the user desires; they see all other characters as equal.
+Dream engine does not make a difference in most cases of who is the user and who is a character, using {{user}} to define templates is discouraged unless you are going for a chosen one run, it is not supposed to tell, this is to help prevent compliance with the user and what the user desires; they see all other characters as equal.
 
-Only the story master (a pseudo character) that acts as a narrator is supposed to be obeyed, not the user, who is but another character; in fact the user also has to obey the story master, because the story master wants to keep the story consistent.
+Only the story master (a pseudo character) that acts as a narrator is supposed to be obeyed, not the user, who is but another character; in fact the user also has to obey the story master, because the story master wants to keep the story consistent; if the user does not obey the story master, they might retaliate by refusing to keep ongoing the story to prevent inconsistencies.
 
 ### World rules
 
