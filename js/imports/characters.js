@@ -379,6 +379,7 @@ export function importCharacterFromJSON(json) {
         maintenanceHydrationLitersPerDay: extractSimpleProperty(schema, json, "maintenance_hydration_liters_per_day"),
         locomotionSpeedMetersPerSecond: extractSimpleProperty(schema, json, "locomotion_speed_meters_per_second"),
         rangeMeters: extractSimpleProperty(schema, json, "range_meters"),
+        characterRules: {},
 
         states: {},
         properties: properties,
@@ -392,6 +393,7 @@ export function importCharacterFromJSON(json) {
             strangerNegativeMultiplier: 1.0,
             strangerPositiveMultiplier: 1.0,
             system: "UNKNOWN",
+            descriptionGeneralInjection: null,
         },
         emotions: importCharacterEmotionsFromJSON(json),
         scripts: {

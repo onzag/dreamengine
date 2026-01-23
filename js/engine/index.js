@@ -81,6 +81,14 @@ function createCharacterFromUser(user) {
         ageYears: user.ageYears,
         carryingCapacityLiters: user.carryingCapacityLiters,
         carryingCapacityKg: user.carryingCapacityKg,
+        characterRules: {},
+        actionPromptInjection: {},
+        locomotionSpeedMetersPerSecond: user.locomotionSpeedMetersPerSecond,
+        maintenanceCaloriesPerDay: user.maintenanceCaloriesPerDay,
+        maintenanceHydrationLitersPerDay: user.maintenanceHydrationLitersPerDay,
+        rangeMeters: user.rangeMeters,
+        systemPromptInjection: {},
+        wanderPotential: 0,
         bonds: {
             system: "UNKNOWN",
             declarations: [],
@@ -160,7 +168,7 @@ export class DEngine {
          */
         this.listeners = [];
         /**
-         * @type {((obj: DEObject, conversationId: string, messageId: string, text: string) => void)[]
+         * @type {((obj: DEObject, conversationId: string, messageId: string, text: string) => void)[]}
          */
         this.startsToInferOverConversationMessageListeners = [];
 
@@ -1604,7 +1612,7 @@ export class DEngine {
         }
 
         /**
-         * @type {Set<string}
+         * @type {Set<string>}
          */
         const itemsCharacterCannotWearWReasons = new Set();
 

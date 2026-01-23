@@ -668,6 +668,12 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
      * so it should be writte in 3rd person format
      */
     systemPromptInjection: Record<string, DEStringTemplate>;
+    
+    /**
+     * These are rules that the character must follow at all times,
+     * they get injected into the character's system prompt every inference cycle
+     */
+    characterRules: Record<string, DEWorldRule>;
 
     /**
      * These are similar to user prompt injections in the state but they don't need any
@@ -1971,6 +1977,7 @@ declare type DEStringTemplateFunction = (
     cause: string,
     potentialCausant: DECompleteCharacterReference,
 ) => Promise<string> | string;
+
 declare type DEStringTemplate = {
     type: "template";
     id: string;
@@ -2143,6 +2150,24 @@ declare interface DEUtils {
     propertyValueToTemplate: (DE: DEObject, value: DEPropertyValueInCharSpace) => DEStringTemplate;
 }
 
+declare interface DEWorldRule {
+    /**
+     * Description of the rule being enforced
+     * eg. "Magic does not exist in this world, so {{char}} cannot use magic."
+     */
+    rule: DEStringTemplate;
+    /**
+     * A yes/no question that helps determine if the rule is being followed or not
+     * eg. "Has {{char}} attempted to use magic?"
+     */
+    question: DEStringTemplate;
+    /**
+     * The expected answer to the yes/no question for the rule to be considered followed
+     * eg. "no" for the magic rule above, since the character should not use magic
+     */
+    expectedAnswer: "no" | "yes";
+}
+
 declare interface DEObject {
     user: DEMinimalCharacterReference;
     characters: Record<string, DECompleteCharacterReference>;
@@ -2180,7 +2205,7 @@ declare interface DEObject {
      * these are used to guide the world simulation LLM reasoning
      * and help it make decisions about what happens in the world
      */
-    worldRules: Record<string, DEStringTemplate>;
+    worldRules: Record<string, DEWorldRule>;
     /**
      * Heuristics that guide character wandering behaviour
      * as how the character decides where to go when wandering
