@@ -1082,6 +1082,12 @@ declare interface DEStateDescription {
     intensity: number;
     causants: Array<DEStateCausant> | null;
     causes: Array<DEStateCause> | null;
+    /**
+     * Items that have been seen when this state was active
+     * these are copies that get stored in the state for reference and are not live references
+     * of the items themselves, these work as a sort of memory of what the character has seen
+     */
+    seenItems: Array<DEItem>;
 
     /**
      * The time when this state was first activated that was contiguous with the current state
