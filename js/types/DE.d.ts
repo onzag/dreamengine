@@ -168,14 +168,22 @@ interface DEStringTemplateWithIntensityAndCausants {
     determineCause: DEStringTemplate | null;
 }
 
-declare interface DEPromptInjection {
+declare interface DEActionPromptInjection {
     /**
      * The template to inject into the character's action reasoning
      * remember this applies every inference cycle while the state is active
      * So be careful check actionPromptInjection documentation description for more details
      * on a proper use case
      */
-    template: DEStringTemplate;
+    action: DEStringTemplate;
+    /**
+     * An optional narrive effect for the action, suppose for example the action is
+     * {{char}} begins to cry
+     * 
+     * The narrative effect can be
+     * When narrating describe {{char}} tantrum in detail and how the tears flow down their face
+     */
+    narrativeEffect?: DEStringTemplate;
     /**
      * If the template represents a dead end scenario
      * use this for the description of the dead end scenario
@@ -194,9 +202,17 @@ declare interface DEPromptInjection {
      * over more dominant states
      */
     forceDominant: boolean;
+    /**
+     * The primary emotion this action will cause provided
+     */
+    primaryEmotion: DEEmotionNames;
+    /**
+     * The emotional range this action will cause provided
+     */
+    emotionalRange: DEEmotionNames[];
 }
 
-declare interface DEPromptInjectionWithIntensity extends DEPromptInjection {
+declare interface DEActionPromptInjectionWithIntensity extends DEActionPromptInjection {
     /**
      * The intensity modification this action will cause provided
      * that something is injected, from -4 to 4
@@ -288,7 +304,7 @@ declare interface CharacterStateDefinition {
      * The injection can have intensity levels as well to allow for different instructions
      * allowing it to be more dynamic
      */
-    actionPromptInjection: Record<string, DEPromptInjectionWithIntensity>;
+    actionPromptInjection: Record<string, DEActionPromptInjectionWithIntensity>;
     /**
      * Description of the state, used for reasoning about the state
      */
@@ -314,7 +330,7 @@ declare interface CharacterStateDefinition {
      * 
      * Check the actionPromptInjection description for an example use case
      */
-    relievingActionPromptInjection?: Record<string, DEPromptInjectionWithIntensity>;
+    relievingActionPromptInjection?: Record<string, DEActionPromptInjectionWithIntensity>;
     /**
      * Whether this state triggers a dead end that causes the character to be permanently removed from the story
      * use this for the description of the dead end scenario
@@ -710,7 +726,7 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
      * Now if forceDominant is set to false for this one, this way the character may have a tic sometimes but it won't override other more important states that are
      * keeping them busy and their behaviour in check
      */
-    actionPromptInjection: Record<string, DEPromptInjection>;
+    actionPromptInjection: Record<string, DEActionPromptInjection>;
 
     /**
      * Just the general description of the character and the base of the system prompt,
@@ -2159,13 +2175,17 @@ declare interface DEWorldRule {
     /**
      * A yes/no question that helps determine if the rule is being followed or not
      * eg. "Has {{char}} attempted to use magic?"
+     * 
+     * The question is used to infer whether the rule is being followed or not by
+     * the user, so if the rule contains no question it cannot be evaluated for
+     * the user character
      */
-    question: DEStringTemplate;
+    question?: DEStringTemplate;
     /**
      * The expected answer to the yes/no question for the rule to be considered followed
      * eg. "no" for the magic rule above, since the character should not use magic
      */
-    expectedAnswer: "no" | "yes";
+    expectedAnswer?: "no" | "yes";
 }
 
 declare interface DEObject {
