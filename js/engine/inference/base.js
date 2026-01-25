@@ -3,7 +3,7 @@ import { DEngine } from "../index.js";
 export class BaseInferenceAdapter {
     /**
      * @param {DEngine} parent
-     * @param {object} args 
+     * @param {*} args 
      */
     constructor(parent, args) {
         if (new.target === BaseInferenceAdapter) {
@@ -22,14 +22,14 @@ export class BaseInferenceAdapter {
      * 
      * @param {DECompleteCharacterReference} character 
      * @param {string} system 
-     * @param {DEConversationMessage[]} messages
+     * @param {AsyncGenerator<{name: string, message: string, id: string, conversationId: string | null, debug: boolean, rejected: boolean}, void, boolean>} getHistoryForCharacter
      * @param {string} action
-     * @returns {AsyncGenerator<{type: "infer" | "think", token: string}, void, boolean>}
+     * @returns {AsyncGenerator<string, void, boolean>}
      */
     async* inferNextMessageFor(
         character,
         system,
-        messages,
+        getHistoryForCharacter,
         action,
     ) {
         throw new Error("Method 'inferNextMessageFor()' must be implemented.");
@@ -44,13 +44,15 @@ export class BaseInferenceAdapter {
      * 
      * @param {DECompleteCharacterReference} character 
      * @param {string} system 
-     * @param {DEConversationMessage[]} messages
+     * @param {AsyncGenerator<{name: string, message: string, id: string, conversationId: string | null, debug: boolean, rejected: boolean}, void, boolean>} getHistoryForCharacter
+     * @param {boolean} lastCycleOnly whether to limit the history to only the last cycle
      * @returns {AsyncGenerator<string, void, {nextQuestion: string, stopAt: Array<string>, maxParagraphs: number; maxCharacters: number} | null>}
      */
     async *runQuestioningCustomAgentOn(
         character,
         system,
-        messages,
+        getHistoryForCharacter,
+        lastCycleOnly,
     ) {
         throw new Error("Method 'runQuestioningCustomAgentOn()' must be implemented.");
     }

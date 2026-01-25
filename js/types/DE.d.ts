@@ -2178,20 +2178,6 @@ declare interface DEWorldRule {
      * eg. "Magic does not exist in this world, so {{char}} cannot use magic."
      */
     rule: DEStringTemplate;
-    /**
-     * A yes/no question that helps determine if the rule is being followed or not
-     * eg. "Has {{char}} attempted to use magic?"
-     * 
-     * The question is used to infer whether the rule is being followed or not by
-     * the user, so if the rule contains no question it cannot be evaluated for
-     * the user character
-     */
-    question?: DEStringTemplate;
-    /**
-     * The expected answer to the yes/no question for the rule to be considered followed
-     * eg. "no" for the magic rule above, since the character should not use magic
-     */
-    expectedAnswer?: "no" | "yes";
 }
 
 declare interface DEObject {

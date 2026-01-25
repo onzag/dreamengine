@@ -164,7 +164,7 @@ export class DEngine {
         this.pseudoConversationSummaryGenerator = null;
 
         /**
-         * @type {((obj: DEObject) => void)[]}
+         * @type {((obj: DEObject) => void | Promise<void>)[]}
          */
         this.listeners = [];
         /**
@@ -1958,7 +1958,7 @@ export class DEngine {
 
         const otherRulesProcessed = (await Promise.all(Object.values(otherRules).map(async (rule, index) => {
             // @ts-ignore
-            return await rule.execute(this.deObject, characterObj);
+            return await rule.rule.execute(this.deObject, characterObj);
         }))).filter((v) => v !== null && v !== undefined && v !== "");
 
         const ruleBreakMessage = "\nWas this rule broken by " + characterName + "? Answer with YES or NO, if YES, explain why briefly.";
@@ -2073,18 +2073,22 @@ export class DEngine {
 
         const otherRulesProcessed = (await Promise.all(Object.values(otherRules).map((rule, index) => {
             // @ts-ignore
-            return rule.execute(this.deObject, characterObj);
+            return rule.rule.execute(this.deObject, characterObj);
         }))).filter((v) => v !== null && v !== undefined && v !== "");
         simplifiedRules.push(...otherRulesProcessed);
 
         return simplifiedRules;
     }
 
-    informDEObjectUpdated() {
-        this.listeners.forEach(listener => {
-            // @ts-ignore
-            listener(this.deObject)
-        });
+    async informDEObjectUpdated() {
+        await Promise.all(this.listeners.map(async (listener) => {
+            try {
+                // @ts-ignore
+                await listener(this.deObject)
+            } catch (e) {
+                console.error("Error in listener:", e);
+            }
+        }));
     }
 
     /**
@@ -2601,7 +2605,6 @@ export class DEngine {
         // typescript not being able to infer here as usual
         // @ts-ignore
         this.deObject.conversations[characterState.conversationId].messages.push(messageToAdd);
-        this.informDEObjectUpdated();
 
         /**
          * @type {string[]}
@@ -2659,7 +2662,6 @@ export class DEngine {
                 // typescript not being able to infer here as usual
                 // @ts-ignore
                 this.deObject.conversations[characterState.conversationId].messages.push(messageToAdd);
-                this.informDEObjectUpdated();
             }
         });
 
@@ -2693,7 +2695,7 @@ export class DEngine {
         // typescript not being able to infer here as usual
         // @ts-ignore
         this.deObject.conversations[characterState.conversationId].messages.push(messageToAdd2);
-        this.informDEObjectUpdated();
+        await this.informDEObjectUpdated();
 
         return result;
     }
@@ -3067,10 +3069,10 @@ export class DEngine {
      * this will ensure the LLM can handle the context window properly without losing important information
      * 
      * @param {DECompleteCharacterReference} character
-     * @param {{limitToOneCycle: boolean, depth: number, sinceMessageId?: string | null, excludeFrom?: string[] | null, includeDebugMessages?: boolean | null, includeRejectedMessages?: boolean | null}} options
-     * @return {Promise<Array<{name: string, message: string, id: string, conversationId: string | null, debug: boolean, rejected: boolean}>>}
+     * @param {{ excludeFrom?: string[] | null, includeDebugMessages?: boolean | null, includeRejectedMessages?: boolean | null}} options
+     * @return {AsyncGenerator<{name: string, message: string, id: string, conversationId: string | null, debug: boolean, rejected: boolean}, void, boolean>}
      */
-    async getHistoryForCharacter(character, options) {
+    async *getHistoryForCharacter(character, options) {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         } else if (this.invalidCharacterStates) {
@@ -3101,11 +3103,6 @@ export class DEngine {
         const consumedConversationIds = new Set();
 
         /**
-         * @type {Array<{name: string, message: string, id: string, conversationId: string | null, debug: boolean, rejected: boolean}>}
-         */
-        const historyMessages = [];
-
-        /**
          * @param {DETimeDescription} fromTime
          */
         const consumeAccumulatedStatesAndLocations = (fromTime) => {
@@ -3127,18 +3124,18 @@ export class DEngine {
                 message += ` is at location: "${statesAccumulatedAtLocation || "unknown location"}".`;
             }
 
-            historyMessages.push({
+            statesAccumulated = new Set();
+            statesAccumulatedAtLocation = null;
+            statesAccumulatedFromTime = null;
+
+            return {
                 name: "Story Master",
                 message: message,
                 id: `story-master-${fromTime.time}`,
                 conversationId: null,
                 debug: false,
                 rejected: false,
-            });
-
-            statesAccumulated = new Set();
-            statesAccumulatedAtLocation = null;
-            statesAccumulatedFromTime = null;
+            };
         };
 
         for (const state of characterStateWithCurrent) {
@@ -3151,16 +3148,10 @@ export class DEngine {
                     // calculate time skipped, and specify in which state the character was
                     // maybe they were sleeping, eating, working, etc
                     // who knows what happened
-                    consumeAccumulatedStatesAndLocations(state.time);
+                    const keepgoing = yield consumeAccumulatedStatesAndLocations(state.time);
 
-                    if (
-                        (options.depth > 0 && historyMessages.length >= options.depth) ||
-                        options.sinceMessageId === historyMessages[historyMessages.length - 1]?.id
-                    ) {
-                        if (options.sinceMessageId === historyMessages[historyMessages.length - 1]?.id) {
-                            historyMessages.pop();
-                        }
-                        break;
+                    if (!keepgoing) {
+                        return;
                     }
                 }
 
@@ -3187,32 +3178,25 @@ export class DEngine {
                     const participantsExcludingCharacter = currentConversationObject.participants.filter(p => p !== character.name);
                     const timeMark = this.makeTimestamp(conversationStartTime);
                     const withOrAlone = participantsExcludingCharacter.length === 0 ? "on their own" : "with " + this.deObject.functions.format_and(this.deObject, null, participantsExcludingCharacter);
-                    historyMessages.push({
+
+                    const expectedId = `story-master-${state.conversationId}-summary`;
+                    const keepgoing = yield {
                         name: "Story Master",
                         message: (timeMark === "Now" ? "Right Now" : "At " + timeMark) + ", " + character.name + " is at " + conversationLocation + " " + withOrAlone + ". Conversation summary: " + currentConversationObject.summary,
-                        id: `story-master-${state.conversationId}-summary`,
+                        id: expectedId,
                         conversationId: state.conversationId,
                         debug: false,
                         rejected: false,
-                    });
-                    if (
-                        (
-                            options.depth > 0 &&
-                            historyMessages.length >= options.depth
-                        ) || options.limitToOneCycle || options.sinceMessageId === historyMessages[historyMessages.length - 1]?.id
-                    ) {
-                        // we assume the character talked during this pseudo conversation
-                        if (options.sinceMessageId === historyMessages[historyMessages.length - 1]?.id) {
-                            historyMessages.pop();
-                        }
-                        break;
+                    };
+                    if (!keepgoing) {
+                        return;
                     }
                 } else {
                     for (const message of conversationMessages.reverse()) {
                         if (options.excludeFrom && options.excludeFrom.includes(message.sender)) {
                             continue;
                         }
-                        historyMessages.push({
+                        const keepgoing = yield ({
                             name: message.sender,
                             message: message.content,
                             id: message.id,
@@ -3220,11 +3204,8 @@ export class DEngine {
                             debug: message.isDebugMessage,
                             rejected: message.isRejectedMessage,
                         });
-                        if ((options.depth > 0 && historyMessages.length >= options.depth) || (options.limitToOneCycle && message.sender === character.name) || options.sinceMessageId === historyMessages[historyMessages.length - 1]?.id) {
-                            if (options.sinceMessageId === historyMessages[historyMessages.length - 1]?.id) {
-                                historyMessages.pop();
-                            }
-                            break;
+                        if (!keepgoing) {
+                            return;
                         }
                     }
 
@@ -3233,19 +3214,16 @@ export class DEngine {
                         const timeMark = this.makeTimestamp(conversationStartTime);
                         const timeMarkDetailed = timeMark === "Now" ? "right now" : "at " + timeMark;
                         const withOrAlone = participantsExcludingCharacter.length === 0 ? "on their own" : "with " + this.deObject.functions.format_and(this.deObject, null, participantsExcludingCharacter);
-                        historyMessages.push({
+                        const keepgoing = yield {
                             name: "Story Master",
                             message: "The following interaction took place " + timeMarkDetailed + ", " + character.name + " is at " + conversationLocation + withOrAlone + ".",
                             id: `story-master-${state.conversationId}-interaction-info`,
                             conversationId: state.conversationId,
                             debug: false,
                             rejected: false,
-                        });
-                        if ((options.depth > 0 && historyMessages.length >= options.depth) || options.sinceMessageId === historyMessages[historyMessages.length - 1]?.id) {
-                            if (options.sinceMessageId === historyMessages[historyMessages.length - 1]?.id) {
-                                historyMessages.pop();
-                            }
-                            break;
+                        };
+                        if (!keepgoing) {
+                            return;
                         }
                     }
                 }
@@ -3255,9 +3233,9 @@ export class DEngine {
                 currentConversationId = null;
                 if (statesAccumulatedAtLocation && statesAccumulatedAtLocation !== state.location) {
                     // location changed, consume accumulated states
-                    consumeAccumulatedStatesAndLocations(state.time);
-                    if (options.depth > 0 && historyMessages.length >= options.depth) {
-                        break;
+                    const keepgoing = yield consumeAccumulatedStatesAndLocations(state.time);
+                    if (!keepgoing) {
+                        return;
                     }
                 } else {
                     statesAccumulatedAtLocation = state.location;
@@ -3271,25 +3249,13 @@ export class DEngine {
             lastStateObjectHandled = state;
         }
 
-        if (options.depth > 0 && historyMessages.length >= options.depth || (options.sinceMessageId && historyMessages[historyMessages.length - 1]?.id === options.sinceMessageId)) {
-            // reverse the messages to be from oldest to newest
-            if (options.sinceMessageId === historyMessages[historyMessages.length - 1]?.id) {
-                historyMessages.pop();
-            }
-            return historyMessages.reverse();
-        }
-
         // consume any remaining accumulated states
         if ((statesAccumulated.size > 0 || statesAccumulatedAtLocation) && lastStateObjectHandled) {
-            consumeAccumulatedStatesAndLocations(lastStateObjectHandled.time);
+            const keepgoing = yield consumeAccumulatedStatesAndLocations(lastStateObjectHandled.time);
+            if (!keepgoing) {
+                return;
+            }
         }
-
-        if (options.sinceMessageId === historyMessages[historyMessages.length - 1]?.id) {
-            historyMessages.pop();
-        }
-
-        // reverse the messages to be from oldest to newest
-        return historyMessages.reverse();
     }
 
     /**
@@ -3440,7 +3406,7 @@ export class DEngine {
         // typescript not being able to infer here as usual
         // @ts-ignore
         this.deObject.conversations[characterState.conversationId].messages.push(messageToAdd);
-        this.informDEObjectUpdated();
+        await this.informDEObjectUpdated();
 
         let expectedNextLocation = characterState.location;
         let expectedNextLocationSlot = characterState.locationSlot;
@@ -3584,7 +3550,7 @@ export class DEngine {
                     canOnlyBeSeenByCharacter: null,
                 };
                 this.deObject.conversations[newConversationId].messages.push(initialMessage);
-                this.informDEObjectUpdated();
+                await this.informDEObjectUpdated();
             } else if (hasCharLeftConversationToJoinAnotherWithSomeoneElse?.left) {
                 await Promise.all(nextOrderOfInteraction.map(async interaction => {
                     const isParticipantCurrently = alreadyInteractingCharacters.includes(interaction.name);
@@ -3742,7 +3708,7 @@ export class DEngine {
                 canOnlyBeSeenByCharacter: null,
             });
 
-            this.informDEObjectUpdated();
+            await this.informDEObjectUpdated();
             return;
         }
     }
@@ -3844,7 +3810,7 @@ export class DEngine {
             /**
              * @param {string} reason 
              */
-            const simpleRollbackWithReason = (reason) => {
+            const simpleRollbackWithReason = async (reason) => {
                 userCharacterState.messageId = originalMessageId;
                 userCharacterState.conversationId = originalConversationId;
                 // reject the added message
@@ -3870,15 +3836,15 @@ export class DEngine {
                     isRejectedMessage: true,
                 });
 
-                this.informDEObjectUpdated();
+                await this.informDEObjectUpdated();
             }
 
-            this.informDEObjectUpdated();
+            await this.informDEObjectUpdated();
             this.informCycleState("info", `Testing message is following the rules`);
 
             const testResults = await this.testWorldRulesForUserMessage(userMessage);
             if (!testResults.passed) {
-                simpleRollbackWithReason(testResults.reason || "Message broke world rules");
+                await simpleRollbackWithReason(testResults.reason || "Message broke world rules");
                 this.informCycleState("info", `The message has been rejected for breaking the rules`);
                 return;
             }
@@ -3935,7 +3901,7 @@ export class DEngine {
             this.informCycleState("error", `Internal Error during cycle execution: ${error.message}`);
             // restore deObject from backup
             this.deObject = deObjectBackup;
-            this.informDEObjectUpdated();
+            await this.informDEObjectUpdated();
         }
 
         this.executingCycle = false;
@@ -3943,7 +3909,7 @@ export class DEngine {
 
     /**
      * 
-     * @param {(obj: DEObject) => void} listener 
+     * @param {(obj: DEObject) => void | Promise<void>} listener 
      */
     addDEObjectUpdatedListener(listener) {
         this.listeners.push(listener);
@@ -4037,7 +4003,7 @@ export class DEngine {
             this.deObject.conversations[userConversationId].messages.push(messageToAdd);
         }
 
-        this.informDEObjectUpdated();
+        await this.informDEObjectUpdated();
     }
 }
 

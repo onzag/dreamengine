@@ -118,26 +118,37 @@ export class TextOnlyUI {
      * @param {DEObject} obj 
      */
     async processUpdate(obj) {
-        const newMessages = await this.engine.getHistoryForCharacter(
+        /**
+         * @type {Array<{name: string; message: string; id: string}>}
+         */
+        let accumulatedMessages = [];
+        const generator = this.engine.getHistoryForCharacter(
             obj.characters[this.username],
             {
-                depth: 0,
-                limitToOneCycle: false,
-                sinceMessageId: this.lastMessageId,
                 excludeFrom: [this.username],
                 includeDebugMessages: true,
             }
         );
+        let next = await generator.next(true);
+        while (!next.done) {
+            if (next.value.id === this.lastMessageId) {
+                await generator.return();
+                break;
+            }
+            accumulatedMessages.push(next.value);
+            next = await generator.next();
+        }
+        accumulatedMessages = accumulatedMessages.reverse();
         
-        const newBuffer = newMessages.map(m => {
+        const newBuffer = accumulatedMessages.map(m => {
             return `${m.name}: ${m.message}`;
         }).join("\n");
 
         if (newBuffer.length > 0) {
-            console.log(newBuffer);
+            process.stdout.write("\n" + newBuffer);
         }
 
-        const lastMessage = newMessages[newMessages.length - 1];
+        const lastMessage = accumulatedMessages[accumulatedMessages.length - 1];
         if (lastMessage) {
             this.lastMessageId = lastMessage.id;
         }
