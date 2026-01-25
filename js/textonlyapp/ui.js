@@ -55,6 +55,15 @@ export class TextOnlyUI {
             throw new Error("Engine not initialized");
         }
         this.engine.addDEObjectUpdatedListener(this.processUpdate);
+        this.engine.addCycleInformListener((level, message) => {
+            if (level === "info") {
+                console.log(`[INFO]: ${message}`);
+            } else if (level === "warning") {
+                console.warn(`[WARNING]: ${message}`);
+            } else if (level === "error") {
+                console.error(`[ERROR]: ${message}`);
+            }
+        });
         this.engine.addInferringOverConversationMessageListener(this.addToTextBuffer);
 
         if (!this.engine.deObject.world.hasStartedScene) {

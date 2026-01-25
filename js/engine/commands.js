@@ -915,4 +915,30 @@ export const commands = {
         cheat: true,
         args: ["<character name>"],
     },
+    "rawstatefor":{
+        run: async (engine, args) => {
+            if (!engine.deObject) {
+                throw new Error("DEngine not initialized");
+            }
+            if (args.length === 0) {
+                return "Usage: /rawstatefor <character name>";
+            }
+            const characterName = args.join(" ");
+            const character = engine.deObject.characters[characterName];
+            if (!character) {
+                return `Character "${characterName}" not found.`;
+            }
+            const characterState = engine.deObject.stateFor[characterName];
+            if (!characterState) {
+                return `No state found for character "${characterName}".`;
+            }
+            const charStateShallowCopy = {...characterState};
+            // @ts-ignore
+            delete charStateShallowCopy.history;
+            return JSON.stringify(charStateShallowCopy, null, 2);
+        },
+        help: "Displays the raw JSON state for a given character.",
+        cheat: true,
+        args: ["<character name>"],
+    },
 }

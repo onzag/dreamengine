@@ -423,16 +423,18 @@ ${states.join(", ")}
 
     /**
      * @param {DECompleteCharacterReference} character 
-     * @param {string} system 
+     * @param {string} system
+     * @param {string|null} contextInfo additional context information to provide to the agent
      * @param {AsyncGenerator<{name: string, message: string, id: string, conversationId: string | null, debug: boolean, rejected: boolean}, void, boolean>} getHistoryForCharacter
-     * @param {boolean} lastCycleOnly whether to limit the history to only the last cycle
+     * @param {"LAST_CYCLE" | "LAST_MESSAGE" | "ALL"} msgLimit what to limit the history to
      * @returns {AsyncGenerator<string, void, {nextQuestion: string, stopAt: Array<string>, maxParagraphs: number; maxCharacters: number} | null>}
      */
     async *runQuestioningCustomAgentOn(
         character,
         system,
+        contextInfo,
         getHistoryForCharacter,
-        lastCycleOnly,
+        msgLimit,
     ) {
         if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
             throw new Error("WebSocket is not open");
@@ -460,9 +462,12 @@ ${states.join(", ")}
         let generator = await getHistoryForCharacter.next(true);
         while (!generator.done) {
             if (!generator.value.debug && !generator.value.rejected) {
-                messagesToAdd.push(generator.value);
+                const shouldRemoveAddedMessage = msgLimit === "LAST_MESSAGE" && generator.value.name !== character.name;
+                if (!shouldRemoveAddedMessage) {
+                    messagesToAdd.push(generator.value);
+                }
                 tokensExhaustedApprox += await this.countTokens("[" + generator.value.name + "]: " + generator.value.message) + 10; // some wiggle room
-                if (tokensExhaustedApprox >= contextWindowSize || (lastCycleOnly && generator.value.name === character.name)) {
+                if (tokensExhaustedApprox >= contextWindowSize || ((msgLimit === "LAST_CYCLE" || msgLimit === "LAST_MESSAGE") && generator.value.name === character.name)) {
                     await getHistoryForCharacter.return();
                     if (tokensExhaustedApprox > contextWindowSize) {
                         // remove the last message as it made us go over
@@ -479,7 +484,7 @@ ${states.join(", ")}
 
         const payload = {
             system: system,
-            userTrail: "<messages>" + messagesFormatted + "</messages>"
+            userTrail: (contextInfo || "") + (contextInfo ? "\n" : "") + "<messages>" + messagesFormatted + "</messages>"
         };
 
         this.socket.send(JSON.stringify({ action: "analyze-prepare", payload }));
@@ -526,13 +531,81 @@ ${states.join(", ")}
     }
 
     /**
+     * @param {string} description
+     * @param {string[]} rules
+     * @param {string|null} characterDescription
+     * @param {string[]} items
+     * @returns string
+     */
+    buildSystemPromptForQuestioningAgent(description, rules, characterDescription, items) {
+        let value = (
+            `<description>` + description + `</description>`
+        );
+
+        for (const rule of rules) {
+            value += `\n<rule>` + rule + `</rule>`;
+        }
+
+        if (items.length > 0) {
+            value += `\n<availableItems>`;
+        }
+
+        for (const item of items) {
+            value += `\n<item>` + item + `</item>`;
+        }
+
+        if (items.length > 0) {
+            value += `\n</availableItems>`;
+        }
+
+        if (characterDescription) {
+            value += `\n<characterDescription>` + characterDescription + `</characterDescription>`;
+        }
+
+        return value;
+    }
+
+    /**
+     * 
+     * @param {DECompleteCharacterReference} character 
+     * @param {string} description 
+     * @param {string|null} appereance 
+     * @param {string[]} relationships 
+     * @param {string[]} states 
+     * @param {string|null} scenario 
+     * @param {string|null} lore
+     * @returns 
+     */
+    buildSystemCharacterDescription(character, description, appereance, relationships, states, scenario, lore) {
+        return (
+`${appereance ? `## ${character.name}'s Appearance:
+${appereance}
+
+` : ""}## ${character.name}'s Description:
+${description}${relationships.length > 0 ? `
+
+## ${character.name}'s Relationships:
+${relationships.map(relationship => ` - ${relationship}`).join("\n")}` : ""}${states.length > 0 ? `
+
+## Current States:
+${states.map(state => ` - ${state}`).join("\n")}` : ""}${scenario && scenario.trim().length > 0 ? `
+
+## Scenario:
+${scenario}` : ""}${lore && lore.trim().length > 0 ? `
+
+## Lore:
+${lore}
+` : ""}`);
+    }
+
+    /**
      * 
      * @param {DECompleteCharacterReference} character
      * @param {string} description 
      * @param {string} appereance
      * @param {string[]} relationships
      * @param {string[]} states 
-     * @param {string} scenario
+     * @param {string|null} scenario
      * @param {string|null} lore
      * @param {Array<string>} otherInteractingCharacters
      * @param {Array<string>} characterRules
@@ -595,24 +668,7 @@ ${worldRules.map(rule => `<rule>${rule}</rule>`).join("\n")}
 </worldRules>
 ` : ""}
 <roleplayContext>
-## ${character.name}'s Appearance:
-${appereance}
-
-## ${character.name}'s Description:
-${description}${relationships.length > 0 ? `
-
-## ${character.name}'s Relationships:
-${relationships.map(relationship => ` - ${relationship}`).join("\n")}` : ""}${states.length > 0 ? `
-
-## Current States:
-${states.map(state => ` - ${state}`).join("\n")}` : ""}
-
-## Scenario:
-${scenario}${lore && lore.trim().length > 0 ? `
-
-## Lore:
-${lore}
-` : ""}
+${this.buildSystemCharacterDescription(character, description, appereance, relationships, states, scenario, lore)}
 </roleplayContext>
 `
         )

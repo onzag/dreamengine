@@ -41,16 +41,18 @@ export class BaseInferenceAdapter {
      * question will make it keep ongoing, passing null will make it stop after the current answer and the generator will finish.
      * 
      * @param {DECompleteCharacterReference} character 
-     * @param {string} system 
+     * @param {string} system
+     * @param {string|null} contextInfo additional context information to provide to the agent
      * @param {AsyncGenerator<{name: string, message: string, id: string, conversationId: string | null, debug: boolean, rejected: boolean}, void, boolean>} getHistoryForCharacter
-     * @param {boolean} lastCycleOnly whether to limit the history to only the last cycle
+     * @param {"LAST_CYCLE" | "LAST_MESSAGE" | "ALL"} msgLimit what to limit the history to
      * @returns {AsyncGenerator<string, void, {nextQuestion: string, stopAt: Array<string>, maxParagraphs: number; maxCharacters: number} | null>}
      */
     async *runQuestioningCustomAgentOn(
         character,
         system,
+        contextInfo,
         getHistoryForCharacter,
-        lastCycleOnly,
+        msgLimit,
     ) {
         throw new Error("Method 'runQuestioningCustomAgentOn()' must be implemented.");
     }
@@ -70,6 +72,33 @@ export class BaseInferenceAdapter {
      */
     buildSystemPromptForCharacter(character, description, appereance, relationships, states, scenario, lore, otherInteractingCharacters, characterRules, worldRules) {
         throw new Error("Method 'buildSystemPromptForCharacter()' must be implemented.");
+    }
+
+    /**
+     * @param {DECompleteCharacterReference} character the character in question that is building a prompt for
+     * @param {string} description the description of the character, general
+     * @param {string|null} appereance the appereance description of the character
+     * @param {string[]} relationships the relationships description of the character
+     * @param {string[]} states the current applying states of the character, most dominant ones, short or long summary
+     * @param {string|null} scenario the basic description of the current location
+     * @param {string|null} lore the lore related to the character or scenario
+     * @returns {string} the system prompt
+     */
+    buildSystemCharacterDescription(character, description, appereance, relationships, states, scenario, lore) {
+        throw new Error("Method 'buildSystemCharacterDescription()' must be implemented.");
+    }
+
+    /**
+     * Builds a system prompt for an assistant to run a questioning agent
+     * 
+     * @param {string} description
+     * @param {string[]} rules
+     * @param {string|null} characterDescription
+     * @param {string[]} items
+     * @returns {string}
+     */
+    buildSystemPromptForQuestioningAgent(description, rules, characterDescription, items) {
+        throw new Error("Method 'buildSystemPromptForQuestioningAgent()' must be implemented.");
     }
 
     /**

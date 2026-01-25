@@ -13,7 +13,7 @@ const INVALID_NAMES = ["system", "assistant", "user", "everyone", "nobody",
     "they", "them", "their", "theirs", "he", "him", "his", "she", "her", "hers",
     "it", "its", "i", "me", "my", "mine", "we", "us", "our", "ours", "you", "your", "yours",
     "everyone else", "everybody else", "anyone else", "anybody else",
-    "somebody else", "somebodyelse", "nobody else", "nobody"];
+    "somebody else", "somebodyelse", "nobody else", "nobody", "story master", "storymaster", "story", "master"];
 
 function setupFunctions() {
     const finalObject = {};
@@ -168,6 +168,10 @@ export class DEngine {
          * @type {((obj: DEObject) => void | Promise<void>)[]}
          */
         this.listeners = [];
+        /**
+         * @type {((level: "info" | "warning" | "error", message: string) => void)[]}
+         */
+        this.informListeners = [];
         /**
          * @type {((obj: DEObject, conversationId: string, messageId: string, text: string) => void)[]}
          */
@@ -598,51 +602,49 @@ export class DEngine {
         const userGetsAPass = !this.deObject.world.hasStartedScene;
 
         for (const charName in this.deObject.stateFor) {
-            if (userGetsAPass && charName === this.userCharacter?.name) {
-                continue;
-            }
             const charState = this.deObject.stateFor[charName];
             const characterLocation = charState.location;
             const characterLocationSlot = charState.locationSlot;
             const characterLocationObj = this.deObject.world.locations[characterLocation];
-            if (!characterLocationObj) {
+            if (!characterLocationObj && !userGetsAPass) {
                 throw new Error(`Character ${charName} is in invalid location ${characterLocation}, valid locations are: ${Object.keys(this.deObject.world.locations).join(", ")}`);
-            }
-            const characterLocationSlotObj = characterLocationObj.slots[characterLocationSlot];
-            if (!characterLocationSlotObj) {
-                throw new Error(`Character ${charName} is in invalid location slot ${characterLocationSlot} in location ${characterLocation}, valid slots are: ${Object.keys(characterLocationObj.slots).join(", ")}`);
-            }
-            const currentWeather = characterLocationObj.currentWeather;
-            const fullyBlockWeatherInfo = characterLocationSlotObj.slotFullyBlocksWeather || characterLocationObj.locationFullyBlocksWeather;
-            const partiallyBlockWeatherInfo = characterLocationSlotObj.slotPartiallyBlocksWeather || characterLocationObj.locationPartiallyBlocksWeather;
-            const isFullyProtectedFromWeather = fullyBlockWeatherInfo.includes(currentWeather);
-            const isPartiallyProtectedFromWeather = partiallyBlockWeatherInfo.includes(currentWeather);
-            charState.fullyExposedToWeather = !isFullyProtectedFromWeather && !isPartiallyProtectedFromWeather ? currentWeather : null;
-            charState.partiallyExposedToWeather = !isFullyProtectedFromWeather && isPartiallyProtectedFromWeather ? currentWeather : null;
+            } else if (characterLocationObj) {
+                const characterLocationSlotObj = characterLocationObj.slots[characterLocationSlot];
+                if (!characterLocationSlotObj) {
+                    throw new Error(`Character ${charName} is in invalid location slot ${characterLocationSlot} in location ${characterLocation}, valid slots are: ${Object.keys(characterLocationObj.slots).join(", ")}`);
+                }
+                const currentWeather = characterLocationObj.currentWeather;
+                const fullyBlockWeatherInfo = characterLocationSlotObj.slotFullyBlocksWeather || characterLocationObj.locationFullyBlocksWeather;
+                const partiallyBlockWeatherInfo = characterLocationSlotObj.slotPartiallyBlocksWeather || characterLocationObj.locationPartiallyBlocksWeather;
+                const isFullyProtectedFromWeather = fullyBlockWeatherInfo.includes(currentWeather);
+                const isPartiallyProtectedFromWeather = partiallyBlockWeatherInfo.includes(currentWeather);
+                charState.fullyExposedToWeather = !isFullyProtectedFromWeather && !isPartiallyProtectedFromWeather ? currentWeather : null;
+                charState.partiallyExposedToWeather = !isFullyProtectedFromWeather && isPartiallyProtectedFromWeather ? currentWeather : null;
 
-            // find other characters in the same location
-            /**
-             * @type {string[]}
-             */
-            const surroundingNonStrangers = [];
-            /**
-             * @type {string[]}
-             */
-            const surroundingTotalStrangers = [];
-            for (const otherCharName in this.deObject.stateFor) {
-                if (otherCharName === charName) continue;
-                const otherCharState = this.deObject.stateFor[otherCharName];
-                if (otherCharState.location === characterLocation) {
-                    const otherChar = this.deObject.characters[otherCharName];
-                    if (this.deObject.social.bonds[charName].active.find(b => b.towards === otherCharName) || this.deObject.social.bonds[charName].ex.find(b => b.towards === otherCharName)) {
-                        surroundingNonStrangers.push(otherChar.name);
-                    } else {
-                        surroundingTotalStrangers.push(otherChar.name);
+                // find other characters in the same location
+                /**
+                 * @type {string[]}
+                 */
+                const surroundingNonStrangers = [];
+                /**
+                 * @type {string[]}
+                 */
+                const surroundingTotalStrangers = [];
+                for (const otherCharName in this.deObject.stateFor) {
+                    if (otherCharName === charName) continue;
+                    const otherCharState = this.deObject.stateFor[otherCharName];
+                    if (otherCharState.location === characterLocation) {
+                        const otherChar = this.deObject.characters[otherCharName];
+                        if (this.deObject.social.bonds[charName].active.find(b => b.towards === otherCharName) || this.deObject.social.bonds[charName].ex.find(b => b.towards === otherCharName)) {
+                            surroundingNonStrangers.push(otherChar.name);
+                        } else {
+                            surroundingTotalStrangers.push(otherChar.name);
+                        }
                     }
                 }
+                charState.surroundingNonStrangers = surroundingNonStrangers;
+                charState.surroundingTotalStrangers = surroundingTotalStrangers;
             }
-            charState.surroundingNonStrangers = surroundingNonStrangers;
-            charState.surroundingTotalStrangers = surroundingTotalStrangers;
 
             charState.isNaked = true;
             for (const cloth of charState.wearing) {
@@ -753,7 +755,7 @@ export class DEngine {
         }
 
         await this.inferenceAdapter.initialize();
-        
+
         const initialScene = this.deObject.world.initialScenes[optionName];
         if (!initialScene) {
             throw new Error(`Initial scene with option name ${optionName} not found.`);
@@ -2118,11 +2120,17 @@ export class DEngine {
     }
 
     /**
-     * @param {"info" | "error" | "debug"} level
+     * @param {"info" | "error" | "warning"} level
      * @param {string} message
      */
     informCycleState(level, message) {
-
+        for (const listener of this.informListeners) {
+            try {
+                listener(level, message);
+            } catch (e) {
+                console.error("Error in cycle state listener:", e);
+            }
+        }
     }
 
     /**
@@ -2186,6 +2194,10 @@ export class DEngine {
             throw new Error(`Character state for ${character.name} not found.`);
         }
 
+        if (!this.inferenceAdapter) {
+            throw new Error("Inference adapter not set, cannot perform inference");
+        }
+
         if (!characterState.conversationId) {
             throw new Error(`Character ${character.name} is not in a conversation, cannot determine if they have left the conversation group.`);
         }
@@ -2194,18 +2206,30 @@ export class DEngine {
             throw new Error(`Character ${character.name} is the only participant in the conversation, cannot determine if they have left the conversation group.`);
         }
 
-        const systemMessage = `You are an assistant that determines if ${character.name} has left their current conversation group alone in an interactive story. ` +
+        const systemMessage = `You are an assistant and story analyst that determines if ${character.name} has left their current conversation group alone in an interactive story. ` +
             `Leaving the conversation group alone means that ${character.name} has specified he left to somewhere else alone to be alone without anyone else and without joining someone else.\n\n` +
             `If ${character.name} is trying to leave the conversation group but is being followed, forced or accompanied by other characters, that does not count as leaving alone to be alone.\n\n` +
             `Answer with YES if ${character.name} has left the conversation group alone, otherwise answer with NO and no further explanation.`;
 
-        // TODO add the messages to the prompt
-        const messageSpecified = "";
+        const systemPrompt = this.inferenceAdapter.buildSystemPromptForQuestioningAgent(systemMessage, [
+            "You must answer with a single word: YES or NO.",
+            "If the answer is YES, it means the character has left the conversation group alone to be alone.",
+            "If the answer is NO, it means the character is still with other characters or has joined another group or someone else.",
+        ], null, []);
 
-        // TODO implement the actual inference using an AI model
-        let inferenceText = "";
+        const questionGenerator = this.inferenceAdapter.runQuestioningCustomAgentOn(character, systemPrompt, null, this.getHistoryForCharacter(character, {}), "LAST_MESSAGE");
+        const result = await questionGenerator.next({
+            nextQuestion: "Has " + character.name + " left their current conversation group alone to be alone? Answer with YES or NO.",
+            maxCharacters: 100,
+            maxParagraphs: 1,
+            stopAt: ["YES", "NO", "yes", "no", "Yes", "No"],
+        });
+        if (result.done) {
+            throw new Error("Questioning agent finished without answering.");
+        }
+        await questionGenerator.next(null); // finish the generator
 
-        return inferenceText.trim().toUpperCase().includes("YES");
+        return result.value.trim().toUpperCase().includes("YES");
     }
 
     /**
@@ -3942,6 +3966,13 @@ export class DEngine {
     }
 
     /**
+     * @param {(level: "info" | "warning" | "error", message: string) => void} listener 
+     */
+    addCycleInformListener(listener) {
+        this.informListeners.push(listener);
+    }
+
+    /**
      * @param {(obj: DEObject, conversationId: string, messageId: string, text: string) => void} listener 
      */
     addInferringOverConversationMessageListener(listener) {
@@ -3984,7 +4015,7 @@ export class DEngine {
          * @type {DEConversationMessage}
          */
         const messageToAdd = {
-            sender: "Story Master",
+            sender: "System",
             content: message,
             duration: { inMinutes: 0, inHours: 0, inDays: 0 },
             startTime: { ...this.deObject.currentTime },

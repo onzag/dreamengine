@@ -273,15 +273,15 @@ async function runQuestion(data, onAnswer, onError) {
         });
 
         const basicConfig = {
-            temperature: CONFIG.standard.temperature || 0.9,
-            topP: CONFIG.standard.top_p || 0.95,
+            temperature: CONFIG.analyze.temperature || 0.9,
+            topP: CONFIG.analyze.top_p || 0.95,
             repeatPenalty: {
-                penalty: CONFIG.standard.repeat_penalty || 1.1,
-                frequencyPenalty: CONFIG.standard.frequency_penalty || 0,
-                presencePenalty: CONFIG.standard.presence_penalty || 0,
+                penalty: CONFIG.analyze.repeat_penalty || 1.1,
+                frequencyPenalty: CONFIG.analyze.frequency_penalty || 0,
+                presencePenalty: CONFIG.analyze.presence_penalty || 0,
             },
             customStopTriggers: ["<|eot_id|>", "<|start_header_id|>"].concat(data.stopAt || []),
-            maxTokens: CONFIG.standard.maxTokens || 512,
+            maxTokens: CONFIG.analyze.maxTokens || 512,
         }
         if (typeof data.maxParagraphs === "number") {
             console.log("Max paragraphs limit set to:", data.maxParagraphs);
