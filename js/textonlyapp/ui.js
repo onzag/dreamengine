@@ -139,13 +139,13 @@ export class TextOnlyUI {
             next = await generator.next();
         }
         accumulatedMessages = accumulatedMessages.reverse();
-        
+
         const newBuffer = accumulatedMessages.map(m => {
             return `${m.name}: ${m.message}`;
         }).join("\n");
 
         if (newBuffer.length > 0) {
-            process.stdout.write("\n" + newBuffer);
+            console.log(newBuffer);
         }
 
         const lastMessage = accumulatedMessages[accumulatedMessages.length - 1];

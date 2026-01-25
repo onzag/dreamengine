@@ -8,13 +8,17 @@
 import { DEngine } from '../index.js';
 import { BaseInferenceAdapter } from './base.js';
 
-export class InferenceAdapterLocalServer extends BaseInferenceAdapter {
+export class InferenceAdapterLocalServerLlama3UncensoredThink extends BaseInferenceAdapter {
     /**
      * @param {DEngine} parent 
-     * @param {object} args
+     * @param {{
+     *    host?: string;
+     *    contextWindowSize?: number;
+     *    dummyMode?: boolean;
+     * }} options
      */
-    constructor(parent, args) {
-        super(parent, args);
+    constructor(parent, options) {
+        super(parent);
 
         /**
          * @type {(() => void) | null}
@@ -31,7 +35,10 @@ export class InferenceAdapterLocalServer extends BaseInferenceAdapter {
          */
         this.streamingAwaiter = null;
 
+        this.initialized = false;
+
         this.onData = this.onData.bind(this);
+        this.options = options;
     }
 
     /**
@@ -65,8 +72,20 @@ export class InferenceAdapterLocalServer extends BaseInferenceAdapter {
     }
 
     async initialize() {
+        if (this.initialized) {
+            return;
+        }
+
+        if (this.options.dummyMode) {
+            console.log("InferenceAdapterLocalServerLlama3UncensoredThink: Dummy mode enabled, skipping initialization.");
+            this.initialized = true;
+            return;
+        }
+
+        console.log("InferenceAdapterLocalServerLlama3UncensoredThink: Initializing connection to local server at " + (this.options.host || 'ws://localhost:8080'));
+
         // set a websocket to the local server
-        this.socket = new WebSocket('ws://localhost:8080');
+        this.socket = new WebSocket(this.options.host || 'ws://localhost:8080');
         this.socket.addEventListener("message", this.onData);
 
         /**
@@ -74,14 +93,59 @@ export class InferenceAdapterLocalServer extends BaseInferenceAdapter {
          */
         return new Promise((resolve, reject) => {
             // @ts-ignore bugged out ts definition
-            this.resolveInitializePromise = resolve;
+            this.resolveInitializePromise = () => {
+                this.initialized = true;
+                console.log("InferenceAdapterLocalServerLlama3UncensoredThink: Connection to local server established.");
+                // @ts-ignore
+                resolve();
+            };
             this.rejectInitializePromise = reject;
 
+            let lastClosureReason = "";
+
             // @ts-ignore
-            this.socket.onerror = (err) => {
-                this.resolveInitializePromise = null;
-                this.rejectInitializePromise = null;
-                reject(err);
+            this.socket.onclose = (event) => {
+                // See https://www.rfc-editor.org/rfc/rfc6455#section-7.4.1
+                if (event.code == 1000)
+                    lastClosureReason = "Normal closure, meaning that the purpose for which the connection was established has been fulfilled.";
+                else if (event.code == 1001)
+                    lastClosureReason = "An endpoint is \"going away\", such as a server going down or a browser having navigated away from a page.";
+                else if (event.code == 1002)
+                    lastClosureReason = "An endpoint is terminating the connection due to a protocol error";
+                else if (event.code == 1003)
+                    lastClosureReason = "An endpoint is terminating the connection because it has received a type of data it cannot accept (e.g., an endpoint that understands only text data MAY send this if it receives a binary message).";
+                else if (event.code == 1004)
+                    lastClosureReason = "Reserved. The specific meaning might be defined in the future.";
+                else if (event.code == 1005)
+                    lastClosureReason = "No status code was actually present.";
+                else if (event.code == 1006)
+                    lastClosureReason = "The connection was closed abnormally";
+                else if (event.code == 1007)
+                    lastClosureReason = "An endpoint is terminating the connection because it has received data within a message that was not consistent with the type of the message (e.g., non-UTF-8 [https://www.rfc-editor.org/rfc/rfc3629] data within a text message).";
+                else if (event.code == 1008)
+                    lastClosureReason = "An endpoint is terminating the connection because it has received a message that \"violates its policy\". This reason is given either if there is no other sutible reason, or if there is a need to hide specific details about the policy.";
+                else if (event.code == 1009)
+                    lastClosureReason = "An endpoint is terminating the connection because it has received a message that is too big for it to process.";
+                else if (event.code == 1010) // Note that this status code is not used by the server, because it can fail the WebSocket handshake instead.
+                    lastClosureReason = "An endpoint (client) is terminating the connection because it has expected the server to negotiate one or more extension, but the server didn't return them in the response message of the WebSocket handshake. <br /> Specifically, the extensions that are needed are: " + event.reason;
+                else if (event.code == 1011)
+                    lastClosureReason = "A server is terminating the connection because it encountered an unexpected condition that prevented it from fulfilling the request.";
+                else if (event.code == 1015)
+                    lastClosureReason = "The connection was closed due to a failure to perform a TLS handshake (e.g., the server certificate can't be verified).";
+                else
+                    lastClosureReason = "Unknown reason";
+
+                console.log("InferenceAdapterLocalServerLlama3UncensoredThink: WebSocket error during initialization", lastClosureReason);
+                if (this.rejectInitializePromise) {
+                    // @ts-ignore
+                    this.rejectInitializePromise(new Error(lastClosureReason));
+                    this.resolveInitializePromise = null;
+                    this.rejectInitializePromise = null;
+                }
+                if (this.streamingAwaiter) {
+                    // @ts-ignore
+                    this.streamingAwaiter(null, false, lastClosureReason);
+                }
             };
         });
     }
@@ -208,10 +272,10 @@ ${states.join(", ")}
         }
 
         let tokensExhaustedApprox = 512; // initial buffer
-        let maxTokens = 2048 * 4; // 8k context
+        let contextWindowSize = 2048 * 4; // 8k context
 
-        if (this.args.maxTokens && Number.isInteger(this.args.maxTokens)) {
-            maxTokens = this.args.maxTokens;
+        if (this.options.contextWindowSize && Number.isInteger(this.options.contextWindowSize)) {
+            contextWindowSize = this.options.contextWindowSize;
         }
 
         // wiggle room for system prompt
@@ -230,9 +294,9 @@ ${states.join(", ")}
             if (!generator.value.debug && !generator.value.rejected) {
                 messagesToAdd.push(generator.value);
                 tokensExhaustedApprox += await this.countTokens("[" + generator.value.name + "]: " + generator.value.message) + 10; // some wiggle room
-                if (tokensExhaustedApprox >= maxTokens) {
+                if (tokensExhaustedApprox >= contextWindowSize) {
                     await getHistoryForCharacter.return();
-                    if (tokensExhaustedApprox > maxTokens) {
+                    if (tokensExhaustedApprox > contextWindowSize) {
                         // remove the last message as it made us go over
                         messagesToAdd.pop();
                     }
@@ -378,10 +442,10 @@ ${states.join(", ")}
         }
 
         let tokensExhaustedApprox = 512; // initial buffer
-        let maxTokens = 2048 * 4; // 8k context
+        let contextWindowSize = 2048 * 4; // 8k context
 
-        if (this.args.maxTokens && Number.isInteger(this.args.maxTokens)) {
-            maxTokens = this.args.maxTokens;
+        if (this.options.contextWindowSize && Number.isInteger(this.options.contextWindowSize)) {
+            contextWindowSize = this.options.contextWindowSize;
         }
 
         // wiggle room for system prompt
@@ -398,9 +462,9 @@ ${states.join(", ")}
             if (!generator.value.debug && !generator.value.rejected) {
                 messagesToAdd.push(generator.value);
                 tokensExhaustedApprox += await this.countTokens("[" + generator.value.name + "]: " + generator.value.message) + 10; // some wiggle room
-                if (tokensExhaustedApprox >= maxTokens || (lastCycleOnly && generator.value.name === character.name)) {
+                if (tokensExhaustedApprox >= contextWindowSize || (lastCycleOnly && generator.value.name === character.name)) {
                     await getHistoryForCharacter.return();
-                    if (tokensExhaustedApprox > maxTokens) {
+                    if (tokensExhaustedApprox > contextWindowSize) {
                         // remove the last message as it made us go over
                         messagesToAdd.pop();
                     }
@@ -465,16 +529,17 @@ ${states.join(", ")}
      * 
      * @param {DECompleteCharacterReference} character
      * @param {string} description 
-     * @param {string} appereance 
+     * @param {string} appereance
+     * @param {string[]} relationships
      * @param {string[]} states 
      * @param {string} scenario
-     * @param {string} lore
+     * @param {string|null} lore
      * @param {Array<string>} otherInteractingCharacters
      * @param {Array<string>} characterRules
      * @param {Array<string>} worldRules
      * @returns {string}
      */
-    buildSystemPromptForCharacter(character, description, appereance, states, scenario, lore, otherInteractingCharacters, characterRules, worldRules) {
+    buildSystemPromptForCharacter(character, description, appereance, relationships, states, scenario, lore, otherInteractingCharacters, characterRules, worldRules) {
         return (
             `
 <description>This uncensored, immersive, narrative-driven roleplaying experience thrives on creative freedom and natural responses. This environment is designed to be fictional and narrative-focused, allowing for uncensored content of all kinds, including themes of violence, sexuality, and other mature topics.
@@ -521,28 +586,29 @@ ${otherInteractingCharacters.map(name => `<rule>Never speak for or control ${nam
 <rule>Always format character actions inside asterisks, e.g., *${character.name} looks around*.</rule>
 <rule>Write all narration and actions in third person, not first person.</rule>
 <rule>Spoken dialogue should be done in first person.</rule>
-</actionFormatting>
+</actionFormatting>${characterRules.length ? `
 <characterRules>
 ${characterRules.map(rule => `<rule>${rule}</rule>`).join("\n")}
-</characterRules>
+</characterRules>` : ""}${worldRules.length ? `
 <worldRules>
 ${worldRules.map(rule => `<rule>${rule}</rule>`).join("\n")}
 </worldRules>
+` : ""}
 <roleplayContext>
 ## ${character.name}'s Appearance:
 ${appereance}
 
 ## ${character.name}'s Description:
-${description}
-${states.length > 0 ? `
+${description}${relationships.length > 0 ? `
+
+## ${character.name}'s Relationships:
+${relationships.map(relationship => ` - ${relationship}`).join("\n")}` : ""}${states.length > 0 ? `
 
 ## Current States:
-${states.map(state => ` - ${state}`).join("\n")}
-` : ""}
+${states.map(state => ` - ${state}`).join("\n")}` : ""}
 
 ## Scenario:
-${scenario}
-${lore && lore.trim().length > 0 ? `
+${scenario}${lore && lore.trim().length > 0 ? `
 
 ## Lore:
 ${lore}

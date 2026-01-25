@@ -3,14 +3,12 @@ import { DEngine } from "../index.js";
 export class BaseInferenceAdapter {
     /**
      * @param {DEngine} parent
-     * @param {*} args 
      */
-    constructor(parent, args) {
+    constructor(parent) {
         if (new.target === BaseInferenceAdapter) {
             throw new TypeError("Cannot construct BaseInferenceAdapter instances directly");
         }
         this.engine = parent;
-        this.args = args;
     }
     
     async initialize() {
@@ -61,15 +59,16 @@ export class BaseInferenceAdapter {
      * @param {DECompleteCharacterReference} character the character in question that is building a prompt for
      * @param {string} description the description of the character, general
      * @param {string} appereance the appereance description of the character
+     * @param {string[]} relationships the relationships description of the character
      * @param {string[]} states the current applying states of the character, most dominant ones, short summary do not explain everything
      * @param {string} scenario the basic description of the current location
-     * @param {string} lore the lore related to the character or scenario
+     * @param {string|null} lore the lore related to the character or scenario
      * @param {Array<string>} otherInteractingCharacters the other characters interacting with this character
      * @param {Array<string>} characterRules the rules that apply specifically to this character
      * @param {Array<string>} worldRules the rules that apply to the world or scenario
      * @returns {string} the system prompt
      */
-    buildSystemPromptForCharacter(character, description, appereance, states, scenario, lore, otherInteractingCharacters, characterRules, worldRules) {
+    buildSystemPromptForCharacter(character, description, appereance, relationships, states, scenario, lore, otherInteractingCharacters, characterRules, worldRules) {
         throw new Error("Method 'buildSystemPromptForCharacter()' must be implemented.");
     }
 

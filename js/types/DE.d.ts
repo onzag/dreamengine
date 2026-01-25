@@ -1320,7 +1320,7 @@ declare interface StateForDescription {
     messageId: string | null;
     isNaked: boolean;
     surroundingNonStrangers: Array<string>;
-    surroundingStrangers: Array<string>;
+    surroundingTotalStrangers: Array<string>;
     partiallyExposedToWeather: string | null;
     fullyExposedToWeather: string | null;
     posture: "standing" | "sitting" | "laying_down";

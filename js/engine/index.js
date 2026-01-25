@@ -4,6 +4,7 @@ import { weightedRandomByLikelihood } from "../util/random.js"
 import { EMOTIONS_LIST } from "./rolling-emotion.js";
 import { deEngineUtils } from "./utils.js";
 import { commands } from "./commands.js";
+import { BaseInferenceAdapter } from "./inference/base.js";
 
 const INVALID_NAMES = ["system", "assistant", "user", "everyone", "nobody",
     "anyone", "somebody", "narrator", "observer", "admin", "moderator",
@@ -182,9 +183,21 @@ export class DEngine {
         this.characterImportResolver = null;
 
         /**
+         * @type {BaseInferenceAdapter | null}
+         */
+        this.inferenceAdapter = null;
+
+        /**
          * @type {(Array<{name: string; import: string; properties: Record<string, DEPropertyValueInCharSpace>; spawnLocations: string[]; spawnLocationSlots: string[]; spawnSpreadToChildrenLocations: boolean; instances: number}>) | null}
          */
         this.characters = null;
+    }
+
+    /**
+     * @param {BaseInferenceAdapter} adapter
+     */
+    setInferenceAdapter(adapter) {
+        this.inferenceAdapter = adapter;
     }
 
     /**
@@ -542,7 +555,7 @@ export class DEngine {
             messageId: null,
             isNaked: true,
             surroundingNonStrangers: [],
-            surroundingStrangers: [],
+            surroundingTotalStrangers: [],
             partiallyExposedToWeather: null,
             fullyExposedToWeather: null,
             posture: "standing",
@@ -573,7 +586,7 @@ export class DEngine {
             }
         }
 
-        // we need to set up surroundingNonStrangers and surroundingStrangers, partiallyExposedToWeather and fullyExposedToWeather properly later
+        // we need to set up surroundingNonStrangers and surroundingTotalStrangers, partiallyExposedToWeather and fullyExposedToWeather properly later
         this.invalidCharacterStates = true;
     }
 
@@ -615,7 +628,7 @@ export class DEngine {
             /**
              * @type {string[]}
              */
-            const surroundingStrangers = [];
+            const surroundingTotalStrangers = [];
             for (const otherCharName in this.deObject.stateFor) {
                 if (otherCharName === charName) continue;
                 const otherCharState = this.deObject.stateFor[otherCharName];
@@ -624,12 +637,12 @@ export class DEngine {
                     if (this.deObject.social.bonds[charName].active.find(b => b.towards === otherCharName) || this.deObject.social.bonds[charName].ex.find(b => b.towards === otherCharName)) {
                         surroundingNonStrangers.push(otherChar.name);
                     } else {
-                        surroundingStrangers.push(otherChar.name);
+                        surroundingTotalStrangers.push(otherChar.name);
                     }
                 }
             }
             charState.surroundingNonStrangers = surroundingNonStrangers;
-            charState.surroundingStrangers = surroundingStrangers;
+            charState.surroundingTotalStrangers = surroundingTotalStrangers;
 
             charState.isNaked = true;
             for (const cloth of charState.wearing) {
@@ -735,7 +748,12 @@ export class DEngine {
             throw new Error("Scene has already been started.");
         } else if (!this.userCharacter) {
             throw new Error("DEngine user character not initialized");
+        } else if (!this.inferenceAdapter) {
+            throw new Error("Inference adapter not set");
         }
+
+        await this.inferenceAdapter.initialize();
+        
         const initialScene = this.deObject.world.initialScenes[optionName];
         if (!initialScene) {
             throw new Error(`Initial scene with option name ${optionName} not found.`);
@@ -1153,7 +1171,11 @@ export class DEngine {
             throw new Error("Character import resolver not set");
         } else if (!this.scriptImportResolver) {
             throw new Error("Script import resolver not set");
+        } else if (!this.inferenceAdapter) {
+            throw new Error("Inference adapter not set");
         }
+
+        await this.inferenceAdapter.initialize();
 
         this.refreshCharacterStates();
 
@@ -1183,7 +1205,11 @@ export class DEngine {
             throw new Error("DEngine world not initialized");
         } else if (!this.deObject.world.hasStartedScene) {
             throw new Error("DEngine world scene not started");
+        } else if (!this.inferenceAdapter) {
+            throw new Error("Inference adapter not set");
         }
+
+        await this.inferenceAdapter.initialize();
 
         this.refreshCharacterStates();
         this.checkDEObjectIntegrity();
@@ -1318,7 +1344,7 @@ export class DEngine {
         if (!characterState) {
             throw new Error(`Character state for ${characterName} not found.`);
         }
-        const surroundingCharacters = [...characterState.surroundingNonStrangers, ...characterState.surroundingStrangers];
+        const surroundingCharacters = [...characterState.surroundingNonStrangers, ...characterState.surroundingTotalStrangers];
         return surroundingCharacters;
     }
 
@@ -2245,7 +2271,7 @@ export class DEngine {
             groupsList += ` - ${ownGroupParticipant}: ${this.getShortDescriptionOfCharacter(ownGroupParticipant)}\n`;
         }
 
-        const allCharactersAround = characterState.surroundingNonStrangers.concat(characterState.surroundingStrangers);
+        const allCharactersAround = characterState.surroundingNonStrangers.concat(characterState.surroundingTotalStrangers);
 
         /**
          * @type {string[][]}
@@ -2377,7 +2403,7 @@ export class DEngine {
             groupsList += ` - ${ownGroupParticipant}: ${this.getShortDescriptionOfCharacter(ownGroupParticipant)}\n`;
         }
 
-        const allCharactersAround = characterState.surroundingNonStrangers.concat(characterState.surroundingStrangers);
+        const allCharactersAround = characterState.surroundingNonStrangers.concat(characterState.surroundingTotalStrangers);
         /**
          * @type {string[][]}
          */
@@ -2519,7 +2545,7 @@ export class DEngine {
 
         // these characters nearby but they are strangers likely not even looking at the direction
         // of the character so they likely don't notice them
-        const surroundingStrangers = characterState.surroundingStrangers;
+        const surroundingTotalStrangers = characterState.surroundingTotalStrangers;
 
         // these characters are already in the conversation and likely will hear everything
         const conversationParticipants = this.deObject.conversations[characterState.conversationId].participants.filter(charName => charName !== character.name);
@@ -2531,7 +2557,7 @@ export class DEngine {
         const nonStrangerNotLikelyToNotice = [];
 
         let description = "";
-        for (const stranger of surroundingStrangers) {
+        for (const stranger of surroundingTotalStrangers) {
             const sameSlot = this.deObject.stateFor[stranger]?.locationSlot === characterState.locationSlot;
             if (sameSlot) {
                 strangersLikelyToNotice.push(stranger);

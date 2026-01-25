@@ -3,11 +3,14 @@ import { DEngine } from '../engine/index.js';
 import fs from 'fs';
 import { nodejsImportResolver, nodejsCharacterImportResolver } from '../imports/import-resolvers-node.js';
 import { TextOnlyUI } from '../textonlyapp/ui.js';
+import { InferenceAdapterLocalServerLlama3UncensoredThink } from "../engine/inference/adapter-local-server-llama3-uncensored-think.js";
 
 const jsonWorld = JSON.parse(fs.readFileSync('../default-worlds/simple-lunar-station.json', 'utf-8'));
 const world = importWorldFromJSON(jsonWorld);
 
 const engine = new DEngine();
+const inferenceAdapter = new InferenceAdapterLocalServerLlama3UncensoredThink(engine, {dummyMode: true});
+engine.setInferenceAdapter(inferenceAdapter);
 engine.initialize({
     ageYears: 30,
     carryingCapacityKg: 30,
@@ -67,7 +70,12 @@ engine.deObject.stateFor["Onza"].wearing = [
 engine.setScriptImportResolver(nodejsImportResolver)
 engine.setCharacterImportResolver(nodejsCharacterImportResolver)
 
-await engine.initializeWorld();
+try {
+    await engine.initializeWorld();
+} catch (err) {
+    console.error("Error initializing world:", err);
+    process.exit(1);
+}
 
 const ui = new TextOnlyUI(engine, "Onza");
 ui.run();

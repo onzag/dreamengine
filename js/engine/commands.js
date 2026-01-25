@@ -1,6 +1,45 @@
 import { DEngine } from "./index.js";
 
 /**
+ * 
+ * @param {DEngine} engine 
+ * @param {string} characterName 
+ * @returns 
+ */
+async function whatIsWeatherLikeForCharacter(engine, characterName) {
+    if (!engine.deObject) {
+        throw new Error("DEngine not initialized");
+    }
+    if (!engine.deObject.stateFor[characterName]) {
+        throw new Error(`No state found for character "${characterName}".`);
+    }
+    const character = engine.deObject.characters[characterName];
+    const characterState = engine.deObject.stateFor[characterName];
+    const characterLocation = characterState.location;
+    const characterLocationSlot = characterState.locationSlot;
+    const location = engine.deObject.world.locations[characterLocation];
+    const weatherThere = location.currentWeather;
+    const isSheltered = await engine.isCharacterShelteredFromWeather(characterName, weatherThere, characterLocation, characterLocationSlot);
+    if (isSheltered.fullySheltered) {
+        // @ts-ignore
+        const noEffectDescription = await location.currentWeatherNoEffectDescription.execute(engine.deObject, character, undefined, undefined, undefined, undefined);
+        return `The current weather where "${characterName}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}". However, "${characterName}" is fully sheltered from its effects. ${isSheltered.reason || ""}, therefore ${noEffectDescription || "no weather effects apply to them."}`;
+    } else if (isSheltered.partiallySheltered) {
+        // @ts-ignore
+        const partialEffectDescription = await location.currentWeatherPartialEffectDescription.execute(engine.deObject, character, undefined, undefined, undefined, undefined);
+        return `The current weather where "${characterName}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}". "${characterName}" is partially sheltered from its effects. ${isSheltered.reason || ""}, therefore ${partialEffectDescription || "some weather effects may apply to them."}`;
+    } else if (isSheltered.negativelyExposed) {
+        // @ts-ignore
+        const negativeEffectsDescription = await location.currentWeatherNegativelyExposedDescription.execute(engine.deObject, character, undefined, undefined, undefined, undefined);
+        return `The current weather where "${characterName}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}". "${characterName}" is negatively exposed to its effects. ${isSheltered.reason || ""}, therefore ${negativeEffectsDescription || "strongly negative weather effects apply to them."}`;
+    } else {
+        // @ts-ignore
+        const effectDescription = await location.currentWeatherFullEffectDescription.execute(engine.deObject, character, undefined, undefined, undefined, undefined);
+        return `The current weather where "${characterName}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}". ${isSheltered.reason || ""}, therefore ${effectDescription || "all weather effects apply to them."}`;
+    }
+}
+
+/**
  * @type {Object.<string, {run: (engine: DEngine, args: string[]) => Promise<string>, help: string, cheat?: boolean, args: string[]}>}
  */
 export const commands = {
@@ -82,28 +121,7 @@ export const commands = {
             if (!characterState) {
                 return `No state found for character "${characterName}".`;
             }
-            const characterLocation = characterState.location;
-            const characterLocationSlot = characterState.locationSlot;
-            const location = engine.deObject.world.locations[characterLocation];
-            const weatherThere = location.currentWeather;
-            const isSheltered = await engine.isCharacterShelteredFromWeather(characterName, weatherThere, characterLocation, characterLocationSlot);
-            if (isSheltered.fullySheltered) {
-                // @ts-ignore
-                const noEffectDescription = await location.currentWeatherNoEffectDescription.execute(engine.deObject, character, undefined, undefined, undefined, undefined);
-                return `The current weather where "${characterName}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}". However, "${characterName}" is fully sheltered from its effects. ${isSheltered.reason || ""}, therefore ${noEffectDescription || "no weather effects apply to them."}`;
-            } else if (isSheltered.partiallySheltered) {
-                // @ts-ignore
-                const partialEffectDescription = await location.currentWeatherPartialEffectDescription.execute(engine.deObject, character, undefined, undefined, undefined, undefined);
-                return `The current weather where "${characterName}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}". "${characterName}" is partially sheltered from its effects. ${isSheltered.reason || ""}, therefore ${partialEffectDescription || "some weather effects may apply to them."}`;
-            } else if (isSheltered.negativelyExposed) {
-                // @ts-ignore
-                const negativeEffectsDescription = await location.currentWeatherNegativelyExposedDescription.execute(engine.deObject, character, undefined, undefined, undefined, undefined);
-                return `The current weather where "${characterName}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}". "${characterName}" is negatively exposed to its effects. ${isSheltered.reason || ""}, therefore ${negativeEffectsDescription || "strongly negative weather effects apply to them."}`;
-            } else {
-                // @ts-ignore
-                const effectDescription = await location.currentWeatherFullEffectDescription.execute(engine.deObject, character, undefined, undefined, undefined, undefined);
-                return `The current weather where "${characterName}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}". ${isSheltered.reason || ""}, therefore ${effectDescription || "all weather effects apply to them."}`;
-            }
+            return await whatIsWeatherLikeForCharacter(engine, characterName);
         },
         help: "Displays the current weather for a given character and its effects and whether they are sheltered from it or not.",
         cheat: true,
@@ -315,7 +333,7 @@ export const commands = {
                 }
             }
             answer += `\nTotal Strangers:\n`;
-            for (const characterName of userState.surroundingStrangers) {
+            for (const characterName of userState.surroundingTotalStrangers) {
                 if (characterName === engine.userCharacter.name) {
                     continue;
                 }
@@ -468,7 +486,7 @@ export const commands = {
             let currentMaxDominace = -1;
             let infoAllStates = (await Promise.all(characterState.states.map(async (state) => {
                 const stateInfo = character.states[state.state];
-                
+
                 const causants = state.causants || undefined;
                 const causes = state.causes || undefined;
 
@@ -621,7 +639,7 @@ export const commands = {
                 const value = await character.bonds.descriptionGeneralInjection.execute(engine.deObject, character, undefined, undefined, undefined, undefined);
                 bondInfo += `\n\n${value}`;
             }
-            
+
             bondInfo += `\n\nBond Level: ${bond.bond} (${bondDesc.name})\nSecondary Bond Level: ${bond.bond2}\nStranger Bond: ${bond.stranger ? "Yes" : "No"}\n\nBond Conditions:\n`;
 
             for (const condition of bondDesc.bondConditions) {
@@ -635,13 +653,265 @@ export const commands = {
                 bondInfo += `\nBreakaway Stranger Bond Absolute Weight: ${character.bonds.strangerBreakawayBondWeightAbsolute}`;
                 bondInfo += `\nBreakaway Stranger Bond Interaction Count: ${character.bonds.strangerBreakawayInteractionsCount}`;
                 bondInfo += `\nBreakaway Stranger Bond Time in Minutes: ${character.bonds.strangerBreakawayTimeMinutes}`;
-                
+
                 // TODO calculate the current interaction count and time minutes towards breakaway
             }
 
             return bondInfo;
         },
         help: "Displays the nature of your relationship with a specified character",
+        cheat: true,
+        args: ["<character name>"],
+    },
+    "syspromptfor": {
+        run: async (engine, args) => {
+            if (!engine.deObject) {
+                throw new Error("DEngine not initialized");
+            }
+            if (args.length === 0) {
+                return "Usage: syspromptfor <character name>";
+            }
+            if (!engine.inferenceAdapter) {
+                throw new Error("DEngine has no inference adapter defined");
+            }
+            const characterName = args.join(" ");
+            const character = engine.deObject.characters[characterName];
+            if (!character) {
+                return `Character "${characterName}" not found.`;
+            }
+
+            const characterState = engine.deObject.stateFor[characterName];
+            if (!characterState) {
+                throw new Error(`No state found for character "${characterName}".`);
+            }
+
+            const shortDescription = (characterState.isNaked ? character.shortDescriptionNaked : character.shortDescription) || character.shortDescription;
+
+            // @ts-ignore
+            let general = await character.general.execute(engine.deObject, character, undefined, undefined, undefined, undefined);
+
+            for (const injectable of Object.values(character.systemPromptInjection)) {
+                // @ts-ignore
+                const injectableV = (await injectable.execute(engine.deObject, character, undefined, undefined, undefined, undefined)).trim();
+                if (injectableV) {
+                    if (!general.endsWith("\n\n")) {
+                        general += "\n\n";
+                    }
+                    // @ts-ignore
+                    general += injectableV;
+                }
+            }
+
+            let statesDescriptions = [];
+            for (const state of characterState.states) {
+                const stateInfo = character.states[state.state];
+                // @ts-ignore
+                let stateDescription = state.state.split("_").map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(" ");
+                if (!state.relieving) {
+                    if (state.intensity >= 1.5) {
+                        stateDescription = `Very ${stateDescription}`;
+                    } else if (state.intensity >= 2.5) {
+                        stateDescription = `Extremely ${stateDescription}`;
+                    } else if (state.intensity >= 3.5) {
+                        stateDescription = `Overwhelmingly ${stateDescription}`;
+                    }
+
+                    if (stateInfo.relievingSystemPromptInjection) {
+                        // @ts-ignore
+                        const relievingInjection = (await stateInfo.relievingSystemPromptInjection.execute(engine.deObject, character, undefined, undefined, undefined, undefined)).trim();
+                        if (relievingInjection) {
+                            if (!general.endsWith("\n\n")) {
+                                general += "\n\n";
+                            }
+                            general += relievingInjection;
+                        }
+                    }
+                } else {
+                    stateDescription = `Relieving from ${stateDescription}`;
+
+                    if (stateInfo.systemPromptInjection) {
+                        // @ts-ignore
+                        const injection = (await stateInfo.systemPromptInjection.execute(engine.deObject, character, undefined, undefined, undefined, undefined)).trim();
+                        if (injection) {
+                            if (!general.endsWith("\n\n")) {
+                                general += "\n\n";
+                            }
+                            general += injection;
+                        }
+                    }
+                }
+
+                statesDescriptions.push(stateDescription);
+            }
+
+            const bonds = engine.deObject.social.bonds[characterName];
+            let relationships = [];
+
+            for (const activeBond of bonds.active) {
+                const bondDeclaration = character.bonds.declarations.find(bondDecl => bondDecl.strangerBond === activeBond.stranger && bondDecl.minBondLevel <= activeBond.bond && activeBond.bond < (bondDecl.maxBondLevel === 100 ? 200 : bondDecl.maxBondLevel) && bondDecl.min2BondLevel <= activeBond.bond2 && activeBond.bond2 < (bondDecl.max2BondLevel === 100 ? 200 : bondDecl.max2BondLevel));
+                if (bondDeclaration) {
+                    // @ts-ignore
+                    let result = await bondDeclaration.description.execute(engine.deObject, character, engine.deObject.characters[activeBond.towards], undefined, undefined, undefined);
+                    if (bondDeclaration.bondAdditionalDescription) {
+                        if (!result.endsWith(". ")) {
+                            result += ". ";
+                        } else if (!result.endsWith(" ")) {
+                            result += " ";
+                        }
+                        // @ts-ignore
+                        result += await bondDeclaration.bondAdditionalDescription.execute(engine.deObject, character, engine.deObject.characters[activeBond.towards], undefined, undefined, undefined);
+                    }
+                    relationships.push(result);
+
+                    if (bondDeclaration.systemPromptInjection) {
+                        // @ts-ignore
+                        const injection = (await bondDeclaration.systemPromptInjection.execute(engine.deObject, character, engine.deObject.characters[activeBond.towards], undefined, undefined, undefined)).trim();
+                        if (injection) {
+                            if (!general.endsWith("\n\n")) {
+                                general += "\n\n";
+                            }
+                            general += injection;
+                        }
+                    }
+                }
+            }
+
+            // ex bonds only inject system prompts, as they are not active relationships but ex-relationships
+            // they may be mourning or have other effects on the character's mindset so only relevant to system prompt injections
+            for (const exBond of bonds.ex) {
+                const bondDeclaration = character.bonds.declarations.find(bondDecl => bondDecl.strangerBond === exBond.stranger && bondDecl.minBondLevel <= exBond.bond && exBond.bond < (bondDecl.maxBondLevel === 100 ? 200 : bondDecl.maxBondLevel) && bondDecl.min2BondLevel <= exBond.bond2 && exBond.bond2 < (bondDecl.max2BondLevel === 100 ? 200 : bondDecl.max2BondLevel));
+                if (bondDeclaration) {
+                    if (bondDeclaration.systemPromptInjectionEx) {
+                        // @ts-ignore
+                        const injection = (await bondDeclaration.systemPromptInjectionEx.execute(engine.deObject, character, engine.deObject.characters[exBond.towards], undefined, undefined, undefined)).trim();
+                        if (injection) {
+                            if (!general.endsWith("\n\n")) {
+                                general += "\n\n";
+                            }
+                            general += injection;
+                        }
+                    }
+                }
+            }
+
+            // make final descriptions for total strangers for the standard stranger bond
+            const strangerBondDeclaration = character.bonds.declarations.find(bondDecl => bondDecl.strangerBond === true && bondDecl.minBondLevel <= 0 && 0 < (bondDecl.maxBondLevel === 100 ? 200 : bondDecl.maxBondLevel) && bondDecl.min2BondLevel <= 0 && 0 < (bondDecl.max2BondLevel === 100 ? 200 : bondDecl.max2BondLevel));
+            if (strangerBondDeclaration) {
+                // these do apply to all the total strangers
+                const allSurroundingTotalStrangers = engine.deObject.stateFor[characterName].surroundingTotalStrangers;
+                for (const strangerName of allSurroundingTotalStrangers) {
+                    const strangerCharacter = engine.deObject.characters[strangerName];
+                    if (strangerCharacter) {
+                        // @ts-ignore
+                        let result = await strangerBondDeclaration.description.execute(engine.deObject, character, strangerCharacter, undefined, undefined, undefined);
+                        if (strangerBondDeclaration.bondAdditionalDescription) {
+                            if (!result.endsWith(". ")) {
+                                result += ". ";
+                            } else if (!result.endsWith(" ")) {
+                                result += " ";
+                            }
+                            // @ts-ignore
+                            result += await strangerBondDeclaration.bondAdditionalDescription.execute(engine.deObject, character, strangerCharacter, undefined, undefined, undefined);
+                        }
+                        relationships.push(result);
+                    }
+
+                    if (strangerBondDeclaration.systemPromptInjection) {
+                        // @ts-ignore
+                        const injection = (await strangerBondDeclaration.systemPromptInjection.execute(engine.deObject, character, strangerCharacter, undefined, undefined, undefined)).trim();
+                        if (injection) {
+                            if (!general.endsWith("\n\n")) {
+                                general += "\n\n";
+                            }
+                            general += injection;
+                        }
+                    }
+                }
+            }
+
+            /**
+             * @type {string|null}
+             */
+            let lore = null;
+
+            if (engine.deObject.world.lore) {
+                // @ts-ignore
+                lore = await engine.deObject.world.lore?.execute(engine.deObject, character, undefined, undefined, undefined, undefined);
+                if (lore.trim().length === 0) {
+                    lore = null;
+                }
+            }
+
+            /**
+             * @type {Array<string>}
+             */
+            const interactingCharacters = [];
+            const potentialConversationId = engine.deObject.stateFor[characterName].conversationId;
+            if (potentialConversationId) {
+                const conversation = engine.deObject.conversations[potentialConversationId];
+                interactingCharacters.push(...conversation.participants.filter(name => name !== characterName));
+            }
+
+            /**
+             * @type {Array<string>}
+             */
+            const worldRules = [];
+            if (engine.deObject.worldRules) {
+                for (const rule of Object.values(engine.deObject.worldRules)) {
+                    // @ts-ignore
+                    const ruleText = (await rule.rule.execute(engine.deObject, character, undefined, undefined, undefined, undefined)).trim();
+                    if (ruleText.length > 0) {
+                        worldRules.push(ruleText);
+                    }
+                }
+            }
+
+            /**
+             * @type {Array<string>}
+             */
+            const characterRules = [];
+            if (character.characterRules) {
+                for (const rule of Object.values(character.characterRules)) {
+                    // @ts-ignore
+                    const ruleText = (await rule.rule.execute(engine.deObject, character, undefined, undefined, undefined, undefined)).trim();
+                    if (ruleText.length > 0) {
+                        characterRules.push(ruleText);
+                    }
+                }
+            }
+
+            let scenario = "";
+            const currentLocation = engine.deObject.world.locations[engine.deObject.stateFor[characterName].location];
+            if (currentLocation && currentLocation.description) {
+                // @ts-ignore
+                scenario = `Location: ${engine.deObject.stateFor[characterName].location}, ` + await currentLocation.description.execute(engine.deObject, character, undefined, undefined, undefined, undefined);
+            }
+            const currentLocationSlot = currentLocation.slots[engine.deObject.stateFor[characterName].locationSlot];
+            if (currentLocationSlot && currentLocationSlot.description) {
+                // @ts-ignore
+                scenario += `\n\nSpecifically at: ${engine.deObject.stateFor[characterName].locationSlot}, ` + await currentLocationSlot.description.execute(engine.deObject, character, undefined, undefined, undefined, undefined);
+            }
+
+            scenario += `\n\n${await whatIsWeatherLikeForCharacter(engine, characterName)}`;
+
+            scenario += `\n\nCurrent time and date in the world: ${engine.makeTimestamp(engine.deObject.currentTime, false)}`;
+
+            const sysprompt = engine.inferenceAdapter.buildSystemPromptForCharacter(
+                character,
+                general,
+                shortDescription,
+                relationships,
+                statesDescriptions,
+                scenario,
+                lore,
+                interactingCharacters,
+                characterRules,
+                worldRules,
+            );
+
+            return sysprompt;
+        },
+        help: "Displays the current system prompt for a given character, for general inference purposes.",
         cheat: true,
         args: ["<character name>"],
     },
