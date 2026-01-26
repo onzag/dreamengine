@@ -1,23 +1,150 @@
+/**
+ * USAGE:
+ * 
+ * node local-llama.js <path to config json>
+ * 
+ * Example:
+ * Windows:
+ * node .\local-llama.js .\testing\model.json
+ * Unix/Linux/Mac:
+ * node ./local-llama.js ./testing/model.json
+ * 
+ * Example (debug mode):
+ * Windows:
+ * $env:DEBUG=1; node .\local-llama.js .\testing\model.json
+ * Unix/Linux/Mac:
+ * DEBUG=1 node ./local-llama.js ./testing/model.json
+ * 
+ * Example (debug with test generation):
+ * Windows:
+ * $env:DEBUG_TEST_GENERATION=1; node .\local-llama.js .\testing\model.json
+ * Unix/Linux/Mac:
+ * DEBUG_TEST_GENERATION=1 node ./local-llama.js ./testing/model.json
+ * 
+ * Remember in Windows
+ * Remove-Item Env:DEBUG_TEST_GENERATION
+ * Remove-Item Env:DEBUG
+ * 
+ * JSON File settings example
+ * 
+ * {
+ *  // the path of the model relative to the json file
+ *   "modelPath": "./model.json",
+ *   // standard generation used in roleplay contexts
+ *   "standard": {
+ *       // temperature base
+ *       "temperature": 1.0,
+ *       "maxTokens": 512,
+ *       // dynamic temperature range, if given it will vary temperature between these values
+ *       "dynamicTemperature": [0.8, 1.05],
+ *       // minimum probability for dry run detection
+ *       "minP": 0.025,
+ *       // dry sampler settings
+ *       "dry": {
+ *           "multiplier": 0.8,
+ *           "base": 1.74,
+ *           "length": 5
+ *       },
+ *       // xtc sampler settings (should probably not use both dry and xtc at the same time)
+ *   },
+ *   "analyze": {
+ *       // analysis generation settings
+ *       "temperature": 0.4,
+ *       "topP": 0.8,
+ *       "topK": 40,
+ *       "repeatPenalty": 1.1,
+ *       "frequencyPenalty": 0.0,
+ *       "presencePenalty": 0.0,
+ *       "maxTokens": 512,
+ *   }
+ * }
+ */
+
 // change to websockets because streaming over http is a pain
-import { WebSocket } from 'ws';
+import { WebSocketServer } from 'ws';
 import fs from 'fs';
-const { LlamaCompletion, LlamaText, LlamaContextSequence } = await import('node-llama-cpp');
+const { LlamaCompletion, getLlama } = await import('node-llama-cpp');
+import path from 'path';
+import { LlamaGrammar } from 'node-llama-cpp';
 
 /**
  * @type {import('node-llama-cpp').LlamaModel}
  */
 let MODEL = /** @type {any} */ (null);
-let MODEL_PATH = ""
+let LLAMA = await getLlama();
+let MODEL_PATH = "";
+
+/**
+ * @param {string} string 
+ * @returns 
+ */
+function escapeRegExp(string) {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // $& means the whole matched string
+}
 
 /**
  * @type {{
  *    modelPath: string;
- *    standard: {temperature: number; top_p: number; repeat_penalty: number; frequency_penalty: number; presence_penalty: number; maxTokens: number;},
- *    analyze: {temperature: number; top_p: number; repeat_penalty: number; frequency_penalty: number; presence_penalty: number; maxTokens: number;},
+ *    standard: {temperature: number; temperatureRange?: [number, number]; topP?: number; minP?: number; repeatPenalty?: number; frequencyPenalty?: number; presencePenalty?: number; maxTokens: number;},
+ *    analyze: {temperature: number; temperatureRange?: [number, number]; topP?: number; minP?: number; repeatPenalty?: number; frequencyPenalty?: number; presencePenalty?: number; maxTokens: number;},
  * }}
  */
 let CONFIG = /** @type {any} */ (null);
 let CONFIG_PATH = "";
+
+/**
+ * @param {*} config 
+ */
+function checkConfigValidity(config) {
+    // implement any additional checks if needed
+    if (typeof config.maxTokens !== "number") {
+        throw new Error("Invalid config: maxTokens must be a number");
+    }
+    if (typeof config.temperature !== "number") {
+        throw new Error("Invalid config: temperature must be a number");
+    }
+    if (config.temperatureRange !== undefined) {
+        if (!Array.isArray(config.temperatureRange) || config.temperatureRange.length !== 2 ||
+            typeof config.temperatureRange[0] !== "number" || typeof config.temperatureRange[1] !== "number") {
+            throw new Error("Invalid config: temperatureRange must be an array of two numbers");
+        }
+    }
+    if (config.topP !== undefined && typeof config.topP !== "number") {
+        throw new Error("Invalid config: topP must be a number");
+    }
+    if (config.repeatPenalty !== undefined && typeof config.repeatPenalty !== "number") {
+        throw new Error("Invalid config: repeatPenalty must be a number");
+    }
+    if (config.frequencyPenalty !== undefined && typeof config.frequencyPenalty !== "number") {
+        throw new Error("Invalid config: frequencyPenalty must be a number");
+    }
+    if (config.presencePenalty !== undefined && typeof config.presencePenalty !== "number") {
+        throw new Error("Invalid config: presencePenalty must be a number");
+    }
+    if (config.minP !== undefined && typeof config.minP !== "number") {
+        throw new Error("Invalid config: minP must be a number");
+    }
+    if (config.dry !== undefined) {
+        if (typeof config.dry !== "object") {
+            throw new Error("Invalid config: dry must be an object");
+        }
+        if (typeof config.dry.multiplier !== "number") {
+            throw new Error("Invalid config: dry.multiplier must be a number");
+        }
+        if (typeof config.dry.base !== "number") {
+            throw new Error("Invalid config: dry.base must be a number");
+        }
+        if (typeof config.dry.length !== "number") {
+            throw new Error("Invalid config: dry.length must be a number");
+        }
+    }
+    if (config.xtc !== undefined) {
+        if (typeof config.xtc !== "object") {
+            throw new Error("Invalid config: xtc must be an object");
+        }
+        // TODO: add xtc specific checks
+    }
+}
 
 /**
  * @type {AbortController | null}
@@ -36,30 +163,19 @@ async function loadConfig(configPath) {
 
     // check that everything lines up
     if (!CONFIG.standard || !CONFIG.analyze) {
+        console.log(CONFIG);
         throw new Error("Invalid config file, missing standard or analyze sections");
     }
-    if (typeof CONFIG.standard.maxTokens !== "number" || typeof CONFIG.analyze.maxTokens !== "number") {
-        throw new Error("Invalid config file, maxTokens must be numbers");
-    }
-    if (typeof CONFIG.standard.temperature !== "number" || typeof CONFIG.analyze.temperature !== "number") {
-        throw new Error("Invalid config file, temperature must be numbers");
-    }
-    if (typeof CONFIG.standard.top_p !== "number" || typeof CONFIG.analyze.top_p !== "number") {
-        throw new Error("Invalid config file, top_p must be numbers");
-    }
-    if (typeof CONFIG.standard.repeat_penalty !== "number" || typeof CONFIG.analyze.repeat_penalty !== "number") {
-        throw new Error("Invalid config file, repeat_penalty must be numbers");
-    }
-    if (typeof CONFIG.standard.frequency_penalty !== "number" || typeof CONFIG.analyze.frequency_penalty !== "number") {
-        throw new Error("Invalid config file, frequency_penalty must be numbers");
-    }
-    if (typeof CONFIG.standard.presence_penalty !== "number" || typeof CONFIG.analyze.presence_penalty !== "number") {
-        throw new Error("Invalid config file, presence_penalty must be numbers");
-    }
+    checkConfigValidity(CONFIG.standard);
+    checkConfigValidity(CONFIG.analyze);
+
     console.log("Config loaded successfully");
 
     if (MODEL_PATH !== CONFIG.modelPath) {
-        await loadModel(CONFIG.modelPath);
+        // use relative path from config file
+        const baseDir = path.dirname(configPath);
+        const modelFullPath = path.resolve(baseDir, CONFIG.modelPath);
+        await loadModel(modelFullPath);
     }
 }
 
@@ -81,12 +197,9 @@ async function loadModel(model) {
         MODEL_PATH = "";
     }
 
-    const { getLlama } = await import('node-llama-cpp');
-    const llama = await getLlama();
+    console.log('GPU Support:', LLAMA.gpu || 'Unknown');
 
-    console.log('GPU Support:', llama.gpu || 'Unknown');
-
-    const LLAMA_MODEL = await llama.loadModel({
+    const LLAMA_MODEL = await LLAMA.loadModel({
         modelPath: model,
         gpuLayers: "auto",
         defaultContextFlashAttention: true,
@@ -104,73 +217,80 @@ if (argv.length < 1) {
     process.exit(1);
 }
 
+const DEBUG = process.env.DEBUG === "1" || process.env.DEBUG_TEST_GENERATION === "1";
+const DEBUG_TEST_GENERATION = process.env.DEBUG_TEST_GENERATION === "1";
+
+console.log("DEBUG mode:", DEBUG);
+
 await loadConfig(argv[0]);
 
-const wss = new WebSocket.Server({ port: 8754, host: '0.0.0.0' });
+if (!DEBUG_TEST_GENERATION) {
+    const wss = new WebSocketServer({ port: 8765, host: '0.0.0.0' });
 
-wss.on('connection', (ws) => {
-    console.log('Client connected');
+    wss.on('connection', (ws) => {
+        console.log('Client connected');
 
-    ws.send(JSON.stringify({ type: 'ready', message: 'Model is ready' }));
+        ws.send(JSON.stringify({ type: 'ready', message: 'Model is ready' }));
 
-    ws.on('message', async (message) => {
-        try {
-            // @ts-ignore
-            const data = JSON.parse(message);
+        ws.on('message', async (message) => {
+            try {
+                // @ts-ignore
+                const data = JSON.parse(message);
 
-            // Handle different actions
-            if (data.action === 'infer') {
-                if (!data.payload) {
-                    throw new Error("Invalid payload for infer");
+                // Handle different actions
+                if (data.action === 'infer') {
+                    if (!data.payload) {
+                        throw new Error("Invalid payload for infer");
+                    }
+                    await generateCompletion(data.payload, (text) => {
+                        ws.send(JSON.stringify({ type: 'token', text }));
+                    }, () => {
+                        ws.send(JSON.stringify({ type: 'done' }));
+                    }, (error) => {
+                        ws.send(JSON.stringify({ type: 'error', message: error.message }));
+                    });
+                } else if (data.action === 'analyze-prepare') {
+                    if (!data.payload) {
+                        throw new Error("Invalid payload for analyze-prepare");
+                    }
+                    await prepareAnalysis(data.payload, () => {
+                        ws.send(JSON.stringify({ type: 'analyze-ready' }));
+                    }, (error) => {
+                        ws.send(JSON.stringify({ type: 'error', message: error.message }));
+                    });
+                } else if (data.action === 'analyze-question') {
+                    if (!data.payload) {
+                        throw new Error("Invalid payload for analyze-question");
+                    }
+                    await runQuestion(data.payload, (text) => {
+                        ws.send(JSON.stringify({ type: 'answer', text }));
+                    }, (error) => {
+                        ws.send(JSON.stringify({ type: 'error', message: error.message }));
+                    });
+                } else if (data.action === 'count-tokens') {
+                    if (!data.payload || typeof data.payload.text !== "string") {
+                        throw new Error("Invalid payload for count-tokens");
+                    }
+                    const text = data.payload.text;
+                    const tokens = MODEL.tokenize(text);
+                    ws.send(JSON.stringify({ type: 'count', n_tokens: tokens.length }));
                 }
-                await generateCompletion(data.payload, (text) => {
-                    ws.send(JSON.stringify({ type: 'token', text }));
-                }, () => {
-                    ws.send(JSON.stringify({ type: 'done' }));
-                }, (error) => {
-                    ws.send(JSON.stringify({ type: 'error', message: error.message }));
-                });
-            } else if (data.action === 'analyze-prepare') {
-                if (!data.payload) {
-                    throw new Error("Invalid payload for analyze-prepare");
-                }
-                await prepareAnalysis(data.payload, () => {
-                    ws.send(JSON.stringify({ type: 'analyze-ready' }));
-                }, (error) => {
-                    ws.send(JSON.stringify({ type: 'error', message: error.message }));
-                });
-            } else if (data.action === 'analyze-question') {
-                if (!data.payload) {
-                    throw new Error("Invalid payload for analyze-question");
-                }
-                await runQuestion(data.payload, (text) => {
-                    ws.send(JSON.stringify({ type: 'answer', text }));
-                }, (error) => {
-                    ws.send(JSON.stringify({ type: 'error', message: error.message }));
-                });
-            } else if (data.action === 'count-tokens') {
-                if (!data.payload || typeof data.payload.text !== "string") {
-                    throw new Error("Invalid payload for count-tokens");
-                }
-                const text = data.payload.text;
-                const tokens = MODEL.tokenize(text);
-                ws.send(JSON.stringify({ type: 'count', n_tokens: tokens.length }));
+            } catch (e) {
+                // @ts-ignore
+                console.log(e.message);
+                // @ts-ignore
+                ws.send(JSON.stringify({ type: 'error', message: e.message }));
             }
-        } catch (e) {
-            // @ts-ignore
-            console.log(e.message);
-            // @ts-ignore
-            ws.send(JSON.stringify({ type: 'error', message: e.message }));
-        }
-    });
+        });
 
-    ws.on('close', () => {
-        console.log('Client disconnected');
-        if (CONTROLLER) {
-            CONTROLLER.abort();
-        }
+        ws.on('close', () => {
+            console.log('Client disconnected');
+            if (CONTROLLER) {
+                CONTROLLER.abort();
+            }
+        });
     });
-});
+}
 
 /**
  * @type {import('node-llama-cpp').Token[] | null}
@@ -180,6 +300,14 @@ wss.on('connection', (ws) => {
  * @type {string | null}
  */
 let ANALYSIS_TEXT = null;
+
+/**
+ * @param {number} minTemp 
+ * @param {number} maxTemp 
+ */
+function getDynamicTemperature(minTemp, maxTemp) {
+    return Math.random() * (maxTemp - minTemp) + minTemp;
+}
 
 /**
  * 
@@ -207,6 +335,9 @@ async function prepareAnalysis(data, onDone, onError) {
 
         // TODO optimize this, for now just retokenize every time
         ANALYSIS_TEXT = `<|start_header_id|>system<|end_header_id|>\n\n${data.system}<|eot_id><|start_header_id|>user<|end_header_id|>\n\n${data.userTrail}`;
+        if (DEBUG) {
+            console.log("Prepared analysis text:", ANALYSIS_TEXT);
+        }
         onDone();
     } catch (e) {
         // @ts-ignore
@@ -219,9 +350,11 @@ async function prepareAnalysis(data, onDone, onError) {
  * @param {{
  * question: string;
  * stopAt: Array<string>;
+ * stopAfter: Array<string>;
  * maxParagraphs: number;
  * maxCharacters: number;
  * trail: string | null;
+ * grammar: string | null;
  * }} data
  * @param {(v: string) => void} onAnswer 
  * @param {(err: Error) => void} onError 
@@ -249,6 +382,10 @@ async function runQuestion(data, onAnswer, onError) {
         throw new Error("Invalid stopAt format");
     }
 
+    if (!Array.isArray(data.stopAfter)) {
+        throw new Error("Invalid stopAfter format");
+    }
+
     if (typeof data.maxParagraphs !== "number" || isNaN(data.maxParagraphs) || data.maxParagraphs < 0) {
         throw new Error("Invalid maxParagraphs format");
     }
@@ -261,27 +398,40 @@ async function runQuestion(data, onAnswer, onError) {
         throw new Error("Invalid trail format");
     }
 
+    if (data.grammar !== null && typeof data.grammar !== "string") {
+        throw new Error("Invalid grammar format");
+    }
+
+    const regexStopAfter = data.stopAfter.map(s => new RegExp(`(^|[.,;])\\s*${escapeRegExp(s)}\\s*([.,;]|$)`, 'i'));
+
     const prompt = ANALYSIS_TEXT + "\n" + data.question + `\n<|start_header_id|>assistant<|end_header_id|>\n\n` + (data.trail || "");
     let context = null
     let completion = null;
     let answer = "";
     try {
+        const grammar = data.grammar ? await LLAMA.createGrammar({
+            grammar: data.grammar,
+        }) : undefined;
         // Create context and completion for raw text
         context = await MODEL.createContext();
         completion = new LlamaCompletion({
-            contextSequence: context.getSequence()
+            contextSequence: context.getSequence(),
         });
 
         const basicConfig = {
-            temperature: CONFIG.analyze.temperature || 0.9,
-            topP: CONFIG.analyze.top_p || 0.95,
+            temperature: CONFIG.analyze.temperature,
+            topP: CONFIG.analyze.topP,
+            minP: CONFIG.analyze.minP,
             repeatPenalty: {
-                penalty: CONFIG.analyze.repeat_penalty || 1.1,
-                frequencyPenalty: CONFIG.analyze.frequency_penalty || 0,
-                presencePenalty: CONFIG.analyze.presence_penalty || 0,
+                penalty: CONFIG.analyze.repeatPenalty,
+                frequencyPenalty: CONFIG.analyze.frequencyPenalty,
+                presencePenalty: CONFIG.analyze.presencePenalty,
             },
             customStopTriggers: ["<|eot_id|>", "<|start_header_id|>"].concat(data.stopAt || []),
             maxTokens: CONFIG.analyze.maxTokens || 512,
+        }
+        if (CONFIG.analyze.temperatureRange) {
+            basicConfig.temperature = getDynamicTemperature(CONFIG.analyze.temperatureRange[0], CONFIG.analyze.temperatureRange[1]);
         }
         if (typeof data.maxParagraphs === "number") {
             console.log("Max paragraphs limit set to:", data.maxParagraphs);
@@ -289,19 +439,32 @@ async function runQuestion(data, onAnswer, onError) {
         if (typeof data.maxCharacters === "number") {
             console.log("Max characters limit set to:", data.maxCharacters);
         }
+        // TODO add XTC and dry sampling options from config
 
         let accumulatedText = "";
 
-        console.log("Generation config:", basicConfig);
+        if (DEBUG) {
+            console.log("Generation config:", basicConfig);
+            console.log("Prompt:", prompt);
+            console.log("Using grammar:", data.grammar);
+        }
+
         await completion.generateCompletion(prompt, {
             ...basicConfig,
             signal: CONTROLLER.signal,
             stopOnAbortSignal: true,
-            onTextChunk(text) {
+            grammar,
+            onTextChunk(textSrc) {
                 try {
+                    const text = textSrc.replace("<|eot_id|>", "").replace("<|end_header_id|>", "").replace("<|start_header_id|>", "");
                     accumulatedText += text;
 
-                    if (data.maxParagraphs !== 0) {
+                    if (DEBUG) {
+                        // use this weird character to denote token boundaries
+                        process.stdout.write(text + "§");
+                    }
+
+                    if (typeof data.maxParagraphs === "number" && data.maxParagraphs > 0) {
                         // For the non prototype this can be optimized better but for now it's fine
                         // count paragraphs
                         let paragraphCount = 0;
@@ -320,7 +483,7 @@ async function runQuestion(data, onAnswer, onError) {
                                 if (potentialPartBeforeNew.length > 0) {
                                     answer += potentialPartBeforeNew;
                                 }
-                                console.log("Aborting completion due to max paragraphs limit.");
+                                console.log("\nAborting completion due to max paragraphs limit.");
                                 CONTROLLER?.abort();
                                 CONTROLLER = null;
                                 onAnswer(answer);
@@ -328,7 +491,7 @@ async function runQuestion(data, onAnswer, onError) {
                             }
                         }
                     }
-                    if (typeof data.maxCharacters === "number") {
+                    if (typeof data.maxCharacters === "number" && data.maxCharacters > 0) {
                         const characterCount = accumulatedText.length;
 
                         //console.log("Current character count:", characterCount);
@@ -342,7 +505,7 @@ async function runQuestion(data, onAnswer, onError) {
                                 if (potentialPartBeforeNew.length > 0) {
                                     answer += potentialPartBeforeNew;
                                 }
-                                console.log("Aborting completion due to max characters limit.");
+                                console.log("\nAborting completion due to max characters limit.");
                                 CONTROLLER?.abort();
                                 CONTROLLER = null;
                                 onAnswer(answer);
@@ -352,19 +515,38 @@ async function runQuestion(data, onAnswer, onError) {
                     }
 
                     answer += text;
+
+                    if (regexStopAfter.length > 0) {
+                        for (const stopRegex of regexStopAfter) {
+                            if (stopRegex.test(answer)) {
+                                console.log("\nAborting completion due to stopAfter trigger matched:", stopRegex);
+                                CONTROLLER?.abort();
+                                CONTROLLER = null;
+                                return;
+                            }
+                        }
+                    }
                 } catch (e) {
                     // @ts-ignore
-                    console.log("Error in onToken callback:", e.message);
+                    console.log("\nError in onToken callback:", e.message);
                     throw e;
                 }
             }
         });
     } catch (e) {
+        console.log("");
         // @ts-ignore
         console.log(e.message);
         // @ts-ignore
         onError(e);
     }
+
+    if (context) {
+        await context.dispose();
+        context = null;
+    }
+
+    console.log("");
     onAnswer(answer);
     CONTROLLER = null;
 }
@@ -372,7 +554,7 @@ async function runQuestion(data, onAnswer, onError) {
 
 /**
  * 
- * @param {{messages: Array<{role: string, content: string}>, extraStops: Array<string>, maxParagraphs: number, maxCharacters: number, startCountingFromToken: string | null, trail: string | null}} data 
+ * @param {{messages: Array<{role: string, content: string}>, stopAt: Array<string>, stopAfter: Array<string>, maxParagraphs: number, maxCharacters: number, startCountingFromToken: string | null, trail: string | null}} data 
  * @param {(text: string) => void} onToken 
  * @param {() => void} onDone 
  * @param {(error: Error) => void} onError 
@@ -395,10 +577,10 @@ async function generateCompletion(data, onToken, onDone, onError) {
         throw new Error("Invalid messages format");
     }
 
-    if (!Array.isArray(data.extraStops)) {
-        throw new Error("Invalid extraStops format");
-    } else if (data.extraStops.some(s => typeof s !== "string")) {
-        throw new Error("Invalid extraStops format, all stops must be strings");
+    if (!Array.isArray(data.stopAt)) {
+        throw new Error("Invalid stopAt format");
+    } else if (data.stopAt.some(s => typeof s !== "string")) {
+        throw new Error("Invalid stopAt format, all stops must be strings");
     }
 
     if (typeof data.maxParagraphs !== "number" || isNaN(data.maxParagraphs) || data.maxParagraphs < 0) {
@@ -416,6 +598,13 @@ async function generateCompletion(data, onToken, onDone, onError) {
     if (data.trail !== null && typeof data.trail !== "string") {
         throw new Error("Invalid trail format");
     }
+
+    if (!Array.isArray(data.stopAfter)) {
+        throw new Error("Invalid stopAfter format");
+    }
+
+    // clear previous analysis
+    ANALYSIS_TEXT = null;
 
     let prompt = "";
     for (const msg of data.messages) {
@@ -444,16 +633,21 @@ async function generateCompletion(data, onToken, onDone, onError) {
         });
 
         const basicConfig = {
-            temperature: CONFIG.standard.temperature || 0.9,
-            topP: CONFIG.standard.top_p || 0.95,
+            temperature: CONFIG.standard.temperature,
+            topP: CONFIG.standard.topP,
+            minP: CONFIG.standard.minP,
             repeatPenalty: {
-                penalty: CONFIG.standard.repeat_penalty || 1.1,
-                frequencyPenalty: CONFIG.standard.frequency_penalty || 0,
-                presencePenalty: CONFIG.standard.presence_penalty || 0,
+                penalty: CONFIG.standard.repeatPenalty,
+                frequencyPenalty: CONFIG.standard.frequencyPenalty,
+                presencePenalty: CONFIG.standard.presencePenalty,
             },
-            customStopTriggers: ["<|eot_id|>", "<|start_header_id|>"].concat(data.extraStops || []),
+            customStopTriggers: ["<|eot_id|>", "<|start_header_id|>"].concat(data.stopAt || []),
             maxTokens: CONFIG.standard.maxTokens || 512,
         }
+        if (CONFIG.standard.temperatureRange) {
+            basicConfig.temperature = getDynamicTemperature(CONFIG.standard.temperatureRange[0], CONFIG.standard.temperatureRange[1]);
+        }
+        // TODO add XTC and dry sampling options from config
         if (typeof data.maxParagraphs === "number") {
             console.log("Max paragraphs limit set to:", data.maxParagraphs);
         }
@@ -465,14 +659,25 @@ async function generateCompletion(data, onToken, onDone, onError) {
         let accumulatedText = "";
         let accumulatedTextForCounting = "";
 
-        console.log("Generation config:", basicConfig);
+        if (DEBUG) {
+            console.log("Generation config:", basicConfig);
+            console.log("Prompt:", prompt);
+        }
+
+        const regexStopAfter = data.stopAfter.map(s => new RegExp(`(^|[.,;])\\s*${escapeRegExp(s)}\\s*([.,;]|$)`, 'i'));
+
         await completion.generateCompletion(prompt, {
             ...basicConfig,
             signal: CONTROLLER.signal,
             stopOnAbortSignal: true,
-            onTextChunk(text) {
+            onTextChunk(textSrc) {
                 try {
+                    const text = textSrc.replace("<|eot_id|>", "").replace("<|end_header_id|>", "").replace("<|start_header_id|>", "");
                     accumulatedText += text;
+                    if (DEBUG && !DEBUG_TEST_GENERATION) {
+                        // use this weird character to denote token boundaries
+                        process.stdout.write(text + "§");
+                    }
                     if (!hasBegunCounting && data.startCountingFromToken && accumulatedText.includes(data.startCountingFromToken)) {
                         hasBegunCounting = true;
                     }
@@ -481,7 +686,7 @@ async function generateCompletion(data, onToken, onDone, onError) {
                         accumulatedTextForCounting += text;
                     }
 
-                    if (data.maxParagraphs !== 0) {
+                    if (typeof data.maxParagraphs === "number" && data.maxParagraphs > 0) {
                         // For the non prototype this can be optimized better but for now it's fine
                         // count paragraphs
                         let paragraphCount = 0;
@@ -500,14 +705,14 @@ async function generateCompletion(data, onToken, onDone, onError) {
                                 if (potentialPartBeforeNew.length > 0) {
                                     onToken(potentialPartBeforeNew);
                                 }
-                                console.log("Aborting completion due to max paragraphs limit.");
+                                console.log("\nAborting completion due to max paragraphs limit.");
                                 CONTROLLER?.abort();
                                 CONTROLLER = null;
                                 return;
                             }
                         }
                     }
-                    if (typeof data.maxCharacters === "number") {
+                    if (typeof data.maxCharacters === "number" && data.maxCharacters > 0) {
                         const characterCount = accumulatedText.length;
 
                         //console.log("Current character count:", characterCount);
@@ -521,7 +726,7 @@ async function generateCompletion(data, onToken, onDone, onError) {
                                 if (potentialPartBeforeNew.length > 0) {
                                     onToken(potentialPartBeforeNew);
                                 }
-                                console.log("Aborting completion due to max characters limit.");
+                                console.log("\nAborting completion due to max characters limit.");
                                 CONTROLLER?.abort();
                                 CONTROLLER = null;
                                 return;
@@ -530,18 +735,126 @@ async function generateCompletion(data, onToken, onDone, onError) {
                     }
 
                     onToken(text);
+
+                    if (regexStopAfter.length > 0) {
+                        for (const stopRegex of regexStopAfter) {
+                            if (stopRegex.test(accumulatedTextForCounting)) {
+                                console.log("\nAborting completion due to stopAfter trigger matched:", stopRegex);
+                                CONTROLLER?.abort();
+                                CONTROLLER = null;
+                                return;
+                            }
+                        }
+                    }
+
                 } catch (e) {
                     // @ts-ignore
-                    console.log("Error in onToken callback:", e.message);
+                    console.log("\nError in onToken callback:", e.message);
                     throw e;
                 }
             }
         });
     } catch (e) {
+        console.log("");
         // @ts-ignore
         console.log(e.message);
         // @ts-ignore
         onError(e);
     }
+    if (context) {
+        await context.dispose();
+        context = null;
+    }
+    console.log("");
+    onDone();
     CONTROLLER = null;
+}
+
+// Useful for quickly testing if the generation works
+if (DEBUG_TEST_GENERATION) {
+    await generateCompletion({
+        messages: [
+            { role: "system", content: "You are a helpful assistant." },
+            { role: "user", content: "Hello, how are you?" }
+        ],
+        stopAt: [],
+        stopAfter: [],
+        maxParagraphs: 0,
+        maxCharacters: 0,
+        startCountingFromToken: null,
+        trail: null
+    }, (text) => {
+        process.stdout.write(text + "§");
+    }, () => {
+        console.log("\nGeneration complete.");
+    }, (error) => {
+        console.log("Error during generation:", error.message);
+    });
+
+    await prepareAnalysis({
+        system: "You are an expert in literature analysis, the user will provide you with stories to analyze and ask questions about them.",
+        userTrail: "<story>The story is about a young hero embarking on a quest.\n\nThe hero faces many challenges along the way.\n\nThe hero name is Arin.</story>\n\n"
+    }, () => {
+        console.log("Analysis prepared successfully.");
+    }, (error) => {
+        console.log("Error during analysis preparation:", error.message);
+    });
+
+    await runQuestion({
+        question: "<question>What is the main theme of the story?</question>",
+        stopAt: [
+            "</answer>",
+            "."
+        ],
+        stopAfter: [],
+        maxParagraphs: 1,
+        maxCharacters: 500,
+        trail: "<answer>The main theme is ",
+        grammar: null,
+    }, (answer) => {
+        console.log(answer);
+    }, (error) => {
+        console.log("Error during question answering:", error.message);
+    });
+
+    await runQuestion({
+        question: "<question>Who is the protagonist of the story?</question>",
+        stopAt: [
+            "</answer>",
+            ".",
+            ",",
+            ";"
+        ],
+        maxParagraphs: 1,
+        maxCharacters: 500,
+        stopAfter: [],
+        trail: "<answer>The protagonist name is ",
+        grammar: null,
+    }, (answer) => {
+        console.log(answer);
+    }, (error) => {
+        console.log("Error during question answering:", error.message);
+    });
+
+    await runQuestion({
+        question: "<question>Is the hero named Arin? Answer with YES or NO.</question>",
+        stopAt: [
+            "</answer>",
+            ".",
+            ",",
+            ";"
+        ],
+        maxParagraphs: 1,
+        maxCharacters: 500,
+        stopAfter: [
+            "yes",
+            "no"
+        ],
+        trail: "<answer>",
+        grammar: null,
+    }, (answer) => {
+        console.log(answer);
+    }, (error) => {
+        console.log("Error during question answering:", error.message);
+    });
 }

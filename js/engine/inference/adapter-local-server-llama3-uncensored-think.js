@@ -61,8 +61,10 @@ export class InferenceAdapterLocalServerLlama3UncensoredThink extends BaseInfere
             this.streamingAwaiter = (data, done, err) => {
                 if (err) {
                     reject(new Error(err));
-                } else {
+                } else if (typeof data === "number") {
                     resolve(/** @type {number} */(data));
+                } else {
+                    reject(new Error("Invalid data received for token count: " + data));
                 }
                 this.streamingAwaiter = null;
             };
@@ -82,10 +84,10 @@ export class InferenceAdapterLocalServerLlama3UncensoredThink extends BaseInfere
             return;
         }
 
-        console.log("InferenceAdapterLocalServerLlama3UncensoredThink: Initializing connection to local server at " + (this.options.host || 'ws://localhost:8080'));
+        console.log("InferenceAdapterLocalServerLlama3UncensoredThink: Initializing connection to local server at " + (this.options.host || 'ws://127.0.0.1:8765'));
 
         // set a websocket to the local server
-        this.socket = new WebSocket(this.options.host || 'ws://localhost:8080');
+        this.socket = new WebSocket(this.options.host || 'ws://127.0.0.1:8765');
         this.socket.addEventListener("message", this.onData);
 
         /**
@@ -159,13 +161,13 @@ export class InferenceAdapterLocalServerLlama3UncensoredThink extends BaseInfere
         try {
             const data = JSON.parse(event.data);
 
-            if (data.event == "ready") {
+            if (data.type == "ready") {
                 if (this.resolveInitializePromise) {
                     this.resolveInitializePromise();
                     this.resolveInitializePromise = null;
                     this.rejectInitializePromise = null;
                 }
-            } else if (data.event == "error") {
+            } else if (data.type == "error") {
                 if (this.rejectInitializePromise) {
                     this.rejectInitializePromise(new Error(data.message));
                     this.resolveInitializePromise = null;
@@ -175,24 +177,24 @@ export class InferenceAdapterLocalServerLlama3UncensoredThink extends BaseInfere
                     // @ts-ignore
                     this.streamingAwaiter(null, false, data.message);
                 }
-            } else if (data.event == "token") {
+            } else if (data.type == "token") {
                 if (this.streamingAwaiter) {
                     this.streamingAwaiter(data.token, false, null);
                 }
-            } else if (data.event == "answer") {
+            } else if (data.type == "answer") {
                 if (this.streamingAwaiter) {
-                    this.streamingAwaiter(data.answer, false, null);
+                    this.streamingAwaiter(data.text, false, null);
                 }
-            } else if (data.event == "count") {
+            } else if (data.type == "count") {
                 if (this.streamingAwaiter) {
-                    this.streamingAwaiter(data.count, false, null);
+                    this.streamingAwaiter(data.n_tokens, false, null);
                 }
-            } else if (data.event == "done") {
+            } else if (data.type == "done") {
                 if (this.streamingAwaiter) {
                     // @ts-ignore
                     this.streamingAwaiter(null, true, null);
                 }
-            } else if (data.event == "analyze-ready") {
+            } else if (data.type == "analyze-ready") {
                 if (this.streamingAwaiter) {
                     this.streamingAwaiter("ready", false, null);
                 }
@@ -322,7 +324,8 @@ ${states.join(", ")}
                 },
             ],
             trail: "[" + character.name + "]: <think>",
-            extraStops: ["<think>"].concat(Array.from(otherCharacterNames).map(name => `\n[${name}]:`)),
+            stopAt: ["<think>"].concat(Array.from(otherCharacterNames).map(name => `\n[${name}]:`)),
+            stopAfter: [],
             startCountingFromToken: "</think>",
             maxParagraphs: 3,
             maxCharacters: 1000,
@@ -424,17 +427,19 @@ ${states.join(", ")}
     /**
      * @param {DECompleteCharacterReference} character 
      * @param {string} system
-     * @param {string|null} contextInfo additional context information to provide to the agent
+     * @param {string|null} contextInfoBefore additional context information to provide to the agent
      * @param {AsyncGenerator<{name: string, message: string, id: string, conversationId: string | null, debug: boolean, rejected: boolean}, void, boolean>} getHistoryForCharacter
-     * @param {"LAST_CYCLE" | "LAST_MESSAGE" | "ALL"} msgLimit what to limit the history to
-     * @returns {AsyncGenerator<string, void, {nextQuestion: string, stopAt: Array<string>, maxParagraphs: number; maxCharacters: number} | null>}
+     * @param {"LAST_CYCLE" | "LAST_MESSAGE" | "LAST_CYCLE_EXPANDED" | "ALL"} msgLimit what to limit the history to
+     * @param {string|null} contextInfoAfter additional context information to provide to the agent
+     * @returns {AsyncGenerator<string, void, {answerTrail?: string, grammar?: string, contextInfo?: string, instructions?: string, nextQuestion: string, stopAfter: Array<string>, stopAt: Array<string>, maxParagraphs: number; maxCharacters: number} | null>}
      */
     async *runQuestioningCustomAgentOn(
         character,
         system,
-        contextInfo,
+        contextInfoBefore,
         getHistoryForCharacter,
         msgLimit,
+        contextInfoAfter
     ) {
         if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
             throw new Error("WebSocket is not open");
@@ -460,19 +465,42 @@ ${states.join(", ")}
         let messagesToAdd = [];
 
         let generator = await getHistoryForCharacter.next(true);
+        let cycleCount = 0;
         while (!generator.done) {
             if (!generator.value.debug && !generator.value.rejected) {
-                const shouldRemoveAddedMessage = msgLimit === "LAST_MESSAGE" && generator.value.name !== character.name;
-                if (!shouldRemoveAddedMessage) {
+                let shouldAddMessage = false;
+                let shouldStopAddingMessages = false;
+
+                if (msgLimit === "ALL") {
+                    tokensExhaustedApprox += await this.countTokens("[" + generator.value.name + "]: " + generator.value.message) + 10; // some wiggle room
+                    shouldStopAddingMessages = tokensExhaustedApprox >= contextWindowSize;
+                    shouldAddMessage = !shouldStopAddingMessages;
+                } else if (msgLimit === "LAST_MESSAGE") {
+                    shouldAddMessage = generator.value.name === character.name;
+                    shouldStopAddingMessages = shouldAddMessage;
+                } else if (msgLimit === "LAST_CYCLE") {
+                    shouldAddMessage = cycleCount === 0;
+                } else if (msgLimit === "LAST_CYCLE_EXPANDED") {
+                    shouldAddMessage = cycleCount === 0 || (cycleCount === 1 && generator.value.name !== character.name);
+                }
+
+                if (generator.value.name === character.name) {
+                    cycleCount++;
+                }
+
+                if (msgLimit === "LAST_CYCLE") {
+                    shouldStopAddingMessages = cycleCount >= 1;
+                }
+                if (msgLimit === "LAST_CYCLE_EXPANDED") {
+                    shouldStopAddingMessages = cycleCount >= 2;
+                }
+
+                if (shouldAddMessage) {
                     messagesToAdd.push(generator.value);
                 }
-                tokensExhaustedApprox += await this.countTokens("[" + generator.value.name + "]: " + generator.value.message) + 10; // some wiggle room
-                if (tokensExhaustedApprox >= contextWindowSize || ((msgLimit === "LAST_CYCLE" || msgLimit === "LAST_MESSAGE") && generator.value.name === character.name)) {
+
+                if (shouldStopAddingMessages) {
                     await getHistoryForCharacter.return();
-                    if (tokensExhaustedApprox > contextWindowSize) {
-                        // remove the last message as it made us go over
-                        messagesToAdd.pop();
-                    }
                     break;
                 }
             }
@@ -484,7 +512,7 @@ ${states.join(", ")}
 
         const payload = {
             system: system,
-            userTrail: (contextInfo || "") + (contextInfo ? "\n" : "") + "<messages>" + messagesFormatted + "</messages>"
+            userTrail: (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "") + "<messages>\n" + messagesFormatted + "\n</messages>" + (contextInfoAfter ? "\n" + contextInfoAfter : ""),
         };
 
         this.socket.send(JSON.stringify({ action: "analyze-prepare", payload }));
@@ -496,9 +524,11 @@ ${states.join(", ")}
                 } else if (data === "ready") {
                     // @ts-ignore
                     resolve();
+                } else {
+                    reject(new Error("Unexpected data received from questioning agent during preparation: " + data));
                 }
+                this.streamingAwaiter = null;
             };
-            this.streamingAwaiter = null;
         });
 
         let nextQuestion = yield "ready";
@@ -507,14 +537,15 @@ ${states.join(", ")}
             this.socket.send(JSON.stringify({
                 action: "analyze-question",
                 payload: {
-                    question: "<question>" + nextQuestion.nextQuestion + "</question>",
+                    question: (nextQuestion.contextInfo ? nextQuestion.contextInfo + "\n" : "") + "<question>" + nextQuestion.nextQuestion + "</question>" + (nextQuestion.instructions ? ("\n<instructions>" + nextQuestion.instructions + "</instructions>") : ""),
                     stopAt: ["</answer>"].concat(nextQuestion.stopAt),
+                    stopAfter: nextQuestion.stopAfter,
                     maxParagraphs: nextQuestion.maxParagraphs,
                     maxCharacters: nextQuestion.maxCharacters,
-                    trail: "<answer>",
+                    trail: "<answer>" + (nextQuestion.answerTrail || ""),
+                    grammar: nextQuestion.grammar || null,
                 }
             }));
-
             const answer = await new Promise((resolve, reject) => {
                 this.streamingAwaiter = (data, done, err) => {
                     if (err) {
@@ -522,9 +553,11 @@ ${states.join(", ")}
                     } else if (data) {
                         // @ts-ignore
                         resolve(data);
+                    } else {
+                        reject(new Error("No data received from questioning agent."));
                     }
+                    this.streamingAwaiter = null;
                 };
-                this.streamingAwaiter = null;
             });
             nextQuestion = yield answer;
         }
@@ -534,10 +567,9 @@ ${states.join(", ")}
      * @param {string} description
      * @param {string[]} rules
      * @param {string|null} characterDescription
-     * @param {string[]} items
      * @returns string
      */
-    buildSystemPromptForQuestioningAgent(description, rules, characterDescription, items) {
+    buildSystemPromptForQuestioningAgent(description, rules, characterDescription) {
         let value = (
             `<description>` + description + `</description>`
         );
@@ -546,23 +578,45 @@ ${states.join(", ")}
             value += `\n<rule>` + rule + `</rule>`;
         }
 
-        if (items.length > 0) {
-            value += `\n<availableItems>`;
-        }
-
-        for (const item of items) {
-            value += `\n<item>` + item + `</item>`;
-        }
-
-        if (items.length > 0) {
-            value += `\n</availableItems>`;
-        }
-
         if (characterDescription) {
             value += `\n<characterDescription>` + characterDescription + `</characterDescription>`;
         }
 
         return value;
+    }
+
+
+    /**
+     * @param {Array<{groupDescription: string, characters: Array<{name: string, description: string}>}>} groups
+     * @returns {{availableCharactersAt: string, characterInfoAt: string, value: string}}
+     */
+    buildContextInfoForAvailableCharacters(groups) {
+        let value = `<availableCharacters>\n`;
+        let index = 0;
+        for (const group of groups) {
+            if (index > 0) {
+                value += `\n`;
+            }
+            value += group.groupDescription + "\n";
+            for (const character of group.characters) {
+                value += `<character>` + character.name + ` - ` + character.description + `</character>\n`;
+            }
+            index++;
+        }
+        value += `</availableCharacters>`;
+
+        return {
+            availableCharactersAt: "`<availableCharacters>` and `</availableCharacters>` tags",
+            characterInfoAt: "`<character>` and `</character>` tags",
+            value,
+        };
+    }
+
+    /**
+     * @param {string} instructions
+     */
+    buildContextInfoInstructions(instructions) {
+        return ("<instructions>\n" + instructions + "\n</instructions>");
     }
 
     /**
@@ -672,5 +726,9 @@ ${this.buildSystemCharacterDescription(character, description, appereance, relat
 </roleplayContext>
 `
         )
+    }
+
+    getRequiredRootGrammarForQuestionGeneration() {
+        return "\"</answer>\"";
     }
 }

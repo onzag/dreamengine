@@ -41,6 +41,10 @@ export class TextOnlyUI {
          * @type {string|null}
          */
         this.lastMessageId = null;
+        /**
+         * @type {Set<string>}
+         */
+        this.seenMessageIds = new Set();
 
         if (!this.engine.deObject) {
             throw new Error("Engine not initialized");
@@ -140,7 +144,7 @@ export class TextOnlyUI {
         );
         let next = await generator.next(true);
         while (!next.done) {
-            if (next.value.id === this.lastMessageId) {
+            if (next.value.id === this.lastMessageId || this.seenMessageIds.has(next.value.id)) {
                 await generator.return();
                 break;
             }
@@ -161,5 +165,8 @@ export class TextOnlyUI {
         if (lastMessage) {
             this.lastMessageId = lastMessage.id;
         }
+        accumulatedMessages.forEach(m =>
+            this.seenMessageIds.add(m.id)
+        );
     }
 }

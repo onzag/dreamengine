@@ -42,17 +42,19 @@ export class BaseInferenceAdapter {
      * 
      * @param {DECompleteCharacterReference} character 
      * @param {string} system
-     * @param {string|null} contextInfo additional context information to provide to the agent
+     * @param {string|null} contextInfoBefore additional context information to provide to the agent
      * @param {AsyncGenerator<{name: string, message: string, id: string, conversationId: string | null, debug: boolean, rejected: boolean}, void, boolean>} getHistoryForCharacter
-     * @param {"LAST_CYCLE" | "LAST_MESSAGE" | "ALL"} msgLimit what to limit the history to
-     * @returns {AsyncGenerator<string, void, {nextQuestion: string, stopAt: Array<string>, maxParagraphs: number; maxCharacters: number} | null>}
+     * @param {"LAST_CYCLE" | "LAST_MESSAGE" | "LAST_CYCLE_EXPANDED" | "ALL"} msgLimit what to limit the history to
+     * @param {string|null} contextInfoAfter additional context information to provide to the agent
+     * @returns {AsyncGenerator<string, void, {answerTrail?: string, grammar?: string, contextInfo?: string, nextQuestion: string, instructions?: string, stopAt: Array<string>, stopAfter: Array<string>, maxParagraphs: number; maxCharacters: number} | null>}
      */
     async *runQuestioningCustomAgentOn(
         character,
         system,
-        contextInfo,
+        contextInfoBefore,
         getHistoryForCharacter,
         msgLimit,
+        contextInfoAfter
     ) {
         throw new Error("Method 'runQuestioningCustomAgentOn()' must be implemented.");
     }
@@ -94,10 +96,9 @@ export class BaseInferenceAdapter {
      * @param {string} description
      * @param {string[]} rules
      * @param {string|null} characterDescription
-     * @param {string[]} items
      * @returns {string}
      */
-    buildSystemPromptForQuestioningAgent(description, rules, characterDescription, items) {
+    buildSystemPromptForQuestioningAgent(description, rules, characterDescription) {
         throw new Error("Method 'buildSystemPromptForQuestioningAgent()' must be implemented.");
     }
 
@@ -114,5 +115,35 @@ export class BaseInferenceAdapter {
      */
     buildActionPromptForCharacter(character, action, primaryEmotion, emotionalRange, states, narrativeEffect) {
         throw new Error("Method 'buildActionPromptForCharacter()' must be implemented.");
+    }
+
+    /**
+     * @param {Array<{groupDescription: string, characters: Array<{name: string, description: string}>}>} groups
+     * @returns {{availableCharactersAt: string, characterInfoAt: string, value: string}}
+     */
+    buildContextInfoForAvailableCharacters(groups) {
+        throw new Error("Method 'buildContextInfoForAvailableCharacters()' must be implemented.");
+    }
+
+    /**
+     * @param {string} instructions
+     */
+    buildContextInfoInstructions(instructions) {
+        throw new Error("Method 'buildContextInfoInstructions()' must be implemented.");
+    }
+
+    /**
+     * When generating custom grammar these are the required grammar rules to be included at the root level
+     * 
+     * When defining a custom grammar for question generation this function should return the required root level grammar rules
+     * 
+     * eg. root ::= answer | {getRequiredRootGrammarForQuestionGeneration()}
+     * answer ::= word+
+     * word ::= "a" | "b" | "c"
+     * 
+     * @returns {string}
+     */
+    getRequiredRootGrammarForQuestionGeneration() {
+        throw new Error("Method 'getRequiredRootGrammarForQuestionGeneration()' must be implemented.");
     }
 }

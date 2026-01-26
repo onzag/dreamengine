@@ -2217,17 +2217,24 @@ export class DEngine {
             "If the answer is NO, it means the character is still with other characters or has joined another group or someone else.",
         ], null, []);
 
-        const questionGenerator = this.inferenceAdapter.runQuestioningCustomAgentOn(character, systemPrompt, null, this.getHistoryForCharacter(character, {}), "LAST_MESSAGE");
+        const questionGenerator = this.inferenceAdapter.runQuestioningCustomAgentOn(character, systemPrompt, null, this.getHistoryForCharacter(character, {}), "LAST_CYCLE_EXPANDED", null);
+        const ready = await questionGenerator.next();
+        if (ready.value !== "ready") {
+            throw new Error("Questioning agent could not be started properly.");
+        }
         const result = await questionGenerator.next({
             nextQuestion: "Has " + character.name + " left their current conversation group alone to be alone? Answer with YES or NO.",
             maxCharacters: 100,
             maxParagraphs: 1,
-            stopAt: ["YES", "NO", "yes", "no", "Yes", "No"],
+            stopAt: [],
+            stopAfter: ["yes", "no"],
         });
-        if (result.done) {
-            throw new Error("Questioning agent finished without answering.");
-        }
         await questionGenerator.next(null); // finish the generator
+        console.log(result);
+        console.log("Questioning agent result received.");
+        console.log(result.value);
+        console.log(result.done);
+        process.exit(0);
 
         return result.value.trim().toUpperCase().includes("YES");
     }
@@ -2545,17 +2552,13 @@ export class DEngine {
             throw new Error("DEngine not initialized");
         } else if (this.invalidCharacterStates) {
             throw new Error("DEngine has invalid character states, cannot determine interacted characters");
+        } else if (!this.inferenceAdapter) {
+            throw new Error("Inference adapter not set, cannot perform inference");
         }
-        const systemMessage = `You are an assistant that determines which characters are being interacted within a message by ${character.name} in an interactive story. ` +
-            `By interaction we mean any mention of the character by name, description, actions directed towards them, where it warrants a response from the character ` +
-            `just mentioning the character behind their back is not enough for interaction unless the message implies that the character is aware of it or might become aware.\n\n` +
-            `Pay attention to potential mispellings of the character names, as they might be referred to in different ways.\n\n` +
-            `If the character whispers, talks quietly, or only thinks about them without any action or dialogue directed towards them or that they might hear, that does not count as interaction.`;
+        const systemMessage = `You are an assistant and story analyst that determines which characters are being interacted within a message by ${character.name} in an interactive story. ` +
+            `By interaction we mean any mention of the character by name, description, actions directed towards them, where it warrants a response from the character`;
 
-        const instruction = "Answer with a list of character names being interacted with, separated by commas. In the order you believe they would most likely respond. If no characters are being interacted with, respond with NONE." +
-            "The list should be in the format: CharacterName1, CharacterName2, CharacterName3\n\n" +
-            "And not include any other text or descriptions. Use the exact character names as defined in the world and not a description or nickname." +
-            "The list should be specific to " + character.name + "'s last message and who is likely to notice them based on their surroundings.";
+        const systemPrompt = this.inferenceAdapter.buildSystemPromptForQuestioningAgent(systemMessage, [], null);
 
         const characterState = this.deObject.stateFor[character.name];
         if (!characterState) {
@@ -2575,12 +2578,23 @@ export class DEngine {
         const conversationParticipants = this.deObject.conversations[characterState.conversationId].participants.filter(charName => charName !== character.name);
         const surroundingNonStrangersNotInConversation = surroundingNonStrangers.filter(charName => !conversationParticipants.includes(charName));
 
+        /**
+         * @type {string[]}
+         */
         const strangersLikelyToNotice = [];
+        /**
+         * @type {string[]}
+         */
         const strangersNotLikelyToNotice = [];
+        /**
+         * @type {string[]}
+         */
         const nonStrangerLikelyToNotice = [];
+        /**
+         * @type {string[]}
+         */
         const nonStrangerNotLikelyToNotice = [];
 
-        let description = "";
         for (const stranger of surroundingTotalStrangers) {
             const sameSlot = this.deObject.stateFor[stranger]?.locationSlot === characterState.locationSlot;
             if (sameSlot) {
@@ -2598,25 +2612,71 @@ export class DEngine {
             }
         }
 
+        /**
+         * @type Array<{groupDescription: string, characters: Array<{name: string, description: string}>}>
+         */
+        const groups = [];
+        const allValidNamesForGrammar = new Set();
+
         if (strangersNotLikelyToNotice.length > 0) {
-            description += `The following characters are strangers likely not looking at ${character.name}'s direction:\n\n` +
-                strangersNotLikelyToNotice.map(name => `- ${name}: ${this.getShortDescriptionOfCharacter(name)}`).join("\n") + "\n\n";
+            groups.push({
+                groupDescription: "strangers likely not looking at " + character.name + "'s direction",
+                characters: strangersNotLikelyToNotice.map(name => ({
+                    name,
+                    description: this.getShortDescriptionOfCharacter(name),
+                })),
+            });
+            for (const name of strangersNotLikelyToNotice) {
+                allValidNamesForGrammar.add(name);
+            }
         }
         if (nonStrangerNotLikelyToNotice.length > 0) {
-            description += `The following characters know ${character.name} but are likely not looking at ${character.name}'s direction:\n\n` +
-                nonStrangerNotLikelyToNotice.map(name => `- ${name}: ${this.getShortDescriptionOfCharacter(name)}`).join("\n") + "\n\n";
+            groups.push({
+                groupDescription: "characters who know " + character.name + " but are likely not looking at " + character.name + "'s direction",
+                characters: nonStrangerNotLikelyToNotice.map(name => ({
+                    name,
+                    description: this.getShortDescriptionOfCharacter(name),
+                })),
+            });
+            for (const name of nonStrangerNotLikelyToNotice) {
+                allValidNamesForGrammar.add(name);
+            }
         }
         if (strangersLikelyToNotice.length > 0) {
-            description += `The following characters are strangers likely looking at ${character.name}'s direction:\n\n` +
-                strangersLikelyToNotice.map(name => `- ${name}: ${this.getShortDescriptionOfCharacter(name)}`).join("\n") + "\n\n";
+            groups.push({
+                groupDescription: "strangers likely looking at " + character.name + "'s direction",
+                characters: strangersLikelyToNotice.map(name => ({
+                    name,
+                    description: this.getShortDescriptionOfCharacter(name),
+                })),
+            });
+            for (const name of strangersLikelyToNotice) {
+                allValidNamesForGrammar.add(name);
+            }
         }
         if (nonStrangerLikelyToNotice.length > 0) {
-            description += `The following characters know ${character.name} and are likely looking at ${character.name}'s direction:\n\n` +
-                nonStrangerLikelyToNotice.map(name => `- ${name}: ${this.getShortDescriptionOfCharacter(name)}`).join("\n") + "\n\n";
+            groups.push({
+                groupDescription: "characters who know " + character.name + " and are likely looking at " + character.name + "'s direction",
+                characters: nonStrangerLikelyToNotice.map(name => ({
+                    name,
+                    description: this.getShortDescriptionOfCharacter(name),
+                })),
+            });
+            for (const name of nonStrangerLikelyToNotice) {
+                allValidNamesForGrammar.add(name);
+            }
         }
         if (conversationParticipants.length > 0) {
-            description += `The following characters are already in conversation with ${character.name} and likely hear everything:\n\n` +
-                conversationParticipants.map(name => `- ${name}: ${this.getShortDescriptionOfCharacter(name)}`).join("\n") + "\n\n";
+            groups.push({
+                groupDescription: "characters already in conversation with " + character.name + " and likely hear everything",
+                characters: conversationParticipants.map(name => ({
+                    name,
+                    description: this.getShortDescriptionOfCharacter(name),
+                })),
+            });
+            for (const name of conversationParticipants) {
+                allValidNamesForGrammar.add(name);
+            }
         }
 
         const allPotentials = ([
@@ -2628,124 +2688,104 @@ export class DEngine {
         ])
         const allPotentialsLowered = allPotentials.map(name => name.toLowerCase());
 
-        // TODO implement the actual inference using an AI model
-        let inferenceText = "";
-        // TODO add the messages to the prompt
-        const messageSpecified = "";
+        const generator = this.inferenceAdapter.runQuestioningCustomAgentOn(character, systemPrompt, null, this.getHistoryForCharacter(character, {}), "LAST_CYCLE_EXPANDED", null);
+        const ready = await generator.next();
+        if (ready.value !== "ready") {
+            throw new Error("Questioning agent could not be started properly.");
+        }
 
-        /**
-         * @type {DEConversationMessage}
-         */
-        const messageToAdd = {
-            sender: "System",
-            content: "Interaction Inference Response:\n\n" + inferenceText,
-            duration: { inMinutes: 0, inHours: 0, inDays: 0 },
-            id: crypto.randomUUID(),
-            isCharacter: false,
-            isDebugMessage: true,
-            isStoryMasterMessage: true,
-            isUser: false,
-            isRejectedMessage: false,
-            // @ts-ignore
-            startTime: { ...this.deObject.currentTime },
-            // @ts-ignore
-            endTime: { ...this.deObject.currentTime },
-            canOnlyBeSeenByCharacter: null,
-        };
-        // typescript not being able to infer here as usual
-        // @ts-ignore
-        this.deObject.conversations[characterState.conversationId].messages.push(messageToAdd);
-
-        /**
-         * @type {string[]}
-         */
-        const inferenceResult = [];
-        inferenceText.split(",").map(name => name.trim()).forEach(name => {
-            const loweredName = name.toLowerCase();
-            if (loweredName === "none" || loweredName === "noone" || loweredName === "nobody" || !loweredName) {
-                return;
-            }
-
-            // try find the character
-            /**
-             * @type {Array<{name: string, index: number}>}
-             */
-            const foundCharacters = []
-            allPotentialsLowered.forEach((potentialName, indexOfPotentialName) => {
-                // match the string either starts with the name or contains the name with a space before or after or ends
-                // with the name, also a comma or period after
-                let indexWithinSubstring = new RegExp(`(^|[\\s,\\.])${potentialName}([\\s,\\.]|$)`).exec(loweredName)?.index || -1;
-                if (indexWithinSubstring !== -1) {
-                    foundCharacters.push({ name: allPotentials[indexOfPotentialName], index: indexWithinSubstring });
-                }
-            });
-
-            // sort by index, lowest index first
-            foundCharacters.sort((a, b) => a.index - b.index);
-            if (foundCharacters.length > 0) {
-                for (const foundCharacter of foundCharacters) {
-                    if (!inferenceResult.includes(foundCharacter.name)) {
-                        inferenceResult.push(foundCharacter.name);
-                    }
-                }
-            } else {
-                // not found, ignore, give debug message
-                /**
-                 * @type {DEConversationMessage}
-                 */
-                const messageToAdd = {
-                    sender: "System",
-                    content: `Character "${name}" was mentioned in interaction detection but was not found among potential interacted characters.`,
-                    duration: { inMinutes: 0, inHours: 0, inDays: 0 },
-                    id: crypto.randomUUID(),
-                    isCharacter: false,
-                    isDebugMessage: true,
-                    isStoryMasterMessage: false,
-                    isUser: false,
-                    isRejectedMessage: false,
-                    // @ts-ignore
-                    startTime: { ...this.deObject.currentTime },
-                    // @ts-ignore
-                    endTime: { ...this.deObject.currentTime },
-                    canOnlyBeSeenByCharacter: null,
-                };
-                // typescript not being able to infer here as usual
-                // @ts-ignore
-                this.deObject.conversations[characterState.conversationId].messages.push(messageToAdd);
-            }
+        const answerAboutLone = await generator.next({
+            maxParagraphs: 1,
+            maxCharacters: 500,
+            stopAt: [],
+            stopAfter: ["yes", "no"],
+            nextQuestion: "In the last message from " + character.name + ", did they interact with any characters or try to get anyone's attention? answer yes if they did, no if they ignored everyone, left or did not interact with anyone.",
+            grammar: `root ::= yesno (${this.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()})\nyesno ::= "yes" | "no"`,
         });
 
-        const result = {
-            strangersAtDistanceThatReacted: strangersNotLikelyToNotice.filter(name => inferenceResult.includes(name)),
-            nonStrangersAtDistanceThatReacted: nonStrangerNotLikelyToNotice.filter(name => inferenceResult.includes(name)),
-            strangersUpCloseThatReacted: strangersLikelyToNotice.filter(name => inferenceResult.includes(name)),
-            nonStrangersUpCloseThatReacted: nonStrangerLikelyToNotice.filter(name => inferenceResult.includes(name)),
-            ordering: inferenceResult,
-        };
+        if (answerAboutLone.done) {
+            throw new Error("Questioning agent ended unexpectedly when asking about interaction alone.");
+        }
 
+        console.log("Answer about tried to get someone attention interaction:", answerAboutLone.value);
+
+        const interactingWithSomeone = answerAboutLone.value.trim().toLowerCase().indexOf("yes") !== -1;
+        let interactingWithEveryone = false;
         /**
-         * @type {DEConversationMessage}
+         * @type string[]
          */
-        const messageToAdd2 = {
-            sender: "System",
-            content: "Interaction Inference Parsed Response:\n\n" + JSON.stringify(result, null, 2),
-            duration: { inMinutes: 0, inHours: 0, inDays: 0 },
-            id: crypto.randomUUID(),
-            isCharacter: false,
-            isDebugMessage: true,
-            isStoryMasterMessage: false,
-            isUser: false,
-            isRejectedMessage: false,
-            // @ts-ignore
-            startTime: { ...this.deObject.currentTime },
-            // @ts-ignore
-            endTime: { ...this.deObject.currentTime },
-            canOnlyBeSeenByCharacter: null,
+        let interactingSpecifically = [];
+
+        if (interactingWithSomeone) {
+            const answerAboutEveryone = await generator.next({
+                maxParagraphs: 1,
+                maxCharacters: 500,
+                stopAt: [],
+                stopAfter: ["yes", "no"],
+                nextQuestion: "In the last message from " + character.name + ", did they attempt to get everyone's attention or interact with everyone around them? such as trying to do a speech or announcement, or otherwise did they do something loud that would get everyone's attention? answer yes if they did, no if they didn't.",
+                grammar: `root ::= yesno (${this.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()})\nyesno ::= "yes" | "no"`,
+            });
+
+            if (answerAboutEveryone.done) {
+                throw new Error("Questioning agent ended unexpectedly when asking about interaction with everyone.");
+            }
+            interactingWithEveryone = answerAboutEveryone.value.trim().toLowerCase().indexOf("yes") !== -1;
+
+            console.log("Answer about everyone interaction:", answerAboutEveryone.value);
+
+            if (!interactingWithEveryone) {
+                // now let's ask who, the LLM is not good at saying nobody or none when there are many options
+                // so we first ask if they interacted with anyone at all
+                // if yes, we then ask who specifically
+                const contextInfoGroups = this.inferenceAdapter.buildContextInfoForAvailableCharacters(groups);
+
+                const customGrammar = `root ::= nameList (${this.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()})\nnameList ::= name (\",\" name)*\nname ::= ${Array.from(allValidNamesForGrammar).map(name => JSON.stringify(name)).join(" | ")}`;
+
+                const answerToQuestion = await generator.next({
+                    contextInfo: contextInfoGroups.value,
+                    maxParagraphs: 1,
+                    maxCharacters: 500,
+                    stopAt: [],
+                    stopAfter: [],
+                    nextQuestion: "In the last message from " + character.name + ", which characters specifically are being interacted with?",
+                    grammar: customGrammar,
+                    answerTrail: "The characters " + character.name + " has interacted with in the order they are likely to respond/react are: ",
+                });
+
+                if (answerToQuestion.done) {
+                    throw new Error("Questioning agent ended unexpectedly when asking about who was interacted with.");
+                }
+
+                console.log("Answer to who was interacted with:", answerToQuestion.value);
+
+                answerToQuestion.value.split(",").map(name => name.trim()).forEach(name => {
+                    const loweredName = name.toLowerCase();
+                    if (loweredName === "none" || loweredName === "noone" || loweredName === "nobody" || !loweredName) {
+                        return;
+                    }
+
+                    if (allPotentialsLowered.includes(loweredName)) {
+                        const actualName = allPotentials[allPotentialsLowered.indexOf(loweredName)];
+                        if (!interactingSpecifically.includes(actualName)) {
+                            interactingSpecifically.push(actualName);
+                        }
+                    }
+                });
+            } else {
+                interactingSpecifically = allPotentials;
+            }
+        }
+
+        await generator.next(null); // finish the generator
+
+        const result = {
+            strangersAtDistanceInteracted: strangersNotLikelyToNotice.filter(name => interactingSpecifically.includes(name)),
+            nonStrangersAtDistanceInteracted: nonStrangerNotLikelyToNotice.filter(name => interactingSpecifically.includes(name)),
+            strangersUpCloseInteracted: strangersLikelyToNotice.filter(name => interactingSpecifically.includes(name)),
+            nonStrangersUpCloseInteracted: nonStrangerLikelyToNotice.filter(name => interactingSpecifically.includes(name)),
+            ordering: interactingSpecifically,
+            loudAnnouncementToEveryone: interactingWithEveryone,
         };
-        // typescript not being able to infer here as usual
-        // @ts-ignore
-        this.deObject.conversations[characterState.conversationId].messages.push(messageToAdd2);
-        await this.informDEObjectUpdated();
 
         return result;
     }
@@ -3355,7 +3395,12 @@ export class DEngine {
         }
 
         const alreadyInteractingCharacters = this.deObject.conversations[characterState.conversationId].participants.filter(participant => participant !== character.name);
+
+        this.informCycleState("info", `Determining next order of interaction for character ${character.name} message`);
+
         const interactedCharacters = await this.determineInteractedCharactersForMessage(character);
+
+        console.log(`Character ${character.name} interacted characters:`, interactedCharacters);
 
         /**
          * @type {Array<{name: string, lastInvoker: string | null, messageWillBeAboutAgreeFollow: boolean, messageWillBeAboutFightFollow: boolean, expectedReasoning: string | null}>}
@@ -3402,6 +3447,7 @@ export class DEngine {
             const characterReference = this.deObject.characters[alreadyInteractingCharacterName];
             if (!nextOrderOfInteraction.find(interaction => interaction.name === alreadyInteractingCharacterName)) {
                 if (Math.random() < characterReference.initiative) {
+                    console.log(`Adding already interacting character ${alreadyInteractingCharacterName} to next order of interaction based on initiative ${characterReference.initiative}`);
                     nextOrderOfInteraction.push({
                         name: alreadyInteractingCharacterName,
                         lastInvoker: null,
@@ -3426,6 +3472,7 @@ export class DEngine {
                 }
             }
             if (highestInitiativeCharacter) {
+                console.log(`Forcefully adding already interacting character ${highestInitiativeCharacter} to next order of interaction as highest initiative ${highestInitiativeValue}`);
                 nextOrderOfInteraction.push({
                     name: highestInitiativeCharacter,
                     lastInvoker: null,
@@ -3437,26 +3484,7 @@ export class DEngine {
             }
         }
 
-        const messageToAdd = {
-            sender: "System",
-            content: "Determined Final of Interaction:\n\n" + JSON.stringify(nextOrderOfInteraction, null, 2),
-            duration: { inMinutes: 0, inHours: 0, inDays: 0 },
-            id: crypto.randomUUID(),
-            isCharacter: false,
-            isDebugMessage: true,
-            isStoryMasterMessage: false,
-            isUser: false,
-            isRejectedMessage: false,
-            // @ts-ignore
-            startTime: { ...this.deObject.currentTime },
-            // @ts-ignore
-            endTime: { ...this.deObject.currentTime },
-            canOnlyBeSeenByCharacter: null,
-        };
-        // typescript not being able to infer here as usual
-        // @ts-ignore
-        this.deObject.conversations[characterState.conversationId].messages.push(messageToAdd);
-        await this.informDEObjectUpdated();
+        console.log(`Character ${character.name} final next order of interaction:`, nextOrderOfInteraction);
 
         let expectedNextLocation = characterState.location;
         let expectedNextLocationSlot = characterState.locationSlot;

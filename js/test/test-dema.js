@@ -9,7 +9,7 @@ const jsonWorld = JSON.parse(fs.readFileSync('../default-worlds/simple-lunar-sta
 const world = importWorldFromJSON(jsonWorld);
 
 const engine = new DEngine();
-const inferenceAdapter = new InferenceAdapterLocalServerLlama3UncensoredThink(engine, {dummyMode: true});
+const inferenceAdapter = new InferenceAdapterLocalServerLlama3UncensoredThink(engine, {});
 engine.setInferenceAdapter(inferenceAdapter);
 engine.initialize({
     ageYears: 30,
