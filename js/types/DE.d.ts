@@ -236,7 +236,7 @@ declare interface DEActionPromptInjectionWithIntensity extends DEActionPromptInj
     intensityModification: number;
 }
 
-declare interface CharacterStateDefinition {
+declare interface DECharacterStateDefinition {
     /**
      * How dominant this state is compared to other states
      * used to determine which state takes precedence in case of conflicts
@@ -901,7 +901,7 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
      * You may want to create custom states for specific behaviours and you can add them
      * to many characters via their spawn script
      */
-    states: Record<string, CharacterStateDefinition>;
+    states: Record<string, DECharacterStateDefinition>;
     /**
      * The bonds this character develops towards other characters in the world and how
      * it evolves.

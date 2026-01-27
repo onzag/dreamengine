@@ -837,4 +837,8 @@ ${this.buildSystemCharacterDescription(character, description, appereance, relat
     getRequiredRootGrammarForQuestionGeneration() {
         return "\"</answer>\"";
     }
+
+    supportsGrammar() {
+        return true;
+    }
 }

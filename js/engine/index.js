@@ -4248,7 +4248,7 @@ export class DEngine {
 
                     if (stateDescriptionSpecific && stateDescriptionSpecific.usesReliefDynamic && withIntensity < 0) {
                         alreadyActivatedInfo.relieving = true;
-                        
+
                         if (alreadyActivatedInfo.intensity > 0) {
                             console.log(`State ${toModifyState} intensity modified on character ${character.name} by ${withIntensity}, now relieving.`);
                             this._onStateRelievedOnCharacter(character, toModifyState);
@@ -4273,7 +4273,7 @@ export class DEngine {
      */
     _onStateTriggeredOnCharacter(character, stateName) {
         // TODO inform these states to the user in case they are the user
-        
+
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         }
@@ -4333,7 +4333,7 @@ export class DEngine {
 
                     if (stateDescriptionSpecific && stateDescriptionSpecific.usesReliefDynamic && withIntensity < 0) {
                         alreadyActivatedInfo.relieving = true;
-                        
+
                         if (alreadyActivatedInfo.intensity > 0) {
                             console.log(`State ${toModifyState} intensity modified on character ${character.name} by ${withIntensity}, now relieving.`);
                             this._onStateRelievedOnCharacter(character, toModifyState);
@@ -4359,7 +4359,7 @@ export class DEngine {
     _onStateRemovedOnCharacter(character, stateName) {
         // TODO inform these states to the user in case they are the user
         // eg. You feel better now that you are no longer cold
-        
+
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         }
@@ -4419,7 +4419,7 @@ export class DEngine {
 
                     if (stateDescriptionSpecific && stateDescriptionSpecific.usesReliefDynamic && withIntensity < 0) {
                         alreadyActivatedInfo.relieving = true;
-                        
+
                         if (alreadyActivatedInfo.intensity > 0) {
                             console.log(`State ${toModifyState} intensity modified on character ${character.name} by ${withIntensity}, now relieving.`);
                             this._onStateRelievedOnCharacter(character, toModifyState);
@@ -4491,6 +4491,47 @@ export class DEngine {
 
             if (alreadyActivatedInfo) {
                 console.log(`Character ${character.name} already has state ${stateName}, checking intensity changes.`);
+
+                if (stateDescription.conflictStates) {
+                    for (const conflictState of stateDescription.conflictStates) {
+                        const conflictStateInfo = this.deObject.stateFor[character.name].states.find(s => s.state === conflictState);
+                        if (conflictStateInfo) {
+                            console.log(`State ${stateName} conflicts with already active state ${conflictState} on character ${character.name}, removing conflicting state.`);
+
+                            this.deObject.stateFor[character.name].states = this.deObject.stateFor[character.name].states.filter(s => s.state !== conflictState);
+                            this._onStateRemovedOnCharacter(character, conflictState);
+                            continue;
+                        }
+                    }
+                }
+
+                if (stateDescription.requiredStates) {
+                    let missingRequiredState = false;
+                    for (const requiredState of stateDescription.requiredStates) {
+                        const requiredStateInfo = this.deObject.stateFor[character.name].states.find(s => s.state === requiredState);
+                        if (!requiredStateInfo) {
+                            console.log(`State ${stateName} requires state ${requiredState} to be active on character ${character.name}, which is missing, removing state ${stateName}.`);
+                            missingRequiredState = true;
+                            break;
+                        }
+                    }
+                    if (missingRequiredState) {
+                        this.deObject.stateFor[character.name].states = this.deObject.stateFor[character.name].states.filter(s => s.state !== stateName);
+                        this._onStateRemovedOnCharacter(character, stateName);
+                        continue;
+                    }
+                }
+
+                if (stateDescription.requiresPosture) {
+                    const characterPosture = this.deObject.stateFor[character.name].posture;
+                    if (characterPosture !== stateDescription.requiresPosture) {
+                        console.log(`State ${stateName} requires posture ${stateDescription.requiresPosture} on character ${character.name}, current posture is ${characterPosture}, removing state ${stateName}.`);
+                        this.deObject.stateFor[character.name].states = this.deObject.stateFor[character.name].states.filter(s => s.state !== stateName);
+                        this._onStateRemovedOnCharacter(character, stateName);
+                        continue;
+                    }
+                }
+
                 // check if the state has an intensity change condition
                 const intensityModifiers = (alreadyActivatedInfo.relieving ? stateDescription.intensityModifiersDuringRelief || stateDescription.intensityModifiers : stateDescription.intensityModifiers);
                 let appliedIntensityChange = false;
@@ -4598,6 +4639,39 @@ export class DEngine {
                     }
                 }
             } else {
+                if (stateDescription.conflictStates) {
+                    for (const conflictState of stateDescription.conflictStates) {
+                        const conflictStateInfo = this.deObject.stateFor[character.name].states.find(s => s.state === conflictState);
+                        if (conflictStateInfo) {
+                            console.log(`State ${stateName} conflicts with already active state ${conflictState} on character ${character.name}, not checking trigger conditions`);
+                            continue;
+                        }
+                    }
+                }
+
+                if (stateDescription.requiredStates) {
+                    let missingRequiredState = false;
+                    for (const requiredState of stateDescription.requiredStates) {
+                        const requiredStateInfo = this.deObject.stateFor[character.name].states.find(s => s.state === requiredState);
+                        if (!requiredStateInfo) {
+                            console.log(`State ${stateName} requires state ${requiredState} to be active on character ${character.name}, which is missing, not checking trigger conditions`);
+                            missingRequiredState = true;
+                            break;
+                        }
+                    }
+                    if (missingRequiredState) {
+                        continue;
+                    }
+                }
+
+                if (stateDescription.requiresPosture) {
+                    const characterPosture = this.deObject.stateFor[character.name].posture;
+                    if (characterPosture !== stateDescription.requiresPosture) {
+                        console.log(`State ${stateName} requires posture ${stateDescription.requiresPosture} on character ${character.name}, current posture is ${characterPosture}, not checking trigger conditions`);
+                        continue;
+                    }
+                }
+
                 // check if we can activate the state
                 let triggeredState = false;
                 const randomRollForStateTrigger = Math.random();
@@ -4782,6 +4856,10 @@ export class DEngine {
         } else if (!this.inferenceAdapter) {
             throw new Error("Inference adapter not initialized");
         }
+
+        // TODO strangerBreakawayTimeMinutes in the bonds automagic system
+        // TOOD strangerBreakaway from the cycles too
+
         // first we need to update the bonds towards the character, for that we need to get a whole extended cycle
         // gather all the other characters that talked inbetween, and update bonds for each
         const historyGenerator = this.getHistoryForCharacter(character, {});
@@ -4876,12 +4954,13 @@ export class DEngine {
 
             // now we can process the messages to update the bond
             for (const condition of currentBondDescription.bondConditions) {
+                const conditionMultiplier = (currentBond.stranger ? (condition.weight < 0 ? character.bonds.strangerNegativeMultiplier : character.bonds.strangerPositiveMultiplier) : (condition.weight < 0 ? character.bonds.bondChangeNegativityBias : character.bonds.bondChangeFineTune));
                 // @ts-ignore
                 const result = (await condition.template.execute(this.deObject, character, this.deObject.characters[characterNameToUpdate], undefined, undefined, undefined)).trim();
                 if (result === "yes" || result === "Yes") {
                     console.log(`Bond condition is a statement which matched for bond from ${character.name} towards ${characterNameToUpdate}, applying bond changes: bond ${condition.weight}, on ${condition.affectsBonds}`);
                     if (condition.affectsBonds === "primary" || condition.affectsBonds === "both") {
-                        currentBond.bond += condition.weight;
+                        currentBond.bond += condition.weight * conditionMultiplier;
                         if (currentBond.bond < 0) {
                             currentBond.bond = 0;
                         } else if (currentBond.bond > 100) {
@@ -4889,7 +4968,7 @@ export class DEngine {
                         }
                     }
                     if (condition.affectsBonds === "secondary" || condition.affectsBonds === "both") {
-                        currentBond.bond2 += condition.weight;
+                        currentBond.bond2 += condition.weight * conditionMultiplier;
                         if (currentBond.bond2 < 0) {
                             currentBond.bond2 = 0;
                         } else if (currentBond.bond2 > 100) {
@@ -4926,7 +5005,7 @@ export class DEngine {
                     if (answer) {
                         console.log(`Bond condition matched for bond from ${character.name} towards ${characterNameToUpdate} via questioning agent on question ${JSON.stringify(result)}, applying bond changes: bond ${condition.weight}, on ${condition.affectsBonds}`);
                         if (condition.affectsBonds === "primary" || condition.affectsBonds === "both") {
-                            currentBond.bond += condition.weight;
+                            currentBond.bond += condition.weight * conditionMultiplier;
                             if (currentBond.bond < 0) {
                                 currentBond.bond = 0;
                             }
@@ -4935,7 +5014,7 @@ export class DEngine {
                             }
                         }
                         if (condition.affectsBonds === "secondary" || condition.affectsBonds === "both") {
-                            currentBond.bond2 += condition.weight;
+                            currentBond.bond2 += condition.weight * conditionMultiplier;
                             if (currentBond.bond2 < 0) {
                                 currentBond.bond2 = 0;
                             }

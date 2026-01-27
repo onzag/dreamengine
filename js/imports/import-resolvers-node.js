@@ -6,6 +6,8 @@ const fsAsync = fs.promises;
 import { importScriptFromJSON, importScriptFromSplitJSON } from './scripts.js';
 import { importCharacterFromJSON } from './characters.js';
 
+const localDEPathAtHomeDir = path.join(process.env.HOME || process.env.USERPROFILE || '.', '.dreamengine');
+
 /**
  * A default import resolver that works within the file system and is meant to be used in nodejs
  * environments.
@@ -31,6 +33,7 @@ export async function nodejsImportResolver(scriptId, scriptType, existingScriptS
 
     // find the script as a local json file straight on
     const directPath = path.join('scripts', scriptId);
+    const directPathAtHomeDir = path.join(localDEPathAtHomeDir, 'scripts', scriptId);
     /**
      * @type {DEScriptSource | null}
      */
@@ -41,6 +44,9 @@ export async function nodejsImportResolver(scriptId, scriptType, existingScriptS
     let separateSource = null;
     if (fs.existsSync(directPath)) {
         const fileContent = await fsAsync.readFile(directPath, 'utf-8');
+        json = JSON.parse(fileContent);
+    } else if (fs.existsSync(directPathAtHomeDir)) {
+        const fileContent = await fsAsync.readFile(directPathAtHomeDir, 'utf-8');
         json = JSON.parse(fileContent);
     } else {
         // try folder style
@@ -56,22 +62,36 @@ export async function nodejsImportResolver(scriptId, scriptType, existingScriptS
                 throw new Error(`Script folder for id ${scriptId} is missing index.js source file at ${sourcePath}`);
             }
         } else {
-            // try default-scripts, these are always separate json files
-            // we need to get the location of this very own file to find the default-scripts folder
-            const thisFileDir = path.dirname(fileURLToPath(import.meta.url));
-            const defaultScriptsPath = path.join(thisFileDir, '..', 'default-scripts', scriptId.replace('.json', ''));
-            const defaultJsonPath = path.join(defaultScriptsPath, 'index.json');
-            const defaultSourcePath = path.join(defaultScriptsPath, 'index.js');
-            if (fs.existsSync(defaultJsonPath)) {
-                const fileContent = await fsAsync.readFile(defaultJsonPath, 'utf-8');
+            const folderPathAtHomeDir = path.join(localDEPathAtHomeDir, 'scripts', scriptId.replace('.json', ''));
+            const jsonPathAtHomeDir = path.join(folderPathAtHomeDir, 'index.json');
+            const sourcePathAtHomeDir = path.join(folderPathAtHomeDir, 'index.js');
+
+            if (fs.existsSync(jsonPathAtHomeDir)) {
+                const fileContent = await fsAsync.readFile(jsonPathAtHomeDir, 'utf-8');
                 json = JSON.parse(fileContent);
-                if (fs.existsSync(defaultSourcePath)) {
-                    separateSource = await fsAsync.readFile(defaultSourcePath, 'utf-8');
+                if (fs.existsSync(sourcePathAtHomeDir)) {
+                    separateSource = await fsAsync.readFile(sourcePathAtHomeDir, 'utf-8');
                 } else {
-                    throw new Error(`Default script folder for id ${scriptId} is missing index.js source file at ${defaultSourcePath}`);
+                    throw new Error(`Script folder for id ${scriptId} is missing index.js source file at ${sourcePathAtHomeDir}`);
                 }
             } else {
-                throw new Error(`Script with id ${scriptId} not found as file or folder checked at ${directPath}, ${jsonPath}, and ${defaultJsonPath}`);
+                // try default-scripts, these are always separate json files
+                // we need to get the location of this very own file to find the default-scripts folder
+                const thisFileDir = path.dirname(fileURLToPath(import.meta.url));
+                const defaultScriptsPath = path.join(thisFileDir, '..', 'default-scripts', scriptId.replace('.json', ''));
+                const defaultJsonPath = path.join(defaultScriptsPath, 'index.json');
+                const defaultSourcePath = path.join(defaultScriptsPath, 'index.js');
+                if (fs.existsSync(defaultJsonPath)) {
+                    const fileContent = await fsAsync.readFile(defaultJsonPath, 'utf-8');
+                    json = JSON.parse(fileContent);
+                    if (fs.existsSync(defaultSourcePath)) {
+                        separateSource = await fsAsync.readFile(defaultSourcePath, 'utf-8');
+                    } else {
+                        throw new Error(`Default script folder for id ${scriptId} is missing index.js source file at ${defaultSourcePath}`);
+                    }
+                } else {
+                    throw new Error(`Script with id ${scriptId} not found as file or folder checked at ${directPath}, ${jsonPath}, ${directPathAtHomeDir}, ${jsonPathAtHomeDir} or default-scripts at ${defaultJsonPath}`);
+                }
             }
         }
     }
@@ -90,9 +110,14 @@ export async function nodejsImportResolver(scriptId, scriptType, existingScriptS
  * @param {string} characterFileId
  */
 export async function nodejsCharacterImportResolver(characterFileId) {
-    const characterFile = path.join('characters', characterFileId);
+    let characterFile = path.join('characters', characterFileId);
     if (!fs.existsSync(characterFile)) {
-        throw new Error(`Character file ${characterFileId} not found at path ${characterFile}`);
+        const characterFileAtHomeDir = path.join(localDEPathAtHomeDir, 'characters', characterFileId);
+        if (fs.existsSync(characterFileAtHomeDir)) {
+            characterFile = characterFileAtHomeDir;
+        } else {
+            throw new Error(`Character file ${characterFileId} not found in characters locally or at ${localDEPathAtHomeDir}`);
+        }
     }
     const fileContent = await fsAsync.readFile(characterFile, 'utf-8');
     const characterJSON = JSON.parse(fileContent);
