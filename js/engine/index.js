@@ -640,6 +640,8 @@ export class DEngine {
             // chars start up naked
             // hopefully they give them some clothes soon :)
             wearing: [],
+            seenItems: [],
+            seenCharacters: [],
         };
 
         this.deObject.wanderHeuristics[character.name] = {
@@ -708,6 +710,50 @@ export class DEngine {
                 }
                 charState.surroundingNonStrangers = surroundingNonStrangers;
                 charState.surroundingTotalStrangers = surroundingTotalStrangers;
+                charState.seenCharacters = [...surroundingNonStrangers, ...surroundingTotalStrangers];
+
+                // determine seen items
+                charState.seenItems = [];
+
+                /**
+                 * @param {DEItem} item
+                 * @param {string} slotName
+                 * @param {string|null} carriedByCharacter
+                 * @param {string|null} wornByCharacter
+                 */
+                const processItem = (item, slotName, carriedByCharacter = null, wornByCharacter = null) => {
+                    charState.seenItems.push({
+                        name: item.name,
+                        amount: item.amount || 1,
+                        location: characterLocation,
+                        locationSlot: slotName,
+                        placement: item.placement || "on the ground",
+                        carriedByCharacter: carriedByCharacter,
+                        wornByCharacter: wornByCharacter,
+                    });
+
+                    if (!wornByCharacter && item.isSeeThrough) {
+                        for (const containedItem of item.containing) {
+                            processItem(containedItem, slotName, carriedByCharacter, wornByCharacter);
+                        }
+                    }
+                }
+
+                for (const [slotName, slot] of Object.entries(characterLocationObj.slots)) {
+                    for (const item of slot.items) {
+                        processItem(item, slotName);
+                    }
+                }
+
+                for (const otherCharacter of charState.seenCharacters) {
+                    const otherCharState = this.deObject.stateFor[otherCharacter];
+                    for (const item of otherCharState.carrying) {
+                        processItem(item, otherCharState.locationSlot, otherCharacter, null);
+                    }
+                    for (const item of otherCharState.wearing) {
+                        processItem(item, otherCharState.locationSlot, null, otherCharacter);
+                    }
+                }
             }
 
             charState.isNaked = true;
@@ -716,6 +762,8 @@ export class DEngine {
                     charState.isNaked = false;
                 }
             }
+
+
         }
 
         this.invalidCharacterStates = false;
@@ -3918,8 +3966,15 @@ export class DEngine {
 
         // TODO run item interaction inference here, to check if items move hands or locations
 
+        // TODO run scripts like post any inference here
+        // do something about stateContiguous cycles too
+
         let expectedNewTime = this.deObject.currentTime.time + (1000 * 60 * 1); // 1 minute per internal cycle step
         // TODO we will need to detect time change from actions that take time
+        // apply the time change to everything, states, conversations, etc... they will all need a fresh
+        // slate, stateFor should have its new history too
+
+        // TODO states have intensityChangePerMinute so that should be applied too
 
         const characterState = this.deObject.stateFor[character.name];
         if (!characterState) {
@@ -3930,6 +3985,12 @@ export class DEngine {
             throw new Error(`Character ${character.name} is not in a conversation, cannot run internal cycle step.`);
         }
 
+        // TODO this cycle cannot go if the character did a location change previously
+        // as well as a group modification like taking a group member or leaving a group
+        // those need to be processed first by the user
+        // we need to detect that and process the location change first, as the user needs to
+        // specify whether they follow, fight back, etc... so maybe it needs to go after nextOrderOfInteraction
+        // if there is nothing to handle with agree follow, fight follow, etc...
         if (this.talkingTurnRequested && internalCycleDepth !== 0) {
             // stop recursion user wants to talk
             // in theory characters can talk/react forever without the user talking
@@ -4096,6 +4157,8 @@ export class DEngine {
         // TODO process location changes, follow changes and consume characters that left the interaction order
         // once that is consumed it is but the lastInvoker that has their chance to talk once again
 
+        // TODO recalculate postures and stances
+
         if (nextOrderOfInteraction.length > 0) {
             this.informCycleState("info", `Next character to talk: ${nextOrderOfInteraction[0].name}`);
             const nextCharacterToTalk = nextOrderOfInteraction[0];
@@ -4117,6 +4180,597 @@ export class DEngine {
 
         // Now finally generate the message
     }
+
+    /**
+     * 
+     * @param {DECompleteCharacterReference} character 
+     * @param {string} stateName 
+     */
+    _onStateRelievedOnCharacter(character, stateName) {
+        // TODO inform these states to the user in case they are the user
+
+        if (!this.deObject) {
+            throw new Error("DEngine not initialized");
+        }
+        const characterState = this.deObject.stateFor[character.name];
+        if (!characterState) {
+            throw new Error(`Character state for ${character.name} not found.`);
+        }
+        const characterStateInfo = characterState.states.find(s => s.state === stateName);
+        if (!characterStateInfo) {
+            throw new Error(`Character ${character.name} does not have state ${stateName} active.`);
+        }
+        const characterStateDescription = character.states[stateName];
+        if (!characterStateDescription) {
+            throw new Error(`Character ${character.name} does not have state description for ${stateName}.`);
+        }
+        if (characterStateDescription.triggersStatesOnRelieve) {
+            for (const triggeredState of Object.keys(characterStateDescription.triggersStatesOnRelieve)) {
+                const withIntensity = characterStateDescription.triggersStatesOnRelieve[triggeredState].intensity || 1.0;
+                console.log(`State ${stateName} relieved on character ${character.name}, triggering state ${triggeredState} with intensity ${withIntensity}.`);
+
+                const alreadyActivatedInfo = this.deObject.stateFor[character.name].states.find(s => s.state === triggeredState);
+                if (alreadyActivatedInfo) {
+                    console.log(`State ${triggeredState} already active on character ${character.name}, cannot trigger.`);
+                } else {
+                    /**
+                     * @type {DEStateDescription}
+                     */
+                    const state = {
+                        causants: characterStateInfo.causants,
+                        causes: [{ description: "The relieving of state " + stateName.replace(/_/g, " ").split(" ").map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(" ") }],
+                        state: triggeredState,
+                        intensity: withIntensity,
+                        relieving: false,
+                        contiguousStartActivationCyclesAgo: 0,
+                        contiguousStartActivationTime: { ...this.deObject.currentTime },
+                    }
+                    this.deObject.stateFor[character.name].states.push(state);
+
+                    console.log(`State ${triggeredState} activated on character ${character.name} with intensity ${withIntensity}.`);
+
+                    this._onStateTriggeredOnCharacter(character, triggeredState);
+                }
+            }
+        }
+        if (characterStateDescription.modifiesStatesIntensitiesOnRelieve) {
+            for (const toModifyState of Object.keys(characterStateDescription.modifiesStatesIntensitiesOnRelieve)) {
+                const withIntensity = characterStateDescription.modifiesStatesIntensitiesOnRelieve[toModifyState].intensity || -1.0;
+                console.log(`State ${stateName} relieved on character ${character.name}, modifying state ${toModifyState} with intensity ${withIntensity}.`);
+
+                const alreadyActivatedInfo = this.deObject.stateFor[character.name].states.find(s => s.state === toModifyState);
+                if (!alreadyActivatedInfo) {
+                    console.log(`State ${toModifyState} not active on character ${character.name}, cannot modify.`);
+                } else {
+                    const stateDescriptionSpecific = character.states[toModifyState];
+
+                    alreadyActivatedInfo.intensity += withIntensity;
+
+                    if (stateDescriptionSpecific && stateDescriptionSpecific.usesReliefDynamic && withIntensity < 0) {
+                        alreadyActivatedInfo.relieving = true;
+                        
+                        if (alreadyActivatedInfo.intensity > 0) {
+                            console.log(`State ${toModifyState} intensity modified on character ${character.name} by ${withIntensity}, now relieving.`);
+                            this._onStateRelievedOnCharacter(character, toModifyState);
+                        }
+                    }
+
+                    if (alreadyActivatedInfo.intensity <= 0) {
+                        // remove the state
+                        this.deObject.stateFor[character.name].states = this.deObject.stateFor[character.name].states.filter(s => s.state !== toModifyState);
+                        console.log(`State ${toModifyState} intensity modified on character ${character.name} by ${withIntensity}, now removed.`);
+                        this._onStateRemovedOnCharacter(character, toModifyState);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * 
+     * @param {DECompleteCharacterReference} character 
+     * @param {string} stateName 
+     */
+    _onStateTriggeredOnCharacter(character, stateName) {
+        // TODO inform these states to the user in case they are the user
+        
+        if (!this.deObject) {
+            throw new Error("DEngine not initialized");
+        }
+        const characterState = this.deObject.stateFor[character.name];
+        if (!characterState) {
+            throw new Error(`Character state for ${character.name} not found.`);
+        }
+        const characterStateInfo = characterState.states.find(s => s.state === stateName);
+        if (!characterStateInfo) {
+            throw new Error(`Character ${character.name} does not have state ${stateName} active.`);
+        }
+        const characterStateDescription = character.states[stateName];
+        if (!characterStateDescription) {
+            throw new Error(`Character ${character.name} does not have state description for ${stateName}.`);
+        }
+        if (characterStateDescription.triggersStates) {
+            for (const triggeredState of Object.keys(characterStateDescription.triggersStates)) {
+                const withIntensity = characterStateDescription.triggersStates[triggeredState].intensity || 1.0;
+                console.log(`State ${stateName} triggered on character ${character.name}, triggering state ${triggeredState} with intensity ${withIntensity}.`);
+
+                const alreadyActivatedInfo = this.deObject.stateFor[character.name].states.find(s => s.state === triggeredState);
+                if (alreadyActivatedInfo) {
+                    console.log(`State ${triggeredState} already active on character ${character.name}, cannot trigger.`);
+                } else {
+                    /**
+                     * @type {DEStateDescription}
+                     */
+                    const state = {
+                        causants: characterStateInfo.causants,
+                        causes: [{ description: "The triggering of state " + stateName.replace(/_/g, " ").split(" ").map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(" ") }],
+                        state: triggeredState,
+                        intensity: withIntensity,
+                        relieving: false,
+                        contiguousStartActivationCyclesAgo: 0,
+                        contiguousStartActivationTime: { ...this.deObject.currentTime },
+                    }
+                    this.deObject.stateFor[character.name].states.push(state);
+
+                    console.log(`State ${triggeredState} activated on character ${character.name} with intensity ${withIntensity}.`);
+
+                    this._onStateTriggeredOnCharacter(character, triggeredState);
+                }
+            }
+        }
+        if (characterStateDescription.modifiesStatesIntensities) {
+            for (const toModifyState of Object.keys(characterStateDescription.modifiesStatesIntensities)) {
+                const withIntensity = characterStateDescription.modifiesStatesIntensities[toModifyState].intensity || -1.0;
+                console.log(`State ${stateName} triggered on character ${character.name}, modifying state ${toModifyState} with intensity ${withIntensity}.`);
+
+                const alreadyActivatedInfo = this.deObject.stateFor[character.name].states.find(s => s.state === toModifyState);
+                if (!alreadyActivatedInfo) {
+                    console.log(`State ${toModifyState} not active on character ${character.name}, cannot modify.`);
+                } else {
+                    const stateDescriptionSpecific = character.states[toModifyState];
+
+                    alreadyActivatedInfo.intensity += withIntensity;
+
+                    if (stateDescriptionSpecific && stateDescriptionSpecific.usesReliefDynamic && withIntensity < 0) {
+                        alreadyActivatedInfo.relieving = true;
+                        
+                        if (alreadyActivatedInfo.intensity > 0) {
+                            console.log(`State ${toModifyState} intensity modified on character ${character.name} by ${withIntensity}, now relieving.`);
+                            this._onStateRelievedOnCharacter(character, toModifyState);
+                        }
+                    }
+
+                    if (alreadyActivatedInfo.intensity <= 0) {
+                        // remove the state
+                        this.deObject.stateFor[character.name].states = this.deObject.stateFor[character.name].states.filter(s => s.state !== toModifyState);
+                        console.log(`State ${toModifyState} intensity modified on character ${character.name} by ${withIntensity}, now removed.`);
+                        this._onStateRemovedOnCharacter(character, toModifyState);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * 
+     * @param {DECompleteCharacterReference} character 
+     * @param {string} stateName 
+     */
+    _onStateRemovedOnCharacter(character, stateName) {
+        // TODO inform these states to the user in case they are the user
+        // eg. You feel better now that you are no longer cold
+        
+        if (!this.deObject) {
+            throw new Error("DEngine not initialized");
+        }
+        const characterState = this.deObject.stateFor[character.name];
+        if (!characterState) {
+            throw new Error(`Character state for ${character.name} not found.`);
+        }
+        const characterStateInfo = characterState.states.find(s => s.state === stateName);
+        if (!characterStateInfo) {
+            throw new Error(`Character ${character.name} does not have state ${stateName} active.`);
+        }
+        const characterStateDescription = character.states[stateName];
+        if (!characterStateDescription) {
+            throw new Error(`Character ${character.name} does not have state description for ${stateName}.`);
+        }
+        if (characterStateDescription.triggersStatesOnRemove) {
+            for (const triggeredState of Object.keys(characterStateDescription.triggersStatesOnRemove)) {
+                const withIntensity = characterStateDescription.triggersStatesOnRemove[triggeredState].intensity || 1.0;
+                console.log(`State ${stateName} removed from character ${character.name}, triggering state ${triggeredState} with intensity ${withIntensity}.`);
+
+                const alreadyActivatedInfo = this.deObject.stateFor[character.name].states.find(s => s.state === triggeredState);
+                if (alreadyActivatedInfo) {
+                    console.log(`State ${triggeredState} already active on character ${character.name}, cannot trigger.`);
+                } else {
+                    /**
+                     * @type {DEStateDescription}
+                     */
+                    const state = {
+                        causants: characterStateInfo.causants,
+                        causes: [{ description: "The triggering of state " + stateName.replace(/_/g, " ").split(" ").map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(" ") }],
+                        state: triggeredState,
+                        intensity: withIntensity,
+                        relieving: false,
+                        contiguousStartActivationCyclesAgo: 0,
+                        contiguousStartActivationTime: { ...this.deObject.currentTime },
+                    }
+                    this.deObject.stateFor[character.name].states.push(state);
+
+                    console.log(`State ${triggeredState} activated on character ${character.name} with intensity ${withIntensity}.`);
+
+                    this._onStateTriggeredOnCharacter(character, triggeredState);
+                }
+            }
+        }
+        if (characterStateDescription.modifiesStatesIntensities) {
+            for (const toModifyState of Object.keys(characterStateDescription.modifiesStatesIntensities)) {
+                const withIntensity = characterStateDescription.modifiesStatesIntensities[toModifyState].intensity || -1.0;
+                console.log(`State ${stateName} removed from character ${character.name}, modifying state ${toModifyState} with intensity ${withIntensity}.`);
+
+                const alreadyActivatedInfo = this.deObject.stateFor[character.name].states.find(s => s.state === toModifyState);
+                if (!alreadyActivatedInfo) {
+                    console.log(`State ${toModifyState} not active on character ${character.name}, cannot modify.`);
+                } else {
+                    const stateDescriptionSpecific = character.states[toModifyState];
+
+                    alreadyActivatedInfo.intensity += withIntensity;
+
+                    if (stateDescriptionSpecific && stateDescriptionSpecific.usesReliefDynamic && withIntensity < 0) {
+                        alreadyActivatedInfo.relieving = true;
+                        
+                        if (alreadyActivatedInfo.intensity > 0) {
+                            console.log(`State ${toModifyState} intensity modified on character ${character.name} by ${withIntensity}, now relieving.`);
+                            this._onStateRelievedOnCharacter(character, toModifyState);
+                        }
+                    }
+
+                    if (alreadyActivatedInfo.intensity <= 0) {
+                        // remove the state
+                        this.deObject.stateFor[character.name].states = this.deObject.stateFor[character.name].states.filter(s => s.state !== toModifyState);
+                        console.log(`State ${toModifyState} intensity modified on character ${character.name} by ${withIntensity}, now removed.`);
+                        this._onStateRemovedOnCharacter(character, toModifyState);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * @param {DECompleteCharacterReference} character 
+     * @returns 
+     */
+    async _calculateStateChangesDueToMessages(character) {
+        if (!this.deObject) {
+            throw new Error("DEngine not initialized");
+        } else if (!this.inferenceAdapter) {
+            throw new Error("Inference adapter not initialized");
+        }
+
+        // first we need to update the bonds towards the character, for that we need to get a whole extended cycle
+        // gather all the other characters that talked inbetween, and update bonds for each
+        const historyGenerator = this.getHistoryForCharacter(character, {});
+
+        /**
+         * @type {Array<{name: string, message: string}>}
+         */
+        let messagesToAdd = [];
+
+        let generator = await historyGenerator.next(true);
+        while (!generator.done) {
+            if (!generator.value.debug && !generator.value.rejected) {
+                const shouldStopAddingMessages = generator.value.name === character.name;
+
+                messagesToAdd.push({
+                    name: generator.value.name,
+                    message: generator.value.message,
+                });
+
+                if (shouldStopAddingMessages) {
+                    await historyGenerator.return();
+                    break;
+                }
+            }
+            generator = await historyGenerator.next(true);
+        }
+
+        messagesToAdd = messagesToAdd.reverse();
+
+        // well that is weird, zero messages?
+        if (messagesToAdd.length === 0) {
+            console.log(`No messages from other characters to set states of ${character.name}`);
+            return;
+        }
+
+        const systemPrompt = `You are an assistant and social dynamics analyst that helps analyze interactions involving ${character.name}`;
+
+        const allPotentialStates = character.states;
+        for (const [stateName, stateDescription] of Object.entries(allPotentialStates)) {
+            const alreadyActivatedInfo = this.deObject.stateFor[character.name].states.find(s => s.state === stateName);
+
+            if (alreadyActivatedInfo) {
+                console.log(`Character ${character.name} already has state ${stateName}, checking intensity changes.`);
+                // check if the state has an intensity change condition
+                const intensityModifiers = (alreadyActivatedInfo.relieving ? stateDescription.intensityModifiersDuringRelief || stateDescription.intensityModifiers : stateDescription.intensityModifiers);
+                let appliedIntensityChange = false;
+                let removedState = false;
+                if (intensityModifiers) {
+                    for (const intensityModifier of intensityModifiers) {
+                        // @ts-ignore
+                        const result = (await intensityModifier.template.execute(this.deObject, character, undefined, undefined, undefined, undefined)).trim();
+                        if (result.startsWith("yes") || result.startsWith("Yes")) {
+                            /**
+                             * @type {string[] | null}
+                             */
+                            let objectCausants = (result.split("|").find(part => part.trim().startsWith("object causants:"))?.split(":")[1].trim().split(",").map(s => s.trim()) || null);
+                            /**
+                             * @type {string[] | null}
+                             */
+                            let characterCausants = (result.split("|").find(part => part.trim().startsWith("character causants:"))?.split(":")[1].trim().split(",").map(s => s.trim()) || null);
+                            /**
+                             * @type {string | null}
+                             */
+                            let cause = (result.split("|").find(part => part.trim().startsWith("cause:"))?.split(":")[1].trim() || null);
+
+                            if (objectCausants && objectCausants.length) {
+                                for (const newCausant of objectCausants) {
+                                    if (!alreadyActivatedInfo.causants) {
+                                        alreadyActivatedInfo.causants = [];
+                                    }
+                                    if (!alreadyActivatedInfo.causants.find(c => c.name === newCausant)) {
+                                        alreadyActivatedInfo.causants.push({
+                                            name: newCausant,
+                                            type: "object",
+                                        });
+                                    }
+                                }
+                            }
+
+                            if (characterCausants && characterCausants.length) {
+                                for (const newCausant of characterCausants) {
+                                    if (!alreadyActivatedInfo.causants) {
+                                        alreadyActivatedInfo.causants = [];
+                                    }
+                                    if (!alreadyActivatedInfo.causants.find(c => c.name === newCausant)) {
+                                        alreadyActivatedInfo.causants.push({
+                                            name: newCausant,
+                                            type: "character",
+                                        });
+                                    }
+                                }
+                            }
+
+                            if (cause) {
+                                alreadyActivatedInfo.causes = alreadyActivatedInfo.causes || [];
+                                if (!alreadyActivatedInfo.causes.find(c => c.description === cause)) {
+                                    alreadyActivatedInfo.causes.push({ description: cause });
+                                }
+                            }
+
+                            console.log(`State intensity modifier matched for state ${stateName} on character ${character.name}, applying intensity change: ${intensityModifier.intensity}`);
+                            alreadyActivatedInfo.intensity += intensityModifier.intensity;
+                            if (stateDescription.usesReliefDynamic && intensityModifier.intensity < 0) {
+                                console.log(`State ${stateName} on character ${character.name} is now relieving due to intensity modifier.`);
+                                alreadyActivatedInfo.relieving = true;
+                                if (alreadyActivatedInfo.intensity > 0) {
+                                    this._onStateRelievedOnCharacter(character, stateName);
+                                }
+                            }
+                            if (alreadyActivatedInfo.intensity < 0) {
+                                // must be removed
+                                console.log(`State ${stateName} on character ${character.name} intensity dropped below zero, removing state.`);
+                                this.deObject.stateFor[character.name].states = this.deObject.stateFor[character.name].states.filter(s => s.state !== stateName);
+                                removedState = true;
+
+                                this._onStateRemovedOnCharacter(character, stateName);
+                            }
+                            appliedIntensityChange = true;
+                        } else if (result.endsWith("?")) {
+                            console.log(`State intensity modifier for state ${stateName} on character ${character.name} returned a question, using inference to determine yes/no.`);
+
+                            // TODO
+                        } else {
+                            console.log(`State intensity modifier for state ${stateName} on character ${character.name} did not match.`);
+                        }
+                    }
+                }
+                if (!appliedIntensityChange && !removedState) {
+                    const intensityChangeRatePerInferenceCycle = (alreadyActivatedInfo.relieving ? stateDescription.intensityChangeRatePerInferenceCycleAfterRelief : stateDescription.intensityChangeRatePerInferenceCycle);
+                    if (intensityChangeRatePerInferenceCycle && intensityChangeRatePerInferenceCycle > 0) {
+                        console.log(`No intensity modifiers matched for state ${stateName} on character ${character.name}, applying decay of ${intensityChangeRatePerInferenceCycle}`);
+                        alreadyActivatedInfo.intensity += intensityChangeRatePerInferenceCycle;
+                        if (stateDescription.usesReliefDynamic && intensityChangeRatePerInferenceCycle < 0) {
+                            console.log(`State ${stateName} on character ${character.name} is now relieving due to decay.`);
+                            alreadyActivatedInfo.relieving = true;
+                            if (alreadyActivatedInfo.intensity > 0) {
+                                this._onStateRelievedOnCharacter(character, stateName);
+                            }
+                        }
+
+                        if (alreadyActivatedInfo.intensity < 0) {
+                            // must be removed
+                            console.log(`State ${stateName} on character ${character.name} intensity dropped below zero, removing state.`);
+                            this.deObject.stateFor[character.name].states = this.deObject.stateFor[character.name].states.filter(s => s.state !== stateName);
+                            removedState = true;
+                            this._onStateRemovedOnCharacter(character, stateName);
+                        }
+                    }
+                }
+            } else {
+                // check if we can activate the state
+                let triggeredState = false;
+                const randomRollForStateTrigger = Math.random();
+                // sort by highest intensity first
+                for (const activationCondition of stateDescription.triggers.sort((a, b) => b.intensity - a.intensity)) {
+                    if (triggeredState) {
+                        break;
+                    }
+                    if (activationCondition.intensity <= 0) {
+                        console.log(`Skipping state activation condition for state ${stateName} on character ${character.name} because intensity is non-positive.`);
+                        continue;
+                    }
+                    if (stateDescription.triggerLikelihood <= 0) {
+                        console.log(`Skipping state activation condition for state ${stateName} on character ${character.name} because trigger likelihood is non-positive.`);
+                        continue;
+                    }
+                    // @ts-ignore
+                    const result = (await activationCondition.template.execute(this.deObject, character, undefined, undefined, undefined, undefined)).trim();
+
+                    if (result.startsWith("yes") || result.startsWith("Yes")) {
+                        if (randomRollForStateTrigger > stateDescription.triggerLikelihood) {
+                            console.log(`State activation condition matched for state ${stateName} on character ${character.name}, but random roll ${randomRollForStateTrigger} exceeded trigger likelihood ${stateDescription.triggerLikelihood}.`);
+                            break;
+                        }
+                        /**
+                         * @type {string[] | null}
+                         */
+                        let objectCausants = (result.split("|").find(part => part.trim().startsWith("object causants:"))?.split(":")[1].trim().split(",").map(s => s.trim()) || null);
+                        /**
+                         * @type {string[] | null}
+                         */
+                        let characterCausants = (result.split("|").find(part => part.trim().startsWith("character causants:"))?.split(":")[1].trim().split(",").map(s => s.trim()) || null);
+                        /**
+                         * @type {string | null}
+                         */
+                        let cause = (result.split("|").find(part => part.trim().startsWith("cause:"))?.split(":")[1].trim() || null);
+
+                        if (
+                            stateDescription.requiresObjectCausants &&
+                            (!objectCausants || objectCausants.length === 0)
+                        ) {
+                            console.log(`State activation condition matched for state ${stateName} on character ${character.name}, but no object causants found in the response.`);
+                            continue;
+                        }
+
+                        if (
+                            stateDescription.requiresCharacterCausants &&
+                            (!characterCausants || characterCausants.length === 0)
+                        ) {
+                            console.log(`State activation condition matched for state ${stateName} on character ${character.name}, but no character causants found in the response.`);
+                            continue;
+                        }
+
+                        if (
+                            stateDescription.requiresCause &&
+                            !cause
+                        ) {
+                            console.log(`State activation condition matched for state ${stateName} on character ${character.name}, but no cause found in the response.`);
+                            continue;
+                        }
+
+                        /**
+                         * @type {DEStateDescription}
+                         */
+                        const state = {
+                            state: stateName,
+                            intensity: activationCondition.intensity,
+                            causants: null,
+                            causes: cause ? [{
+                                description: cause,
+                            }] : null,
+                            contiguousStartActivationCyclesAgo: 0,
+                            contiguousStartActivationTime: { ...this.deObject.currentTime },
+                            relieving: false,
+                        };
+                        for (const newCausant of objectCausants || []) {
+                            if (!state.causants) {
+                                state.causants = [];
+                            }
+                            state.causants.push({
+                                name: newCausant,
+                                type: "object",
+                            });
+                        }
+                        for (const newCausant of characterCausants || []) {
+                            if (!state.causants) {
+                                state.causants = [];
+                            }
+                            state.causants.push({
+                                name: newCausant,
+                                type: "character",
+                            });
+                        }
+
+                        this.deObject.stateFor[character.name].states.push(state);
+                        triggeredState = true;
+
+                        this._onStateTriggeredOnCharacter(character, stateName);
+
+                        console.log(`State ${stateName} activated on character ${character.name} with intensity ${activationCondition.intensity}.`);
+                    } else if (result.endsWith("?")) {
+                        console.log(`State activation condition for state ${stateName} on character ${character.name} returned a question, using inference to determine yes/no.`);
+
+                        // TODO
+                        if (randomRollForStateTrigger > stateDescription.triggerLikelihood) {
+                            console.log(`State activation condition matched for state ${stateName} on character ${character.name}, but random roll ${randomRollForStateTrigger} exceeded trigger likelihood ${stateDescription.triggerLikelihood}.`);
+                            break;
+                        }
+                    } else {
+                        console.log(`State activation condition for state ${stateName} on character ${character.name} did not match.`);
+                    }
+                }
+
+                if (!triggeredState) {
+                    // try by random spawn chance
+                    if (stateDescription.randomSpawnRate && stateDescription.randomSpawnRate > 0) {
+                        const randomRoll = Math.random();
+                        if (randomRoll < stateDescription.randomSpawnRate) {
+                            console.log(`State ${stateName} randomly spawned on character ${character.name} with spawn rate ${stateDescription.randomSpawnRate} and roll ${randomRoll}.`);
+
+                            if (stateDescription.requiresCharacterCausants || stateDescription.requiresObjectCausants || stateDescription.requiresCause) {
+                                console.log(`But state ${stateName} on character ${character.name} requires causants or cause, skipping random spawn.`);
+                            } else {
+                                /**
+                                 * @type {DEStateDescription}
+                                 */
+                                const state = {
+                                    state: stateName,
+                                    intensity: 1,
+                                    causants: null,
+                                    causes: null,
+                                    contiguousStartActivationCyclesAgo: 0,
+                                    contiguousStartActivationTime: { ...this.deObject.currentTime },
+                                    relieving: false,
+                                };
+                                this.deObject.stateFor[character.name].states.push(state);
+                                triggeredState = true;
+
+                                this._onStateTriggeredOnCharacter(character, stateName);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        for (const stateActive of this.deObject.stateFor[character.name].states) {
+            const stateDescription = character.states[stateActive.state];
+            // @ts-ignore
+            const deadEndPotential = (await stateDescription.triggersDeadEnd?.execute(this.deObject, character, undefined, undefined, undefined, undefined))?.trim();
+            if (deadEndPotential) {
+                console.log(`State ${stateActive.state} on character ${character.name} triggers dead-end, the character will now be removed from the story.`);
+                this.deObject.stateFor[character.name].deadEnded = true;
+                this.deObject.stateFor[character.name].deadEndReason = deadEndPotential;
+                if (stateDescription.deadEndIsDeath) {
+                    console.log(`Character ${character.name} has died due to state ${stateActive.state}.`);
+                    this.deObject.stateFor[character.name].dead = true;
+                }
+
+                // TODO insert dead end message in conversation history
+                // if deadEnd is death, we should drop a body as an item in the location
+
+                if (character.name === this.userCharacter?.name) {
+                    this.informCycleState("info", `The user character ${character.name} has reached a dead-end: ${deadEndPotential}`);
+
+                    // TODO do game over handling here
+                }
+            }
+        }
+
+        await this.informDEObjectUpdated();
+    }
+
 
     /**
      * Finally it is the character's turn to talk
@@ -4142,31 +4796,31 @@ export class DEngine {
             if (!generator.value.debug && !generator.value.rejected) {
                 const shouldStopAddingMessages = generator.value.name === character.name;
 
-                if (shouldStopAddingMessages) {
-                    await historyGenerator.return();
-                    break;
-                }
-
                 messagesToAdd.push({
                     name: generator.value.name,
                     message: generator.value.message,
                 });
+
+                if (shouldStopAddingMessages) {
+                    await historyGenerator.return();
+                    break;
+                }
             }
             generator = await historyGenerator.next(true);
         }
 
         messagesToAdd = messagesToAdd.reverse();
 
-        // well that is weird, they talk and talked again themselves?
-        if (messagesToAdd.length === 0) {
-            this.informCycleState("info", `No messages from other characters to update bonds towards ${character.name}`);
-            return;
-        }
-
         const allCharactersToUpdateBondsTowards = new Set();
         messagesToAdd.forEach(msg => {
             allCharactersToUpdateBondsTowards.add(msg.name);
         });
+
+        // well that is weird, they talk and talked again themselves?
+        if (allCharactersToUpdateBondsTowards.size === 0) {
+            this.informCycleState("info", `No messages from other characters to update bonds towards ${character.name}`);
+            return;
+        }
 
         for (const characterNameToUpdate of allCharactersToUpdateBondsTowards) {
             this.informCycleState("info", `Updating bonds from ${character.name} towards ${characterNameToUpdate}`);
@@ -4455,6 +5109,9 @@ export class DEngine {
             this.informCycleState("info", `World rules passed!`);
 
             await this._runInternalCycleStepRecursive(this.userCharacter, [], 0);
+            // calculate state changes towards the user character
+            // hopefully these are reasonable
+            await this._calculateStateChangesDueToMessages(this.userCharacter);
 
             // 1. Get user message
             // 2. Validate the user message does not break any rules world rules or general rules, esp no forced actions in other characters, validate locations

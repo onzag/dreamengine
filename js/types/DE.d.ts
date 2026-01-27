@@ -66,8 +66,22 @@ declare interface DEMinimalCharacterReference {
 interface DEStringTemplateWithIntensityAndCausants {
     /**
      * Relevant template in question,
-     * should be a yes/no question or similar, yes
-     * will increase/decrease intensity to the specified level
+     * should be a yes/no question or similar
+     * if yes is returned instead of a question mark at the end it will increase/decrease intensity to the specified level
+     * 
+     * RELEVANT FOR TRIGGERS ONLY
+     * For the template with a straight answer to give causants and cause it should be formatted as
+     * yes | cause: [cause...] | object causants: causant_1, causant_2, ... | character causants: causant_1, causant_2, ...
+     * note the very specific format required for parsing the cause and causants
+     * needs causants/cause to be triggered
+     * 
+     * RELEVANT FOR BASIC INTENSITY MODIFIERS ONLY
+     * You may also return just "yes" or "no" to increase or decrease intensity
+     * You can also include causants in the response, and they will be added as causants of the state
+     * a new cause will override the previous cause
+     * 
+     * Otherwise return a question mark at the end to indicate it is a question and it will
+     * be fed to the LLM to determine if the state triggers/modifies intensity
      * 
      * Remember to make use of the bond system to determine
      * if a potential causant is good or not for triggering
@@ -145,7 +159,7 @@ interface DEStringTemplateWithIntensityAndCausants {
      * triggering the state FEARFUL
      * and the determineCausants is "the dark forest"
      */
-    determineCausants: DEStringTemplate | null;
+    determineCausants?: DEStringTemplate | null;
     /**
      * If the template holds true, how to determine the cause of the state
      * if it ends with "?" it means that it is a question
@@ -165,7 +179,7 @@ interface DEStringTemplateWithIntensityAndCausants {
      * The engine will check if it is a question or a static cause by looking at question mark at the end
      * if it is a question, it will ask the LLM to answer it
      */
-    determineCause: DEStringTemplate | null;
+    determineCause?: DEStringTemplate | null;
 }
 
 declare interface DEActionPromptInjection {
@@ -395,12 +409,25 @@ declare interface CharacterStateDefinition {
     /**
      * States that this state relieves when it gets activated
      */
-    relievesStates: { [stateName: string]: { intensity: number } };
+    modifiesStatesIntensities: { [stateName: string]: { intensity: number } };
     /**
-     * States that this state triggers when it gets relieved provided it has
-     * a relief mechanism, as in the relieving description exists
+     * States that this state triggers when it gets relieved and the intensity drops the first time
+     * requires using a relief mechanism
      */
     triggersStatesOnRelieve?: { [stateName: string]: { intensity: number } };
+    /**
+     * States that this state relieves when it gets relieved and the intensity drops the first time
+     * requires using a relief mechanism
+     */
+    modifiesStatesIntensitiesOnRelieve?: { [stateName: string]: { intensity: number } };
+    /**
+     * States that this state triggers when it gets relieved and the intensity drops to zero
+     */
+    triggersStatesOnRemove?: { [stateName: string]: { intensity: number } };
+    /**
+     * States that this state relieves when it gets relieved and the intensity drops to zero
+     */
+    modifiesStatesIntensitiesOnRemove?: { [stateName: string]: { intensity: number } };
     /**
      * An instruction that gets added to the character description where a potential causant that does not fit
      * the criteria is set, for example, say the state is HUGGING, but the character has a low bond level, the
@@ -446,9 +473,15 @@ declare interface CharacterStateDefinition {
      */
     potentialCausantNonStrangerAllowed?: boolean;
     /**
-     * The decay rate per inference cycle when the state is active
+     * The intensity change rate per inference cycle when the state is active
+     * should be a float bewteen -4 and 4
      */
-    decayRatePerInferenceCycle: number;
+    intensityChangeRatePerInferenceCycle: number;
+    /**
+     * The intensity change rate per minute when the state is active
+     * should be a float bewteen -4 and 4
+     */
+    intensityChangePerMinute?: number;
     /**
      * If the answer to the triggers question is yes, this is the likelihood that the state will actually get triggered
      * anyway even if the condition holds true.
@@ -481,11 +514,11 @@ declare interface CharacterStateDefinition {
      * Whether the releif uses a decay rate that reduces intensity over time
      * this is only regarding states that have relief mechanisms
      */
-    reliefUsesDecayRate?: boolean;
+    usesReliefDynamic?: boolean;
     /**
-     * The decay rate applied to the relief mechanism if reliefUsesDecayRate is true
+     * The intensity change rate applied to the relief mechanism if usesReliefDynamic is true
      */
-    decayRateAfterRelief?: number;
+    intensityChangeRatePerInferenceCycleAfterRelief?: number;
     /**
      * A permanent state never goes away and only get to 1 intensity level
      */
@@ -511,6 +544,10 @@ declare interface CharacterStateDefinition {
      * Honestly mostly useless to require object causants but here for completeness
      */
     requiresObjectCausants: boolean;
+    /**
+     * Whether this states requires a causal explanation
+     */
+    requiresCause: boolean;
 }
 
 declare interface DEBondIncreaseDecreaseQuestion {
@@ -1070,7 +1107,6 @@ declare interface DEStateCausant {
 
 declare interface DEStateCause {
     description: string;
-    causant: string | null;
 }
 
 declare interface DEStateDescription {
@@ -1082,12 +1118,6 @@ declare interface DEStateDescription {
     intensity: number;
     causants: Array<DEStateCausant> | null;
     causes: Array<DEStateCause> | null;
-    /**
-     * Items that have been seen when this state was active
-     * these are copies that get stored in the state for reference and are not live references
-     * of the items themselves, these work as a sort of memory of what the character has seen
-     */
-    seenItems: Array<DEItem>;
 
     /**
      * The time when this state was first activated that was contiguous with the current state
@@ -1305,6 +1335,16 @@ declare interface DEItem {
     communicator?: DEItemCommunicationDeviceProperties | null;
 }
 
+declare interface DESeenItem {
+    name: string;
+    amount: number;
+    location: string;
+    locationSlot: string;
+    carriedByCharacter: string | null;
+    wornByCharacter: string | null;
+    placement: string;
+}
+
 declare interface StateForDescription {
     id: string;
     location: string;
@@ -1347,6 +1387,20 @@ declare interface StateForDescription {
      * If the character has deadEnded, the reason why it happened
      */
     deadEndReason: string | null;
+    /**
+     * Items that have been seen when this state was active, reduced description
+     * 
+     * These can be subject to memory
+     */
+    seenItems: Array<DESeenItem>;
+    /**
+     * Characters that may have been seen when this state was active, reduced description
+     * 
+     * These can be subject to memory, do not modify surroundingNonStrangers or surroundingTotalStrangers
+     * 
+     * These can be subject to memory
+     */
+    seenCharacters: Array<string>;
 }
 
 declare interface StateForDescriptionWithHistory extends StateForDescription {

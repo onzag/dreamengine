@@ -853,10 +853,19 @@ export const utils = [
     ],
     [
         "format_and list:string[] -> string",
-        "formats a list with commas and 'and'",
+        "formats a list with commas and 'and', do not use this for formatting causants use format_comma_list",
         "eg. Arya, Thalon, and Mira",
         (DE, character, list) => {
             return formatAnd(list);
+        }
+    ],
+    [
+        "format_comma_list list:string[] -> string",
+        "formats a list with commas only, do not use this for formatting causants use format_comma_list",
+        "eg. Arya, Thalon, Mira",
+        (DE, character, list) => {
+            if (!list || !Array.isArray(list)) return "";
+            return list.join(', ');
         }
     ],
     [

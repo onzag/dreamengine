@@ -330,10 +330,15 @@ union(DE: DEObject, char: CompleteCharacterReference, list1:string[], list2:stri
 */
 difference(DE: DEObject, char: CompleteCharacterReference, list1:string[], list2:string[]): string[];
 /**
-  formats a list with commas and 'and'
+  formats a list with commas and 'and', do not use this for formatting causants use format_comma_list
   @returns eg. Arya, Thalon, and Mira
 */
 format_and(DE: DEObject, char: CompleteCharacterReference, list:string[]): string;
+/**
+  formats a list with commas only, do not use this for formatting causants use format_comma_list
+  @returns eg. Arya, Thalon, Mira
+*/
+format_comma_list(DE: DEObject, char: CompleteCharacterReference, list:string[]): string;
 /**
   formats a list with commas and 'or'
   @returns eg. Arya, Thalon, or Mira

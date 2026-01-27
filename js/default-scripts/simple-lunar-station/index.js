@@ -662,7 +662,7 @@ DE.world.worldAllCharacterSpawnScripts["LUNAR_STATION_INITIAL_SCRIPT"] = DE.util
     char.states["ASPHYXIATING_VACCUUM"] = {
         randomSpawnRate: 0,
         permanent: false,
-        relievesStates: {},
+        modifiesStatesIntensities: {},
         requiredStates: [],
         requiresCharacterCausants: false,
         requiresObjectCausants: false,
@@ -723,7 +723,7 @@ DE.world.worldAllCharacterSpawnScripts["LUNAR_STATION_INITIAL_SCRIPT"] = DE.util
             "ASPHYXIATING_VACCUUM_DEAD_END_TRIGGER",
             "{{char}} has run out of air and has asphyxiated in the vacuum of space"
         ),
-        decayRatePerInferenceCycle: 0,
+        intensityChangeRatePerInferenceCycle: 0,
         dominance: 10,
         fallsDown: false,
         general: DE.utils.newHandlebarsTemplate(
@@ -731,12 +731,13 @@ DE.world.worldAllCharacterSpawnScripts["LUNAR_STATION_INITIAL_SCRIPT"] = DE.util
             "ASPHYXIATING_VACCUUM_GENERAL",
             "{{char}} is struggling to breathe in the vacuum of space"
         ),
+        requiresCause: false,
     };
 
     char.states["FREEZING_VACCUUM"] = {
         randomSpawnRate: 0,
         permanent: false,
-        relievesStates: {},
+        modifiesStatesIntensities: {},
         requiredStates: [],
         requiresCharacterCausants: false,
         requiresObjectCausants: false,
@@ -765,13 +766,13 @@ DE.world.worldAllCharacterSpawnScripts["LUNAR_STATION_INITIAL_SCRIPT"] = DE.util
                 ),
             },
         ],
-        reliefUsesDecayRate: true,
+        usesReliefDynamic: true,
         relieving: DE.utils.newHandlebarsTemplate(
             DE,
             "FREEZING_VACCUUM_RELIEVING",
             "{{char}} is recovering from the severe freezing effects of the vacuum of space and should look for warmth"
         ),
-        decayRateAfterRelief: 0.1,
+        intensityChangeRatePerInferenceCycleAfterRelief: -0.1,
         intensityModifiersDuringRelief: [
             {
                 determineCausants: null,
@@ -809,7 +810,7 @@ DE.world.worldAllCharacterSpawnScripts["LUNAR_STATION_INITIAL_SCRIPT"] = DE.util
             "FREEZING_VACCUUM_DEAD_END_TRIGGER",
             "{{char}} has succumbed to the extreme cold of the vacuum of space"
         ),
-        decayRatePerInferenceCycle: 0,
+        intensityChangeRatePerInferenceCycle: 0,
         dominance: 10,
         dominanceAfterRelief: 1,
         fallsDown: false,
@@ -818,5 +819,6 @@ DE.world.worldAllCharacterSpawnScripts["LUNAR_STATION_INITIAL_SCRIPT"] = DE.util
             "FREEZING_VACCUUM_GENERAL",
             "{{char}} is freezing in the vacuum of space"
         ),
+        requiresCause: false,
     };
 });
