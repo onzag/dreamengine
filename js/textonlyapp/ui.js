@@ -140,6 +140,7 @@ export class TextOnlyUI {
             {
                 excludeFrom: [this.username],
                 includeDebugMessages: true,
+                includeRejectedMessages: true,
             }
         );
         let next = await generator.next(true);

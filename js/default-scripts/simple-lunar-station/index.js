@@ -700,7 +700,7 @@ DE.world.worldAllCharacterSpawnScripts["LUNAR_STATION_INITIAL_SCRIPT"] = DE.util
         // what else could it be?
         actionPromptInjection: {
             "RETURN_TO_AIRLOCK": {
-                template: DE.utils.newHandlebarsTemplate(
+                action: DE.utils.newHandlebarsTemplate(
                     DE,
                     "RETURN_TO_AIRLOCK_PROMPT",
                     "{{char}} has an urgent need to return to the airlock and into the lunar station to avoid asphyxiation"
@@ -709,6 +709,8 @@ DE.world.worldAllCharacterSpawnScripts["LUNAR_STATION_INITIAL_SCRIPT"] = DE.util
                 intensityModification: 0,
                 isDeadEndScenario: false,
                 deadEndIsDeath: false,
+                primaryEmotion: "fearful",
+                emotionalRange: [],
             },
         },
         binaryBehaviour: true,

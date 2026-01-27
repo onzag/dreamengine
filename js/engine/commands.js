@@ -212,7 +212,7 @@ export const commands = {
                 throw new Error("DEngine has no user character defined");
             }
             const info = engine.describeItemsAvailableToCharacterForInference(engine.userCharacter.name);
-            return info;
+            return info.complete;
         },
         help: "Lists the objects you can see in your current location.",
         cheat: false,

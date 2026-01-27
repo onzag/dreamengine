@@ -67,8 +67,11 @@ engine.deObject.stateFor["Onza"].wearing = [
     clothes,
 ];
 
-engine.setScriptImportResolver(nodejsImportResolver)
-engine.setCharacterImportResolver(nodejsCharacterImportResolver)
+engine.setScriptImportResolver(nodejsImportResolver);
+engine.setCharacterImportResolver(nodejsCharacterImportResolver);
+
+// debug speedups
+engine.setWorldRulesDisabled(true);
 
 try {
     await engine.initializeWorld();

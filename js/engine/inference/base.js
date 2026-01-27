@@ -20,7 +20,7 @@ export class BaseInferenceAdapter {
      * 
      * @param {DECompleteCharacterReference} character 
      * @param {string} system 
-     * @param {AsyncGenerator<{name: string, message: string, id: string, conversationId: string | null, debug: boolean, rejected: boolean}, void, boolean>} getHistoryForCharacter
+     * @param {(AsyncGenerator<{name: string, message: string, id: string, conversationId: string | null, debug: boolean, rejected: boolean}, void, boolean> | Array<{name: string, message: string}>)} getHistoryForCharacter
      * @param {string} action
      * @returns {AsyncGenerator<string, void, boolean>}
      */
@@ -43,10 +43,20 @@ export class BaseInferenceAdapter {
      * @param {DECompleteCharacterReference} character 
      * @param {string} system
      * @param {string|null} contextInfoBefore additional context information to provide to the agent
-     * @param {AsyncGenerator<{name: string, message: string, id: string, conversationId: string | null, debug: boolean, rejected: boolean}, void, boolean>} getHistoryForCharacter
-     * @param {"LAST_CYCLE" | "LAST_MESSAGE" | "LAST_CYCLE_EXPANDED" | "ALL"} msgLimit what to limit the history to
+     * @param {(AsyncGenerator<{name: string, message: string, id: string, conversationId: string | null, debug: boolean, rejected: boolean}, void, boolean> | Array<{name: string, message: string}>)} getHistoryForCharacter
+     * @param {"LAST_CYCLE" | "LAST_MESSAGE" | "LAST_CYCLE_EXPANDED" | "LAST_CYCLE_EXPANDED_EXCLUDE_CHAR" | "ALL"} msgLimit what to limit the history to
      * @param {string|null} contextInfoAfter additional context information to provide to the agent
-     * @returns {AsyncGenerator<string, void, {answerTrail?: string, grammar?: string, contextInfo?: string, nextQuestion: string, instructions?: string, stopAt: Array<string>, stopAfter: Array<string>, maxParagraphs: number; maxCharacters: number} | null>}
+     * @returns {AsyncGenerator<string, void, {
+     * answerTrail?: string,
+     * grammar?: string,
+     * contextInfo?: string,
+     * instructions?: string,
+     * nextQuestion: string,
+     * stopAfter: Array<string>,
+     * stopAt: Array<string>,
+     * maxParagraphs: number,
+     * maxCharacters: number,
+     * } | null>}
      */
     async *runQuestioningCustomAgentOn(
         character,
@@ -112,24 +122,60 @@ export class BaseInferenceAdapter {
      * @param {string[]} emotionalRange
      * @param {string[]} states
      * @param {string} narrativeEffect
+     * @returns {string}
      */
     buildActionPromptForCharacter(character, action, primaryEmotion, emotionalRange, states, narrativeEffect) {
         throw new Error("Method 'buildActionPromptForCharacter()' must be implemented.");
     }
 
-    /**
+     /**
      * @param {Array<{groupDescription: string, characters: Array<{name: string, description: string}>}>} groups
+     * @param {boolean} asSocialGroups
      * @returns {{availableCharactersAt: string, characterInfoAt: string, value: string}}
      */
-    buildContextInfoForAvailableCharacters(groups) {
+    buildContextInfoForAvailableCharacters(groups, asSocialGroups = false) {
         throw new Error("Method 'buildContextInfoForAvailableCharacters()' must be implemented.");
     }
 
     /**
      * @param {string} instructions
+     * @returns {string}
      */
     buildContextInfoInstructions(instructions) {
         throw new Error("Method 'buildContextInfoInstructions()' must be implemented.");
+    }
+
+    /**
+     * @param {string} rule
+     * @returns {string}
+     */
+    buildContextInfoRule(rule) {
+        throw new Error("Method 'buildContextInfoRule()' must be implemented.");
+    }
+
+    /**
+     * @param {string} description
+     * @return {{locationDescriptionAt: string, value: string}}
+     */
+    buildContextInfoCurrentLocationDescription(description) {
+        throw new Error("Method 'buildContextInfoCurrentLocationDescription()' must be implemented.");
+    }
+
+    /**
+     * @param {string[]} items
+     * @param {"characters" | "items"} type
+     * @return {{cannotCarryDescriptionAt: string, value: string}}
+     */
+    buildContextInfoItemsCannotCarry(items, type) {
+        throw new Error("Method 'buildContextInfoItemsCannotCarry()' must be implemented.");
+    }
+
+    /**
+     * @param {string} example
+     * @returns {string}
+     */
+    buildContextInfoExample(example) {
+        throw new Error("Method 'buildContextInfoExample()' must be implemented.");
     }
 
     /**
@@ -145,5 +191,22 @@ export class BaseInferenceAdapter {
      */
     getRequiredRootGrammarForQuestionGeneration() {
         throw new Error("Method 'getRequiredRootGrammarForQuestionGeneration()' must be implemented.");
+    }
+
+    /**
+     * Builds context info for available items
+     * @param {string[]} items 
+     * @returns {{availableItemsAt: string, itemInfoAt: string, value: string}}
+     */
+    buildContextInfoForAvailableItems(items) {
+        throw new Error("Method 'buildContextInfoForAvailableItems()' must be implemented.");
+    }
+
+    /**
+     * Specifies whether the adapter supports grammar generation
+     * @returns {boolean}
+     */
+    supportsGrammar() {
+        throw new Error("Method 'supportsGrammar()' must be implemented.");
     }
 }

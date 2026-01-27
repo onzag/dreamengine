@@ -256,7 +256,7 @@ ${states.join(", ")}
      * 
      * @param {DECompleteCharacterReference} character 
      * @param {string} system 
-     * @param {AsyncGenerator<{name: string, message: string, id: string, conversationId: string | null, debug: boolean, rejected: boolean}, void, boolean>} getHistoryForCharacter
+     * @param {(AsyncGenerator<{name: string, message: string, id: string, conversationId: string | null, debug: boolean, rejected: boolean}, void, boolean> | Array<{name: string, message: string}>)} getHistoryForCharacter
      * @param {string} action
      * @returns {AsyncGenerator<string, void, boolean>}
      */
@@ -291,24 +291,28 @@ ${states.join(", ")}
          */
         let messagesToAdd = [];
 
-        let generator = await getHistoryForCharacter.next(true);
-        while (!generator.done) {
-            if (!generator.value.debug && !generator.value.rejected) {
-                messagesToAdd.push(generator.value);
-                tokensExhaustedApprox += await this.countTokens("[" + generator.value.name + "]: " + generator.value.message) + 10; // some wiggle room
-                if (tokensExhaustedApprox >= contextWindowSize) {
-                    await getHistoryForCharacter.return();
-                    if (tokensExhaustedApprox > contextWindowSize) {
-                        // remove the last message as it made us go over
-                        messagesToAdd.pop();
+        if (!Array.isArray(getHistoryForCharacter)) {
+            let generator = await getHistoryForCharacter.next(true);
+            while (!generator.done) {
+                if (!generator.value.debug && !generator.value.rejected) {
+                    messagesToAdd.push(generator.value);
+                    tokensExhaustedApprox += await this.countTokens("[" + generator.value.name + "]: " + generator.value.message) + 10; // some wiggle room
+                    if (tokensExhaustedApprox >= contextWindowSize) {
+                        await getHistoryForCharacter.return();
+                        if (tokensExhaustedApprox > contextWindowSize) {
+                            // remove the last message as it made us go over
+                            messagesToAdd.pop();
+                        }
+                        break;
                     }
-                    break;
                 }
+                generator = await getHistoryForCharacter.next(true);
             }
-            generator = await getHistoryForCharacter.next(true);
-        }
 
-        messagesToAdd = messagesToAdd.reverse();
+            messagesToAdd = messagesToAdd.reverse();
+        } else {
+            messagesToAdd = getHistoryForCharacter;
+        }
 
         const otherCharacterNames = new Set();
         for (const msg of messagesToAdd) {
@@ -429,9 +433,19 @@ ${states.join(", ")}
      * @param {string} system
      * @param {string|null} contextInfoBefore additional context information to provide to the agent
      * @param {AsyncGenerator<{name: string, message: string, id: string, conversationId: string | null, debug: boolean, rejected: boolean}, void, boolean>} getHistoryForCharacter
-     * @param {"LAST_CYCLE" | "LAST_MESSAGE" | "LAST_CYCLE_EXPANDED" | "ALL"} msgLimit what to limit the history to
+     * @param {"LAST_CYCLE" | "LAST_MESSAGE" | "LAST_CYCLE_EXPANDED" | "LAST_CYCLE_EXPANDED_EXCLUDE_CHAR" | "ALL"} msgLimit what to limit the history to
      * @param {string|null} contextInfoAfter additional context information to provide to the agent
-     * @returns {AsyncGenerator<string, void, {answerTrail?: string, grammar?: string, contextInfo?: string, instructions?: string, nextQuestion: string, stopAfter: Array<string>, stopAt: Array<string>, maxParagraphs: number; maxCharacters: number} | null>}
+     * @returns {AsyncGenerator<string, void, {
+     * answerTrail?: string,
+     * grammar?: string,
+     * contextInfo?: string,
+     * instructions?: string,
+     * nextQuestion: string,
+     * stopAfter: Array<string>,
+     * stopAt: Array<string>,
+     * maxParagraphs: number,
+     * maxCharacters: number,
+     * }>}
      */
     async *runQuestioningCustomAgentOn(
         character,
@@ -464,50 +478,56 @@ ${states.join(", ")}
          */
         let messagesToAdd = [];
 
-        let generator = await getHistoryForCharacter.next(true);
-        let cycleCount = 0;
-        while (!generator.done) {
-            if (!generator.value.debug && !generator.value.rejected) {
-                let shouldAddMessage = false;
-                let shouldStopAddingMessages = false;
+        if (!Array.isArray(getHistoryForCharacter)) {
+            let generator = await getHistoryForCharacter.next(true);
+            let cycleCount = 0;
+            while (!generator.done) {
+                if (!generator.value.debug && !generator.value.rejected) {
+                    let shouldAddMessage = false;
+                    let shouldStopAddingMessages = false;
 
-                if (msgLimit === "ALL") {
-                    tokensExhaustedApprox += await this.countTokens("[" + generator.value.name + "]: " + generator.value.message) + 10; // some wiggle room
-                    shouldStopAddingMessages = tokensExhaustedApprox >= contextWindowSize;
-                    shouldAddMessage = !shouldStopAddingMessages;
-                } else if (msgLimit === "LAST_MESSAGE") {
-                    shouldAddMessage = generator.value.name === character.name;
-                    shouldStopAddingMessages = shouldAddMessage;
-                } else if (msgLimit === "LAST_CYCLE") {
-                    shouldAddMessage = cycleCount === 0;
-                } else if (msgLimit === "LAST_CYCLE_EXPANDED") {
-                    shouldAddMessage = cycleCount === 0 || (cycleCount === 1 && generator.value.name !== character.name);
-                }
+                    if (msgLimit === "ALL") {
+                        tokensExhaustedApprox += await this.countTokens("[" + generator.value.name + "]: " + generator.value.message) + 10; // some wiggle room
+                        shouldStopAddingMessages = tokensExhaustedApprox >= contextWindowSize;
+                        shouldAddMessage = !shouldStopAddingMessages;
+                    } else if (msgLimit === "LAST_MESSAGE") {
+                        shouldAddMessage = generator.value.name === character.name;
+                        shouldStopAddingMessages = shouldAddMessage;
+                    } else if (msgLimit === "LAST_CYCLE") {
+                        shouldAddMessage = cycleCount === 0;
+                    } else if (msgLimit === "LAST_CYCLE_EXPANDED") {
+                        shouldAddMessage = cycleCount === 0 || (cycleCount === 1 && generator.value.name !== character.name);
+                    } else if (msgLimit === "LAST_CYCLE_EXPANDED_EXCLUDE_CHAR") {
+                        shouldAddMessage = (cycleCount === 0 && generator.value.name !== character.name) || (cycleCount === 1 && generator.value.name !== character.name);
+                    }
 
-                if (generator.value.name === character.name) {
-                    cycleCount++;
-                }
+                    if (generator.value.name === character.name) {
+                        cycleCount++;
+                    }
 
-                if (msgLimit === "LAST_CYCLE") {
-                    shouldStopAddingMessages = cycleCount >= 1;
-                }
-                if (msgLimit === "LAST_CYCLE_EXPANDED") {
-                    shouldStopAddingMessages = cycleCount >= 2;
-                }
+                    if (msgLimit === "LAST_CYCLE") {
+                        shouldStopAddingMessages = cycleCount >= 1;
+                    }
+                    if (msgLimit === "LAST_CYCLE_EXPANDED" || msgLimit === "LAST_CYCLE_EXPANDED_EXCLUDE_CHAR") {
+                        shouldStopAddingMessages = cycleCount >= 2;
+                    }
 
-                if (shouldAddMessage) {
-                    messagesToAdd.push(generator.value);
-                }
+                    if (shouldAddMessage) {
+                        messagesToAdd.push(generator.value);
+                    }
 
-                if (shouldStopAddingMessages) {
-                    await getHistoryForCharacter.return();
-                    break;
+                    if (shouldStopAddingMessages) {
+                        await getHistoryForCharacter.return();
+                        break;
+                    }
                 }
+                generator = await getHistoryForCharacter.next(true);
             }
-            generator = await getHistoryForCharacter.next(true);
-        }
 
-        messagesToAdd = messagesToAdd.reverse();
+            messagesToAdd = messagesToAdd.reverse();
+        } else {
+            messagesToAdd = getHistoryForCharacter;
+        }
         const messagesFormatted = messagesToAdd.map(msg => `[` + msg.name + `]: ` + msg.message).join("\n\n");
 
         const payload = {
@@ -588,26 +608,72 @@ ${states.join(", ")}
 
     /**
      * @param {Array<{groupDescription: string, characters: Array<{name: string, description: string}>}>} groups
+     * @param {boolean} asSocialGroups
      * @returns {{availableCharactersAt: string, characterInfoAt: string, value: string}}
      */
-    buildContextInfoForAvailableCharacters(groups) {
-        let value = `<availableCharacters>\n`;
-        let index = 0;
-        for (const group of groups) {
-            if (index > 0) {
-                value += `\n`;
+    buildContextInfoForAvailableCharacters(groups, asSocialGroups = false) {
+        if (asSocialGroups) {
+            let value = `<socialGroups>\n`;
+            let index = 0;
+            for (const group of groups) {
+                if (index > 0) {
+                    value += `\n`;
+                }
+                if (group.groupDescription) {
+                    value += group.groupDescription + "\n";
+                }
+                for (const character of group.characters) {
+                    value += `<character>` + character.name + ` - ` + character.description + `</character>\n`;
+                }
+                index++;
             }
-            value += group.groupDescription + "\n";
-            for (const character of group.characters) {
-                value += `<character>` + character.name + ` - ` + character.description + `</character>\n`;
+            value += `</socialGroups>`;
+
+            return {
+                availableCharactersAt: "`<socialGroups>` and `</socialGroups>` tags",
+                characterInfoAt: "`<character>` and `</character>` tags",
+                value,
+            };
+        } else {
+            let value = `<availableCharacters>\n`;
+            let index = 0;
+            for (const group of groups) {
+                if (index > 0) {
+                    value += `\n`;
+                }
+                if (group.groupDescription) {
+                    value += group.groupDescription + "\n";
+                }
+                for (const character of group.characters) {
+                    value += `<character>` + character.name + ` - ` + character.description + `</character>\n`;
+                }
+                index++;
             }
-            index++;
+            value += `</availableCharacters>`;
+
+            return {
+                availableCharactersAt: "`<availableCharacters>` and `</availableCharacters>` tags",
+                characterInfoAt: "`<character>` and `</character>` tags",
+                value,
+            };
         }
-        value += `</availableCharacters>`;
+    }
+
+    /**
+     * Builds context info for available items
+     * @param {string[]} items 
+     * @returns {{availableItemsAt: string, itemInfoAt: string, value: string}}
+     */
+    buildContextInfoForAvailableItems(items) {
+        let value = `<availableItems>\n`;
+        for (const item of items) {
+            value += `<item>` + item + `</item>\n`;
+        }
+        value += `</availableItems>`;
 
         return {
-            availableCharactersAt: "`<availableCharacters>` and `</availableCharacters>` tags",
-            characterInfoAt: "`<character>` and `</character>` tags",
+            availableItemsAt: "`<availableItems>` and `</availableItems>` tags",
+            itemInfoAt: "`<item>` and `</item>` tags",
             value,
         };
     }
@@ -620,7 +686,47 @@ ${states.join(", ")}
     }
 
     /**
+     * @param {string} rule 
+     * @returns {string}
+     */
+    buildContextInfoRule(rule) {
+        return ("<rule>\n" + rule + "\n</rule>");
+    }
+
+    /**
      * 
+     * @param {string} description
+     * @return {{locationDescriptionAt: string, value: string}}
+     */
+    buildContextInfoCurrentLocationDescription(description) {
+        return {
+            value: "<currentLocationDescription>\n" + description + "\n</currentLocationDescription>",
+            locationDescriptionAt: "`<currentLocationDescription>` and `</currentLocationDescription>` tags",
+        };
+    }
+
+    /**
+     * @param {string[]} items
+     * @param {"characters" | "items"} type
+     * @return {{cannotCarryDescriptionAt: string, value: string}}
+     */
+    buildContextInfoItemsCannotCarry(items, type) {
+        const innerTag = type === "characters" ? "cannotCarryCharacter" : "cannotCarryItem";
+        return {
+            value: `<cannotCarry${type.charAt(0).toUpperCase() + type.slice(1)}>\n` + items.map((i) => `<${innerTag}>` + i + `</${innerTag}>`).join("\n") + `\n</cannotCarry${type.charAt(0).toUpperCase() + type.slice(1)}>`,
+            cannotCarryDescriptionAt: "`<cannotCarry" + type.charAt(0).toUpperCase() + type.slice(1) + ">` and `</cannotCarry" + type.charAt(0).toUpperCase() + type.slice(1) + ">` tags",
+        };
+    }
+
+    /**
+     * @param {string} example
+     * @returns {string}
+     */
+    buildContextInfoExample(example) {
+        return ("<example>\n" + example + "\n</example>");
+    }
+
+    /**
      * @param {DECompleteCharacterReference} character 
      * @param {string} description 
      * @param {string|null} appereance 
@@ -628,11 +734,11 @@ ${states.join(", ")}
      * @param {string[]} states 
      * @param {string|null} scenario 
      * @param {string|null} lore
-     * @returns 
+     * @returns {string}
      */
     buildSystemCharacterDescription(character, description, appereance, relationships, states, scenario, lore) {
         return (
-`${appereance ? `## ${character.name}'s Appearance:
+            `${appereance ? `## ${character.name}'s Appearance:
 ${appereance}
 
 ` : ""}## ${character.name}'s Description:
