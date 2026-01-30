@@ -18,12 +18,12 @@ export function importScript(name, type, args, script, mustReturn) {
         /**
          * @param {DEObject} DE
          * @param {DECompleteCharacterReference} character
-         * @param {DECompleteCharacterReference|null} other
+         * @param {DECompleteCharacterReference} other
          * @param {DEStateCausant[]} causants
-         * @param {string|null} cause
          * @param {DECompleteCharacterReference|null} potentialCausant
+         * @param {DECompleteCharacterReference[]|null} potentialCausants
          */
-        compiled = async (DE, character, other, causants, cause, potentialCausant) => {
+        compiled = async (DE, character, other, causants, potentialCausant, potentialCausants) => {
             /**
              * @type {any}
              */
@@ -41,11 +41,11 @@ export function importScript(name, type, args, script, mustReturn) {
             if (causants) {
                 handlebarObj["causants"] = causants.map(c => c.name );
             }
-            if (cause) {
-                handlebarObj["cause"] = cause;
-            }
             if (potentialCausant) {
                 handlebarObj["potential_causant"] = potentialCausant.name;
+            }
+            if (potentialCausants) {
+                handlebarObj["potential_causants"] = potentialCausants.map(c => c.name);
             }
             const returnValue = handlebarsCompiled(handlebarObj);
             return returnValue;
@@ -79,7 +79,7 @@ export function importScript(name, type, args, script, mustReturn) {
  * @returns {DEStringTemplate}
  */
 export function importScriptAsTemplate(id, name, type, script) {
-    const execute = importScript(name, type, ["DE", "char", "other", "causants", "cause", "potentialCausant"], script, "string");
+    const execute = importScript(name, type, ["DE", "char", "other", "causants", "potentialCausant", "potentialCausants"], script, "string");
     return {
         id,
         type: "template",

@@ -53,14 +53,15 @@ declare interface DEMinimalCharacterReference {
      */
     shortDescription: string;
     /**
-     * Short description when the character is completely naked
-     * aka no clothes or accessories on them at all, useful for
-     * animals or scenarios where the character is stripped of all clothing,
-     * note that you should still not specify the character as being fully nude
-     * just describe their physical appearance without clothes, that is because
-     * they may still have accessories like glasses, jewelry, piercings, bracelet, small shirt, etc...
+     * Short description when the character is top naked, this is added
+     * to the end of the shortDescription when the character is top naked
      */
-    shortDescriptionNaked: string | null;
+    shortDescriptionTopNakedAdd: string | null;
+    /**
+     * Short description when the character is bottom naked, this is added
+     * to the end of the shortDescription when the character is bottom naked
+     */
+    shortDescriptionBottomNakedAdd: string | null;
 }
 
 interface DEStringTemplateWithIntensityAndCausants {
@@ -69,16 +70,7 @@ interface DEStringTemplateWithIntensityAndCausants {
      * should be a yes/no question or similar
      * if yes is returned instead of a question mark at the end it will increase/decrease intensity to the specified level
      * 
-     * RELEVANT FOR TRIGGERS ONLY
-     * For the template with a straight answer to give causants and cause it should be formatted as
-     * yes | cause: [cause...] | object causants: causant_1, causant_2, ... | character causants: causant_1, causant_2, ...
-     * note the very specific format required for parsing the cause and causants
-     * needs causants/cause to be triggered
-     * 
-     * RELEVANT FOR BASIC INTENSITY MODIFIERS ONLY
      * You may also return just "yes" or "no" to increase or decrease intensity
-     * You can also include causants in the response, and they will be added as causants of the state
-     * a new cause will override the previous cause
      * 
      * Otherwise return a question mark at the end to indicate it is a question and it will
      * be fed to the LLM to determine if the state triggers/modifies intensity
@@ -87,17 +79,28 @@ interface DEStringTemplateWithIntensityAndCausants {
      * if a potential causant is good or not for triggering
      * the state (or increasing intensity)
      * 
+     * for that you may use the potentialCausantMinBondRequired, potentialCausantMaxBondAllowed,
+     * potentialCausantMin2BondRequired, potentialCausantMax2BondAllowed, etc...
+     * to limit the characters that can trigger the state
+     * 
+     * That is provided that requiresCharacterCausants is true for this state
+     * 
      * For example, say the state is NEEDS_AFFECTION
      * it may not be good for the state to be triggered by complete strangers
      * so you may want to write a template like:
      * 
-     * """
-     * {{#with (get_present_conversing_social_group 20 100 20 100) as |potential_causants|}}
-     *    {{#if potential_causants}}
-     *       Is {{char}} getting a hug from {{format_or potential_causants}}?"
-     *    {{/if}}
-     * {{/with}}
-     * """
+     * potentialCausantMinBondRequired: 20
+     * potentialCausantMaxBondAllowed: 100
+     * potentialCausantMin2BondRequired: 20
+     * potentialCausantMax2BondAllowed: 100
+     * 
+     * template:
+     * "Is {{char}} getting a hug from {{format_or potential_causants}}?"
+     * 
+     * determineCausants:
+     * "Who is hugging {{char}}?"
+     * 
+     * Alternatively you may define potential causants with this and 
      * 
      * Depending on the bond system, this basically means the state will only trigger
      * if someone the character has a good bond with and they know them and has
@@ -143,7 +146,7 @@ interface DEStringTemplateWithIntensityAndCausants {
     /**
      * Intensity of the template effect, from -4 to 4
      */
-    intensity: number;
+    intensity: number | "DO_NOT_MODIFY_INTENSITY_ADD_CAUSANTS_ONLY" | "DO_NOT_MODIFY_INTENSITY_REMOVE_CAUSANTS_ONLY";
     /**
      * If the template holds true, how are causants handled
      * this should be a comma-separated list of causant names
@@ -158,28 +161,36 @@ interface DEStringTemplateWithIntensityAndCausants {
      * for example, "{{char}} is in the dark forest"
      * triggering the state FEARFUL
      * and the determineCausants is "the dark forest"
+     * it expects a list nevertheless, but for a single causant it will be just one item in the list
+     * comma separate them, eg. Bob, Alice, the dark forest
+     * 
+     * Note if the causants represents a trigger with negative intensity, the causants will be removed from the state causants
+     * instead of added to them, if the resulting causant list is empty, and the state requires causants, the state will be removed
+     * 
+     * For example, say the state is FEARFUL, and the character is currently fearful of Bob and Alice
+     * now Bob shows himself as non threatening, based on the question "has {{format_or causants}} show themselves as non threatening?"
+     * and the determineCausants is "Who has shown themselves as non threatening to {{char}}?" with a trail of "the characters not showing themselves as threatening anymore is " and a
+     * determineCausantsAnswerForceGrammarTo LIST_OF_ANY_CAUSANTS (meaning the answer should be Bob, Alice, etc..)
+     * then once "Bob" returns from the inference step, Bob will be removed from the causants of the FEARFUL state
+     * meaning the character is now only fearful of Alice
+     * 
+     * If then Alice shows herself as non threatening as well, the causants list becomes empty
+     * and the FEARFUL state is removed from the character as it requires causants to be active
+     * 
+     * if the state does not require causants, then the state remains active but with no causants
      */
     determineCausants?: DEStringTemplate | null;
     /**
-     * If the template holds true, how to determine the cause of the state
-     * if it ends with "?" it means that it is a question
-     * that will be answered by the LLM to determine the cause
-     * 
-     * for example, say the template is "{{char}} is feeling scared and threatened by someone"
-     * triggering the state FEARFUL
-     * and the determineCause is "why is {{char}} feeling scared by {{format_and causants}}?"
-     * 
-     * Remember that causants is an array that may contain objects and characters
-     * 
-     * It is also possible to just give it a static cause eg.
-     * for example, "{{char}} is in the dark forest"
-     * triggering the state FEARFUL
-     * and the determineCause is "{{char}} is alone in the dark forest"
-     * 
-     * The engine will check if it is a question or a static cause by looking at question mark at the end
-     * if it is a question, it will ask the LLM to answer it
+     * The trail to determine the causants from, for example
+     * if determineCausants is "who is {{char}} threatened by?"
+     * determineCausantsTrail is "{{char}} is threatened by "
      */
-    determineCause?: DEStringTemplate | null;
+    determineCausantsAnswerTrail?: DEStringTemplate | null;
+    /**
+     * The grammar to use when answering the determineCausants question
+     * The default is LIST_OF_ANY_CAUSANTS
+     */
+    determineCausantsAnswerForceGrammarTo?: "LIST_OF_ANY_CAUSANTS" | "LIST_OF_CHARACTER_CAUSANTS" | "LIST_OF_OBJECT_CAUSANTS" | "SINGLE_ANY_CAUSANT" | "SINGLE_CHARACTER_CAUSANT" | "SINGLE_OBJECT_CAUSANT" | "SINGLE_CHARACTER_POTENTIAL_CAUSANT" | "LIST_OF_CHARACTER_POTENTIAL_CAUSANTS" | null;
 }
 
 declare interface DEActionPromptInjection {
@@ -196,8 +207,32 @@ declare interface DEActionPromptInjection {
      * 
      * The narrative effect can be
      * When narrating describe {{char}} tantrum in detail and how the tears flow down their face
+     * 
+     * It's possible to have an action that only has a narrative effect and vice-versa
+     * 
+     * When only the narrative effect is provided, the character will not be forced to perform the given
+     * action, but the narrative effect will still apply
      */
     narrativeEffect?: DEStringTemplate;
+    /**
+     * Whether the narrative effect should always apply even if the action is not performed
+     * Or if no action is specified, in which case the narrative effect will always apply
+     * even if another action is performed by the character
+     */
+    alwaysApplyNarrativeEffect: boolean;
+    /**
+     * The probability (0 to 1) that the action will be even checked for execution, if say
+     * the probability is only 0.5 then the action will only be considered for execution half the time
+     * this is useful to avoid the character being stuck in a loop of performing the same action
+     * 
+     * default is 1.0 meaning it always gets considered
+     * 
+     * This probability exists for the sake of ease of use, the same effect can be achieved in the template
+     * by using a randomizing function like get_random_seed_from_time to only return the action sometimes
+     * from the template itself as an empty string in the action results in no action being performed
+     * but this is way more developer friendly
+     */
+    probability: number;
     /**
      * If the template represents a dead end scenario
      * use this for the description of the dead end scenario
@@ -207,6 +242,9 @@ declare interface DEActionPromptInjection {
     isDeadEndScenario: boolean;
     /**
      * Whether the dead end scenario is a death scenario
+     * 
+     * the action must be specified as well if this is true
+     * otherwise it's not possible to give a message about death
      */
     deadEndIsDeath: boolean;
     /**
@@ -224,6 +262,15 @@ declare interface DEActionPromptInjection {
      * The emotional range this action will cause provided
      */
     emotionalRange: DEEmotionNames[];
+    /**
+     * Limit vocabulary to these specific words or grammatical tokens, ensure to double quote strings
+     * that match specific words, these are used for grammar control so they should be in
+     * the form of grammatical patterns eg. "specific word", [A-Z]+, etc... they will be used a pipe
+     * in the grammar limit
+     * 
+     * Do not specify this if you do not want to limit vocabulary
+     */
+    vocabularyLimit?: string[];
 }
 
 declare interface DEActionPromptInjectionWithIntensity extends DEActionPromptInjection {
@@ -376,6 +423,10 @@ declare interface DECharacterStateDefinition {
      */
     requiresPosture: "standing" | "sitting" | "laying_down" | null;
     /**
+     * Whether the state requires a specific posture to trigger only
+     */
+    requiresPostureForTrigger?: "standing" | "sitting" | "laying_down" | null;
+    /**
      * Whether the state seeks a specific posture once triggered
      * for example the TIRED state may seek laying_down posture
      * if null, posture is not sought
@@ -400,8 +451,14 @@ declare interface DECharacterStateDefinition {
     /**
      * States that are required for this state to be active, if any are not active, this state cannot be active
      * or even be considered for activation
+     * 
+     * These are applied for trigger and mantenience
      */
     requiredStates: string[];
+    /**
+     * States that are required for trigger only
+     */
+    requiredStatesForTrigger?: string[];
     /**
      * States that this state triggers when it gets activated
      */
@@ -409,7 +466,7 @@ declare interface DECharacterStateDefinition {
     /**
      * States that this state relieves when it gets activated
      */
-    modifiesStatesIntensities: { [stateName: string]: { intensity: number } };
+    modifiesStatesIntensitiesOnTrigger: { [stateName: string]: { intensity: number } };
     /**
      * States that this state triggers when it gets relieved and the intensity drops the first time
      * requires using a relief mechanism
@@ -468,10 +525,10 @@ declare interface DECharacterStateDefinition {
      */
     potentialCausantStrangerAllowed?: boolean;
     /**
-     * Whether a potential causant that is not a stranger (has some bond) is allowed to be a causant of this state
+     * Whether a potential causant that is not a stranger (has some bond) is denied to be a causant of this state
      * if no characters are around, no questions are asked about triggering the state if requiresCausant is true
      */
-    potentialCausantNonStrangerAllowed?: boolean;
+    potentialCausantNonStrangerDenied?: boolean;
     /**
      * The intensity change rate per inference cycle when the state is active
      * should be a float bewteen -4 and 4
@@ -504,12 +561,21 @@ declare interface DECharacterStateDefinition {
      */
     intensityModifiersDuringRelief?: Array<DEStringTemplateWithIntensityAndCausants>;
     /**
-     * Whether this represents a binary behaviour of sorts, in such a case, while the intensity still may vary
-     * it doesn't say things like Overwhemingly or extremely (STATE_NAME) for example if the state is SLEEPING vs SCARED
-     * Sleeping may be deeming binary behaviour. Susan is sleeping.
-     * But scared may allow intensity expressiongs, Susan is scared, susan is very scared, Susan is extremely scared, Susan is overwhelmingly scared.
+     * INTENSITY_EXPRESSIVE:
+     * For example the state SCARED may be intensity expressive, it will cause the injection on the character state of:
+     * - Susan is scared, susan is very Scared, Susan is extremely Scared, Susan is overwhelmingly Scared.
+     * Depending on intensity level from 1 to 4
+     * 
+     * BINARY:
+     * Either an on/off state, for example SLEEPING
+     * - Susan is currently sleeping.
+     * 
+     * HIDDEN:
+     * Hidden states do not get described in the character description, they are useful for states that are only used to determine
+     * actions, for example TALKING_ABOUT_THEIR_FRIEND_BOB which triggers when the character is being asked about Bob and that
+     * injects a specific prompt (or actions) about this context, and the state relieves when the character is no longer talking about Bob
      */
-    binaryBehaviour: boolean;
+    behaviourType: "INTENSITY_EXPRESSIVE" | "BINARY" | "HIDDEN";
     /**
      * Whether the releif uses a decay rate that reduces intensity over time
      * this is only regarding states that have relief mechanisms
@@ -545,9 +611,16 @@ declare interface DECharacterStateDefinition {
      */
     requiresObjectCausants: boolean;
     /**
-     * Whether this states requires a causal explanation
+     * Limit vocabulary to these specific words or grammatical tokens, ensure to double quote strings
+     * that match specific words, these are used for grammar control so they should be in
+     * the form of grammatical patterns eg. "specific word", [A-Z]+, etc... they will be used a pipe
+     * in the grammar limit
+     * 
+     * Do not specify this if you do not want to limit vocabulary
+     * 
+     * This is state level and will apply if this state is active to all character messages
      */
-    requiresCause: boolean;
+    vocabularyLimit?: string[];
 }
 
 declare interface DEBondIncreaseDecreaseQuestion {
@@ -1080,6 +1153,21 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
         postInference: Record<string, DEScript>;
         postAnyInference: Record<string, DEScript>;
     };
+    /**
+     * Limit vocabulary to these specific words or grammatical tokens, ensure to double quote strings
+     * that match specific words, these are used for grammar control so they should be in
+     * the form of grammatical patterns eg. "specific word", [A-Z]+, etc... they will be used a pipe
+     * in the grammar limit
+     * 
+     * Do not specify this if you do not want to limit vocabulary
+     * 
+     * This is a character level vocabulary limit that applies to the whole character,
+     * mainly useful to make characters with no vocabulary at all (eg. non-verbal characters)
+     * by setting this as an empty array, or very limited vocabulary for characters that can only say
+     * only specific words of phrases (eg. a parrot that can only say "hello" and "goodbye" by setting this)
+     * or something like groot that can only say "I am Groot" in different inflections
+     */
+    vocabularyLimit?: string[];
 }
 
 declare interface DENamePool {
@@ -1093,6 +1181,7 @@ declare interface DESingleBondDescription {
     stranger: boolean;
     bond: number;
     bond2: number;
+    createdAt: DETimeDescription;
 }
 
 declare interface DEBondDescription {
@@ -1117,7 +1206,6 @@ declare interface DEStateDescription {
     relieving: boolean;
     intensity: number;
     causants: Array<DEStateCausant> | null;
-    causes: Array<DEStateCause> | null;
 
     /**
      * The time when this state was first activated that was contiguous with the current state
@@ -1260,7 +1348,8 @@ declare interface DEItem {
      * Whether this item covers nakedness when worn
      */
     wearableProperties?: {
-        coversNakedness: boolean;
+        coversTopNakedness: boolean;
+        coversBottomNakedness: boolean;
         /**
          * The minimum and maximum volume in liters that this item is meant to fit when worn by the character
          */
@@ -1358,7 +1447,8 @@ declare interface StateForDescription {
      * when this state was added
      */
     messageId: string | null;
-    isNaked: boolean;
+    isTopNaked: boolean;
+    isBottomNaked: boolean;
     surroundingNonStrangers: Array<string>;
     surroundingTotalStrangers: Array<string>;
     partiallyExposedToWeather: string | null;
@@ -2046,12 +2136,33 @@ declare interface DEScriptSource {
     run: (...args: any[]) => any;
 }
 declare type DEStringTemplateFunction = (
+    /**
+     * Always available the DE object representing the whole simulation
+     */
     DE: DEObject,
+    /**
+     * Always available the character invoking the template
+     */
     char: DECompleteCharacterReference,
+    /**
+     * Only available in bond description templates
+     */
     other: DECompleteCharacterReference,
-    causant: DECompleteCharacterReference,
-    cause: string,
+    /**
+     * Only available in state action/effect templates
+     */
+    causants: DEStateCausant[],
+    /**
+     * Only really available in
+     * potentialCausantNegativeDescription
+     * and
+     * potentialCausantPositiveDescription
+     */
     potentialCausant: DECompleteCharacterReference,
+    /**
+     * Only really available when called from a state trigger template
+     */
+    potentialCausants: DECompleteCharacterReference[],
 ) => Promise<string> | string;
 
 declare type DEStringTemplate = {
@@ -2282,11 +2393,18 @@ declare interface DEObject {
      * Utility functions for common operations
      */
     utils: DEUtils;
+    /**
+     * Whether the game is over or not, this means the user
+     * has reached an ending condition, eg. died, arrested, sucesful completition, etc...
+     * whatever the world defines as game over conditions
+     */
+    gameOver: boolean;
 }
 
 declare type DE = DEObject;
 declare var DE: DEObject;
 declare var char: DECompleteCharacterReference;
-declare var other: DEMinimalCharacterReference;
-declare var causant: DEMinimalCharacterReference;
-declare var cause: string;
+declare var other: DECompleteCharacterReference;
+declare var causant: DECompleteCharacterReference;
+declare var potentialCausant: DECompleteCharacterReference;
+declare var potentialCausants: DECompleteCharacterReference[];

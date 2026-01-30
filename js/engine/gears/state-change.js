@@ -1,0 +1,1167 @@
+/**
+ * Gear that calculates state changes for a character based on recent interactions.
+ */
+
+import { DEngine, getFrozenBonds } from "..";
+
+/**
+ * @param {DEngine} engine 
+ * @param {string} message 
+ */
+async function makeUserStoryMasterMessage(engine, message) {
+    if (!engine.deObject) {
+        throw new Error("DEngine not initialized");
+    }
+    if (!engine.user) {
+        throw new Error("User not defined in engine");
+    }
+    const userCharacter = engine.deObject.characters[engine.user.name];
+    if (!userCharacter) {
+        throw new Error(`User character ${engine.user.name} not found in DE object.`);
+    }
+    const stateForUser = engine.deObject.stateFor[engine.user.name];
+    if (!stateForUser) {
+        throw new Error(`State for user character ${engine.user.name} not found in DE object.`);
+    }
+
+    /**
+     * @type {DEConversationMessage}
+     */
+    const messageToAdd = {
+        sender: "Story Master",
+        content: message,
+        duration: { inMinutes: 0, inHours: 0, inDays: 0 },
+        startTime: { ...engine.deObject.currentTime },
+        endTime: { ...engine.deObject.currentTime },
+        id: crypto.randomUUID(),
+        isCharacter: true,
+        isDebugMessage: false,
+        isUser: true,
+        isStoryMasterMessage: true,
+        isRejectedMessage: false,
+        canOnlyBeSeenByCharacter: engine.user.name,
+    }
+
+    if (!stateForUser.conversationId) {
+        // make a new conversation id
+        // need to make a new conversation
+        const newConversationId = crypto.randomUUID();
+        stateForUser.conversationId = newConversationId;
+        stateForUser.messageId = messageToAdd.id;
+        stateForUser.type = "INTERACTING";
+        engine.deObject.conversations[newConversationId] = {
+            id: newConversationId,
+            previousConversationIdsPerParticipant: {
+                [engine.user.name]: null,
+            },
+            startTime: { ...engine.deObject.currentTime },
+            messages: [messageToAdd],
+            participants: [engine.user.name],
+            remoteParticipants: [],
+            duration: { inMinutes: 0, inHours: 0, inDays: 0 },
+            endTime: null,
+            location: stateForUser.location,
+            pseudoConversation: false,
+            summary: null,
+            bondsAtStart: getFrozenBonds([engine.user.name]),
+            bondsAtEnd: null,
+        };
+    } else {
+        const conversation = engine.deObject.conversations[stateForUser.conversationId];
+        if (!conversation) {
+            throw new Error(`Conversation ${stateForUser.conversationId} not found in DE object.`);
+        }
+        conversation.messages.push(messageToAdd);
+    }
+
+    await engine.informDEObjectUpdated();
+}
+/**
+     * @param {DEngine} engine
+     * @param {DECompleteCharacterReference} character 
+     * @param {string} stateName 
+     */
+async function onStateTriggeredOnCharacter(engine, character, stateName) {
+    if (!engine.deObject) {
+        throw new Error("DEngine not initialized");
+    }
+
+    if (!engine.deObject) {
+        throw new Error("DEngine not initialized");
+    }
+
+    const characterState = engine.deObject.stateFor[character.name];
+    if (!characterState) {
+        throw new Error(`Character state for ${character.name} not found.`);
+    }
+    const characterStateInfo = characterState.states.find(s => s.state === stateName);
+    if (!characterStateInfo) {
+        throw new Error(`Character ${character.name} does not have state ${stateName} active.`);
+    }
+
+    const characterStateDescription = character.states[stateName];
+    if (!characterStateDescription) {
+        throw new Error(`Character ${character.name} does not have state description for ${stateName}.`);
+    }
+
+    // if we have fallsDown property, set the character posture to laying down
+    if (characterStateDescription.fallsDown) {
+        console.log(`Character ${character.name} has fallen down due to state ${stateName}.`);
+        characterState.posture = "laying_down";
+
+        // TODO somewhere else the character must use the seekPosture state stuff
+    }
+
+    // if the new state triggered is from the user, make a message about it
+    if (engine.user && engine.user.name === character.name) {
+        // @ts-ignore
+        let stateDescriptionText = await characterStateDescription.general.execute(engine.deObject, character, undefined, characterStateInfo.causants);
+        if (!stateDescriptionText.endsWith(".")) {
+            stateDescriptionText += ".";
+        }
+        await makeUserStoryMasterMessage(engine, `${engine.user.name} is now being affected by the state: ${stateName.split("_").map((w) => w[0].toUpperCase() + w.slice(1)).join(" ")}.\n${stateDescriptionText}`);
+    }
+
+    // now check for states that triggered by this one
+    if (characterStateDescription.triggersStates) {
+        // start triggering them
+        for (const triggeredState of Object.keys(characterStateDescription.triggersStates)) {
+            // get the intensity to trigger with
+            const withIntensity = characterStateDescription.triggersStates[triggeredState].intensity || 1.0;
+            console.log(`State ${stateName} triggered on character ${character.name}, triggering state ${triggeredState} with intensity ${withIntensity}.`);
+
+            // check if it is already active
+            const alreadyActivatedInfo = engine.deObject.stateFor[character.name].states.find(s => s.state === triggeredState);
+            if (alreadyActivatedInfo) {
+                console.log(`State ${triggeredState} already active on character ${character.name}, cannot trigger.`);
+            } else {
+                // otherwise, activate it
+
+                /**
+                 * @type {DEStateDescription}
+                 */
+                const state = {
+                    causants: characterStateInfo.causants,
+                    state: triggeredState,
+                    intensity: withIntensity,
+                    relieving: false,
+                    contiguousStartActivationCyclesAgo: 0,
+                    contiguousStartActivationTime: { ...engine.deObject.currentTime },
+                }
+                engine.deObject.stateFor[character.name].states.push(state);
+
+                console.log(`State ${triggeredState} activated on character ${character.name} with intensity ${withIntensity}.`);
+
+                await onStateTriggeredOnCharacter(engine, character, triggeredState);
+            }
+        }
+    }
+
+    // check for states to modify
+    if (characterStateDescription.modifiesStatesIntensitiesOnTrigger) {
+        for (const toModifyState of Object.keys(characterStateDescription.modifiesStatesIntensitiesOnTrigger)) {
+            const withIntensity = characterStateDescription.modifiesStatesIntensitiesOnTrigger[toModifyState].intensity || -1.0;
+            console.log(`State ${stateName} triggered on character ${character.name}, modifying state ${toModifyState} with intensity ${withIntensity}.`);
+
+            const alreadyActivatedInfo = engine.deObject.stateFor[character.name].states.find(s => s.state === toModifyState);
+            if (!alreadyActivatedInfo) {
+                console.log(`State ${toModifyState} not active on character ${character.name}, cannot modify.`);
+            } else {
+                const stateDescriptionSpecific = character.states[toModifyState];
+
+                // modify intensity
+                alreadyActivatedInfo.intensity += withIntensity;
+
+                // check for relief dynamics
+                if (stateDescriptionSpecific && stateDescriptionSpecific.usesReliefDynamic && withIntensity < 0) {
+                    // if the intensity is being reduced, set relieving to true
+                    alreadyActivatedInfo.relieving = true;
+
+                    // if the intensity is still above 0, trigger relief event
+                    if (alreadyActivatedInfo.intensity > 0) {
+                        console.log(`State ${toModifyState} intensity modified on character ${character.name} by ${withIntensity}, now relieving.`);
+                        await onStateRelievedOnCharacter(engine, character, toModifyState);
+                    }
+                }
+
+                // if the intensity is now 0 or below, remove the state
+                if (alreadyActivatedInfo.intensity <= 0) {
+                    // remove the state
+                    engine.deObject.stateFor[character.name].states = engine.deObject.stateFor[character.name].states.filter(s => s.state !== toModifyState);
+                    console.log(`State ${toModifyState} intensity modified on character ${character.name} by ${withIntensity}, now removed.`);
+                    await onStateRemovedOnCharacter(engine, character, toModifyState);
+                }
+            }
+        }
+    }
+
+    // DETERMINE if we activated any state with a dead-end trigger
+    // @ts-ignore
+    const deadEndPotential = (await characterStateDescription.triggersDeadEnd?.execute(engine.deObject, character, undefined, undefined, undefined, undefined))?.trim();
+    if (deadEndPotential) {
+        console.log(`State ${stateName} on character ${character.name} triggers dead-end, the character will now be removed from the story.`);
+        engine.deObject.stateFor[character.name].deadEnded = true;
+        engine.deObject.stateFor[character.name].deadEndReason = deadEndPotential;
+        if (characterStateDescription.deadEndIsDeath) {
+            console.log(`Character ${character.name} has died due to state ${stateName}.`);
+            engine.deObject.stateFor[character.name].dead = true;
+        }
+
+        if (character.name === engine.userCharacter?.name) {
+            engine.informCycleState("info", `The user character ${character.name} has reached a dead-end: ${deadEndPotential}, game over.`);
+
+            if (characterStateDescription.deadEndIsDeath) {
+                await makeUserStoryMasterMessage(engine, `${character.name} has died: ${deadEndPotential}.`);
+            } else {
+                await makeUserStoryMasterMessage(engine, `${character.name} has reached a dead-end and is thus removed from the story: ${deadEndPotential}.`);
+            }
+
+            await engine.gameOver();
+        }
+    }
+}
+
+/**
+     * @param {DEngine} engine
+     * @param {DECompleteCharacterReference} character 
+     * @param {string} stateName 
+     */
+async function onStateRemovedOnCharacter(engine, character, stateName) {
+    if (!engine.deObject) {
+        throw new Error("DEngine not initialized");
+    }
+
+    if (engine.user && engine.user.name === character.name) {
+        await makeUserStoryMasterMessage(engine, `${engine.user.name} is no longer affected by the state: ${stateName.split("_").map((w) => w[0].toUpperCase() + w.slice(1)).join(" ")}.`);
+    }
+
+    const characterState = engine.deObject.stateFor[character.name];
+    if (!characterState) {
+        throw new Error(`Character state for ${character.name} not found.`);
+    }
+    const characterStateInfo = characterState.states.find(s => s.state === stateName);
+    if (!characterStateInfo) {
+        throw new Error(`Character ${character.name} does not have state ${stateName} active.`);
+    }
+    const characterStateDescription = character.states[stateName];
+    if (!characterStateDescription) {
+        throw new Error(`Character ${character.name} does not have state description for ${stateName}.`);
+    }
+
+    // check if we trigger states on removal
+    if (characterStateDescription.triggersStatesOnRemove) {
+        // check out the options we are given
+        for (const triggeredState of Object.keys(characterStateDescription.triggersStatesOnRemove)) {
+            const withIntensity = characterStateDescription.triggersStatesOnRemove[triggeredState].intensity || 1.0;
+            console.log(`State ${stateName} removed from character ${character.name}, triggering state ${triggeredState} with intensity ${withIntensity}.`);
+
+            const alreadyActivatedInfo = engine.deObject.stateFor[character.name].states.find(s => s.state === triggeredState);
+            if (alreadyActivatedInfo) {
+                console.log(`State ${triggeredState} already active on character ${character.name}, cannot trigger.`);
+            } else {
+                /**
+                 * @type {DEStateDescription}
+                 */
+                const state = {
+                    causants: characterStateInfo.causants,
+                    state: triggeredState,
+                    intensity: withIntensity,
+                    relieving: false,
+                    contiguousStartActivationCyclesAgo: 0,
+                    contiguousStartActivationTime: { ...engine.deObject.currentTime },
+                }
+                engine.deObject.stateFor[character.name].states.push(state);
+
+                console.log(`State ${triggeredState} activated on character ${character.name} with intensity ${withIntensity}.`);
+
+                await onStateTriggeredOnCharacter(engine, character, triggeredState);
+            }
+        }
+    }
+
+    // check for states to modify on remove
+    if (characterStateDescription.modifiesStatesIntensitiesOnRemove) {
+        for (const toModifyState of Object.keys(characterStateDescription.modifiesStatesIntensitiesOnRemove)) {
+            const withIntensity = characterStateDescription.modifiesStatesIntensitiesOnRemove[toModifyState].intensity || -1.0;
+            console.log(`State ${stateName} removed from character ${character.name}, modifying state ${toModifyState} with intensity ${withIntensity}.`);
+
+            const alreadyActivatedInfo = engine.deObject.stateFor[character.name].states.find(s => s.state === toModifyState);
+            if (!alreadyActivatedInfo) {
+                console.log(`State ${toModifyState} not active on character ${character.name}, cannot modify.`);
+            } else {
+                const stateDescriptionSpecific = character.states[toModifyState];
+
+                alreadyActivatedInfo.intensity += withIntensity;
+
+                if (stateDescriptionSpecific && stateDescriptionSpecific.usesReliefDynamic && withIntensity < 0) {
+                    alreadyActivatedInfo.relieving = true;
+
+                    if (alreadyActivatedInfo.intensity > 0) {
+                        console.log(`State ${toModifyState} intensity modified on character ${character.name} by ${withIntensity}, now relieving.`);
+                        await onStateRelievedOnCharacter(engine, character, toModifyState);
+                    }
+                }
+
+                if (alreadyActivatedInfo.intensity <= 0) {
+                    // remove the state
+                    engine.deObject.stateFor[character.name].states = engine.deObject.stateFor[character.name].states.filter(s => s.state !== toModifyState);
+                    console.log(`State ${toModifyState} intensity modified on character ${character.name} by ${withIntensity}, now removed.`);
+                    await onStateRemovedOnCharacter(engine, character, toModifyState);
+                }
+            }
+        }
+    }
+}
+
+/**
+     * @param {DEngine} engine
+     * @param {DECompleteCharacterReference} character 
+     * @param {string} stateName 
+     */
+async function onStateRelievedOnCharacter(engine, character, stateName) {
+    // TODO inform these states to the user in case they are the user
+
+    if (!engine.deObject) {
+        throw new Error("DEngine not initialized");
+    }
+    const characterState = engine.deObject.stateFor[character.name];
+    if (!characterState) {
+        throw new Error(`Character state for ${character.name} not found.`);
+    }
+    const characterStateInfo = characterState.states.find(s => s.state === stateName);
+    if (!characterStateInfo) {
+        throw new Error(`Character ${character.name} does not have state ${stateName} active.`);
+    }
+    const characterStateDescription = character.states[stateName];
+    if (!characterStateDescription) {
+        throw new Error(`Character ${character.name} does not have state description for ${stateName}.`);
+    }
+
+    // if the new state triggered is from the user, make a message about it
+    if (engine.user && engine.user.name === character.name) {
+        // @ts-ignore
+        let stateDescriptionText = ".\n";
+
+        if (characterStateDescription.relieving && stateDescriptionText) {
+            // @ts-ignore
+            stateDescriptionText += (await characterStateDescription.relieving.execute(engine.deObject, character, undefined, characterStateInfo.causants)).trim();
+            if (!stateDescriptionText.endsWith(".")) {
+                stateDescriptionText += ".";
+            }
+        } else {
+            stateDescriptionText = "";
+        }
+
+        
+        await makeUserStoryMasterMessage(engine, `${engine.user.name} is has begun to relieve: ${stateName.split("_").map((w) => w[0].toUpperCase() + w.slice(1)).join(" ")}${stateDescriptionText}`);
+    }
+
+    // states triggered when relieving starts
+    if (characterStateDescription.triggersStatesOnRelieve) {
+        for (const triggeredState of Object.keys(characterStateDescription.triggersStatesOnRelieve)) {
+            const withIntensity = characterStateDescription.triggersStatesOnRelieve[triggeredState].intensity || 1.0;
+            console.log(`State ${stateName} relieved on character ${character.name}, triggering state ${triggeredState} with intensity ${withIntensity}.`);
+
+            const alreadyActivatedInfo = engine.deObject.stateFor[character.name].states.find(s => s.state === triggeredState);
+            if (alreadyActivatedInfo) {
+                console.log(`State ${triggeredState} already active on character ${character.name}, cannot trigger.`);
+            } else {
+                /**
+                 * @type {DEStateDescription}
+                 */
+                const state = {
+                    causants: characterStateInfo.causants,
+                    state: triggeredState,
+                    intensity: withIntensity,
+                    relieving: false,
+                    contiguousStartActivationCyclesAgo: 0,
+                    contiguousStartActivationTime: { ...engine.deObject.currentTime },
+                }
+                engine.deObject.stateFor[character.name].states.push(state);
+
+                console.log(`State ${triggeredState} activated on character ${character.name} with intensity ${withIntensity}.`);
+
+                await onStateTriggeredOnCharacter(engine, character, triggeredState);
+            }
+        }
+    }
+    if (characterStateDescription.modifiesStatesIntensitiesOnRelieve) {
+        for (const toModifyState of Object.keys(characterStateDescription.modifiesStatesIntensitiesOnRelieve)) {
+            const withIntensity = characterStateDescription.modifiesStatesIntensitiesOnRelieve[toModifyState].intensity || -1.0;
+            console.log(`State ${stateName} relieved on character ${character.name}, modifying state ${toModifyState} with intensity ${withIntensity}.`);
+
+            const alreadyActivatedInfo = engine.deObject.stateFor[character.name].states.find(s => s.state === toModifyState);
+            if (!alreadyActivatedInfo) {
+                console.log(`State ${toModifyState} not active on character ${character.name}, cannot modify.`);
+            } else {
+                const stateDescriptionSpecific = character.states[toModifyState];
+
+                alreadyActivatedInfo.intensity += withIntensity;
+
+                if (stateDescriptionSpecific && stateDescriptionSpecific.usesReliefDynamic && withIntensity < 0) {
+                    alreadyActivatedInfo.relieving = true;
+
+                    if (alreadyActivatedInfo.intensity > 0) {
+                        console.log(`State ${toModifyState} intensity modified on character ${character.name} by ${withIntensity}, now relieving.`);
+                        await onStateRelievedOnCharacter(engine, character, toModifyState);
+                    }
+                }
+
+                if (alreadyActivatedInfo.intensity <= 0) {
+                    // remove the state
+                    engine.deObject.stateFor[character.name].states = engine.deObject.stateFor[character.name].states.filter(s => s.state !== toModifyState);
+                    console.log(`State ${toModifyState} intensity modified on character ${character.name} by ${withIntensity}, now removed.`);
+                    await onStateRemovedOnCharacter(engine, character, toModifyState);
+                }
+            }
+        }
+    }
+}
+
+/**
+ * @param {DEngine} engine 
+ * @param {DECompleteCharacterReference} character 
+ * @param {DECharacterStateDefinition} stateDefinition
+ * @param {DECompleteCharacterReference[]} allCharactersInAnalysis
+ */
+function determinePotentialCharacterCausants(
+    engine,
+    character,
+    stateDefinition,
+    allCharactersInAnalysis,
+) {
+    // just a quick short circuit in case there are no characters matching that criteria
+    let potentialCausants = allCharactersInAnalysis;
+
+    const minBondLevel = typeof stateDefinition.potentialCausantMinBondRequired === "number" ? stateDefinition.potentialCausantMinBondRequired : -100;
+    const maxBondLevel = typeof stateDefinition.potentialCausantMaxBondAllowed === "number" ? stateDefinition.potentialCausantMaxBondAllowed : 100;
+    const min2BondLevel = stateDefinition.potentialCausantMin2BondRequired || 0;
+    const max2BondLevel = stateDefinition.potentialCausantMax2BondAllowed || 100;
+    const allowsStrangers = !!stateDefinition.potentialCausantStrangerAllowed;
+    const deniesKnownPeople = !!stateDefinition.potentialCausantNonStrangerDenied;
+
+    potentialCausants = allCharactersInAnalysis.filter(otherCharacter => {
+        const bondTowardsCharacter = engine.deObject?.social.bonds[character.name].active.find(b => b.towards === otherCharacter.name);
+        const assumedBond = bondTowardsCharacter ? bondTowardsCharacter.bond : 0;
+        const assumedBond2 = bondTowardsCharacter ? bondTowardsCharacter.bond2 : 0;
+        const assumedStranger = bondTowardsCharacter ? bondTowardsCharacter.stranger : true;
+
+        if (
+            (assumedStranger && deniesKnownPeople) ||
+            (!assumedStranger && !allowsStrangers)
+        ) {
+            return false;
+        }
+        if (assumedBond < minBondLevel || assumedBond > maxBondLevel) {
+            return false;
+        }
+        if (assumedBond2 < min2BondLevel || assumedBond2 > max2BondLevel) {
+            return false;
+        }
+        return true;
+    });
+
+    return potentialCausants;
+}
+
+/**
+ * 
+ * @param {DEngine} engine 
+ * @param {DECompleteCharacterReference} character 
+ * @param {DECharacterStateDefinition} stateDefinition
+ * @param {DEStringTemplateWithIntensityAndCausants} activationCondition
+ * @param {DECompleteCharacterReference[]} allCharactersInAnalysis
+ * @param {{generator: import('../inference/base.js').QuestionAgentGeneratorResponse, initialized: boolean}} prompter
+ * @returns {Promise<DEStateCausant[]|null>}
+ */
+async function determineCausants(
+    engine,
+    character,
+    stateDefinition,
+    activationCondition,
+    allCharactersInAnalysis,
+    prompter,
+) {
+    if (!engine.deObject) {
+        throw new Error("DEngine not initialized");
+    }
+    const potentialCharacterCausants = determinePotentialCharacterCausants(
+        engine,
+        character,
+        stateDefinition,
+        allCharactersInAnalysis,
+    );
+    if (!activationCondition.determineCausants) {
+        return null;
+    }
+    // @ts-ignore
+    const executed = (await activationCondition.determineCausants.execute(engine.deObject, character, undefined, undefined, undefined, potentialCharacterCausants)).trim();
+    if (!executed) {
+        return null;
+    }
+
+    const allCharactersWithLowerCaseNames = Object.keys(engine.deObject.characters).map(name => name.toLowerCase());
+
+    if (!executed.endsWith("?")) {
+        console.log(`Causants determination for state on character ${character.name} did not return a question, parsing response directly.`);
+
+        if (executed.includes(" and ")) {
+            console.warn(`Causants determination for state on character ${character.name} returned 'and' in the response, which may lead to incorrect parsing. Consider using commas to separate causants and not format_and, use format_comma_list instead`);
+        }
+
+        const result = executed.split(",").map(s => s.trim()).filter(s => s.length > 0);
+        return result.length ? result.map(causantName => {
+            // check if it is a character or object
+            if (allCharactersWithLowerCaseNames.includes(causantName.toLowerCase())) {
+                return {
+                    name: causantName,
+                    type: "character",
+                };
+            } else {
+                return {
+                    name: causantName,
+                    type: "object",
+                };
+            }
+        }) : null;
+    }
+
+    // @ts-ignore
+    const trail = ((await activationCondition.determineCausantsAnswerTrail?.execute(engine.deObject, character, undefined, undefined, undefined, potentialCharacterCausants)) || "").trim();
+    const grammarLimitation = activationCondition.determineCausantsAnswerForceGrammarTo || "LIST_OF_ANY_CAUSANTS";
+
+    let grammar = "root ::= causant (\",\" causant)* \" \" \".\";\ncausant ::= OBJECT_CAUSANT | CHARACTER_CAUSANT;\nOBJECT_CAUSANT ::= [a-zA-Z0-9 _-]+;\nCHARACTER_CAUSANT ::= [a-zA-Z0-9 _-]+;";
+    let instructions = "Provide a comma separated list of causants only, these causants can be objects or characters related to the question, use their exact names as in the story";
+
+    if (grammarLimitation === "LIST_OF_OBJECT_CAUSANTS") {
+        grammar = "root ::= causant (\",\" causant)* \" \" \".\";\ncausant ::= OBJECT_CAUSANT;\nOBJECT_CAUSANT ::= [a-zA-Z0-9 _-]+;";
+        instructions = "Provide a comma separated list of object causants only, these causants must be objects related to the question, use their exact names as in the story";
+    } else if (grammarLimitation === "LIST_OF_CHARACTER_CAUSANTS") {
+        grammar = "root ::= causant (\",\" causant)* \" \" \".\";\ncausant ::= CHARACTER_CAUSANT;\nCHARACTER_CAUSANT ::= [a-zA-Z0-9 _-]+;";
+        instructions = "Provide a comma separated list of character causants only, these causants must be characters related to the question, use their exact names as in the story";
+    } else if (grammarLimitation === "SINGLE_OBJECT_CAUSANT") {
+        grammar = "root ::= OBJECT_CAUSANT \" \" \".\";\nOBJECT_CAUSANT ::= [a-zA-Z0-9 _-]+;";
+        instructions = "Provide a single object causant only, this causant must be an object related to the question, use its exact name as in the story";
+    } else if (grammarLimitation === "SINGLE_CHARACTER_CAUSANT") {
+        grammar = "root ::= CHARACTER_CAUSANT \" \" \".\";\nCHARACTER_CAUSANT ::= [a-zA-Z0-9 _-]+;";
+        instructions = "Provide a single character causant only, this causant must be a character related to the question, use its exact name as in the story";
+    } else if (grammarLimitation === "SINGLE_ANY_CAUSANT") {
+        grammar = "root ::= causant \" \" \".\";\ncausant ::= OBJECT_CAUSANT | CHARACTER_CAUSANT;\nOBJECT_CAUSANT ::= [a-zA-Z0-9 _-]+;\nCHARACTER_CAUSANT ::= [a-zA-Z0-9 _-]+;";
+        instructions = "Provide a single causant only, this causant can be an object or character related to the question, use its exact name as in the story";
+    } else if (grammarLimitation === "SINGLE_CHARACTER_POTENTIAL_CAUSANT") {
+        const potentialCausantsOptions = potentialCharacterCausants.map(c => JSON.stringify(c.name)).join(" | ");
+        grammar = `root ::= CHARACTER_CAUSANT \" \" \".\";\nCHARACTER_CAUSANT ::= ${potentialCausantsOptions};`;
+        instructions = `Provide a single character causant only, this causant must be one of the following characters: ${potentialCharacterCausants.map(c => c.name).join(", ")}`;
+    } else if (grammarLimitation === "LIST_OF_CHARACTER_POTENTIAL_CAUSANTS") {
+        const potentialCausantsOptions = potentialCharacterCausants.map(c => JSON.stringify(c.name)).join(" | ");
+        grammar = `root ::= CHARACTER_CAUSANT (\",\" CHARACTER_CAUSANT)* \" \" \".\";\nCHARACTER_CAUSANT ::= ${potentialCausantsOptions};`;
+        instructions = `Provide a comma separated list of character causants only, these causants must be from the following characters: ${potentialCharacterCausants.map(c => c.name).join(", ")}`;
+    }
+
+    if (!prompter.initialized) {
+        // prime the generator
+        await prompter.generator.next();
+        prompter.initialized = true;
+    }
+
+    const answer = await prompter.generator.next({
+        maxCharacters: 250,
+        maxParagraphs: 1,
+        nextQuestion: executed,
+        answerTrail: trail,
+        stopAt: ["\n", "."],
+        stopAfter: [],
+        instructions: instructions,
+        grammar: grammar,
+    });
+
+    if (answer.done) {
+        throw new Error("Causants determination prompt generator finished unexpectedly.");
+    }
+
+    const parsedCausants = answer.value.trim().split(",").map(s => s.trim()).filter(s => !!s);
+
+    // @ts-ignore even with casting to specifically be type character it remains being string because TS is weird
+    const expectedFinalResults = parsedCausants.map(causantName => {
+        // check if it is a character or object
+        if (allCharactersWithLowerCaseNames.includes(causantName.toLowerCase())) {
+            return {
+                name: causantName,
+                type: /** @type {"character"} */ "character",
+            };
+        } else {
+            return {
+                name: causantName,
+                type: /** @type {"object"} */ "object",
+            };
+        }
+    }).filter(c => {
+        if (grammarLimitation === "LIST_OF_OBJECT_CAUSANTS" || grammarLimitation === "SINGLE_OBJECT_CAUSANT") {
+            return c.type === "object";
+        } else if (grammarLimitation === "LIST_OF_CHARACTER_CAUSANTS" || grammarLimitation === "SINGLE_CHARACTER_CAUSANT") {
+            return c.type === "character";
+        }
+        return true;
+    });
+    // @ts-ignore
+    return expectedFinalResults.length ? expectedFinalResults : null;
+}
+
+/**
+ * @param {DEngine} engine
+ * @param {DECompleteCharacterReference} character
+ * @param {string} stateName
+ * @param {DECharacterStateDefinition} stateDescription
+ */
+async function checkActiveStateConsistency(engine, character, stateName, stateDescription) {
+    if (!engine.deObject) {
+        throw new Error("DEngine not initialized");
+    }
+
+    const stillActive = engine.deObject.stateFor[character.name].states.find(s => s.state === stateName);
+    if (!stillActive) {
+        // actually removed
+        return true;
+    }
+
+    let conflicted = false;
+    // check if it is conflicting with other states
+    if (stateDescription.conflictStates) {
+        // check for conflicts
+        for (const conflictState of stateDescription.conflictStates) {
+            const conflictStateInfo = engine.deObject.stateFor[character.name].states.find(s => s.state === conflictState);
+            if (conflictStateInfo) {
+                conflicted = true;
+                console.log(`State ${stateName} conflicts with active state ${conflictState} on character ${character.name}, removing state ${stateName}.`);
+                engine.deObject.stateFor[character.name].states = engine.deObject.stateFor[character.name].states.filter(s => s.state !== stateName);
+                await onStateRemovedOnCharacter(engine, character, stateName);
+            }
+        }
+    }
+
+    let missingRequiredState = false;
+    // check required states
+    if (stateDescription.requiredStates) {
+        // check if one of them is missing
+        for (const requiredState of stateDescription.requiredStates) {
+            const requiredStateInfo = engine.deObject.stateFor[character.name].states.find(s => s.state === requiredState);
+            if (!requiredStateInfo) {
+                console.log(`State ${stateName} requires state ${requiredState} to be active on character ${character.name}, which is missing, removing state ${stateName}.`);
+                missingRequiredState = true;
+                break;
+            }
+        }
+        // if missing, remove the state since its required state is gone
+        if (missingRequiredState) {
+            engine.deObject.stateFor[character.name].states = engine.deObject.stateFor[character.name].states.filter(s => s.state !== stateName);
+            await onStateRemovedOnCharacter(engine, character, stateName);
+        }
+    }
+
+    let missingPosture = false;
+    if (stateDescription.requiresPosture) {
+        const characterPosture = engine.deObject.stateFor[character.name].posture;
+        if (characterPosture !== stateDescription.requiresPosture) {
+            missingPosture = true;
+            console.log(`State ${stateName} requires posture ${stateDescription.requiresPosture} on character ${character.name}, current posture is ${characterPosture}, removing state ${stateName}.`);
+            engine.deObject.stateFor[character.name].states = engine.deObject.stateFor[character.name].states.filter(s => s.state !== stateName);
+            await onStateRemovedOnCharacter(engine, character, stateName);
+        }
+    }
+
+    return !(conflicted || missingRequiredState || missingPosture);
+}
+
+/**
+ * @param {DEngine} engine
+ * @param {DECompleteCharacterReference} character
+ * @returns {Promise<void>}
+ */
+export default async function calculateStateChange(engine, character) {
+    if (!engine.deObject) {
+        throw new Error("DEngine not initialized");
+    } else if (!engine.inferenceAdapter) {
+        throw new Error("Inference adapter not initialized");
+    }
+
+    // first we need to update the bonds towards the character, for that we need to get a whole extended cycle
+    // gather all the other characters that talked inbetween, and update bonds for each
+    const historyGenerator = engine.getHistoryForCharacter(character, {});
+
+    /**
+     * @type {DECompleteCharacterReference[]}
+     */
+    const allCharactersInAnalysis = [];
+
+    /**
+     * @type {Array<{name: string, message: string}>}
+     */
+    let messagesToAdd = [];
+
+    // gather messages until we reach the character's own message
+    // which we will also add
+    let generator = await historyGenerator.next(true);
+    while (!generator.done) {
+        if (!generator.value.debug && !generator.value.rejected) {
+            const shouldStopAddingMessages = generator.value.name === character.name;
+
+            messagesToAdd.push({
+                name: generator.value.name,
+                message: generator.value.message,
+            });
+
+            const characterRelevant = engine.deObject.characters[generator.value.name];
+            if (!characterRelevant) {
+                throw new Error(`Character ${generator.value.name} not found in DE object.`);
+            }
+
+            if (!allCharactersInAnalysis.find(c => c.name === characterRelevant.name)) {
+                allCharactersInAnalysis.push(characterRelevant);
+            }
+
+            if (shouldStopAddingMessages) {
+                await historyGenerator.return();
+                break;
+            }
+        }
+        generator = await historyGenerator.next(true);
+    }
+
+    // reverse to have oldest first
+    messagesToAdd = messagesToAdd.reverse();
+
+    // well that is weird, zero messages?
+    if (messagesToAdd.length === 0) {
+        console.log(`No messages from other characters to set states of ${character.name}`);
+        return;
+    }
+
+    const systemPrompt = `You are an assistant and social dynamics analyst that helps analyze interactions involving ${character.name}`;
+    const questioningAgent = engine.inferenceAdapter.runQuestioningCustomAgentOn(
+        character,
+        engine.inferenceAdapter.buildSystemPromptForQuestioningAgent(systemPrompt, [], null),
+        null,
+        messagesToAdd,
+        "ALL",
+        null,
+    );
+
+    const prompter = {
+        generator: questioningAgent,
+        initialized: false,
+    };
+
+    // All potential states for the character we will start to loop through
+    const allPotentialStates = character.states;
+    for (const [stateName, stateDescription] of Object.entries(allPotentialStates)) {
+        // check if they already have the state
+        const alreadyActivatedInfo = engine.deObject.stateFor[character.name].states.find(s => s.state === stateName);
+
+        // if they do, check if we need to update intensity or remove it
+        if (alreadyActivatedInfo) {
+            console.log(`Character ${character.name} already has state ${stateName}, checking intensity changes.`);
+
+            // we will check if the state is consistent first and if not we dont activate it
+            const isConsistent = await checkActiveStateConsistency(engine, character, stateName, stateDescription);
+            if (!isConsistent) {
+                continue;
+            }
+
+            // check if the state has an intensity change condition
+            const intensityModifiers = (alreadyActivatedInfo.relieving ? stateDescription.intensityModifiersDuringRelief || stateDescription.intensityModifiers : stateDescription.intensityModifiers);
+            let appliedIntensityChange = false;
+            let removedState = false;
+            if (intensityModifiers) {
+                for (const intensityModifier of intensityModifiers) {
+
+                    if (intensityModifier.intensity === 0) {
+                        console.log(`Skipping state intensity modifier for state ${stateName} on character ${character.name} because intensity change is zero.`);
+                        continue;
+                    }
+
+                    let willExecute = false;
+                    // @ts-ignore
+                    const result = (await intensityModifier.template.execute(engine.deObject, character, undefined, alreadyActivatedInfo.causants)).trim();
+                    if (result.startsWith("yes") || result.startsWith("Yes")) {
+                        console.log(`State intensity modifier matched immediately for state ${stateName} on character ${character.name}`);
+                        willExecute = true;
+                    } else if (result.endsWith("?")) {
+                        console.log(`State intensity modifier for state ${stateName} on character ${character.name} returned a question, using inference to determine yes/no.`);
+
+                        if (!prompter.initialized) {
+                            // prime the generator
+                            await prompter.generator.next();
+                            prompter.initialized = true;
+                        }
+                        const answer = await prompter.generator.next({
+                            maxCharacters: 250,
+                            maxParagraphs: 1,
+                            nextQuestion: result,
+                            stopAfter: ["yes", "no"],
+                            stopAt: [],
+                            grammar: "root ::= (\"yes\" | \"no\") .*;",
+                            instructions: "Answer with 'yes' or 'no'",
+                        });
+
+                        if (answer.done) {
+                            throw new Error("State intensity modifier prompt generator finished unexpectedly.");
+                        }
+                        const trimmedAnswer = answer.value.trim().toLowerCase();
+                        if (trimmedAnswer === "yes") {
+                            console.log(`State intensity modifier matched for state ${stateName} on character ${character.name} via inference`);
+                            willExecute = true;
+                        } else {
+                            console.log(`State intensity modifier for state ${stateName} on character ${character.name} did not match because the template returned no/nothing`);
+                        }
+                    }
+
+                    if (willExecute) {
+                        if (!engine.deObject) {
+                            // typescript being funny
+                            throw new Error("DEngine not initialized");
+                        }
+                        const newCausants = await determineCausants(engine, character, stateDescription, intensityModifier, allCharactersInAnalysis, prompter);
+
+                        console.log(`The causants determined for intensity modifier of state ${stateName} on character ${character.name} are: ${newCausants ? newCausants.map(c => c.name).join(", ") : "none"}`);
+
+                        // update the causants in the active state info
+                        if (newCausants) {
+                            // we need to merge them with existing causants
+                            if (!alreadyActivatedInfo.causants) {
+                                if (typeof intensityModifier.intensity === "number" && intensityModifier.intensity > 0 || intensityModifier.intensity === "DO_NOT_MODIFY_INTENSITY_ADD_CAUSANTS_ONLY") {
+                                    console.log(`Setting causants for state ${stateName} on character ${character.name} due to intensity modifier.`);
+                                    alreadyActivatedInfo.causants = newCausants;
+                                }
+                            } else {
+                                for (const newCausant of newCausants) {
+                                    const addCausants = typeof intensityModifier.intensity === "number" && intensityModifier.intensity > 0 || intensityModifier.intensity === "DO_NOT_MODIFY_INTENSITY_ADD_CAUSANTS_ONLY";
+                                    const removeCausants = typeof intensityModifier.intensity === "number" && intensityModifier.intensity < 0 || intensityModifier.intensity === "DO_NOT_MODIFY_INTENSITY_REMOVE_CAUSANTS_ONLY";
+
+                                    if (removeCausants) {
+                                        // @ts-expect-error typescript being funny as usual, I already null checked above
+                                        const index = alreadyActivatedInfo.causants.findIndex(c => c.name === newCausant.name);
+                                        if (index !== -1) {
+                                            console.log(`Removing causant ${newCausant.name} from state ${stateName} on character ${character.name} due to intensity modifier.`);
+                                            // @ts-expect-error typescript being funny as usual, I already null checked above
+                                            alreadyActivatedInfo.causants.splice(index, 1);
+                                        }
+
+                                        // check if our causants is now empty
+                                        // @ts-expect-error typescript being funny as usual, I already null checked above
+                                        if (alreadyActivatedInfo.causants.length === 0) {
+                                            alreadyActivatedInfo.causants = null;
+                                        }
+
+                                        // check if we still meet the requirements
+                                        if (stateDescription.requiresCharacterCausants) {
+                                            const hasCharacterCausant = alreadyActivatedInfo.causants && alreadyActivatedInfo.causants.find(c => c.type === "character");
+                                            if (!hasCharacterCausant) {
+                                                console.log(`All character causants removed from state ${stateName} on character ${character.name}, which requires character causants, removing state.`);
+                                                engine.deObject.stateFor[character.name].states = engine.deObject.stateFor[character.name].states.filter(s => s.state !== stateName);
+                                                removedState = true;
+                                            }
+                                        }
+                                        if (stateDescription.requiresObjectCausants) {
+                                            const hasObjectCausant = alreadyActivatedInfo.causants && alreadyActivatedInfo.causants.find(c => c.type === "object");
+                                            if (!hasObjectCausant) {
+                                                console.log(`All object causants removed from state ${stateName} on character ${character.name}, which requires object causants, removing state.`);
+                                                engine.deObject.stateFor[character.name].states = engine.deObject.stateFor[character.name].states.filter(s => s.state !== stateName);
+                                                removedState = true;
+                                            }
+                                        }
+                                    } else if (addCausants) {
+                                        // @ts-expect-error typescript being funny as usual, I already null checked above
+                                        const exists = alreadyActivatedInfo.causants.find(c => c.name === newCausant.name);
+                                        if (!exists) {
+                                            console.log(`Adding causant ${newCausant.name} to state ${stateName} on character ${character.name} due to intensity modifier.`);
+                                            // @ts-expect-error typescript being funny as usual, I already null checked above
+                                            alreadyActivatedInfo.causants.push(newCausant);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+
+                        if (!removedState) {
+                            if (typeof intensityModifier.intensity !== "number") {
+                                console.log(`State intensity modifier for state ${stateName} on character ${character.name} is set to not modify intensity, skipping intensity change.`);
+                            } else {
+                                console.log(`State intensity modifier matched for state ${stateName} on character ${character.name}, applying intensity change: ${intensityModifier.intensity}`);
+                                alreadyActivatedInfo.intensity += intensityModifier.intensity;
+                                if (stateDescription.usesReliefDynamic && intensityModifier.intensity < 0) {
+                                    console.log(`State ${stateName} on character ${character.name} is now relieving due to intensity modifier.`);
+                                    alreadyActivatedInfo.relieving = true;
+                                    if (alreadyActivatedInfo.intensity > 0) {
+                                        await onStateRelievedOnCharacter(engine, character, stateName);
+                                    }
+                                }
+                                if (alreadyActivatedInfo.intensity < 0) {
+                                    // must be removed
+                                    console.log(`State ${stateName} on character ${character.name} intensity dropped below zero, removing state.`);
+                                    engine.deObject.stateFor[character.name].states = engine.deObject.stateFor[character.name].states.filter(s => s.state !== stateName);
+                                    removedState = true;
+
+                                    await onStateRemovedOnCharacter(engine, character, stateName);
+                                }
+                                appliedIntensityChange = true;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (!appliedIntensityChange && !removedState) {
+                const intensityChangeRatePerInferenceCycle = (alreadyActivatedInfo.relieving ? stateDescription.intensityChangeRatePerInferenceCycleAfterRelief : stateDescription.intensityChangeRatePerInferenceCycle);
+                if (intensityChangeRatePerInferenceCycle && intensityChangeRatePerInferenceCycle > 0) {
+                    console.log(`No intensity modifiers matched for state ${stateName} on character ${character.name}, applying decay of ${intensityChangeRatePerInferenceCycle}`);
+                    alreadyActivatedInfo.intensity += intensityChangeRatePerInferenceCycle;
+                    if (stateDescription.usesReliefDynamic && intensityChangeRatePerInferenceCycle < 0) {
+                        console.log(`State ${stateName} on character ${character.name} is now relieving due to decay.`);
+                        alreadyActivatedInfo.relieving = true;
+                        if (alreadyActivatedInfo.intensity > 0) {
+                            await onStateRelievedOnCharacter(engine, character, stateName);
+                        }
+                    }
+
+                    if (alreadyActivatedInfo.intensity < 0) {
+                        // must be removed
+                        console.log(`State ${stateName} on character ${character.name} intensity dropped below zero, removing state.`);
+                        engine.deObject.stateFor[character.name].states = engine.deObject.stateFor[character.name].states.filter(s => s.state !== stateName);
+                        removedState = true;
+                        await onStateRemovedOnCharacter(engine, character, stateName);
+                    }
+                }
+            }
+        } else {
+            if (stateDescription.conflictStates) {
+                for (const conflictState of stateDescription.conflictStates) {
+                    const conflictStateInfo = engine.deObject.stateFor[character.name].states.find(s => s.state === conflictState);
+                    if (conflictStateInfo) {
+                        console.log(`State ${stateName} conflicts with already active state ${conflictState} on character ${character.name}, not checking trigger conditions`);
+                        continue;
+                    }
+                }
+            }
+
+            if (stateDescription.requiredStates) {
+                let missingRequiredState = false;
+                for (const requiredState of stateDescription.requiredStates) {
+                    const requiredStateInfo = engine.deObject.stateFor[character.name].states.find(s => s.state === requiredState);
+                    if (!requiredStateInfo) {
+                        console.log(`State ${stateName} requires state ${requiredState} to be active on character ${character.name}, which is missing, not checking trigger conditions`);
+                        missingRequiredState = true;
+                        break;
+                    }
+                }
+                if (missingRequiredState) {
+                    continue;
+                }
+            }
+
+            if (stateDescription.requiredStatesForTrigger) {
+                let missingRequiredState = false;
+                for (const requiredState of stateDescription.requiredStatesForTrigger) {
+                    const requiredStateInfo = engine.deObject.stateFor[character.name].states.find(s => s.state === requiredState);
+                    if (!requiredStateInfo) {
+                        console.log(`State ${stateName} requires state ${requiredState} to be active during trigger time on character ${character.name}, which is missing, not checking trigger conditions`);
+                        missingRequiredState = true;
+                        break;
+                    }
+                }
+                if (missingRequiredState) {
+                    continue;
+                }
+            }
+
+            if (stateDescription.requiresPosture) {
+                const characterPosture = engine.deObject.stateFor[character.name].posture;
+                if (characterPosture !== stateDescription.requiresPosture) {
+                    console.log(`State ${stateName} requires posture ${stateDescription.requiresPosture} on character ${character.name}, current posture is ${characterPosture}, not checking trigger conditions`);
+                    continue;
+                }
+            }
+
+            if (stateDescription.requiresPostureForTrigger) {
+                const characterPosture = engine.deObject.stateFor[character.name].posture;
+                if (characterPosture !== stateDescription.requiresPostureForTrigger) {
+                    console.log(`State ${stateName} requires posture ${stateDescription.requiresPostureForTrigger} on character ${character.name}, current posture is ${characterPosture}, not checking trigger conditions`);
+                    continue;
+                }
+            }
+
+            const potentialCausants = determinePotentialCharacterCausants(
+                engine,
+                character,
+                stateDescription,
+                allCharactersInAnalysis,
+            );
+
+            if (stateDescription.requiresCharacterCausants) {
+                if (potentialCausants.length === 0) {
+                    console.log(`State ${stateName} requires character causants on character ${character.name}, but no characters in analysis match the criteria, skipping state activation.`);
+                    continue;
+                }
+            }
+
+            const validActivationTriggers = stateDescription.triggers.filter((t) => {
+                const isValid = typeof t.intensity === "number" && t.intensity > 0;
+                if (!isValid) {
+                    console.warn(`Skipping state activation trigger for state ${stateName} on character ${character.name} because intensity is non-positive or non-numeric.`);
+                }
+                return isValid;
+
+                // @ts-expect-error
+            }).sort((a, b) => b.intensity - a.intensity);
+
+            // check if we can activate the state
+            let triggeredState = false;
+            const randomRollForStateTrigger = Math.random();
+            // sort by highest intensity first
+            for (const activationCondition of validActivationTriggers) {
+                if (triggeredState) {
+                    break;
+                }
+                if (typeof activationCondition.intensity !== "number" || activationCondition.intensity <= 0) {
+                    console.log(`Skipping state activation condition for state ${stateName} on character ${character.name} because intensity is non-positive or non-numeric.`);
+                    continue;
+                }
+
+                if (stateDescription.triggerLikelihood <= 0) {
+                    console.log(`Skipping state activation condition for state ${stateName} on character ${character.name} because trigger likelihood is non-positive.`);
+                    continue;
+                }
+
+                // @ts-ignore
+                const result = (await activationCondition.template.execute(engine.deObject, character, undefined, undefined, undefined, potentialCausants)).trim();
+
+                let executeTrigger = false;
+                if (result === "yes" || result === "Yes") {
+                    console.log(`State activation condition matched immediately for state ${stateName} on character ${character.name}`);
+                    executeTrigger = true;
+                } else if (result.endsWith("?")) {
+                    console.log(`State activation condition for state ${stateName} on character ${character.name} returned a question, using inference to determine yes/no.`);
+
+                    if (!prompter.initialized) {
+                        // prime the generator
+                        await prompter.generator.next();
+                        prompter.initialized = true;
+                    }
+
+                    const answer = await prompter.generator.next({
+                        maxCharacters: 250,
+                        maxParagraphs: 1,
+                        nextQuestion: result,
+                        stopAfter: ["yes", "no"],
+                        stopAt: [],
+                        grammar: "root ::= (\"yes\" | \"no\") .*;",
+                        instructions: "Answer with 'yes' or 'no'",
+                    });
+
+                    if (answer.done) {
+                        throw new Error("State activation condition prompt generator finished unexpectedly.");
+                    }
+
+                    const trimmedAnswer = answer.value.trim().toLowerCase();
+                    if (trimmedAnswer === "yes") {
+                        console.log(`State activation condition matched for state ${stateName} on character ${character.name} via inference`);
+                        executeTrigger = true;
+                    } else {
+                        console.log(`State activation condition for state ${stateName} on character ${character.name} did not match via inference.`);
+                    }
+                } else {
+                    console.log(`State activation condition for state ${stateName} on character ${character.name} did not match.`);
+                }
+
+                if (executeTrigger) {
+                    if (randomRollForStateTrigger > stateDescription.triggerLikelihood) {
+                        console.log(`State activation condition matched for state ${stateName} on character ${character.name}, but random roll ${randomRollForStateTrigger} exceeded trigger likelihood ${stateDescription.triggerLikelihood}.`);
+                        break;
+                    }
+
+                    const causants = await determineCausants(
+                        engine,
+                        character,
+                        stateDescription,
+                        activationCondition,
+                        allCharactersInAnalysis,
+                        prompter,
+                    );
+
+                    if (
+                        stateDescription.requiresObjectCausants &&
+                        (!causants || causants.filter(c => c.type === "object").length === 0)
+                    ) {
+                        console.log(`State activation condition matched for state ${stateName} on character ${character.name}, but no object causants found in the response.`);
+                        continue;
+                    }
+
+                    if (
+                        stateDescription.requiresCharacterCausants &&
+                        (!causants || causants.filter(c => c.type === "character").length === 0)
+                    ) {
+                        console.log(`State activation condition matched for state ${stateName} on character ${character.name}, but no character causants found in the response.`);
+                        continue;
+                    }
+
+                    /**
+                     * @type {DEStateDescription}
+                     */
+                    const state = {
+                        state: stateName,
+                        intensity: activationCondition.intensity,
+                        causants: causants,
+                        contiguousStartActivationCyclesAgo: 0,
+                        contiguousStartActivationTime: { ...engine.deObject.currentTime },
+                        relieving: false,
+                    };
+
+                    engine.deObject.stateFor[character.name].states.push(state);
+                    triggeredState = true;
+
+                    await onStateTriggeredOnCharacter(engine, character, stateName);
+
+                    console.log(`State ${stateName} activated on character ${character.name} with intensity ${activationCondition.intensity}.`);
+                }
+            }
+
+            if (!triggeredState) {
+                // try by random spawn chance
+                if (stateDescription.randomSpawnRate && stateDescription.randomSpawnRate > 0) {
+                    const randomRoll = Math.random();
+                    if (randomRoll < stateDescription.randomSpawnRate) {
+                        console.log(`State ${stateName} randomly spawned on character ${character.name} with spawn rate ${stateDescription.randomSpawnRate} and roll ${randomRoll}.`);
+
+                        if (stateDescription.requiresCharacterCausants || stateDescription.requiresObjectCausants) {
+                            console.log(`But state ${stateName} on character ${character.name} requires causants, skipping random spawn.`);
+                        } else {
+                            /**
+                             * @type {DEStateDescription}
+                             */
+                            const state = {
+                                state: stateName,
+                                intensity: 1,
+                                causants: null,
+                                contiguousStartActivationCyclesAgo: 0,
+                                contiguousStartActivationTime: { ...engine.deObject.currentTime },
+                                relieving: false,
+                            };
+                            engine.deObject.stateFor[character.name].states.push(state);
+                            triggeredState = true;
+
+                            await onStateTriggeredOnCharacter(engine, character, stateName);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (prompter.initialized) {
+        // terminate the generator
+        await prompter.generator.next(null);
+        prompter.initialized = false;
+    }
+
+    await engine.informDEObjectUpdated();
+}

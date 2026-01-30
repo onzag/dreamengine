@@ -1,4 +1,4 @@
-import { generateIntSeedFromString } from "../app/util/random.js";
+import { generateIntSeedFromString, weightedRandomByLikelihood } from "../util/random.js";
 
 /**
  * @type Array<[string, string, string, (DEObject: DEObject, character: DECompleteCharacterReference) => any]>
@@ -198,12 +198,6 @@ export const specials = [
         "Only available at description and relieving description for states, the name of the causant character or object that activated the state; note that causant can be an object as well",
         "eg. Aria, Thalon, The Ancient Sword",
         (DE, character, causant) => causant,
-    ],
-    [
-        "cause -> string",
-        "Only available at description and relieving description for states, the cause/reason provided for the state activation",
-        "eg. helped me with my chores, betrayed me in the past",
-        (DE, character, cause) => cause,
     ]
 ]
 
@@ -265,38 +259,6 @@ export const utils = [
         "eg. [\"Aria\", \"Thalon\", \"Player\", \"The Ancient Sword\"]",
         (DE, character, stateName) => {
             return getCausantsHelper(DE, character, stateName).map(causant => causant.name);
-        },
-    ],
-    [
-        "get_last_state_cause state_name:string -> string[]",
-        "The cause/reason for the last activation of the state, it requires track_cause enabled for the state to work",
-        "eg. 'helped me with my chores', 'betrayed me in the past'",
-        (DE, character, stateName) => {
-            const actualStateName = stateName.trim().toUpperCase().replace(/\s+/, "_");
-            const characterHistoryAndCurrent = [...DE.stateFor[character.name].history, DE.stateFor[character.name]];
-
-            /**
-             * @type {StateForDescription | null}
-             */
-            let lastEntryWithActivation = null;
-            // loop in reverse to find the last activation of the state
-            // this will include current as the history contains the current session too
-            for (let i = characterHistoryAndCurrent.length - 1; i >= 0; i--) {
-                const entry = characterHistoryAndCurrent[i];
-                if (entry.type === "INTERACTING" && entry.states.find(s => s.state === actualStateName)) {
-                    lastEntryWithActivation = entry;
-                    break;
-                }
-            }
-            if (!lastEntryWithActivation) {
-                return "";
-            }
-            const stateInfo = lastEntryWithActivation.states.find(s => s.state === actualStateName);
-            if (stateInfo?.causes === null) {
-                console.warn(`State ${actualStateName} does not track causes for character ${character.name}`);
-                return "";
-            }
-            return stateInfo?.causes.map(cause => cause.description);
         },
     ],
     [
@@ -1027,6 +989,24 @@ export const utils = [
             return generateIntSeedFromString(options_number, currentTimeString);
         }
     ],
+    [
+        "get_random_option options:string[] -> string",
+        "Provides one of the random options by using the time as the seed",
+        "string",
+        (DE, character, options) => {
+            // @ts-expect-error
+            return weightedRandomByLikelihood(options.map(option => ({ item: option, likelihood: 1 })), generateIntSeedFromString(1000000, DE.currentTime.time.toString()));
+        }
+    ],
+    [
+        "get_random_option_fixed_character options:string[] -> string",
+        "Provides one of the random options by using the character name and time as the seed, useful for generating consistent random choices per character that change over time",
+        "string",
+        (DE, character, options) => {
+            // @ts-expect-error
+            return weightedRandomByLikelihood(options.map(option => ({ item: option, likelihood: 1 })), generateIntSeedFromString(1000000, character.name));
+        }
+    ]
 ];
 
 export const ALL_FUNCTIONS = [

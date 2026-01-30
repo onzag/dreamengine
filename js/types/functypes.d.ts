@@ -429,4 +429,14 @@ get_random_seed_from_string(DE: DEObject, char: CompleteCharacterReference, opti
   @returns integer
 */
 get_random_seed_from_time(DE: DEObject, char: CompleteCharacterReference, options_number:number): number;
+/**
+  Provides one of the random options by using the time as the seed
+  @returns string
+*/
+get_random_option(DE: DEObject, char: CompleteCharacterReference, options:string[]): string;
+/**
+  Provides one of the random options by using the character name and time as the seed, useful for generating consistent random choices per character that change over time
+  @returns string
+*/
+get_random_option_fixed_character(DE: DEObject, char: CompleteCharacterReference, options:string[]): string;
 }

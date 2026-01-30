@@ -22,19 +22,19 @@ async function whatIsWeatherLikeForCharacter(engine, characterName) {
     const isSheltered = await engine.isCharacterShelteredFromWeather(characterName, weatherThere, characterLocation, characterLocationSlot);
     if (isSheltered.fullySheltered) {
         // @ts-ignore
-        const noEffectDescription = await location.currentWeatherNoEffectDescription.execute(engine.deObject, character, undefined, undefined, undefined, undefined);
+        const noEffectDescription = await location.currentWeatherNoEffectDescription.execute(engine.deObject, character);
         return `The current weather where "${characterName}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}". However, "${characterName}" is fully sheltered from its effects. ${isSheltered.reason || ""}, therefore ${noEffectDescription || "no weather effects apply to them."}`;
     } else if (isSheltered.partiallySheltered) {
         // @ts-ignore
-        const partialEffectDescription = await location.currentWeatherPartialEffectDescription.execute(engine.deObject, character, undefined, undefined, undefined, undefined);
+        const partialEffectDescription = await location.currentWeatherPartialEffectDescription.execute(engine.deObject, character);
         return `The current weather where "${characterName}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}". "${characterName}" is partially sheltered from its effects. ${isSheltered.reason || ""}, therefore ${partialEffectDescription || "some weather effects may apply to them."}`;
     } else if (isSheltered.negativelyExposed) {
         // @ts-ignore
-        const negativeEffectsDescription = await location.currentWeatherNegativelyExposedDescription.execute(engine.deObject, character, undefined, undefined, undefined, undefined);
+        const negativeEffectsDescription = await location.currentWeatherNegativelyExposedDescription.execute(engine.deObject, character);
         return `The current weather where "${characterName}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}". "${characterName}" is negatively exposed to its effects. ${isSheltered.reason || ""}, therefore ${negativeEffectsDescription || "strongly negative weather effects apply to them."}`;
     } else {
         // @ts-ignore
-        const effectDescription = await location.currentWeatherFullEffectDescription.execute(engine.deObject, character, undefined, undefined, undefined, undefined);
+        const effectDescription = await location.currentWeatherFullEffectDescription.execute(engine.deObject, character);
         return `The current weather where "${characterName}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}". ${isSheltered.reason || ""}, therefore ${effectDescription || "all weather effects apply to them."}`;
     }
 }
@@ -84,19 +84,19 @@ export const commands = {
             const isSheltered = await engine.isCharacterShelteredFromWeather(engine.userCharacter.name, currentWeather, engine.deObject.world.currentLocation, engine.deObject.world.currentLocationSlot);
             if (isSheltered.fullySheltered) {
                 // @ts-ignore
-                const noEffectDescription = await currentLocation.currentWeatherNoEffectDescription.execute(engine.deObject, engine.userCharacter, undefined, undefined, undefined, undefined);
+                const noEffectDescription = await currentLocation.currentWeatherNoEffectDescription.execute(engine.deObject, engine.userCharacter);
                 return `The current weather in your location is "${currentWeather}". However, you are fully sheltered from its effects. ${isSheltered.reason || ""}, therefore ${noEffectDescription || "no weather effects apply to you."}`;
             } else if (isSheltered.partiallySheltered) {
                 // @ts-ignore
-                const partialEffectDescription = await currentLocation.currentWeatherPartialEffectDescription.execute(engine.deObject, engine.userCharacter, undefined, undefined, undefined, undefined);
+                const partialEffectDescription = await currentLocation.currentWeatherPartialEffectDescription.execute(engine.deObject, engine.userCharacter);
                 return `The current weather in your location is "${currentWeather}". You are partially sheltered from its effects. ${isSheltered.reason || ""}, therefore ${partialEffectDescription || "some weather effects may apply to you."}`;
             } else if (isSheltered.negativelyExposed) {
                 // @ts-ignore
-                const negativeEffectsDescription = await currentLocation.currentWeatherNegativelyExposedDescription.execute(engine.deObject, engine.userCharacter, undefined, undefined, undefined, undefined);
+                const negativeEffectsDescription = await currentLocation.currentWeatherNegativelyExposedDescription.execute(engine.deObject, engine.userCharacter);
                 return `The current weather in your location is "${currentWeather}". You are negatively exposed to its effects. ${isSheltered.reason || ""}, therefore ${negativeEffectsDescription || "strongly negative weather effects apply to you."}`;
             } else {
                 // @ts-ignore
-                const effectDescription = await currentLocation.currentWeatherFullEffectDescription.execute(engine.deObject, engine.userCharacter, undefined, undefined, undefined, undefined);
+                const effectDescription = await currentLocation.currentWeatherFullEffectDescription.execute(engine.deObject, engine.userCharacter);
                 return `The current weather in your location is "${currentWeather}". ${isSheltered.reason || ""}, therefore ${effectDescription || "all weather effects apply to you."}`;
             }
         },
@@ -160,19 +160,19 @@ export const commands = {
             const isSheltered = await engine.isCharacterShelteredFromWeather(characterName, weatherThere, locationId, locationSlotId);
             if (isSheltered.fullySheltered) {
                 // @ts-ignore
-                const noEffectDescription = await location.currentWeatherNoEffectDescription.execute(engine.deObject, character, undefined, undefined, undefined, undefined);
+                const noEffectDescription = await location.currentWeatherNoEffectDescription.execute(engine.deObject, character);
                 return `Hypothetical - The current weather at (${locationId}, ${locationSlotId}) is "${weatherThere}". However, "${characterName}" would be fully sheltered from its effects. ${isSheltered.reason || ""}, therefore ${noEffectDescription || "no weather effects would apply to them."}`;
             } else if (isSheltered.partiallySheltered) {
                 // @ts-ignore
-                const partialEffectDescription = await location.currentWeatherPartialEffectDescription.execute(engine.deObject, character, undefined, undefined, undefined, undefined);
+                const partialEffectDescription = await location.currentWeatherPartialEffectDescription.execute(engine.deObject, character);
                 return `Hypothetical - The current weather at (${locationId}, ${locationSlotId}) is "${weatherThere}". "${characterName}" would be partially sheltered from its effects. ${isSheltered.reason || ""}, therefore ${partialEffectDescription || "some weather effects might apply to them."}`;
             } else if (isSheltered.negativelyExposed) {
                 // @ts-ignore
-                const negativeEffectsDescription = await location.currentWeatherNegativelyExposedDescription.execute(engine.deObject, character, undefined, undefined, undefined, undefined);
+                const negativeEffectsDescription = await location.currentWeatherNegativelyExposedDescription.execute(engine.deObject, character);
                 return `Hypothetical - The current weather at (${locationId}, ${locationSlotId}) is "${weatherThere}". "${characterName}" would be negatively exposed to its effects. ${isSheltered.reason || ""}, therefore ${negativeEffectsDescription || "strongly negative weather effects would apply to them."}`;
             } else {
                 // @ts-ignore
-                const effectDescription = await location.currentWeatherFullEffectDescription.execute(engine.deObject, character, undefined, undefined, undefined, undefined);
+                const effectDescription = await location.currentWeatherFullEffectDescription.execute(engine.deObject, character);
                 return `Hypothetical - The current weather at (${locationId}, ${locationSlotId}) is "${weatherThere}". ${isSheltered.reason || ""}, therefore ${effectDescription || "all weather effects would apply to them."}`;
             }
         },
@@ -329,7 +329,7 @@ export const commands = {
                 const characterInfo = engine.deObject.characters[characterName];
                 const characterState = engine.deObject.stateFor[characterName];
                 if (characterInfo) {
-                    answer += `- ${characterName}: ${characterState.isNaked ? characterInfo.shortDescriptionNaked : characterInfo.shortDescription}\n`;
+                    answer += `- ${characterName}: ${engine.getShortDescriptionOfCharacter(characterName, true)}\n`;
                 }
             }
             answer += `\nTotal Strangers:\n`;
@@ -340,7 +340,7 @@ export const commands = {
                 const characterInfo = engine.deObject.characters[characterName];
                 const characterState = engine.deObject.stateFor[characterName];
                 if (characterInfo) {
-                    answer += `- ${characterName}: ${characterState.isNaked ? characterInfo.shortDescriptionNaked : characterInfo.shortDescription}\n`;
+                    answer += `- ${characterName}: ${engine.getShortDescriptionOfCharacter(characterName, true)}\n`;
                 }
             }
             return answer;
@@ -377,7 +377,7 @@ export const commands = {
                 const characterInfo = engine.deObject.characters[participantName];
                 const characterState = engine.deObject.stateFor[participantName];
                 if (characterInfo) {
-                    answer += `- ${participantName}: ${characterState.isNaked ? characterInfo.shortDescriptionNaked : characterInfo.shortDescription}\n`;
+                    answer += `- ${participantName}: ${engine.getShortDescriptionOfCharacter(participantName, true)}\n`;
                 }
             }
             return answer;
@@ -422,7 +422,7 @@ export const commands = {
             let actionAnalysis = "Character forced action:";
 
             // @ts-ignore
-            let currentSystemInstructions = await character.general.execute(engine.deObject, character, undefined, undefined, undefined, undefined);
+            let currentSystemInstructions = await character.general.execute(engine.deObject, character);
 
             currentSystemInstructions = currentSystemInstructions.trim();
 
@@ -486,9 +486,6 @@ export const commands = {
             let currentMaxDominace = -1;
             let infoAllStates = (await Promise.all(characterState.states.map(async (state) => {
                 const stateInfo = character.states[state.state];
-
-                const causants = state.causants || undefined;
-                const causes = state.causes || undefined;
 
                 const dominance = state.relieving ? (stateInfo.dominanceAfterRelief || 0) : (stateInfo.dominance || 0);
 
@@ -636,7 +633,7 @@ export const commands = {
 
             if (character.bonds.descriptionGeneralInjection) {
                 // @ts-ignore
-                const value = await character.bonds.descriptionGeneralInjection.execute(engine.deObject, character, undefined, undefined, undefined, undefined);
+                const value = await character.bonds.descriptionGeneralInjection.execute(engine.deObject, character);
                 bondInfo += `\n\n${value}`;
             }
 
@@ -685,10 +682,10 @@ export const commands = {
                 throw new Error(`No state found for character "${characterName}".`);
             }
 
-            const shortDescription = (characterState.isNaked ? character.shortDescriptionNaked : character.shortDescription) || character.shortDescription;
+            const shortDescription = engine.getShortDescriptionOfCharacter(characterName, true);
 
             // @ts-ignore
-            let general = await character.general.execute(engine.deObject, character, undefined, undefined, undefined, undefined);
+            let general = await character.general.execute(engine.deObject, character);
 
             for (const injectable of Object.values(character.systemPromptInjection)) {
                 // @ts-ignore
@@ -751,7 +748,7 @@ export const commands = {
                 const bondDeclaration = character.bonds.declarations.find(bondDecl => bondDecl.strangerBond === activeBond.stranger && bondDecl.minBondLevel <= activeBond.bond && activeBond.bond < (bondDecl.maxBondLevel === 100 ? 200 : bondDecl.maxBondLevel) && bondDecl.min2BondLevel <= activeBond.bond2 && activeBond.bond2 < (bondDecl.max2BondLevel === 100 ? 200 : bondDecl.max2BondLevel));
                 if (bondDeclaration) {
                     // @ts-ignore
-                    let result = await bondDeclaration.description.execute(engine.deObject, character, engine.deObject.characters[activeBond.towards], undefined, undefined, undefined);
+                    let result = await bondDeclaration.description.execute(engine.deObject, character, engine.deObject.characters[activeBond.towards]);
                     if (bondDeclaration.bondAdditionalDescription) {
                         if (!result.endsWith(". ")) {
                             result += ". ";
@@ -759,7 +756,7 @@ export const commands = {
                             result += " ";
                         }
                         // @ts-ignore
-                        result += await bondDeclaration.bondAdditionalDescription.execute(engine.deObject, character, engine.deObject.characters[activeBond.towards], undefined, undefined, undefined);
+                        result += await bondDeclaration.bondAdditionalDescription.execute(engine.deObject, character, engine.deObject.characters[activeBond.towards]);
                     }
                     relationships.push(result);
 
@@ -803,7 +800,7 @@ export const commands = {
                     const strangerCharacter = engine.deObject.characters[strangerName];
                     if (strangerCharacter) {
                         // @ts-ignore
-                        let result = await strangerBondDeclaration.description.execute(engine.deObject, character, strangerCharacter, undefined, undefined, undefined);
+                        let result = await strangerBondDeclaration.description.execute(engine.deObject, character, strangerCharacter);
                         if (strangerBondDeclaration.bondAdditionalDescription) {
                             if (!result.endsWith(". ")) {
                                 result += ". ";
@@ -811,7 +808,7 @@ export const commands = {
                                 result += " ";
                             }
                             // @ts-ignore
-                            result += await strangerBondDeclaration.bondAdditionalDescription.execute(engine.deObject, character, strangerCharacter, undefined, undefined, undefined);
+                            result += await strangerBondDeclaration.bondAdditionalDescription.execute(engine.deObject, character, strangerCharacter);
                         }
                         relationships.push(result);
                     }
@@ -836,7 +833,7 @@ export const commands = {
 
             if (engine.deObject.world.lore) {
                 // @ts-ignore
-                lore = await engine.deObject.world.lore?.execute(engine.deObject, character, undefined, undefined, undefined, undefined);
+                lore = await engine.deObject.world.lore?.execute(engine.deObject, character);
                 if (lore.trim().length === 0) {
                     lore = null;
                 }
@@ -884,12 +881,12 @@ export const commands = {
             const currentLocation = engine.deObject.world.locations[engine.deObject.stateFor[characterName].location];
             if (currentLocation && currentLocation.description) {
                 // @ts-ignore
-                scenario = `Location: ${engine.deObject.stateFor[characterName].location}, ` + await currentLocation.description.execute(engine.deObject, character, undefined, undefined, undefined, undefined);
+                scenario = `Location: ${engine.deObject.stateFor[characterName].location}, ` + await currentLocation.description.execute(engine.deObject, character);
             }
             const currentLocationSlot = currentLocation.slots[engine.deObject.stateFor[characterName].locationSlot];
             if (currentLocationSlot && currentLocationSlot.description) {
                 // @ts-ignore
-                scenario += `\n\nSpecifically at: ${engine.deObject.stateFor[characterName].locationSlot}, ` + await currentLocationSlot.description.execute(engine.deObject, character, undefined, undefined, undefined, undefined);
+                scenario += `\n\nSpecifically at: ${engine.deObject.stateFor[characterName].locationSlot}, ` + await currentLocationSlot.description.execute(engine.deObject, character);
             }
 
             scenario += `\n\n${await whatIsWeatherLikeForCharacter(engine, characterName)}`;

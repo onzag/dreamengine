@@ -25,7 +25,8 @@ engine.initialize({
     rangeMeters: 500,
     sex: "male",
     shortDescription: "A human male in decent physical condition",
-    shortDescriptionNaked: "A naked human male in decent physical condition",
+    shortDescriptionTopNakedAdd: "He is currently not wearing a shirt revealing a well-toned upper body",
+    shortDescriptionBottomNakedAdd: "He is currently not wearing any pants or underwear",
 }, world.world, world.scriptSources, world.characters)
 /**
  * @type {DEItem}
@@ -41,7 +42,8 @@ const clothes = {
     consumableProperties: null,
     containing: [],
     wearableProperties: {
-        coversNakedness: true,
+        coversTopNakedness: true,
+        coversBottomNakedness: true,
         volumeRangeMinLiters: 70,
         volumeRangeMaxLiters: 90,
         addedCarryingCapacityKg: 0,

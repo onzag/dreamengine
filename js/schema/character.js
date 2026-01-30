@@ -79,13 +79,22 @@ const schema = {
             "placeholder": "A muscular woman with short brown hair and green eyes",
             "multiline": true,
         },
-        "short_description_naked": {
+        "short_description_top_naked_add": {
             "type": "string",
-            "title": "Short Description (Naked)",
-            "description": "A short mostly physical (on the surface) description of the character when not wearing any clothes",
+            "title": "Short Description (Top Naked Add)",
+            "description": "Additional description of the character's upper body when not wearing a shirt",
             "maxLength": 250,
             "minLength": 20,
-            "placeholder": "A muscular woman with short brown hair and green eyes",
+            "placeholder": "She is currently not wearing a shirt or bra, revealing her toned chest and flat stomach",
+            "multiline": true,
+        },
+        "short_description_bottom_naked_add": {
+            "type": "string",
+            "title": "Short Description (Bottom Naked Add)",
+            "description": "Additional description of the character's lower body when not wearing pants or underwear",
+            "maxLength": 250,
+            "minLength": 20,
+            "placeholder": "She is currently not wearing any pants or underwear, revealing her smooth legs and hips",
             "multiline": true,
         },
         "height_cm": {

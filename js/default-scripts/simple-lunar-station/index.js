@@ -113,7 +113,8 @@ const spaceSuit = {
     consumableProperties: null,
     containing: [],
     wearableProperties: {
-        coversNakedness: true,
+        coversTopNakedness: true,
+        coversBottomNakedness: true,
         volumeRangeMinLiters: 50,
         volumeRangeMaxLiters: 160,
         addedCarryingCapacityKg: 10,
@@ -662,7 +663,7 @@ DE.world.worldAllCharacterSpawnScripts["LUNAR_STATION_INITIAL_SCRIPT"] = DE.util
     char.states["ASPHYXIATING_VACCUUM"] = {
         randomSpawnRate: 0,
         permanent: false,
-        modifiesStatesIntensities: {},
+        modifiesStatesIntensitiesOnTrigger: {},
         requiredStates: [],
         requiresCharacterCausants: false,
         requiresObjectCausants: false,
@@ -672,7 +673,6 @@ DE.world.worldAllCharacterSpawnScripts["LUNAR_STATION_INITIAL_SCRIPT"] = DE.util
         intensityModifiers: [
             {
                 determineCausants: null,
-                determineCause: null,
                 intensity: -4,
                 template: DE.utils.newHandlebarsTemplate(
                     DE,
@@ -682,7 +682,6 @@ DE.world.worldAllCharacterSpawnScripts["LUNAR_STATION_INITIAL_SCRIPT"] = DE.util
             },
             {
                 determineCausants: null,
-                determineCause: null,
                 intensity: -4,
                 template: DE.utils.newHandlebarsTemplate(
                     DE,
@@ -737,7 +736,7 @@ DE.world.worldAllCharacterSpawnScripts["LUNAR_STATION_INITIAL_SCRIPT"] = DE.util
     char.states["FREEZING_VACCUUM"] = {
         randomSpawnRate: 0,
         permanent: false,
-        modifiesStatesIntensities: {},
+        modifiesStatesIntensitiesOnTrigger: {},
         requiredStates: [],
         requiresCharacterCausants: false,
         requiresObjectCausants: false,
@@ -747,7 +746,6 @@ DE.world.worldAllCharacterSpawnScripts["LUNAR_STATION_INITIAL_SCRIPT"] = DE.util
         intensityModifiers: [
             {
                 determineCausants: null,
-                determineCause: null,
                 intensity: -1,
                 template: DE.utils.newHandlebarsTemplate(
                     DE,
@@ -757,7 +755,6 @@ DE.world.worldAllCharacterSpawnScripts["LUNAR_STATION_INITIAL_SCRIPT"] = DE.util
             },
             {
                 determineCausants: null,
-                determineCause: null,
                 intensity: -1,
                 template: DE.utils.newHandlebarsTemplate(
                     DE,
@@ -776,7 +773,6 @@ DE.world.worldAllCharacterSpawnScripts["LUNAR_STATION_INITIAL_SCRIPT"] = DE.util
         intensityModifiersDuringRelief: [
             {
                 determineCausants: null,
-                determineCause: null,
                 intensity: -1,
                 template: DE.utils.newHandlebarsTemplate(
                     DE,
@@ -786,7 +782,6 @@ DE.world.worldAllCharacterSpawnScripts["LUNAR_STATION_INITIAL_SCRIPT"] = DE.util
             },
             {
                 determineCausants: null,
-                determineCause: null,
                 intensity: -2,
                 template: DE.utils.newHandlebarsTemplate(
                     DE,

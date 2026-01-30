@@ -102,7 +102,7 @@ export const deEngineUtils = {
     },
     newTemplateFromFunction(DE, id, fn) {
         // we need to extract the source code from the function
-        const source = "return await ((" + fn.toString() + ")(DE, char, other, causants, cause, potentialCausant))";
+        const source = "return await ((" + fn.toString() + ")(DE, char, other, causants, potentialCausant, potentialCausants))";
         const existingScriptSource = DE.scriptSources.find(s => s.id === id);
         if (existingScriptSource) {
             if (existingScriptSource.sourceType !== "javascript") {

@@ -435,17 +435,7 @@ ${states.join(", ")}
      * @param {AsyncGenerator<{name: string, message: string, id: string, conversationId: string | null, debug: boolean, rejected: boolean}, void, boolean>} getHistoryForCharacter
      * @param {"LAST_CYCLE" | "LAST_MESSAGE" | "LAST_CYCLE_EXPANDED" | "LAST_CYCLE_EXPANDED_EXCLUDE_CHAR" | "ALL"} msgLimit what to limit the history to
      * @param {string|null} contextInfoAfter additional context information to provide to the agent
-     * @returns {AsyncGenerator<string, void, {
-     * answerTrail?: string,
-     * grammar?: string,
-     * contextInfo?: string,
-     * instructions?: string,
-     * nextQuestion: string,
-     * stopAfter: Array<string>,
-     * stopAt: Array<string>,
-     * maxParagraphs: number,
-     * maxCharacters: number,
-     * }>}
+     * @returns {import('./base.js').QuestionAgentGeneratorResponse}
      */
     async *runQuestioningCustomAgentOn(
         character,
