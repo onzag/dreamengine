@@ -219,6 +219,17 @@ async function onStateTriggeredOnCharacter(engine, character, stateName) {
             await engine.gameOver();
         }
     }
+
+    for (const modifier of characterStateDescription.intensityModifiers || []) {
+        if (modifier.useActionAccumulator?.reset === "when_state_triggers") {
+            await resetAccumulator(engine, modifier);
+        }
+    }
+    for (const modifier of characterStateDescription.triggers || []) {
+        if (modifier.useActionAccumulator?.reset === "when_state_triggers") {
+            await resetAccumulator(engine, modifier);
+        }
+    }
 }
 
 /**
@@ -311,6 +322,17 @@ async function onStateRemovedOnCharacter(engine, character, stateName) {
             }
         }
     }
+
+    for (const modifier of characterStateDescription.intensityModifiers || []) {
+        if (modifier.useActionAccumulator?.reset === "when_state_removed") {
+            await resetAccumulator(engine, modifier);
+        }
+    }
+    for (const modifier of characterStateDescription.triggers || []) {
+        if (modifier.useActionAccumulator?.reset === "when_state_removed") {
+            await resetAccumulator(engine, modifier);
+        }
+    }
 }
 
 /**
@@ -319,8 +341,6 @@ async function onStateRemovedOnCharacter(engine, character, stateName) {
      * @param {string} stateName 
      */
 async function onStateRelievedOnCharacter(engine, character, stateName) {
-    // TODO inform these states to the user in case they are the user
-
     if (!engine.deObject) {
         throw new Error("DEngine not initialized");
     }
@@ -352,7 +372,7 @@ async function onStateRelievedOnCharacter(engine, character, stateName) {
             stateDescriptionText = "";
         }
 
-        
+
         await makeUserStoryMasterMessage(engine, `${engine.user.name} is has begun to relieve: ${stateName.split("_").map((w) => w[0].toUpperCase() + w.slice(1)).join(" ")}${stateDescriptionText}`);
     }
 
@@ -414,6 +434,17 @@ async function onStateRelievedOnCharacter(engine, character, stateName) {
                     await onStateRemovedOnCharacter(engine, character, toModifyState);
                 }
             }
+        }
+    }
+
+    for (const modifier of characterStateDescription.intensityModifiers || []) {
+        if (modifier.useActionAccumulator?.reset === "when_state_relieves") {
+            await resetAccumulator(engine, modifier);
+        }
+    }
+    for (const modifier of characterStateDescription.triggers || []) {
+        if (modifier.useActionAccumulator?.reset === "when_state_relieves") {
+            await resetAccumulator(engine, modifier);
         }
     }
 }
@@ -771,10 +802,11 @@ export default async function calculateStateChange(engine, character) {
             const intensityModifiers = (alreadyActivatedInfo.relieving ? stateDescription.intensityModifiersDuringRelief || stateDescription.intensityModifiers : stateDescription.intensityModifiers);
             let appliedIntensityChange = false;
             let removedState = false;
+            const randomRollForIntensityTrigger = Math.random();
             if (intensityModifiers) {
                 for (const intensityModifier of intensityModifiers) {
 
-                    if (intensityModifier.intensity === 0) {
+                    if (typeof intensityModifier.intensity === "number" && intensityModifier.intensity === 0) {
                         console.log(`Skipping state intensity modifier for state ${stateName} on character ${character.name} because intensity change is zero.`);
                         continue;
                     }
@@ -816,16 +848,42 @@ export default async function calculateStateChange(engine, character) {
                     }
 
                     if (willExecute) {
+                        if (randomRollForIntensityTrigger > (typeof intensityModifier.triggerLikelihood === "number" ? intensityModifier.triggerLikelihood : 1.0)) {
+                            if (intensityModifier.useActionAccumulator) {
+                                if (intensityModifier.useActionAccumulator.usePerCausant) {
+                                    const causants = await determineCausants(
+                                        engine,
+                                        character,
+                                        stateDescription,
+                                        intensityModifier,
+                                        allCharactersInAnalysis,
+                                        prompter,
+                                    );
+                                    await accumulate(engine, intensityModifier, causants);
+                                } else {
+                                    await accumulate(engine, intensityModifier, null);
+                                }
+                            }
+                            console.log(`State intensity modifier for state ${stateName} on character ${character.name} passed template check but failed probability check (${randomRollForIntensityTrigger} > ${intensityModifier.triggerLikelihood}), skipping intensity change.`);
+                            continue;
+                        }
+
                         if (!engine.deObject) {
                             // typescript being funny
                             throw new Error("DEngine not initialized");
                         }
                         const newCausants = await determineCausants(engine, character, stateDescription, intensityModifier, allCharactersInAnalysis, prompter);
 
+                        let surpassesThreshold = true;
+                        let surpassesThresholdCausants = newCausants;
+                        if (intensityModifier.useActionAccumulator) {
+                            [surpassesThreshold, surpassesThresholdCausants] = await accumulate(engine, intensityModifier, newCausants);
+                        }
+
                         console.log(`The causants determined for intensity modifier of state ${stateName} on character ${character.name} are: ${newCausants ? newCausants.map(c => c.name).join(", ") : "none"}`);
 
                         // update the causants in the active state info
-                        if (newCausants) {
+                        if (surpassesThresholdCausants && surpassesThresholdCausants.length > 0) {
                             // we need to merge them with existing causants
                             if (!alreadyActivatedInfo.causants) {
                                 if (typeof intensityModifier.intensity === "number" && intensityModifier.intensity > 0 || intensityModifier.intensity === "DO_NOT_MODIFY_INTENSITY_ADD_CAUSANTS_ONLY") {
@@ -833,7 +891,7 @@ export default async function calculateStateChange(engine, character) {
                                     alreadyActivatedInfo.causants = newCausants;
                                 }
                             } else {
-                                for (const newCausant of newCausants) {
+                                for (const newCausant of surpassesThresholdCausants) {
                                     const addCausants = typeof intensityModifier.intensity === "number" && intensityModifier.intensity > 0 || intensityModifier.intensity === "DO_NOT_MODIFY_INTENSITY_ADD_CAUSANTS_ONLY";
                                     const removeCausants = typeof intensityModifier.intensity === "number" && intensityModifier.intensity < 0 || intensityModifier.intensity === "DO_NOT_MODIFY_INTENSITY_REMOVE_CAUSANTS_ONLY";
 
@@ -883,29 +941,38 @@ export default async function calculateStateChange(engine, character) {
                         }
 
 
+                        // we did not remove the state and we surpass the threshold of accumulators
                         if (!removedState) {
-                            if (typeof intensityModifier.intensity !== "number") {
-                                console.log(`State intensity modifier for state ${stateName} on character ${character.name} is set to not modify intensity, skipping intensity change.`);
-                            } else {
-                                console.log(`State intensity modifier matched for state ${stateName} on character ${character.name}, applying intensity change: ${intensityModifier.intensity}`);
-                                alreadyActivatedInfo.intensity += intensityModifier.intensity;
-                                if (stateDescription.usesReliefDynamic && intensityModifier.intensity < 0) {
-                                    console.log(`State ${stateName} on character ${character.name} is now relieving due to intensity modifier.`);
-                                    alreadyActivatedInfo.relieving = true;
-                                    if (alreadyActivatedInfo.intensity > 0) {
-                                        await onStateRelievedOnCharacter(engine, character, stateName);
+                            if (surpassesThreshold) {
+                                if (typeof intensityModifier.intensity !== "number") {
+                                    console.log(`State intensity modifier for state ${stateName} on character ${character.name} is set to not modify intensity, skipping intensity change.`);
+                                } else {
+                                    console.log(`State intensity modifier matched for state ${stateName} on character ${character.name}, applying intensity change: ${intensityModifier.intensity}`);
+                                    alreadyActivatedInfo.intensity += intensityModifier.intensity;
+                                    if (stateDescription.usesReliefDynamic && intensityModifier.intensity < 0) {
+                                        console.log(`State ${stateName} on character ${character.name} is now relieving due to intensity modifier.`);
+                                        alreadyActivatedInfo.relieving = true;
+                                        if (alreadyActivatedInfo.intensity > 0) {
+                                            await onStateRelievedOnCharacter(engine, character, stateName);
+                                        }
                                     }
-                                }
-                                if (alreadyActivatedInfo.intensity < 0) {
-                                    // must be removed
-                                    console.log(`State ${stateName} on character ${character.name} intensity dropped below zero, removing state.`);
-                                    engine.deObject.stateFor[character.name].states = engine.deObject.stateFor[character.name].states.filter(s => s.state !== stateName);
-                                    removedState = true;
+                                    if (alreadyActivatedInfo.intensity < 0) {
+                                        // must be removed
+                                        console.log(`State ${stateName} on character ${character.name} intensity dropped below zero, removing state.`);
+                                        engine.deObject.stateFor[character.name].states = engine.deObject.stateFor[character.name].states.filter(s => s.state !== stateName);
+                                        removedState = true;
 
-                                    await onStateRemovedOnCharacter(engine, character, stateName);
+                                        await onStateRemovedOnCharacter(engine, character, stateName);
+                                    }
+                                    appliedIntensityChange = true;
                                 }
-                                appliedIntensityChange = true;
+                            } else {
+                                console.log(`State ${stateName} on character ${character.name} did not surpass accumulator threshold, skipping intensity change.`);
                             }
+                        }
+                    } else {
+                        if (intensityModifier.useActionAccumulator && intensityModifier.useActionAccumulator.resetIfNo) {
+                            await resetAccumulator(engine, intensityModifier);
                         }
                     }
                 }
@@ -1020,16 +1087,10 @@ export default async function calculateStateChange(engine, character) {
             // sort by highest intensity first
             for (const activationCondition of validActivationTriggers) {
                 if (triggeredState) {
-                    break;
-                }
-                if (typeof activationCondition.intensity !== "number" || activationCondition.intensity <= 0) {
-                    console.log(`Skipping state activation condition for state ${stateName} on character ${character.name} because intensity is non-positive or non-numeric.`);
-                    continue;
-                }
-
-                if (stateDescription.triggerLikelihood <= 0) {
-                    console.log(`Skipping state activation condition for state ${stateName} on character ${character.name} because trigger likelihood is non-positive.`);
-                    continue;
+                    if (!activationCondition.useActionAccumulator) {
+                        continue;
+                    }
+                    console.log(`State ${stateName} on character ${character.name} already triggered, but next activation condition uses action accumulator ${activationCondition.useActionAccumulator.name}, updating accumulation.`);
                 }
 
                 // @ts-ignore
@@ -1074,54 +1135,103 @@ export default async function calculateStateChange(engine, character) {
                 }
 
                 if (executeTrigger) {
-                    if (randomRollForStateTrigger > stateDescription.triggerLikelihood) {
-                        console.log(`State activation condition matched for state ${stateName} on character ${character.name}, but random roll ${randomRollForStateTrigger} exceeded trigger likelihood ${stateDescription.triggerLikelihood}.`);
-                        break;
+                    if (triggeredState) {
+                        if (activationCondition.useActionAccumulator) {
+                            console.log(`State ${stateName} on character ${character.name} already triggered, but activation condition matched on the accumulator, updating accumulation only.`);
+                            if (activationCondition.useActionAccumulator.usePerCausant) {
+                                const causants = await determineCausants(
+                                    engine,
+                                    character,
+                                    stateDescription,
+                                    activationCondition,
+                                    allCharactersInAnalysis,
+                                    prompter,
+                                );
+                                await accumulate(engine, activationCondition, causants);
+                            } else {
+                                await accumulate(engine, activationCondition, null);
+                            }
+                        }
+                    } else {
+
+                        if (randomRollForStateTrigger > (typeof activationCondition.triggerLikelihood === "number" ? activationCondition.triggerLikelihood : 1.0)) {
+                            if (activationCondition.useActionAccumulator) {
+                                if (activationCondition.useActionAccumulator.usePerCausant) {
+                                    const causants = await determineCausants(
+                                        engine,
+                                        character,
+                                        stateDescription,
+                                        activationCondition,
+                                        allCharactersInAnalysis,
+                                        prompter,
+                                    );
+                                    await accumulate(engine, activationCondition, causants);
+                                } else {
+                                    await accumulate(engine, activationCondition, null);
+                                }
+                            }
+                            console.log(`State activation condition matched for state ${stateName} on character ${character.name}, but random roll ${randomRollForStateTrigger} exceeded trigger likelihood ${activationCondition.triggerLikelihood}.`);
+                            continue;
+                        }
+
+                        const causants = await determineCausants(
+                            engine,
+                            character,
+                            stateDescription,
+                            activationCondition,
+                            allCharactersInAnalysis,
+                            prompter,
+                        );
+
+                        let surpassesThreshold = true;
+                        let surpassesThresholdCausants = causants;
+                        if (activationCondition.useActionAccumulator) {
+                            [surpassesThreshold, surpassesThresholdCausants] = await accumulate(engine, activationCondition, causants);
+                        }
+
+                        if (
+                            stateDescription.requiresObjectCausants &&
+                            (!causants || causants.filter(c => c.type === "object").length === 0)
+                        ) {
+                            console.log(`State activation condition matched for state ${stateName} on character ${character.name}, but no object causants found in the response.`);
+                            continue;
+                        }
+
+                        if (
+                            stateDescription.requiresCharacterCausants &&
+                            (!causants || causants.filter(c => c.type === "character").length === 0)
+                        ) {
+                            console.log(`State activation condition matched for state ${stateName} on character ${character.name}, but no character causants found in the response.`);
+                            continue;
+                        }
+
+                        if (surpassesThreshold) {
+                            /**
+                             * @type {DEStateDescription}
+                             */
+                            const state = {
+                                state: stateName,
+                                intensity: /** @type {number} */ (activationCondition.intensity),
+                                causants: surpassesThresholdCausants,
+                                contiguousStartActivationCyclesAgo: 0,
+                                contiguousStartActivationTime: { ...engine.deObject.currentTime },
+                                relieving: false,
+                            };
+
+                            engine.deObject.stateFor[character.name].states.push(state);
+                            triggeredState = true;
+
+                            await onStateTriggeredOnCharacter(engine, character, stateName);
+
+                            console.log(`State ${stateName} activated on character ${character.name} with intensity ${activationCondition.intensity}.`);
+                        } else {
+                            console.log(`State activation condition matched for state ${stateName} on character ${character.name}, but did not surpass accumulator threshold.`);
+                        }
                     }
-
-                    const causants = await determineCausants(
-                        engine,
-                        character,
-                        stateDescription,
-                        activationCondition,
-                        allCharactersInAnalysis,
-                        prompter,
-                    );
-
-                    if (
-                        stateDescription.requiresObjectCausants &&
-                        (!causants || causants.filter(c => c.type === "object").length === 0)
-                    ) {
-                        console.log(`State activation condition matched for state ${stateName} on character ${character.name}, but no object causants found in the response.`);
-                        continue;
+                } else {
+                    if (activationCondition.useActionAccumulator && activationCondition.useActionAccumulator.resetIfNo) {
+                        await resetAccumulator(engine, activationCondition);
                     }
-
-                    if (
-                        stateDescription.requiresCharacterCausants &&
-                        (!causants || causants.filter(c => c.type === "character").length === 0)
-                    ) {
-                        console.log(`State activation condition matched for state ${stateName} on character ${character.name}, but no character causants found in the response.`);
-                        continue;
-                    }
-
-                    /**
-                     * @type {DEStateDescription}
-                     */
-                    const state = {
-                        state: stateName,
-                        intensity: activationCondition.intensity,
-                        causants: causants,
-                        contiguousStartActivationCyclesAgo: 0,
-                        contiguousStartActivationTime: { ...engine.deObject.currentTime },
-                        relieving: false,
-                    };
-
-                    engine.deObject.stateFor[character.name].states.push(state);
-                    triggeredState = true;
-
-                    await onStateTriggeredOnCharacter(engine, character, stateName);
-
-                    console.log(`State ${stateName} activated on character ${character.name} with intensity ${activationCondition.intensity}.`);
                 }
             }
 

@@ -191,6 +191,76 @@ interface DEStringTemplateWithIntensityAndCausants {
      * The default is LIST_OF_ANY_CAUSANTS
      */
     determineCausantsAnswerForceGrammarTo?: "LIST_OF_ANY_CAUSANTS" | "LIST_OF_CHARACTER_CAUSANTS" | "LIST_OF_OBJECT_CAUSANTS" | "SINGLE_ANY_CAUSANT" | "SINGLE_CHARACTER_CAUSANT" | "SINGLE_OBJECT_CAUSANT" | "SINGLE_CHARACTER_POTENTIAL_CAUSANT" | "LIST_OF_CHARACTER_POTENTIAL_CAUSANTS" | null;
+    /**
+     * Use an action accumulator to track the number of times this trigger/modifier has fired,
+     * this does not include any trigger likelihood checks, only when the template holds true
+     * the accummulator name should be unique per state per trigger/modifier (or it can be shared if that is desired)
+     * 
+     * eg. for example, let's say a character will only get angry after being insulted 3 times
+     * you may have a trigger like:
+     * """
+     * Has {{char}} been insulted by {{format_or potential_causants}}?
+     * """
+     * with a determineCausants like:
+     * """
+     * Who has insulted {{char}}?
+     * """
+     * and an intensity of 1
+     * and an action accumulator name of
+     * {
+     *    name: "insult_accumulator",
+     *    usePerCausant: true,
+     *    triggerThreshold: 3,
+     *    reset: "when_state_triggers"
+     * }
+     * 
+     * You may use trigger likelihood in addition to this to avoid the state triggering right at 3 consistently
+     * every time, adding some randomness to it
+     * 
+     * An action accumulator can be used more creatively, for example, the character Mob Psycho 100, accumulates
+     * emotional energy until it reaches a threshold and then it explodes in a psychic outburst, the accumulator can
+     * be used to track the emotional energy accumulation until it reaches the threshold to trigger the outburst state
+     * 
+     * States with accumulators are expensive when used on triggers, as they are always evaluated every inference cycle to determine if the accumulator
+     * has changed, while on intensity modifiers they have the same cost as normal; this is because triggers are evaluated until one is found that triggers the state
+     * but if it has an accumulator, it must always be evaluated to update the accumulator value
+     */
+    useActionAccumulator?: {
+        /**
+         * Name of the accumulator to use, should be unique per character
+         */
+        name: string;
+        /**
+         * Whether to use a separate accumulator per causant, if causants are used and known
+         * otherwise it would not make sense to use per causant
+         */
+        usePerCausant: boolean;
+        /**
+         * The threshold to trigger the state or intensity modification
+         * basically the accumulator must hold this value or more to trigger
+         */
+        triggerThreshold: number;
+        /**
+         * When to reset the accumulator
+         */
+        reset?: "when_state_triggers" | "when_state_relieves" | "when_state_removed";
+        /**
+         * The number to accumulate towards the threshold each time the template holds true
+         * default is 1, negative values are allowed to allow for decrementing accumulators
+         */
+        accumulateAmount?: number;
+        /**
+         * Resets the accumulator back to zero
+         */
+        resetIfNo?: boolean;
+    };
+    /**
+     * If the answer to the triggers question is yes, this is the likelihood that the state will actually get triggered
+     * anyway even if the condition holds true.
+     * 
+     * Statistically the check is not even done if this doesn't pass the likelihood check
+     */
+    triggerLikelihood?: number;
 }
 
 declare interface DEActionPromptInjection {
@@ -219,7 +289,7 @@ declare interface DEActionPromptInjection {
      * Or if no action is specified, in which case the narrative effect will always apply
      * even if another action is performed by the character
      */
-    alwaysApplyNarrativeEffect: boolean;
+    alwaysApplyNarrativeEffect?: boolean;
     /**
      * The probability (0 to 1) that the action will be even checked for execution, if say
      * the probability is only 0.5 then the action will only be considered for execution half the time
@@ -232,7 +302,7 @@ declare interface DEActionPromptInjection {
      * from the template itself as an empty string in the action results in no action being performed
      * but this is way more developer friendly
      */
-    probability: number;
+    probability?: number;
     /**
      * If the template represents a dead end scenario
      * use this for the description of the dead end scenario
@@ -539,13 +609,6 @@ declare interface DECharacterStateDefinition {
      * should be a float bewteen -4 and 4
      */
     intensityChangePerMinute?: number;
-    /**
-     * If the answer to the triggers question is yes, this is the likelihood that the state will actually get triggered
-     * anyway even if the condition holds true.
-     * 
-     * Statistically the check is not even done if this doesn't pass the likelihood check
-     */
-    triggerLikelihood: number;
     /**
      * The triggers that can cause this state to pop up
      */
@@ -2345,7 +2408,12 @@ declare interface DEWorldRule {
     rule: DEStringTemplate;
 }
 
+declare interface DEActionAccumulators {
+    accumulators: Record<string, number>;
+}
+
 declare interface DEObject {
+    actionAccumulators: Record<string, DEActionAccumulators>;
     user: DEMinimalCharacterReference;
     characters: Record<string, DECompleteCharacterReference>;
     social: {

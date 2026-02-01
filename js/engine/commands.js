@@ -620,6 +620,7 @@ export const commands = {
                     bond2: 0,
                     stranger: true,
                     towards: engine.userCharacter.name,
+                    createdAt: engine.deObject.currentTime,
                 }
             }
 

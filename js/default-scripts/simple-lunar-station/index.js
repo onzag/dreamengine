@@ -692,7 +692,6 @@ DE.world.worldAllCharacterSpawnScripts["LUNAR_STATION_INITIAL_SCRIPT"] = DE.util
         ],
         // need no triggers, the weather system will apply the state
         triggers: [],
-        triggerLikelihood: 1.0,
         triggersStates: {},
 
         // No reasoning required, obviously should get out of the vaccuum
@@ -712,7 +711,7 @@ DE.world.worldAllCharacterSpawnScripts["LUNAR_STATION_INITIAL_SCRIPT"] = DE.util
                 emotionalRange: [],
             },
         },
-        binaryBehaviour: true,
+        behaviourType: "BINARY",
         conflictStates: [],
         deadEndIsDeath: true,
         // 30 seconds to death by asphyxiation
@@ -730,7 +729,6 @@ DE.world.worldAllCharacterSpawnScripts["LUNAR_STATION_INITIAL_SCRIPT"] = DE.util
             "ASPHYXIATING_VACCUUM_GENERAL",
             "{{char}} is struggling to breathe in the vacuum of space"
         ),
-        requiresCause: false,
     };
 
     char.states["FREEZING_VACCUUM"] = {
@@ -792,10 +790,9 @@ DE.world.worldAllCharacterSpawnScripts["LUNAR_STATION_INITIAL_SCRIPT"] = DE.util
         ],
         // need no triggers, the weather system will apply the state
         triggers: [],
-        triggerLikelihood: 1.0,
         triggersStates: {},
         actionPromptInjection: {},
-        binaryBehaviour: true,
+        behaviourType: "BINARY",
         conflictStates: [],
         deadEndIsDeath: true,
         // 5 minutes to death by freezing
@@ -814,6 +811,5 @@ DE.world.worldAllCharacterSpawnScripts["LUNAR_STATION_INITIAL_SCRIPT"] = DE.util
             "FREEZING_VACCUUM_GENERAL",
             "{{char}} is freezing in the vacuum of space"
         ),
-        requiresCause: false,
     };
 });
