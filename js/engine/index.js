@@ -8,6 +8,7 @@ import { BaseInferenceAdapter } from "./inference/base.js";
 import calculateStateChange from "./gears/state-change.js";
 import calculateBondsChangesDueToMessages from "./gears/bond-change.js";
 import testWorldRulesOn from "./gears/rules-enforce.js";
+import testMessageFeasibilityForCharacter from "./gears/feasibility-check.js";
 
 const INVALID_NAMES = ["system", "assistant", "user", "everyone", "nobody",
     "anyone", "somebody", "narrator", "observer", "admin", "moderator",
@@ -29,7 +30,11 @@ function setupFunctions() {
     return finalObject;
 }
 
-
+/**
+ * @typedef {Object} DEngineInteraction
+ * @property {string} name name of the character that is about to interact
+ * @property {string | null} invoker who invoked this interaction, null if none and it was their own initiative
+ */
 
 /**
  * @param {*} obj 
@@ -93,7 +98,7 @@ function createCharacterFromUser(user) {
         maintenanceCaloriesPerDay: user.maintenanceCaloriesPerDay,
         maintenanceHydrationLitersPerDay: user.maintenanceHydrationLitersPerDay,
         rangeMeters: user.rangeMeters,
-        systemPromptInjection: {},
+        generalCharacterDescriptionInjection: {},
         wanderPotential: 0,
         bonds: {
             system: "UNKNOWN",
@@ -898,13 +903,8 @@ export class DEngine {
                 }
             ],
             bondsAtStart: getFrozenBonds(expectedParticipants),
+            // TODO what do we do with bonds at end here?
             bondsAtEnd: {},
-            duration: {
-                inDays: 0,
-                inHours: 0,
-                inMinutes: 0,
-            },
-            endTime: { ...this.deObject.currentTime },
             startTime: { ...this.deObject.currentTime },
             location: sceneObject.startingLocation,
             participants: expectedParticipants,
@@ -1300,7 +1300,6 @@ export class DEngine {
 
         this.refreshCharacterStates();
         this.checkDEObjectIntegrity();
-        this.rerollWorldWeather();
     }
 
     /**
@@ -1556,11 +1555,242 @@ export class DEngine {
     }
 
     /**
+     * 
+     * @param {string} characterName 
+     * @param {string} towards
+     * @returns {Promise<[boolean, DESingleBondDescription, DEBondDeclaration, string]>} bond description and bond info
+     */
+    async getRelationshipBetweenCharacters(characterName, towards) {
+        if (!this.deObject) {
+            throw new Error("DEngine not initialized");
+        }
+        if (this.invalidCharacterStates) {
+            throw new Error("DEngine has invalid character states, cannot get relationship between characters");
+        }
+        const character = this.deObject.characters[characterName];
+        if (!character) {
+            throw new Error(`Character ${characterName} not found.`);
+        }
+        const towardsCharacter = this.deObject.characters[towards];
+        if (!towardsCharacter) {
+            throw new Error(`Character ${towards} not found.`);
+        }
+        // @ts-ignore
+        let bond = this.deObject.social.bonds[characterName].active.find(bond => bond.towards === towards);
+        let bondInfo = "";
+        let pseudoBond = false;
+        if (!bond) {
+            // make a pseudo bond for stranger
+            bond = {
+                bond: 0,
+                bond2: 0,
+                stranger: true,
+                towards: towards,
+                createdAt: this.deObject.currentTime,
+            }
+            pseudoBond = true;
+        }
+
+        const bondDecl = character.bonds.declarations.find((b => b.strangerBond === bond.stranger && b.minBondLevel <= bond.bond && bond.bond < (b.maxBondLevel === 100 ? 200 : b.maxBondLevel) && b.min2BondLevel <= bond.bond2 && bond.bond2 < (b.max2BondLevel === 100 ? 200 : b.max2BondLevel)));
+        if (!bondDecl) {
+            throw new Error(`No bond description found for bond level ${bond.bond} and secondary bond level ${bond.bond2} in character "${characterName}".`);
+        }
+
+        // @ts-ignore
+        bondInfo += await bondDecl.description.execute(this.deObject, character, towardsCharacter);
+
+        if (character.bonds.descriptionGeneralInjection) {
+            // @ts-ignore
+            const value = await character.bonds.descriptionGeneralInjection.execute(this.deObject, character, towardsCharacter);
+            bondInfo += `\n\n${value}`;
+        }
+
+        return [pseudoBond, bond, bondDecl, bondInfo];
+    }
+
+    /**
+     * @param {string} characterName 
+     * @returns {Promise<[string, string[], string[]]>} complete description, list of states, list of relationships
+     */
+    async getInternalDescriptionOfCharacter(characterName) {
+        if (!this.deObject) {
+            throw new Error("DEngine not initialized");
+        }
+        if (this.invalidCharacterStates) {
+            throw new Error("DEngine has invalid character states, cannot get short description of character");
+        }
+
+        const character = this.deObject.characters[characterName];
+        if (!character) {
+            throw new Error(`Character ${characterName} not found.`);
+        }
+
+        const characterState = this.deObject.stateFor[characterName];
+        if (!characterState) {
+            throw new Error(`Character state for ${characterName} not found.`);
+        }
+
+        // @ts-ignore
+        let general = await character.general.execute(engine.deObject, character);
+
+        for (const injectable of Object.values(character.generalCharacterDescriptionInjection)) {
+            // @ts-ignore
+            const injectableV = (await injectable.execute(engine.deObject, character, undefined, undefined, undefined, undefined)).trim();
+            if (injectableV) {
+                if (!general.endsWith("\n\n")) {
+                    general += "\n\n";
+                }
+                // @ts-ignore
+                general += injectableV;
+            }
+        }
+
+        /**
+         * @type {string[]}
+         */
+        const statesDescriptions = [];
+        for (const state of characterState.states) {
+            const stateInfo = character.states[state.state];
+            // @ts-ignore
+            let stateDescription = state.state.split("_").map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(" ");
+            if (!state.relieving) {
+                if (state.intensity >= 1.5) {
+                    stateDescription = `Very ${stateDescription}`;
+                } else if (state.intensity >= 2.5) {
+                    stateDescription = `Extremely ${stateDescription}`;
+                } else if (state.intensity >= 3.5) {
+                    stateDescription = `Overwhelmingly ${stateDescription}`;
+                }
+
+                if (stateInfo.relievingGeneralCharacterDescriptionInjection) {
+                    // @ts-ignore
+                    const relievingInjection = (await stateInfo.relievingGeneralCharacterDescriptionInjection.execute(engine.deObject, character, undefined, undefined, undefined, undefined)).trim();
+                    if (relievingInjection) {
+                        if (!general.endsWith("\n\n")) {
+                            general += "\n\n";
+                        }
+                        general += relievingInjection;
+                    }
+                }
+            } else {
+                stateDescription = `Relieving from ${stateDescription}`;
+
+                if (stateInfo.generalCharacterDescriptionInjection) {
+                    // @ts-ignore
+                    const injection = (await stateInfo.generalCharacterDescriptionInjection.execute(engine.deObject, character, undefined, undefined, undefined, undefined)).trim();
+                    if (injection) {
+                        if (!general.endsWith("\n\n")) {
+                            general += "\n\n";
+                        }
+                        general += injection;
+                    }
+                }
+            }
+
+            statesDescriptions.push(stateDescription);
+        }
+
+        const bonds = this.deObject.social.bonds[characterName];
+        /**
+         * @type {string[]}
+         */
+        const relationships = [];
+
+        for (const activeBond of bonds.active) {
+            const bondDeclaration = character.bonds.declarations.find(bondDecl => bondDecl.strangerBond === activeBond.stranger && bondDecl.minBondLevel <= activeBond.bond && activeBond.bond < (bondDecl.maxBondLevel === 100 ? 200 : bondDecl.maxBondLevel) && bondDecl.min2BondLevel <= activeBond.bond2 && activeBond.bond2 < (bondDecl.max2BondLevel === 100 ? 200 : bondDecl.max2BondLevel));
+            if (bondDeclaration) {
+                // @ts-ignore
+                let result = await bondDeclaration.description.execute(engine.deObject, character, engine.deObject.characters[activeBond.towards]);
+                if (bondDeclaration.bondAdditionalDescription) {
+                    if (!result.endsWith(". ")) {
+                        result += ". ";
+                    } else if (!result.endsWith(" ")) {
+                        result += " ";
+                    }
+                    // @ts-ignore
+                    result += await bondDeclaration.bondAdditionalDescription.execute(engine.deObject, character, engine.deObject.characters[activeBond.towards]);
+                }
+                relationships.push(result);
+
+                if (bondDeclaration.generalCharacterDescriptionInjection) {
+                    // @ts-ignore
+                    const injection = (await bondDeclaration.generalCharacterDescriptionInjection.execute(engine.deObject, character, engine.deObject.characters[activeBond.towards], undefined, undefined, undefined)).trim();
+                    if (injection) {
+                        if (!general.endsWith("\n\n")) {
+                            general += "\n\n";
+                        }
+                        general += injection;
+                    }
+                }
+            }
+        }
+
+        // ex bonds only inject system prompts, as they are not active relationships but ex-relationships
+        // they may be mourning or have other effects on the character's mindset so only relevant to system prompt injections
+        for (const exBond of bonds.ex) {
+            const bondDeclaration = character.bonds.declarations.find(bondDecl => bondDecl.strangerBond === exBond.stranger && bondDecl.minBondLevel <= exBond.bond && exBond.bond < (bondDecl.maxBondLevel === 100 ? 200 : bondDecl.maxBondLevel) && bondDecl.min2BondLevel <= exBond.bond2 && exBond.bond2 < (bondDecl.max2BondLevel === 100 ? 200 : bondDecl.max2BondLevel));
+            if (bondDeclaration) {
+                if (bondDeclaration.generalCharacterDescriptionInjectionEx) {
+                    // @ts-ignore
+                    const injection = (await bondDeclaration.generalCharacterDescriptionInjectionEx.execute(engine.deObject, character, engine.deObject.characters[exBond.towards], undefined, undefined, undefined)).trim();
+                    if (injection) {
+                        if (!general.endsWith("\n\n")) {
+                            general += "\n\n";
+                        }
+                        general += injection;
+                    }
+                }
+            }
+        }
+
+        // make final descriptions for total strangers for the standard stranger bond
+        const strangerBondDeclaration = character.bonds.declarations.find(bondDecl => bondDecl.strangerBond === true && bondDecl.minBondLevel <= 0 && 0 < (bondDecl.maxBondLevel === 100 ? 200 : bondDecl.maxBondLevel) && bondDecl.min2BondLevel <= 0 && 0 < (bondDecl.max2BondLevel === 100 ? 200 : bondDecl.max2BondLevel));
+        if (strangerBondDeclaration) {
+            // these do apply to all the total strangers
+            const allSurroundingTotalStrangers = this.deObject.stateFor[characterName].surroundingTotalStrangers;
+            for (const strangerName of allSurroundingTotalStrangers) {
+                const strangerCharacter = this.deObject.characters[strangerName];
+                if (strangerCharacter) {
+                    // @ts-ignore
+                    let result = await strangerBondDeclaration.description.execute(this.deObject, character, strangerCharacter);
+                    if (strangerBondDeclaration.bondAdditionalDescription) {
+                        if (!result.endsWith(". ")) {
+                            result += ". ";
+                        } else if (!result.endsWith(" ")) {
+                            result += " ";
+                        }
+                        // @ts-ignore
+                        result += await strangerBondDeclaration.bondAdditionalDescription.execute(this.deObject, character, strangerCharacter);
+                    }
+                    relationships.push(result);
+                }
+
+                if (strangerBondDeclaration.generalCharacterDescriptionInjection) {
+                    // @ts-ignore
+                    const injection = (await strangerBondDeclaration.generalCharacterDescriptionInjection.execute(this.deObject, character, strangerCharacter, undefined, undefined, undefined)).trim();
+                    if (injection) {
+                        if (!general.endsWith("\n\n")) {
+                            general += "\n\n";
+                        }
+                        general += injection;
+                    }
+                }
+            }
+        }
+
+        return [
+            general.trim(),
+            statesDescriptions,
+            relationships,
+        ];
+    }
+
+    /**
      * @param {string} characterName 
      * @param {boolean} onlyBasics
      * @returns {string}
      */
-    getShortDescriptionOfCharacter(characterName, onlyBasics = false) {
+    getExternalDescriptionOfCharacter(characterName, onlyBasics = false) {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         }
@@ -2056,7 +2286,7 @@ export class DEngine {
                     }
                     const otherCharacterState = this.deObject.stateFor[otherCharName];
                     const otherCharacterInfo = this.deObject.characters[otherCharName];
-                    const currentShortDesc = this.getShortDescriptionOfCharacter(characterName, true)
+                    const currentShortDesc = this.getExternalDescriptionOfCharacter(characterName, true)
 
                     if (reason && canOrCannot === "cannot") {
                         itemsCharacterCannotCarryWReasons.add(`Name: ${otherCharacter.name} - Description: ${currentShortDesc} - Cannot be carried because ${reason}`);
@@ -2160,10 +2390,10 @@ export class DEngine {
             throw new Error(`Character ${character.name} is the only participant in the conversation, cannot determine if they have left the conversation group.`);
         }
 
-        let groupsList = `The list of groups is as follows:\n\n${character.name}'s own group:\n - ${character.name}: ${this.getShortDescriptionOfCharacter(character.name)}\n`;
+        let groupsList = `The list of groups is as follows:\n\n${character.name}'s own group:\n - ${character.name}: ${this.getExternalDescriptionOfCharacter(character.name)}\n`;
 
         for (const ownGroupParticipant of currentConversation.participants) {
-            groupsList += ` - ${ownGroupParticipant}: ${this.getShortDescriptionOfCharacter(ownGroupParticipant)}\n`;
+            groupsList += ` - ${ownGroupParticipant}: ${this.getExternalDescriptionOfCharacter(ownGroupParticipant)}\n`;
         }
 
         const allCharactersAround = characterState.surroundingNonStrangers.concat(characterState.surroundingTotalStrangers);
@@ -2205,7 +2435,7 @@ export class DEngine {
             const strongestCharacterBond = this.getCharacterWithClosestBondToCharacter(character, group);
             groupsList += `\n\n${strongestCharacterBond}'s group:\n`;
             for (const member of group) {
-                groupsList += ` - ${member}: ${this.getShortDescriptionOfCharacter(member)}\n`;
+                groupsList += ` - ${member}: ${this.getExternalDescriptionOfCharacter(member)}\n`;
             }
         });
 
@@ -2255,487 +2485,6 @@ export class DEngine {
         return {
             merged: true,
             newGroupMembers: newPeopleOfTheGroup,
-        }
-    }
-
-    /**
-     * @param {DECompleteCharacterReference} character
-     * @param {string[]} currentlyInteractingCharacters
-     * @param {Array<{
-         * name: string,
-         * lastInvoker: string | null,
-         * messageWillBeAboutAgreeFollow: boolean,
-         * messageWillBeAboutFightFollow: boolean,
-         * messageWillBeAboutAgreeGroupMemberTaken: boolean,
-         * messageWillBeAboutFightGroupMemberTaken: boolean,
-         * expectedReasoning: string | null,
-         * }>} interactionExpectations
-     */
-    async determineGroupDynamics(character, currentlyInteractingCharacters, interactionExpectations) {
-        const allCharacterNamesNotChar = [...currentlyInteractingCharacters];
-
-        // character is solo wont be really used here because we will use merged into another conversation group
-        // to figure that out
-
-        if (!this.deObject) {
-            throw new Error("DEngine not initialized");
-        } else if (this.invalidCharacterStates) {
-            throw new Error("DEngine has invalid character states, cannot determine if character has left conversation group to join another");
-        }
-
-        if (currentlyInteractingCharacters.length === 0 && interactionExpectations.length === 0) {
-            throw new Error("No currently interacting characters or interaction expectations provided, cannot determine group dynamics");
-        }
-
-        if (currentlyInteractingCharacters.length === 0) {
-            // in this case we will just use the interaction expectations to build the list, since they must be joining
-            // whomever they are interacting with
-            // TODO
-        }
-
-        if (this.inferenceAdapter === null) {
-            throw new Error("Inference adapter not set, cannot perform inference");
-        }
-
-        const characterState = this.deObject.stateFor[character.name];
-        if (!characterState) {
-            throw new Error(`Character state for ${character.name} not found.`);
-        }
-
-        const currentConversation = characterState.conversationId ? this.deObject.conversations[characterState.conversationId] : null;
-        if (!currentConversation) {
-            throw new Error(`Character ${character.name} is not in a conversation, cannot determine if they have left the conversation group.`);
-        }
-
-        /**
-         * @type Array<{groupDescription: string, characters: Array<{name: string, description: string}>}>
-         */
-        const groups = [
-            {
-                groupDescription: `${character.name}'s own group`,
-                characters: currentlyInteractingCharacters.map((charName) => {
-                    return {
-                        name: charName,
-                        description: this.getShortDescriptionOfCharacter(charName),
-                    };
-                })
-            }];
-
-        const allCharactersAround = characterState.surroundingNonStrangers.concat(characterState.surroundingTotalStrangers);
-        /**
-         * @type {{groupDescription: string, characters: Array<{name: string, description: string}>}}
-         */
-        const solos = {
-            groupDescription: "Solo characters around",
-            characters: [],
-        };
-        for (const surrondingCharacterName of allCharactersAround) {
-            if (surrondingCharacterName !== character.name && !allCharacterNamesNotChar.includes(surrondingCharacterName)) {
-                allCharacterNamesNotChar.push(surrondingCharacterName);
-            }
-            if (currentlyInteractingCharacters.includes(surrondingCharacterName)) continue;
-
-            // check if already in one of the groups
-            let foundInGroup = false;
-            for (const group of groups) {
-                if (group.characters.some(char => char.name === surrondingCharacterName)) {
-                    foundInGroup = true;
-                    break;
-                }
-            }
-            if (foundInGroup) continue;
-
-            const surrondingCharacterState = this.deObject.stateFor[surrondingCharacterName];
-            if (surrondingCharacterState.conversationId) {
-                const conv = this.deObject.conversations[surrondingCharacterState.conversationId];
-                const participants = conv.participants;
-                if (participants.length === 1) {
-                    solos.characters.push({
-                        name: surrondingCharacterName,
-                        description: this.getShortDescriptionOfCharacter(surrondingCharacterName),
-                    });
-                } else {
-                    const existingGroup = groups.find(group => {
-                        // small hack, we will change these group descriptions later
-                        return group.groupDescription === "?" + surrondingCharacterState.conversationId;
-                    });
-                    if (existingGroup) {
-                        // add to existing group
-                        existingGroup.characters.push({
-                            name: surrondingCharacterName,
-                            description: this.getShortDescriptionOfCharacter(surrondingCharacterName),
-                        });
-                    } else {
-                        groups.push({
-                            // small hack, we will change these group descriptions later
-                            groupDescription: "?" + surrondingCharacterState.conversationId,
-                            characters: participants.map((charName) => {
-                                return {
-                                    name: charName,
-                                    description: this.getShortDescriptionOfCharacter(charName),
-                                };
-                            }),
-                        });
-                    }
-                }
-            } else {
-                solos.characters.push({
-                    name: surrondingCharacterName,
-                    description: this.getShortDescriptionOfCharacter(surrondingCharacterName),
-                });
-            }
-        };
-
-        groups.forEach((group, index) => {
-            // we have the hacky description renamed
-            if (group.groupDescription.startsWith("?")) {
-                const strongestCharacterBond = this.getCharacterWithClosestBondToCharacter(character, group.characters.map(c => c.name));
-                group.groupDescription = `${strongestCharacterBond}'s group`;
-            }
-        });
-
-        const availableSocialGroupsContextInfo = this.inferenceAdapter.buildContextInfoForAvailableCharacters(groups, true);
-
-        const systemMessage = `You are an assistant and story analyst that determines group dynamics between ${character.name} and ${this.deObject.functions.format_and(this.deObject, null, currentlyInteractingCharacters)}`;
-        const systemPrompt = this.inferenceAdapter.buildSystemPromptForQuestioningAgent(systemMessage, [
-            "You must make the conclusion based on the last message from " + character.name,
-            "You must resolve ambiguous mentions of characters to proper names based on the available character descriptions at " + availableSocialGroupsContextInfo.characterInfoAt,
-        ], null);
-        const systemAgent = this.inferenceAdapter.runQuestioningCustomAgentOn(
-            character,
-            systemPrompt,
-            availableSocialGroupsContextInfo.value,
-            this.getHistoryForCharacter(character, {}),
-            "LAST_CYCLE_EXPANDED",
-            null,
-        );
-        const ready = await systemAgent.next();
-        if (ready.done) {
-            throw new Error("Questioning agent could not be started properly.");
-        }
-
-        // huge grammar should answer all the possible outcomes, we need examples
-        const result = await systemAgent.next({
-            nextQuestion: `considering the list at ${availableSocialGroupsContextInfo.availableCharactersAt}. How have the conversational dynamics changed?`,
-            maxCharacters: 250,
-            maxParagraphs: 1,
-            stopAt: [],
-            stopAfter: [".", "\n"],
-            contextInfo: this.inferenceAdapter.buildContextInfoExample(
-                `Example: If the story says '${character.name} left alone to go [somewhere]', answer: '${character.name} has left their current conversation group on their own to go somewhere else'.`
-            ) + "\n" + this.inferenceAdapter.buildContextInfoExample(
-                `Example: If the story says '${character.name} left their current conversation group and joined Bob', answer: '${character.name} has left their current conversation group on their own and joined another group, the new group is formed by "Alice", "Bob" and "Charlie"'.`
-            ) + "\n" + this.inferenceAdapter.buildContextInfoExample(
-                `Example: If the story says '${character.name} joined the group where the cat is', answer: '${character.name} has joined another group on their own; the new group is formed by "Alice", "Bob", and "Charlie"'. Assuming Charlie is the cat's name, use proper names.`
-            ) + "\n" + this.inferenceAdapter.buildContextInfoExample(
-                `Example: If the story says '${character.name} joined another group together with Dave and Eve', answer: '${character.name} has joined another group with "Dave" and "Eve"; the new group is formed by "Alice", "Bob" and "Charlie"'.`
-            ) + "\n" + this.inferenceAdapter.buildContextInfoExample(
-                `Example: If the story says '${character.name} kidnapped Joe away from their friends', answer: '${character.name} has kidnapped "Joe" away from their current conversation'.`
-            ) + "\n" + this.inferenceAdapter.buildContextInfoExample(
-                `Example: If the story says '${character.name} joined Dale while forcing Peter with him', answer: '${character.name} has joined another group forcing "Peter" with them; the new group is formed by "Dale"'.`
-            ) + "\n" + this.inferenceAdapter.buildContextInfoExample(
-                `Example: If the story does not indicate any change in group dynamics, answer: '${character.name} has stayed with their current group'.`
-            )
-            ,
-            answerTrail: `${character.name} has `,
-            grammar: `root::= (leftalone | leftalonejoined | joinedgroupalone | joinedgroupwith | stayedwithcurrentgroup | takenfromgroup) .*\n` +
-
-                `leftalone ::= "left" " " "their" " " "current" " " "conversation" " " "group" " " "on" " " "their" " " "own" " " "to" (gosomewhereelse | dosomethingelse)\n` +
-                `gosomewhereelse ::= "go" " " "somewhere" " " "else"\n` +
-                `dosomethingelse ::= "do" " " "something" " " "else"\n` +
-
-                `leftalonejoined ::= "left" " " "their" " " "current" " " "conversation" " " "group" " " "on" " " "their" " " "own" " " "and" " " "joined" " " "another" " " "group" ";" "the" " " "new" " " "group" " " "is" " " "formed" " " "by" " " characteractuallist\n` +
-
-                `joinedgroupalone ::= "joined" " " "another" " " "group" " " "on" " " "their" " " "own" ";" " " "the" " " "new" " " "group" " " "is" " " "formed" " " "by" " " characteractuallist\n` +
-
-                `joinedgroupwith ::= "joined" " " "another" " " "group" " " ("accompanied" | "together" | "taking" | "forcing" | "kidnapping") characteractuallist (" " "with" " " "them")? ";" "the" " " "new" " " "group" " " "is" " " "formed" " " "by" " " characteractuallist\n` +
-                `stayedwithcurrentgroup ::= "stayed" " " "with" " " "their" " " "current" " " "group" .*\n` +
-
-                `takenfromgroup ::= ("taken" | ("forced" " " "out") | "kidnapped" | "removed") " " characteractuallist " " "away" " " "from" " " "their" " " "current" " " "conversation" " " "group" andjoined?\n` +
-                `andjoined ::= "and" " " "joined" " " characteractuallist\n` +
-
-                `characteractuallist ::= ((" "? "," " "? | " " "and" " ")? "\\"" characterlist "\\"")+\n` +
-                "characterlist ::= " + allCharacterNamesNotChar.map(name => JSON.stringify(name)).join(" | ") + "\n",
-        });
-
-        if (result.done) {
-            throw new Error("Questioning agent finished unexpectedly.");
-        }
-
-        await systemAgent.next(null); // finish the generator
-
-        // now we are up to some serious parsing
-        const message = result.value.trim();
-
-        // leftalone check
-        if (message.toLowerCase().startsWith("left their current conversation group on their own to")) {
-            originalGroupMembersLeftBehind = [...currentlyInteractingCharacters];
-            newGroupMembers = [character.name];
-        } else if (message.toLowerCase().startsWith("left their current conversation group on their own and joined another group")) {
-            const formedByPart = message.split("formed by")[1];
-        }
-    }
-
-    /**
-     * @param {DECompleteCharacterReference} character
-     */
-    async determineInteractedCharactersForMessage(character) {
-        if (!this.deObject) {
-            throw new Error("DEngine not initialized");
-        } else if (this.invalidCharacterStates) {
-            throw new Error("DEngine has invalid character states, cannot determine interacted characters");
-        } else if (!this.inferenceAdapter) {
-            throw new Error("Inference adapter not set, cannot perform inference");
-        }
-        const systemMessage = `You are an assistant and story analyst that determines which characters are being interacted within a message by ${character.name} in an interactive story. ` +
-            `By interaction we mean any mention of the character by name, description, actions directed towards them, where it warrants a response from the character`;
-
-        const systemPrompt = this.inferenceAdapter.buildSystemPromptForQuestioningAgent(systemMessage, [], null);
-
-        const characterState = this.deObject.stateFor[character.name];
-        if (!characterState) {
-            throw new Error(`Character state for ${character.name} not found.`);
-        }
-        if (!characterState.conversationId) {
-            throw new Error(`Character ${character.name} is not in a conversation, cannot determine interacted characters.`);
-        }
-
-        const surroundingNonStrangers = characterState.surroundingNonStrangers;
-
-        // these characters nearby but they are strangers likely not even looking at the direction
-        // of the character so they likely don't notice them
-        const surroundingTotalStrangers = characterState.surroundingTotalStrangers;
-
-        // these characters are already in the conversation and likely will hear everything
-        const conversationParticipants = this.deObject.conversations[characterState.conversationId].participants.filter(charName => charName !== character.name);
-        const surroundingNonStrangersNotInConversation = surroundingNonStrangers.filter(charName => !conversationParticipants.includes(charName));
-
-        /**
-         * @type {string[]}
-         */
-        const strangersLikelyToNotice = [];
-        /**
-         * @type {string[]}
-         */
-        const strangersNotLikelyToNotice = [];
-        /**
-         * @type {string[]}
-         */
-        const nonStrangerLikelyToNotice = [];
-        /**
-         * @type {string[]}
-         */
-        const nonStrangerNotLikelyToNotice = [];
-
-        for (const stranger of surroundingTotalStrangers) {
-            const sameSlot = this.deObject.stateFor[stranger]?.locationSlot === characterState.locationSlot;
-            if (sameSlot) {
-                strangersLikelyToNotice.push(stranger);
-            } else {
-                strangersNotLikelyToNotice.push(stranger);
-            }
-        }
-        for (const nonStranger of surroundingNonStrangersNotInConversation) {
-            const sameSlot = this.deObject.stateFor[nonStranger]?.locationSlot === characterState.locationSlot;
-            if (sameSlot) {
-                nonStrangerLikelyToNotice.push(nonStranger);
-            } else {
-                nonStrangerNotLikelyToNotice.push(nonStranger);
-            }
-        }
-
-        /**
-         * @type Array<{groupDescription: string, characters: Array<{name: string, description: string}>}>
-         */
-        const groups = [];
-        const allValidNamesForGrammar = new Set();
-
-        if (strangersNotLikelyToNotice.length > 0) {
-            groups.push({
-                groupDescription: "strangers likely not looking at " + character.name + "'s direction",
-                characters: strangersNotLikelyToNotice.map(name => ({
-                    name,
-                    description: this.getShortDescriptionOfCharacter(name),
-                })),
-            });
-            for (const name of strangersNotLikelyToNotice) {
-                allValidNamesForGrammar.add(name);
-            }
-        }
-        if (nonStrangerNotLikelyToNotice.length > 0) {
-            groups.push({
-                groupDescription: "characters who know " + character.name + " but are likely not looking at " + character.name + "'s direction",
-                characters: nonStrangerNotLikelyToNotice.map(name => ({
-                    name,
-                    description: this.getShortDescriptionOfCharacter(name),
-                })),
-            });
-            for (const name of nonStrangerNotLikelyToNotice) {
-                allValidNamesForGrammar.add(name);
-            }
-        }
-        if (strangersLikelyToNotice.length > 0) {
-            groups.push({
-                groupDescription: "strangers likely looking at " + character.name + "'s direction",
-                characters: strangersLikelyToNotice.map(name => ({
-                    name,
-                    description: this.getShortDescriptionOfCharacter(name),
-                })),
-            });
-            for (const name of strangersLikelyToNotice) {
-                allValidNamesForGrammar.add(name);
-            }
-        }
-        if (nonStrangerLikelyToNotice.length > 0) {
-            groups.push({
-                groupDescription: "characters who know " + character.name + " and are likely looking at " + character.name + "'s direction",
-                characters: nonStrangerLikelyToNotice.map(name => ({
-                    name,
-                    description: this.getShortDescriptionOfCharacter(name),
-                })),
-            });
-            for (const name of nonStrangerLikelyToNotice) {
-                allValidNamesForGrammar.add(name);
-            }
-        }
-        if (conversationParticipants.length > 0) {
-            groups.push({
-                groupDescription: "characters already in conversation with " + character.name + " and likely hear everything",
-                characters: conversationParticipants.map(name => ({
-                    name,
-                    description: this.getShortDescriptionOfCharacter(name),
-                })),
-            });
-            for (const name of conversationParticipants) {
-                allValidNamesForGrammar.add(name);
-            }
-        }
-
-        const allPotentials = ([
-            ...strangersLikelyToNotice,
-            ...nonStrangerLikelyToNotice,
-            ...strangersNotLikelyToNotice,
-            ...nonStrangerNotLikelyToNotice,
-            ...conversationParticipants,
-        ])
-        const allPotentialsLowered = allPotentials.map(name => name.toLowerCase());
-
-        const generator = this.inferenceAdapter.runQuestioningCustomAgentOn(character, systemPrompt, null, this.getHistoryForCharacter(character, {}), "LAST_CYCLE_EXPANDED", null);
-        const ready = await generator.next();
-        if (ready.value !== "ready") {
-            throw new Error("Questioning agent could not be started properly.");
-        }
-
-        const answerAboutLone = await generator.next({
-            maxParagraphs: 1,
-            maxCharacters: 500,
-            stopAt: [],
-            stopAfter: ["yes", "no"],
-            nextQuestion: "In the last message from " + character.name + ", did they interact with any characters or try to get anyone's attention? answer yes if they did, no if they ignored everyone, left or did not interact with anyone.",
-            grammar: `root ::= yesno .*\nyesno ::= "yes" | "no"`,
-        });
-
-        if (answerAboutLone.done) {
-            throw new Error("Questioning agent ended unexpectedly when asking about interaction alone.");
-        }
-
-        console.log("Answer about tried to get someone attention interaction:", answerAboutLone.value);
-
-        const interactingWithSomeone = answerAboutLone.value.trim().toLowerCase().indexOf("yes") !== -1;
-        let interactingWithEveryone = false;
-        /**
-         * @type string[]
-         */
-        let interactingSpecifically = [];
-
-        if (interactingWithSomeone) {
-            const answerAboutEveryone = await generator.next({
-                maxParagraphs: 1,
-                maxCharacters: 500,
-                stopAt: [],
-                stopAfter: ["yes", "no"],
-                nextQuestion: "In the last message from " + character.name + ", did they attempt to get everyone's attention or interact with everyone around them? such as trying to do a speech or announcement, or otherwise did they do something loud that would get everyone's attention? answer yes if they did, no if they didn't.",
-                grammar: `root ::= yesno .*\nyesno ::= "yes" | "no"`,
-            });
-
-            if (answerAboutEveryone.done) {
-                throw new Error("Questioning agent ended unexpectedly when asking about interaction with everyone.");
-            }
-            interactingWithEveryone = answerAboutEveryone.value.trim().toLowerCase().indexOf("yes") !== -1;
-
-            console.log("Answer about everyone interaction:", answerAboutEveryone.value);
-
-            if (!interactingWithEveryone) {
-                // now let's ask who, the LLM is not good at saying nobody or none when there are many options
-                // so we first ask if they interacted with anyone at all
-                // if yes, we then ask who specifically
-                const contextInfoGroups = this.inferenceAdapter.buildContextInfoForAvailableCharacters(groups);
-
-                const customGrammar = `root ::= nameList (${this.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()})\nnameList ::= name (\",\" name)*\nname ::= ${Array.from(allValidNamesForGrammar).map(name => JSON.stringify(name)).join(" | ")}`;
-
-                const answerToQuestion = await generator.next({
-                    contextInfo: contextInfoGroups.value,
-                    maxParagraphs: 1,
-                    maxCharacters: 500,
-                    stopAt: [],
-                    stopAfter: [],
-                    nextQuestion: "In the last message from " + character.name + ", which characters specifically are being interacted with?",
-                    grammar: customGrammar,
-                    answerTrail: "The characters " + character.name + " has interacted with in the order they are likely to respond/react are: ",
-                });
-
-                if (answerToQuestion.done) {
-                    throw new Error("Questioning agent ended unexpectedly when asking about who was interacted with.");
-                }
-
-                console.log("Answer to who was interacted with:", answerToQuestion.value);
-
-                answerToQuestion.value.split(",").map(name => name.trim()).forEach(name => {
-                    const loweredName = name.toLowerCase();
-                    if (loweredName === "none" || loweredName === "noone" || loweredName === "nobody" || !loweredName) {
-                        return;
-                    }
-
-                    if (allPotentialsLowered.includes(loweredName)) {
-                        const actualName = allPotentials[allPotentialsLowered.indexOf(loweredName)];
-                        if (!interactingSpecifically.includes(actualName)) {
-                            interactingSpecifically.push(actualName);
-                        }
-                    }
-                });
-            } else {
-                interactingSpecifically = allPotentials;
-            }
-        }
-
-        await generator.next(null); // finish the generator
-
-        const result = {
-            strangersAtDistanceInteracted: strangersNotLikelyToNotice.filter(name => interactingSpecifically.includes(name)),
-            nonStrangersAtDistanceInteracted: nonStrangerNotLikelyToNotice.filter(name => interactingSpecifically.includes(name)),
-            strangersUpCloseInteracted: strangersLikelyToNotice.filter(name => interactingSpecifically.includes(name)),
-            nonStrangersUpCloseInteracted: nonStrangerLikelyToNotice.filter(name => interactingSpecifically.includes(name)),
-            ordering: interactingSpecifically,
-            loudAnnouncementToEveryone: interactingWithEveryone,
-        };
-
-        return result;
-    }
-
-    /**
-     * @param {string} characterThatInvokedInteraction 
-     * @param {string} interactedCharacter 
-     */
-    async applyConversationReactionAccordingToCharacter(characterThatInvokedInteraction, interactedCharacter) {
-        return {
-            repliesWithAutism: false,
-            repliesWithSchizophrenia: false,
-            repliesNormally: false,
-            ignoresInvokerDueToTotalStranger: false,
-            ignoresInvokerDueToBadRelationship: false,
-
-            repliesWithCustom: false,
-            customReaction: "",
         }
     }
 
@@ -3253,26 +3002,14 @@ export class DEngine {
 
     /**
      * @param {DECompleteCharacterReference} character
-     * @param {Array<{name: string, lastInvoker: string}>} previouslyLeftOrderOfInteraction
+     * @param {Array<DEngineInteraction>} previouslyLeftOrderOfInteraction
      * @param {number} internalCycleDepth
      * @returns 
      */
-    async _runInternalCycleStepRecursive(character, previouslyLeftOrderOfInteraction = [], internalCycleDepth = 0) {
+    async _startInteraction(character, previouslyLeftOrderOfInteraction = [], internalCycleDepth = 0) {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         }
-
-        // TODO run item interaction inference here, to check if items move hands or locations
-
-        // TODO run scripts like post any inference here
-        // do something about stateContiguous cycles too
-
-        let expectedNewTime = this.deObject.currentTime.time + (1000 * 60 * 1); // 1 minute per internal cycle step
-        // TODO we will need to detect time change from actions that take time
-        // apply the time change to everything, states, conversations, etc... they will all need a fresh
-        // slate, stateFor should have its new history too
-
-        // TODO states have intensityChangePerMinute so that should be applied too
 
         const characterState = this.deObject.stateFor[character.name];
         if (!characterState) {
@@ -3283,12 +3020,6 @@ export class DEngine {
             throw new Error(`Character ${character.name} is not in a conversation, cannot run internal cycle step.`);
         }
 
-        // TODO this cycle cannot go if the character did a location change previously
-        // as well as a group modification like taking a group member or leaving a group
-        // those need to be processed first by the user
-        // we need to detect that and process the location change first, as the user needs to
-        // specify whether they follow, fight back, etc... so maybe it needs to go after nextOrderOfInteraction
-        // if there is nothing to handle with agree follow, fight follow, etc...
         if (this.talkingTurnRequested && internalCycleDepth !== 0) {
             // stop recursion user wants to talk
             // in theory characters can talk/react forever without the user talking
@@ -3301,183 +3032,31 @@ export class DEngine {
             return;
         }
 
-        const alreadyInteractingCharacters = this.deObject.conversations[characterState.conversationId].participants.filter(participant => participant !== character.name);
+        this.informCycleState("info", `Next character to talk: ${character.name}`);
+        await calculateStateChange(this, character);
+        await calculateBondsChangesDueToMessages(this, character);
+        await talk(character);
 
-        this.informCycleState("info", `Determining next order of interaction for character ${character.name} message`);
+        const feasibilityResults = await testMessageFeasibilityForCharacter(this, character, previouslyLeftOrderOfInteraction);
 
-        const interactedCharacters = await this.determineInteractedCharactersForMessage(character);
-
-        console.log(`Character ${character.name} interacted characters:`, interactedCharacters);
-
-        /**
-         * @type {Array<{
-         * name: string,
-         * lastInvoker: string | null,
-         * messageWillBeAboutAgreeFollow: boolean,
-         * messageWillBeAboutFightFollow: boolean,
-         * messageWillBeAboutAgreeGroupMemberTaken: boolean,
-         * messageWillBeAboutFightGroupMemberTaken: boolean,
-         * expectedReasoning: string | null,
-         * }>}
-         */
-        let nextOrderOfInteraction = /** @type {*} */(interactedCharacters.ordering.map(name => {
-            if (name === character.name) {
-                // kinda weird is character talking to themselves?
-                return null;
-            }
-            return ({
-                name: name,
-                lastInvoker: character.name,
-
-                messageWillBeAboutAgreeFollow: false,
-                messageWillBeAboutFightFollow: false,
-                messageWillBeAboutAgreeGroupMemberTaken: false,
-                messageWillBeAboutFightGroupMemberTaken: false,
-
-                expectedReasoning: null,
-            });
-
-            // we don't add the ones that already left the order of interaction
-            // they come first in the next order of interaction
-        }).filter(item => item !== null && !previouslyLeftOrderOfInteraction.find(prev => prev.name === item.name)));
-
-        // we take the old values provided that they are still interacting characters
-        // otherwise we must have left them behind without giving them time to answer
-        // in their turn in the conversation
-        // well the character did so, just the user is also a character after all
-        const nextOrderOfInteractionPrevValues = previouslyLeftOrderOfInteraction.filter((c) => alreadyInteractingCharacters.includes(c.name)).map(prevInteraction => ({
-            name: prevInteraction.name,
-            lastInvoker: prevInteraction.lastInvoker,
-            messageWillBeAboutAgreeFollow: false,
-            messageWillBeAboutFightFollow: false,
-            messageWillBeAboutAgreeGroupMemberTaken: false,
-            messageWillBeAboutFightGroupMemberTaken: false,
-            expectedReasoning: null,
-        }));
-
-        nextOrderOfInteraction = [
-            ...nextOrderOfInteractionPrevValues,
-            ...nextOrderOfInteraction,
-        ];
-
-        // we will add characters that are already interacting based on their initiative
-        for (const alreadyInteractingCharacterName of alreadyInteractingCharacters) {
-            const characterReference = this.deObject.characters[alreadyInteractingCharacterName];
-            if (!nextOrderOfInteraction.find(interaction => interaction.name === alreadyInteractingCharacterName)) {
-                if (Math.random() < characterReference.initiative) {
-                    console.log(`Adding already interacting character ${alreadyInteractingCharacterName} to next order of interaction based on initiative ${characterReference.initiative}`);
-                    nextOrderOfInteraction.push({
-                        name: alreadyInteractingCharacterName,
-                        lastInvoker: null,
-                        messageWillBeAboutAgreeFollow: false,
-                        messageWillBeAboutFightFollow: false,
-                        messageWillBeAboutAgreeGroupMemberTaken: false,
-                        messageWillBeAboutFightGroupMemberTaken: false,
-                        expectedReasoning: null,
-                    });
-                }
-            }
+        // this should not happen for non user characters
+        if (!feasibilityResults.feasible) {
+            throw new Error(`Character ${character.name} generated an infeasible message, which should not happen because they are not the user character. Reason: ${feasibilityResults.reason}`);
         }
 
-        // forcefully add the character with the highest initiative if no one is left
-        if (nextOrderOfInteraction.length === 0) {
-            let highestInitiativeCharacter = null;
-            let highestInitiativeValue = -1;
-            for (const alreadyInteractingCharacterName of alreadyInteractingCharacters) {
-                const characterReference = this.deObject.characters[alreadyInteractingCharacterName];
-                if (characterReference.initiative > highestInitiativeValue) {
-                    highestInitiativeValue = characterReference.initiative;
-                    highestInitiativeCharacter = alreadyInteractingCharacterName;
-                }
-            }
-            if (highestInitiativeCharacter) {
-                console.log(`Forcefully adding already interacting character ${highestInitiativeCharacter} to next order of interaction as highest initiative ${highestInitiativeValue}`);
-                nextOrderOfInteraction.push({
-                    name: highestInitiativeCharacter,
-                    lastInvoker: null,
-                    messageWillBeAboutAgreeFollow: false,
-                    messageWillBeAboutFightFollow: false,
-                    messageWillBeAboutAgreeGroupMemberTaken: false,
-                    messageWillBeAboutFightGroupMemberTaken: false,
-                    expectedReasoning: null,
-                });
-            }
-        }
+        this.informCycleState("info", `Feasibility analysis and effect completed!`);
 
-        console.log(`Character is currently interacting with:`, alreadyInteractingCharacters);
+        const nextCharacterToTalk = feasibilityResults.nextCharacterToTalk;
 
-        let expectedNextLocation = characterState.location;
-        let expectedNextLocationSlot = characterState.locationSlot;
-
-        // TODO determine the location change
-
-        console.log(`Character ${character.name} final next order of interaction:`, nextOrderOfInteraction);
-
-        // We need to check characters that are in conversation with these
-        if (alreadyInteractingCharacters.length > 0 || nextOrderOfInteraction.length > 0) {
-            console.log(`Determining change in group dynamics for character ${character.name}`);
-
-            // this function modifies nextOrderOfInteraction in place
-            // TODO this is not completed
-            await this.determineGroupDynamics(character, alreadyInteractingCharacters, nextOrderOfInteraction);
-        } else {
-            // otherwise they are talking to themselves :D
-        }
-
-        // Now we will use initiative to find out characters that may just barge in the conversation
-        // alongside their group members
-        // TODO do this after location changes and we know which group is left and where they are
-
-        if (nextOrderOfInteraction.length === 0) {
-            // you are kinda, talking to yourself :D are you alone?...
-            // we still need to figure item interactions nevertheless.
-            this.informCycleState("info", `No characters noticed the user message.`);
-
-            this.deObject.conversations[characterState.conversationId].messages.push({
-                sender: "Story Master",
-                content: "No characters noticed " + character.name + " messages/actions.",
-                duration: { inMinutes: 0, inHours: 0, inDays: 0 },
-                startTime: { ...this.deObject.currentTime },
-                endTime: { ...this.deObject.currentTime },
-                id: crypto.randomUUID(),
-                isCharacter: false,
-                isDebugMessage: false,
-                isUser: false,
-                isStoryMasterMessage: true,
-                isRejectedMessage: false,
-                canOnlyBeSeenByCharacter: null,
-            });
-
-            await this.informDEObjectUpdated();
+        if (!nextCharacterToTalk || nextCharacterToTalk.name === this.user?.name) {
+            this.informCycleState("info", `Next character to talk is the user or no one, ending recursive internal cycle.`);
             return;
         }
 
-        // TODO process location changes, follow changes and consume characters that left the interaction order
-        // once that is consumed it is but the lastInvoker that has their chance to talk once again
+        const nextCharacterToTalkCharacterObject = this.deObject.characters[nextCharacterToTalk.name];
+        const leftOrderOfInteraction = feasibilityResults.leftOrderOfInteraction;
 
-        // TODO recalculate postures and stances
-
-        if (nextOrderOfInteraction.length > 0) {
-            this.informCycleState("info", `Next character to talk: ${nextOrderOfInteraction[0].name}`);
-            const nextCharacterToTalk = nextOrderOfInteraction[0];
-            const nextCharacterToTalkCharacterObject = this.deObject.characters[nextCharacterToTalk.name];
-            await this._talk(nextCharacterToTalkCharacterObject);
-            await this._runInternalCycleStepRecursive(nextCharacterToTalkCharacterObject, [], internalCycleDepth + 1);
-        }
-    }
-
-    /**
-     * Finally it is the character's turn to talk
-     * @param {DECompleteCharacterReference} character 
-     */
-    async _talk(character) {
-        await calculateStateChange(this, character);
-        await calculateBondsChangesDueToMessages(this, character);
-
-        // Determine an action to take
-        const actionDeterminationResult = await this.determineCharacterAction(character);
-
-        // Now finally generate the message
+        await this._startInteraction(nextCharacterToTalkCharacterObject, leftOrderOfInteraction, internalCycleDepth + 1);
     }
 
     async gameOver() {
@@ -3544,70 +3123,82 @@ export class DEngine {
         try {
             this.informCycleState("info", `Starting new message cycle`);
 
-            let userConversationId = userCharacterState.conversationId;
-            let originalConversationId = userConversationId;
-            let originalMessageId = userCharacterState.messageId;
+            const user = this.user;
+
+            const expectedFutureConversationIdIfNotFound = crypto.randomUUID();
+
             /**
-             * @type {DEConversationMessage}
+             * @param {boolean} makeRejected 
+             * @returns 
              */
-            const messageToAdd = {
-                sender: this.user.name,
-                content: userMessage,
-                duration: { inMinutes: 0, inHours: 0, inDays: 0 },
-                startTime: { ...this.deObject.currentTime },
-                endTime: { ...this.deObject.currentTime },
-                id: crypto.randomUUID(),
-                isCharacter: true,
-                isDebugMessage: false,
-                isUser: true,
-                isStoryMasterMessage: false,
-                isRejectedMessage: false,
-                canOnlyBeSeenByCharacter: null,
-            }
-            if (!userConversationId) {
-                // need to make a new conversation
-                // TODO time hasn't moved so it shouldn't be a new state
-                userConversationId = crypto.randomUUID();
-                const userCharacterStateCopy = deepCopyNoHistory(userCharacterState);
-                userCharacterState.history.push(userCharacterStateCopy)
-                userCharacterState.conversationId = userConversationId;
-                userCharacterState.messageId = messageToAdd.id;
-                userCharacterState.type = "INTERACTING";
-                this.deObject.conversations[userConversationId] = {
-                    id: userConversationId,
-                    previousConversationIdsPerParticipant: {
-                        [this.user.name]: null,
-                    },
-                    startTime: { ...this.deObject.currentTime },
-                    messages: [messageToAdd],
-                    participants: [this.user.name],
-                    remoteParticipants: [],
+            const addUserMessage = (makeRejected) => {
+                /**
+                 * @type {DEConversationMessage}
+                 */
+                const messageToAdd = {
+                    sender: user.name,
+                    content: userMessage,
                     duration: { inMinutes: 0, inHours: 0, inDays: 0 },
-                    endTime: null,
-                    location: userCharacterState.location,
-                    pseudoConversation: false,
-                    summary: null,
-                    bondsAtStart: getFrozenBonds([this.user.name]),
-                    bondsAtEnd: null,
-                };
-            } else {
-                this.deObject.conversations[userConversationId].messages.push(messageToAdd);
-                userCharacterState.messageId = messageToAdd.id;
+                    // @ts-expect-error typescript issue as usual
+                    startTime: { ...this.deObject.currentTime },
+                    // @ts-expect-error typescript issue as usual
+                    endTime: { ...this.deObject.currentTime },
+                    id: crypto.randomUUID(),
+                    isCharacter: true,
+                    isDebugMessage: false,
+                    isUser: true,
+                    isStoryMasterMessage: false,
+                    isRejectedMessage: makeRejected,
+                    canOnlyBeSeenByCharacter: null,
+                }
+                if (!userCharacterState.conversationId) {
+                    // need to make a new conversation
+                    // TODO time hasn't moved so it shouldn't be a new state
+                    const userCharacterStateCopy = deepCopyNoHistory(userCharacterState);
+                    userCharacterState.history.push(userCharacterStateCopy);
+                    userCharacterState.conversationId = expectedFutureConversationIdIfNotFound;
+                    if (!makeRejected) {
+                        userCharacterState.messageId = messageToAdd.id;
+                    }
+                    userCharacterState.type = "INTERACTING";
+                    // @ts-expect-error typescript issue as usual
+                    this.deObject.conversations[expectedFutureConversationIdIfNotFound] = {
+                        id: expectedFutureConversationIdIfNotFound,
+                        previousConversationIdsPerParticipant: {
+                            [user.name]: null,
+                        },
+                        // @ts-expect-error typescript issue as usual
+                        startTime: { ...this.deObject.currentTime },
+                        messages: [messageToAdd],
+                        participants: [user.name],
+                        remoteParticipants: [],
+                        location: userCharacterState.location,
+                        pseudoConversation: false,
+                        summary: null,
+                        bondsAtStart: getFrozenBonds([user.name]),
+                        bondsAtEnd: null,
+                    };
+                    return expectedFutureConversationIdIfNotFound;
+                } else {
+                    // @ts-expect-error typescript issue as usual
+                    this.deObject.conversations[userCharacterState.conversationId].messages.push(messageToAdd);
+                    if (!makeRejected) {
+                        userCharacterState.messageId = messageToAdd.id;
+                    }
+                    return userCharacterState.conversationId;
+                }
             }
 
             /**
              * @param {string} reason 
              */
             const simpleRollbackWithReason = async (reason) => {
-                userCharacterState.messageId = originalMessageId;
-                userCharacterState.conversationId = originalConversationId;
-                // reject the added message
-                messageToAdd.isRejectedMessage = true;
-                // delete the historic state we added
+                this.deObject = deObjectBackup;
+
+                const conversationIdUsed = addUserMessage(true);
+
                 // @ts-ignore
-                this.deObject.stateFor[this.user.name].history.pop();
-                // @ts-ignore
-                this.deObject.conversations[userConversationId].messages.push({
+                this.deObject.conversations[conversationIdUsed].messages.push({
                     sender: "Story Master",
                     content: `Message rejected, ${reason}`,
                     duration: { inMinutes: 0, inHours: 0, inDays: 0 },
@@ -3627,24 +3218,53 @@ export class DEngine {
                 await this.informDEObjectUpdated();
             }
 
+            addUserMessage(false);
             await this.informDEObjectUpdated();
             this.informCycleState("info", `Testing message is following the rules`);
 
             const testResults = await testWorldRulesOn(this, this.userCharacter);
             if (!testResults.passed) {
                 await simpleRollbackWithReason(testResults.reason || "Message broke world rules");
-                this.informCycleState("info", `The message has been rejected for breaking the rules`);
+                this.informCycleState("info", `The message has been rejected for breaking the world rules`);
                 this.executingCycle = false;
                 return;
             }
 
-            this.informCycleState("info", `World rules passed!`);
+            const feasibilityResults = await testMessageFeasibilityForCharacter(this, this.userCharacter, []);
 
-            await this._runInternalCycleStepRecursive(this.userCharacter, [], 0);
+            if (!feasibilityResults.feasible) {
+                await simpleRollbackWithReason(feasibilityResults.reason || "Message is not feasible for character");
+                this.informCycleState("info", `The message has been rejected for being not feasible for the character`);
+                this.executingCycle = false;
+                return;
+            }
+
+            this.informCycleState("info", `Feasibility test Passed!`);
+
+            const nextCharacterToTalk = feasibilityResults.nextCharacterToTalk;
+
+            if (!nextCharacterToTalk || nextCharacterToTalk.name === this.user.name) {
+                this.informCycleState("info", `Calculating state changes for user character`);
+                await calculateStateChange(this, this.userCharacter);
+                this.informCycleState("info", `Cycle completed successfully`);
+                await this.informDEObjectUpdated();
+                return;
+            }
+
+            const nextCharacterToTalkCharacterObject = this.deObject.characters[nextCharacterToTalk.name];
+            const leftOrderOfInteraction = feasibilityResults.leftOrderOfInteraction;
+
+            await this._startInteraction(
+                nextCharacterToTalkCharacterObject,
+                leftOrderOfInteraction,
+                0,
+            );
             // calculate state changes towards the user character
             // hopefully these are reasonable
+            this.informCycleState("info", `Calculating state changes for user character`);
             await calculateStateChange(this, this.userCharacter);
-            
+            this.informCycleState("info", `Cycle completed successfully`);
+            await this.informDEObjectUpdated();
         } catch (error) {
             // @ts-ignore
             this.informCycleState("error", `Internal Error during cycle execution: ${error.message}`);
@@ -3747,8 +3367,6 @@ export class DEngine {
                 messages: [messageToAdd],
                 participants: [this.user.name],
                 remoteParticipants: [],
-                duration: { inMinutes: 0, inHours: 0, inDays: 0 },
-                endTime: null,
                 location: userCharacterState.location,
                 pseudoConversation: false,
                 summary: null,

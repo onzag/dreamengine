@@ -83,7 +83,7 @@ export default async function testWorldRulesOn(engine, character) {
     const charState = engine.deObject.stateFor[character.name];
 
     if (engine.disabledWorldRules) {
-        engine.informCycleState("warning", `World rules testing is disabled, skipping world rules test for character ${character.name}.`);
+        console.warn(`World rules testing is disabled, skipping world rules test for character ${character.name}.`);
         return { passed: true, reason: null };
     }
 
@@ -98,7 +98,7 @@ export default async function testWorldRulesOn(engine, character) {
         const characterInfo = engine.deObject.characters[characterName];
         const characterState = engine.deObject.stateFor[characterName];
         if (characterInfo) {
-            characters.push({ name: characterName, description: engine.getShortDescriptionOfCharacter(characterName, true) });
+            characters.push({ name: characterName, description: engine.getExternalDescriptionOfCharacter(characterName, true) });
         }
     }
     for (const characterName of charState.surroundingNonStrangers) {
@@ -108,7 +108,7 @@ export default async function testWorldRulesOn(engine, character) {
         const characterInfo = engine.deObject.characters[characterName];
         const characterState = engine.deObject.stateFor[characterName];
         if (characterInfo) {
-            characters.push({ name: characterName, description: engine.getShortDescriptionOfCharacter(characterName, true) });
+            characters.push({ name: characterName, description: engine.getExternalDescriptionOfCharacter(characterName, true) });
         }
     }
 
@@ -247,15 +247,15 @@ export default async function testWorldRulesOn(engine, character) {
         if (whoDidThisAction === character.name) {
             // this is us, the character, so it must have been a false positive
             brokenSpecialRule = false;
-            engine.informCycleState("warning", "The action/reaction described by " + character.name + " in world rule checking was actually performed by themselves; allowing the rule to pass.");
+            console.warn("The action/reaction described by " + character.name + " in world rule checking was actually performed by themselves; allowing the rule to pass.");
         } else {
 
             // now we need to figure out who did the action/reaction if possible
             // because of bad LLM behaviour sometimes the name doesn't match reality let's double check anyway
             if (!whoDidThisAction) {
-                engine.informCycleState("warning", "Could not determine who performed the action/reaction described by " + character.name + " in world rule checking.");
+                console.warn("Could not determine who performed the action/reaction described by " + character.name + " in world rule checking.");
             } else {
-                engine.informCycleState("info", "Double checking who performed the action/reaction described by " + character.name + " in world rule checking.");
+                console.log("Double checking who performed the action/reaction described by " + character.name + " in world rule checking.");
             }
 
             // ask now for the name
@@ -288,13 +288,13 @@ export default async function testWorldRulesOn(engine, character) {
             }
 
             if (!whoDidThisAction2) {
-                engine.informCycleState("warning", "Could not determine who performed the action/reaction described by " + character.name + " in world rule checking, even after asking specifically.");
+                console.warn("Could not determine who performed the action/reaction described by " + character.name + " in world rule checking, even after asking specifically.");
             }
             whoDidThisAction = whoDidThisAction2 || name;
             if (whoDidThisAction === character.name) {
                 // this is us, the character, so it must have been a false positive
                 brokenSpecialRule = false;
-                engine.informCycleState("warning", "The action/reaction described by " + character.name + " in world rule checking was actually performed by themselves; allowing the rule to pass.");
+                console.warn("The action/reaction described by " + character.name + " in world rule checking was actually performed by themselves; allowing the rule to pass.");
             }
         }
     }
@@ -385,22 +385,22 @@ export default async function testWorldRulesOn(engine, character) {
         throw new Error("Inference adapter questioning generator ended unexpectedly.");
     }
 
-    let currentLocationDescription = `"${character.name}" is currently at: ${charState.location}, at the slot: ${charState.locationSlot}.`;
+    // let currentLocationDescription = `"${character.name}" is currently at: ${charState.location}, at the slot: ${charState.locationSlot}.`;
 
-    const locationInfo = engine.deObject.world.locations[charState.location];
-    if (locationInfo.entrances && locationInfo.entrances.length > 0) {
-        currentLocationDescription += `\nAt this location, the following entrances are available: ${locationInfo.entrances.join(", ")}.`;
-    }
+    // const locationInfo = engine.deObject.world.locations[charState.location];
+    // if (locationInfo.entrances && locationInfo.entrances.length > 0) {
+    //     currentLocationDescription += `\nAt this location, the following entrances are available: ${locationInfo.entrances.join(", ")}.`;
+    // }
 
-    // @ts-ignore
-    const locationDescription = await locationInfo.description.execute(engine.deObject, character);
-    if (locationDescription && locationDescription.trim() !== "") currentLocationDescription += `\nThe location is described as: ${locationDescription}.`;
-    const locationSlotInfo = locationInfo.slots[charState.locationSlot];
-    // @ts-ignore
-    const locationSlotDescription = await locationSlotInfo.description.execute(engine.deObject, character);
-    if (locationSlotDescription && locationSlotDescription.trim() !== "") currentLocationDescription += `\nThe slot is described as: ${locationSlotDescription}.`;
+    // // @ts-ignore
+    // const locationDescription = await locationInfo.description.execute(engine.deObject, character);
+    // if (locationDescription && locationDescription.trim() !== "") currentLocationDescription += `\nThe location is described as: ${locationDescription}.`;
+    // const locationSlotInfo = locationInfo.slots[charState.locationSlot];
+    // // @ts-ignore
+    // const locationSlotDescription = await locationSlotInfo.description.execute(engine.deObject, character);
+    // if (locationSlotDescription && locationSlotDescription.trim() !== "") currentLocationDescription += `\nThe slot is described as: ${locationSlotDescription}.`;
 
-    const contextLocationInfo = engine.inferenceAdapter.buildContextInfoCurrentLocationDescription(currentLocationDescription);
+    // const contextLocationInfo = engine.inferenceAdapter.buildContextInfoCurrentLocationDescription(currentLocationDescription);
 
     const basicYesNoRules = [
         // {
@@ -411,18 +411,18 @@ export default async function testWorldRulesOn(engine, character) {
             rule: `${character.name} cannot do time travel to the past`,
             question: `has ${character.name} specified going back in time? answer no if unsure or unclear`,
         },
-        {
-            rule: `If ${character.name} is trying to go somewhere by themselves, they need to end the message before arriving at destination or describing actions at the new location`,
-            moreContext: contextLocationInfo.value + "\n" + engine.inferenceAdapter.buildContextInfoInstructions(
-                "This rule is not broken if " + character.name + " is describing the same location they are currently at, check at " + contextLocationInfo.locationDescriptionAt + " for information on the current location to determine if it is the same one, answer no if unsure/unclear",
-            ),
-        },
-        {
-            rule: `If ${character.name} is trying to go somewhere with another character, they need to end the message before arriving at destination or describing actions at the new location`,
-            moreContext: contextLocationInfo.value + "\n" + engine.inferenceAdapter.buildContextInfoInstructions(
-                "This rule is not broken if " + character.name + " is describing the same location they are currently at, check at " + contextLocationInfo.locationDescriptionAt + " for information on the current location to determine if it is the same one, answer no if unsure/unclear",
-            ),
-        },
+        // {
+        //     rule: `If ${character.name} is trying to go somewhere by themselves, they need to end the message before arriving at destination or describing actions at the new location`,
+        //     moreContext: contextLocationInfo.value + "\n" + engine.inferenceAdapter.buildContextInfoInstructions(
+        //         "This rule is not broken if " + character.name + " is describing the same location they are currently at, check at " + contextLocationInfo.locationDescriptionAt + " for information on the current location to determine if it is the same one, answer no if unsure/unclear",
+        //     ),
+        // },
+        // {
+        //     rule: `If ${character.name} is trying to go somewhere with another character, they need to end the message before arriving at destination or describing actions at the new location`,
+        //     moreContext: contextLocationInfo.value + "\n" + engine.inferenceAdapter.buildContextInfoInstructions(
+        //         "This rule is not broken if " + character.name + " is describing the same location they are currently at, check at " + contextLocationInfo.locationDescriptionAt + " for information on the current location to determine if it is the same one, answer no if unsure/unclear",
+        //     ),
+        // },
         ...otherRulesProcessed.map(ruleText => ({ rule: ruleText })),
     ];
 
@@ -510,7 +510,7 @@ export default async function testWorldRulesOn(engine, character) {
         }
 
         if (characterExists) {
-            engine.informCycleState("warning", "The character " + mentionedName + " mentioned by " + character.name + " as being newly introduced is actually already present; allowing the rule to pass.");
+            console.warn("The character " + mentionedName + " mentioned by " + character.name + " as being newly introduced is actually already present; allowing the rule to pass.");
         } else {
             return { passed: false, reason: spawnedMissingCharacters.value.trim().replace("yes, ", "").trim() };
         }
@@ -567,7 +567,7 @@ export default async function testWorldRulesOn(engine, character) {
                 }
             }
             if (!characterExists) {
-                engine.informCycleState("warning", "The character " + characterNameMentioned + " mentioned by " + character.name + " as being lifted or carried is actually not in the cannot carry list; allowing the rule to pass.");
+                console.warn("The character " + characterNameMentioned + " mentioned by " + character.name + " as being lifted or carried is actually not in the cannot carry list; allowing the rule to pass.");
             } else {
                 return { passed: false, reason: liftingTooHeavyCharacter.value.trim().replace("yes, ", "").trim() };
             }
@@ -645,7 +645,7 @@ export default async function testWorldRulesOn(engine, character) {
                 }
             }
             if (!itemExists) {
-                engine.informCycleState("warning", "The item " + itemNameMentioned + " mentioned by " + character.name + " as being lifted or carried is actually not in the cannot carry list; allowing the rule to pass.");
+                console.warn("The item " + itemNameMentioned + " mentioned by " + character.name + " as being lifted or carried is actually not in the cannot carry list; allowing the rule to pass.");
             } else {
                 return { passed: false, reason: liftingTooHeavyItem.value.trim().replace("yes, ", "").trim() };
             }
@@ -701,7 +701,7 @@ export default async function testWorldRulesOn(engine, character) {
         }
 
         if (itemExists) {
-            engine.informCycleState("warning", "The item " + itemNameMentioned + " mentioned by " + character.name + " as being interacted with is actually available at their location; allowing the rule to pass.");
+            console.warn("The item " + itemNameMentioned + " mentioned by " + character.name + " as being interacted with is actually available at their location; allowing the rule to pass.");
         } else {
             // Not so fast it might be a character
             let isCharacter = false;
@@ -713,7 +713,7 @@ export default async function testWorldRulesOn(engine, character) {
             }
 
             if (isCharacter) {
-                engine.informCycleState("warning", "The name " + itemNameMentioned + " mentioned by " + character.name + " as being an item interacted with is actually an existing character; allowing the rule to pass.");
+                console.warn("The name " + itemNameMentioned + " mentioned by " + character.name + " as being an item interacted with is actually an existing character; allowing the rule to pass.");
             } else {
                 return { passed: false, reason: spawnedMissingItems.value.trim().replace("yes, ", "").trim() };
             }

@@ -367,7 +367,7 @@ export function importCharacterFromJSON(json) {
         name: characterName,
         initiative: extractSimpleProperty(schema, json, "initiative"),
         actionPromptInjection: {},
-        systemPromptInjection: {},
+        generalCharacterDescriptionInjection: {},
         schizophrenia: extractSimpleProperty(schema, json, "schizophrenia"),
         schizophrenicVoiceDescription: schizophrenicVoiceDescription,
         wanderPotential: extractSimpleProperty(schema, json, "wander_potential"),

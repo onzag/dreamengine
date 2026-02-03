@@ -402,7 +402,7 @@ declare interface DECharacterStateDefinition {
      * Used for descriptions of the character general state
      * get applied at system prompt level
      */
-    systemPromptInjection?: DEStringTemplate;
+    generalCharacterDescriptionInjection?: DEStringTemplate;
     /**
      * Very strong, used for instructions that the character must follow
      * make sure that it is not kept every inference cycle unless intended
@@ -444,7 +444,7 @@ declare interface DECharacterStateDefinition {
      * Used for descriptions of the character general state
      * get applied at system prompt level when relieving the state
      */
-    relievingSystemPromptInjection?: DEStringTemplate;
+    relievingGeneralCharacterDescriptionInjection?: DEStringTemplate;
     /**
      * Very strong, used for instructions that the character must follow
      * make sure that it is not kept every inference cycle unless intended
@@ -762,7 +762,7 @@ declare interface DEBondDeclaration {
      * 
      * {{char}} trusts {{other}} a lot and would do anything for {{format_object_pronoun other}}.
      */
-    systemPromptInjection?: DEStringTemplate;
+    generalCharacterDescriptionInjection?: DEStringTemplate;
     /**
      * Used for descriptions of the character general bond state when the bond is an ex bond
      * for the character has been removed from the story but the other character still exists
@@ -771,7 +771,7 @@ declare interface DEBondDeclaration {
      * 
      * {{char}} used to trust {{other}} a lot and be best friends but now {{other}} is gone and they feel sad about it.
      */
-    systemPromptInjectionEx?: DEStringTemplate;
+    generalCharacterDescriptionInjectionEx?: DEStringTemplate;
     /**
      * The questions to ask to determine bond increases or decreases
      * based on interactions and events happening in the story
@@ -856,7 +856,7 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
      * every inference cycle, these get applied at a system prompt level
      * so it should be writte in 3rd person format
      */
-    systemPromptInjection: Record<string, DEStringTemplate>;
+    generalCharacterDescriptionInjection: Record<string, DEStringTemplate>;
     
     /**
      * These are rules that the character must follow at all times,
@@ -1273,7 +1273,7 @@ declare interface DEStateDescription {
     /**
      * The time when this state was first activated that was contiguous with the current state
      * as in the character did not relieve or have the state removed in between inference cycles
-     * it just keeped being active
+     * it just kept being active
      */
     contiguousStartActivationTime: DETimeDescription;
     /**
@@ -2141,14 +2141,6 @@ declare interface DEConversation {
      * The start time of the conversation
      */
     startTime: DETimeDescription;
-    /**
-     * The end time of the conversation, null if still ongoing
-     */
-    endTime: DETimeDescription | null;
-    /**
-     * The duration of the conversation thus far, or total duration if ended
-     */
-    duration: DETimeDurationDescription;
     /**
      * The list of messages that were exchanged in the conversation
      */

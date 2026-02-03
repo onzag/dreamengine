@@ -329,7 +329,7 @@ export const commands = {
                 const characterInfo = engine.deObject.characters[characterName];
                 const characterState = engine.deObject.stateFor[characterName];
                 if (characterInfo) {
-                    answer += `- ${characterName}: ${engine.getShortDescriptionOfCharacter(characterName, true)}\n`;
+                    answer += `- ${characterName}: ${engine.getExternalDescriptionOfCharacter(characterName, true)}\n`;
                 }
             }
             answer += `\nTotal Strangers:\n`;
@@ -340,7 +340,7 @@ export const commands = {
                 const characterInfo = engine.deObject.characters[characterName];
                 const characterState = engine.deObject.stateFor[characterName];
                 if (characterInfo) {
-                    answer += `- ${characterName}: ${engine.getShortDescriptionOfCharacter(characterName, true)}\n`;
+                    answer += `- ${characterName}: ${engine.getExternalDescriptionOfCharacter(characterName, true)}\n`;
                 }
             }
             return answer;
@@ -377,7 +377,7 @@ export const commands = {
                 const characterInfo = engine.deObject.characters[participantName];
                 const characterState = engine.deObject.stateFor[participantName];
                 if (characterInfo) {
-                    answer += `- ${participantName}: ${engine.getShortDescriptionOfCharacter(participantName, true)}\n`;
+                    answer += `- ${participantName}: ${engine.getExternalDescriptionOfCharacter(participantName, true)}\n`;
                 }
             }
             return answer;
@@ -431,7 +431,7 @@ export const commands = {
              */
             const allActionsProvidedByForce = [];
 
-            for (const injectable of Object.values(character.systemPromptInjection)) {
+            for (const injectable of Object.values(character.generalCharacterDescriptionInjection)) {
                 // @ts-ignore
                 currentSystemInstructions += "\n\n" + (await injectable.execute(engine.deObject, character, undefined, undefined, undefined, undefined)).trim();
             }
@@ -447,9 +447,9 @@ export const commands = {
                 });
                 for (const activeBond of sortedActive) {
                     const bondDeclaration = character.bonds.declarations.find(bondDecl => bondDecl.strangerBond === activeBond.stranger && bondDecl.minBondLevel <= activeBond.bond && activeBond.bond < (bondDecl.maxBondLevel === 100 ? 200 : bondDecl.maxBondLevel) && bondDecl.min2BondLevel <= activeBond.bond2 && activeBond.bond2 < (bondDecl.max2BondLevel === 100 ? 200 : bondDecl.max2BondLevel));
-                    if (bondDeclaration && bondDeclaration.systemPromptInjection) {
+                    if (bondDeclaration && bondDeclaration.generalCharacterDescriptionInjection) {
                         // @ts-ignore
-                        const injectedValue = (await bondDeclaration.systemPromptInjection.execute(engine.deObject, character, engine.deObject.characters[activeBond.towards], undefined, undefined, undefined)).trim();
+                        const injectedValue = (await bondDeclaration.generalCharacterDescriptionInjection.execute(engine.deObject, character, engine.deObject.characters[activeBond.towards], undefined, undefined, undefined)).trim();
                         if (injectedValue) {
                             currentSystemInstructions += `\n\n${injectedValue}`;
                         }
@@ -457,9 +457,9 @@ export const commands = {
                 }
                 for (const exBond of sortedEx) {
                     const bondDeclaration = character.bonds.declarations.find(bondDecl => bondDecl.strangerBond === exBond.stranger && bondDecl.minBondLevel <= exBond.bond && exBond.bond < (bondDecl.maxBondLevel === 100 ? 200 : bondDecl.maxBondLevel) && bondDecl.min2BondLevel <= exBond.bond2 && exBond.bond2 < (bondDecl.max2BondLevel === 100 ? 200 : bondDecl.max2BondLevel));
-                    if (bondDeclaration && bondDeclaration.systemPromptInjection) {
+                    if (bondDeclaration && bondDeclaration.generalCharacterDescriptionInjection) {
                         // @ts-ignore
-                        const injectedValue = (await bondDeclaration.systemPromptInjection.execute(engine.deObject, character, engine.deObject.characters[exBond.towards], undefined, undefined, undefined)).trim();
+                        const injectedValue = (await bondDeclaration.generalCharacterDescriptionInjection.execute(engine.deObject, character, engine.deObject.characters[exBond.towards], undefined, undefined, undefined)).trim();
                         if (injectedValue) {
                             currentSystemInstructions += `\n\n${injectedValue}`;
                         }
@@ -528,14 +528,14 @@ export const commands = {
                     ),
                     systemInstructions: async () => (state.relieving ? (
                         // @ts-ignore
-                        stateInfo.relievingSystemPromptInjection ?
+                        stateInfo.relievingGeneralCharacterDescriptionInjection ?
                             // @ts-ignore
-                            await stateInfo.relievingSystemPromptInjection.execute(engine.deObject, character, undefined, undefined, undefined, undefined) :
+                            await stateInfo.relievingGeneralCharacterDescriptionInjection.execute(engine.deObject, character, undefined, undefined, undefined, undefined) :
                             // @ts-ignore
-                            await stateInfo.systemPromptInjection?.execute(engine.deObject, character, undefined, undefined, undefined, undefined)
+                            await stateInfo.generalCharacterDescriptionInjection?.execute(engine.deObject, character, undefined, undefined, undefined, undefined)
                     ) : (
                         // @ts-ignore
-                        await stateInfo.systemPromptInjection?.execute(engine.deObject, character, undefined, undefined, undefined, undefined)
+                        await stateInfo.generalCharacterDescriptionInjection?.execute(engine.deObject, character, undefined, undefined, undefined, undefined)
                     )) || "",
                 }
             })));
@@ -609,50 +609,15 @@ export const commands = {
             if (!character) {
                 return `Character "${characterName}" not found`;
             }
-            // @ts-ignore
-            let bond = engine.deObject.social.bonds[characterName].active.find(bond => bond.towards === engine.userCharacter.name);
-            let bondInfo = "";
-            if (!bond) {
-                bondInfo += `You are a complete stranger to "${characterName}", however if you are to interact with them, here is what you should know about your potential bond:`;
-                // make a pseudo bond for stranger
-                bond = {
-                    bond: 0,
-                    bond2: 0,
-                    stranger: true,
-                    towards: engine.userCharacter.name,
-                    createdAt: engine.deObject.currentTime,
-                }
-            }
+            
+            let [_, bond, bondDecl, bondInfo] = await engine.getRelationshipBetweenCharacters(engine.userCharacter.name, characterName);
 
-            const bondDesc = character.bonds.declarations.find((b => b.strangerBond === bond.stranger && b.minBondLevel <= bond.bond && bond.bond < (b.maxBondLevel === 100 ? 200 : b.maxBondLevel) && b.min2BondLevel <= bond.bond2 && bond.bond2 < (b.max2BondLevel === 100 ? 200 : b.max2BondLevel)));
-            if (!bondDesc) {
-                throw new Error(`No bond description found for bond level ${bond.bond} and secondary bond level ${bond.bond2} in character "${characterName}".`);
-            }
+            bondInfo += `\n\nBond Level: ${bond.bond} (${bondDecl.name})\nSecondary Bond Level: ${bond.bond2}\nStranger Bond: ${bond.stranger ? "Yes" : "No"}\n\nBond Conditions:\n`;
 
-            // @ts-ignore
-            bondInfo += `\n\n${await bondDesc.description.execute(engine.deObject, character, engine.userCharacter, undefined, undefined, undefined)}`;
-
-            if (character.bonds.descriptionGeneralInjection) {
+            for (const condition of bondDecl.bondConditions) {
                 // @ts-ignore
-                const value = await character.bonds.descriptionGeneralInjection.execute(engine.deObject, character);
-                bondInfo += `\n\n${value}`;
-            }
-
-            bondInfo += `\n\nBond Level: ${bond.bond} (${bondDesc.name})\nSecondary Bond Level: ${bond.bond2}\nStranger Bond: ${bond.stranger ? "Yes" : "No"}\n\nBond Conditions:\n`;
-
-            for (const condition of bondDesc.bondConditions) {
-                // @ts-ignore
-                const question = await condition.template.execute(engine.deObject, character, engine.userCharacter, undefined, undefined, undefined)
+                const question = await condition.template.execute(engine.deObject, character, engine.userCharacter)
                 bondInfo += `- ${question}\nAffects ${condition.affectsBonds} bond by ${condition.weight}\n`;
-            }
-
-            // check breakaway stranger conditions
-            if (bondDesc.strangerBond) {
-                bondInfo += `\nBreakaway Stranger Bond Absolute Weight: ${character.bonds.strangerBreakawayBondWeightAbsolute}`;
-                bondInfo += `\nBreakaway Stranger Bond Interaction Count: ${character.bonds.strangerBreakawayInteractionsCount}`;
-                bondInfo += `\nBreakaway Stranger Bond Time in Minutes: ${character.bonds.strangerBreakawayTimeMinutes}`;
-
-                // TODO calculate the current interaction count and time minutes towards breakaway
             }
 
             return bondInfo;
@@ -683,149 +648,10 @@ export const commands = {
                 throw new Error(`No state found for character "${characterName}".`);
             }
 
-            const shortDescription = engine.getShortDescriptionOfCharacter(characterName, true);
+            const shortDescription = engine.getExternalDescriptionOfCharacter(characterName, true);
 
             // @ts-ignore
-            let general = await character.general.execute(engine.deObject, character);
-
-            for (const injectable of Object.values(character.systemPromptInjection)) {
-                // @ts-ignore
-                const injectableV = (await injectable.execute(engine.deObject, character, undefined, undefined, undefined, undefined)).trim();
-                if (injectableV) {
-                    if (!general.endsWith("\n\n")) {
-                        general += "\n\n";
-                    }
-                    // @ts-ignore
-                    general += injectableV;
-                }
-            }
-
-            let statesDescriptions = [];
-            for (const state of characterState.states) {
-                const stateInfo = character.states[state.state];
-                // @ts-ignore
-                let stateDescription = state.state.split("_").map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(" ");
-                if (!state.relieving) {
-                    if (state.intensity >= 1.5) {
-                        stateDescription = `Very ${stateDescription}`;
-                    } else if (state.intensity >= 2.5) {
-                        stateDescription = `Extremely ${stateDescription}`;
-                    } else if (state.intensity >= 3.5) {
-                        stateDescription = `Overwhelmingly ${stateDescription}`;
-                    }
-
-                    if (stateInfo.relievingSystemPromptInjection) {
-                        // @ts-ignore
-                        const relievingInjection = (await stateInfo.relievingSystemPromptInjection.execute(engine.deObject, character, undefined, undefined, undefined, undefined)).trim();
-                        if (relievingInjection) {
-                            if (!general.endsWith("\n\n")) {
-                                general += "\n\n";
-                            }
-                            general += relievingInjection;
-                        }
-                    }
-                } else {
-                    stateDescription = `Relieving from ${stateDescription}`;
-
-                    if (stateInfo.systemPromptInjection) {
-                        // @ts-ignore
-                        const injection = (await stateInfo.systemPromptInjection.execute(engine.deObject, character, undefined, undefined, undefined, undefined)).trim();
-                        if (injection) {
-                            if (!general.endsWith("\n\n")) {
-                                general += "\n\n";
-                            }
-                            general += injection;
-                        }
-                    }
-                }
-
-                statesDescriptions.push(stateDescription);
-            }
-
-            const bonds = engine.deObject.social.bonds[characterName];
-            let relationships = [];
-
-            for (const activeBond of bonds.active) {
-                const bondDeclaration = character.bonds.declarations.find(bondDecl => bondDecl.strangerBond === activeBond.stranger && bondDecl.minBondLevel <= activeBond.bond && activeBond.bond < (bondDecl.maxBondLevel === 100 ? 200 : bondDecl.maxBondLevel) && bondDecl.min2BondLevel <= activeBond.bond2 && activeBond.bond2 < (bondDecl.max2BondLevel === 100 ? 200 : bondDecl.max2BondLevel));
-                if (bondDeclaration) {
-                    // @ts-ignore
-                    let result = await bondDeclaration.description.execute(engine.deObject, character, engine.deObject.characters[activeBond.towards]);
-                    if (bondDeclaration.bondAdditionalDescription) {
-                        if (!result.endsWith(". ")) {
-                            result += ". ";
-                        } else if (!result.endsWith(" ")) {
-                            result += " ";
-                        }
-                        // @ts-ignore
-                        result += await bondDeclaration.bondAdditionalDescription.execute(engine.deObject, character, engine.deObject.characters[activeBond.towards]);
-                    }
-                    relationships.push(result);
-
-                    if (bondDeclaration.systemPromptInjection) {
-                        // @ts-ignore
-                        const injection = (await bondDeclaration.systemPromptInjection.execute(engine.deObject, character, engine.deObject.characters[activeBond.towards], undefined, undefined, undefined)).trim();
-                        if (injection) {
-                            if (!general.endsWith("\n\n")) {
-                                general += "\n\n";
-                            }
-                            general += injection;
-                        }
-                    }
-                }
-            }
-
-            // ex bonds only inject system prompts, as they are not active relationships but ex-relationships
-            // they may be mourning or have other effects on the character's mindset so only relevant to system prompt injections
-            for (const exBond of bonds.ex) {
-                const bondDeclaration = character.bonds.declarations.find(bondDecl => bondDecl.strangerBond === exBond.stranger && bondDecl.minBondLevel <= exBond.bond && exBond.bond < (bondDecl.maxBondLevel === 100 ? 200 : bondDecl.maxBondLevel) && bondDecl.min2BondLevel <= exBond.bond2 && exBond.bond2 < (bondDecl.max2BondLevel === 100 ? 200 : bondDecl.max2BondLevel));
-                if (bondDeclaration) {
-                    if (bondDeclaration.systemPromptInjectionEx) {
-                        // @ts-ignore
-                        const injection = (await bondDeclaration.systemPromptInjectionEx.execute(engine.deObject, character, engine.deObject.characters[exBond.towards], undefined, undefined, undefined)).trim();
-                        if (injection) {
-                            if (!general.endsWith("\n\n")) {
-                                general += "\n\n";
-                            }
-                            general += injection;
-                        }
-                    }
-                }
-            }
-
-            // make final descriptions for total strangers for the standard stranger bond
-            const strangerBondDeclaration = character.bonds.declarations.find(bondDecl => bondDecl.strangerBond === true && bondDecl.minBondLevel <= 0 && 0 < (bondDecl.maxBondLevel === 100 ? 200 : bondDecl.maxBondLevel) && bondDecl.min2BondLevel <= 0 && 0 < (bondDecl.max2BondLevel === 100 ? 200 : bondDecl.max2BondLevel));
-            if (strangerBondDeclaration) {
-                // these do apply to all the total strangers
-                const allSurroundingTotalStrangers = engine.deObject.stateFor[characterName].surroundingTotalStrangers;
-                for (const strangerName of allSurroundingTotalStrangers) {
-                    const strangerCharacter = engine.deObject.characters[strangerName];
-                    if (strangerCharacter) {
-                        // @ts-ignore
-                        let result = await strangerBondDeclaration.description.execute(engine.deObject, character, strangerCharacter);
-                        if (strangerBondDeclaration.bondAdditionalDescription) {
-                            if (!result.endsWith(". ")) {
-                                result += ". ";
-                            } else if (!result.endsWith(" ")) {
-                                result += " ";
-                            }
-                            // @ts-ignore
-                            result += await strangerBondDeclaration.bondAdditionalDescription.execute(engine.deObject, character, strangerCharacter);
-                        }
-                        relationships.push(result);
-                    }
-
-                    if (strangerBondDeclaration.systemPromptInjection) {
-                        // @ts-ignore
-                        const injection = (await strangerBondDeclaration.systemPromptInjection.execute(engine.deObject, character, strangerCharacter, undefined, undefined, undefined)).trim();
-                        if (injection) {
-                            if (!general.endsWith("\n\n")) {
-                                general += "\n\n";
-                            }
-                            general += injection;
-                        }
-                    }
-                }
-            }
+            const [general, statesDescriptions, relationships] = await engine.getInternalDescriptionOfCharacter(characterName);
 
             /**
              * @type {string|null}

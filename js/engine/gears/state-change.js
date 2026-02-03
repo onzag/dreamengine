@@ -5,6 +5,83 @@
 import { DEngine, getFrozenBonds } from "..";
 
 /**
+ * 
+ * @param {DEngine} engine 
+ * @param {DECompleteCharacterReference} character
+ * @param {DEStringTemplateWithIntensityAndCausants} modifier 
+ */
+async function resetAccumulator(engine, character, modifier) {
+    if (!engine.deObject) {
+        throw new Error("DEngine not initialized");
+    }
+
+    if (modifier.useActionAccumulator && modifier.useActionAccumulator.name) {
+        engine.deObject.actionAccumulators[character.name] = engine.deObject.actionAccumulators[character.name] || {
+            accumulators: {}
+        };
+        delete engine.deObject.actionAccumulators[character.name].accumulators[modifier.useActionAccumulator.name];
+    }
+}
+
+/**
+ * 
+ * @param {DEngine} engine 
+ * @param {DECompleteCharacterReference} character 
+ * @param {DEStringTemplateWithIntensityAndCausants} modifier
+ * @param {DEStateCausant[]|null} causants
+ * @return {Promise<[boolean, DEStateCausant[]|null]>} whether the accumulator has surpassed the threshold and the causants that caused it
+ */
+async function accumulate(engine, character, modifier, causants) {
+    if (!engine.deObject) {
+        throw new Error("DEngine not initialized");
+    }
+    if (modifier.useActionAccumulator && modifier.useActionAccumulator.name) {
+        console.log(`Updating action accumulator '${modifier.useActionAccumulator.name}' for character ${character.name}.`);
+        engine.deObject.actionAccumulators[character.name] = engine.deObject.actionAccumulators[character.name] || {
+            accumulators: {}
+        };
+        const accumulatorValue = engine.deObject.actionAccumulators[character.name];
+        if (!modifier.useActionAccumulator.usePerCausant) {
+            console.log(`Not using per-causant accumulation.`);
+            accumulatorValue.accumulators.DEFAULT = (accumulatorValue.accumulators.DEFAULT || 0) + (modifier.useActionAccumulator.accumulateAmount || 1);
+            if (accumulatorValue.accumulators.DEFAULT >= modifier.useActionAccumulator.triggerThreshold) {
+                console.log(`Accumulator '${modifier.useActionAccumulator.name}' for character ${character.name} has surpassed threshold ${modifier.useActionAccumulator.triggerThreshold} with value ${accumulatorValue.accumulators.DEFAULT}.`);
+                return [true, causants];
+            } else {
+                console.log(`Accumulator '${modifier.useActionAccumulator.name}' for character ${character.name} is at value ${accumulatorValue.accumulators.DEFAULT}, below threshold ${modifier.useActionAccumulator.triggerThreshold}.`);
+                return [false, null];
+            }
+        }
+        console.log(`Using per-causant accumulation.`);
+        if (!causants || causants.length === 0) {
+            console.log(`No causants provided for per-causant accumulation, cannot accumulate.`);
+            return [false, null];
+        }
+
+        /**
+         * @type {DEStateCausant[]}
+         */
+        const surpassingCausants = [];
+        for (const causant of causants) {
+            accumulatorValue.accumulators[causant.name] = (accumulatorValue.accumulators[causant.name] || 0) + (modifier.useActionAccumulator.accumulateAmount || 1);
+            if (accumulatorValue.accumulators[causant.name] >= modifier.useActionAccumulator.triggerThreshold) {
+                console.log(`Accumulator '${modifier.useActionAccumulator.name}' for character ${character.name} and causant ${causant.name} has surpassed threshold ${modifier.useActionAccumulator.triggerThreshold} with value ${accumulatorValue.accumulators[causant.name]}.`);
+                surpassingCausants.push(causant);
+            } else {
+                console.log(`Accumulator '${modifier.useActionAccumulator.name}' for character ${character.name} and causant ${causant.name} is at value ${accumulatorValue.accumulators[causant.name]}, below threshold ${modifier.useActionAccumulator.triggerThreshold}.`);
+            }
+        }
+
+        if (surpassingCausants.length > 0) {
+            return [true, surpassingCausants];
+        } else {
+            return [false, null];
+        }
+    }
+    return [true, causants];
+}
+
+/**
  * @param {DEngine} engine 
  * @param {string} message 
  */
@@ -58,8 +135,6 @@ async function makeUserStoryMasterMessage(engine, message) {
             messages: [messageToAdd],
             participants: [engine.user.name],
             remoteParticipants: [],
-            duration: { inMinutes: 0, inHours: 0, inDays: 0 },
-            endTime: null,
             location: stateForUser.location,
             pseudoConversation: false,
             summary: null,
@@ -222,12 +297,12 @@ async function onStateTriggeredOnCharacter(engine, character, stateName) {
 
     for (const modifier of characterStateDescription.intensityModifiers || []) {
         if (modifier.useActionAccumulator?.reset === "when_state_triggers") {
-            await resetAccumulator(engine, modifier);
+            await resetAccumulator(engine, character, modifier);
         }
     }
     for (const modifier of characterStateDescription.triggers || []) {
         if (modifier.useActionAccumulator?.reset === "when_state_triggers") {
-            await resetAccumulator(engine, modifier);
+            await resetAccumulator(engine, character, modifier);
         }
     }
 }
@@ -325,12 +400,12 @@ async function onStateRemovedOnCharacter(engine, character, stateName) {
 
     for (const modifier of characterStateDescription.intensityModifiers || []) {
         if (modifier.useActionAccumulator?.reset === "when_state_removed") {
-            await resetAccumulator(engine, modifier);
+            await resetAccumulator(engine, character, modifier);
         }
     }
     for (const modifier of characterStateDescription.triggers || []) {
         if (modifier.useActionAccumulator?.reset === "when_state_removed") {
-            await resetAccumulator(engine, modifier);
+            await resetAccumulator(engine, character, modifier);
         }
     }
 }
@@ -439,12 +514,12 @@ async function onStateRelievedOnCharacter(engine, character, stateName) {
 
     for (const modifier of characterStateDescription.intensityModifiers || []) {
         if (modifier.useActionAccumulator?.reset === "when_state_relieves") {
-            await resetAccumulator(engine, modifier);
+            await resetAccumulator(engine, character, modifier);
         }
     }
     for (const modifier of characterStateDescription.triggers || []) {
         if (modifier.useActionAccumulator?.reset === "when_state_relieves") {
-            await resetAccumulator(engine, modifier);
+            await resetAccumulator(engine, character, modifier);
         }
     }
 }
@@ -859,9 +934,9 @@ export default async function calculateStateChange(engine, character) {
                                         allCharactersInAnalysis,
                                         prompter,
                                     );
-                                    await accumulate(engine, intensityModifier, causants);
+                                    await accumulate(engine, character, intensityModifier, causants);
                                 } else {
-                                    await accumulate(engine, intensityModifier, null);
+                                    await accumulate(engine, character, intensityModifier, null);
                                 }
                             }
                             console.log(`State intensity modifier for state ${stateName} on character ${character.name} passed template check but failed probability check (${randomRollForIntensityTrigger} > ${intensityModifier.triggerLikelihood}), skipping intensity change.`);
@@ -877,7 +952,7 @@ export default async function calculateStateChange(engine, character) {
                         let surpassesThreshold = true;
                         let surpassesThresholdCausants = newCausants;
                         if (intensityModifier.useActionAccumulator) {
-                            [surpassesThreshold, surpassesThresholdCausants] = await accumulate(engine, intensityModifier, newCausants);
+                            [surpassesThreshold, surpassesThresholdCausants] = await accumulate(engine, character, intensityModifier, newCausants);
                         }
 
                         console.log(`The causants determined for intensity modifier of state ${stateName} on character ${character.name} are: ${newCausants ? newCausants.map(c => c.name).join(", ") : "none"}`);
@@ -972,7 +1047,7 @@ export default async function calculateStateChange(engine, character) {
                         }
                     } else {
                         if (intensityModifier.useActionAccumulator && intensityModifier.useActionAccumulator.resetIfNo) {
-                            await resetAccumulator(engine, intensityModifier);
+                            await resetAccumulator(engine, character,intensityModifier);
                         }
                     }
                 }
@@ -1147,9 +1222,9 @@ export default async function calculateStateChange(engine, character) {
                                     allCharactersInAnalysis,
                                     prompter,
                                 );
-                                await accumulate(engine, activationCondition, causants);
+                                await accumulate(engine, character, activationCondition, causants);
                             } else {
-                                await accumulate(engine, activationCondition, null);
+                                await accumulate(engine, character, activationCondition, null);
                             }
                         }
                     } else {
@@ -1165,9 +1240,9 @@ export default async function calculateStateChange(engine, character) {
                                         allCharactersInAnalysis,
                                         prompter,
                                     );
-                                    await accumulate(engine, activationCondition, causants);
+                                    await accumulate(engine, character, activationCondition, causants);
                                 } else {
-                                    await accumulate(engine, activationCondition, null);
+                                    await accumulate(engine, character, activationCondition, null);
                                 }
                             }
                             console.log(`State activation condition matched for state ${stateName} on character ${character.name}, but random roll ${randomRollForStateTrigger} exceeded trigger likelihood ${activationCondition.triggerLikelihood}.`);
@@ -1186,7 +1261,7 @@ export default async function calculateStateChange(engine, character) {
                         let surpassesThreshold = true;
                         let surpassesThresholdCausants = causants;
                         if (activationCondition.useActionAccumulator) {
-                            [surpassesThreshold, surpassesThresholdCausants] = await accumulate(engine, activationCondition, causants);
+                            [surpassesThreshold, surpassesThresholdCausants] = await accumulate(engine, character, activationCondition, causants);
                         }
 
                         if (
@@ -1230,7 +1305,7 @@ export default async function calculateStateChange(engine, character) {
                     }
                 } else {
                     if (activationCondition.useActionAccumulator && activationCondition.useActionAccumulator.resetIfNo) {
-                        await resetAccumulator(engine, activationCondition);
+                        await resetAccumulator(engine, character,activationCondition);
                     }
                 }
             }

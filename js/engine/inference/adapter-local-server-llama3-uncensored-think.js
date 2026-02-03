@@ -433,7 +433,7 @@ ${states.join(", ")}
      * @param {string} system
      * @param {string|null} contextInfoBefore additional context information to provide to the agent
      * @param {AsyncGenerator<{name: string, message: string, id: string, conversationId: string | null, debug: boolean, rejected: boolean}, void, boolean>} getHistoryForCharacter
-     * @param {"LAST_CYCLE" | "LAST_MESSAGE" | "LAST_CYCLE_EXPANDED" | "LAST_CYCLE_EXPANDED_EXCLUDE_CHAR" | "ALL"} msgLimit what to limit the history to
+     * @param {"LAST_CYCLE" | "LAST_MESSAGE" | "LAST_CYCLE_EXPANDED" | "LAST_CYCLE_EXPANDED_EXCLUDE_CHAR" | "LAST_CYCLE_EXPANDED_TWICE" | "ALL"} msgLimit what to limit the history to
      * @param {string|null} contextInfoAfter additional context information to provide to the agent
      * @returns {import('./base.js').QuestionAgentGeneratorResponse}
      */
@@ -489,6 +489,8 @@ ${states.join(", ")}
                         shouldAddMessage = cycleCount === 0 || (cycleCount === 1 && generator.value.name !== character.name);
                     } else if (msgLimit === "LAST_CYCLE_EXPANDED_EXCLUDE_CHAR") {
                         shouldAddMessage = (cycleCount === 0 && generator.value.name !== character.name) || (cycleCount === 1 && generator.value.name !== character.name);
+                    } else if (msgLimit === "LAST_CYCLE_EXPANDED_TWICE") {
+                        shouldAddMessage = cycleCount === 0 || (cycleCount === 2 && generator.value.name !== character.name);
                     }
 
                     if (generator.value.name === character.name) {
@@ -500,6 +502,9 @@ ${states.join(", ")}
                     }
                     if (msgLimit === "LAST_CYCLE_EXPANDED" || msgLimit === "LAST_CYCLE_EXPANDED_EXCLUDE_CHAR") {
                         shouldStopAddingMessages = cycleCount >= 2;
+                    }
+                    if (msgLimit === "LAST_CYCLE_EXPANDED_TWICE") {
+                        shouldStopAddingMessages = cycleCount >= 3;
                     }
 
                     if (shouldAddMessage) {
@@ -714,6 +719,15 @@ ${states.join(", ")}
      */
     buildContextInfoExample(example) {
         return ("<example>\n" + example + "\n</example>");
+    }
+
+    /**
+     * @param {DECompleteCharacterReference} character
+     * @param {string} info
+     * @returns {string}
+     */
+    buildContextInfoIsolatedCharacter(character, info) {
+        return ("<characterInfo>" + character.name + ":\n\n" + info + "\n</characterInfo>");
     }
 
     /**
