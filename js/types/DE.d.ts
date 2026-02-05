@@ -1399,8 +1399,8 @@ declare interface DEItem {
     descriptionWhenCarried: string | null;
     compartimentName: string | null;
     isSeeThrough: boolean;
-    canSitOn: boolean;
-    canLieOn: boolean;
+    // canSitOn: boolean;
+    // canLieOn: boolean;
     properties: Record<string, DEPropertyValueInItemSpace>;
     isConsumable: boolean;
     consumableProperties?: {
@@ -1518,7 +1518,7 @@ declare interface StateForDescription {
     fullyExposedToWeather: string | null;
     posture: "standing" | "sitting" | "laying_down";
     /**
-     * The id of the item the character is using to sit, stand or lay down on or null if none
+     * The name of the item the character is using to sit, stand or lay down on or null if none
      * if none that means the character is using the ground/floor/etc
      */
     postureAppliedOn: string | null;
@@ -1556,7 +1556,7 @@ declare interface StateForDescription {
     seenCharacters: Array<string>;
 }
 
-declare interface StateForDescriptionWithHistory extends StateForDescription {
+declare interface DEStateForDescriptionWithHistory extends StateForDescription {
     history: Array<StateForDescription>;
 }
 
@@ -2413,7 +2413,7 @@ declare interface DEObject {
     };
     allNames: DENamePool;
     worldNames: DENamePool;
-    stateFor: Record<string, StateForDescriptionWithHistory>;
+    stateFor: Record<string, DEStateForDescriptionWithHistory>;
     world: DEWorld;
     /**
      * All the conversations that have happened in the world

@@ -860,7 +860,7 @@ export default async function testMessageFeasibilityForCharacter(engine, charact
 
             await generator.next(null); // finish the generator
 
-            const [internalDescription, stateInfo, ] = await engine.getInternalDescriptionOfCharacter(character.name);
+            const [internalDescription, stateInfo,] = await engine.getInternalDescriptionOfCharacter(character.name);
 
             // 2. For each forced character, check if the action is feasible
             for (const forcedCharacterName of forcedCharacters) {
@@ -889,7 +889,7 @@ export default async function testMessageFeasibilityForCharacter(engine, charact
                 );
 
                 const [, , , relationshipOfForcedCharacterTowardsOwnCharacter] = await engine.getRelationshipBetweenCharacters(forcedCharacterName, character.name);
-                const [internalDescriptionForcedCharacter, stateInfoForcedCharacter, ] = await engine.getInternalDescriptionOfCharacter(forcedCharacterName);
+                const [internalDescriptionForcedCharacter, stateInfoForcedCharacter,] = await engine.getInternalDescriptionOfCharacter(forcedCharacterName);
                 const forcedCharacterDescription = engine.inferenceAdapter.buildSystemCharacterDescription(
                     forcedCharacter,
                     internalDescriptionForcedCharacter,
@@ -951,16 +951,22 @@ export default async function testMessageFeasibilityForCharacter(engine, charact
         }
     }
 
+    // SECOND ITEM CHANGES
+
     // if we reached here, the message is feasible
     // 2. we will calculate items changing hands (being dropped, picked up, given, stolen, etc.)
     const systemMessage = `You are an assistant and story analyst that determines if the last message from ${character.name} contains any items that have moved, changed hands, been dropped by any other character, in an interactive story. Changing hands means any item that has been picked up, dropped, given to another character, stolen, or otherwise transferred from one character to another.\n\n` +
-    "This includes clothing and worn items that have been removed or put on";
+        "This includes clothing and worn items that have been removed or put on";
     const systemPrompt = engine.inferenceAdapter.buildSystemPromptForQuestioningAgent(systemMessage, [
         "Consider only the last message from " + character.name + ".",
         "Identify any items that have been dropped by any chararacter, picked up, given to another character, stolen, or otherwise transferred from one character to another.",
         "Also identify any items dropped or left behind by any character.",
         "Identify any clothing or worn items that have been removed or put on by any character.",
         "If unable to specify where the item is placed next, assume it is placed on the ground at the current location of the character dropping or removing the item.",
+        "Always place the name of the item in quotation marks",
+        "Always place the name of the character in quotation marks",
+        "When specifying an item if a character has it, is wearing it or is otherwise in their posession specify it as \"[character name]'s [item name]\" to make it clear whose item it is, for example \"Alice's sword\". If the item is not in possession of any character, just specify the item name with quotation marks, for example \"a sword\".",
+        "Always specify the actions in order as they happen in the message, for example if a character drops an item and then picks up another item, specify the dropped item first and then the picked up item.",
     ], null);
 
     const allContainersInLocation = [];
@@ -1018,35 +1024,46 @@ export default async function testMessageFeasibilityForCharacter(engine, charact
         }
     }
 
-    const anyCharacterGrammar = "charactername ::= " + allCharactersInLocation.map(name => JSON.stringify(name)).join(" | ");
+    const anyCharacterGrammarSimple = "characternamesimple ::= " + allCharactersInLocation.map(name => JSON.stringify(name)).join(" | ");
+    const anyCharacterGrammarQuoted = `characternamequoted ::= \"\\\"\" characternamesimple \"\\\"\"`
+    const commaSeparatorOrAnd = `commaseparatororand ::= (\",\" \" \") | \" and \"`;
+    const amountNumber = `amountnumber ::= ([0-9]+ " " "of") | "a few" | "several" | "many" | "a lot of" | "some" | "half of" | "most of" | "all of"`;
 
-    const containeroptionGrammar = "containeroption ::= " + allContainersInLocation.map(name => "(charactername \"'s\")?" + JSON.stringify(name)).join(" | ");
-    const carriableItemGrammar = "carriableitem ::= " + allCarriableItemsInLocation.map(name => "(charactername \"'s\")?" + JSON.stringify(name)).join(" | ");
-    const carriableItemListGrammar = "carriableitemlist ::= carriableitem (\",\" \" \" carriableitem)*";
-    const wearableItemGrammar = "wearableitem ::= " + allWearableItemsInLocation.map(name => "(charactername \"'s\")?" + JSON.stringify(name)).join(" | ");
-    const wearableItemListGrammar = "wearableitemlist ::= wearableitem (\",\" \" \" wearableitem)*";
-    const anyItemGrammar = "anyitem ::= " + allItemsInLocation.map(name => "(charactername \"'s\")?" + JSON.stringify(name)).join(" | ");
-    const anyItemListGrammar = "anyitemlist ::= anyitem (\",\" \" \" anyitem)*";
-
+    const containeroptionGrammar = "containeroption ::= \"\\\"\" (amountnumber \" \")? (characternamesimple \"'s\")? (" + allContainersInLocation.map(name => JSON.stringify(name)).join(" | ") + ") \"\\\"\"";
+    const carriableItemGrammar = "carriableitem ::= \"\\\"\" (amountnumber \" \")? (characternamesimple \"'s\" \" \")? (" + allCarriableItemsInLocation.map(name => JSON.stringify(name)).join(" | ") + ") \"\\\"\"";
+    const carriableItemListGrammar = "carriableitemlist ::= carriableitem (commaseparatororand carriableitem)*";
+    const wearableItemGrammar = "wearableitem ::= \"\\\"\" (amountnumber \" \")? (characternamesimple \"'s\" \" \")? (" + allWearableItemsInLocation.map(name => JSON.stringify(name)).join(" | ") + ") \"\\\"\"";
+    const wearableItemListGrammar = "wearableitemlist ::= wearableitem (commaseparatororand wearableitem)*";
+    const anyItemGrammar = "anyitem ::= \"\\\"\" (amountnumber \" \")? (characternamesimple \"'s\" \" \")? (" + allItemsInLocation.map(name => JSON.stringify(name)).join(" | ") + ") \"\\\"\"";
+    const anyItemListGrammar = "anyitemlist ::= anyitem (commaseparatororand anyitem)*";
 
     const placementGrammar = `placement ::= ("on" " " anyitem) | ("in" " " containeroption) | ("on" " " "the" " " ("ground" | "floor"))`;
     const placementWithAndGrammar = `placementwithand ::= "and" " " "placed" " " ("them" | "it") " " placement`;
-    const placementWithAndOrWearGrammar = `placementwithandorwear ::= placementwithand | ("and" " " "wore" " " ("them" | "it")) | ("and" " " "put" " " ("them" | "it") " " "on" ("themselves" | charactername)?)`;
+    const placementWithAndGiveGrammar = `placementwithgive ::= placementwithand | ("and" " " "gave" " " ("them" | "it") " " "to" " " characternamequoted)`;
+    const placementWithAndOrWearOrGiveGrammar = `placementwithandorwearorgive ::= placementwithgive | ("and" " " "wore" " " ("them" | "it")) | ("and" " " "put" " " ("them" | "it") " " "on" " " ("\\""themselves"\\"" | characternamequoted | ("\\"" "the" " " "ground" "\\""))?)`;
 
-    const droppedGrammar = `characterdropped ::= charactername " " "dropped" " " (carriableitemlist | "everything" | "all" | "all their items" | "all of their items" | "all of their belongings")`;
-    const droppedAndPlacedSomewhereElseGrammar = `characterdroppedandplacedsomewhereelse ::= characterdropped " " "placing" " " ("them" | "it") " " placement`;
-    const droppedClothesGrammar = `characterdroppedclothes ::= charactername " " "removed" " " (wearableitemlist | "all their clothes" | "all their garments" | "all their wearables")`;
-    const droppedClothesAndPlacedSomewhereElseGrammar = `characterdroppedclothesandplacedsomewhereelse ::= characterdroppedclothes " " placementwithandorwear`;
-    const pickedUpGrammar = `characterpickedup ::= charactername " " (("picked" " " ("up" " ")?) | "stole" | ("put" " " "on") | "wore" | ("now" " " "wears")) (carriableitemlist | wearableitemlist)`;
-    const pickedUpAndPlacedSomewhereElseGrammar = `characterpickedupandplacedsomewhereelse ::= characterpickedup " " placementwithandorwear`;
+    const simpleGiveGrammar = `simplegive ::= characternamequoted " " "gave" " " (carriableitemlist | wearableitemlist) " " "to" " " characternamequoted`;
+    const simplePutOnOtherGrammar = `simpleputonother ::= characternamequoted " " "made" " " characternamequoted " " (("put" " " "on") | "wear") " " (wearableitemlist)`;
+    const droppedGrammar = `characterdropped ::= characternamequoted " " "dropped" " " (carriableitemlist | "\\"everything\\"" | "\\"all\\"" | "\\"all their items\\"" | "\\"all of their items\\"" | "\\"all of their belongings\\"")`;
+    const droppedAndPlacedSomewhereElseGrammar = `characterdroppedandplacedsomewhereelse ::= characterdropped " " placementwithgive`;
+    const droppedClothesGrammar = `characterdroppedclothes ::= characternamequoted " " "removed" " " (wearableitemlist | "\\"all their clothes\\"" | "\\"all their garments\\"" | "\\"all their wearables\\"")`;
+    const droppedClothesAndPlacedSomewhereElseGrammar = `characterdroppedclothesandplacedsomewhereelse ::= characterdroppedclothes " " placementwithandorwearorgive`;
+    const pickedUpGrammar = `characterpickedup ::= characternamequoted " " (("picked" " " ("up" " ")?) | "stole" | ("put" " " "on") | "wore" | ("now" " " "wears")) (carriableitemlist | wearableitemlist)`;
+    const pickedUpAndPlacedSomewhereElseGrammar = `characterpickedupandplacedsomewhereelse ::= characterpickedup " " placementwithandorwearorgive`;
 
-    const statementGrammar = `statement ::= characterdropped | characterdroppedandplacedsomewhereelse | characterdroppedclothes | characterdroppedclothesandplacedsomewhereelse | characterpickedup | characterpickedupandplacedsomewhereelse`;
+    const statementGrammar = `statement ::= simplegive | simpleputonother | characterdropped | characterdroppedandplacedsomewhereelse | characterdroppedclothes | characterdroppedclothesandplacedsomewhereelse | characterpickedup | characterpickedupandplacedsomewhereelse`;
     const listOfStatementsGrammar = `root ::= statement ("." "\\n" statement)*`;
 
     const finalGrammar = [
         listOfStatementsGrammar,
+        commaSeparatorOrAnd,
+        amountNumber,
 
-        anyCharacterGrammar,
+        anyCharacterGrammarSimple,
+        anyCharacterGrammarQuoted,
+
+        simpleGiveGrammar,
+        simplePutOnOtherGrammar,
         containeroptionGrammar,
         carriableItemGrammar,
         carriableItemListGrammar,
@@ -1056,7 +1073,8 @@ export default async function testMessageFeasibilityForCharacter(engine, charact
         anyItemListGrammar,
         placementGrammar,
         placementWithAndGrammar,
-        placementWithAndOrWearGrammar,
+        placementWithAndGiveGrammar,
+        placementWithAndOrWearOrGiveGrammar,
         droppedGrammar,
         droppedAndPlacedSomewhereElseGrammar,
         droppedClothesGrammar,
@@ -1066,5 +1084,628 @@ export default async function testMessageFeasibilityForCharacter(engine, charact
         statementGrammar,
     ].join(";\n") + ";";
 
+    const examples = engine.inferenceAdapter.buildContextInfoExample(
+        `Example: if the last message from ${character.name} is "Alice gives Bob the sword and shield, then takes off her cloak and leaves it on the ground, while Charlie steals a potion from Alice", the output should be:`
+        + "\n\n" +
+        `"Alice" gave "Alice's sword" and "Alice's shield" to "Bob"\n"Alice" removed "Alice's cloak" and placed it on the ground\n"Charlie" stole "Alice's potion"`
+    ) + "\n" + engine.inferenceAdapter.buildContextInfoExample(
+        `Example: if the last message from ${character.name} is "${character.name} removes their shirt and puts it on Bob after removing his pants":`
+        + "\n\n" +
+        `"${character.name}" removed "${character.name}'s shirt" and put it on "Bob"\n"${character.name}" removed "${character.name}'s pants"`
+    );
+
+    const generator = engine.inferenceAdapter.runQuestioningCustomAgentOn(character, systemPrompt, examples, engine.getHistoryForCharacter(character, {}), "LAST_CYCLE_EXPANDED", null);
+
+    const ready = await generator.next();
+    if (ready.done) {
+        throw new Error("Questioning agent could not be started properly for item changes check.");
+    }
+
+    const answer = await generator.next({
+        maxParagraphs: 100,
+        maxCharacters: 1000,
+        nextQuestion: "Considering the last message from " + character.name + ", identify any items that have been dropped by any chararacter, picked up, given to another character, stolen, or otherwise transferred from one character to another. Also identify any clothing or worn items that have been removed or put on by any character. For each item, specify the character involved and the new placement of the item if applicable. If unable to specify where the item is placed next, assume it is placed on the ground at the current location of the character dropping or removing the item. Provide your answer as a list of statements in the format: '[Character] dropped [item(s)]', '[Character] dropped [item(s)] and placed them in [placement]', '[Character] removed [item(s)]', '[Character] removed [item(s)] and placed them in [placement]', '[Character] picked up [item(s)]', '[Character] picked up [item(s)] and placed them in [placement]', or similar formats indicating item changes. Separate multiple statements with a period and a new line.",
+        stopAfter: [],
+        stopAt: [],
+        answerTrail: "In the last message from " + character.name + ", the following item changes occurred:\n",
+        grammar: finalGrammar,
+    });
+
+    if (answer.done) {
+        throw new Error("Questioning agent ended unexpectedly when asking about item changes.");
+    }
+
+    await generator.next(null); // finish the generator
+
+    const answerValue = answer.value.trim().split("\n").map(line => line.trim()).filter(line => line);
+
+    let nextToProcess = answerValue;
+
+    /**
+     * @type {string[]}
+     */
+    let storyMasterMessagesToAdd = [];
+
+    let currentCycleIsProcessingAmount = 0;
+    let previousCycleProcessedAmount = 0;
+    let nextCycleIsForce = false;
+    while (nextToProcess.length > 0) {
+        console.log("Staring LOOP to process item changes, current cycle processing amount:", currentCycleIsProcessingAmount, "previous cycle processed amount:", previousCycleProcessedAmount, "next cycle is force:", nextCycleIsForce);
+
+        const actualNextToProcess = nextToProcess;
+        currentCycleIsProcessingAmount = actualNextToProcess.length;
+        nextToProcess = [];
+        for (const line of actualNextToProcess) {
+            // parse the first character name in quotes first to determine the character involved
+            if (!line.startsWith("\"")) {
+                console.log("Feasibility check item changes: line does not start with a character name in quotes, skipping line:", line);
+                continue;
+            }
+            const firstQuoteEndIndex = line.indexOf("\"", 1);
+            if (firstQuoteEndIndex === -1) {
+                console.log("Feasibility check item changes: line does not contain a closing quote for character name, skipping line:", line);
+                continue;
+            }
+            const { quoted: characterName, rest } = getNextQuotedAndSplit(line);
+            if (!characterName) {
+                console.log("Feasibility check item changes: could not parse character name from line, skipping line:", line);
+                continue;
+            } else if (!engine.deObject.characters[characterName]) {
+                console.log("Feasibility check item changes: parsed character name not found in character list, skipping line:", line);
+                continue;
+            }
+
+            const isSimpleGive = rest.indexOf("gave") === 0;
+            const isMadeSomeoneElseWear = rest.indexOf("made") === 0;
+            if (isSimpleGive) {
+                // let's see who the recipient is, we will parse the last quoted name in the line for that
+                // eg. "Alice" gave "Emma's sword" and "Emma's shield" to "Bob"
+
+                // the list should be ["Emma's sword", "Emma's shield"] and the recipient should be "Bob"
+                const { quotedList: itemList, rest: recipientInfoAfter } = getNextQuotedListAndSplit(rest);
+                const { quoted: recepientCharacterName } = getNextQuotedAndSplit(recipientInfoAfter);
+
+                let willRetry = false;
+                let willSkip = false;
+                for (const item of itemList) {
+                    const rs = attemptToMoveItemToRecepient(
+                        engine,
+                        // the item contains the holder or owner in its name, for example "Emma's sword", so we can parse that
+                        // so in total we have 3 people, the holder, the giver and the recepient, for example in "Alice gave Emma's sword to Bob", the holder is Emma, the giver is Alice and the recepient is Bob
+                        item,
+                        // in this case the character is giving the item, they are the giver, even if they are giving
+                        // someone else item that other person is carrying
+                        characterName,
+                        // and the recepeint is the target
+                        recepientCharacterName,
+                        "carrying",
+                        nextCycleIsForce,
+                        storyMasterMessagesToAdd,
+                        line,
+                    );
+                    if (rs.retry) {
+                        willRetry = true;
+                    }
+                    if (rs.skip) {
+                        willSkip = true;
+                    }
+                }
+                if (willSkip) {
+                    console.log("Feasibility check item changes: skipping line due to unfeasible item change:", line);
+                }
+                if (willRetry) {
+                    console.log("Feasibility check item changes: will retry line in the next loop due to missing information for item change:", line);
+                    nextToProcess.push(line);
+                }
+            }
+            if (isMadeSomeoneElseWear) {
+                // eg. "Alice" made "Bob" put on "Emma's cloak"
+                const { quoted: targetCharacterName, rest: restAfterTarget } = getNextQuotedAndSplit(rest);
+                const { quotedList: itemList } = getNextQuotedListAndSplit(restAfterTarget);
+
+                let willRetry = false;
+                let willSkip = false;
+                for (const item of itemList) {
+                    const rs = attemptToMoveItemToRecepient(
+                        engine,
+                        item,
+                        characterName,
+                        targetCharacterName,
+                        "wearing",
+                        nextCycleIsForce,
+                        storyMasterMessagesToAdd,
+                        line,
+                    );
+                    if (rs.retry) {
+                        willRetry = true;
+                    }
+                    if (rs.skip) {
+                        willSkip = true;
+                    }
+                }
+                if (willSkip) {
+                    console.log("Feasibility check item changes: skipping line due to unfeasible item change:", line);
+                }
+                if (willRetry) {
+                    console.log("Feasibility check item changes: will retry line in the next loop due to missing information for item change:", line);
+                    nextToProcess.push(line);
+                }
+            }
+        }
+
+        if (currentCycleIsProcessingAmount === previousCycleProcessedAmount) {
+            console.log("Feasibility check item changes: no progress made in processing item changes, stopping to prevent infinite loop. Remaining lines that were not processed:", nextToProcess);
+            if (nextCycleIsForce) {
+                console.log("Feasibility check item changes: we already attempted to force changes based on heuristics in a previous cycle, but there are still lines that we could not process, thus we will stop here to prevent infinite loop. Remaining lines that were not processed:", nextToProcess);
+                break;
+            } else {
+                nextCycleIsForce = true;
+                console.log("Attempting to force changes based on heuristics for remaining lines...");
+            }
+        }
+
+        previousCycleProcessedAmount = currentCycleIsProcessingAmount;
+    }
+
+    // ONLY FOR USER CHARACTER, since we assume that the LLM respects the world rules
     // TODO check if a worn item is unfeasible to be put on (only for user character)
+    // TODO check if some invalid states are created, eg. a container in the location gets overfilled out of capacity, or a character gets more items than they can carry, or a character wears more items than they can wear, etc. For this we will need to gather the necessary information about the characters and items involved and then ask the LLM if the new state is feasible or not, if not we will reject the message as infeasible
+}
+
+/**
+ * OPTIMIZE some memoize may be good here
+ * @param {string} text 
+ * @returns {{
+ *   quoted: string | null,
+ *   rest: string,
+ * }} 
+ */
+function getNextQuotedAndSplit(text) {
+    const firstQuoteStartIndex = text.indexOf("\"", 0);
+    if (firstQuoteStartIndex === -1) {
+        return {
+            quoted: null,
+            rest: text,
+        }
+    }
+    const secondQuoteEndIndex = text.indexOf("\"", firstQuoteStartIndex + 1);
+    if (secondQuoteEndIndex === -1) {
+        return {
+            quoted: text.substring(firstQuoteStartIndex + 1).trim(),
+            rest: "",
+        };
+    }
+    const quoted = text.substring(firstQuoteStartIndex + 1, secondQuoteEndIndex);
+    const rest = text.substring(secondQuoteEndIndex + 1).trim();
+    return { quoted, rest };
+}
+
+/**
+ * OPTIMIZE some memoize may be good here
+ * Gets the next quoted item in the text and splits the text accordingly, it also checks if there is a comma or "and" after the quoted item, if so it continues to get the next quoted item and adds it to the list, it stops when there are no more quoted items or when there is no comma or "and" after the quoted item
+ * For example, if the text is '"Alice's sword", "Bob's shield" and "Charlie's potion" are on the ground', it will return the list ["Alice's sword", "Bob's shield", "Charlie's potion"] and the rest 'are on the ground'
+ * @param {string} text 
+ * @returns 
+ */
+function getNextQuotedListAndSplit(text) {
+    const firstResult = getNextQuotedAndSplit(text);
+    if (!firstResult.quoted) {
+        return {
+            quotedList: [],
+            rest: firstResult.rest,
+        }
+    }
+    const quotedList = [
+        firstResult.quoted,
+    ];
+
+    let rest = firstResult.rest;
+    while (rest.length > 0 && rest.indexOf(",") === 0 || rest.indexOf("and ") === 0) {
+        const nextResult = getNextQuotedAndSplit(rest);
+        if (!nextResult.quoted) {
+            break;
+        }
+        quotedList.push(nextResult.quoted);
+        rest = nextResult.rest;
+    }
+
+    return {
+        quotedList,
+        rest,
+    };
+}
+
+/**
+ * @param {DEngine} engine 
+ * @param {string} textOriginal
+ */
+function getItemNameAmountAndItemHolderFromText(engine, textOriginal) {
+    let text = textOriginal;
+    /**
+     * @type {number | "a few" | "several" | "many" | "a lot of" | "some" | "half of" | "most of" | "all of"}
+     */
+    let amount = 1;
+
+    if (text.startsWith("a few ")) {
+        amount = "a few";
+        text = text.substring("a few ".length);
+    } else if (text.startsWith("several ")) {
+        amount = "several";
+        text = text.substring("several ".length);
+    } else if (text.startsWith("many ")) {
+        amount = "many";
+        text = text.substring("many ".length);
+    } else if (text.startsWith("a lot of ")) {
+        amount = "a lot of";
+        text = text.substring("a lot of ".length);
+    } else if (text.startsWith("some ")) {
+        amount = "some";
+        text = text.substring("some ".length);
+    } else if (text.startsWith("half of ")) {
+        amount = "half of";
+        text = text.substring("half of ".length);
+    } else if (text.startsWith("most of ")) {
+        amount = "most of";
+        text = text.substring("most of ".length);
+    } else if (text.startsWith("all of ")) {
+        amount = "all of";
+        text = text.substring("all of ".length);
+
+        // lastly check if it is a number
+    } else if (text.match(/^[0-9]+ of /)) {
+        const numberMatch = text.match(/^([0-9]+) of /);
+        if (numberMatch) {
+            amount = parseInt(numberMatch[1]);
+            text = text.substring(numberMatch[0].length);
+        }
+    }
+
+    if (amount === 0) {
+        console.log("Feasibility check item changes: parsed amount is 0, from text:", textOriginal, "this may be due to the item name starting with a number or a word that we parse as an amount, in this case we will assume the amount is 1 and that the parsed amount is actually part of the item name, item name:", text);
+        return {
+            amount: 0,
+            itemHolder: null,
+            itemNameWithoutHolder: text,
+        }
+    }
+
+    // now let's try to determine if the item has a character name in it, for example "Alice's sword", if so we will check if the character that is said to own the item actually owns it, if not we will check if the item is in the location
+    let itemHolder = text.includes("'s ") ? text.split("'s ")[0] : null;
+    // @ts-expect-error
+    if (itemHolder && !engine.deObject.characters[itemHolder]) {
+        console.log("Feasibility check item changes: parsed item holder character name not found in character list, assuming this is part of the item name for this item:", text);
+        itemHolder = null;
+    }
+    let itemNameWithoutHolder = text;
+    if (itemHolder) {
+        itemNameWithoutHolder = text.substring(text.indexOf("'s ") + 3).trim();
+    }
+
+    return {
+        amount,
+        itemHolder,
+        itemNameWithoutHolder,
+    }
+}
+
+/**
+ * 
+ * @param {DEngine} engine 
+ * @param {string} itemName
+ * @param {string|null} giver
+ * @param {string|null} itemReceipient
+ * @param {"carrying" | "wearing"} itemRecepientAction
+ * @param {boolean} useForce whether to attempt to force the change based on heuristics if we cannot parse it properly, this is to prevent the LLM from giving us changes in a format that we cannot parse but that are still feasible and should be accepted, without allowing it to give us completely unfeasible changes that we would have accepted because we could not parse them
+ * @param {string[]} storyMasterMessagesToAdd 
+ * @param {string} line the original line that we are trying to process, this is used for logging purposes to give more context in the logs when we cannot parse the line properly
+ * @returns {{retry: boolean, skip: boolean}}
+ */
+function attemptToMoveItemToRecepient(engine, itemName, giver, itemReceipient, itemRecepientAction, useForce, storyMasterMessagesToAdd, line) {
+    if (!engine.deObject) {
+        throw new Error("DEngine object not found in attemptToMoveItemToRecepient");
+    }
+    if (!itemReceipient) {
+        console.log("Feasibility check item changes: could not parse recipient character name from simple give line, skipping feasibility check for this line:", line);
+        return {
+            retry: false,
+            skip: true,
+        }
+    } else if (!engine.deObject.characters[itemReceipient]) {
+        console.log("Feasibility check item changes: parsed recipient character name not found in character list, skipping feasibility check for this line:", line);
+        return {
+            retry: false,
+            skip: true,
+        }
+    } else if (!itemName) {
+        console.log("Feasibility check item changes: could not parse item name from simple give line, skipping feasibility check for this line:", line);
+        return {
+            retry: false,
+            skip: true,
+        }
+    }
+
+    const recepientState = engine.deObject.stateFor[itemReceipient];
+    if (!recepientState) {
+        console.log("Feasibility check item changes: recipient character state not found, skipping feasibility check for this line:", line);
+        return {
+            retry: false,
+            skip: true,
+        }
+    }
+
+    let { amount, itemHolder, itemNameWithoutHolder } = getItemNameAmountAndItemHolderFromText(engine, itemName);
+
+    if (amount === 0) {
+        console.log("Feasibility check item changes: parsed amount is explicitly stated as 0");
+
+        // we won't retry but won't skip either, as there may be other item changes in the same message that we can process and that are still feasible, we will just ignore this specific item change as it is explicitly stated as 0 amount, which means no items are actually being given, thus it is not unfeasible but there is also no change to be made
+        return {
+            retry: false,
+            skip: false,
+        }
+    }
+
+    // assume the giver is the item holder if we could not parse an item holder from the item name, this is because in a simple give format like "Alice gave Bob the sword", it is likely that the sword is being given by Alice, even if we could not parse it properly from the item name, this is to prevent the LLM from giving us changes in a format that we cannot parse but that are still feasible and should be accepted, without allowing it to give us completely unfeasible changes that we would have accepted because we could not parse them
+    // if the giver doesn't have the item, (maybe they picked it from the ground in the same message) 
+    if (!itemHolder && giver) {
+        itemHolder = giver;
+        console.log("Feasibility check item changes: could not parse item holder from item name, assuming giver is the item holder for this item, item name:", itemName, "giver:", giver);
+    }
+    if (itemHolder) {
+        const stateForItemHolder = engine.deObject.stateFor[itemHolder];
+        if (!stateForItemHolder) {
+            console.log("Feasibility check item changes: item holder parsed from item name does not have a character state, skipping feasibility check for this line:", line);
+            return {
+                retry: false,
+                skip: true,
+            }
+        }
+        const carryingItem = stateForItemHolder.carrying.find(item => item.name === itemNameWithoutHolder);
+        const wearingItem = stateForItemHolder.wearing.find(item => item.name === itemNameWithoutHolder);
+
+        if (!carryingItem && !wearingItem && !useForce) {
+            console.log("Feasibility check item changes: item holder parsed from item name does not seem to have the item in their carrying or wearing state, this may be due to out of order inference, adding line back to processing list to check again in the next cycle after other lines have been processed, line:", line);
+            return {
+                retry: true,
+                skip: false,
+            }
+        }
+
+        // if we are here, it means the item is indeed held by the character that we parsed from the item name, so we can be reasonably sure that the give action is feasible, we will still check if the recipient character can receive the item, for example if they are not too weak to carry it or if they have a free hand to receive it, but we can be pretty sure that the item is indeed being given by the character that we parsed from the item name
+        if (carryingItem) {
+            console.log("Feasibility check item changes: item is being carried by the character parsed from the item name, thus it is feasible for them to give it, checking if recipient can receive it, line:", line);
+            if (itemRecepientAction === "wearing") {
+                const exactAmountPassed = recalculateDEItemListMovement(carryingItem, stateForItemHolder.carrying, recepientState.wearing, amount, "worn by " + itemReceipient);
+                if (giver && giver !== itemHolder) {
+                    storyMasterMessagesToAdd.push(`${giver} has taken ${displayItemNameForStoryMessage(carryingItem)} from ${itemHolder} and given it to ${itemReceipient}, now ${itemReceipient} is wearing:${exactAmountPassed === 1 ? "" : " " + exactAmountPassed} ${displayItemNameForStoryMessage(carryingItem)}`);
+                } else if (giver) {
+                    storyMasterMessagesToAdd.push(`${itemReceipient} has received and is now wearing:${exactAmountPassed === 1 ? "" : " " + exactAmountPassed} ${displayItemNameForStoryMessage(carryingItem)} from ${giver}`);
+                } else {
+                    storyMasterMessagesToAdd.push(`${itemReceipient} is now wearing:${exactAmountPassed === 1 ? "" : " " + exactAmountPassed} ${displayItemNameForStoryMessage(carryingItem)} from ${itemHolder}`);
+                }
+            } else {
+                const exactAmountPassed = recalculateDEItemListMovement(carryingItem, stateForItemHolder.carrying, recepientState.carrying, amount, "carried by " + itemReceipient);
+                if (giver && giver !== itemHolder) {
+                    storyMasterMessagesToAdd.push(`${giver} has taken ${displayItemNameForStoryMessage(carryingItem)} from ${itemHolder} and given it to ${itemReceipient}, now ${itemReceipient} is carrying:${exactAmountPassed === 1 ? "" : " " + exactAmountPassed} ${displayItemNameForStoryMessage(carryingItem)}`);
+                } else if (giver) {
+                    storyMasterMessagesToAdd.push(`${itemReceipient} has received and is now carrying:${exactAmountPassed === 1 ? "" : " " + exactAmountPassed} ${displayItemNameForStoryMessage(carryingItem)} from ${giver}`);
+                } else {
+                    storyMasterMessagesToAdd.push(`${itemReceipient} is now carrying:${exactAmountPassed === 1 ? "" : " " + exactAmountPassed} ${displayItemNameForStoryMessage(carryingItem)} from ${itemHolder}`);
+                }
+            }
+        } else if (wearingItem) {
+            console.log("Feasibility check item changes: item is being worn by the character parsed from the item name, thus it is feasible for them to give it, checking if recipient can receive it, line:", line);
+            if (itemRecepientAction === "wearing") {
+                const exactAmountPassed = recalculateDEItemListMovement(wearingItem, stateForItemHolder.wearing, recepientState.wearing, amount, "worn by " + itemReceipient);
+                if (giver && giver !== itemHolder) {
+                    storyMasterMessagesToAdd.push(`${giver} has taken ${displayItemNameForStoryMessage(wearingItem)} from ${itemHolder} and given it to ${itemReceipient}, now ${itemReceipient} is wearing:${exactAmountPassed === 1 ? "" : " " + exactAmountPassed} ${displayItemNameForStoryMessage(wearingItem)}`);
+                } else if (giver) {
+                    storyMasterMessagesToAdd.push(`${itemReceipient} has received and is now wearing:${exactAmountPassed === 1 ? "" : " " + exactAmountPassed} ${displayItemNameForStoryMessage(wearingItem)} from ${giver}`);
+                } else {
+                    storyMasterMessagesToAdd.push(`${itemReceipient} is now wearing:${exactAmountPassed === 1 ? "" : " " + exactAmountPassed} ${displayItemNameForStoryMessage(wearingItem)} from ${itemHolder}`);
+                }
+            } else {
+                const exactAmountPassed = recalculateDEItemListMovement(wearingItem, stateForItemHolder.wearing, recepientState.carrying, amount, "carried by " + itemReceipient);
+                if (giver && giver !== itemHolder) {
+                    storyMasterMessagesToAdd.push(`${giver} has taken ${displayItemNameForStoryMessage(wearingItem)} from ${itemHolder} and given it to ${itemReceipient}, now ${itemReceipient} is carrying:${exactAmountPassed === 1 ? "" : " " + exactAmountPassed} ${displayItemNameForStoryMessage(wearingItem)}`);
+                } else if (giver) {
+                    storyMasterMessagesToAdd.push(`${itemReceipient} has received and is now carrying:${exactAmountPassed === 1 ? "" : " " + exactAmountPassed} ${displayItemNameForStoryMessage(wearingItem)} from ${giver}`);
+                } else {
+                    storyMasterMessagesToAdd.push(`${itemReceipient} is now carrying:${exactAmountPassed === 1 ? "" : " " + exactAmountPassed} ${displayItemNameForStoryMessage(wearingItem)} from ${itemHolder}`);
+                }
+            }
+        } else if (useForce) {
+            console.log("Feasibility check item changes: we attempted to force changes based on heuristics in a previous cycle, thus we will assume the give action is feasible even if we could not find the item in the holder's state, line:", line);
+
+            useForceToPassItem(
+                engine,
+                giver || itemReceipient,
+                stateForItemHolder,
+                recepientState,
+                itemNameWithoutHolder,
+                itemHolder,
+                itemReceipient,
+                itemRecepientAction,
+                amount,
+                storyMasterMessagesToAdd,
+                line,
+            );
+
+            return {
+                retry: false,
+                skip: true,
+            }
+        }
+
+        return {
+            retry: false,
+            skip: false,
+        }
+    } else {
+        // pick it from the world
+        /**
+         * @type {DELocationSlot | null}
+         */
+        let finalSlot = null;
+        const receiverSlot = engine.deObject.world.locations[recepientState.location].slots[recepientState.locationSlot];
+        if (itemListHasItem(receiverSlot.items, itemNameWithoutHolder)) {
+            finalSlot = receiverSlot;
+        } else {
+            // find the item somewhere in the location
+            const location = engine.deObject.world.locations[recepientState.location];
+            finalSlot = Object.values(location.slots).find(slot => !!itemListHasItem(slot.items, itemNameWithoutHolder)) || null;
+        }
+        if (!finalSlot && !useForce) {
+            console.log("Feasibility check item changes: could not find the item in the location, retrying later to see if a character drops such item later");
+            return {
+                retry: true,
+                skip: false,
+            };
+        }
+        if (!finalSlot && useForce) {
+            console.log("Feasibility check item changes: could not find the item in the location when attempting to force changes based on heuristics");
+            useForceToPassItem(
+                engine,
+                giver || itemReceipient,
+                null,
+                recepientState,
+                itemNameWithoutHolder,
+                null,
+                itemReceipient,
+                itemRecepientAction,
+                amount,
+                storyMasterMessagesToAdd,
+                line,
+            );
+
+            return {
+                retry: false,
+                skip: true,
+            }
+        }
+
+        // TODO pick the item or something
+    }
+
+    return {
+        retry: false,
+        skip: false,
+    }
+}
+
+/**
+ * 
+ * @param {DEngine} engine
+ * @param {string|null} giver
+ * @param {DEStateForDescriptionWithHistory | null} potentialItemHolderState
+ * @param {DEStateForDescriptionWithHistory} itemRecepientState
+ * @param {string} itemNameWithoutHolder
+ * @param {string|null} potentialItemHolder
+ * @param {string} itemRecepient
+ * @param {"carrying" | "wearing"} itemRecepientAction
+ * @param {number | "a few" | "several" | "many" | "a lot of" | "some" | "half of" | "most of" | "all of"} amount
+ * @param {string[]} storyMasterMessagesToAdd
+ * @param {string} line the original line that we are trying to process, this is used for logging purposes to give more context in the logs when we cannot parse the line properly
+ * @returns 
+ */
+function useForceToPassItem(engine, giver, potentialItemHolderState, itemRecepientState, itemNameWithoutHolder, potentialItemHolder, itemRecepient, itemRecepientAction, amount, storyMasterMessagesToAdd, line) {
+    if (!engine.deObject) {
+        throw new Error("DEngine object not found in useForceToPassItem");
+    }
+    /**
+     * @type {DELocationSlot | null}
+     */
+    let finalSlot = null;
+    const holderSlot = potentialItemHolderState ? engine.deObject.world.locations[potentialItemHolderState.location].slots[potentialItemHolderState.locationSlot] : null;
+    const receiverSlot = engine.deObject.world.locations[itemRecepientState.location].slots[itemRecepientState.locationSlot];
+    if (holderSlot && itemListHasItem(holderSlot.items, itemNameWithoutHolder)) {
+        finalSlot = holderSlot;
+    } else if (itemListHasItem(receiverSlot.items, itemNameWithoutHolder)) {
+        finalSlot = receiverSlot;
+    } else {
+        // find the item somewhere in the location and move it to the recipient character
+        const location = engine.deObject.world.locations[potentialItemHolderState?.location || itemRecepientState.location];
+        finalSlot = Object.values(location.slots).find(slot => !!itemListHasItem(slot.items, itemNameWithoutHolder)) || null;
+    }
+
+    if (!finalSlot) {
+        console.log("Feasibility check item changes: could not find the item in the location when attempting to force changes based on heuristics, skipping this item change, line:", line);
+        return;
+    }
+
+    const itemInQuestion = itemListHasItem(finalSlot.items, itemNameWithoutHolder);
+
+    if (itemInQuestion) {
+        // there is no item holder here because the item was picked from the location
+        if (itemRecepientAction === "wearing") {
+            const exactAmountMoved = recalculateDEItemListMovement(itemInQuestion.item, itemInQuestion.sourceList, itemRecepientState.wearing, amount, "worn by " + itemRecepient);
+            if (!giver) {
+                storyMasterMessagesToAdd.push(`${itemRecepient} is now wearing:${exactAmountMoved === 1 ? "" : " " + exactAmountMoved} ${displayItemNameForStoryMessage(itemInQuestion.item)}`);
+            } else {
+                storyMasterMessagesToAdd.push(`${itemRecepient} has received and is now wearing:${exactAmountMoved === 1 ? "" : " " + exactAmountMoved} ${displayItemNameForStoryMessage(itemInQuestion.item)} from ${giver}`);
+            }
+        } else {
+            const exactAmountMoved = recalculateDEItemListMovement(itemInQuestion.item, itemInQuestion.sourceList, itemRecepientState.carrying, amount, "carried by " + itemRecepient);
+            if (!giver) {
+                storyMasterMessagesToAdd.push(`${itemRecepient} is now carrying:${exactAmountMoved === 1 ? "" : " " + exactAmountMoved} ${displayItemNameForStoryMessage(itemInQuestion.item)}`);
+            } else {
+                storyMasterMessagesToAdd.push(`${itemRecepient} has received and is now carrying:${exactAmountMoved === 1 ? "" : " " + exactAmountMoved} ${displayItemNameForStoryMessage(itemInQuestion.item)} from ${giver}`);
+            }
+        }
+    }
+
+    console.log("Feasibility check item changes: could not find the item in the final slot when attempting to force changes based on heuristics, skipping this item change, line:", line);
+
+    // TODO get it from other characters to see if they have it, in that case they are the real holders
+
+    return;
+}
+
+/**
+ * 
+ * @param {DEItem} item 
+ */
+function displayItemNameForStoryMessage(item) {
+    if (item.owner) {
+        return `${item.owner}'s ${item.name}`;
+    }
+
+    return item.name;
+}
+
+/**
+ * 
+ * @param {DEItem[]} itemList 
+ * @param {string} itemName 
+ * @returns {{sourceList: DEItem[], item: DEItem} | null}
+ */
+function itemListHasItem(itemList, itemName) {
+    const listHasIt = itemList.find(item => item.name === itemName);
+    if (listHasIt) {
+        return { sourceList: itemList, item: listHasIt };
+    }
+
+    for (const item of itemList) {
+        if (item.containing && item.containing.length > 0) {
+            const result = itemListHasItem(item.containing, itemName);
+            if (result) {
+                return result;
+            }
+        }
+    }
+
+    return null;
+}
+
+/**
+ * 
+ * @param {DEItem} itemInQuestion 
+ * @param {DEItem[]} sourceList 
+ * @param {DEItem[]} targetList 
+ * @param {number | "a few" | "several" | "many" | "a lot of" | "some" | "half of" | "most of" | "all of"} amount 
+ * @param {string} newPlacement 
+ * @return {number} the exact amount that was moved, this may be different from the amount parameter if the amount parameter is not a number or if the item quantity is less than the amount parameter, for example if the item quantity is 2 and the amount parameter is "a lot of", we will move both items and return 2 as the exact amount moved, or if the item quantity is 5 and the amount parameter is "half of", we will move 2 items and return 2 as the exact amount moved
+ */
+function recalculateDEItemListMovement(itemInQuestion, sourceList, targetList, amount, newPlacement) {
+
 }

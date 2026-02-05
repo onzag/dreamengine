@@ -33,8 +33,6 @@ engine.initialize({
  */
 const clothes = {
     amount: 1,
-    canLieOn: false,
-    canSitOn: false,
     capacityKg: 0,
     capacityLiters: 0,
     description: "A single set of space clothing",
