@@ -1,4 +1,4 @@
-import { DEngine } from "..";
+import { DEngine } from "../index.js";
 
 /**
  * Removes any punctuation from a string.
@@ -15,33 +15,6 @@ function removeAnyPunctuation(str) {
  */
 function extractNamedEntitiesFromText(text) {
     return removeAnyPunctuation((text.split("named ")[1] || "").split("\"")[1] || "").toLowerCase().trim();
-}
-
-/**
- * this one is more finnicky, it extracts multiple named entities from text
- * @param {string} text
- * @param {string} stopAfterFoundText 
- */
-function extractManyNamedEntitiesFromText(text, stopAfterFoundText) {
-    let accumulated = "";
-    let insideQuotes = false;
-    const foundEntities = [];
-    for (let i = 0; i < text.length; i++) {
-        const char = text[i];
-        if (char === "\"") {
-            insideQuotes = !insideQuotes;
-            if (!insideQuotes) {
-                foundEntities.push(accumulated);
-            }
-            accumulated = "";
-        } else {
-            accumulated += char;
-            if (!insideQuotes && stopAfterFoundText && accumulated.endsWith(stopAfterFoundText)) {
-                break;
-            }
-        }
-    }
-    return foundEntities;
 }
 
 /**
@@ -119,8 +92,81 @@ export default async function testWorldRulesOn(engine, character) {
         }
     ]);
 
+    // RULE #1 SPAWNING NEW CHARACTERS THAT DONT EXIST
+    // Character interaction checks
+    const systemMessageCharacterInteractions = `You are a assistant and story analyst that checks for interactions among characters between ${character.name} and other characters, ` +
+        `you will be questioned on each interaction separately, and you will answer with Yes or No`;
+
+    const systemPromptCharacterInteractionsIntroduction = engine.inferenceAdapter.buildSystemPromptForQuestioningAgent(systemMessageCharacterInteractions, [
+        "If a character is described as entering, arriving, or being greeted in person, that counts as introducing them as physically present, even if they are not at " + contextInfoSurroundingCharacters.availableCharactersAt + " list",
+        "If a character is described as being present in the location through other means (such as via magical projection, hologram, etc.), that counts as being physically present",
+        "Make sure to resolve ambiguous mentions of characters by descriptions to determine if they correspond to known characters",
+        "You must answer with Yes or No",
+        "If answering Yes, you must provide a brief explanation",
+        "Answer no for any characters that are already present at " + contextInfoSurroundingCharacters.availableCharactersAt + " list",
+        "Answer no for any of " + [...charState.surroundingTotalStrangers, ...charState.surroundingNonStrangers, character.name].map(name => `"${name}"`).join(", "),
+    ], null);
+
+    const characterInteractionGenerator = engine.inferenceAdapter.runQuestioningCustomAgentOn(
+        character,
+        systemPromptCharacterInteractionsIntroduction, contextInfoSurroundingCharacters.value, engine.getHistoryForCharacter(character, {}), "LAST_CYCLE_EXPANDED", null);
+
+    const readyCharInt = await characterInteractionGenerator.next(); // start the generator
+    if (readyCharInt.done) {
+        throw new Error("Inference adapter questioning generator for character interactions ended unexpectedly.");
+    }
+
+    const nextQuestion = `Considering the list of present characters ${contextInfoSurroundingCharacters.availableCharactersAt}, has ${character.name} specified new characters as being physically present?`;
+    console.log("Asking question, " + nextQuestion);
+
+    const spawnedMissingCharacters = await characterInteractionGenerator.next({
+        maxCharacters: 500,
+        maxParagraphs: 1,
+        nextQuestion: nextQuestion,
+        stopAfter: [],
+        stopAt: ["\n", "."],
+        grammar: `root::= yesanswer | noanswer\nnoanswer ::= "no" (${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()})\nyesanswer ::= "yes" "," " " ${JSON.stringify(character.name)} " " "has" " " "physically" " " "introduced" " " "a" " " "character" " " "named" " " "\\"" .* "\\"" " " "not" " " "already" " " "present" " " .*`
+    });
+
+    if (spawnedMissingCharacters.done) {
+        throw new Error("Inference adapter questioning generator for character interactions ended unexpectedly during spawned missing characters check.");
+    }
+
+    await characterInteractionGenerator.next(null); // finish the generator
+
+    console.log("Received answer, " + spawnedMissingCharacters.value.trim());
+
+    if (spawnedMissingCharacters.value.trim().toLowerCase().split(" ")[0] === "yes,") {
+        // check the character name mentioned
+        const mentionedName = extractNamedEntitiesFromText(spawnedMissingCharacters.value);
+        let characterExists = false;
+        for (const surroundingCharName of charState.surroundingTotalStrangers) {
+            if (surroundingCharName.toLowerCase().includes(mentionedName)) {
+                characterExists = true;
+                break;
+            }
+        }
+        for (const surroundingCharName of charState.surroundingNonStrangers) {
+            if (surroundingCharName.toLowerCase().includes(mentionedName)) {
+                characterExists = true;
+                break;
+            }
+        }
+
+        if (characterExists) {
+            console.warn("The character " + mentionedName + " mentioned by " + character.name + " as being newly introduced is actually already present; allowing the rule to pass.");
+        } else {
+            return { passed: false, reason: spawnedMissingCharacters.value.trim().replace("yes, ", "").trim() };
+        }
+    }
+
+    // After this rule passed we can be sure that any character mentioned, must be physically present in the location
+
     // we are going to build an special custom agent just to analyze actions and reactions because
     // the normal question for the world rule was not being handled well by the LLMs
+    const characterNamesOptions = [...charState.surroundingTotalStrangers, ...charState.surroundingNonStrangers, character.name, "Unknown"].map(name => JSON.stringify(name)).join(" | ");
+    const characterNameOpenFormat = "\"\\\"\" .* \"\\\"\"";
+
     const systeMessageSpecial = `You are an assistant and story analyst that checks for actions and reactions of characters in an interactive story`;
     const systemPromptSpecial = engine.inferenceAdapter.buildSystemPromptForQuestioningAgent(
         systeMessageSpecial,
@@ -131,6 +177,8 @@ export default async function testWorldRulesOn(engine, character) {
             "The action must be clearly described in the messages and stated, do not assume anything that is not explicitly described",
             "If the character has described actions or reactions of other characters in the messages, answer Yes and elaborate briefly",
             "If the character has not described any actions or reactions of other characters in the messages, answer No",
+            "If the story says something in the past tense answer no",
+            "If the character is not present in the location, they cannot perform any actions or reactions, so answer No",
         ],
         null,
     );
@@ -142,6 +190,7 @@ export default async function testWorldRulesOn(engine, character) {
     }
 
     let lastQuestion = `Has ${character.name} described any actions or reactions of other characters in the messages? do not make assumptions, only consider what is explicitly described.`;
+    console.log("Asking question, " + lastQuestion);
     let specialResult1 = await generatorSpecial.next({
         maxCharacters: 500,
         maxParagraphs: 5,
@@ -153,7 +202,7 @@ export default async function testWorldRulesOn(engine, character) {
         ),
         stopAfter: [],
         stopAt: ["\n", "."],
-        grammar: `root::= yesanswer | noanswer\nnoanswer ::= "no" (${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()})\nyesanswer ::= "yes" "," " " "the" " " "specific" " " ("action" | "reaction") " " "performed" " " "by" " " "another" " " "character" " " "named" " " "\\"" .* "\\"" " " "is" .*`,
+        grammar: `root::= yesanswer | noanswer\nnoanswer ::= "no" (${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()})\nyesanswer ::= "yes" "," " " "the" " " "specific" " " ("action" | "reaction") " " "performed" " " "by" " " "another" " " "character" " " "named" " " (${characterNameOpenFormat}) " " "is" .*`,
     });
     let doubleCheckLabel = "perform the specific action or reaction?";
 
@@ -161,19 +210,23 @@ export default async function testWorldRulesOn(engine, character) {
         throw new Error("Inference adapter questioning generator ended unexpectedly during special action/reaction check.");
     }
 
+    console.log("Received answer, " + specialResult1.value.trim());
+
     let brokenSpecialRule = specialResult1.value.trim().toLowerCase().split(" ")[0] === "yes,";
+
     if (!brokenSpecialRule) {
         lastQuestion = `Has ${character.name} described an emotional response by other characters in the messages? do not make assumptions, only consider what is explicitly described.`;
+        console.log("Asking question, " + lastQuestion);
         specialResult1 = await generatorSpecial.next({
             maxCharacters: 500,
             maxParagraphs: 5,
             nextQuestion: lastQuestion,
             contextInfo: engine.inferenceAdapter.buildContextInfoExample(
-                `Example: If ${character.name} says "[Character] feels [something]" or "[Character] expresses [something]" or "[Character] showcases [emotion]" where the character is not themselves, answer Yes. If the story says "${character.name} expresses [emotion] towards [Character]" or "${character.name} showcases [emotion] towards [Character]", answer No.`,
+                `Example: If ${character.name} says "[Character] feels [something]" or "[Character] expresses [something]" or "[Character] showcases [emotion]" where the character is not ${character.name}, answer Yes. If the story says "${character.name} expresses [emotion] towards [Character]" or "${character.name} showcases [emotion] towards [Character]", answer No.`,
             ),
             stopAfter: [],
             stopAt: ["\n", "."],
-            grammar: `root::= yesanswer | noanswer\nnoanswer ::= "no" (${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()})\nyesanswer ::= "yes" "," " " "the" " " "specific" " " "emotional" " " "response" " " "performed" " " "by" " " "another" " " "character" " " "named" " " "\\"" .* "\\"" " " "is" .*`,
+            grammar: `root::= yesanswer | noanswer\nnoanswer ::= "no" (${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()})\nyesanswer ::= "yes" "," " " "the" " " "specific" " " "emotional" " " "response" " " "performed" " " "by" " " "another" " " "character" " " "named" " " (${characterNameOpenFormat}) " " "is" .*`,
         });
 
         if (specialResult1.done) {
@@ -182,21 +235,24 @@ export default async function testWorldRulesOn(engine, character) {
 
         doubleCheckLabel = "showcase that specific emotional state?";
 
+        console.log("Received answer, " + specialResult1.value.trim());
+
         brokenSpecialRule = specialResult1.value.trim().toLowerCase().split(" ")[0] === "yes,";
     }
 
     if (!brokenSpecialRule) {
         lastQuestion = `Has ${character.name} described any verbal response of other characters in the messages? do not make assumptions, only consider what is explicitly described.`;
+        console.log("Asking question, " + lastQuestion);
         specialResult1 = await generatorSpecial.next({
             maxCharacters: 500,
             maxParagraphs: 5,
             nextQuestion: lastQuestion,
             contextInfo: engine.inferenceAdapter.buildContextInfoExample(
-                `Example: If ${character.name} says "[Character] speaks up" or "[Character] says [something]" or "[Character] expresses [something]" or "[Character] greets [someone]" where the character is not themselves, answer Yes. If the story says "${character.name} greets [Character]" or "${character.name} talks to [Character]", answer No.`,
+                `Example: If ${character.name} says "[Character] speaks up" or "[Character] says [something]" or "[Character] expresses [something]" or "[Character] greets [someone]" where the character is not ${character.name}, answer Yes. If the story says "${character.name} greets [Character]" or "${character.name} talks to [Character]", answer No.`,
             ),
             stopAfter: [],
             stopAt: ["\n", "."],
-            grammar: `root::= yesanswer | noanswer\nnoanswer ::= "no" (${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()})\nyesanswer ::= "yes" "," " " "the" " " "specific" " " "verbal" " " "response" " " "performed" " " "by" " " "another" " " "character" " " "named" " " "\\"" .* "\\"" " " "is" .*`,
+            grammar: `root::= yesanswer | noanswer\nnoanswer ::= "no" (${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()})\nyesanswer ::= "yes" "," " " "the" " " "specific" " " "verbal" " " "response" " " "performed" " " "by" " " "another" " " "character" " " "named" " " (${characterNameOpenFormat}) " " "is" .*`,
         });
 
         if (specialResult1.done) {
@@ -204,21 +260,27 @@ export default async function testWorldRulesOn(engine, character) {
         }
 
         doubleCheckLabel = "perform that specific verbal response?";
+
+        console.log("Received answer, " + specialResult1.value.trim());
+
         brokenSpecialRule = specialResult1.value.trim().toLowerCase().split(" ")[0] === "yes,";
     }
 
     if (!brokenSpecialRule) {
         lastQuestion = `Has ${character.name} described any emotional process or thought process of other characters in the messages? do not make assumptions, only consider what is explicitly described.`;
+
+        console.log("Asking question, " + lastQuestion);
+
         specialResult1 = await generatorSpecial.next({
             maxCharacters: 500,
             maxParagraphs: 5,
             nextQuestion: lastQuestion,
             stopAfter: [],
             contextInfo: engine.inferenceAdapter.buildContextInfoExample(
-                `Example: If ${character.name} says "[Character] thinks [something]" or "[Character] believes [something]" or "[Character] feels [emotion]" where the character is not themselves, answer Yes. If the story says "${character.name} thinks [something]" or "${character.name} believes [something]" or "${character.name} feels [emotion]", answer No.`,
+                `Example: If ${character.name} says "[Character] thinks [something]" or "[Character] believes [something]" or "[Character] feels [emotion]" where the character is not ${character.name}, answer Yes. If the story says "${character.name} thinks [something]" or "${character.name} believes [something]" or "${character.name} feels [emotion]", answer No.`,
             ),
             stopAt: ["\n", "."],
-            grammar: `root::= yesanswer | noanswer\nnoanswer ::= "no" (${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()})\nyesanswer ::= "yes" "," " " "the" " " "specific" " " ("thought" | "emotional") " " "process" " " "performed" " " "by" " " "another" " " "character" " " "named" " " "\\"" .* "\\"" " " "is" .*`,
+            grammar: `root::= yesanswer | noanswer\nnoanswer ::= "no" (${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()})\nyesanswer ::= "yes" "," " " "the" " " "specific" " " ("thought" | "emotional") " " "process" " " "performed" " " "by" " " "another" " " "character" " " "named" " " (${characterNameOpenFormat}) " " "is" .*`,
         });
 
         if (specialResult1.done) {
@@ -226,93 +288,91 @@ export default async function testWorldRulesOn(engine, character) {
         }
 
         doubleCheckLabel = "described that " + (specialResult1.value.includes("emotional") ? "emotional process or one similar?" : "thought process or one similar?");
+
+        console.log("Received answer, " + specialResult1.value.trim());
+
         brokenSpecialRule = specialResult1.value.trim().toLowerCase().split(" ")[0] === "yes,";
     }
 
     /**
      * @type {string | null}
      */
-    let whoDidThisAction = null;
-
-    if (brokenSpecialRule) {
-        // we will see first if the name is mentioned in the result
-        for (const otherCharName in engine.deObject.stateFor) {
-            const name = extractNamedEntitiesFromText(specialResult1.value);
-            if (name.includes(otherCharName.toLowerCase())) {
-                whoDidThisAction = otherCharName;
+    let whoDidThisAction = extractNamedEntitiesFromText(specialResult1.value) || null;
+    if (whoDidThisAction && whoDidThisAction !== "Unknown") {
+        for (const nameOption of [...charState.surroundingTotalStrangers, ...charState.surroundingNonStrangers, character.name]) {
+            if (whoDidThisAction && nameOption.toLowerCase().includes(whoDidThisAction)) {
+                whoDidThisAction = nameOption;
                 break;
             }
         }
 
+        console.log("It appears that the character that performed the action/reaction is " + whoDidThisAction + " as extracted from the LLM response.");
+    }
+
+    const specificAction = specialResult1.value.trim().replace("yes, ", "").trim();
+
+    if (brokenSpecialRule) {
+        console.log("A potential special rule breach was detected regarding the description of actions or reactions of other characters by " + character.name + " in world rule checking, analyzing further to determine if this is a real breach or a false positive.");
+        // now we need to figure out who did the action/reaction if possible
+        // because of bad LLM behaviour sometimes the name doesn't match reality let's double check anyway
+        if (!whoDidThisAction) {
+            console.warn("Could not determine who performed the action/reaction described by " + character.name + " in world rule checking.");
+        } else {
+            console.log("Double checking who performed the action/reaction described by " + character.name + " in world rule checking.");
+        }
+
+        console.log("Re-asking question, " + JSON.stringify(lastQuestion) + " but asking for the name of the character that performed the action/reaction this time.");
+
+        // ask now for the name
+        const specialResult1Whom = await generatorSpecial.next({
+            maxCharacters: 500,
+            maxParagraphs: 5,
+            nextQuestion: lastQuestion + ". Please choose from the list of characters present: " + contextInfoSurroundingCharacters.availableCharactersAt + ", or answer Unknown if it is not clear who performed the action/reaction.",
+            stopAfter: [],
+            stopAt: ["."],
+            answerTrail: specialResult1.value.trim() + ", the actual action was performed by the character ",
+            grammar: `root::= ${characterNamesOptions} "." .*`,
+        });
+
+        if (specialResult1Whom.done) {
+            throw new Error("Inference adapter questioning generator ended unexpectedly during special action/reaction who check.");
+        }
+
+        console.log("Received answer for who performed the action/reaction, " + specialResult1Whom.value.trim());
+
+        // now try to find the name again
+        /**
+         * @type {string | null}
+         */
+        let whoDidThisAction2 = specialResult1Whom.value.trim() || null;
+
+        if (!whoDidThisAction2) {
+            console.warn("Could not determine who performed the action/reaction described by " + character.name + " in world rule checking, even after asking specifically.");
+        }
+
+        whoDidThisAction = whoDidThisAction2 || whoDidThisAction || null;
+        if (whoDidThisAction === "Unknown") {
+            whoDidThisAction = null;
+        }
         if (whoDidThisAction === character.name) {
             // this is us, the character, so it must have been a false positive
             brokenSpecialRule = false;
             console.warn("The action/reaction described by " + character.name + " in world rule checking was actually performed by themselves; allowing the rule to pass.");
-        } else {
-
-            // now we need to figure out who did the action/reaction if possible
-            // because of bad LLM behaviour sometimes the name doesn't match reality let's double check anyway
-            if (!whoDidThisAction) {
-                console.warn("Could not determine who performed the action/reaction described by " + character.name + " in world rule checking.");
-            } else {
-                console.log("Double checking who performed the action/reaction described by " + character.name + " in world rule checking.");
-            }
-
-            // ask now for the name
-            const specialResult1Whom = await generatorSpecial.next({
-                maxCharacters: 500,
-                maxParagraphs: 5,
-                nextQuestion: lastQuestion,
-                stopAfter: [],
-                stopAt: ["\n", "."],
-                answerTrail: specialResult1.value.trim() + ", the actual action was performed by the character ",
-                grammar: `root::= "named" " " "\\"" .* "\\"" " " .*`,
-            });
-
-            if (specialResult1Whom.done) {
-                throw new Error("Inference adapter questioning generator ended unexpectedly during special action/reaction who check.");
-            }
-
-            // now try to find the name again
-            /**
-             * @type {string | null}
-             */
-            let whoDidThisAction2 = null;
-            const name = extractNamedEntitiesFromText(specialResult1Whom.value);
-            const nameLower = name.toLowerCase();
-            for (const otherCharName in engine.deObject.stateFor) {
-                if (nameLower.includes(otherCharName.toLowerCase())) {
-                    whoDidThisAction2 = otherCharName;
-                    break;
-                }
-            }
-
-            if (!whoDidThisAction2) {
-                console.warn("Could not determine who performed the action/reaction described by " + character.name + " in world rule checking, even after asking specifically.");
-            }
-            whoDidThisAction = whoDidThisAction2 || name;
-            if (whoDidThisAction === character.name) {
-                // this is us, the character, so it must have been a false positive
-                brokenSpecialRule = false;
-                console.warn("The action/reaction described by " + character.name + " in world rule checking was actually performed by themselves; allowing the rule to pass.");
-            }
         }
     }
 
     await generatorSpecial.next(null); // finish the generator
 
+    if (brokenSpecialRule && !whoDidThisAction) {
+        // so now this means that the user described an action/reaction of another character but we don't know which character, that is still a break of immersion and a break of the rules
+        return { passed: false, reason: character.name + " described the action/reaction of a character that is not present in the location, with the following description: " + specificAction };
+    }
+
     // Now we consider the rule broken because our user described actions/reactions of other characters
     // but it may be the case that those characters were performing those actions/reactions themselves
     // and our user character was just narrating them, for that we will ensure that the character did not perform those actions/reactions themselves
-    if (brokenSpecialRule && whoDidThisAction) {
-        const specificAction = specialResult1.value.trim().replace("yes, ", "").trim();
-
-        // first we are going to check if the character is even real to begin with and not some made up name
-        const characterStateForThatCharacter = engine.deObject.stateFor[whoDidThisAction];
-        if (!characterStateForThatCharacter) {
-            // the character does not exist, so the rule is definitely broken
-            return { passed: false, reason: character.name + " described the action/reaction of a non-existent character in the story, " + whoDidThisAction + ", " + specificAction };
-        }
+    if (brokenSpecialRule && whoDidThisAction && whoDidThisAction !== "Unknown") {
+        console.log("Special rule breach detected, ensuring");
 
         // now we will have to check if the character did not perform that action/reaction themselves
         // sadly we will need a new assistant for this, because the user message cannot be included in the analysis otherwise
@@ -322,8 +382,8 @@ export default async function testWorldRulesOn(engine, character) {
             [
                 "An action is defined as something a character does",
                 "A reaction is defined as how a character responds to an action or event",
-                "If a character has done the specific action or reaction, answer Yes",
-                "If a character has not done the specific action or reaction, answer No",
+                "If " + whoDidThisAction + " has done the specific action or reaction, answer Yes",
+                "If " + whoDidThisAction + " has not done the specific action or reaction, answer No",
             ],
             null,
         );
@@ -332,10 +392,12 @@ export default async function testWorldRulesOn(engine, character) {
         if (readySpecial2.done) {
             throw new Error("Inference adapter questioning generator ended unexpectedly.");
         }
+        const nextQuestion = `${specificAction}. In any of the provided messages, did ${whoDidThisAction} ${doubleCheckLabel}`;
+        console.log("Asking question, " + nextQuestion);
         const specialResult2 = await generatorSpecial.next({
             maxCharacters: 250,
             maxParagraphs: 1,
-            nextQuestion: `${specificAction}. In any of the provided messages, did ${whoDidThisAction} ${doubleCheckLabel}`,
+            nextQuestion: nextQuestion,
             stopAfter: ["yes", "no"],
             stopAt: ["\n", "."],
             grammar: `root::= ("yes" | "no") .*`,
@@ -347,11 +409,18 @@ export default async function testWorldRulesOn(engine, character) {
 
         const didPerformSpecialAction = specialResult2.value.trim().toLowerCase().split(" ")[0] === "yes";
 
+        console.log("Received answer, " + specialResult2.value.trim());
+
         if (!didPerformSpecialAction) {
             // so now this means that the user described an action/reaction of another character
             // that the other character did not perform themselves, so this is a rule break
             return { passed: false, reason: character.name + " described the action/reaction of another character, " + whoDidThisAction + ", " + specificAction };
         }
+
+        // if it passes this means that they did actually perform that action/reaction themselves, so it is not a break of immersion or a break of the rules, it is just a narration of what they did
+        // Joe: I am feeling very angry.
+        // User: *As Joe is feeling very angry User tries to calm him down*
+        // User is describing an action by Joe, but it is actually Joe's own action, so it is not a break of immersion or a break of the rules, it is just a narration of what Joe did
     }
 
     // DONE CHECKING SPECIAL ACTION/REACTION RULES, those would be the most broken ones so special care was taken
@@ -427,6 +496,8 @@ export default async function testWorldRulesOn(engine, character) {
     ];
 
     for (const rule of basicYesNoRules) {
+        // @ts-ignore
+        console.log("Asking question, " + (rule.question || ruleBreakMessage));
         const yesNoResult = await generator.next({
             maxCharacters: 250,
             maxParagraphs: 1,
@@ -446,6 +517,9 @@ export default async function testWorldRulesOn(engine, character) {
         }
 
         const brokenRule = yesNoResult.value.trim().toLowerCase().split(" ")[0] === "yes,";
+
+        console.log("Received answer, " + yesNoResult.value.trim());
+
         if (brokenRule) {
             // finish the generator
             await generator.next(null);
@@ -455,66 +529,6 @@ export default async function testWorldRulesOn(engine, character) {
     }
 
     await generator.next(null); // finish the generator
-
-    // Character interaction checks
-    const systemMessageCharacterInteractions = `You are a assistant and story analyst that checks for interactions among characters between ${character.name} and other characters, ` +
-        `you will be questioned on each interaction separately, and you will answer with Yes or No`;
-
-    const systemPromptCharacterInteractionsIntroduction = engine.inferenceAdapter.buildSystemPromptForQuestioningAgent(systemMessageCharacterInteractions, [
-        "If a character is described as entering, arriving, or being greeted in person, that counts as introducing them as physically present, even if they are not at " + contextInfoSurroundingCharacters.availableCharactersAt + " list",
-        "If a character is described as being present in the location through other means (such as via magical projection, hologram, etc.), that counts as being physically present",
-        "Make sure to resolve ambiguous mentions of characters by descriptions to determine if they correspond to known characters",
-        "You must answer with Yes or No",
-        "If answering Yes, you must provide a brief explanation",
-    ], null);
-
-    const characterInteractionGenerator = engine.inferenceAdapter.runQuestioningCustomAgentOn(
-        character,
-        systemPromptCharacterInteractionsIntroduction, contextInfoSurroundingCharacters.value, engine.getHistoryForCharacter(character, {}), "LAST_CYCLE_EXPANDED", null);
-
-    const readyCharInt = await characterInteractionGenerator.next(); // start the generator
-    if (readyCharInt.done) {
-        throw new Error("Inference adapter questioning generator for character interactions ended unexpectedly.");
-    }
-
-    const spawnedMissingCharacters = await characterInteractionGenerator.next({
-        maxCharacters: 500,
-        maxParagraphs: 1,
-        nextQuestion: `Considering the list of present characters ${contextInfoSurroundingCharacters.availableCharactersAt}, has ${character.name} specified new characters as being physically present?`,
-        stopAfter: [],
-        stopAt: ["\n", "."],
-        grammar: `root::= yesanswer | noanswer\nnoanswer ::= "no" (${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()})\nyesanswer ::= "yes" "," " " ${JSON.stringify(character.name)} " " "has" " " "physically" " " "introduced" " " "a" " " "new" " " "character" " " "named" " " "\\"" .* "\\"" " " "not" " " "already" " " "present" " " .*`
-    });
-
-    if (spawnedMissingCharacters.done) {
-        throw new Error("Inference adapter questioning generator for character interactions ended unexpectedly during spawned missing characters check.");
-    }
-
-    await characterInteractionGenerator.next(null); // finish the generator
-
-    if (spawnedMissingCharacters.value.trim().toLowerCase().split(" ")[0] === "yes,") {
-        // check the character name mentioned
-        const mentionedName = extractNamedEntitiesFromText(spawnedMissingCharacters.value);
-        let characterExists = false;
-        for (const surroundingCharName of charState.surroundingTotalStrangers) {
-            if (surroundingCharName.toLowerCase().includes(mentionedName)) {
-                characterExists = true;
-                break;
-            }
-        }
-        for (const surroundingCharName of charState.surroundingNonStrangers) {
-            if (surroundingCharName.toLowerCase().includes(mentionedName)) {
-                characterExists = true;
-                break;
-            }
-        }
-
-        if (characterExists) {
-            console.warn("The character " + mentionedName + " mentioned by " + character.name + " as being newly introduced is actually already present; allowing the rule to pass.");
-        } else {
-            return { passed: false, reason: spawnedMissingCharacters.value.trim().replace("yes, ", "").trim() };
-        }
-    }
 
     // Now we need to check for character lifting rules if they are broken
     const charactersCharacterCannotCarryWReasons = engine.getItemsCharacterMayCarryWithReasons("cannot", character.name, charState.location, true, true);
@@ -544,10 +558,12 @@ export default async function testWorldRulesOn(engine, character) {
         if (readyForCarryCheck.done) {
             throw new Error("Inference adapter questioning generator for character interactions ended unexpectedly during carry check.");
         }
+        const nextQuestion = `considering the list at ${contextInfoCannotCarryCharacters.cannotCarryDescriptionAt}. Has ${character.name} described lifting or carrying another character that is too heavy or big for them to carry? The action must not be an attempt but a successful lifting or carrying.`;
+        console.log("Asking question, " + nextQuestion);
         const liftingTooHeavyCharacter = await charactersCharacterCannotCarryWReasonsGenerator.next({
             maxCharacters: 250,
             maxParagraphs: 1,
-            nextQuestion: `considering the list at ${contextInfoCannotCarryCharacters.cannotCarryDescriptionAt}. Has ${character.name} described lifting or carrying another character that is too heavy or big for them to carry? The action must not be an attempt but a successful lifting or carrying.`,
+            nextQuestion: nextQuestion,
             stopAfter: [],
             stopAt: ["\n", "."],
             grammar: `root::= yesanswer | noanswer\nnoanswer ::= "no" (${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()})\nyesanswer ::= "yes" "," " " ${JSON.stringify(character.name)} " " "is" " " ("lifting" | "carrying") " " "a" " " "character" " " "named" " " "\\"" .* "\\"" " " "who" " " "is" " " "too" " " ("big" | "heavy") " " .*`
@@ -555,6 +571,9 @@ export default async function testWorldRulesOn(engine, character) {
         if (liftingTooHeavyCharacter.done) {
             throw new Error("Inference adapter questioning generator for character interactions ended unexpectedly during lifting too heavy character check.");
         }
+
+        console.log("Received answer, " + liftingTooHeavyCharacter.value.trim());
+
         await charactersCharacterCannotCarryWReasonsGenerator.next(null); // finish the generator
 
         if (liftingTooHeavyCharacter.value.trim().toLowerCase().split(" ")[0] === "yes,") {
@@ -590,6 +609,8 @@ export default async function testWorldRulesOn(engine, character) {
         }
     }
 
+    const itemsAtLocation = engine.getFullItemListAtLocation(charState.location);
+
     const itemsCharacterCannotCarryWReasons = engine.getItemsCharacterMayCarryWithReasons("cannot", character.name, charState.location, false, false);
     if (itemsCharacterCannotCarryWReasons.length) {
         const contextInfoCannotCarryItems = engine.inferenceAdapter.buildContextInfoItemsCannotCarry(itemsCharacterCannotCarryWReasons, "items");
@@ -604,7 +625,7 @@ export default async function testWorldRulesOn(engine, character) {
                 "You must answer with Yes or No",
                 "If answering Yes, you must provide a brief explanation",
                 "People and other characters are not items, do not consider them for this question",
-                otherCharacterNames.length ? "The list of characters that should not be considered for this question are: " + otherCharacterNames.join(", ") : null,
+                "Only consider items explictly manipulated by " + character.name + " in the messages",
             ].filter((v) => v !== null), null);
 
         const itemsCharacterCannotCarryWReasonsGenerator = engine.inferenceAdapter.runQuestioningCustomAgentOn(
@@ -620,10 +641,13 @@ export default async function testWorldRulesOn(engine, character) {
             throw new Error("Inference adapter questioning generator for character interactions ended unexpectedly during item carry check.");
         }
 
+        const nextQuestion = `considering the list at ${contextInfoCannotCarryItems.cannotCarryDescriptionAt}. Has ${character.name} described lifting or carrying an item that is too heavy or big for them to carry? The action must not be an attempt but a successful lifting or carrying.`;
+        console.log("Asking question, " + nextQuestion);
+
         const liftingTooHeavyItem = await itemsCharacterCannotCarryWReasonsGenerator.next({
             maxCharacters: 250,
             maxParagraphs: 1,
-            nextQuestion: `considering the list at ${contextInfoCannotCarryItems.cannotCarryDescriptionAt}. Has ${character.name} described lifting or carrying an item that is too heavy or big for them to carry? The action must not be an attempt but a successful lifting or carrying.`,
+            nextQuestion: nextQuestion,
             stopAfter: [],
             stopAt: ["\n", "."],
             grammar: `root::= yesanswer | noanswer\nnoanswer ::= "no" (${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()})\nyesanswer ::= "yes" "," " " ${JSON.stringify(character.name)} " " "is" " " ("lifting" | "carrying") " " "an" " " "item" " " "named" " " "\\"" .* "\\"" " " "that" " " "is" " " "too" " " ("big" | "heavy") " " .*`
@@ -632,6 +656,8 @@ export default async function testWorldRulesOn(engine, character) {
         if (liftingTooHeavyItem.done) {
             throw new Error("Inference adapter questioning generator for character interactions ended unexpectedly during lifting too heavy item check.");
         }
+
+        console.log("Received answer, " + liftingTooHeavyItem.value.trim());
 
         await itemsCharacterCannotCarryWReasonsGenerator.next(null); // finish the generator
 
@@ -659,10 +685,11 @@ export default async function testWorldRulesOn(engine, character) {
         "You will be questioned on whether " + character.name + ` has interacted with items in the story that are not available to them at their current location`,
         [
             `An interaction with an item is defined as lifting, carrying, moving, using, or manipulating the item in any way`,
-            "If an item is only mentioned or described but not interacted with, answer Yes, since no interaction happened",
+            "If an item is only mentioned or described but not interacted with, answer No, since no interaction happened",
             `If the interacted item is not in the list at ${availableItemsContextInfo.availableItemsAt}, answer No and explain why`,
             "People and other characters are not items, do not consider them for this question",
-            otherCharacterNames.length ? "The list of characters that should not be considered for this question are: " + otherCharacterNames.join(", ") : null,
+            "Only consider items explictly manipulated by " + character.name + " in the messages",
+            "Answer no for any of the following items: " + itemsAtLocation.join(", "),
         ].filter((v) => v !== null), null);
 
     const itemsInteractionGenerator = engine.inferenceAdapter.runQuestioningCustomAgentOn(
@@ -676,10 +703,14 @@ export default async function testWorldRulesOn(engine, character) {
     if (readyItemsInteraction.done) {
         throw new Error("Inference adapter questioning generator for item interactions ended unexpectedly.");
     }
+
+    const nextQuestion2 = `Considering the list at ${availableItemsContextInfo.availableItemsAt}. Has ${character.name} interacted with an item that is not in the list?`;
+    console.log("Asking question, " + nextQuestion2);
+
     const spawnedMissingItems = await itemsInteractionGenerator.next({
         maxCharacters: 500,
         maxParagraphs: 1,
-        nextQuestion: `considering the list at ${availableItemsContextInfo.availableItemsAt}. Has ${character.name} interacted with an item that is not in the list?`,
+        nextQuestion: nextQuestion2,
         stopAfter: [],
         stopAt: ["\n", "."],
         grammar: `root::= yesanswer | noanswer\nnoanswer ::= "no" (${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()})\nyesanswer ::= "yes" "," " " ${JSON.stringify(character.name)} " " "has" " " "interacted" " " "with" " " "an" " " "item" " " "named" " " "\\"" .* "\\"" " " "not" " " "available" " " "at" " " "their" " " "current" " " "location" " " .*`
@@ -688,6 +719,9 @@ export default async function testWorldRulesOn(engine, character) {
     if (spawnedMissingItems.done) {
         throw new Error("Inference adapter questioning generator for item interactions ended unexpectedly during spawned missing items check.");
     }
+
+    console.log("Received answer, " + spawnedMissingItems.value.trim());
+    
     await itemsInteractionGenerator.next(null); // finish the generator
 
     if (spawnedMissingItems.value.trim().toLowerCase().split(" ")[0] === "yes,") {

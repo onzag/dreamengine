@@ -53,7 +53,6 @@ const clothes = {
     isConsumable: false,
     isSeeThrough: false,
     name: "Space Clothes",
-    nonPickable: false,
     owner: "Onza",
     properties: {},
     placement: "worn",

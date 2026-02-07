@@ -125,7 +125,6 @@ const spaceSuit = {
     descriptionWhenWorn: null,
     isConsumable: false,
     isSeeThrough: false,
-    nonPickable: false,
     owner: null,
     communicator: null,
 }
@@ -150,8 +149,6 @@ const locker = {
     descriptionWhenWorn: null,
     isConsumable: false,
     isSeeThrough: false,
-    // part of the environment, cannot be picked up
-    nonPickable: true,
     owner: null,
     communicator: null,
 };
@@ -176,8 +173,6 @@ const stove = {
     descriptionWhenWorn: null,
     isConsumable: false,
     isSeeThrough: false,
-    // part of the environment, cannot be picked up
-    nonPickable: true,
     owner: null,
     communicator: null,
 };
@@ -202,7 +197,6 @@ const fork = {
     descriptionWhenWorn: null,
     isConsumable: false,
     isSeeThrough: false,
-    nonPickable: false,
     owner: null,
     communicator: null,
 };
@@ -224,7 +218,6 @@ const spoon = {
     descriptionWhenWorn: null,
     isConsumable: false,
     isSeeThrough: false,
-    nonPickable: false,
     owner: null,
     communicator: null,
 };
@@ -246,7 +239,6 @@ const cabinetDrawerKitchenware = {
     descriptionWhenWorn: null,
     isConsumable: false,
     isSeeThrough: false,
-    nonPickable: false,
     owner: null,
     communicator: null,
 };
@@ -268,7 +260,6 @@ const bowl = {
     descriptionWhenWorn: null,
     isConsumable: false,
     isSeeThrough: false,
-    nonPickable: false,
     owner: null,
     communicator: null,
 };
@@ -290,7 +281,6 @@ const cabinetDrawerBowls = {
     descriptionWhenWorn: null,
     isConsumable: false,
     isSeeThrough: false,
-    nonPickable: false,
     owner: null,
     communicator: null,
 };
@@ -312,8 +302,6 @@ const cabinet = {
     descriptionWhenWorn: null,
     isConsumable: false,
     isSeeThrough: false,
-    // part of the environment, cannot be picked up
-    nonPickable: true,
     owner: null,
     communicator: null,
 };
@@ -341,7 +329,6 @@ const spaceFoodPack = {
     descriptionWhenWorn: null,
     isConsumable: true,
     isSeeThrough: false,
-    nonPickable: false,
     owner: null,
     communicator: null,
 };
@@ -363,8 +350,6 @@ const largeCabinet = {
     descriptionWhenWorn: null,
     isConsumable: false,
     isSeeThrough: false,
-    // part of the environment, cannot be picked up
-    nonPickable: true,
     owner: null,
     communicator: null,
 };
@@ -389,7 +374,6 @@ const chair = {
     descriptionWhenWorn: null,
     isConsumable: false,
     isSeeThrough: false,
-    nonPickable: false,
     owner: null,
     communicator: null,
 };
@@ -439,7 +423,6 @@ DE.world.locations["Surface of the Moon"] = DE.utils.newLocationFromStaticDefini
                     descriptionWhenWorn: null,
                     isConsumable: false,
                     isSeeThrough: false,
-                    nonPickable: false,
                     placement: "In the ground",
                     owner: null,
                     communicator: null,
@@ -607,7 +590,6 @@ for (let i = 0; i < 2; i++) {
                         descriptionWhenWorn: null,
                         isConsumable: false,
                         isSeeThrough: false,
-                        nonPickable: false,
                         owner: null,
                         communicator: null,
                     }

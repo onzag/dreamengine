@@ -2,7 +2,7 @@
  * Gear that calculates state changes for a character based on recent interactions.
  */
 
-import { DEngine } from "..";
+import { DEngine } from "../index.js";
 
 /**
  * 

@@ -1468,13 +1468,7 @@ declare interface DEItem {
      * this should be generated using the LLM
      */
     placement: string;
-
-    /**
-     * Use this to prevent characters from picking up this item, this is useful
-     * for example with furniture and other fixed items in the location
-     * that the character should not be able to pick up and carry around
-     */
-    nonPickable: boolean;
+    
     /**
      * The id of the character that owns this item, null if no owner
      * this is useful for items that are owned by specific characters

@@ -491,8 +491,7 @@ export class DEngine {
             stateFor: {},
             initialTime: defaultTimeDEFormat,
             currentTime: { ...defaultTimeDEFormat },
-            // @ts-ignore
-            functions: this.allInternalFunctions,
+            functions: /** @type {*} */ (this.allInternalFunctions),
             social: {
                 bonds: {},
             },
@@ -500,7 +499,8 @@ export class DEngine {
             wanderHeuristics: {},
             utils: deEngineUtils,
             gameOver: false,
-            worldRules: {}
+            worldRules: {},
+            actionAccumulators: {},
         }
 
         this.user = user;
@@ -902,7 +902,7 @@ export class DEngine {
                     startTime: { ...this.deObject.currentTime },
                 }
             ],
-            bondsAtStart: getFrozenBonds(expectedParticipants),
+            bondsAtStart: getFrozenBonds(this, expectedParticipants),
             // TODO what do we do with bonds at end here?
             bondsAtEnd: {},
             startTime: { ...this.deObject.currentTime },
@@ -1321,6 +1321,16 @@ export class DEngine {
                 location.currentWeatherPartialEffectDescription = parentLocation.currentWeatherPartialEffectDescription;
                 location.currentWeatherFullEffectDescription = parentLocation.currentWeatherFullEffectDescription;
                 location.currentWeatherNegativelyExposedDescription = parentLocation.currentWeatherNegativelyExposedDescription;
+
+                // find every children locations and reroll their weather
+                if (cascade) {
+                    for (const potentialChildLocationKey in this.deObject.world.locations) {
+                        const potentialChildLocation = this.deObject.world.locations[potentialChildLocationKey];
+                        if (potentialChildLocation.parent === locationName) {
+                            this.rerollLocationWeather(potentialChildLocationKey, potentialChildLocation, location, true);
+                        }
+                    }
+                }
             } else {
                 throw new Error("Location has no own weather system and no parent location to inherit weather from.");
             }
@@ -1379,6 +1389,8 @@ export class DEngine {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         }
+
+        console.log("Rerolling world weather...");
 
         // find every top level location and reroll their weather
         for (const locationKey in this.deObject.world.locations) {
@@ -1930,29 +1942,6 @@ export class DEngine {
     }
 
     /**
-     * @param {string} locationName 
-     * @param {string} locationSlotName 
-     */
-    getNonPickableItemsAtSlot(locationName, locationSlotName) {
-        if (!this.deObject) {
-            throw new Error("DEngine not initialized");
-        }
-        if (this.invalidCharacterStates) {
-            throw new Error("DEngine has invalid character states, cannot get non pickable items at slot");
-        }
-        const location = this.deObject.world.locations[locationName]
-        if (!location) {
-            throw new Error(`Location ${locationName} not found.`);
-        }
-        const locationSlot = location.slots[locationSlotName]
-        if (!locationSlot) {
-            throw new Error(`Location slot ${locationSlotName} not found in location ${locationName}.`);
-        }
-        const nonPickableItems = locationSlot.items.filter(item => item.nonPickable);
-        return nonPickableItems;
-    }
-
-    /**
      * @param {"can" | "cannot"} canOrCannot
      * @param {string} characterName 
      * @param {string} locationName 
@@ -2039,8 +2028,6 @@ export class DEngine {
                 reason = `${character.name} is too big to wear this item, minimum volume is ${item.wearableProperties.volumeRangeMinLiters}L, character current volume with is approximated at ${characterCurrentVolumeApprox}L`;
             } else if (characterCurrentVolumeApprox > item.wearableProperties.volumeRangeMaxLiters) {
                 reason = `${character.name} is too small to wear this item, maximum volume is ${item.wearableProperties.volumeRangeMaxLiters}L, character current volume is approximated at ${characterCurrentVolumeApprox}L`;
-            } else if (item.nonPickable) {
-                reason = `${character.name} cannot wear an item that is non-pickable`;
             }
 
             if (reason && canOrCannot === "cannot") {
@@ -2086,6 +2073,51 @@ export class DEngine {
         }
 
         return Array.from(itemsCharacterCannotWearWReasons);
+    }
+
+    /**
+     * @param {string} locationName 
+     * @returns 
+     */
+    getFullItemListAtLocation(locationName) {
+        if (!this.deObject) {
+            throw new Error("DEngine not initialized");
+        }
+        if (this.invalidCharacterStates) {
+            throw new Error("DEngine has invalid character states, cannot get items at location");
+        }
+        const location = this.deObject.world.locations[locationName];
+        if (!location) {
+            throw new Error(`Location ${locationName} not found.`);
+        }
+        /**
+         * @type {string[]}
+         */
+        const items = [];
+        /**
+         * 
+         * @param {DEItem[]} itemList 
+         */
+        const processItemList = (itemList) => {
+            for (const item of itemList) {
+                if (!items.includes(item.name)) {
+                    items.push(item.name);
+                }
+                processItemList(item.containing);
+            }
+        }
+        for (const locationSlotName in location.slots) {
+            const locationSlot = location.slots[locationSlotName];
+            processItemList(locationSlot.items);
+        }
+        // @ts-ignore
+        const charactersAtLocation = Object.keys(this.deObject.stateFor).filter(charName => this.deObject.stateFor[charName].location === locationName);
+        for (const charName of charactersAtLocation) {
+            const charState = this.deObject.stateFor[charName];
+            processItemList(charState.wearing);
+            processItemList(charState.carrying);
+        }
+        return items;
     }
 
     /**
@@ -2215,8 +2247,6 @@ export class DEngine {
                 reason = `${character.name} is already carrying too much weight to lift this item, weights ${item.weightKg}kg, remaining capacity is ${remainingCarryingCapacity}kg`;
             } else if (item.volumeLiters > remainingCarryingVolume) {
                 reason = `${character.name} is already carrying too much volume to fit this item, volume is ${item.volumeLiters}L, remaining capacity is ${remainingCarryingVolume}L`;
-            } else if (item.nonPickable) {
-                reason = `${character.name} cannot pick/carry the item because the item is part of the environment and non-pickable`;
             }
 
             if (reason && canOrCannot === "cannot") {
@@ -3175,7 +3205,7 @@ export class DEngine {
                         location: userCharacterState.location,
                         pseudoConversation: false,
                         summary: null,
-                        bondsAtStart: getFrozenBonds([user.name]),
+                        bondsAtStart: getFrozenBonds(this, [user.name]),
                         bondsAtEnd: null,
                     };
                     return expectedFutureConversationIdIfNotFound;
@@ -3240,6 +3270,8 @@ export class DEngine {
             }
 
             this.informCycleState("info", `Feasibility test Passed!`);
+
+            process.exit(1);
 
             const nextCharacterToTalk = feasibilityResults.nextCharacterToTalk;
 
@@ -3370,7 +3402,7 @@ export class DEngine {
                 location: userCharacterState.location,
                 pseudoConversation: false,
                 summary: null,
-                bondsAtStart: getFrozenBonds([this.user.name]),
+                bondsAtStart: getFrozenBonds(this, [this.user.name]),
                 bondsAtEnd: null,
             };
         } else {
@@ -3426,17 +3458,17 @@ export function deepCopyNoHistory(obj) {
 }
 
 /**
-     * 
+     * @param {DEngine} engine 
      * @param {string[]} characters 
      */
-export function getFrozenBonds(characters) {
+export function getFrozenBonds(engine, characters) {
     /**
      * @type {Record<string, DEBondDescription>}
      */
     const frozenBonds = {};
     characters.forEach(charName => {
         // @ts-expect-error
-        frozenBonds[charName] = deepCopy(this.deObject.social.bonds[charName]);
+        frozenBonds[charName] = deepCopy(engine.deObject.social.bonds[charName]);
     });
     return frozenBonds;
 }
