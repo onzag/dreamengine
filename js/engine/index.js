@@ -711,6 +711,10 @@ export class DEngine {
                             processItem(containedItem, slotName, carriedByCharacter, wornByCharacter);
                         }
                     }
+
+                    for (const ontopItem of item.ontop) {
+                        processItem(ontopItem, slotName, carriedByCharacter, wornByCharacter);
+                    }
                 }
 
                 for (const [slotName, slot] of Object.entries(characterLocationObj.slots)) {
@@ -1496,6 +1500,9 @@ export class DEngine {
             for (const containedItem of item.containing) {
                 listItems(space + "  ", containedItem, ", contained by: " + item.name + extraMessage);
             }
+            for (const ontopItem of item.ontop) {
+                listItems(space + "  ", ontopItem, ", on top of: " + item.name + extraMessage);
+            }
             cheapList.push(`${item.owner ? item.owner + "'s " : ""}${item.name}${item.amount >= 2 ? " x" + item.amount : ""}`);
         }
         if (noItemsInAnySlot) {
@@ -1605,7 +1612,7 @@ export class DEngine {
 
         const bondDecl = character.bonds.declarations.find((b => b.strangerBond === bond.stranger && b.minBondLevel <= bond.bond && bond.bond < (b.maxBondLevel === 100 ? 200 : b.maxBondLevel) && b.min2BondLevel <= bond.bond2 && bond.bond2 < (b.max2BondLevel === 100 ? 200 : b.max2BondLevel)));
         if (!bondDecl) {
-            throw new Error(`No bond description found for bond level ${bond.bond} and secondary bond level ${bond.bond2} in character "${characterName}".`);
+            throw new Error(`No bond description found for bond level ${bond.bond} and secondary bond level ${bond.bond2} from character "${characterName}" towards character "${towards}".`);
         }
 
         // @ts-ignore
@@ -1643,11 +1650,11 @@ export class DEngine {
         }
 
         // @ts-ignore
-        let general = await character.general.execute(engine.deObject, character);
+        let general = await character.general.execute(this.deObject, character);
 
         for (const injectable of Object.values(character.generalCharacterDescriptionInjection)) {
             // @ts-ignore
-            const injectableV = (await injectable.execute(engine.deObject, character, undefined, undefined, undefined, undefined)).trim();
+            const injectableV = (await injectable.execute(this.deObject, character, undefined, undefined, undefined, undefined)).trim();
             if (injectableV) {
                 if (!general.endsWith("\n\n")) {
                     general += "\n\n";
@@ -1676,7 +1683,7 @@ export class DEngine {
 
                 if (stateInfo.relievingGeneralCharacterDescriptionInjection) {
                     // @ts-ignore
-                    const relievingInjection = (await stateInfo.relievingGeneralCharacterDescriptionInjection.execute(engine.deObject, character, undefined, undefined, undefined, undefined)).trim();
+                    const relievingInjection = (await stateInfo.relievingGeneralCharacterDescriptionInjection.execute(this.deObject, character, undefined, undefined, undefined, undefined)).trim();
                     if (relievingInjection) {
                         if (!general.endsWith("\n\n")) {
                             general += "\n\n";
@@ -1689,7 +1696,7 @@ export class DEngine {
 
                 if (stateInfo.generalCharacterDescriptionInjection) {
                     // @ts-ignore
-                    const injection = (await stateInfo.generalCharacterDescriptionInjection.execute(engine.deObject, character, undefined, undefined, undefined, undefined)).trim();
+                    const injection = (await stateInfo.generalCharacterDescriptionInjection.execute(this.deObject, character, undefined, undefined, undefined, undefined)).trim();
                     if (injection) {
                         if (!general.endsWith("\n\n")) {
                             general += "\n\n";
@@ -1712,7 +1719,7 @@ export class DEngine {
             const bondDeclaration = character.bonds.declarations.find(bondDecl => bondDecl.strangerBond === activeBond.stranger && bondDecl.minBondLevel <= activeBond.bond && activeBond.bond < (bondDecl.maxBondLevel === 100 ? 200 : bondDecl.maxBondLevel) && bondDecl.min2BondLevel <= activeBond.bond2 && activeBond.bond2 < (bondDecl.max2BondLevel === 100 ? 200 : bondDecl.max2BondLevel));
             if (bondDeclaration) {
                 // @ts-ignore
-                let result = await bondDeclaration.description.execute(engine.deObject, character, engine.deObject.characters[activeBond.towards]);
+                let result = await bondDeclaration.description.execute(this.deObject, character, this.deObject.characters[activeBond.towards]);
                 if (bondDeclaration.bondAdditionalDescription) {
                     if (!result.endsWith(". ")) {
                         result += ". ";
@@ -1720,13 +1727,13 @@ export class DEngine {
                         result += " ";
                     }
                     // @ts-ignore
-                    result += await bondDeclaration.bondAdditionalDescription.execute(engine.deObject, character, engine.deObject.characters[activeBond.towards]);
+                    result += await bondDeclaration.bondAdditionalDescription.execute(this.deObject, character, this.deObject.characters[activeBond.towards]);
                 }
                 relationships.push(result);
 
                 if (bondDeclaration.generalCharacterDescriptionInjection) {
                     // @ts-ignore
-                    const injection = (await bondDeclaration.generalCharacterDescriptionInjection.execute(engine.deObject, character, engine.deObject.characters[activeBond.towards], undefined, undefined, undefined)).trim();
+                    const injection = (await bondDeclaration.generalCharacterDescriptionInjection.execute(this.deObject, character, this.deObject.characters[activeBond.towards], undefined, undefined, undefined)).trim();
                     if (injection) {
                         if (!general.endsWith("\n\n")) {
                             general += "\n\n";
@@ -1744,7 +1751,7 @@ export class DEngine {
             if (bondDeclaration) {
                 if (bondDeclaration.generalCharacterDescriptionInjectionEx) {
                     // @ts-ignore
-                    const injection = (await bondDeclaration.generalCharacterDescriptionInjectionEx.execute(engine.deObject, character, engine.deObject.characters[exBond.towards], undefined, undefined, undefined)).trim();
+                    const injection = (await bondDeclaration.generalCharacterDescriptionInjectionEx.execute(this.deObject, character, this.deObject.characters[exBond.towards], undefined, undefined, undefined)).trim();
                     if (injection) {
                         if (!general.endsWith("\n\n")) {
                             general += "\n\n";
@@ -1984,6 +1991,7 @@ export class DEngine {
                 // the added and taken volume are irrelevant because
                 // these are already inside another container
                 processItemList(carriedItem.containing);
+                processItemList(carriedItem.ontop);
             }
         }
         /**
@@ -2047,6 +2055,10 @@ export class DEngine {
             for (const containedItem of item.containing) {
                 processItemAndReason(containedItem, ` (contained by ${item.name}${extraMessage})`);
             }
+
+            for (const ontopItem of item.ontop) {
+                processItemAndReason(ontopItem, ` (on top of ${item.name}${extraMessage})`);
+            }
         }
 
         for (const locationSlotName in location.slots) {
@@ -2104,6 +2116,7 @@ export class DEngine {
                     items.push(item.name);
                 }
                 processItemList(item.containing);
+                processItemList(item.ontop);
             }
         }
         for (const locationSlotName in location.slots) {
@@ -2191,6 +2204,7 @@ export class DEngine {
                 // the added and taken volume are irrelevant because
                 // these are already inside another container
                 processItemList(carriedItem.containing);
+                processItemList(carriedItem.ontop);
             }
 
             return { takenVolume, addedVolume }
@@ -2265,6 +2279,10 @@ export class DEngine {
 
             for (const containedItem of item.containing) {
                 processItemAndReason(containedItem, ` (contained by ${item.name}${extraMessage})`);
+            }
+
+            for (const ontopItem of item.ontop) {
+                processItemAndReason(ontopItem, ` (on top of ${item.name}${extraMessage})`);
             }
         }
 
@@ -3300,6 +3318,8 @@ export class DEngine {
         } catch (error) {
             // @ts-ignore
             this.informCycleState("error", `Internal Error during cycle execution: ${error.message}`);
+            // @ts-ignore
+            console.log(error.stack);
             // restore deObject from backup
             this.deObject = deObjectBackup;
             await this.informDEObjectUpdated();

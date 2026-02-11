@@ -4,7 +4,7 @@ import { deepCopy, deepCopyNoHistory, DEngine } from "../../index.js";
  * @param {DEngine} engine 
  * @param {DECompleteCharacterReference} character 
  */
-export default async function testMessageFeasibilityWorldRules(engine, character) {
+export default async function testMessageFeasibilityForce(engine, character) {
     if (!engine.deObject) {
         throw new Error("DEngine not initialized");
     } else if (engine.invalidCharacterStates) {
@@ -76,10 +76,12 @@ export default async function testMessageFeasibilityWorldRules(engine, character
     if (ready.value !== "ready") {
         throw new Error("Questioning agent could not be started properly.");
     }
+    const nextQuestion = "Considering the list at " + contextInfoSurroundingCharacters.availableCharactersAt + ". Which characters, if any, have been successfully forced to do something by " + character.name + " in the last message by such character? Provide a comma separated list of names only, or say 'none' if no characters were successfully forced.";
+    console.log("Asking question, " + nextQuestion);
     const answerToQuestion = await generator.next({
         maxParagraphs: 1,
         maxCharacters: 500,
-        nextQuestion: "Considering the list at " + contextInfoSurroundingCharacters.availableCharactersAt + ". Which characters, if any, have been successfully forced to do something by " + character.name + " in the last message by such character? Provide a comma separated list of names only, or say 'none' if no characters were successfully forced.",
+        nextQuestion: nextQuestion,
         stopAt: ["\n", "."],
         stopAfter: [],
         grammar: `root ::= nameList (${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()})\nnameList ::= name (\",\" name)*\nname ::= ${characters.map(c => JSON.stringify(c.name)).join(" | ")} | "none"`,
@@ -89,6 +91,8 @@ export default async function testMessageFeasibilityWorldRules(engine, character
     if (answerToQuestion.done) {
         throw new Error("Questioning agent ended unexpectedly when asking about who was forced.");
     }
+
+    console.log("Received answer, ", answerToQuestion.value);
 
     /**
      * @type {string[]}
@@ -124,19 +128,28 @@ export default async function testMessageFeasibilityWorldRules(engine, character
                 continue;
             }
 
+            const nextQuestion = "In the last message from " + character.name + ", what specific action or actions has " + forcedCharacterName + " been successfully forced to do by " + character.name + "? Provide a brief description of the action or actions, if no action was forced, say 'they have not been forced to do anything'.";
+            console.log("Asking question, " + nextQuestion);
+
             const answerAboutWhat = await generator.next({
                 maxParagraphs: 1,
                 maxCharacters: 500,
-                nextQuestion: "In the last message from " + character.name + ", what specific action or actions has " + forcedCharacterName + " been successfully forced to do by " + character.name + "? Provide a brief description of the action or actions.",
+                nextQuestion: nextQuestion,
                 stopAt: ["\n", "."],
                 stopAfter: [],
-                answerTrail: forcedCharacterName + " has been forced to ",
+                answerTrail: forcedCharacterName + " ",
+                grammar: `root ::= ("has not been forced to do anything" | "has been forced to " .*) ${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()}`,
             });
 
             if (answerAboutWhat.done) {
                 throw new Error("Questioning agent ended unexpectedly when asking about what was forced.");
             }
-            forcedToDoWhat[forcedCharacterName] = answerAboutWhat.value.trim();
+
+            console.log("Received answer, ", answerAboutWhat.value);
+
+            if (answerAboutWhat.value.trim().toLowerCase().startsWith("has been forced to")) {
+                forcedToDoWhat[forcedCharacterName] = answerAboutWhat.value.trim();
+            }
         }
 
         await generator.next(null); // finish the generator
@@ -154,34 +167,67 @@ export default async function testMessageFeasibilityWorldRules(engine, character
 
             const forcedAction = forcedToDoWhat[forcedCharacterName];
 
+            if (!forcedAction) {
+                console.log(`Feasibility check: after double check no specific forced action found for ${forcedCharacterName}, skipping feasibility check for them`);
+                continue;
+            }
+
             console.log(`Feasibility check: checking if it is feasible for ${forcedCharacterName} to be forced to do the action: ${forcedAction}`);
 
-            const [, , , relationshipOfOwnCharacterTowardsForcedCharacter] = await engine.getRelationshipBetweenCharacters(character.name, forcedCharacterName);
-            const ownCharacterDescription = engine.inferenceAdapter.buildSystemCharacterDescription(
-                character,
-                internalDescription,
-                engine.getExternalDescriptionOfCharacter(character.name, true),
-                [
-                    relationshipOfOwnCharacterTowardsForcedCharacter,
-                ],
-                stateInfo,
-                null,
-                null,
-            );
+            let ownCharacterDescription = "";
+            try {
+                const [, , , relationshipOfOwnCharacterTowardsForcedCharacter] = await engine.getRelationshipBetweenCharacters(character.name, forcedCharacterName);
+                ownCharacterDescription = engine.inferenceAdapter.buildSystemCharacterDescription(
+                    character,
+                    internalDescription,
+                    engine.getExternalDescriptionOfCharacter(character.name, true),
+                    [
+                        relationshipOfOwnCharacterTowardsForcedCharacter,
+                    ],
+                    stateInfo,
+                    null,
+                    null,
+                );
+            } catch (e) {
+                ownCharacterDescription = engine.inferenceAdapter.buildSystemCharacterDescription(
+                    character,
+                    internalDescription,
+                    engine.getExternalDescriptionOfCharacter(character.name, true),
+                    [],
+                    stateInfo,
+                    null,
+                    null,
+                );
+            }
 
-            const [, , , relationshipOfForcedCharacterTowardsOwnCharacter] = await engine.getRelationshipBetweenCharacters(forcedCharacterName, character.name);
-            const [internalDescriptionForcedCharacter, stateInfoForcedCharacter,] = await engine.getInternalDescriptionOfCharacter(forcedCharacterName);
-            const forcedCharacterDescription = engine.inferenceAdapter.buildSystemCharacterDescription(
-                forcedCharacter,
-                internalDescriptionForcedCharacter,
-                engine.getExternalDescriptionOfCharacter(forcedCharacterName, true),
-                [
-                    relationshipOfForcedCharacterTowardsOwnCharacter,
-                ],
-                stateInfoForcedCharacter,
-                null,
-                null,
-            );
+            let forcedCharacterDescription = "";
+
+            try {
+                const [, , , relationshipOfForcedCharacterTowardsOwnCharacter] = await engine.getRelationshipBetweenCharacters(forcedCharacterName, character.name);
+                const [internalDescriptionForcedCharacter, stateInfoForcedCharacter,] = await engine.getInternalDescriptionOfCharacter(forcedCharacterName);
+                forcedCharacterDescription = engine.inferenceAdapter.buildSystemCharacterDescription(
+                    forcedCharacter,
+                    internalDescriptionForcedCharacter,
+                    engine.getExternalDescriptionOfCharacter(forcedCharacterName, true),
+                    [
+                        relationshipOfForcedCharacterTowardsOwnCharacter,
+                    ],
+                    stateInfoForcedCharacter,
+                    null,
+                    null,
+                );
+            } catch (e) {
+                const [internalDescriptionForcedCharacter, stateInfoForcedCharacter,] = await engine.getInternalDescriptionOfCharacter(forcedCharacterName);
+                forcedCharacterDescription = engine.inferenceAdapter.buildSystemCharacterDescription(
+                    forcedCharacter,
+                    internalDescriptionForcedCharacter,
+                    engine.getExternalDescriptionOfCharacter(forcedCharacterName, true),
+                    [],
+                    stateInfoForcedCharacter,
+                    null,
+                    null,
+                );
+            }
 
             const isolatedCharacterInfo = engine.inferenceAdapter.buildContextInfoIsolatedCharacter(character, ownCharacterDescription) + "\n\n" + engine.inferenceAdapter.buildContextInfoIsolatedCharacter(forcedCharacter, forcedCharacterDescription);
 
@@ -203,10 +249,14 @@ export default async function testMessageFeasibilityWorldRules(engine, character
             if (feasibilityReady.value !== "ready") {
                 throw new Error("Questioning agent could not be started properly for feasibility check.");
             }
+            const nextQuestion = "Considering the character descriptions and current states of both characters, is it feasible for " + forcedCharacterName + " to be successfully been forced to " + forcedAction + " by " + character.name + " in the last message from such character? Answer 'yes' if it is feasible, 'no' and elaborate if it is not feasible.";
+
+            console.log("Asking question, " + nextQuestion);
+
             const feasibilityAnswer = await feasibilityGenerator.next({
                 maxParagraphs: 1,
                 maxCharacters: 250,
-                nextQuestion: "Considering the character descriptions and current states of both characters, is it feasible for " + forcedCharacterName + " to be successfully been forced to " + forcedAction + " by " + character.name + " in the last message from such character? Answer 'yes' if it is feasible, 'no' and elaborate if it is not feasible.",
+                nextQuestion: nextQuestion,
                 stopAt: ["\n", "."],
                 stopAfter: [],
                 grammar: `root ::= (yesanswer | noanswer)\nyesanswer ::= "yes" ${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()}\nnoanswer ::= "no" "," " " "because" .* ${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()}`,
@@ -215,6 +265,8 @@ export default async function testMessageFeasibilityWorldRules(engine, character
             if (feasibilityAnswer.done) {
                 throw new Error("Questioning agent ended unexpectedly when asking about feasibility.");
             }
+
+            console.log("Received answer, ", feasibilityAnswer.value);
 
             const feasible = feasibilityAnswer.value.trim().toLowerCase().indexOf("yes") === 0;
 

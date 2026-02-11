@@ -1397,7 +1397,6 @@ declare interface DEItem {
     description: string;
     descriptionWhenWorn: string | null;
     descriptionWhenCarried: string | null;
-    compartimentName: string | null;
     isSeeThrough: boolean;
     // canSitOn: boolean;
     // canLieOn: boolean;
@@ -1447,7 +1446,29 @@ declare interface DEItem {
         partiallyProtectsFromWeathers?: Array<string>;
         negativelyExposesToWeathers?: Array<string>;
     } | null;
+    /**
+     * The items that are inside this item if it is a container, for example a backpack may have items inside it
+     * this is different from ontop as these items are actually inside the container and may be hidden from view, while ontop items are on top of the item
+     * 
+     * TODO containing characters?
+     */
     containing: Array<DEItem>;
+    /**
+     * The items that are on top of this item, for example a backpack may have a jacket on top of it, or a table may have a vase on top of it
+     * 
+     * TODO on top characters?
+     */
+    ontop: Array<DEItem>;
+    /**
+     * The maximum weight in kilograms that can be on top of this item, for example a table may have a max weight on top of 100kg, while a fragile vase may have a max weight on top of 1kg
+     * if something heavier than the max weight on top is placed, the item will break
+     */
+    maxWeightOnTopKg: number;
+    /**
+     * The maximum volume in liters that can be on top of this item, if something greater than this volume is placed on top, the item placed will fall down into
+     * the ground
+     */
+    maxVolumeOnTopLiters: number;
     /**
      * The items that this item is made of, for example a wooden table
      * may be made of planks and nails
@@ -1464,6 +1485,8 @@ declare interface DEItem {
     /**
      * The placement of the item in the location or on the character
      * or within the container item
+     * 
+     * this should not be relative to other items. But only relative to the location, character or a container item if it is inside one
      * 
      * this should be generated using the LLM
      */

@@ -5,7 +5,7 @@
 import { DEngine } from "../index.js";
 import testMessageFeasibilityItemChanges from "./feasibility-check/item-changes.js";
 import timeForwardsUsingLastMessage from "./feasibility-check/time-forwards.js";
-import testMessageFeasibilityWorldRules from "./feasibility-check/world-rules.js";
+import testMessageFeasibilityForce from "./feasibility-check/force.js";
 
 /**
  * @typedef {Object} DEngineInteraction
@@ -613,7 +613,7 @@ export default async function testMessageFeasibilityForCharacter(engine, charact
     // it was not feasible, eg. they forced a giant dragon to a mountain (which may be impossible if they are weak)
     // we will try to detect such situations and reject the message as infeasible
     if (character.name === engine.userCharacter.name) {
-        const returnValue = await testMessageFeasibilityWorldRules(engine, character);
+        const returnValue = await testMessageFeasibilityForce(engine, character);
         if (returnValue) {
             return returnValue;
         }
@@ -622,8 +622,6 @@ export default async function testMessageFeasibilityForCharacter(engine, charact
     // FORWARD TIME
     // this message is only relevant if we stay at the same location and don't happen to move while that is the case
     const storyMasterMessagesToAddFromTimeForwards = await timeForwardsUsingLastMessage(engine, character);
-
-    process.exit(1);
 
     // THIRD ITEM CHANGES
     const storyMasterMessagesToAddFromItemChanges = await testMessageFeasibilityItemChanges(engine, character);

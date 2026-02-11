@@ -1,5 +1,64 @@
 import { deepCopy, DEngine } from "../../index.js";
 
+const nameOptionsBase = [
+    "Bob",
+    "Emma",
+    "Joe",
+    "Alice",
+]
+
+const nameOptionsExtras = [
+    "Charlie",
+    "David",
+    "Fiona",
+    "George",
+    "Hannah",
+    "Ian",
+    "Jane",
+    "Kevin",
+    "Laura",
+    "Mike",
+    "Nina",
+    "Oscar",
+    "Paula",
+    "Quinn",
+    "Rachel",
+    "Sam",
+    "Tina",
+]
+
+/**
+ * 
+ * @param {Array<any>} array 
+ * @returns 
+ */
+function removeRepeatsInArray(array) {
+    return [...new Set(array)];
+}
+
+/**
+ * @param {string[]} involvedNames 
+ * @param {number} index 
+ */
+function getCharacterNameForExample(involvedNames, index) {
+    if (!involvedNames.includes(nameOptionsBase[index])) {
+        return nameOptionsBase[index];
+    } else {
+        let matchCount = 0;
+        for (const name of nameOptionsExtras) {
+            if (!involvedNames.includes(name)) {
+                matchCount++;
+            }
+
+            if (matchCount === (index + 1)) {
+                return name;
+            }
+        }
+
+        throw new Error("Not enough name options to assign character names for item changes feasibility check examples. Please add more names to the nameOptionsExtras array.");
+    }
+}
+
 /**
  * @param {DEngine} engine 
  * @param {DECompleteCharacterReference} character 
@@ -22,32 +81,32 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
 
     // if we reached here, the message is feasible
     // 2. we will calculate items changing hands (being dropped, picked up, given, stolen, etc.)
-    const systemMessage = `You are an assistant and story analyst that determines if the last message from ${character.name} contains any items or other characters that have moved, changed hands, been dropped by any other character, in an interactive story. Changing hands means any item that has been picked up, dropped, given to another character, stolen, or otherwise transferred from one character to another.\n\n` +
-        "This includes clothing and worn items that have been removed or put on, also characters that may have been picked up and carried by other characters";
-    const systemPrompt = engine.inferenceAdapter.buildSystemPromptForQuestioningAgent(systemMessage, [
-        "Consider only the last message from " + character.name + ".",
-        "Identify any items that have been dropped by any chararacter, picked up, given to another character, stolen, or otherwise transferred from one character to another.",
-        "Identify any characters that have been picked up and carried by other characters, or dropped by characters.",
-        "Also identify any items dropped or left behind by any character.",
-        "Identify any clothing or worn items that have been removed or put on by any character.",
-        "If unable to specify where the item is placed next, assume it is placed on the ground at the current location of the character dropping or removing the item.",
-        "Always place the name of the item in quotation marks",
-        "Always place the name of the character in quotation marks",
-        "Do not use steal lightly, only specify an item as stolen if it is explicitly stated that it was stolen or taken without permission. If it is not clear if the item was stolen or given, assume it was given.",
-        "When specifying an item if a character has it, is wearing it or is otherwise in their posession specify it as \"[character name]'s [item name]\" to make it clear whose item it is, for example \"Alice's sword\". If the item is not in possession of any character, just specify the item name with quotation marks, for example \"a sword\".",
-        "Always specify the actions in order as they happen in the message, for example if a character drops an item and then picks up another item, specify the dropped item first and then the picked up item.",
-    ], null);
-
+    /**
+     * @type {string[]}
+     */
     const allContainersInLocation = [];
+    /**
+     * @type {string[]}
+     */
     const allCarriableItemsInLocation = [];
+    /**
+     * @type {string[]}
+     */
     const allWearableItemsInLocation = [];
+    /**
+     * @type {string[]}
+     */
     const allItemsInLocation = [];
 
     const allCharactersInLocation = [...charState.surroundingNonStrangers, ...charState.surroundingTotalStrangers, character.name];
 
     const location = engine.deObject.world.locations[charState.location];
-    for (const slot of Object.values(location.slots)) {
-        for (const item of slot.items) {
+
+    /**
+     * @param {DEItem[]} itemList 
+     */
+    const processItemList = (itemList) => {
+        for (const item of itemList) {
             if (item.wearableProperties) {
                 allWearableItemsInLocation.push(item.name);
             }
@@ -56,69 +115,100 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
             }
             allCarriableItemsInLocation.push(item.name);
             allItemsInLocation.push(item.name);
+            if (item.containing && item.containing.length > 0) {
+                processItemList(item.containing);
+            }
+            if (item.ontop && item.ontop.length > 0) {
+                processItemList(item.ontop);
+            }
+        }
+    }
+    for (const slot of Object.values(location.slots)) {
+        for (const item of slot.items) {
+            processItemList([item]);
         }
     }
 
-    for (const otherCharacterName of [...charState.surroundingNonStrangers, ...charState.surroundingTotalStrangers]) {
+    for (const otherCharacterName of allCharactersInLocation) {
         const otherCharacterState = engine.deObject.stateFor[otherCharacterName];
-        if (otherCharacterState.carrying) {
-            for (const item of otherCharacterState.carrying) {
-                if (item.wearableProperties) {
-                    allWearableItemsInLocation.push(item.name);
-                }
-                if (item.capacityKg) {
-                    allContainersInLocation.push(item.name);
-                }
-                allCarriableItemsInLocation.push(item.name);
-                allItemsInLocation.push(item.name);
-            }
-        }
-        if (otherCharacterState.wearing) {
-            for (const item of otherCharacterState.wearing) {
-                if (item.wearableProperties) {
-                    allWearableItemsInLocation.push(item.name);
-                }
-                if (item.capacityKg) {
-                    allContainersInLocation.push(item.name);
-                }
-                allCarriableItemsInLocation.push(item.name);
-                allItemsInLocation.push(item.name);
-            }
-        }
+        processItemList(otherCharacterState.carrying);
+        processItemList(otherCharacterState.wearing);
     }
+
+    // TODO must handle these
+    const allItemsInLocationForGrammar = [...allItemsInLocation, "unknown", "nothing", "clothes", "possessions"];
 
     const anyCharacterGrammarSimple = "characternamesimple ::= " + allCharactersInLocation.map(name => JSON.stringify(name)).join(" | ");
-    const anyCharacterGrammarQuoted = `characternamequoted ::= \"\\\"\" characternamesimple \"\\\"\"`
-    const commaSeparatorOrAnd = `commaseparatororand ::= (\",\" \" \") | \" and \"`;
-    const amountNumber = `amountnumber ::= ([0-9]+ " " "of") | "a few" | "several" | "many" | "a lot of" | "some" | "half of" | "most of" | "all of"`;
+    const anyCharacterGrammarQuoted = `characternamequoted ::= "\\"" characternamesimple "\\""`
+    const commaSeparatorOrAnd = `commaseparatororand ::= ("," " ") | " and "`;
+    const amountNumber = `amountnumber ::= ([0-9]+ " " "of") | "a few" | "several" | "many" | "a lot of" | "some" | "half of" | "most of" | "all of" | "an" | "a"`;
 
-    const containeroptionGrammar = "containeroption ::= \"\\\"\" (characternamesimple \"'s\")? (" + allContainersInLocation.map(name => JSON.stringify(name)).join(" | ") + ") \"\\\"\"";
-    const anyItemOptionGrammar = "anyitemoption ::= " + allItemsInLocation.map(name => JSON.stringify(name)).join(" | ");
-    const anyItemGrammar = "anyitem ::= \"\\\"\" (amountnumber \" \")? (characternamesimple \"'s\" \" \")? anyitemoption \"\\\"\"";
-    const anyItemNoCountGrammar = "anyitemnocount ::= \"\\\"\" (characternamesimple \"'s\" \" \")? anyitemoption \"\\\"\"";
-    const anyItemListGrammar = "anyitemlist ::= anyitem (commaseparatororand anyitem)*";
+    const anyItemOptionGrammar = allItemsInLocation.length === 0 ? "" : `anyitemoption ::= ` + allItemsInLocationForGrammar.map(name => JSON.stringify(name)).join(" | ");
+    const anyItemGrammar = allItemsInLocation.length === 0 ? "" : `anyitem ::= "\\"" (amountnumber " ")? (characternamesimple "'s ")? anyitemoption "\\""`;
+    const anyItemNoCountGrammar = allItemsInLocation.length === 0 ? "" : `anyitemnocount ::= "\\"" (characternamesimple "'s ")? anyitemoption "\\""`;
+    const anyItemListGrammar = allItemsInLocation.length === 0 ? "" : "anyitemlist ::= anyitem (commaseparatororand anyitem)*";
 
-    const placementGrammar = `placement ::= ("on" " " anyitemnocount) | ("in" " " containeroption) | ("on" " " "\\"" "the" " " ("ground" | "floor") "\\"")`;
+    const placementGrammar = `placement ::= ${allItemsInLocation.length === 0 ? "" : `(("on" | "in" | "inside") " " anyitemnocount) |`} ("on" " " "\\"ground\\"")`;
     const placementWithAndGrammar = `placementwithand ::= "and" " " "placed" " " ("them" | "it") " " placement`;
-    const placementWithAndGiveGrammar = `placementwithgive ::= placementwithand | ("and" " " "gave" " " ("them" | "it") " " "to" " " characternamequoted)`;
-    const placementWithAndOrWearOrGiveGrammar = `placementwithandorwearorgive ::= placementwithgive | ("and" " " "wore" " " ("them" | "it")) | ("and" " " "put" " " ("them" | "it") " " "on" " " ("\\""themselves"\\"" | "\\""himself"\\"" | "\\""herself"\\"" | characternamequoted | ("\\"" "the" " " ("ground" | "floor") "\\""))?)`;
 
-    const simpleGiveGrammar = `simplegive ::= characternamequoted " " "gave" " " anyitemlist " " "to" " " characternamequoted`;
-    const simplePutOnOtherGrammar = `simpleputonother ::= characternamequoted " " "made" " " characternamequoted " " (("put" " " "on") | "wear") " " anyitemlist`;
-    const droppedGrammar = `characterdropped ::= characternamequoted " " "dropped" " " (anyitemlist | "\\"everything\\"" | "\\"all\\"" | "\\"all their items\\"" | "\\"all of their items\\"" | "\\"all of their belongings\\"")`;
-    const droppedAndPlacedSomewhereElseGrammar = `characterdroppedandplacedsomewhereelse ::= characterdropped " " placementwithandorwearorgive`;
-    const droppedClothesGrammar = `characterdroppedclothes ::= characternamequoted " " "removed" " " (anyitemlist | "\\"all their clothes\\"" | "\\"all their garments\\"" | "\\"all their wearables\\"")`;
-    const droppedClothesAndPlacedSomewhereElseGrammar = `characterdroppedclothesandplacedsomewhereelse ::= characterdroppedclothes " " placementwithandorwearorgive`;
-    const pickedUpGrammar = `characterpickedup ::= characternamequoted " " ("took" | ("picked" " " ("up" " ")?) | "stole" | ("put" " " "on") | "wore" | ("now" " " "wears")) anyitemlist`;
-    const pickedUpAndPlacedSomewhereElseGrammar = `characterpickedupandplacedsomewhereelse ::= characterpickedup " " placementwithandorwearorgive`;
-    const pickedUpOtherCharacter = `characterpickedupother ::= characternamequoted " " ("picked" " " ("up" " ")?) " " "another" " " "character" " " "named" " " characternamequoted`;
-    const droppedOtherCharacter = `characterdroppedother ::= characternamequoted " " "dropped" " " "another" " " "character" " " "named" " " characternamequoted`;
+    const posessivePronoun = `possessivepronoun ::= "their" | "his" | "her" | "its"`;
+    const possessiveItemExtras = `possessiveitemextras ::= "\\"" (("all" " " possessivepronoun " " "clothes") | (possessivepronoun " " "items") | ("all" " " possessivepronoun " " "items") | ("all" " " possessivepronoun " " "posessions")) "\\""`;
+    const possessiveItemExtrasOnlyWearables = `possessiveitemextrasonlywearables ::= "\\"" (("all" " " possessivepronoun " " "clothes") | ("all" " " possessivepronoun " " "garments") | ("all" " " possessivepronoun " " "wearables")) "\\""`;
 
-    const statementGrammar = `statement ::= characterpickedupother | characterdroppedother | simplegive | simpleputonother | characterdropped | characterdroppedandplacedsomewhereelse | characterdroppedclothes | characterdroppedclothesandplacedsomewhereelse | characterpickedup | characterpickedupandplacedsomewhereelse`;
-    const listOfStatementsGrammar = `root ::= (statement ("." "\\n" statement)*) | nothinghappened`;
-    const nothingHappenedGrammar = `nothinghappened ::= "nothing happened" | "no item changes"`;
+    // TODO handle all their clothes, all their items, all their wearables, everything, all, all of their items, all of their belongings, etc.
+    const simpleGiveGrammar = allItemsInLocation.length === 0 ? "" : `simplegive ::= (anyitemlist | possessiveitemextras)`;
+    const simplePutOnOtherGrammar = allItemsInLocation.length === 0 ? "" : `simpleputonother ::= (anyitemlist | possessiveitemextrasonlywearables)`;
+    const droppedGrammar = allItemsInLocation.length === 0 ? "" : `characterdropped ::= ("dropped" | "removed") | (anyitemlist | possessiveitemextras) " " placementwithand`;
+    const pickedUpGrammar = allItemsInLocation.length === 0 ? "" : `characterpickedup ::= ("took" | ("picked" " " ("up")?)) " " (anyitemlist | possessiveitemextras)`;
+    const pickedUpOtherCharacter = `characterpickedupother ::= characternamequoted`;
+    const droppedOtherCharacter = `characterdroppedother ::= characternamequoted`;
+    const jumpedOnOther = `characterjumpedonother ::= characternamequoted`;
+    const droppedOfOther = `characterdroppedofother ::= characternamequoted`;
 
-    const finalGrammar = [
+    const listOfStatementsGrammar = `root ::= statement ${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()}`;
+
+    // TODO figure steal and stealthysteal
+
+    // give: source is the character, target is the character receiving the item, action is "give", items is the list of items given
+    // wear: source is the character, target is the character being made to wear the item, action is "wear", items is the list of items put on
+    // dropped_at: source is the character, target is the location or container where the item was dropped, action is "dropped_at", items is the list of items dropped
+    // picked_up: source is null or a container, target is the character picking up the item, action is "picked_up", items is the list of items picked up
+    // put_on: source is null or a container, target is the character wearing the item, action is "put_on", items is the list of items put on
+    // picked_up_other: source is null, target is the character doing the lifting, action is "picked_up_other", items is the character being picked up
+    // dropped_other: source is the character doing the dropping, target is null, action is "dropped_other", items is the character being dropped
+    /**
+     * @type {Array<{
+     *    source: string | null,
+     *    sourceType: "character" | "container/surface" | "ground",
+     *    target: string | null,
+     *    targetType: "character" | "container" | "surface" | "ground",
+     *    targetPlacement: string,
+     *    action: "give" | "wear" | "dropped_at" | "picked_up" | "put_on" | "picked_up_other" | "dropped_other",
+     *    steal?: boolean,
+     *    stealnoticers?: string[],
+     *    stealignorers?: string[],
+     *    items: string[],
+     * }>}
+     */
+    let finalResults = [];
+
+    const allStatementsToProbe = [
+        allItemsInLocation.length === 0 || allCharactersInLocation.length <= 1 ? null : "simplegive",
+        allItemsInLocation.length === 0 || allWearableItemsInLocation.length === 0 || allCharactersInLocation.length <= 1 ? null : "simpleputonother",
+        allItemsInLocation.length === 0 ? null : "characterdropped",
+        allItemsInLocation.length === 0 ? null : "characterpickedup",
+        allCharactersInLocation.length <= 1 ? null : "characterpickedupother",
+        allCharactersInLocation.length <= 1 ? null : "characterdroppedother",
+        allCharactersInLocation.length <= 1 ? null : "characterjumpedonother",
+        allCharactersInLocation.length <= 1 ? null : "characterdroppedofother",
+    ].filter(x => x !== null);
+
+    // TODO figure out all mentioned characters then, for more efficiency
+    // maybe only use last message and give context?
+    // Those are the interacted characters too, so we can retrieve them since we need them anyway
+    const charactersToProbe = allCharactersInLocation;
+
+    const finalGrammarNoStatement = [
         listOfStatementsGrammar,
         commaSeparatorOrAnd,
         amountNumber,
@@ -126,65 +216,625 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
         anyCharacterGrammarSimple,
         anyCharacterGrammarQuoted,
 
+        posessivePronoun,
+        possessiveItemExtras,
+        possessiveItemExtrasOnlyWearables,
+
         simpleGiveGrammar,
         simplePutOnOtherGrammar,
-        containeroptionGrammar,
         anyItemOptionGrammar,
         anyItemNoCountGrammar,
         anyItemGrammar,
         anyItemListGrammar,
         placementGrammar,
         placementWithAndGrammar,
-        placementWithAndGiveGrammar,
-        placementWithAndOrWearOrGiveGrammar,
         droppedGrammar,
-        droppedAndPlacedSomewhereElseGrammar,
-        droppedClothesGrammar,
-        droppedClothesAndPlacedSomewhereElseGrammar,
         pickedUpGrammar,
-        pickedUpAndPlacedSomewhereElseGrammar,
-        statementGrammar,
-        nothingHappenedGrammar,
         pickedUpOtherCharacter,
         droppedOtherCharacter,
-    ].join(";\n") + ";";
+        jumpedOnOther,
+        droppedOfOther,
+    ].join("\n");
 
-    const examples = engine.inferenceAdapter.buildContextInfoExample(
-        `Example: if the last message from ${character.name} is "Alice gives Bob the sword and shield, then takes off her cloak and leaves it on the ground, while Charlie steals a potion from Alice", the output should be:`
-        + "\n\n" +
-        `"Alice" gave "Alice's sword" and "Alice's shield" to "Bob"\n"Alice" removed "Alice's cloak" and placed it on the ground\n"Charlie" stole "Alice's potion"`
-    ) + "\n" + engine.inferenceAdapter.buildContextInfoExample(
-        `Example: if the last message from ${character.name} is "${character.name} removes their shirt and puts it on Bob after removing his pants":`
-        + "\n\n" +
-        `"${character.name}" removed "${character.name}'s shirt" and put it on "Bob"\n"${character.name}" removed "${character.name}'s pants"`
-    );
+    for (const statement of allStatementsToProbe) {
+        const finalGrammar = finalGrammarNoStatement + "\n" + "statement ::= " + statement;
 
-    const generator = engine.inferenceAdapter.runQuestioningCustomAgentOn(character, systemPrompt, examples, engine.getHistoryForCharacter(character, {}), "LAST_CYCLE_EXPANDED", null);
+        const characterPronoun = character.gender === "male" ? "his" : character.gender === "female" ? "her" : "their";
 
-    const ready = await generator.next();
-    if (ready.done) {
-        throw new Error("Questioning agent could not be started properly for item changes check.");
+        if (statement === "simplegive") {
+            const systemMessage = `You are an assistant and story analyst that determines if in the last message from ${character.name} contains information about any items given to another character`;
+            const systemPrompt = engine.inferenceAdapter.buildSystemPromptForQuestioningAgent(systemMessage, [
+                "Consider only the last message from " + character.name + ".",
+            ], null);
+
+            const generator = engine.inferenceAdapter.runQuestioningCustomAgentOn(character, systemPrompt, null, engine.getHistoryForCharacter(character, {}), "LAST_CYCLE_EXPANDED", null);
+
+            const ready = await generator.next();
+            if (ready.done) {
+                throw new Error("Questioning agent could not be started properly for item changes check.");
+            }
+
+            const preQuestionNext = `Did ${character.name} give any items to another character in the last message from ${character.name}? Answer 'yes' or 'no'.`;
+
+            console.log("Asking question, " + preQuestionNext);
+
+            const preExamples = engine.inferenceAdapter.buildContextInfoExample(
+                `Example: if the last message from ${character.name} includes: "${character.name} gave ${getCharacterNameForExample([character.name], 2)}'s sword and ${getCharacterNameForExample([character.name], 3)}'s shield to ${getCharacterNameForExample([character.name], 2)}", you should respond with "yes" since there was an item change.`
+            ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                `Example: if the last message from ${character.name} includes: "${character.name} gave ${getCharacterNameForExample([character.name], 2)}'s sword to ${getCharacterNameForExample([character.name], 3)}, but ${getCharacterNameForExample([character.name], 1)} refused to take it", you should respond with: "no" since the item was not actually transferred to ${getCharacterNameForExample([character.name], 1)}`
+            ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                `Example: if the last message from ${character.name} includes: "${character.name} just walked around and did not interact with anyone or any item", you should respond with: "no" since there were no item changes`
+            ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                `Example: if the last message from ${character.name} includes: "${character.name} gives all ${characterPronoun} belongings to ${getCharacterNameForExample([character.name], 0)}", you should respond with: "yes" since ${character.name} gave all ${characterPronoun} possessions to ${getCharacterNameForExample([character.name], 0)}`
+            ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                `Example: if the last message from ${character.name} includes: "${character.name} gives ${characterPronoun} clothes to ${getCharacterNameForExample([character.name], 1)}", you should respond with: "yes" since ${character.name} gave ${characterPronoun} clothes to ${getCharacterNameForExample([character.name], 1)}`
+            );
+
+            const preQuestion = await generator.next({
+                maxParagraphs: 1,
+                maxCharacters: 200,
+                nextQuestion: preQuestionNext,
+                stopAfter: ["yes", "no"],
+                stopAt: [],
+                contextInfo: preExamples,
+                grammar: `root ::= (yesanswer | noanswer)\nyesanswer ::= "yes"\nnoanswer ::= "no"`,
+            });
+
+            if (preQuestion.done) {
+                throw new Error("Questioning agent ended unexpectedly when asking about whether any items were given.");
+            }
+
+            const answerValuePre = preQuestion.value.trim().toLowerCase();
+
+            console.log("Received answer,", preQuestion.value);
+
+            if (answerValuePre.startsWith("yes")) {
+                for (const characterNameToProbe of charactersToProbe) {
+                    if (characterNameToProbe === character.name) {
+                        continue;
+                    }
+
+                    const preExamples2 = engine.inferenceAdapter.buildContextInfoExample(
+                        `Example: if the last message from ${character.name} includes: "${character.name} gave Emma's sword and Emma's shield to ${characterNameToProbe}", you should respond with "yes" since there was an item change.`
+                    ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                        `Example: if the last message from ${character.name} includes: "${character.name} gave Emma's sword to ${characterNameToProbe}, but ${characterNameToProbe} refused to take it", you should respond with: "no" since the item was not actually transferred to ${characterNameToProbe}`
+                    ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                        `Example: if the last message from ${character.name} includes: "${character.name} gave his underwear to Bob", you should respond with: "no" since Bob is not ${characterNameToProbe}`
+                    ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                        `Example: if the last message from ${character.name} includes: "${character.name} gives all her belongings to ${characterNameToProbe}", you should respond with: "yes" since ${character.name} gave all her possessions to ${characterNameToProbe}`
+                    ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                        `Example: if the last message from ${character.name} includes: "${character.name} gives her clothes to Joe", you should respond with: "no" since Joe is not ${characterNameToProbe}`
+                    );
+
+                    const preQuestion2Next = `Did ${character.name} give any items to ${characterNameToProbe} in the last message from ${character.name}? Answer 'yes' or 'no'.`;
+                    console.log("Asking question, " + preQuestion2Next);
+
+                    const preQuestion2 = await generator.next({
+                        maxParagraphs: 1,
+                        maxCharacters: 200,
+                        nextQuestion: preQuestion2Next,
+                        stopAfter: ["yes", "no"],
+                        stopAt: [],
+                        contextInfo: preExamples2,
+                        grammar: `root ::= (yesanswer | noanswer)\nyesanswer ::= "yes"\nnoanswer ::= "no"`,
+                    });
+
+                    if (preQuestion2.done) {
+                        throw new Error("Questioning agent ended unexpectedly when asking about whether any items were given.");
+                    }
+
+                    const answerValuePre2 = preQuestion2.value.trim().toLowerCase();
+
+                    console.log("Received answer,", answerValuePre2);
+
+                    if (answerValuePre2.startsWith("yes")) {
+                        const nextQuestion = "Considering the last message from " + character.name + ", identify any items that " + character.name + " has given to " + characterNameToProbe + " in that message.";
+                        console.log("Asking question, " + nextQuestion);
+
+                        const examples = engine.inferenceAdapter.buildContextInfoExample(
+                            `Example: if the last message from ${character.name} includes: "${character.name} gave ${getCharacterNameForExample([character.name, characterNameToProbe], 0)}'s sword and ${getCharacterNameForExample([character.name, characterNameToProbe], 1)}'s shield to ${characterNameToProbe}", you should respond with: ""${character.name}" gave "${characterNameToProbe}" the following items: "${getCharacterNameForExample([character.name], 0)}'s sword" and "${getCharacterNameForExample([character.name], 1)}'s shield""`
+                        ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                            `Example: if the last message from ${character.name} includes: "${character.name} gave a wallet to ${characterNameToProbe}", you should respond with: ""${character.name}" gave "${characterNameToProbe}" the following items: "a wallet""`
+                        ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                            `Example: if the last message from ${character.name} includes: "${character.name} gave his shirt to ${characterNameToProbe}", you should respond with: ""${character.name}" gave "${characterNameToProbe}" the following items: "${character.name}'s shirt""`
+                        ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                            `Example: if the last message from ${character.name} includes: "${character.name} gives all her belongings to ${characterNameToProbe}", you should respond with: ""${character.name}" gave "${characterNameToProbe}" the following items: "all her possessions""`
+                        ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                            `Example: if the last message from ${character.name} includes: "${character.name} just walked around and did not give anything", you should respond with: ""${character.name}" gave "${characterNameToProbe}" the following items: "nothing"" since ${character.name} did not give anything to ${characterNameToProbe}`
+                        ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                            `Example: if the last message from ${character.name} includes: "${character.name} gives her clothes to ${characterNameToProbe}", you should respond with: ""${character.name}" gave "${characterNameToProbe}" the following items: "all her clothes""`
+                        );
+
+                        const answer = await generator.next({
+                            maxParagraphs: 1,
+                            maxCharacters: 200,
+                            nextQuestion: nextQuestion,
+                            stopAfter: [],
+                            stopAt: [],
+                            contextInfo: examples,
+                            answerTrail: "Result of the analysis of given items in the last message from " + character.name + ":\n" + JSON.stringify(character.name) + " gave " + JSON.stringify(characterNameToProbe) + " the following items: ",
+                            grammar: finalGrammar,
+                            instructions: engine.inferenceAdapter.buildContextInfoInstructions(
+                                "If the item has a known owner or holder for an item mentioned, include that in the response in the format 'character's item', for example 'Emma's sword'.\n" +
+                                "Use the format " + JSON.stringify(character.name) + " gave " + JSON.stringify(characterNameToProbe) + " the following items: [Item 1], [Item 2], ...\n" +
+                                "IMPORTANT: Do not repeat items in your answer, each item must be mentioned once only",
+                            )
+                        });
+
+                        if (answer.done) {
+                            throw new Error("Questioning agent ended unexpectedly when asking about given items.");
+                        }
+
+                        console.log("Received answer, ", answer.value);
+
+                        const answerValue = answer.value.trim();
+                        const listOfItems = getNextQuotedListAndSplit(answerValue).quotedList;
+                        const filteredItems = listOfItems.filter(item => item !== "nothing");
+                        if (filteredItems.length > 0) {
+                            finalResults.push({
+                                source: character.name,
+                                sourceType: "character",
+                                target: characterNameToProbe,
+                                targetType: "character",
+                                action: "give",
+                                items: filteredItems,
+                                targetPlacement: "carried by " + characterNameToProbe,
+                            });
+                        }
+                    }
+                }
+            }
+
+            await generator.next(null); // finish the generator
+        }
+
+        if (statement === "simpleputonother") {
+            const systemMessage = `You are an assistant and story analyst that determines if in the last message from ${character.name} contains information about ${character.name} making other characters wear any clothing or wearable items, or putting clothing or wearable items on other characters.`;
+            const systemPrompt = engine.inferenceAdapter.buildSystemPromptForQuestioningAgent(systemMessage, [
+                "Consider only the last message from " + character.name + ".",
+            ], null);
+
+            const generator = engine.inferenceAdapter.runQuestioningCustomAgentOn(character, systemPrompt, null, engine.getHistoryForCharacter(character, {}), "LAST_CYCLE_EXPANDED", null);
+
+            const ready = await generator.next();
+            if (ready.done) {
+                throw new Error("Questioning agent could not be started properly for item changes check.");
+            }
+
+            const preQuestionNext = `Did ${character.name} made any other characters wear any clothing or wearable items, or put clothing or wearable items on other characters in the last message from ${character.name}? Answer 'yes' or 'no'.`;
+
+            console.log("Asking question, " + preQuestionNext);
+
+            const preExamples = engine.inferenceAdapter.buildContextInfoExample(
+                `Example: if the last message from ${character.name} includes: "${character.name} placed a Hat on ${getCharacterNameForExample([character.name], 0)}'s head", you should respond with "yes" since ${character.name} made ${getCharacterNameForExample([character.name], 0)} wear a clothing or wearable item.`
+            ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                `Example: if the last message from ${character.name} includes: "${character.name} gave ${getCharacterNameForExample([character.name], 0)}'s sword to ${getCharacterNameForExample([character.name], 1)}", you should respond with: "no" since a sword is not a piece of clothing`
+            ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                `Example: if the last message from ${character.name} includes: "${character.name} just walked around and did not interact with anyone or any item", you should respond with: "no" since no clothed or wearable item changes occurred`
+            ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                `Example: if the last message from ${character.name} includes: "${character.name} put ${getCharacterNameForExample([character.name], 0)} on a nice suit", you should respond with: "yes" since ${character.name} made ${getCharacterNameForExample([character.name], 0)} wear a clothing or wearable item.`
+            ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                `Example: if the last message from ${character.name} includes: "${character.name} gives ${characterPronoun} clothes to ${getCharacterNameForExample([character.name], 0)}", you should respond with: "no" since ${character.name} only gave clothes to ${getCharacterNameForExample([character.name], 0)} but did not actually make ${getCharacterNameForExample([character.name], 0)} wear them.`
+            ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                `Example: if the last message from ${character.name} includes: "${character.name} hands a bracelet to ${getCharacterNameForExample([character.name], 0)}", you should respond with: "no" since ${character.name} has only given a bracelet to ${getCharacterNameForExample([character.name], 0)} but did not actually make ${getCharacterNameForExample([character.name], 0)} wear it.`
+            )
+
+            const preQuestion = await generator.next({
+                maxParagraphs: 1,
+                maxCharacters: 200,
+                nextQuestion: preQuestionNext,
+                stopAfter: ["yes", "no"],
+                stopAt: [],
+                contextInfo: preExamples,
+                grammar: `root ::= (yesanswer | noanswer)\nyesanswer ::= "yes"\nnoanswer ::= "no"`,
+            });
+
+            if (preQuestion.done) {
+                throw new Error("Questioning agent ended unexpectedly when asking about whether any clothing or wearable items were put on other characters.");
+            }
+
+            const answerValuePre = preQuestion.value.trim().toLowerCase();
+
+            console.log("Received answer,", preQuestion.value);
+
+            if (answerValuePre.startsWith("yes")) {
+                for (const characterNameToProbe of charactersToProbe) {
+                    if (characterNameToProbe === character.name) {
+                        continue;
+                    }
+
+                    const preExamples2 = engine.inferenceAdapter.buildContextInfoExample(
+                        `Example: if the last message from ${character.name} includes: "${character.name} placed a Hat on ${characterNameToProbe}'s head", you should respond with "yes" since ${character.name} made ${characterNameToProbe} wear a clothing or wearable item.`
+                    ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                        `Example: if the last message from ${character.name} includes: "${character.name} tried to place a Hat on ${characterNameToProbe}, but ${characterNameToProbe} refused to wear it", you should respond with: "no" since the item was not actually transferred to ${characterNameToProbe}`
+                    ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                        `Example: if the last message from ${character.name} includes: "${character.name} gave his underwear to ${getCharacterNameForExample([character.name, characterNameToProbe], 0)}", you should respond with: "no" since ${getCharacterNameForExample([character.name, characterNameToProbe], 0)} is not ${characterNameToProbe}`
+                    ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                        `Example: if the last message from ${character.name} includes: "${character.name} gives all her belongings to ${characterNameToProbe}", you should respond with: "no" since giving is not the same as making someone wear something, and there is no indication that ${characterNameToProbe} actually wore any of the clothes or wearable items that ${character.name} gave them.`
+                    ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                        `Example: if the last message from ${character.name} includes: "${character.name} forced a dress on ${characterNameToProbe}", you should respond with: "yes" since ${character.name} made ${characterNameToProbe} wear a clothing or wearable item.`
+                    );
+
+                    const preQuestion2Next = `Did ${character.name} made ${characterNameToProbe} wear any clothing or wearable items in the last message from ${character.name}? Answer 'yes' or 'no'.`;
+                    console.log("Asking question, " + preQuestion2Next);
+
+                    const preQuestion2 = await generator.next({
+                        maxParagraphs: 1,
+                        maxCharacters: 200,
+                        nextQuestion: preQuestion2Next,
+                        stopAfter: ["yes", "no"],
+                        stopAt: [],
+                        contextInfo: preExamples2,
+                        grammar: `root ::= (yesanswer | noanswer)\nyesanswer ::= "yes"\nnoanswer ::= "no"`,
+                    });
+
+                    if (preQuestion2.done) {
+                        throw new Error("Questioning agent ended unexpectedly when asking about whether any clothing or wearable items were put on other characters.");
+                    }
+
+                    const answerValuePre2 = preQuestion2.value.trim().toLowerCase();
+
+                    console.log("Received answer,", answerValuePre2);
+
+                    if (answerValuePre2.startsWith("yes")) {
+                        const nextQuestion = "Considering the last message from " + character.name + ", identify any clothing or wearable items that " + character.name + " has made " + characterNameToProbe + " wear in that message.";
+                        console.log("Asking question, " + nextQuestion);
+
+                        const examples = engine.inferenceAdapter.buildContextInfoExample(
+                            `Example: if the last message from ${character.name} includes: "${character.name} placed a Hat on ${characterNameToProbe}", you should respond with: ""${character.name}" made "${characterNameToProbe}" wear the following items: "Hat""`
+                        ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                            `Example: if the last message from ${character.name} includes: "${character.name} forced a dress on ${characterNameToProbe}", you should respond with: ""${character.name}" made "${characterNameToProbe}" wear the following items: "a dress""`
+                        ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                            `Example: if the last message from ${character.name} includes: "${character.name} tried to place a Hat on ${characterNameToProbe}, but ${characterNameToProbe} refused to wear it", you should respond with: ""${character.name}" made "${characterNameToProbe}" wear the following items: "nothing"" since ${characterNameToProbe} refused to wear the hat`
+                        ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                            `Example: if the last message from ${character.name} includes: "${character.name} made ${characterNameToProbe} wear ${getCharacterNameForExample([character.name, characterNameToProbe], 1)}'s shirt", you should respond with: ""${character.name}" made "${characterNameToProbe}" wear the following items: "${getCharacterNameForExample([character.name, characterNameToProbe], 1)}'s shirt""`
+                        ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                            `Example: if the last message from ${character.name} includes: "${character.name} made ${characterNameToProbe} put on all their clothing", you should respond with: ""${character.name}" made "${characterNameToProbe}" wear the following items: "all their clothes""`
+                        ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                            `Example: if the last message from ${character.name} includes: "${character.name} placed a bracelet on ${characterNameToProbe} wrist", you should respond with: ""${character.name}" made "${characterNameToProbe}" wear the following items: "a bracelet""`
+                        )
+
+                        const answer = await generator.next({
+                            maxParagraphs: 1,
+                            maxCharacters: 200,
+                            nextQuestion: nextQuestion,
+                            stopAfter: [],
+                            stopAt: [],
+                            contextInfo: examples,
+                            answerTrail: "Result of the analysis of given items in the last message from " + character.name + ":\n" + JSON.stringify(character.name) + " made " + JSON.stringify(characterNameToProbe) + " wear the following items: ",
+                            grammar: finalGrammar,
+                            instructions: engine.inferenceAdapter.buildContextInfoInstructions(
+                                "If the clothing or wearable item has a known owner or holder for an item mentioned, include that in the response in the format 'character's item', for example 'Emma's dress'.\n" +
+                                "Use the format " + JSON.stringify(character.name) + " made " + JSON.stringify(characterNameToProbe) + " wear the following items: [Item 1], [Item 2], ...\n" +
+                                "IMPORTANT: Do not repeat items in your answer, each item must be mentioned once only",
+                            )
+                        });
+
+                        if (answer.done) {
+                            throw new Error("Questioning agent ended unexpectedly when asking about given items.");
+                        }
+
+                        console.log("Received answer, ", answer.value);
+
+
+                        const answerValue = answer.value.trim();
+                        const listOfItems = getNextQuotedListAndSplit(answerValue).quotedList;
+                        const filteredItems = listOfItems.filter(item => item !== "nothing");
+
+                        if (filteredItems.length > 0) {
+                            finalResults.push({
+                                source: character.name,
+                                sourceType: "character",
+                                target: characterNameToProbe,
+                                targetType: "character",
+                                action: "wear",
+                                items: filteredItems,
+                                targetPlacement: "worn by " + characterNameToProbe,
+                            });
+                        }
+                    }
+                }
+            }
+
+            await generator.next(null); // finish the generator
+        }
+
+        if (statement === "characterdropped") {
+            const systemMessage = `You are an assistant and story analyst that determines if in the last message from ${character.name} contains information about ${character.name} dropping, removing, or placing any items or clothes on the ground or any surface or container.`;
+            const systemPrompt = engine.inferenceAdapter.buildSystemPromptForQuestioningAgent(systemMessage, [
+                "Consider only the last message from " + character.name + ".",
+                "Assume an item is dropped on the ground if not specified",
+            ], null);
+
+            const generator = engine.inferenceAdapter.runQuestioningCustomAgentOn(character, systemPrompt, null, engine.getHistoryForCharacter(character, {}), "LAST_CYCLE_EXPANDED", null);
+
+            const ready = await generator.next();
+            if (ready.done) {
+                throw new Error("Questioning agent could not be started properly for item changes check.");
+            }
+
+            const preQuestionNext = `Did ${character.name} drop, remove, or place any items or clothes, and placed them on the ground or any surface or container in the last message from ${character.name}? Answer 'yes' or 'no', if not specified where the items were dropped, assume they were dropped on the ground.`;
+
+            console.log("Asking question, " + preQuestionNext);
+
+            const preExamples = engine.inferenceAdapter.buildContextInfoExample(
+                `Example: if the last message from ${character.name} includes: "${character.name} dropped ${getCharacterNameForExample([character.name], 0)}'s sword and ${getCharacterNameForExample([character.name], 1)}'s shield on the ground", you should respond with "yes" since these items were dropped by ${character.name}.`
+            ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                `Example: if the last message from ${character.name} includes: "${character.name} gave ${getCharacterNameForExample([character.name], 0)}'s sword to ${getCharacterNameForExample([character.name], 1)}", you should respond with: "no" because the items were given to another character and not dropped on the ground or any surface.`
+            ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                `Example: if the last message from ${character.name} includes: "${character.name} just walked around and did not interact with anyone or any item", you should respond with: "no" since there were no item changes`
+            ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                `Example: if the last message from ${character.name} includes: "${character.name} removed all ${characterPronoun} clothes", you should respond with: "yes" since ${character.name} removed ${characterPronoun} clothes, even if not explicitly stated where, we assume it is on the ground`
+            ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                `Example: if the last message from ${character.name} includes: "${character.name} drops ${characterPronoun} ring", you should respond with: "yes" since ${character.name} dropped ${characterPronoun} ring, and we assume it is on the ground since not specified otherwise.`
+            ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                `Example: if the last message from ${character.name} includes: "${character.name} placed ${characterPronoun} watch in her backpack", you should respond with: "yes" since ${character.name} placed ${characterPronoun} watch in her backpack`
+            ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                `Example: if the last message from ${character.name} includes: "${character.name} placed ${getCharacterNameForExample([character.name], 0)}'s arrow in ${getCharacterNameForExample([character.name], 1)}'s quiver", you should respond with: "yes" since ${character.name} placed ${getCharacterNameForExample([character.name], 0)}'s arrow in ${getCharacterNameForExample([character.name], 1)}'s quiver`
+            );
+
+            const preQuestion = await generator.next({
+                maxParagraphs: 1,
+                maxCharacters: 200,
+                nextQuestion: preQuestionNext,
+                stopAfter: ["yes", "no"],
+                stopAt: [],
+                contextInfo: preExamples,
+                grammar: `root ::= (yesanswer | noanswer)\nyesanswer ::= "yes"\nnoanswer ::= "no"`,
+            });
+
+            if (preQuestion.done) {
+                throw new Error("Questioning agent ended unexpectedly when asking about whether any clothing or wearable items were put on other characters.");
+            }
+
+            const answerValuePre = preQuestion.value.trim().toLowerCase();
+
+            console.log("Received answer,", preQuestion.value);
+
+            if (answerValuePre.startsWith("yes")) {
+                const nextQuestion = "Considering the last message from " + character.name + ", identify any items or clothing that " + character.name + " has dropped, removed, or placed on the ground or any surface in that message.";
+                console.log("Asking question, " + nextQuestion);
+
+                const examples = engine.inferenceAdapter.buildContextInfoExample(
+                    `Example: if the last message from ${character.name} includes: "${character.name} dropped ${getCharacterNameForExample([character.name], 0)}'s sword and ${getCharacterNameForExample([character.name], 1)}'s shield", you should respond with ""${character.name} placed the following items: "${getCharacterNameForExample([character.name], 0)}'s sword" and "${getCharacterNameForExample([character.name], 1)}'s shield" on "the ground""`
+                ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                    `Example: if the last message from ${character.name} includes: "${character.name} removed all ${characterPronoun} clothes", you should respond with: ""${character.name} placed the following items: ""all ${characterPronoun} clothes"" on "ground""`
+                ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                    `Example: if the last message from ${character.name} includes: "${character.name} just walked around and did not interact with anyone or any item", you should respond with: ""${character.name} placed the following items: "nothing" on "ground"" since there were no item changes`
+                ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                    `Example: if the last message from ${character.name} includes: "${character.name} drops ${characterPronoun} ring on the table", you should respond with: ""${character.name} placed the following items: "${character.name}'s ring" on "table""`,
+                ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                    `Example: if the last message from ${character.name} includes: "${character.name} placed ${characterPronoun} watch in her backpack", you should respond with: ""${character.name} placed the following items: "${character.name}'s watch" in "${character.name}'s backpack""`
+                ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                    `Example: if the last message from ${character.name} includes: "${character.name} placed ${getCharacterNameForExample([character.name], 0)}'s arrow in ${getCharacterNameForExample([character.name], 1)}'s quiver", you should respond with: ""${character.name} placed the following items: "${getCharacterNameForExample([character.name], 0)}'s arrow" in "${getCharacterNameForExample([character.name], 1)}'s quiver""`
+                );
+
+                const answer = await generator.next({
+                    maxParagraphs: 1,
+                    maxCharacters: 200,
+                    nextQuestion: nextQuestion,
+                    stopAfter: [],
+                    stopAt: [],
+                    contextInfo: examples,
+                    answerTrail: "Result of the analysis of placed/dropped items in the last message from " + character.name + ":\n" + JSON.stringify(character.name) + " placed the following items: ",
+                    grammar: finalGrammar,
+                    instructions: engine.inferenceAdapter.buildContextInfoInstructions(
+                        "If the item or clothing has a known owner or holder for an item mentioned, include that in the response in the format 'character's item', for example 'Emma's dress'.\n" +
+                        "Use the format " + JSON.stringify(character.name) + " placed the following items: [Item 1], [Item 2], ... in/on [container/surface]\n" +
+                        "IMPORTANT: Do not repeat items in your answer, each item must be mentioned once only",
+                    )
+                });
+
+                if (answer.done) {
+                    throw new Error("Questioning agent ended unexpectedly when asking about given items.");
+                }
+
+                console.log("Received answer, ", answer.value);
+
+                const listOfItems = getNextQuotedListAndSplit(answer.value);
+                const listOfItemsFiltered = removeRepeatsInArray(listOfItems.quotedList.filter(item => item.toLowerCase() !== "nothing"));
+
+                if (listOfItemsFiltered.length !== 0) {
+                    const target = getNextQuotedAndSplit(listOfItems.rest).quoted;
+                    finalResults.push({
+                        source: character.name,
+                        sourceType: "character",
+                        target: target || "ground",
+                        targetType: target && target !== "ground" ? (
+                            listOfItems.rest.startsWith("in ") || listOfItems.rest.startsWith("inside ") ? "container" : "surface"
+                        ) : "ground",
+                        action: "dropped_at",
+                        items: listOfItemsFiltered,
+                        targetPlacement: (listOfItems.rest.startsWith("in ") || listOfItems.rest.startsWith("inside ") ? "contained by " : "placed on ") + (target || "ground"),
+                    });
+                }
+            }
+
+            await generator.next(null); // finish the generator
+        }
+
+        if (statement === "characterpickedup") {
+            const systemMessage = `You are an assistant and story analyst that determines if in the last message from ${character.name} contains information about ${character.name} picking up, taking, stealing, putting on, wearing, or equipping any items or clothes from the ground or any surface or container or from any other character`;
+            const systemPrompt = engine.inferenceAdapter.buildSystemPromptForQuestioningAgent(systemMessage, [
+                "Consider only the last message from " + character.name + ".",
+            ], null);
+
+            const generator = engine.inferenceAdapter.runQuestioningCustomAgentOn(character, systemPrompt, null, engine.getHistoryForCharacter(character, {}), "LAST_CYCLE_EXPANDED", null);
+
+            const ready = await generator.next();
+            if (ready.done) {
+                throw new Error("Questioning agent could not be started properly for item changes check.");
+            }
+
+            const preQuestionNext = `Did ${character.name} pick up, take, steal, put on, wear, or equip any items or clothes from the ground or any surface or container or from any other character in the last message from ${character.name}? Answer 'yes' or 'no'.`;
+
+            console.log("Asking question, " + preQuestionNext);
+
+            const preExamples = engine.inferenceAdapter.buildContextInfoExample(
+                `Example: if the last message from ${character.name} includes: "${character.name} received ${getCharacterNameForExample([character.name], 0)}'s sword and ${getCharacterNameForExample([character.name], 1)}'s shield", you should respond with "yes" since these items were taken by ${character.name}.`
+            ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                `Example: if the last message from ${character.name} includes: "${character.name} gave ${getCharacterNameForExample([character.name], 0)}'s sword to ${getCharacterNameForExample([character.name], 1)}", you should respond with: "no" because the items were given to another character and not taken by ${character.name}.`
+            ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                `Example: if the last message from ${character.name} includes: "${character.name} just walked around and did not interact with anyone or any item", you should respond with: "no" since there were no item changes`
+            ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                `Example: if the last message from ${character.name} includes: "${character.name} picked up all ${characterPronoun} clothes", you should respond with: "yes" since ${character.name} picked up ${characterPronoun} clothes`
+            ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                `Example: if the last message from ${character.name} includes: "${character.name} took ${characterPronoun} ring from the Table", you should respond with: "yes" since ${character.name} took ${characterPronoun} ring`
+            ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                `Example: if the last message from ${character.name} includes: "${character.name} picked an arrow from ${characterPronoun} backpack", you should respond with: "yes" since ${character.name} took ${characterPronoun} arrow from ${characterPronoun} backpack`
+            ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                `Example: if the last message from ${character.name} includes: "${character.name} took ${getCharacterNameForExample([character.name], 0)}'s ring and gave it to ${getCharacterNameForExample([character.name], 1)}", you should respond with: "no" since they didn't actually take the item for themselves but just moved it from one character to another.`
+            );
+
+            const preQuestion = await generator.next({
+                maxParagraphs: 1,
+                maxCharacters: 200,
+                nextQuestion: preQuestionNext,
+                stopAfter: ["yes", "no"],
+                stopAt: [],
+                contextInfo: preExamples,
+                grammar: `root ::= (yesanswer | noanswer)\nyesanswer ::= "yes"\nnoanswer ::= "no"`,
+            });
+
+            if (preQuestion.done) {
+                throw new Error("Questioning agent ended unexpectedly when asking about whether any clothing or wearable items were put on other characters.");
+            }
+
+            const answerValuePre = preQuestion.value.trim().toLowerCase();
+
+            console.log("Received answer,", preQuestion.value);
+
+            if (answerValuePre.startsWith("yes")) {
+                const nextQuestion = "Considering the last message from " + character.name + ", identify any items or clothing that " + character.name + " has picked up, taken, stolen, put on, worn, or equipped from the ground or any surface or container or from any other character in that message.";
+
+                console.log("Asking question, " + nextQuestion);
+
+                const examples = engine.inferenceAdapter.buildContextInfoExample(
+                    `Example: if the last message from ${character.name} includes: "${character.name} received ${getCharacterNameForExample([character.name], 0)}'s sword and ${getCharacterNameForExample([character.name], 1)}'s shield", you should respond with: ""${character.name} picked up the following items: "${getCharacterNameForExample([character.name], 0)}'s sword" and "${getCharacterNameForExample([character.name], 1)}'s shield""`
+                ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                    `Example: if the last message from ${character.name} includes: "${character.name} stole ${getCharacterNameForExample([character.name], 0)}'s sword and placed it in his backpack", you should respond with: ""${character.name} picked up the following items: ""${getCharacterNameForExample([character.name], 0)}'s sword""`
+                ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                    `Example: if the last message from ${character.name} includes: "${character.name} just walked around and did not interact with anyone or any item", you should respond with: ""${character.name}" picked up the following items: "nothing"" since there were no item changes`
+                ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                    `Example: if the last message from ${character.name} includes: "${character.name} picked up all ${characterPronoun} clothes", you should respond with: ""${character.name} picked up the following items: "all ${characterPronoun} clothes""`
+                ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                    `Example: if the last message from ${character.name} includes: "${character.name} took ${characterPronoun} ring from the Table", you should respond with: ""${character.name} picked up the following items: "${character.name}'s ring""`
+                ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                    `Example: if the last message from ${character.name} includes: "${character.name} picked an arrow from ${characterPronoun} backpack", you should respond with: ""${character.name} picked up the following items: ""${character.name}'s arrow""`
+                )
+                const answer = await generator.next({
+                    maxParagraphs: 1,
+                    maxCharacters: 200,
+                    nextQuestion: nextQuestion,
+                    stopAfter: [],
+                    stopAt: [],
+                    contextInfo: examples,
+                    answerTrail: "Result of the analysis of placed/dropped items in the last message from " + character.name + ":\n" + JSON.stringify(character.name) + " picked up the following items: ",
+                    grammar: finalGrammar,
+                    instructions: engine.inferenceAdapter.buildContextInfoInstructions(
+                        "If the item or clothing has a known owner or holder for an item mentioned, include that in the response in the format 'character's item', for example 'Emma's dress'.\n" +
+                        "Use the format " + JSON.stringify(character.name) + " picked up the following items: [Item 1], [Item 2], ...\n" +
+                        "IMPORTANT: Do not repeat items in your answer, each item must be mentioned once only",
+                    )
+                });
+
+                if (answer.done) {
+                    throw new Error("Questioning agent ended unexpectedly when asking about given items.");
+                }
+
+                console.log("Received answer, ", answer.value);
+
+                const listOfItems = getNextQuotedListAndSplit(answer.value);
+                const listOfItemsFiltered = removeRepeatsInArray(listOfItems.quotedList.filter(item => item.toLowerCase() !== "nothing"));
+
+                if (listOfItemsFiltered.length !== 0) {
+                    // ask if the items were picked up from a container, from a surface or from another character
+                    // this will help narrow us down where the item was picked up from, which we need to know
+
+                    const postQuestion = "Where did " + character.name + " pick up " + engine.deObject.functions.format_and(engine.deObject, null, listOfItemsFiltered.map(item => JSON.stringify(item))) + " from? Did " + character.name + " pick up the items from the ground, from a surface, from a container, or from another character? If the items were picked up from another character, please specify the character's name.";
+                    console.log("Asking question, " + postQuestion);
+
+                    const postExamples = engine.inferenceAdapter.buildContextInfoExample(
+                        `Example: if the last message from ${character.name} includes: "${character.name} received ${getCharacterNameForExample([character.name], 0)}'s sword and ${getCharacterNameForExample([character.name], 1)}'s shield from ${getCharacterNameForExample([character.name], 0)}", you should respond with: ""${character.name}" picked up "${getCharacterNameForExample([character.name], 0)}'s sword" and "${getCharacterNameForExample([character.name], 1)}'s shield" from "${getCharacterNameForExample([character.name], 0)}""`
+                    ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                        `Example: if the last message from ${character.name} includes: "${character.name} stole ${getCharacterNameForExample([character.name], 0)}'s sword and placed it in his backpack", you should respond with: ""${character.name}" picked up "${getCharacterNameForExample([character.name], 0)}'s sword" from "${getCharacterNameForExample([character.name], 0)}""`
+                    ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                        `Example: if the last message from ${character.name} includes: "${character.name} picked up all ${characterPronoun} clothes", you should respond with: ""${character.name} picked up the following items: ""${character.name}" picked up "all ${characterPronoun} clothes" from "ground""`
+                    ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                        `Example: if the last message from ${character.name} includes: "${character.name} took ${characterPronoun} ring from the Table", you should respond with: ""${character.name} picked up the following items: ""${character.name}'s ring"" from "Table""`
+                    ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                        `Example: if the last message from ${character.name} includes: "${character.name} picked an arrow", and it is unclear from where, you should respond with: ""${character.name} picked up the following items: "arrow" from \"unknown location\"" since it is not specified from where the arrow was picked up`
+                    )
+
+                    const postGrammar = finalGrammarNoStatement + "\n" + `statement ::= ${allCharactersInLocation.length > 0 ? "characternamequoted |" : ""} ${allItemsInLocation.length > 0 ? "anyitemnocount |" : ""} "\"ground\"" | "\"unknown location\""`;
+                    let cheapPostAnswer = "";
+                    if (allCharactersInLocation.length === 0 && allItemsInLocation.length === 0) {
+                        cheapPostAnswer = "the ground";
+                    }
+
+                    const postAnswer = cheapPostAnswer ? (
+                        {
+                            done: false,
+                            value: cheapPostAnswer,
+                        }
+                    ) : await generator.next({
+                        maxParagraphs: 1,
+                        maxCharacters: 200,
+                        nextQuestion: nextQuestion,
+                        stopAfter: [],
+                        stopAt: [],
+                        contextInfo: examples,
+                        answerTrail: "Result of the analysis of placed/dropped items in the last message from " + character.name + ":\n" + JSON.stringify(character.name) + " picked up the following items: " + engine.deObject.functions.format_and(engine.deObject, null, listOfItemsFiltered.map(item => JSON.stringify(item))) + " from ",
+                        grammar: postGrammar,
+                        instructions: engine.inferenceAdapter.buildContextInfoInstructions(
+                            "If the item has a known owner or holder for an item mentioned, include that in the response in the format 'character's item', for example 'Emma's cabinet'.\n" +
+                            "Use the format " + JSON.stringify(character.name) + " picked up the following items: [Item 1], [Item 2], ... from [Item|Character|Location].\n"
+                        )
+                    });
+
+                    if (postAnswer.done) {
+                        throw new Error("Questioning agent ended unexpectedly when asking about given items.");
+                    }
+
+                    console.log("Received answer, ", postAnswer.value);
+
+                    const source = postAnswer.value.trim();
+                    /**
+                     * @type {string | null}
+                     */
+                    let actualSource = null;
+                    /**
+                     * @type {"character" | "container/surface" | "ground"}
+                     */
+                    let actualSourceType = "ground";
+                    if (source !== "ground" && source !== "unknown location") {
+                        // figure out if it is a character
+                        const { quoted: givenSource } = getNextQuotedAndSplit(source);
+                        actualSource = givenSource;
+                        if (givenSource && engine.deObject.characters[givenSource]) {
+                            actualSourceType = "character";
+                        } else {
+                            actualSourceType = "container/surface";
+                        }
+                    }
+
+                    const postQuestion2 = "Did " + character.name + " place the items: " + engine.deObject.functions.format_and(engine.deObject, null, listOfItemsFiltered.map(item => JSON.stringify(item))) + " into another container or put them on another surface after picking them up? If so answer yes and please specify the container or surface name. If not, answer 'no'.";
+                    const postQuestion3 = "Did " + character.name + " wear (as clothes), the items: " + engine.deObject.functions.format_and(engine.deObject, null, listOfItemsFiltered.map(item => JSON.stringify(item))) + ", is it explicitly said that the character wore them? answer 'yes' or 'no'.";
+                    const postQuestion4 = "Did " + character.name + " stole, the items: " + engine.deObject.functions.format_and(engine.deObject, null, listOfItemsFiltered.map(item => JSON.stringify(item))) + ", is it explicitly said that the character steal such items? answer 'yes' or 'no'.";
+                    // TODO stealth check
+
+                    // Now to figure out if the item was stolen or just picked up
+                }
+            }
+
+            await generator.next(null); // finish the generator
+        }
     }
 
-    const answer = await generator.next({
-        maxParagraphs: 100,
-        maxCharacters: 1000,
-        nextQuestion: "Considering the last message from " + character.name + ", identify any items that have been dropped by any chararacter, picked up, given to another character, stolen, or otherwise transferred from one character to another. Also identify any clothing or worn items that have been removed or put on by any character. For each item, specify the character involved and the new placement of the item if applicable. If unable to specify where the item is placed next, assume it is placed on the ground at the current location of the character dropping or removing the item. Provide your answer as a list of statements in the format: '[Character] dropped [item(s)]', '[Character] dropped [item(s)] and placed them in [placement]', '[Character] removed [item(s)]', '[Character] removed [item(s)] and placed them in [placement]', '[Character] picked up [item(s)]', '[Character] picked up [item(s)] and placed them in [placement]', or similar formats indicating item changes. Separate multiple statements with a period and a new line.",
-        stopAfter: [],
-        stopAt: [],
-        answerTrail: "In the last message from " + character.name + ", the following item changes occurred:\n",
-        grammar: finalGrammar,
-    });
+    console.log(finalResults);
+    process.exit(1);
 
-    if (answer.done) {
-        throw new Error("Questioning agent ended unexpectedly when asking about item changes.");
-    }
-
-    await generator.next(null); // finish the generator
-
-    const answerValue = answer.value.trim().split("\n").map(line => line.trim()).filter(line => line);
-
-    let nextToProcess = answerValue;
+    let nextToProcess = finalResults;
 
     /**
      * @type {string[]}
@@ -752,6 +1402,9 @@ function getItemNameAmountAndItemHolderFromText(engine, textOriginal) {
     } else if (text.startsWith("all of ")) {
         amount = "all of";
         text = text.substring("all of ".length);
+    } else if (text.startsWith("a ") || text.startsWith("an ")) {
+        amount = 1;
+        text = text.substring("a ".length);
 
         // lastly check if it is a number
     } else if (text.match(/^[0-9]+ of /)) {
@@ -1588,7 +2241,7 @@ function attemptToPickUpCharacter(engine, characterPickedUp, characterName, next
 }
 
 /**
- * 
+ * TODO need a version for ontop
  * @param {DEngine} engine 
  * @param {string} characterName 
  * @param {string[]} storyMasterMessagesToAdd 
@@ -1631,6 +2284,7 @@ function dropAnyOverflowingItemsFromOverfilledContainersAt(engine, characterName
 
     /**
      * @param {DEItem[]} containerList 
+     * TODO needs to be done on top too
      */
     const dropFromList = (containerList) => {
         for (const container of containerList) {
@@ -1818,6 +2472,7 @@ function getCharacterTotalWeightAndVolumeTaken(engine, characterName) {
             weight += carriedItem.weightKg * carriedItem.amount;
             volume += carriedItem.volumeLiters * carriedItem.amount;
             processItemList(carriedItem.containing);
+            processItemList(carriedItem.ontop);
         }
     }
     /**
@@ -1849,6 +2504,13 @@ function getItemTotalWeightAndVolume(item) {
             const containedWeightAndVolume = getItemTotalWeightAndVolume(containedItem);
             weight += containedWeightAndVolume.totalWeight;
             volume += containedWeightAndVolume.totalVolume;
+        }
+    }
+    if (item.ontop) {
+        for (const ontopItem of item.ontop) {
+            const ontopWeightAndVolume = getItemTotalWeightAndVolume(ontopItem);
+            weight += ontopWeightAndVolume.totalWeight;
+            volume += ontopWeightAndVolume.totalVolume;
         }
     }
     return { totalWeight: weight, totalVolume: volume };
@@ -2050,13 +2712,13 @@ function canCharacterCarryAnotherCharacterPotentially(engine, characterName, cha
     } else if (characterToCarryWeightAndVolume.totalVolume / 4 > maxCarryingCapacityLiters) {
         return { canCarry: false, reason: `${characterToCarryName} is absurdly large for ${characterName} to carry` };
 
-    // a toddler trying to carry an adult
+        // a toddler trying to carry an adult
     } else if (characterToCarryWeightAndVolume.totalWeight / 2 > maxCarryingCapacityKg) {
         return { canCarry: false, reason: `${characterToCarryName} is overwhelmingly heavy for ${characterName} to carry` };
     } else if (characterToCarryWeightAndVolume.totalVolume / 2 > maxCarryingCapacityLiters) {
         return { canCarry: false, reason: `${characterToCarryName} is overwhelmingly large for ${characterName} to carry` };
 
-    // a person trying to carry another of similar size, likely they can't, but this message will be more likely
+        // a person trying to carry another of similar size, likely they can't, but this message will be more likely
     } else if (characterToCarryWeightAndVolume.totalWeight > maxCarryingCapacityKg) {
         return { canCarry: false, reason: `${characterToCarryName} is too heavy for ${characterName} to carry` };
     } else if (characterToCarryWeightAndVolume.totalVolume > maxCarryingCapacityLiters) {
