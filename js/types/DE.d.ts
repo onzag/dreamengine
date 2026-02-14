@@ -1449,16 +1449,21 @@ declare interface DEItem {
     /**
      * The items that are inside this item if it is a container, for example a backpack may have items inside it
      * this is different from ontop as these items are actually inside the container and may be hidden from view, while ontop items are on top of the item
-     * 
-     * TODO containing characters?
      */
     containing: Array<DEItem>;
     /**
+     * The characters that are inside this item if it is a container, for example a backpack may have a character inside it if it's big enough, or a car may have characters inside it
+     * this is different from ontop as these characters are actually inside the container and may be hidden from view, while ontop characters are on top of the item
+     */
+    containingCharacters: Array<string>;
+    /**
      * The items that are on top of this item, for example a backpack may have a jacket on top of it, or a table may have a vase on top of it
-     * 
-     * TODO on top characters?
      */
     ontop: Array<DEItem>;
+    /**
+     * The characters that are on top of this item, for example a table may have a character sitting on top of it
+     */
+    ontopCharacters: Array<string>;
     /**
      * The maximum weight in kilograms that can be on top of this item, for example a table may have a max weight on top of 100kg, while a fragile vase may have a max weight on top of 1kg
      * if something heavier than the max weight on top is placed, the item will break

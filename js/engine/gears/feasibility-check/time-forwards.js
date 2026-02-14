@@ -51,7 +51,7 @@ export default async function timeForwardsUsingLastMessage(engine, character) {
         throw new Error("Failed to prime time-forwards agent.");
     }
 
-    const nextQuestion = `According to the message provided from ${character.name}, how much time has passed?`;
+    const nextQuestion = `According to the last message provided from ${character.name}, how much time has passed?`;
     console.log("Asking question, " + nextQuestion);
 
     const answer = await timePassedGenerator.next({

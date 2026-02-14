@@ -435,6 +435,7 @@ ${states.join(", ")}
      * @param {AsyncGenerator<{name: string, message: string, id: string, conversationId: string | null, debug: boolean, rejected: boolean}, void, boolean>} getHistoryForCharacter
      * @param {"LAST_CYCLE" | "LAST_MESSAGE" | "LAST_CYCLE_EXPANDED" | "LAST_CYCLE_EXPANDED_EXCLUDE_CHAR" | "LAST_CYCLE_EXPANDED_TWICE" | "ALL"} msgLimit what to limit the history to
      * @param {string|null} contextInfoAfter additional context information to provide to the agent
+     * @param {boolean} [remarkLastMessageForAnalysis] whether to mark the last message with an special token so the agent can analyze it
      * @returns {import('./base.js').QuestionAgentGeneratorResponse}
      */
     async *runQuestioningCustomAgentOn(
@@ -443,7 +444,8 @@ ${states.join(", ")}
         contextInfoBefore,
         getHistoryForCharacter,
         msgLimit,
-        contextInfoAfter
+        contextInfoAfter,
+        remarkLastMessageForAnalysis
     ) {
         if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
             throw new Error("WebSocket is not open");
@@ -523,14 +525,30 @@ ${states.join(", ")}
         } else {
             messagesToAdd = getHistoryForCharacter;
         }
-        const messagesFormatted = messagesToAdd.map(msg => `[` + msg.name + `]: ` + msg.message).join("\n\n");
 
-        const payload = {
-            system: system,
-            userTrail: (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "") + "<messages>\n" + messagesFormatted + "\n</messages>" + (contextInfoAfter ? "\n" + contextInfoAfter : ""),
-        };
+        if (!remarkLastMessageForAnalysis) {
+            const messagesFormatted = messagesToAdd.map(msg => `[` + msg.name + `]: ` + msg.message).join("\n\n");
 
-        this.socket.send(JSON.stringify({ action: "analyze-prepare", payload }));
+            const payload = {
+                system: system,
+                userTrail: (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "") + "<messages>\n" + messagesFormatted + "\n</messages>" + (contextInfoAfter ? "\n" + contextInfoAfter : ""),
+            };
+
+            this.socket.send(JSON.stringify({ action: "analyze-prepare", payload }));
+        } else {
+            const lastMessage = messagesToAdd[messagesToAdd.length - 1];
+            const restMessages = messagesToAdd.slice(0, -1);
+
+            const restMessagesFormatted = restMessages.map(msg => `[` + msg.name + `]: ` + msg.message).join("\n\n");
+            const lastMessageFormatted = `[` + lastMessage.name + `]: ` + lastMessage.message;
+
+            const payload = {
+                system: system,
+                userTrail: (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "") + "<previousMessages>\n" + restMessagesFormatted + "\n</previousMessages><analyze><lastMessage>" + lastMessageFormatted + "</lastMessage></analyze>" + (contextInfoAfter ? "\n" + contextInfoAfter : ""),
+            };
+
+            this.socket.send(JSON.stringify({ action: "analyze-prepare", payload }));
+        }
 
         await new Promise((resolve, reject) => {
             this.streamingAwaiter = (data, done, err) => {
