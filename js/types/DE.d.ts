@@ -1231,6 +1231,33 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
      * or something like groot that can only say "I am Groot" in different inflections
      */
     vocabularyLimit?: string[];
+
+    /**
+     * A number from 0 to 1 that represents how likely the character is to perform stealthy actions or behaviours
+     * higher means more likely to perform stealthy actions, this is useful for characters that are sneaky or like to hide
+     * 
+     * Used in the following scenarios:
+     * - When a character performs a robbery, the LLM checks the characters that were interacted to see if they noticed; for the rest of the characters that were not with
+     * the character, the engine uses their stealth score to see if they noticed the robbery or not, higher stealth means less likely to notice
+     */
+    stealth: number;
+    /**
+     * A number from 0 to 1 that represents how likely the character is to perform perceptive actions or behaviours
+     * higher means more likely to perform perceptive actions, this is useful for characters that are observant or like to pay attention to details
+     * 
+     * Used in the following scenarios:
+     * - When a character performs a robbery, and the character is deemed as noticing (aka passes the stealth check), then the engine uses their perception score to see
+     * if they actually noticed the robbery or just noticed that something happened but couldn't tell what, higher perception means more likely to actually notice the robbery and identify the robbery
+     */
+    perception: number;
+    /**
+     * A number from 0 to 1 that represents how heroic the character is, higher means more likely to perform heroic actions and behaviours
+     * this is useful for characters that are brave or like to do good deeds, it can also be used to determine how likely they are to help others in need
+     * 
+     * Used in the following scenarios:
+     * - When a character witnesses a robbery, the engine uses their heroism score to determine how likely they are to intervene and try to stop the robbery, higher heroism means more likely to intervene and try to stop the robbery
+     */
+    heroism: number;
 }
 
 declare interface DENamePool {
@@ -1396,7 +1423,7 @@ declare interface DEItem {
     capacityKg: number;
     description: string;
     descriptionWhenWorn: string | null;
-    descriptionWhenCarried: string | null;
+    descriptionWhenContainingCharacter: string | null;
     isSeeThrough: boolean;
     // canSitOn: boolean;
     // canLieOn: boolean;
@@ -1540,10 +1567,15 @@ declare interface StateForDescription {
     fullyExposedToWeather: string | null;
     posture: "standing" | "sitting" | "laying_down";
     /**
-     * The name of the item the character is using to sit, stand or lay down on or null if none
-     * if none that means the character is using the ground/floor/etc
+     * The name of the item the character is currently inside of, this is just the name
+     * for the specific item, it needs to be found in the item tree
      */
-    postureAppliedOn: string | null;
+    insideItem: string | null;
+    /**
+     * The name of the item the character is currently on top of, this is just the name
+     * for the specific item, it needs to be found in the item tree
+     */
+    atopItem: string | null;
     carrying: DEItem[];
     carryingCharacters: Array<string>;
     wearing: DEItem[];

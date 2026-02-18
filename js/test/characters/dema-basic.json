@@ -28,6 +28,9 @@
     "maintenance_hydration_liters_per_day": 0,
     "range_meters": 1000,
     "locomotion_speed_meters_per_second": 2,
+    "stealth": 0.2,
+    "perception": 1,
+    "heroism": 1,
     "properties": {
         "IS_ROBOT": {
             "ts": "// Internal",

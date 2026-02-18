@@ -595,8 +595,8 @@ export class DEngine {
             partiallyExposedToWeather: null,
             fullyExposedToWeather: null,
             posture: "standing",
-            // start on the ground/floor/etc
-            postureAppliedOn: null,
+            atopItem: null,
+            insideItem: null,
 
             // chars start out empty handed
             carrying: [],
@@ -745,7 +745,71 @@ export class DEngine {
                 }
             }
 
+            // Sadly these cannot be regenerated
 
+            // if the character is being carried by another character, they must be at the same location as that character
+            if (charState.beingCarriedByCharacter) {
+                const carrierState = this.deObject.stateFor[charState.beingCarriedByCharacter];
+                if (carrierState.location !== charState.location || carrierState.locationSlot !== charState.locationSlot) {
+                    throw new Error(`Character ${charName} is being carried by ${charState.beingCarriedByCharacter} but they are not in the same location.`);
+                }
+                if (carrierState.carryingCharacters && !carrierState.carryingCharacters.includes(charName)) {
+                    throw new Error(`Character ${charName} is being carried by ${charState.beingCarriedByCharacter} but that character does not have them in their carryingCharacters.`);
+                }
+            }
+
+            // do the same but for carryingCharacters, they must be in the same location as well
+            for (const carrier of charState.carryingCharacters) {
+                const carrierState = this.deObject.stateFor[carrier];
+                if (carrierState.location !== charState.location || carrierState.locationSlot !== charState.locationSlot) {
+                    throw new Error(`Character ${charName} is carrying ${carrier} but they are not in the same location.`);
+                }
+                if (carrierState.beingCarriedByCharacter !== charName) {
+                    throw new Error(`Character ${charName} is carrying ${carrier} but that character does not have them as beingCarriedByCharacter.`);
+                }
+            }
+
+            /**
+             * @param {DEItem[]} itemList 
+             */
+            const processItemRecursive = (itemList) => {
+                // typescript nonsense
+                if (!this.deObject) {
+                    throw new Error("DEngine not initialized");
+                }
+                for (const item of itemList) {
+                    if (item.containing) {
+                        processItemRecursive(item.containing);
+                    } else if (item.ontop) {
+                        processItemRecursive(item.ontop);
+                    }
+                    if (item.containingCharacters) {
+                        for (const containedChar of item.containingCharacters) {
+                            const containedCharState = this.deObject.stateFor[containedChar];
+                            if (containedCharState.location !== charState.location || containedCharState.locationSlot !== charState.locationSlot) {
+                                throw new Error(`Character ${charName} is carrying ${item.name} which contains character ${containedChar} but they are not in the same location.`);
+                            }
+                            if (containedCharState.beingCarriedByCharacter !== charName) {
+                                throw new Error(`Character ${charName} is carrying ${item.name} which contains character ${containedChar} but that character does not have them as beingCarriedByCharacter.`);
+                            }
+                        }
+                    }
+                    if (item.ontopCharacters) {
+                        for (const ontopChar of item.ontopCharacters) {
+                            const ontopCharState = this.deObject.stateFor[ontopChar];
+                            if (ontopCharState.location !== charState.location || ontopCharState.locationSlot !== charState.locationSlot) {
+                                throw new Error(`Character ${charName} is carrying ${item.name} which has character ${ontopChar} on top of it but they are not in the same location.`);
+                            }
+                            if (ontopCharState.beingCarriedByCharacter !== charName) {
+                                throw new Error(`Character ${charName} is carrying ${item.name} which has character ${ontopChar} on top of it but that character does not have them as beingCarriedByCharacter.`);
+                            }
+                        }
+                    }
+                }
+            }
+
+            processItemRecursive(charState.carrying);
+            processItemRecursive(charState.wearing);
         }
 
         this.invalidCharacterStates = false;
@@ -1853,7 +1917,7 @@ export class DEngine {
         }
 
         if (characterState.carrying.length > 0) {
-            finalDescription += " Carrying " + this.deObject.functions.format_and(this.deObject, null, characterState.carrying.map(item => item.amount >= 2 ? item.amount + " of " + (item.descriptionWhenCarried || item.description) : (item.descriptionWhenCarried || item.description))) + ".";
+            finalDescription += " Carrying " + this.deObject.functions.format_and(this.deObject, null, characterState.carrying.map(item => item.amount >= 2 ? item.amount + " of " + (item.descriptionWhenContainingCharacter || item.description) : (item.descriptionWhenContainingCharacter || item.description))) + ".";
         } else {
             finalDescription += " Not carrying any items.";
         }
@@ -1866,23 +1930,55 @@ export class DEngine {
             finalDescription += ` Carrying characters: ` + this.deObject.functions.format_and(this.deObject, null, characterState.carryingCharacters) + ".";
         }
 
-        let postureAppliedOnDescription = "the ground/floor";
-        if (characterState.postureAppliedOn) {
-            postureAppliedOnDescription = characterState.postureAppliedOn;
+        let postureAppliedOnDescription = "on the ground/floor";
+        if (characterState.atopItem) {
+            postureAppliedOnDescription = "on " + characterState.atopItem;
+        } else if (characterState.insideItem) {
+            postureAppliedOnDescription = "inside " + characterState.insideItem;
+        }
+
+        if (characterState.atopItem || characterState.insideItem) {
+            /**
+             * @type {DEItem | null}
+             */
+            let itemCarriedOn = null;
+            let directlyFound = false;
+
+            /**
+             * @param {DEItem[]} itemList 
+             * @returns 
+             */
+            const recurseItemCarriedOn = (itemList, depth = 0) => {
+                for (const item of itemList) {
+                    if (item.ontopCharacters.includes(characterName) || item.containingCharacters.includes(characterName)) {
+                        itemCarriedOn = item;
+                        if (depth === 0) {
+                            directlyFound = true;
+                        }
+                        return;
+                    }
+                    if (item.containing.length > 0) {
+                        recurseItemCarriedOn(item.containing, depth + 1);
+                    }
+                }
+            }
+
             if (characterState.beingCarriedByCharacter) {
                 // let's see if we can be more specific
                 const carryingCharacterState = this.deObject.stateFor[characterState.beingCarriedByCharacter];
                 if (carryingCharacterState) {
-                    const itemCarriedOn = carryingCharacterState.carrying.find(item => item.name === characterState.postureAppliedOn);
+
+
+                    recurseItemCarriedOn(carryingCharacterState.carrying);
+                    let worn = false;
+                    if (!itemCarriedOn) {
+                        recurseItemCarriedOn(carryingCharacterState.wearing);
+                        worn = directlyFound;
+                    }
+
                     if (itemCarriedOn) {
-                        postureAppliedOnDescription = itemCarriedOn.descriptionWhenCarried || itemCarriedOn.description;
-                        postureAppliedOnDescription += ` (carried by ${characterState.beingCarriedByCharacter})`;
-                    } else {
-                        const itemWearing = carryingCharacterState.wearing.find(item => item.name === characterState.postureAppliedOn);
-                        if (itemWearing) {
-                            postureAppliedOnDescription = itemWearing.descriptionWhenWorn || itemWearing.description;
-                            postureAppliedOnDescription += ` (worn by ${characterState.beingCarriedByCharacter})`;
-                        }
+                        postureAppliedOnDescription += " (" + (/** @type {DEItem} */ (itemCarriedOn)).descriptionWhenContainingCharacter || (/** @type {DEItem} */ (itemCarriedOn)).description;
+                        postureAppliedOnDescription += `. ${worn ? "worn" : "carried"} by ${characterState.beingCarriedByCharacter})`;
                     }
                 }
             } else {
@@ -1891,16 +1987,16 @@ export class DEngine {
                 if (location) {
                     const locationSlot = location.slots[characterState.locationSlot];
                     if (locationSlot) {
-                        const itemAtLocation = locationSlot.items.find(item => item.name === characterState.postureAppliedOn);
-                        if (itemAtLocation) {
-                            postureAppliedOnDescription = itemAtLocation.description;
+                        recurseItemCarriedOn(locationSlot.items);
+                        if (itemCarriedOn) {
+                            postureAppliedOnDescription += " (" + (/** @type {DEItem} */ (itemCarriedOn)).descriptionWhenContainingCharacter || (/** @type {DEItem} */ (itemCarriedOn)).description + ")";
                         }
                     }
                 }
             }
         }
 
-        finalDescription += " " + character.name + " is currently " + characterState.posture + " on " + postureAppliedOnDescription + ".";
+        finalDescription += " " + character.name + " is currently " + characterState.posture + postureAppliedOnDescription + ".";
 
         return finalDescription;
     }
@@ -1932,7 +2028,7 @@ export class DEngine {
         }
 
         if (characterState.carrying.length > 0) {
-            finalDescription += `\n${character.name} is carrying ` + this.deObject.functions.format_and(this.deObject, null, characterState.carrying.map(item => item.amount >= 2 ? item.amount + " of " + (item.descriptionWhenCarried || item.description) : (item.descriptionWhenCarried || item.description))) + ".";
+            finalDescription += `\n${character.name} is carrying ` + this.deObject.functions.format_and(this.deObject, null, characterState.carrying.map(item => item.amount >= 2 ? item.amount + " of " + (item.descriptionWhenContainingCharacter || item.description) : (item.descriptionWhenContainingCharacter || item.description))) + ".";
         } else {
             finalDescription += `\n${character.name} is not carrying any items.`;
         }

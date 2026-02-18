@@ -304,12 +304,41 @@ const schema = {
             "code_context": "Character Spawn",
             "placeholder": "// TypeScript code here, use char and DE",
         },
+        "stealth": {
+            "type": "number",
+            "title": "Stealth",
+            "description": "A percentage that determines how stealthy the character is, higher values indicate more stealthy behaviour; this can be used to determine how likely is the character to be detected by others when they are not in the same location, or to avoid certain interactions",
+            "minimum": 0,
+            "maximum": 1,
+            "default": 0,
+            "percentage": true,
+        },
+        "perception": {
+            "type": "number",
+            "title": "Perception",
+            "description": "A percentage that determines how perceptive the character is, higher values indicate more perceptive behaviour; this can be used to determine how likely is the character to detect others when they are in the same location, or to trigger certain interactions",
+            "minimum": 0,
+            "maximum": 1,
+            "default": 0,
+            "percentage": true,
+        },
+        "heroism": {
+            "type": "number",
+            "title": "Heroism",
+            "description": "A percentage that determines how heroic the character is, higher values indicate more heroic behaviour; this can be used to determine how likely is the character to help others in need, or to trigger certain interactions",
+            "minimum": 0,
+            "maximum": 1,
+            "default": 0,
+            "percentage": true,
+        },
     },
     "required": [
-        "states",
         "bonds",
         "general",
-        "initiative"
+        "initiative",
+        "stealth",
+        "perception",
+        "heroism",
     ]
 }
 

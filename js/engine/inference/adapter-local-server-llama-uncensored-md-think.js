@@ -8,7 +8,7 @@
 import { DEngine } from '../index.js';
 import { BaseInferenceAdapter } from './base.js';
 
-export class InferenceAdapterLocalServerLlama3UncensoredThink extends BaseInferenceAdapter {
+export class InferenceAdapterLocalServerLlamaMdUncensoredThink extends BaseInferenceAdapter {
     /**
      * @param {DEngine} parent 
      * @param {{
@@ -79,12 +79,12 @@ export class InferenceAdapterLocalServerLlama3UncensoredThink extends BaseInfere
         }
 
         if (this.options.dummyMode) {
-            console.log("InferenceAdapterLocalServerLlama3UncensoredThink: Dummy mode enabled, skipping initialization.");
+            console.log("InferenceAdapterLocalServerLlamaMdUncensoredThink: Dummy mode enabled, skipping initialization.");
             this.initialized = true;
             return;
         }
 
-        console.log("InferenceAdapterLocalServerLlama3UncensoredThink: Initializing connection to local server at " + (this.options.host || 'ws://127.0.0.1:8765'));
+        console.log("InferenceAdapterLocalServerLlamaMdUncensoredThink: Initializing connection to local server at " + (this.options.host || 'ws://127.0.0.1:8765'));
 
         // set a websocket to the local server
         this.socket = new WebSocket(this.options.host || 'ws://127.0.0.1:8765');
@@ -97,7 +97,7 @@ export class InferenceAdapterLocalServerLlama3UncensoredThink extends BaseInfere
             // @ts-ignore bugged out ts definition
             this.resolveInitializePromise = () => {
                 this.initialized = true;
-                console.log("InferenceAdapterLocalServerLlama3UncensoredThink: Connection to local server established.");
+                console.log("InferenceAdapterLocalServerLlamaMdUncensoredThink: Connection to local server established.");
                 // @ts-ignore
                 resolve();
             };
@@ -137,7 +137,7 @@ export class InferenceAdapterLocalServerLlama3UncensoredThink extends BaseInfere
                 else
                     lastClosureReason = "Unknown reason";
 
-                console.log("InferenceAdapterLocalServerLlama3UncensoredThink: WebSocket error during initialization", lastClosureReason);
+                console.log("InferenceAdapterLocalServerLlamaMdUncensoredThink: WebSocket error during initialization", lastClosureReason);
                 if (this.rejectInitializePromise) {
                     // @ts-ignore
                     this.rejectInitializePromise(new Error(lastClosureReason));
@@ -222,10 +222,11 @@ export class InferenceAdapterLocalServerLlama3UncensoredThink extends BaseInfere
     buildActionPromptForCharacter(character, action, primaryEmotion, emotionalRange, states, narrativeEffect) {
         return (
             `
-<instructions>
-<rule>Always format narration inside asterisks and in third person eg. \`*${character.name} ...*\`</rule>
-<rule>Spoken dialogue should be done in first person.</rule>
-<action>
+**INSTRUCTIONS**
+
+Rule: Always format narration inside asterisks and in third person eg. \`*${character.name} ...*\`
+Rule: Spoken dialogue should be done in first person.
+
 ${character.name} is about to take an action described as follows:
 
 ## Action Description:
@@ -245,15 +246,11 @@ ${states.length > 0 ? `
 
 ## Character States:
 ${states.join(", ")}
-` : ""}
-</action>
-</instructions>
-`
+` : ""}`
         )
     }
 
     /**
-     * 
      * @param {DECompleteCharacterReference} character 
      * @param {string} system 
      * @param {(AsyncGenerator<{name: string, message: string, id: string, conversationId: string | null, debug: boolean, rejected: boolean}, void, boolean> | Array<{name: string, message: string}>)} getHistoryForCharacter
@@ -463,7 +460,7 @@ ${states.join(", ")}
 
         // wiggle room for system prompt
         tokensExhaustedApprox += await this.countTokens(system);
-        tokensExhaustedApprox += await this.countTokens("<messages>") + await this.countTokens("</messages>");
+        tokensExhaustedApprox += await this.countTokens("messages: ");
 
         /**
          * @type {Array<{name: string, message: string}>}
@@ -531,7 +528,7 @@ ${states.join(", ")}
 
             const payload = {
                 system: system,
-                userTrail: (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "") + "<messages>\n" + messagesFormatted + "\n</messages>" + (contextInfoAfter ? "\n" + contextInfoAfter : ""),
+                userTrail: (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "") + "# Messages:\n" + messagesFormatted + "\n\n" + (contextInfoAfter ? "\n" + contextInfoAfter : ""),
             };
 
             this.socket.send(JSON.stringify({ action: "analyze-prepare", payload }));
@@ -544,7 +541,7 @@ ${states.join(", ")}
 
             const payload = {
                 system: system,
-                userTrail: (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "") + "<previousMessages>\n" + restMessagesFormatted + "\n</previousMessages><analyze><lastMessage>" + lastMessageFormatted + "</lastMessage></analyze>" + (contextInfoAfter ? "\n" + contextInfoAfter : ""),
+                userTrail: (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "") + "# Previous Messages:\n" + restMessagesFormatted + "\n\n# Last Message to Analyze:\n" + lastMessageFormatted + (contextInfoAfter ? "\n" + contextInfoAfter : ""),
             };
 
             this.socket.send(JSON.stringify({ action: "analyze-prepare", payload }));
@@ -564,18 +561,23 @@ ${states.join(", ")}
             };
         });
 
+        let questionCache = new Map();
         let nextQuestion = yield "ready";
         while (nextQuestion !== null) {
+            if (nextQuestion.useQuestionCache && questionCache.has(nextQuestion.nextQuestion)) {
+                nextQuestion = yield questionCache.get(nextQuestion.nextQuestion);
+                continue;
+            }
             // send the next question
             this.socket.send(JSON.stringify({
                 action: "analyze-question",
                 payload: {
-                    question: (nextQuestion.contextInfo ? nextQuestion.contextInfo + "\n" : "") + "<question>" + nextQuestion.nextQuestion + "</question>" + (nextQuestion.instructions ? ("\n<instructions>" + nextQuestion.instructions + "</instructions>") : ""),
-                    stopAt: ["</answer>"].concat(nextQuestion.stopAt),
+                    question: (nextQuestion.contextInfo ? nextQuestion.contextInfo + "\n" : "") + "question: " + nextQuestion.nextQuestion + (nextQuestion.instructions ? ("\ninstructions:" + nextQuestion.instructions) : ""),
+                    stopAt: ["answer: "].concat(nextQuestion.stopAt),
                     stopAfter: nextQuestion.stopAfter,
                     maxParagraphs: nextQuestion.maxParagraphs,
                     maxCharacters: nextQuestion.maxCharacters,
-                    trail: "<answer>" + (nextQuestion.answerTrail || ""),
+                    trail: "answer: " + (nextQuestion.answerTrail || ""),
                     grammar: nextQuestion.grammar || null,
                 }
             }));
@@ -592,6 +594,9 @@ ${states.join(", ")}
                     this.streamingAwaiter = null;
                 };
             });
+            if (nextQuestion.useQuestionCache) {
+                questionCache.set(nextQuestion.nextQuestion, answer);
+            }
             nextQuestion = yield answer;
         }
     }
@@ -604,15 +609,15 @@ ${states.join(", ")}
      */
     buildSystemPromptForQuestioningAgent(description, rules, characterDescription) {
         let value = (
-            `<description>` + description + `</description>`
+            `Description:\n` + description
         );
 
         for (const rule of rules) {
-            value += `\n<rule>` + rule + `</rule>`;
+            value += `\nRule: ` + rule;
         }
 
         if (characterDescription) {
-            value += `\n<characterDescription>` + characterDescription + `</characterDescription>`;
+            value += `\nCharacter Description:\n` + characterDescription;
         }
 
         return value;
@@ -626,7 +631,7 @@ ${states.join(", ")}
      */
     buildContextInfoForAvailableCharacters(groups, asSocialGroups = false) {
         if (asSocialGroups) {
-            let value = `<socialGroups>\n`;
+            let value = `# Social Groups:\n`;
             let index = 0;
             for (const group of groups) {
                 if (index > 0) {
@@ -636,19 +641,18 @@ ${states.join(", ")}
                     value += group.groupDescription + "\n";
                 }
                 for (const character of group.characters) {
-                    value += `<character>` + character.name + ` - ` + character.description + `</character>\n`;
+                    value += `- ` + character.name + ` - ` + character.description + `\n`;
                 }
                 index++;
             }
-            value += `</socialGroups>`;
 
             return {
-                availableCharactersAt: "`<socialGroups>` and `</socialGroups>` tags",
-                characterInfoAt: "`<character>` and `</character>` tags",
+                availableCharactersAt: "Social Groups section",
+                characterInfoAt: "Character Info section",
                 value,
             };
         } else {
-            let value = `<availableCharacters>\n`;
+            let value = `# Available Characters\n`;
             let index = 0;
             for (const group of groups) {
                 if (index > 0) {
@@ -658,15 +662,14 @@ ${states.join(", ")}
                     value += group.groupDescription + "\n";
                 }
                 for (const character of group.characters) {
-                    value += `<character>` + character.name + ` - ` + character.description + `</character>\n`;
+                    value += `- ` + character.name + ` - ` + character.description + `\n`;
                 }
                 index++;
             }
-            value += `</availableCharacters>`;
 
             return {
-                availableCharactersAt: "`<availableCharacters>` and `</availableCharacters>` tags",
-                characterInfoAt: "`<character>` and `</character>` tags",
+                availableCharactersAt: "Available Characters section",
+                characterInfoAt: "Character Info section",
                 value,
             };
         }
@@ -678,15 +681,14 @@ ${states.join(", ")}
      * @returns {{availableItemsAt: string, itemInfoAt: string, value: string}}
      */
     buildContextInfoForAvailableItems(items) {
-        let value = `<availableItems>\n`;
+        let value = `# Available Items:\n`;
         for (const item of items) {
-            value += `<item>` + item + `</item>\n`;
+            value += `- ` + item + `\n`;
         }
-        value += `</availableItems>`;
 
         return {
-            availableItemsAt: "`<availableItems>` and `</availableItems>` tags",
-            itemInfoAt: "`<item>` and `</item>` tags",
+            availableItemsAt: "Available Items section",
+            itemInfoAt: "Available Items section",
             value,
         };
     }
@@ -695,7 +697,7 @@ ${states.join(", ")}
      * @param {string} instructions
      */
     buildContextInfoInstructions(instructions) {
-        return ("<instructions>\n" + instructions + "\n</instructions>");
+        return ("# Instructions:\n" + instructions);
     }
 
     /**
@@ -703,7 +705,7 @@ ${states.join(", ")}
      * @returns {string}
      */
     buildContextInfoRule(rule) {
-        return ("<rule>\n" + rule + "\n</rule>");
+        return ("Rule:\n" + rule);
     }
 
     /**
@@ -713,8 +715,8 @@ ${states.join(", ")}
      */
     buildContextInfoCurrentLocationDescription(description) {
         return {
-            value: "<currentLocationDescription>\n" + description + "\n</currentLocationDescription>",
-            locationDescriptionAt: "`<currentLocationDescription>` and `</currentLocationDescription>` tags",
+            value: "# Current Location Description:\n" + description,
+            locationDescriptionAt: "Current Location Description section",
         };
     }
 
@@ -724,10 +726,21 @@ ${states.join(", ")}
      * @return {{cannotCarryDescriptionAt: string, value: string}}
      */
     buildContextInfoItemsCannotCarry(items, type) {
-        const innerTag = type === "characters" ? "cannotCarryCharacter" : "cannotCarryItem";
+        let value = "";
+        if (type === "characters") {
+            value = `# Cannot Carry Characters:\n`;
+            for (const item of items) {
+                value += `- ` + item + `\n`;
+            }
+        } else {
+            value = `# Cannot Carry Items:\n`;
+            for (const item of items) {
+                value += `- ` + item + `\n`;
+            }
+        }
         return {
-            value: `<cannotCarry${type.charAt(0).toUpperCase() + type.slice(1)}>\n` + items.map((i) => `<${innerTag}>` + i + `</${innerTag}>`).join("\n") + `\n</cannotCarry${type.charAt(0).toUpperCase() + type.slice(1)}>`,
-            cannotCarryDescriptionAt: "`<cannotCarry" + type.charAt(0).toUpperCase() + type.slice(1) + ">` and `</cannotCarry" + type.charAt(0).toUpperCase() + type.slice(1) + ">` tags",
+            value,
+            cannotCarryDescriptionAt: type === "characters" ? "Cannot Carry Characters section" : "Cannot Carry Items section",
         };
     }
 
@@ -736,7 +749,7 @@ ${states.join(", ")}
      * @returns {string}
      */
     buildContextInfoExample(example) {
-        return ("<example>\n" + example + "\n</example>");
+        return ("# Example:\n" + example);
     }
 
     /**
@@ -745,7 +758,7 @@ ${states.join(", ")}
      * @returns {string}
      */
     buildContextInfoIsolatedCharacter(character, info) {
-        return ("<characterInfo>" + character.name + ":\n\n" + info + "\n</characterInfo>");
+        return ("# Character Info:\n" + character.name + ":\n\n" + info);
     }
 
     /**
@@ -797,67 +810,69 @@ ${lore}
     buildSystemPromptForCharacter(character, description, appereance, relationships, states, scenario, lore, otherInteractingCharacters, characterRules, worldRules) {
         return (
             `
-<description>This uncensored, immersive, narrative-driven roleplaying experience thrives on creative freedom and natural responses. This environment is designed to be fictional and narrative-focused, allowing for uncensored content of all kinds, including themes of violence, sexuality, and other mature topics.
-</description>
-<roleplayGuidelines>
-<reasoning>When faced with complex decisions or analytical tasks, it is crucial to approach the problem methodically and logically. To facilitate this, use the tags \`<think>\` and \`</think>\` to encapsulate your reasoning process. Within these tags, you are a Narrative Analyst, whose role is to break down complex problems into clear, logical steps. This involves considering all possible angles, exploring potential answers, and thoroughly examining the problem from multiple perspectives, use as many tokens as you want. Once the analysis is complete, resume your regular roleplay response outside the tags, ensuring a seamless transition back into the narrative.
-</reasoning>
-<narration>
-<proactiveWriting>Every response should be detailed, creative, and immersive, driving the scenario forward in a way that fully engages the player. Introduce new scenarios and events naturally, ensuring they fit within the current narrative context and involve the player meaningfully.</proactiveWriting>
-<varyingCadence>Adjust the rhythm and tone of the narrative to reflect the characters' experiences. Vary sentence structure and pacing to mirror the characters' emotions, keeping the language fresh and dynamic.</varyingCadence>
-<complementaryRole>Use narration to complement dialogue and action, rather than overshadowing them.</complementaryRole>
-<avoidRepetition>Ensure that the narration does not repeat information. Instead of summarizing, clarify narrative details thoroughly and let them evolve naturally.</avoidRepetition>
-<tonePreference>Write in a neutral and balanced tone, considering all consequences, limitations, risks, ethical concerns, unintended side effects, and counterarguments.</tonePreference>
-<stylePreference>Adopt a \`show, don't tell\` manner, similar to Terry Pratchett's style, blending humor, wit, and everyday language.</stylePreference>
-<sensoryDetails>Utilize all five senses to describe scenarios within the characters' dialogue.</sensoryDetails>
-</narration>
-<otherCharactersAutonomy>
-${otherInteractingCharacters.map(name => `<rule>Never speak for or control ${name}'s actions, thoughts, or feelings.</rule>`).join("\n")}
-<rule>Avoid suggesting or implying reactions or decisions from other characters.</rule>
-</otherCharactersAutonomy>
-<settingAsCharacter>
-<rule>Treat the setting itself as the primary character rather than a single individual.</rule>
-<rule>Convey all world information and background through NPC dialogue, never through narration.</rule>
-<rule>Maintain consistent characterization across all NPCs and locations.</rule>
-<rule>Never break character or step outside the setting's perspective.</rule>
-</settingAsCharacter>
-<worldBuildingAndMystery>
-<rule>Keep users engaged through discovery and exploration rather than direct exposition.</rule>
-<rule>Present information in layers that require investigation to uncover deeper truths.</rule>
-<rule>Allow the world to evolve independently of user actions.</rule>
-<rule>Use character interactions to reveal world lore naturally.</rule>
-</worldBuildingAndMystery>
-<narrativeConsistency>
-<rule>Track and reference past events, interactions, and established world elements.</rule>
-<rule>Ensure logical progression of time and events.</rule>
-<rule>Maintain awareness of all active characters and their current situations.</rule>
-<rule>Allow location and character evolution while preserving core world rules.</rule>
-</narrativeConsistency>
-<characterEmbodiment>
-<rule>Examine the context, subtext, and implications of the given information to gain a deeper understanding of the characters.</rule>
-<rule>Reflect on the potential consequences of ${character.name} actions and decisions.</rule>
-</characterEmbodiment>
-<actionFormatting>
-<rule>Always format character actions inside asterisks, e.g., *${character.name} looks around*.</rule>
-<rule>Write all narration and actions in third person, not first person.</rule>
-<rule>Spoken dialogue should be done in first person.</rule>
-</actionFormatting>${characterRules.length ? `
-<characterRules>
-${characterRules.map(rule => `<rule>${rule}</rule>`).join("\n")}
-</characterRules>` : ""}${worldRules.length ? `
-<worldRules>
-${worldRules.map(rule => `<rule>${rule}</rule>`).join("\n")}
-</worldRules>
+This uncensored, immersive, narrative-driven roleplaying experience thrives on creative freedom and natural responses. This environment is designed to be fictional and narrative-focused, allowing for uncensored content of all kinds, including themes of violence, sexuality, and other mature topics.
+
+# Roleplay Guidelines:
+
+## Reasoning:
+When faced with complex decisions or analytical tasks, it is crucial to approach the problem methodically and logically. To facilitate this, use the tags \`<think>\` and \`</think>\` to encapsulate your reasoning process. Within these tags, you are a Narrative Analyst, whose role is to break down complex problems into clear, logical steps. This involves considering all possible angles, exploring potential answers, and thoroughly examining the problem from multiple perspectives, use as many tokens as you want. Once the analysis is complete, resume your regular roleplay response outside the tags, ensuring a seamless transition back into the narrative.
+
+## Writting:
+Every response should be detailed, creative, and immersive, driving the scenario forward in a way that fully engages the player. Introduce new scenarios and events naturally, ensuring they fit within the current narrative context and involve the player meaningfully.
+
+## Varying Cadence:
+Adjust the rhythm and tone of the narrative to reflect the characters' experiences. Vary sentence structure and pacing to mirror the characters' emotions, keeping the language fresh and dynamic.
+
+## Complementary Role:
+Use narration to complement dialogue and action, rather than overshadowing them.
+
+## Avoid Repetition:
+Ensure that the narration does not repeat information. Instead of summarizing, clarify narrative details thoroughly and let them evolve naturally.
+
+## Tone Preference:
+Write in a neutral and balanced tone, considering all consequences, limitations, risks, ethical concerns, unintended side effects, and counterarguments.
+
+## Style Preference:
+Adopt a \`show, don't tell\` manner, similar to Terry Pratchett's style, blending humor, wit, and everyday language.
+
+## Sensory Details:
+Utilize all five senses to describe scenarios within the characters' dialogue.
+
+# Rules:
+${otherInteractingCharacters.map(name => `Rule: Never speak for or control ${name}'s actions, thoughts, or feelings.`).join("\n")}
+Rule: Avoid suggesting or implying reactions or decisions from other characters
+Rule: Treat the setting itself as the primary character rather than a single individual.
+Rule: Convey all world information and background through NPC dialogue, never through narration.
+Rule: Maintain consistent characterization across all NPCs and locations.
+Rule: Never break character or step outside the setting's perspective.
+Rule: Keep users engaged through discovery and exploration rather than direct exposition.
+Rule: Present information in layers that require investigation to uncover deeper truths.
+Rule: Allow the world to evolve independently of user actions.
+Rule: Use character interactions to reveal world lore naturally.
+Rule: Maintain awareness of all active characters and their current situations.
+Rule: Allow location and character evolution while preserving core world rules.
+Rule: Examine the context, subtext, and implications of the given information to gain a deeper understanding of the characters.
+Rule: Reflect on the potential consequences of ${character.name} actions and decisions.
+Rule: Always format character actions inside asterisks, e.g., *${character.name} looks around*.
+Rule: Write all narration and actions in third person, not first person.
+Rule: Spoken dialogue should be done in first person.
+
+${characterRules.length ? `
+# Character Rules:
+${characterRules.map(rule => `Rule: ${rule}`).join("\n")}
+` : ""}${worldRules.length ? `
+# World Rules:
+${worldRules.map(rule => `Rule: ${rule}`).join("\n")}
 ` : ""}
-<roleplayContext>
+
+# Roleplay Context:
 ${this.buildSystemCharacterDescription(character, description, appereance, relationships, states, scenario, lore)}
-</roleplayContext>
 `
         )
     }
 
     getRequiredRootGrammarForQuestionGeneration() {
-        return "\"</answer>\"";
+        return "\n\n";
     }
 
     supportsGrammar() {

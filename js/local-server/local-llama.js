@@ -85,6 +85,7 @@ function escapeRegExp(string) {
 /**
  * @type {{
  *    modelPath: string;
+ *    mode?: "mistral" | "llama3";
  *    standard: {temperature: number; temperatureRange?: [number, number]; topP?: number; minP?: number; repeatPenalty?: number; frequencyPenalty?: number; presencePenalty?: number; maxTokens: number;},
  *    analyze: {temperature: number; temperatureRange?: [number, number]; topP?: number; minP?: number; repeatPenalty?: number; frequencyPenalty?: number; presencePenalty?: number; maxTokens: number;},
  * }}
@@ -334,7 +335,12 @@ async function prepareAnalysis(data, onDone, onError) {
         //contextSequence.eraseContextTokenRanges
 
         // TODO optimize this, for now just retokenize every time
-        ANALYSIS_TEXT = `<|start_header_id|>system<|end_header_id|>\n\n${data.system}<|eot_id><|start_header_id|>user<|end_header_id|>\n\n${data.userTrail}`;
+        if (CONFIG.mode === "mistral") {
+            ANALYSIS_TEXT = `<s>[SYSTEM_PROMPT] ${data.system}[/SYSTEM_PROMPT][INST] ${data.userTrail}`;
+        } else {
+            ANALYSIS_TEXT = `<|start_header_id|>system<|end_header_id|>\n\n${data.system}<|eot_id><|start_header_id|>user<|end_header_id|>\n\n${data.userTrail}`;
+        }
+
         if (DEBUG) {
             console.log("Prepared analysis text:", ANALYSIS_TEXT);
         }
@@ -404,7 +410,12 @@ async function runQuestion(data, onAnswer, onError) {
 
     const regexStopAfter = data.stopAfter.map(s => new RegExp(`(^|[.,;])\\s*${escapeRegExp(s)}\\s*([.,;]|$)`, 'i'));
 
-    const prompt = ANALYSIS_TEXT + "\n" + data.question + `\n<|start_header_id|>assistant<|end_header_id|>\n\n` + (data.trail || "");
+    let prompt = "";
+    if (CONFIG.mode === "mistral") {
+        prompt = ANALYSIS_TEXT + "\n\n" + data.question + `\n[/INST]\n\n` + (data.trail || "");
+    } else {
+        prompt = ANALYSIS_TEXT + "\n" + data.question + `\n<|start_header_id|>assistant<|end_header_id|>\n\n` + (data.trail || "");
+    }
     let context = null
     let completion = null;
     let answer = "";
@@ -427,7 +438,7 @@ async function runQuestion(data, onAnswer, onError) {
                 frequencyPenalty: CONFIG.analyze.frequencyPenalty,
                 presencePenalty: CONFIG.analyze.presencePenalty,
             },
-            customStopTriggers: ["<|eot_id|>", "<|start_header_id|>"].concat(data.stopAt || []),
+            customStopTriggers: (CONFIG.mode === "mistral" ? ["</s>", "[INST]"] : ["<|eot_id|>", "<|start_header_id|>"]).concat(data.stopAt || []),
             maxTokens: CONFIG.analyze.maxTokens || 512,
         }
         if (CONFIG.analyze.temperatureRange) {
@@ -456,7 +467,7 @@ async function runQuestion(data, onAnswer, onError) {
             grammar,
             onTextChunk(textSrc) {
                 try {
-                    const text = textSrc.replace("<|eot_id|>", "").replace("<|end_header_id|>", "").replace("<|start_header_id|>", "");
+                    const text = textSrc;
                     accumulatedText += text;
 
                     if (DEBUG) {
@@ -607,6 +618,9 @@ async function generateCompletion(data, onToken, onDone, onError) {
     ANALYSIS_TEXT = null;
 
     let prompt = "";
+    if (CONFIG.mode === "mistral") {
+        prompt += "<s>";
+    }
     for (const msg of data.messages) {
         if (typeof msg.content !== "string") {
             throw new Error("Invalid message content");
@@ -615,10 +629,23 @@ async function generateCompletion(data, onToken, onDone, onError) {
         } else if (!["user", "assistant", "system"].includes(msg.role)) {
             throw new Error("Invalid message role: " + msg.role);
         }
-        prompt += `<|start_header_id|>${msg.role}<|end_header_id|>\n\n${msg.content}<|eot_id>`;
-    }
-    prompt += "\n<|start_header_id|>assistant<|end_header_id|>\n\n";
+        if (CONFIG.mode === "mistral") {
+            if (msg.role === "system") {
+                prompt += `[SYSTEM_PROMPT] ${msg.content}[/SYSTEM_PROMPT][INST]`;
+            } else {
+                prompt += "\n\n" + msg.content
+            }
+        } else {
+            prompt += `<|start_header_id|>${msg.role}<|end_header_id|>\n\n${msg.content}<|eot_id>`;
+        }
 
+    }
+    if (CONFIG.mode === "mistral") {
+        prompt += "[/INST]\n\n";
+    } else {
+        prompt += "\n<|start_header_id|>assistant<|end_header_id|>\n\n";
+    }
+    
     if (data.trail) {
         prompt += data.trail;
     }
@@ -641,7 +668,7 @@ async function generateCompletion(data, onToken, onDone, onError) {
                 frequencyPenalty: CONFIG.standard.frequencyPenalty,
                 presencePenalty: CONFIG.standard.presencePenalty,
             },
-            customStopTriggers: ["<|eot_id|>", "<|start_header_id|>"].concat(data.stopAt || []),
+            customStopTriggers: (CONFIG.mode === "mistral" ? ["</s>", "[INST]"] : ["<|eot_id|>", "<|start_header_id|>"]).concat(data.stopAt || []),
             maxTokens: CONFIG.standard.maxTokens || 512,
         }
         if (CONFIG.standard.temperatureRange) {
@@ -672,7 +699,7 @@ async function generateCompletion(data, onToken, onDone, onError) {
             stopOnAbortSignal: true,
             onTextChunk(textSrc) {
                 try {
-                    const text = textSrc.replace("<|eot_id|>", "").replace("<|end_header_id|>", "").replace("<|start_header_id|>", "");
+                    const text = textSrc;
                     accumulatedText += text;
                     if (DEBUG && !DEBUG_TEST_GENERATION) {
                         // use this weird character to denote token boundaries
@@ -784,7 +811,6 @@ if (DEBUG_TEST_GENERATION) {
         startCountingFromToken: null,
         trail: null
     }, (text) => {
-        process.stdout.write(text + "§");
     }, () => {
         console.log("\nGeneration complete.");
     }, (error) => {
@@ -793,7 +819,7 @@ if (DEBUG_TEST_GENERATION) {
 
     await prepareAnalysis({
         system: "You are an expert in literature analysis, the user will provide you with stories to analyze and ask questions about them.",
-        userTrail: "<story>The story is about a young hero embarking on a quest.\n\nThe hero faces many challenges along the way.\n\nThe hero name is Arin.</story>\n\n"
+        userTrail: "<story>The story is about a young hero embarking on a quest.\n\nThe hero faces many challenges along the way.\n\nThe hero name is Arin.</story>"
     }, () => {
         console.log("Analysis prepared successfully.");
     }, (error) => {
@@ -803,14 +829,13 @@ if (DEBUG_TEST_GENERATION) {
     await runQuestion({
         question: "<question>What is the main theme of the story?</question>",
         stopAt: [
-            "</answer>",
             "."
         ],
         stopAfter: [],
-        maxParagraphs: 1,
+        maxParagraphs: 100,
         maxCharacters: 500,
         trail: "<answer>The main theme is ",
-        grammar: null,
+        grammar: `root ::= [a-zA-Z0-9 _-]+ "."`,
     }, (answer) => {
         console.log(answer);
     }, (error) => {

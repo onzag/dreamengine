@@ -380,6 +380,9 @@ export function importCharacterFromJSON(json) {
         maintenanceHydrationLitersPerDay: extractSimpleProperty(schema, json, "maintenance_hydration_liters_per_day"),
         locomotionSpeedMetersPerSecond: extractSimpleProperty(schema, json, "locomotion_speed_meters_per_second"),
         rangeMeters: extractSimpleProperty(schema, json, "range_meters"),
+        stealth: extractSimpleProperty(schema, json, "stealth"),
+        perception: extractSimpleProperty(schema, json, "perception"),
+        heroism: extractSimpleProperty(schema, json, "heroism"),
         characterRules: {},
 
         states: {},

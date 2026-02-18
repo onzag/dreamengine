@@ -3,13 +3,13 @@ import { DEngine } from '../engine/index.js';
 import fs from 'fs';
 import { nodejsImportResolver, nodejsCharacterImportResolver } from '../imports/import-resolvers-node.js';
 import { TextOnlyUI } from '../textonlyapp/ui.js';
-import { InferenceAdapterLocalServerLlama3UncensoredThink } from "../engine/inference/adapter-local-server-llama3-uncensored-think.js";
+import { InferenceAdapterLocalServerLlamaMdUncensoredThink } from "../engine/inference/adapter-local-server-llama-uncensored-md-think.js";
 
 const jsonWorld = JSON.parse(fs.readFileSync('../default-worlds/simple-lunar-station.json', 'utf-8'));
 const world = importWorldFromJSON(jsonWorld);
 
 const engine = new DEngine();
-const inferenceAdapter = new InferenceAdapterLocalServerLlama3UncensoredThink(engine, {});
+const inferenceAdapter = new InferenceAdapterLocalServerLlamaMdUncensoredThink(engine, {});
 engine.setInferenceAdapter(inferenceAdapter);
 engine.initialize({
     ageYears: 30,
@@ -52,7 +52,7 @@ const clothes = {
         addedCarryingCapacityLiters: 0,
         extraBodyVolumeWhenWornLiters: 1,
     },
-    descriptionWhenCarried: null,
+    descriptionWhenContainingCharacter: null,
     descriptionWhenWorn: null,
     isConsumable: false,
     isSeeThrough: false,

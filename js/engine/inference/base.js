@@ -11,6 +11,7 @@ import { DEngine } from "../index.js";
      * stopAt: Array<string>,
      * maxParagraphs: number,
      * maxCharacters: number,
+     * useQuestionCache?: boolean,
      * } | null>} QuestionAgentGeneratorResponse
      */
 
