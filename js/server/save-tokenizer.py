@@ -16,7 +16,7 @@ if len(sys.argv) < 2:
     sys.exit(1)
 
 gguf_path = sys.argv[1]
-output_dir = os.path.join(os.path.dirname(gguf_path), "tokenizer")
+output_dir = os.path.join(os.path.dirname(gguf_path), "tokenizer_" + gguf_path.split("/")[-1].replace(".gguf", ""))
 
 print(f"Loading tokenizer from GGUF: {gguf_path}")
 print("(This will be slow one last time...)")
