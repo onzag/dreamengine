@@ -439,9 +439,17 @@ def run_question(
         prev_len = 0
         while MODEL.has_unfinished_requests():
             step_outputs = MODEL.step()
+
+            found_its_step = False
+            stop_process = False
+
             for output in step_outputs:
+                if (output.request_id != request_id):
+                    continue  # Ignore outputs from other requests
+
+                found_its_step = True
                 new_text = output.outputs[0].text
-                delta = new_text[len(prev_len):] if isinstance(prev_len, str) else new_text[prev_len:]
+                delta = new_text[prev_len:]
                 prev_len = len(new_text)
 
                 if not delta:
@@ -464,10 +472,8 @@ def run_question(
                                 answer = answer[:len(answer) - len(delta)] + part_before
                                 print("\nAborting completion due to max paragraphs limit.")
                                 MODEL.abort_request(request_id)
+                                stop_process = True
                                 break
-                    else:
-                        continue
-                    break
 
                 if max_characters > 0 and len(answer) >= max_characters:
                     if '\n' in delta:
@@ -475,6 +481,7 @@ def run_question(
                         answer = answer[:len(answer) - len(delta)] + part_before
                         print("\nAborting completion due to max characters limit.")
                         MODEL.abort_request(request_id)
+                        stop_process = True
                         break
 
                 if regex_stop_after:
@@ -486,6 +493,7 @@ def run_question(
                             should_stop = True
                             break
                     if should_stop:
+                        stop_process = True
                         break
 
                 if data.get("repetitionBuster"):
@@ -493,12 +501,17 @@ def run_question(
                     if rep and rep["amount"] >= 3:
                         print(f"\nAborting completion due to repetition detected: {rep}")
                         MODEL.abort_request(request_id)
+                        stop_process = True
                         break
 
                 if data.get("aggressiveListRepetitionBuster") and aggressive_list_repetition_checker(answer):
                     print("\nAborting completion due to aggressive list repetition detected")
                     MODEL.abort_request(request_id)
+                    stop_process = True
                     break
+
+            if not found_its_step or stop_process:
+                break  # No more outputs for this request, exit loop
 
         answer = _strip_trailing_newlines(answer)
 
@@ -591,7 +604,15 @@ def generate_completion(
 
         while MODEL.has_unfinished_requests():
             step_outputs = MODEL.step()
+
+            stop_process = False
+            found_its_step = False
+
             for output in step_outputs:
+                if (output.request_id != request_id):
+                    continue  # Ignore outputs from other requests
+
+                found_its_step = True
                 new_text = output.outputs[0].text
                 delta = new_text[prev_len:]
                 prev_len = len(new_text)
@@ -623,6 +644,7 @@ def generate_completion(
                                     on_token(part_before)
                                 print("\nAborting completion due to max paragraphs limit.")
                                 MODEL.abort_request(request_id)
+                                stop_process = True
                                 break
                     else:
                         on_token(delta)
@@ -637,6 +659,7 @@ def generate_completion(
                             on_token(part_before)
                         print("\nAborting completion due to max characters limit.")
                         MODEL.abort_request(request_id)
+                        stop_process = True
                         break
 
                 on_token(delta)
@@ -651,7 +674,11 @@ def generate_completion(
                             should_stop = True
                             break
                     if should_stop:
+                        stop_process = True
                         break
+
+            if not found_its_step or stop_process:
+                break  # No more outputs for this request, exit loop
 
         print()
         on_done()
