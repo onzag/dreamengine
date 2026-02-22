@@ -213,6 +213,10 @@ async function loadConfig(configPath) {
 
     console.log("Config loaded successfully");
 
+    if (CONFIG.mode !== "mistral" && CONFIG.mode !== "llama3" && CONFIG.mode !== undefined) {
+        throw new Error("Invalid config: mode must be 'mistral' or 'llama3' if provided");
+    }
+
     if (MODEL_PATH !== CONFIG.modelPath) {
         // use relative path from config file
         const baseDir = path.dirname(configPath);
