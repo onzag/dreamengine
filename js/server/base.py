@@ -372,6 +372,7 @@ def prepare_analysis(
 
 def run_question(
     data: dict,
+    on_request_id: Callable[[str], None],
     on_answer: Callable[[str], None],
     on_error: Callable[[Exception], None],
 ) -> None:
@@ -433,6 +434,7 @@ def run_question(
 
     try:
         request_id = _next_request_id()
+        on_request_id(request_id)
         MODEL.add_request(request_id, prompt, sampling)
 
         answer = ""
@@ -440,11 +442,16 @@ def run_question(
         while MODEL.has_unfinished_requests():
             step_outputs = MODEL.step()
 
+            if (len(step_outputs) == 0):
+                print("No outputs from this step, but request is not finished. Continuing...")
+                continue
+
             found_its_step = False
             stop_process = False
 
             for output in step_outputs:
                 if (output.request_id != request_id):
+                    print("SKIPPED OUTPUT from other request:", output.request_id)
                     continue  # Ignore outputs from other requests
 
                 found_its_step = True
@@ -516,6 +523,7 @@ def run_question(
         answer = _strip_trailing_newlines(answer)
 
         print()
+        
         on_answer(answer)
     except Exception as e:
         print()
@@ -525,6 +533,7 @@ def run_question(
 
 def generate_completion(
     data: dict,
+    on_request_id: Callable[[str], None],
     on_token: Callable[[str], None],
     on_done: Callable[[], None],
     on_error: Callable[[Exception], None],
@@ -595,6 +604,7 @@ def generate_completion(
 
     try:
         request_id = _next_request_id()
+        on_request_id(request_id)
         MODEL.add_request(request_id, prompt, sampling)
 
         accumulated_text = ""
@@ -604,6 +614,10 @@ def generate_completion(
 
         while MODEL.has_unfinished_requests():
             step_outputs = MODEL.step()
+
+            if (len(step_outputs) == 0):
+                print("No outputs from this step, but request is not finished. Continuing...")
+                continue
 
             stop_process = False
             found_its_step = False

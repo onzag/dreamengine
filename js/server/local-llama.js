@@ -12,6 +12,7 @@ wss.on('connection', (ws) => {
         try {
             // @ts-ignore
             const data = JSON.parse(message);
+            const rid = data.rid || "no-rid";
 
             // Handle different actions
             if (data.action === 'infer') {
@@ -19,29 +20,29 @@ wss.on('connection', (ws) => {
                     throw new Error("Invalid payload for infer");
                 }
                 await generateCompletion(data.payload, (text) => {
-                    ws.send(JSON.stringify({ type: 'token', text }));
+                    ws.send(JSON.stringify({ type: 'token', rid, text }));
                 }, () => {
-                    ws.send(JSON.stringify({ type: 'done' }));
+                    ws.send(JSON.stringify({ type: 'done', rid }));
                 }, (error) => {
-                    ws.send(JSON.stringify({ type: 'error', message: error.message }));
+                    ws.send(JSON.stringify({ type: 'error', rid, message: error.message }));
                 });
             } else if (data.action === 'analyze-prepare') {
                 if (!data.payload) {
                     throw new Error("Invalid payload for analyze-prepare");
                 }
                 await prepareAnalysis(data.payload, () => {
-                    ws.send(JSON.stringify({ type: 'analyze-ready' }));
+                    ws.send(JSON.stringify({ type: 'analyze-ready', rid }));
                 }, (error) => {
-                    ws.send(JSON.stringify({ type: 'error', message: error.message }));
+                    ws.send(JSON.stringify({ type: 'error', rid, message: error.message }));
                 });
             } else if (data.action === 'analyze-question') {
                 if (!data.payload) {
                     throw new Error("Invalid payload for analyze-question");
                 }
                 await runQuestion(data.payload, (text) => {
-                    ws.send(JSON.stringify({ type: 'answer', text }));
+                    ws.send(JSON.stringify({ type: 'answer', rid, text }));
                 }, (error) => {
-                    ws.send(JSON.stringify({ type: 'error', message: error.message }));
+                    ws.send(JSON.stringify({ type: 'error', rid, message: error.message }));
                 });
             } else if (data.action === 'count-tokens') {
                 if (!data.payload || typeof data.payload.text !== "string") {
@@ -49,13 +50,13 @@ wss.on('connection', (ws) => {
                 }
                 const text = data.payload.text;
                 const tokens = MODEL.tokenize(text);
-                ws.send(JSON.stringify({ type: 'count', n_tokens: tokens.length }));
+                ws.send(JSON.stringify({ type: 'count', rid, n_tokens: tokens.length }));
             }
         } catch (e) {
             // @ts-ignore
             console.log(e.message);
             // @ts-ignore
-            ws.send(JSON.stringify({ type: 'error', message: e.message }));
+            ws.send(JSON.stringify({ type: 'error', rid, message: e.message }));
         }
     });
 

@@ -8,6 +8,9 @@
 import { DEngine } from '../index.js';
 import { BaseInferenceAdapter } from './base.js';
 
+// TODO python server and nodejs server can technically run multiple requests at the same time
+// but this adapter cannot handle that
+
 export class InferenceAdapterLocalServerLlamaXmlUncensoredThink extends BaseInferenceAdapter {
     /**
      * @param {DEngine} parent 

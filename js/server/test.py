@@ -21,7 +21,8 @@ def main():
         "maxCharacters": 0,
         "startCountingFromToken": None,
         "trail": None
-    }, lambda text: None,
+    }, lambda rqid: None,
+       lambda text: None,
        lambda: print("\nGeneration complete."),
        lambda error: print("Error during generation:", str(error)))
 
@@ -39,7 +40,7 @@ def main():
         "maxCharacters": 500,
         "trail": "<answer>The main theme is ",
         "grammar": 'root ::= "well I don\'t really know " [a-zA-Z0-9 _-]+ "."',
-    }, lambda answer: print(answer),
+    }, lambda rqid: None, lambda answer: print(answer),
        lambda error: print("Error during question answering:", str(error)))
 
     run_question({
@@ -50,7 +51,7 @@ def main():
         "stopAfter": [],
         "trail": "<answer>The protagonist name is ",
         "grammar": None,
-    }, lambda answer: print(answer),
+    }, lambda rqid: None, lambda answer: print(answer),
        lambda error: print("Error during question answering:", str(error)))
 
     run_question({
@@ -61,7 +62,7 @@ def main():
         "stopAfter": ["yes", "no"],
         "trail": "<answer>",
         "grammar": None,
-    }, lambda answer: print(answer),
+    }, lambda rqid: None, lambda answer: print(answer),
        lambda error: print("Error during question answering:", str(error)))
 
 
