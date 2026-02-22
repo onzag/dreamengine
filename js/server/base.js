@@ -15,14 +15,7 @@
  * Unix/Linux/Mac:
  * DEBUG=1 node ./local-llama.js ./testing/model.json
  * 
- * Example (debug with test generation):
- * Windows:
- * $env:DEBUG_TEST_GENERATION=1; node .\local-llama.js .\testing\model.json
- * Unix/Linux/Mac:
- * DEBUG_TEST_GENERATION=1 node ./local-llama.js ./testing/model.json
- * 
  * Remember in Windows
- * Remove-Item Env:DEBUG_TEST_GENERATION
  * Remove-Item Env:DEBUG
  * 
  * JSON File settings example
@@ -60,17 +53,14 @@
  * }
  */
 
-// change to websockets because streaming over http is a pain
-import { WebSocketServer } from 'ws';
 import fs from 'fs';
 const { LlamaCompletion, getLlama } = await import('node-llama-cpp');
 import path from 'path';
-import { LlamaGrammar } from 'node-llama-cpp';
 
 /**
  * @type {import('node-llama-cpp').LlamaModel}
  */
-let MODEL = /** @type {any} */ (null);
+export let MODEL = /** @type {any} */ (null);
 let LLAMA = await getLlama();
 let MODEL_PATH = "";
 
@@ -92,6 +82,57 @@ function escapeRegExp(string) {
  */
 let CONFIG = /** @type {any} */ (null);
 let CONFIG_PATH = "";
+
+/**
+ * @param {string} text 
+ * @param {number} minLength 
+ * @param {number} maxLength
+ * @return {{
+ *      repetitionAt: string,
+ *      amount: number,
+ *   } | null
+ * }
+ */
+function patternRepetitionChecker(text, minLength, maxLength) {
+    if (text.length < minLength) {
+        return null;
+    }
+    for (let length = minLength; length <= Math.min(maxLength, text.length); length++) {
+        const pattern = text.slice(0, length);
+        const splitted = text.split(pattern);
+        if (splitted.every(s => s === "")) {
+            const occurrences = splitted.length - 1;
+            if (occurrences > 1) {
+                return {
+                    repetitionAt: pattern,
+                    amount: occurrences,
+                };
+            }
+        }
+    }
+    return null;
+}
+
+/**
+ * @param {string} text
+ * @return {boolean}
+ */
+function aggressiveListRepetitionChecker(text) {
+    const splitted = text.split(",").map(s => s.trim()).filter(s => s.length > 0);
+    if (splitted.length === 1) {
+        return false;
+    }
+    let hasHadAnotherItemDifferentFromFirst = false;
+    for (let i = 1; i < splitted.length; i++) {
+        const item = splitted[i];
+        if (item === splitted[0] && hasHadAnotherItemDifferentFromFirst) {
+            return true;
+        } else if (item !== splitted[0]) {
+            hasHadAnotherItemDifferentFromFirst = true;
+        }
+    }
+    return false;
+}
 
 /**
  * @param {*} config 
@@ -150,7 +191,7 @@ function checkConfigValidity(config) {
 /**
  * @type {AbortController | null}
  */
-let CONTROLLER = null;
+export let CONTROLLER = null;
 
 /**
  * @param {string} configPath 
@@ -218,80 +259,11 @@ if (argv.length < 1) {
     process.exit(1);
 }
 
-const DEBUG = process.env.DEBUG === "1" || process.env.DEBUG_TEST_GENERATION === "1";
-const DEBUG_TEST_GENERATION = process.env.DEBUG_TEST_GENERATION === "1";
+const DEBUG = process.env.DEBUG === "1";
 
 console.log("DEBUG mode:", DEBUG);
 
 await loadConfig(argv[0]);
-
-if (!DEBUG_TEST_GENERATION) {
-    const wss = new WebSocketServer({ port: 8765, host: '0.0.0.0' });
-
-    wss.on('connection', (ws) => {
-        console.log('Client connected');
-
-        ws.send(JSON.stringify({ type: 'ready', message: 'Model is ready' }));
-
-        ws.on('message', async (message) => {
-            try {
-                // @ts-ignore
-                const data = JSON.parse(message);
-
-                // Handle different actions
-                if (data.action === 'infer') {
-                    if (!data.payload) {
-                        throw new Error("Invalid payload for infer");
-                    }
-                    await generateCompletion(data.payload, (text) => {
-                        ws.send(JSON.stringify({ type: 'token', text }));
-                    }, () => {
-                        ws.send(JSON.stringify({ type: 'done' }));
-                    }, (error) => {
-                        ws.send(JSON.stringify({ type: 'error', message: error.message }));
-                    });
-                } else if (data.action === 'analyze-prepare') {
-                    if (!data.payload) {
-                        throw new Error("Invalid payload for analyze-prepare");
-                    }
-                    await prepareAnalysis(data.payload, () => {
-                        ws.send(JSON.stringify({ type: 'analyze-ready' }));
-                    }, (error) => {
-                        ws.send(JSON.stringify({ type: 'error', message: error.message }));
-                    });
-                } else if (data.action === 'analyze-question') {
-                    if (!data.payload) {
-                        throw new Error("Invalid payload for analyze-question");
-                    }
-                    await runQuestion(data.payload, (text) => {
-                        ws.send(JSON.stringify({ type: 'answer', text }));
-                    }, (error) => {
-                        ws.send(JSON.stringify({ type: 'error', message: error.message }));
-                    });
-                } else if (data.action === 'count-tokens') {
-                    if (!data.payload || typeof data.payload.text !== "string") {
-                        throw new Error("Invalid payload for count-tokens");
-                    }
-                    const text = data.payload.text;
-                    const tokens = MODEL.tokenize(text);
-                    ws.send(JSON.stringify({ type: 'count', n_tokens: tokens.length }));
-                }
-            } catch (e) {
-                // @ts-ignore
-                console.log(e.message);
-                // @ts-ignore
-                ws.send(JSON.stringify({ type: 'error', message: e.message }));
-            }
-        });
-
-        ws.on('close', () => {
-            console.log('Client disconnected');
-            if (CONTROLLER) {
-                CONTROLLER.abort();
-            }
-        });
-    });
-}
 
 /**
  * @type {import('node-llama-cpp').Token[] | null}
@@ -316,7 +288,7 @@ function getDynamicTemperature(minTemp, maxTemp) {
  * @param {() => void} onDone 
  * @param {(error: Error) => void} onError 
  */
-async function prepareAnalysis(data, onDone, onError) {
+export async function prepareAnalysis(data, onDone, onError) {
     if (!MODEL) {
         throw new Error("Model not loaded");
     }
@@ -361,11 +333,13 @@ async function prepareAnalysis(data, onDone, onError) {
  * maxCharacters: number;
  * trail: string | null;
  * grammar: string | null;
+ * repetitionBuster?: boolean;
+ * aggressiveListRepetitionBuster?: boolean;
  * }} data
  * @param {(v: string) => void} onAnswer 
  * @param {(err: Error) => void} onError 
  */
-async function runQuestion(data, onAnswer, onError) {
+export async function runQuestion(data, onAnswer, onError) {
     if (CONTROLLER) {
         throw new Error("Another generation is already in progress");
     }
@@ -406,6 +380,14 @@ async function runQuestion(data, onAnswer, onError) {
 
     if (data.grammar !== null && typeof data.grammar !== "string") {
         throw new Error("Invalid grammar format");
+    }
+
+    if (data.repetitionBuster !== undefined && typeof data.repetitionBuster !== "boolean") {
+        throw new Error("Invalid repetitionBuster format");
+    }
+
+    if (data.aggressiveListRepetitionBuster !== undefined && typeof data.aggressiveListRepetitionBuster !== "boolean") {
+        throw new Error("Invalid aggressiveListRepetitionBuster format");
     }
 
     const regexStopAfter = data.stopAfter.map(s => new RegExp(`(^|[.,;])\\s*${escapeRegExp(s)}\\s*([.,;]|$)`, 'i'));
@@ -497,7 +479,6 @@ async function runQuestion(data, onAnswer, onError) {
                                 console.log("\nAborting completion due to max paragraphs limit.");
                                 CONTROLLER?.abort();
                                 CONTROLLER = null;
-                                onAnswer(answer);
                                 return;
                             }
                         }
@@ -519,7 +500,6 @@ async function runQuestion(data, onAnswer, onError) {
                                 console.log("\nAborting completion due to max characters limit.");
                                 CONTROLLER?.abort();
                                 CONTROLLER = null;
-                                onAnswer(answer);
                                 return;
                             }
                         }
@@ -536,6 +516,23 @@ async function runQuestion(data, onAnswer, onError) {
                                 return;
                             }
                         }
+                    }
+
+                    if (data.repetitionBuster) {
+                        const repetition = patternRepetitionChecker(answer, 5, 300);
+                        if (repetition && repetition.amount >= 3) {
+                            console.log("\nAborting completion due to repetition detected:", repetition);
+                            CONTROLLER?.abort();
+                            CONTROLLER = null;
+                            return;
+                        }
+                    }
+
+                    if (data.aggressiveListRepetitionBuster && aggressiveListRepetitionChecker(answer)) {
+                        console.log("\nAborting completion due to aggressive list repetition detected");
+                        CONTROLLER?.abort();
+                        CONTROLLER = null;
+                        return;
                     }
                 } catch (e) {
                     // @ts-ignore
@@ -558,6 +555,12 @@ async function runQuestion(data, onAnswer, onError) {
     }
 
     console.log("");
+
+    // For the love of god stop adding newlines at the end of the answer
+    while (answer[answer.length - 1] === '\n') {
+        answer = answer.slice(0, -1);
+    }
+
     onAnswer(answer);
     CONTROLLER = null;
 }
@@ -570,7 +573,7 @@ async function runQuestion(data, onAnswer, onError) {
  * @param {() => void} onDone 
  * @param {(error: Error) => void} onError 
  */
-async function generateCompletion(data, onToken, onDone, onError) {
+export async function generateCompletion(data, onToken, onDone, onError) {
     if (CONTROLLER) {
         throw new Error("Another generation is already in progress");
     }
@@ -645,7 +648,7 @@ async function generateCompletion(data, onToken, onDone, onError) {
     } else {
         prompt += "\n<|start_header_id|>assistant<|end_header_id|>\n\n";
     }
-    
+
     if (data.trail) {
         prompt += data.trail;
     }
@@ -701,7 +704,7 @@ async function generateCompletion(data, onToken, onDone, onError) {
                 try {
                     const text = textSrc;
                     accumulatedText += text;
-                    if (DEBUG && !DEBUG_TEST_GENERATION) {
+                    if (DEBUG) {
                         // use this weird character to denote token boundaries
                         process.stdout.write(text + "§");
                     }
@@ -795,91 +798,4 @@ async function generateCompletion(data, onToken, onDone, onError) {
     console.log("");
     onDone();
     CONTROLLER = null;
-}
-
-// Useful for quickly testing if the generation works
-if (DEBUG_TEST_GENERATION) {
-    await generateCompletion({
-        messages: [
-            { role: "system", content: "You are a helpful assistant." },
-            { role: "user", content: "Hello, how are you?" }
-        ],
-        stopAt: [],
-        stopAfter: [],
-        maxParagraphs: 0,
-        maxCharacters: 0,
-        startCountingFromToken: null,
-        trail: null
-    }, (text) => {
-    }, () => {
-        console.log("\nGeneration complete.");
-    }, (error) => {
-        console.log("Error during generation:", error.message);
-    });
-
-    await prepareAnalysis({
-        system: "You are an expert in literature analysis, the user will provide you with stories to analyze and ask questions about them.",
-        userTrail: "<story>The story is about a young hero embarking on a quest.\n\nThe hero faces many challenges along the way.\n\nThe hero name is Arin.</story>"
-    }, () => {
-        console.log("Analysis prepared successfully.");
-    }, (error) => {
-        console.log("Error during analysis preparation:", error.message);
-    });
-
-    await runQuestion({
-        question: "<question>What is the main theme of the story?</question>",
-        stopAt: [
-            "."
-        ],
-        stopAfter: [],
-        maxParagraphs: 100,
-        maxCharacters: 500,
-        trail: "<answer>The main theme is ",
-        grammar: `root ::= [a-zA-Z0-9 _-]+ "."`,
-    }, (answer) => {
-        console.log(answer);
-    }, (error) => {
-        console.log("Error during question answering:", error.message);
-    });
-
-    await runQuestion({
-        question: "<question>Who is the protagonist of the story?</question>",
-        stopAt: [
-            "</answer>",
-            ".",
-            ",",
-            ";"
-        ],
-        maxParagraphs: 1,
-        maxCharacters: 500,
-        stopAfter: [],
-        trail: "<answer>The protagonist name is ",
-        grammar: null,
-    }, (answer) => {
-        console.log(answer);
-    }, (error) => {
-        console.log("Error during question answering:", error.message);
-    });
-
-    await runQuestion({
-        question: "<question>Is the hero named Arin? Answer with YES or NO.</question>",
-        stopAt: [
-            "</answer>",
-            ".",
-            ",",
-            ";"
-        ],
-        maxParagraphs: 1,
-        maxCharacters: 500,
-        stopAfter: [
-            "yes",
-            "no"
-        ],
-        trail: "<answer>",
-        grammar: null,
-    }, (answer) => {
-        console.log(answer);
-    }, (error) => {
-        console.log("Error during question answering:", error.message);
-    });
 }

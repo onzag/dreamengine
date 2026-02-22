@@ -12,6 +12,8 @@ import { DEngine } from "../index.js";
      * maxParagraphs: number,
      * maxCharacters: number,
      * useQuestionCache?: boolean,
+     * useRepetitionBuster?: boolean,
+     * useAggressiveListRepetitionBuster?: boolean,
      * } | null>} QuestionAgentGeneratorResponse
      */
 
@@ -224,5 +226,12 @@ export class BaseInferenceAdapter {
      */
     supportsGrammar() {
         throw new Error("Method 'supportsGrammar()' must be implemented.");
+    }
+
+    /**
+     * @param {Array<{question: string; answer: string;}>} qaList 
+     */
+    buildContextInfoPreviousQuestionsAndAnswers(qaList) {
+        throw new Error("Method 'buildContextInfoPreviousQuestionsAndAnswers()' must be implemented.");
     }
 }

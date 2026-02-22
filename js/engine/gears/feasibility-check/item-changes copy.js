@@ -791,8 +791,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                 // now note how we check in this condition if there are 2 or more potential locations for the other item, because if there is only one potential location for the other item,
                 // then it doesn't matter if it is ambiguous or not, since it can only be that one location
                 if ((isAmbiguouslyAtop || isAmbiguouslyContained) && otherItemPotentialLocations.allPotentialLocationsForItem.length >= 2) {
-                    // so now we are in the case where there are more, and we are now looking for explicit mentions, because if there are explicit mentions, then we can be sure that at least some of the item were placed at a specific location4
-                    const allPotentialLocationsList = otherItemPotentialLocations.allPotentialLocationsForItem.join("\n - ");
+                    // so now we are in the case where there are more, and we are now looking for explicit mentions, because if there are explicit mentions, then we can be sure that at least some of the item were placed at a specific location
                     for (let i = 0; i < otherItemPotentialLocations.allPotentialLocationsForItem.length; i++) {
                         // this is the potential location for the other item
                         const potentialLocation = otherItemPotentialLocations.allPotentialLocationsForItem[i];
@@ -817,7 +816,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                                     `Example: If the last message said that "many of ${item} were placed on top of ${otherItem} at ${potentialLocation}, the answer would be "0" or "none" since it was explicitly stated to be on top of ${otherItem}, not inside it, even if the location was specified as ${potentialLocation}.`,
                                 ),
                                 grammar: amountGrammar,
-                                instructions: `The location "${potentialLocation}" must be EXPLICITLY WRITTEN in the last message text as the location of ${otherItem}. Do NOT infer or guess the location, all available locations where ${otherItem} might be are:\n\n` + allPotentialLocationsList,
+                                instructions: `The location "${potentialLocation}" must be EXPLICITLY WRITTEN in the last message text as the location of ${otherItem}. Do NOT infer or guess the location from context, character positions, or any other information. If the last message does not literally mention that ${otherItem} is at ${potentialLocation} in one form or another, answer "none" or "0". Only answer with a number if the message itself explicitly states the location.`,
                             });
 
                             if (placementQuestion2.done) {
@@ -850,7 +849,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
                                     `Example: If the last message said that "many of ${item} were placed inside of ${otherItem} at ${potentialLocation}, the answer would be "0" or "none" since it was explicitly stated to be inside of ${otherItem}, not on top of it, even if the location was specified as ${potentialLocation}.`,
                                 ),
-                                instructions: `The location "${potentialLocation}" must be EXPLICITLY WRITTEN in the last message text as the location of ${otherItem}. Do NOT infer or guess the location, all available locations where ${otherItem} might be are:\n\n` + allPotentialLocationsList,
+                                instructions: `The location "${potentialLocation}" must be EXPLICITLY WRITTEN in the last message text as the location of ${otherItem}. Do NOT infer or guess the location from context, character positions, or any other information. If the last message does not literally mention that ${otherItem} is at ${potentialLocation} in one form or another, answer "none" or "0". Only answer with a number if the message itself explicitly states the location.`,
                             });
 
                             if (placementQuestion2.done) {

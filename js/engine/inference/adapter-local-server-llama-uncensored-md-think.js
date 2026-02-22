@@ -572,13 +572,15 @@ ${states.join(", ")}
             this.socket.send(JSON.stringify({
                 action: "analyze-question",
                 payload: {
-                    question: (nextQuestion.contextInfo ? nextQuestion.contextInfo + "\n" : "") + "question: " + nextQuestion.nextQuestion + (nextQuestion.instructions ? ("\ninstructions:" + nextQuestion.instructions) : ""),
-                    stopAt: ["answer: "].concat(nextQuestion.stopAt),
+                    question: (nextQuestion.contextInfo ? nextQuestion.contextInfo + "\n\n" : "") + "# Question:\n\n" + nextQuestion.nextQuestion + (nextQuestion.instructions ? ("\n\n# Instructions:\n\n" + nextQuestion.instructions) : ""),
+                    stopAt: ["\n\n"].concat(nextQuestion.stopAt),
                     stopAfter: nextQuestion.stopAfter,
                     maxParagraphs: nextQuestion.maxParagraphs,
                     maxCharacters: nextQuestion.maxCharacters,
-                    trail: "answer: " + (nextQuestion.answerTrail || ""),
+                    trail: "# Answer:\n\n" + (nextQuestion.answerTrail || ""),
                     grammar: nextQuestion.grammar || null,
+                    aggressiveListRepetitionBuster: nextQuestion.useAggressiveListRepetitionBuster || false,
+                    repetitionBuster: nextQuestion.useRepetitionBuster || false,
                 }
             }));
             const answer = await new Promise((resolve, reject) => {
@@ -648,7 +650,7 @@ ${states.join(", ")}
 
             return {
                 availableCharactersAt: "Social Groups section",
-                characterInfoAt: "Character Info section",
+                characterInfoAt: "Social Groups section",
                 value,
             };
         } else {
@@ -669,7 +671,7 @@ ${states.join(", ")}
 
             return {
                 availableCharactersAt: "Available Characters section",
-                characterInfoAt: "Character Info section",
+                characterInfoAt: "Available Characters section",
                 value,
             };
         }
@@ -759,6 +761,13 @@ ${states.join(", ")}
      */
     buildContextInfoIsolatedCharacter(character, info) {
         return ("# Character Info:\n" + character.name + ":\n\n" + info);
+    }
+
+    /**
+     * @param {Array<{question: string; answer: string;}>} qaList 
+     */
+    buildContextInfoPreviousQuestionsAndAnswers(qaList) {
+        return ("# Facts:\n\n" + qaList.map(qa => `## Question:\n\n${qa.question}\n\n## Answer:\n\n${qa.answer}`).join("\n\n"));
     }
 
     /**
@@ -872,7 +881,7 @@ ${this.buildSystemCharacterDescription(character, description, appereance, relat
     }
 
     getRequiredRootGrammarForQuestionGeneration() {
-        return "\n\n";
+        return JSON.stringify("\n\n");
     }
 
     supportsGrammar() {

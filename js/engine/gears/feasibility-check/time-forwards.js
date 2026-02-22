@@ -60,7 +60,7 @@ export default async function timeForwardsUsingLastMessage(engine, character) {
         nextQuestion: nextQuestion,
         stopAt: ["\n", "."],
         stopAfter: [],
-        answerTrail: "Time Passed: ",
+        answerTrail: "Time Passed:\n\n",
         grammar: `root ::= NUMBER " " UNIT ${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()}\nNUMBER ::= ([1-9] | [1-9] [0-9] | [1-9] [0-9] [0-9])\nUNIT ::= ("seconds" | "second" | "minutes" | "minute" | "hours" | "hour" | "days" | "day" | "weeks" | "week" | "month" | "months" | "year" | "years")`,
     });
 

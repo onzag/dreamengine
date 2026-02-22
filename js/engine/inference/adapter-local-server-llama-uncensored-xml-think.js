@@ -580,8 +580,10 @@ ${states.join(", ")}
                     stopAfter: nextQuestion.stopAfter,
                     maxParagraphs: nextQuestion.maxParagraphs,
                     maxCharacters: nextQuestion.maxCharacters,
-                    trail: "<answer>" + (nextQuestion.answerTrail || ""),
+                    trail: "<answer>\n" + (nextQuestion.answerTrail || "").trim() + "\n\n",
                     grammar: nextQuestion.grammar || null,
+                    aggressiveListRepetitionBuster: nextQuestion.useAggressiveListRepetitionBuster || false,
+                    repetitionBuster: nextQuestion.useRepetitionBuster || false,
                 }
             }));
             const answer = await new Promise((resolve, reject) => {
@@ -754,6 +756,12 @@ ${states.join(", ")}
      */
     buildContextInfoIsolatedCharacter(character, info) {
         return ("<characterInfo>" + character.name + ":\n\n" + info + "\n</characterInfo>");
+    }
+    /**
+     * @param {Array<{question: string; answer: string;}>} qaList 
+     */
+    buildContextInfoPreviousQuestionsAndAnswers(qaList) {
+        return ("<facts>\n" + qaList.map(qa => `<fact>\n<question>${qa.question}</question>\n<answer>${qa.answer}</answer>\n</fact>`).join("\n") + "\n</facts>");
     }
 
     /**
