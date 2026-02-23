@@ -120,7 +120,7 @@ export default async function testWorldRulesOn(engine, character) {
     console.log("Asking question, " + nextQuestion);
 
     const spawnedMissingCharacters = await characterInteractionGenerator.next({
-        maxCharacters: 500,
+        maxSafetyCharacters: 500,
         maxParagraphs: 1,
         nextQuestion: nextQuestion,
         stopAfter: [],
@@ -192,7 +192,8 @@ export default async function testWorldRulesOn(engine, character) {
     let lastQuestion = `Has ${character.name} described any actions or reactions of other characters in the messages? do not make assumptions, only consider what is explicitly described.`;
     console.log("Asking question, " + lastQuestion);
     let specialResult1 = await generatorSpecial.next({
-        maxCharacters: 500,
+        maxCharacters: 0,
+        maxSafetyCharacters: 500,
         maxParagraphs: 5,
         nextQuestion: lastQuestion,
         contextInfo: engine.inferenceAdapter.buildContextInfoExample(
@@ -218,7 +219,8 @@ export default async function testWorldRulesOn(engine, character) {
         lastQuestion = `Has ${character.name} described an emotional response by other characters in the messages? do not make assumptions, only consider what is explicitly described.`;
         console.log("Asking question, " + lastQuestion);
         specialResult1 = await generatorSpecial.next({
-            maxCharacters: 500,
+            maxCharacters: 0,
+            maxSafetyCharacters: 500,
             maxParagraphs: 5,
             nextQuestion: lastQuestion,
             contextInfo: engine.inferenceAdapter.buildContextInfoExample(
@@ -244,7 +246,8 @@ export default async function testWorldRulesOn(engine, character) {
         lastQuestion = `Has ${character.name} described any verbal response of other characters in the messages? do not make assumptions, only consider what is explicitly described.`;
         console.log("Asking question, " + lastQuestion);
         specialResult1 = await generatorSpecial.next({
-            maxCharacters: 500,
+            maxCharacters: 0,
+            maxSafetyCharacters: 500,
             maxParagraphs: 5,
             nextQuestion: lastQuestion,
             contextInfo: engine.inferenceAdapter.buildContextInfoExample(
@@ -272,7 +275,8 @@ export default async function testWorldRulesOn(engine, character) {
         console.log("Asking question, " + lastQuestion);
 
         specialResult1 = await generatorSpecial.next({
-            maxCharacters: 500,
+            maxCharacters: 0,
+            maxSafetyCharacters: 500,
             maxParagraphs: 5,
             nextQuestion: lastQuestion,
             stopAfter: [],
@@ -325,7 +329,8 @@ export default async function testWorldRulesOn(engine, character) {
 
         // ask now for the name
         const specialResult1Whom = await generatorSpecial.next({
-            maxCharacters: 500,
+            maxCharacters: 0,
+            maxSafetyCharacters: 500,
             maxParagraphs: 5,
             nextQuestion: lastQuestion + ". Please choose from the list of characters present: " + contextInfoSurroundingCharacters.availableCharactersAt + ", or answer Unknown if it is not clear who performed the action/reaction.",
             stopAfter: [],
@@ -395,7 +400,8 @@ export default async function testWorldRulesOn(engine, character) {
         const nextQuestion = `${specificAction}. In any of the provided messages, did ${whoDidThisAction} ${doubleCheckLabel}`;
         console.log("Asking question, " + nextQuestion);
         const specialResult2 = await generatorSpecial.next({
-            maxCharacters: 250,
+            maxCharacters: 0,
+            maxSafetyCharacters: 250,
             maxParagraphs: 1,
             nextQuestion: nextQuestion,
             stopAfter: ["yes", "no"],
@@ -499,7 +505,8 @@ export default async function testWorldRulesOn(engine, character) {
         // @ts-ignore
         console.log("Asking question, " + (rule.question || ruleBreakMessage));
         const yesNoResult = await generator.next({
-            maxCharacters: 250,
+            maxCharacters: 0,
+            maxSafetyCharacters: 250,
             maxParagraphs: 1,
             // @ts-ignore
             nextQuestion: rule.question || ruleBreakMessage,
@@ -561,7 +568,8 @@ export default async function testWorldRulesOn(engine, character) {
         const nextQuestion = `considering the list at ${contextInfoCannotCarryCharacters.cannotCarryDescriptionAt}. Has ${character.name} described lifting or carrying another character that is too heavy or big for them to carry? The action must not be an attempt but a successful lifting or carrying.`;
         console.log("Asking question, " + nextQuestion);
         const liftingTooHeavyCharacter = await charactersCharacterCannotCarryWReasonsGenerator.next({
-            maxCharacters: 250,
+            maxCharacters: 0,
+            maxSafetyCharacters: 250,
             maxParagraphs: 1,
             nextQuestion: nextQuestion,
             stopAfter: [],
@@ -645,7 +653,8 @@ export default async function testWorldRulesOn(engine, character) {
         console.log("Asking question, " + nextQuestion);
 
         const liftingTooHeavyItem = await itemsCharacterCannotCarryWReasonsGenerator.next({
-            maxCharacters: 250,
+            maxCharacters: 0,
+            maxSafetyCharacters: 250,
             maxParagraphs: 1,
             nextQuestion: nextQuestion,
             stopAfter: [],
@@ -708,7 +717,8 @@ export default async function testWorldRulesOn(engine, character) {
     console.log("Asking question, " + nextQuestion2);
 
     const spawnedMissingItems = await itemsInteractionGenerator.next({
-        maxCharacters: 500,
+        maxCharacters: 0,
+        maxSafetyCharacters: 250,
         maxParagraphs: 1,
         nextQuestion: nextQuestion2,
         stopAfter: [],

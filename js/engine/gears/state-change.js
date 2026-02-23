@@ -671,7 +671,8 @@ async function determineCausants(
     }
 
     const answer = await prompter.generator.next({
-        maxCharacters: 250,
+        maxCharacters: 0,
+        maxSafetyCharacters: 250,
         maxParagraphs: 1,
         nextQuestion: executed,
         answerTrail: trail,
@@ -901,7 +902,8 @@ export default async function calculateStateChange(engine, character) {
                             prompter.initialized = true;
                         }
                         const answer = await prompter.generator.next({
-                            maxCharacters: 250,
+                            maxCharacters: 0,
+                            maxSafetyCharacters: 250,
                             maxParagraphs: 1,
                             nextQuestion: result,
                             stopAfter: ["yes", "no"],
@@ -1185,7 +1187,8 @@ export default async function calculateStateChange(engine, character) {
                     }
 
                     const answer = await prompter.generator.next({
-                        maxCharacters: 250,
+                        maxCharacters: 0,
+                        maxSafetyCharacters: 250,
                         maxParagraphs: 1,
                         nextQuestion: result,
                         stopAfter: ["yes", "no"],

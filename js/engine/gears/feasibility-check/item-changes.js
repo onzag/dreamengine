@@ -164,7 +164,8 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
         const nextQuestion = "Which items, if any, were directly physically interacted with (grabbed, picked up, moved, worn, dropped, used, etc.) in the last message? Do not list items that are only mentioned, seen, or described without physical interaction.";
         console.log("Asking question, " + nextQuestion)
         const answer = await itemsInteractionGenerator.next({
-            maxCharacters: 200,
+            maxCharacters: 0,
+            maxSafetyCharacters: 250,
             maxParagraphs: 10,
             nextQuestion: nextQuestion,
             stopAfter: [],
@@ -267,7 +268,8 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
     const nextQuestionCharacters = "What characters were mentioned or interacted with by any character in the last message?";
     console.log("Asking question, " + nextQuestionCharacters)
     const answerCharacters = await charactersInteractionGenerator.next({
-        maxCharacters: 200,
+        maxCharacters: 0,
+        maxSafetyCharacters: 250,
         maxParagraphs: 1,
         nextQuestion: nextQuestionCharacters,
         stopAfter: [],
@@ -350,7 +352,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
         console.log("Asking question, " + wasItMovedNextQuestion);
 
         const wasItMovedQuestion = await interactionGenerator.next({
-            maxCharacters: 100,
+            maxCharacters: 0, maxSafetyCharacters: 100,
             maxParagraphs: 1,
             nextQuestion: wasItMovedNextQuestion,
             stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
@@ -390,7 +392,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
             const wasItMovedConfirmationQuestion = `Is the following statement correct? In the last message, the item "${item}" was moved, picked up, carried, put on, or had its location changed. Answer "yes" if this statement is correct, or "no" if this statement is incorrect.`;
             console.log("Asking question, " + wasItMovedConfirmationQuestion);
             const wasItMovedConfirmation = await interactionGenerator.next({
-                maxCharacters: 100,
+                maxCharacters: 0, maxSafetyCharacters: 100,
                 maxParagraphs: 1,
                 nextQuestion: wasItMovedConfirmationQuestion,
                 stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
@@ -434,7 +436,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                     const nextQuestion = `For the item "${item}", according to the last message to analyze, before it was interacted with, was it originally ${allPotentialLocationsForItem[i]}?`;
                     console.log("Asking question, " + nextQuestion);
                     const whereWasItQuestion = await interactionGenerator.next({
-                        maxCharacters: 100,
+                        maxCharacters: 0, maxSafetyCharacters: 100,
                         maxParagraphs: 1,
                         nextQuestion: nextQuestion,
                         stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
@@ -510,7 +512,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
             const amountGrammar = `root ::= ([0-9]+ | "a few" | "several" | "many" | "a lot" | "some" | "half" | "most" | "all" | "none") ${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()}`;
             console.log("Asking question, " + baseAmountMovedQuestion);
             const baseAmountMovedAnswer = await interactionGenerator.next({
-                maxCharacters: 100,
+                maxCharacters: 0, maxSafetyCharacters: 100,
                 maxParagraphs: 1,
                 nextQuestion: baseAmountMovedQuestion,
                 contextInfo: engine.inferenceAdapter.buildContextInfoExample(
@@ -605,7 +607,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                     const nextQuestion = `By the end of the last message, was the item "${item}" placed inside ${isAnother ? "another " : "the item "}"${otherItem}"? As a container, ${item} must have been placed inside the item "${otherItem}", not the opposite. Answer "yes" ONLY if ${item} was PUT INTO or PLACED INSIDE ${otherItem}.`;
                     console.log("Asking question, " + nextQuestion);
                     const ambiguousPlacement = await interactionGenerator.next({
-                        maxCharacters: 100,
+                        maxCharacters: 0, maxSafetyCharacters: 100,
                         maxParagraphs: 1,
                         nextQuestion: nextQuestion,
                         useQuestionCache: true,
@@ -636,7 +638,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                 const nextQuestion2 = `By the end of the last message, was the item "${item}" on top of ${isAnother ? "another " : "the item "}"${otherItem}"? As a surface, ${item} must have been placed on top of ${isAnother ? "another " : "the item "}"${otherItem}", not the opposite. Answer "yes" ONLY if ${item} was PLACED ON TOP of ${otherItem}.`;
                 console.log("Asking question, " + nextQuestion2);
                 const ambiguousPlacement2 = await interactionGenerator.next({
-                    maxCharacters: 100,
+                    maxCharacters: 0, maxSafetyCharacters: 100,
                     maxParagraphs: 1,
                     nextQuestion: nextQuestion2,
                     useQuestionCache: true,
@@ -671,7 +673,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                         console.log("Asking question, " + confirmQuestionAtop);
 
                         const ambiguousPlacement2 = await interactionGenerator.next({
-                            maxCharacters: 100,
+                            maxCharacters: 0, maxSafetyCharacters: 100,
                             maxParagraphs: 1,
                             nextQuestion: confirmQuestionAtop,
                             stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
@@ -692,7 +694,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                         console.log("Asking question, " + confirmQuestionContained);
 
                         const ambiguousPlacementContained = await interactionGenerator.next({
-                            maxCharacters: 100,
+                            maxCharacters: 0, maxSafetyCharacters: 100,
                             maxParagraphs: 1,
                             nextQuestion: confirmQuestionContained,
                             stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
@@ -717,7 +719,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                     console.log("Asking question, " + nextQuestion);
 
                     const possessionQuestion = await interactionGenerator.next({
-                        maxCharacters: 100,
+                        maxCharacters: 0, maxSafetyCharacters: 100,
                         maxParagraphs: 1,
                         nextQuestion: nextQuestion,
                         stopAfter: [],
@@ -751,7 +753,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                         console.log("Asking question, " + nextQuestion);
 
                         const possessionQuestion = await interactionGenerator.next({
-                            maxCharacters: 100,
+                            maxCharacters: 0, maxSafetyCharacters: 100,
                             maxParagraphs: 1,
                             nextQuestion: nextQuestion,
                             stopAfter: [],
@@ -803,7 +805,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                             const nextQuestion = `How many of "${item}" were placed inside ${isAnother ? "another " : ""}"${otherItem}" where the target location of ${otherItem} is EXPLICITLY stated to be ${JSON.stringify(potentialLocation)}? ${item} must have been explcitly specified to be placed inside ${otherItem} at the explicit location ${potentialLocation}. Answer with the amount of ONLY the ${item} that were explicitly stated to be placed INSIDE ${otherItem} at the location ${potentialLocation}.`;
                             console.log("Asking question, " + nextQuestion);
                             const placementQuestion2 = await interactionGenerator.next({
-                                maxCharacters: 100,
+                                maxCharacters: 0, maxSafetyCharacters: 100,
                                 maxParagraphs: 1,
                                 nextQuestion: nextQuestion,
                                 useQuestionCache: true,
@@ -837,7 +839,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                             const nextQuestion = `How many of "${item}" were placed on top of ${isAnother ? "another " : ""}"${otherItem}" where the target location of ${otherItem} is EXPLICITLY stated to be ${JSON.stringify(potentialLocation)}? ${item} must have been explcitly specified to be placed on top of ${otherItem} at the explicit location ${potentialLocation}. Answer with the amount of ONLY the ${item} that were explicitly stated to be placed ON TOP OF ${otherItem} at the location ${potentialLocation}.`;
                             console.log("Asking question, " + nextQuestion);
                             const placementQuestion2 = await interactionGenerator.next({
-                                maxCharacters: 100,
+                                maxCharacters: 0, maxSafetyCharacters: 100,
                                 maxParagraphs: 1,
                                 nextQuestion: nextQuestion,
                                 stopAfter: [],
@@ -886,7 +888,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
             console.log("Asking question, " + nextQuestion);
             const anotherChar = charName === "${getCharacterNameForExample([charName], 0)}" ? "Fiona" : "${getCharacterNameForExample([charName], 0)}";
             const possessionQuestion = await interactionGenerator.next({
-                maxCharacters: 100,
+                maxCharacters: 0, maxSafetyCharacters: 100,
                 maxParagraphs: 1,
                 nextQuestion: nextQuestion,
                 stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
@@ -919,7 +921,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                 console.log("Asking question, " + nextQuestion);
 
                 const possessionQuestion = await interactionGenerator.next({
-                    maxCharacters: 100,
+                    maxCharacters: 0, maxSafetyCharacters: 100,
                     maxParagraphs: 1,
                     nextQuestion: nextQuestion,
                     stopAfter: [],
@@ -940,7 +942,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                     const nextQuestion = `By the end of the last message, is the item "${item}" being worn by ${charName}? Answer "yes" ONLY if ${item} was PUT ON or WORN by ${charName}. If ${item} was taken off, removed, or not put on, answer "no".`;
                     console.log("Asking question, " + nextQuestion);
                     const wornQuestion = await interactionGenerator.next({
-                        maxCharacters: 100,
+                        maxCharacters: 0, maxSafetyCharacters: 100,
                         maxParagraphs: 1,
                         nextQuestion: nextQuestion,
                         stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
@@ -981,7 +983,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
             const nextQuestionSteal = `By the last message, was the item "${item}" stolen? Answer "yes" ONLY if a character took the item without permission from its previous possessor. If the item was obtained through other means (like finding it, being given it, or moving it from one place to another without taking it from someone else), answer "no".`;
             console.log("Asking question, " + nextQuestionSteal);
             const stealQuestion = await interactionGenerator.next({
-                maxCharacters: 100,
+                maxCharacters: 0, maxSafetyCharacters: 100,
                 maxParagraphs: 1,
                 nextQuestion: nextQuestionSteal,
                 stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
@@ -1013,7 +1015,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
 
                 console.log("Asking question, " + nextQuestion);
                 const stealByQuestion = await interactionGenerator.next({
-                    maxCharacters: 100,
+                    maxCharacters: 0, maxSafetyCharacters: 100,
                     maxParagraphs: 1,
                     nextQuestion: nextQuestion,
                     stopAfter: charactersToQuestion.concat(["none"]),
@@ -1042,7 +1044,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                     const nextQuestion = `By the last message, which characters could have witnessed the theft of "${item}"? Answer with the names of the characters who witnessed it, separated by commas. If it's not clear who witnessed it, answer with "none".`;
                     console.log("Asking question, " + nextQuestion);
                     const witnessesQuestion = await interactionGenerator.next({
-                        maxCharacters: 100,
+                        maxCharacters: 0, maxSafetyCharacters: 100,
                         maxParagraphs: 1,
                         nextQuestion: nextQuestion,
                         stopAfter: [],
@@ -1114,7 +1116,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
         const nextQuestion = `By the end of the last message, is ${charName} inside ${item}? Answer "yes" ONLY if ${charName} got inside ${item} by entering it, climbing into it, or being put into it. If ${charName} is near ${item} but not inside it, or if it's not clear if they are inside it, answer "no".`;
         console.log("Asking question, " + nextQuestion);
         const insideQuestion = await interactionGenerator.next({
-            maxCharacters: 100,
+            maxCharacters: 0, maxSafetyCharacters: 100,
             maxParagraphs: 1,
             nextQuestion: nextQuestion,
             stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
@@ -1151,7 +1153,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
         const nextQuestion = `By the end of the last message, is ${charName} on top of ${item} (sitting, standing, or laying on it, or any other position atop)? Answer "yes" ONLY if ${charName} got on top of ${item} by sitting, standing, laying on it, or being placed on top of it. If ${charName} is near ${item} but not on top of it, or if it's not clear if they are on top of it, answer "no".`;
         console.log("Asking question, " + nextQuestion);
         const atopQuestion = await interactionGenerator.next({
-            maxCharacters: 100,
+            maxCharacters: 0, maxSafetyCharacters: 100,
             maxParagraphs: 1,
             nextQuestion: nextQuestion,
             stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
@@ -1324,7 +1326,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
 //             const nextQuestion = `By the end of the last message, did ${charName} get out of ${charState.insideItem} (the item they were inside)? Answer "yes" ONLY if ${charName} got out of ${charState.insideItem} by exiting it, climbing out of it, or being taken out of it. If ${charName} is still inside ${charState.insideItem}, or if it's not clear if they got out of it, answer "no".`;
 //             console.log("Asking question, " + nextQuestion);
 //             const outsideQuestion = await interactionGenerator.next({
-//                 maxCharacters: 100,
+//                 maxCharacters: 0, maxSafetyCharacters: 100,
 //                 maxParagraphs: 1,
 //                 nextQuestion: nextQuestion,
 //                 stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
@@ -1355,7 +1357,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
 //             const nextQuestion = `By the end of the last message, did ${charName} get off of ${charState.atopItem} (the item they were ${charState.posture} on)? Answer "yes" ONLY if ${charName} got off of ${charState.atopItem} by standing up from it, getting down from it to the ground, or being taken off of it. If ${charName} is still on top of ${charState.atopItem}, or if it's not clear if they got off of it, answer "no".`;
 //             console.log("Asking question, " + nextQuestion);
 //             const offQuestion = await interactionGenerator.next({
-//                 maxCharacters: 100,
+//                 maxCharacters: 0, maxSafetyCharacters: 100,
 //                 maxParagraphs: 1,
 //                 nextQuestion: nextQuestion,
 //                 stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
@@ -1404,7 +1406,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
 //         console.log("Asking question, " + nextQuestion);
 
 //         const carryingQuestion = await interactionGenerator.next({
-//             maxCharacters: 100,
+//             maxCharacters: 0, maxSafetyCharacters: 100,
 //             maxParagraphs: 1,
 //             nextQuestion: nextQuestion,
 //             stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],

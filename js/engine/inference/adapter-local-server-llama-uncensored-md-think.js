@@ -333,6 +333,7 @@ ${states.join(", ")}
             startCountingFromToken: "</think>",
             maxParagraphs: 3,
             maxCharacters: 1000,
+            maxSafetyCharacters: 5000,
         };
 
         for (const msg of messagesToAdd) {
@@ -580,6 +581,7 @@ ${states.join(", ")}
                     stopAfter: nextQuestion.stopAfter,
                     maxParagraphs: nextQuestion.maxParagraphs,
                     maxCharacters: nextQuestion.maxCharacters,
+                    maxSafetyCharacters: nextQuestion.maxSafetyCharacters,
                     trail: "# Answer:\n\n" + (nextQuestion.answerTrail || ""),
                     grammar: nextQuestion.grammar || null,
                     aggressiveListRepetitionBuster: nextQuestion.useAggressiveListRepetitionBuster || false,

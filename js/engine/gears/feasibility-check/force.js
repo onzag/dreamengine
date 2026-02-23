@@ -80,7 +80,8 @@ export default async function testMessageFeasibilityForce(engine, character) {
     console.log("Asking question, " + nextQuestion);
     const answerToQuestion = await generator.next({
         maxParagraphs: 1,
-        maxCharacters: 500,
+        maxCharacters: 0,
+        maxSafetyCharacters: 250,
         nextQuestion: nextQuestion,
         stopAt: ["\n", "."],
         stopAfter: [],
@@ -133,7 +134,8 @@ export default async function testMessageFeasibilityForce(engine, character) {
 
             const answerAboutWhat = await generator.next({
                 maxParagraphs: 1,
-                maxCharacters: 500,
+                maxCharacters: 0,
+                maxSafetyCharacters: 250,
                 nextQuestion: nextQuestion,
                 stopAt: ["\n", "."],
                 stopAfter: [],
@@ -255,7 +257,8 @@ export default async function testMessageFeasibilityForce(engine, character) {
 
             const feasibilityAnswer = await feasibilityGenerator.next({
                 maxParagraphs: 1,
-                maxCharacters: 250,
+                maxCharacters: 0,
+                maxSafetyCharacters: 250,
                 nextQuestion: nextQuestion,
                 stopAt: ["\n", "."],
                 stopAfter: [],

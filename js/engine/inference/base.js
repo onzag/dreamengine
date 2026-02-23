@@ -11,6 +11,7 @@ import { DEngine } from "../index.js";
      * stopAt: Array<string>,
      * maxParagraphs: number,
      * maxCharacters: number,
+     * maxSafetyCharacters: number,
      * useQuestionCache?: boolean,
      * useRepetitionBuster?: boolean,
      * useAggressiveListRepetitionBuster?: boolean,
