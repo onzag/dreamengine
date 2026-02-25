@@ -3,13 +3,13 @@ import { DEngine } from '../engine/index.js';
 import fs from 'fs';
 import { nodejsImportResolver, nodejsCharacterImportResolver } from '../imports/import-resolvers-node.js';
 import { TextOnlyUI } from '../textonlyapp/ui.js';
-import { InferenceAdapterLocalServerLlamaMdUncensoredThink } from "../engine/inference/adapter-local-server-llama-uncensored-md-think.js";
+import { InferenceAdapterLlamaUncensored } from "../engine/inference/adapter-llama-uncensored.js";
 
 const jsonWorld = JSON.parse(fs.readFileSync('../default-worlds/simple-lunar-station.json', 'utf-8'));
 const world = importWorldFromJSON(jsonWorld);
 
 const engine = new DEngine();
-const inferenceAdapter = new InferenceAdapterLocalServerLlamaMdUncensoredThink(engine, {});
+const inferenceAdapter = new InferenceAdapterLlamaUncensored(engine, {});
 engine.setInferenceAdapter(inferenceAdapter);
 engine.initialize({
     ageYears: 30,

@@ -8,16 +8,19 @@
 import { DEngine } from '../index.js';
 import { BaseInferenceAdapter } from './base.js';
 
-// TODO python server and nodejs server can technically run multiple requests at the same time
-// but this adapter cannot handle that
+function cheapRID() {
+    return Math.random().toString(36).substring(2) + Date.now().toString(36);
+}
 
-export class InferenceAdapterLocalServerLlamaXmlUncensoredThink extends BaseInferenceAdapter {
+export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
     /**
      * @param {DEngine} parent 
      * @param {{
      *    host?: string;
-     *    contextWindowSize?: number;
-     *    dummyMode?: boolean;
+     *    mode?: "xml" | "md";
+     *    thinkTag?: boolean;
+     *    apiKey?: string;
+     *    secret?: string;
      * }} options
      */
     constructor(parent, options) {
@@ -38,10 +41,19 @@ export class InferenceAdapterLocalServerLlamaXmlUncensoredThink extends BaseInfe
          */
         this.streamingAwaiter = null;
 
-        this.initialized = false;
+        this.connected = false;
+        /**
+         * @type {string | null}
+         */
+        this.reason = null;
 
         this.onData = this.onData.bind(this);
         this.options = options;
+
+        /**
+         * @type {Object.<string, [(data: any) => void, (err: any) => void]>}
+         */
+        this.listener = {};
     }
 
     /**
@@ -57,37 +69,44 @@ export class InferenceAdapterLocalServerLlamaXmlUncensoredThink extends BaseInfe
             throw new Error("Another inference is already in progress");
         }
 
-        /**
-         * @returns {Promise<number>}
-         */
-        return new Promise((resolve, reject) => {
-            this.streamingAwaiter = (data, done, err) => {
-                if (err) {
-                    reject(new Error(err));
-                } else if (typeof data === "number") {
-                    resolve(/** @type {number} */(data));
-                } else {
-                    reject(new Error("Invalid data received for token count: " + data));
-                }
-                this.streamingAwaiter = null;
-            };
-            // @ts-ignore
-            this.socket.send(JSON.stringify({ action: "count-tokens", payload: { text } }));
-        });
+        const rid = cheapRID();
+        this.socket.send(JSON.stringify({ action: "count-tokens", payload: { text } }));
+        const data = await (new Promise((resolve, reject) => {
+            this.listener[rid] = [resolve, (err) => {
+                delete this.listener[rid];
+                reject(new Error(err));
+            }];
+        }));
+        delete this.listener[rid];
+
+        const tokenCount = data.n_tokens;
+        if (typeof tokenCount !== "number") {
+            throw new Error("Invalid response for token count: " + JSON.stringify(data));
+        }
+        return tokenCount;
+    }
+
+    async ensureInitialized() {
+        if (this.connected) {
+            return;
+        }
+
+        if (this.socket) {
+            return new Promise((resolve, reject) => {
+                // @ts-ignore
+                this.onConnectionStatusChangePromises.push([resolve, (err) => reject(new Error(err))]);
+            });
+        }
+
+        await this.initialize();
     }
 
     async initialize() {
-        if (this.initialized) {
+        if (this.connected) {
             return;
         }
 
-        if (this.options.dummyMode) {
-            console.log("InferenceAdapterLocalServerLlamaXmlUncensoredThink: Dummy mode enabled, skipping initialization.");
-            this.initialized = true;
-            return;
-        }
-
-        console.log("InferenceAdapterLocalServerLlamaXmlUncensoredThink: Initializing connection to local server at " + (this.options.host || 'ws://127.0.0.1:8765'));
+        console.log("InferenceAdapterLlamaUncensored: Initializing connection to server at " + (this.options.host || 'ws://127.0.0.1:8765'));
 
         // set a websocket to the local server
         this.socket = new WebSocket(this.options.host || 'ws://127.0.0.1:8765');
@@ -99,8 +118,13 @@ export class InferenceAdapterLocalServerLlamaXmlUncensoredThink extends BaseInfe
         return new Promise((resolve, reject) => {
             // @ts-ignore bugged out ts definition
             this.resolveInitializePromise = () => {
-                this.initialized = true;
-                console.log("InferenceAdapterLocalServerLlamaXmlUncensoredThink: Connection to local server established.");
+                this.connected = true;
+                console.log("InferenceAdapterLlamaUncensored: Connection to local server established.");
+                this.resolveInitializePromise = null;
+                this.rejectInitializePromise = null;
+                this.reason = null;
+                this.triggerOnConnectionStatusChange(true)
+
                 // @ts-ignore
                 resolve();
             };
@@ -140,16 +164,20 @@ export class InferenceAdapterLocalServerLlamaXmlUncensoredThink extends BaseInfe
                 else
                     lastClosureReason = "Unknown reason";
 
-                console.log("InferenceAdapterLocalServerLlamaXmlUncensoredThink: WebSocket error during initialization", lastClosureReason);
+                console.log("InferenceAdapterLlamaUncensored: WebSocket error during initialization", lastClosureReason);
                 if (this.rejectInitializePromise) {
                     // @ts-ignore
                     this.rejectInitializePromise(new Error(lastClosureReason));
                     this.resolveInitializePromise = null;
                     this.rejectInitializePromise = null;
-                }
-                if (this.streamingAwaiter) {
-                    // @ts-ignore
-                    this.streamingAwaiter(null, false, lastClosureReason);
+                    this.reason = lastClosureReason;
+                    this.triggerOnConnectionStatusChange(false, lastClosureReason);
+                    Object.keys(this.listener).forEach(rid => {
+                        const [, reject] = this.listener[rid];
+                        reject(new Error("Connection closed: " + lastClosureReason));
+                    });
+                    this.connected = false;
+                    this.socket = null;
                 }
             };
         });
@@ -165,6 +193,15 @@ export class InferenceAdapterLocalServerLlamaXmlUncensoredThink extends BaseInfe
             const data = JSON.parse(event.data);
 
             if (data.type == "ready") {
+                this.contextWindowSize = data.context_window_size;
+                this.doSupportsParallelRequests = data.supports_parallel_requests;
+
+                console.log("InferenceAdapterLlamaUncensored: Received ready message from server. Context window size: " + this.contextWindowSize + ", Supports parallel requests: " + this.doSupportsParallelRequests);
+
+                if (!this.doSupportsParallelRequests) {
+                    console.warn("InferenceAdapterLlamaUncensored: The connected model does not support parallel requests, this means that only one user at a time can interact with the endpoint.");
+                }
+
                 if (this.resolveInitializePromise) {
                     this.resolveInitializePromise();
                     this.resolveInitializePromise = null;
@@ -176,30 +213,11 @@ export class InferenceAdapterLocalServerLlamaXmlUncensoredThink extends BaseInfe
                     this.resolveInitializePromise = null;
                     this.rejectInitializePromise = null;
                 }
-                if (this.streamingAwaiter) {
-                    // @ts-ignore
-                    this.streamingAwaiter(null, false, data.message);
-                }
-            } else if (data.type == "token") {
-                if (this.streamingAwaiter) {
-                    this.streamingAwaiter(data.token, false, null);
-                }
-            } else if (data.type == "answer") {
-                if (this.streamingAwaiter) {
-                    this.streamingAwaiter(data.text, false, null);
-                }
-            } else if (data.type == "count") {
-                if (this.streamingAwaiter) {
-                    this.streamingAwaiter(data.n_tokens, false, null);
-                }
-            } else if (data.type == "done") {
-                if (this.streamingAwaiter) {
-                    // @ts-ignore
-                    this.streamingAwaiter(null, true, null);
-                }
-            } else if (data.type == "analyze-ready") {
-                if (this.streamingAwaiter) {
-                    this.streamingAwaiter("ready", false, null);
+            }
+
+            if (data.rid) {
+                if (this.listener[data.rid]) {
+                    this.listener[data.rid][0](data);
                 }
             }
         } catch (err) {
@@ -223,9 +241,9 @@ export class InferenceAdapterLocalServerLlamaXmlUncensoredThink extends BaseInfe
      * @param {string} narrativeEffect
      */
     buildActionPromptForCharacter(character, action, primaryEmotion, emotionalRange, states, narrativeEffect) {
-        return (
-            `
-<instructions>
+        if (this.options.mode === "xml") {
+            return (
+                `<instructions>
 <rule>Always format narration inside asterisks and in third person eg. \`*${character.name} ...*\`</rule>
 <rule>Spoken dialogue should be done in first person.</rule>
 <action>
@@ -250,13 +268,40 @@ ${states.length > 0 ? `
 ${states.join(", ")}
 ` : ""}
 </action>
-</instructions>
-`
+</instructions>`
+            )
+        }
+        return (
+            `
+**INSTRUCTIONS**
+
+Rule: Always format narration inside asterisks and in third person eg. \`*${character.name} ...*\`
+Rule: Spoken dialogue should be done in first person.
+
+${character.name} is about to take an action described as follows:
+
+## Action Description:
+${action}
+
+## Narrative Effect:
+${narrativeEffect}
+
+## Primary Emotion:
+${primaryEmotion}
+${emotionalRange.length > 0 ? `
+
+## Emotional Range:
+${emotionalRange.join(", ")}
+` : ""}
+${states.length > 0 ? `
+
+## Character States:
+${states.join(", ")}
+` : ""}`
         )
     }
 
     /**
-     * 
      * @param {DECompleteCharacterReference} character 
      * @param {string} system 
      * @param {(AsyncGenerator<{name: string, message: string, id: string, conversationId: string | null, debug: boolean, rejected: boolean}, void, boolean> | Array<{name: string, message: string}>)} getHistoryForCharacter
@@ -272,16 +317,9 @@ ${states.join(", ")}
         if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
             throw new Error("WebSocket is not open");
         }
-        if (this.streamingAwaiter) {
-            throw new Error("Another inference is already in progress");
-        }
 
         let tokensExhaustedApprox = 512; // initial buffer
-        let contextWindowSize = 2048 * 4; // 8k context
-
-        if (this.options.contextWindowSize && Number.isInteger(this.options.contextWindowSize)) {
-            contextWindowSize = this.options.contextWindowSize;
-        }
+        let contextWindowSize = this.contextWindowSize
 
         // wiggle room for system prompt
         tokensExhaustedApprox += await this.countTokens(system);
@@ -323,6 +361,7 @@ ${states.join(", ")}
                 otherCharacterNames.add(msg.name);
             }
         }
+
         const payload = {
             messages: [
                 {
@@ -330,10 +369,10 @@ ${states.join(", ")}
                     content: system,
                 },
             ],
-            trail: "[" + character.name + "]: <think>",
-            stopAt: ["<think>"].concat(Array.from(otherCharacterNames).map(name => `\n[${name}]:`)),
+            trail: "[" + character.name + "]: " + (this.options.thinkTag ? "<think>" : ""),
+            stopAt: this.options.thinkTag ? ["<think>"].concat(Array.from(otherCharacterNames).map(name => `\n[${name}]:`)) : Array.from(otherCharacterNames).map(name => `\n[${name}]:`),
             stopAfter: [],
-            startCountingFromToken: "</think>",
+            startCountingFromToken: this.options.thinkTag ? "</think>" : null,
             maxParagraphs: 3,
             maxCharacters: 1000,
             maxSafetyCharacters: 5000,
@@ -370,64 +409,45 @@ ${states.join(", ")}
             }
         }
 
-        this.socket.send(JSON.stringify({ action: "infer", payload }));
+        const rid = cheapRID();
+        this.socket.send(JSON.stringify({ action: "infer", payload, rid }));
 
-        /**
-         * @type {*}
-         */
-        let waitForMessagesToProcessResolve = null;
-        /**
-         * @type {Promise<void> | null}
-         */
-        let waitForMessagesToProcessPromise = null;
-        /**
-         * @type Array<{token: string, done: boolean, err: string | null}>
-         */
-        let collectedMessages = [];
+        // by default we are thinking if we use the think tag, otherwise we are not
+        let isThinking = this.options.thinkTag ? true : false;
 
-        // by default we are thinking because we used the trail <think>
-        let isThinking = true;
+        let collectedMessage = "";
+        let alreadyOutOfThinkLoop = this.options.thinkTag ? false : true;
 
-        this.streamingAwaiter = (data, done, err) => {
-            // @ts-ignore
-            if (data.includes("<think>")) {
-                isThinking = true;
-                // @ts-ignore
-            } else if (data.includes("</think>")) {
-                isThinking = false;
-            } else if (!isThinking || done) {
-                collectedMessages.push({ token: /** @type {string} */ (data), done, err });
-                if (waitForMessagesToProcessResolve) {
-                    waitForMessagesToProcessResolve();
-                }
-            }
-        }
         while (true) {
-            if (collectedMessages.length === 0) {
-                waitForMessagesToProcessPromise = new Promise((resolve) => {
-                    waitForMessagesToProcessResolve = resolve;
-                });
-                await waitForMessagesToProcessPromise;
-                waitForMessagesToProcessPromise = null;
-                waitForMessagesToProcessResolve = null;
-            }
-
-            let messagesToProcess = collectedMessages;
-            collectedMessages = [];
-
-            for (const msg of messagesToProcess) {
-                let shouldContinue = true;
-                if (msg.token && msg.token.trim().length > 0) {
-                    shouldContinue = yield msg.token;
-                }
-                if (msg.done || msg.err || shouldContinue === false) {
-                    if (!shouldContinue) {
-                        // send a cancel message
-                        this.socket.send(JSON.stringify({ action: "cancel" }));
+            const data = await new Promise((resolve, reject) => {
+                this.listener[rid] = [resolve, (err) => {
+                    delete this.listener[rid];
+                    reject(new Error(err));
+                }];
+            });
+            delete this.listener[rid];
+            if (data.type === "token") {
+                collectedMessage += data.token;
+                if (!alreadyOutOfThinkLoop) {
+                    const outOfThinkLoopNow = collectedMessage.includes("</think>");
+                    if (outOfThinkLoopNow) {
+                        isThinking = false;
+                        alreadyOutOfThinkLoop = true;
+                        const tokensAfterThinkTag = collectedMessage.split("</think>")[1];
+                        const shouldContinue = yield tokensAfterThinkTag;
+                        if (shouldContinue === false) {
+                            // send a cancel message
+                            this.socket.send(JSON.stringify({ action: "cancel", "rid": rid }));
+                            break;
+                        }
                     }
-                    this.streamingAwaiter = null;
-                    return;
                 }
+            } else if (data.type === "done") {
+                break;
+            } else if (data.type === "error") {
+                throw new Error(data.message);
+            } else {
+                throw new Error("Unexpected message type during inference: " + data.type);
             }
         }
     }
@@ -459,15 +479,11 @@ ${states.join(", ")}
         }
 
         let tokensExhaustedApprox = 512; // initial buffer
-        let contextWindowSize = 2048 * 4; // 8k context
-
-        if (this.options.contextWindowSize && Number.isInteger(this.options.contextWindowSize)) {
-            contextWindowSize = this.options.contextWindowSize;
-        }
+        let contextWindowSize = this.contextWindowSize
 
         // wiggle room for system prompt
         tokensExhaustedApprox += await this.countTokens(system);
-        tokensExhaustedApprox += await this.countTokens("<messages>") + await this.countTokens("</messages>");
+        tokensExhaustedApprox += await this.countTokens("messages: ");
 
         /**
          * @type {Array<{name: string, message: string}>}
@@ -533,12 +549,21 @@ ${states.join(", ")}
         if (!remarkLastMessageForAnalysis) {
             const messagesFormatted = messagesToAdd.map(msg => `[` + msg.name + `]: ` + msg.message).join("\n\n");
 
-            const payload = {
-                system: system,
-                userTrail: (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "") + "<messages>\n" + messagesFormatted + "\n</messages>" + (contextInfoAfter ? "\n" + contextInfoAfter : ""),
-            };
+            if (this.options.mode === "xml") {
+                const payload = {
+                    system: system,
+                    userTrail: (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "") + "<messages>\n" + messagesFormatted + "\n</messages>" + (contextInfoAfter ? "\n" + contextInfoAfter : ""),
+                };
 
-            this.socket.send(JSON.stringify({ action: "analyze-prepare", payload }));
+                this.socket.send(JSON.stringify({ action: "analyze-prepare", payload }));
+            } else {
+                const payload = {
+                    system: system,
+                    userTrail: (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "") + "# Messages:\n" + messagesFormatted + "\n\n" + (contextInfoAfter ? "\n" + contextInfoAfter : ""),
+                };
+
+                this.socket.send(JSON.stringify({ action: "analyze-prepare", payload }));
+            }
         } else {
             const lastMessage = messagesToAdd[messagesToAdd.length - 1];
             const restMessages = messagesToAdd.slice(0, -1);
@@ -546,27 +571,22 @@ ${states.join(", ")}
             const restMessagesFormatted = restMessages.map(msg => `[` + msg.name + `]: ` + msg.message).join("\n\n");
             const lastMessageFormatted = `[` + lastMessage.name + `]: ` + lastMessage.message;
 
-            const payload = {
-                system: system,
-                userTrail: (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "") + "<previousMessages>\n" + restMessagesFormatted + "\n</previousMessages><analyze><lastMessage>" + lastMessageFormatted + "</lastMessage></analyze>" + (contextInfoAfter ? "\n" + contextInfoAfter : ""),
-            };
+            if (this.options.mode === "xml") {
+                const payload = {
+                    system: system,
+                    userTrail: (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "") + "<previousMessages>\n" + restMessagesFormatted + "\n</previousMessages><analyze><lastMessage>" + lastMessageFormatted + "</lastMessage></analyze>" + (contextInfoAfter ? "\n" + contextInfoAfter : ""),
+                };
 
-            this.socket.send(JSON.stringify({ action: "analyze-prepare", payload }));
+                this.socket.send(JSON.stringify({ action: "analyze-prepare", payload }));
+            } else {
+                const payload = {
+                    system: system,
+                    userTrail: (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "") + "# Previous Messages:\n" + restMessagesFormatted + "\n\n# Last Message to Analyze:\n" + lastMessageFormatted + (contextInfoAfter ? "\n" + contextInfoAfter : ""),
+                };
+
+                this.socket.send(JSON.stringify({ action: "analyze-prepare", payload }));
+            }
         }
-
-        await new Promise((resolve, reject) => {
-            this.streamingAwaiter = (data, done, err) => {
-                if (err) {
-                    reject(new Error(err));
-                } else if (data === "ready") {
-                    // @ts-ignore
-                    resolve();
-                } else {
-                    reject(new Error("Unexpected data received from questioning agent during preparation: " + data));
-                }
-                this.streamingAwaiter = null;
-            };
-        });
 
         let questionCache = new Map();
         let nextQuestion = yield "ready";
@@ -575,39 +595,63 @@ ${states.join(", ")}
                 nextQuestion = yield questionCache.get(nextQuestion.nextQuestion);
                 continue;
             }
+            const rid = cheapRID();
             // send the next question
-            this.socket.send(JSON.stringify({
-                action: "analyze-question",
-                payload: {
-                    question: (nextQuestion.contextInfo ? nextQuestion.contextInfo + "\n" : "") + "<question>" + nextQuestion.nextQuestion + "</question>" + (nextQuestion.instructions ? ("\n<instructions>" + nextQuestion.instructions + "</instructions>") : ""),
-                    stopAt: ["</answer>"].concat(nextQuestion.stopAt),
-                    stopAfter: nextQuestion.stopAfter,
-                    maxParagraphs: nextQuestion.maxParagraphs,
-                    maxCharacters: nextQuestion.maxCharacters,
-                    maxSafetyCharacters: nextQuestion.maxSafetyCharacters,
-                    trail: "<answer>\n" + (nextQuestion.answerTrail || "").trim() + "\n\n",
-                    grammar: nextQuestion.grammar || null,
-                    aggressiveListRepetitionBuster: nextQuestion.useAggressiveListRepetitionBuster || false,
-                    repetitionBuster: nextQuestion.useRepetitionBuster || false,
-                }
-            }));
-            const answer = await new Promise((resolve, reject) => {
-                this.streamingAwaiter = (data, done, err) => {
-                    if (err) {
-                        reject(new Error(err));
-                    } else if (data) {
-                        // @ts-ignore
-                        resolve(data);
-                    } else {
-                        reject(new Error("No data received from questioning agent."));
+            if (this.options.mode === "xml") {
+                this.socket.send(JSON.stringify({
+                    action: "analyze-question",
+                    rid,
+                    payload: {
+                        question: (nextQuestion.contextInfo ? nextQuestion.contextInfo + "\n" : "") + "<question>" + nextQuestion.nextQuestion + "</question>" + (nextQuestion.instructions ? ("\n<instructions>" + nextQuestion.instructions + "</instructions>") : ""),
+                        stopAt: ["</answer>"].concat(nextQuestion.stopAt),
+                        stopAfter: nextQuestion.stopAfter,
+                        maxParagraphs: nextQuestion.maxParagraphs,
+                        maxCharacters: nextQuestion.maxCharacters,
+                        maxSafetyCharacters: nextQuestion.maxSafetyCharacters,
+                        trail: "<answer>\n" + (nextQuestion.answerTrail || "").trim() + "\n\n",
+                        grammar: nextQuestion.grammar || null,
+                        aggressiveListRepetitionBuster: nextQuestion.useAggressiveListRepetitionBuster || false,
+                        repetitionBuster: nextQuestion.useRepetitionBuster || false,
                     }
-                    this.streamingAwaiter = null;
-                };
-            });
-            if (nextQuestion.useQuestionCache) {
-                questionCache.set(nextQuestion.nextQuestion, answer);
+                }));
+            } else {
+                this.socket.send(JSON.stringify({
+                    action: "analyze-question",
+                    rid,
+                    payload: {
+                        question: (nextQuestion.contextInfo ? nextQuestion.contextInfo + "\n\n" : "") + "# Question:\n\n" + nextQuestion.nextQuestion + (nextQuestion.instructions ? ("\n\n# Instructions:\n\n" + nextQuestion.instructions) : ""),
+                        stopAt: ["\n\n"].concat(nextQuestion.stopAt),
+                        stopAfter: nextQuestion.stopAfter,
+                        maxParagraphs: nextQuestion.maxParagraphs,
+                        maxCharacters: nextQuestion.maxCharacters,
+                        maxSafetyCharacters: nextQuestion.maxSafetyCharacters,
+                        trail: "# Answer:\n\n" + (nextQuestion.answerTrail || ""),
+                        grammar: nextQuestion.grammar || null,
+                        aggressiveListRepetitionBuster: nextQuestion.useAggressiveListRepetitionBuster || false,
+                        repetitionBuster: nextQuestion.useRepetitionBuster || false,
+                    }
+                }));
             }
-            nextQuestion = yield answer;
+
+            const data = await new Promise((resolve, reject) => {
+                this.listener[rid] = [resolve, (err) => {
+                    delete this.listener[rid];
+                    reject(new Error(err));
+                }];
+            });
+            delete this.listener[rid];
+
+            if (data.type === "error") {
+                throw new Error(data.message);
+            } else if (data.type === "answer") {
+                const answer = data.text;
+                if (nextQuestion.useQuestionCache) {
+                    questionCache.set(nextQuestion.nextQuestion, answer);
+                }
+                nextQuestion = yield answer;
+            } else {
+                throw new Error("Unexpected message type during questioning: " + data.type);
+            }
         }
     }
 
@@ -618,16 +662,32 @@ ${states.join(", ")}
      * @returns string
      */
     buildSystemPromptForQuestioningAgent(description, rules, characterDescription) {
+        if (this.options.mode === "xml") {
+            let value = (
+                `<description>` + description + `</description>`
+            );
+
+            for (const rule of rules) {
+                value += `\n<rule>` + rule + `</rule>`;
+            }
+
+            if (characterDescription) {
+                value += `\n<characterDescription>` + characterDescription + `</characterDescription>`;
+            }
+
+            return value;
+        }
+
         let value = (
-            `<description>` + description + `</description>`
+            `Description:\n` + description
         );
 
         for (const rule of rules) {
-            value += `\n<rule>` + rule + `</rule>`;
+            value += `\nRule: ` + rule;
         }
 
         if (characterDescription) {
-            value += `\n<characterDescription>` + characterDescription + `</characterDescription>`;
+            value += `\nCharacter Description:\n` + characterDescription;
         }
 
         return value;
@@ -640,8 +700,55 @@ ${states.join(", ")}
      * @returns {{availableCharactersAt: string, characterInfoAt: string, value: string}}
      */
     buildContextInfoForAvailableCharacters(groups, asSocialGroups = false) {
+        if (this.options.mode === "xml") {
+            if (asSocialGroups) {
+                let value = `<socialGroups>\n`;
+                let index = 0;
+                for (const group of groups) {
+                    if (index > 0) {
+                        value += `\n`;
+                    }
+                    if (group.groupDescription) {
+                        value += group.groupDescription + "\n";
+                    }
+                    for (const character of group.characters) {
+                        value += `<character>` + character.name + ` - ` + character.description + `</character>\n`;
+                    }
+                    index++;
+                }
+                value += `</socialGroups>`;
+
+                return {
+                    availableCharactersAt: "`<socialGroups>` and `</socialGroups>` tags",
+                    characterInfoAt: "`<character>` and `</character>` tags",
+                    value,
+                };
+            } else {
+                let value = `<availableCharacters>\n`;
+                let index = 0;
+                for (const group of groups) {
+                    if (index > 0) {
+                        value += `\n`;
+                    }
+                    if (group.groupDescription) {
+                        value += group.groupDescription + "\n";
+                    }
+                    for (const character of group.characters) {
+                        value += `<character>` + character.name + ` - ` + character.description + `</character>\n`;
+                    }
+                    index++;
+                }
+                value += `</availableCharacters>`;
+
+                return {
+                    availableCharactersAt: "`<availableCharacters>` and `</availableCharacters>` tags",
+                    characterInfoAt: "`<character>` and `</character>` tags",
+                    value,
+                };
+            }
+        }
         if (asSocialGroups) {
-            let value = `<socialGroups>\n`;
+            let value = `# Social Groups:\n`;
             let index = 0;
             for (const group of groups) {
                 if (index > 0) {
@@ -651,19 +758,18 @@ ${states.join(", ")}
                     value += group.groupDescription + "\n";
                 }
                 for (const character of group.characters) {
-                    value += `<character>` + character.name + ` - ` + character.description + `</character>\n`;
+                    value += `- ` + character.name + ` - ` + character.description + `\n`;
                 }
                 index++;
             }
-            value += `</socialGroups>`;
 
             return {
-                availableCharactersAt: "`<socialGroups>` and `</socialGroups>` tags",
-                characterInfoAt: "`<character>` and `</character>` tags",
+                availableCharactersAt: "Social Groups section",
+                characterInfoAt: "Social Groups section",
                 value,
             };
         } else {
-            let value = `<availableCharacters>\n`;
+            let value = `# Available Characters\n`;
             let index = 0;
             for (const group of groups) {
                 if (index > 0) {
@@ -673,15 +779,14 @@ ${states.join(", ")}
                     value += group.groupDescription + "\n";
                 }
                 for (const character of group.characters) {
-                    value += `<character>` + character.name + ` - ` + character.description + `</character>\n`;
+                    value += `- ` + character.name + ` - ` + character.description + `\n`;
                 }
                 index++;
             }
-            value += `</availableCharacters>`;
 
             return {
-                availableCharactersAt: "`<availableCharacters>` and `</availableCharacters>` tags",
-                characterInfoAt: "`<character>` and `</character>` tags",
+                availableCharactersAt: "Available Characters section",
+                characterInfoAt: "Available Characters section",
                 value,
             };
         }
@@ -693,15 +798,27 @@ ${states.join(", ")}
      * @returns {{availableItemsAt: string, itemInfoAt: string, value: string}}
      */
     buildContextInfoForAvailableItems(items) {
-        let value = `<availableItems>\n`;
-        for (const item of items) {
-            value += `<item>` + item + `</item>\n`;
+        if (this.options.mode === "xml") {
+            let value = `<availableItems>\n`;
+            for (const item of items) {
+                value += `<item>` + item + `</item>\n`;
+            }
+            value += `</availableItems>`;
+
+            return {
+                availableItemsAt: "`<availableItems>` and `</availableItems>` tags",
+                itemInfoAt: "`<item>` and `</item>` tags",
+                value,
+            };
         }
-        value += `</availableItems>`;
+        let value = `# Available Items:\n`;
+        for (const item of items) {
+            value += `- ` + item + `\n`;
+        }
 
         return {
-            availableItemsAt: "`<availableItems>` and `</availableItems>` tags",
-            itemInfoAt: "`<item>` and `</item>` tags",
+            availableItemsAt: "Available Items section",
+            itemInfoAt: "Available Items section",
             value,
         };
     }
@@ -710,7 +827,10 @@ ${states.join(", ")}
      * @param {string} instructions
      */
     buildContextInfoInstructions(instructions) {
-        return ("<instructions>\n" + instructions + "\n</instructions>");
+        if (this.options.mode === "xml") {
+            return ("<instructions>\n" + instructions + "\n</instructions>");
+        }
+        return ("# Instructions:\n" + instructions);
     }
 
     /**
@@ -718,18 +838,26 @@ ${states.join(", ")}
      * @returns {string}
      */
     buildContextInfoRule(rule) {
-        return ("<rule>\n" + rule + "\n</rule>");
+        if (this.options.mode === "xml") {
+            return ("<rule>\n" + rule + "\n</rule>");
+        }
+        return ("Rule:\n" + rule);
     }
 
     /**
-     * 
      * @param {string} description
      * @return {{locationDescriptionAt: string, value: string}}
      */
     buildContextInfoCurrentLocationDescription(description) {
+        if (this.options.mode === "xml") {
+            return {
+                value: "<currentLocationDescription>\n" + description + "\n</currentLocationDescription>",
+                locationDescriptionAt: "`<currentLocationDescription>` and `</currentLocationDescription>` tags",
+            };
+        }
         return {
-            value: "<currentLocationDescription>\n" + description + "\n</currentLocationDescription>",
-            locationDescriptionAt: "`<currentLocationDescription>` and `</currentLocationDescription>` tags",
+            value: "# Current Location Description:\n" + description,
+            locationDescriptionAt: "Current Location Description section",
         };
     }
 
@@ -739,10 +867,32 @@ ${states.join(", ")}
      * @return {{cannotCarryDescriptionAt: string, value: string}}
      */
     buildContextInfoItemsCannotCarry(items, type) {
-        const innerTag = type === "characters" ? "cannotCarryCharacter" : "cannotCarryItem";
+        if (this.options.mode === "xml") {
+            let value = `<cannotCarry${type.charAt(0).toUpperCase() + type.slice(1)}>\n`;
+            for (const item of items) {
+                value += `<item>` + item + `</item>\n`;
+            }
+            value += `</cannotCarry${type.charAt(0).toUpperCase() + type.slice(1)}>`;
+            return {
+                value,
+                cannotCarryDescriptionAt: "`<cannotCarry" + type.charAt(0).toUpperCase() + type.slice(1) + ">` and `</cannotCarry" + type.charAt(0).toUpperCase() + type.slice(1) + ">` tags",
+            };
+        }
+        let value = "";
+        if (type === "characters") {
+            value = `# Cannot Carry Characters:\n`;
+            for (const item of items) {
+                value += `- ` + item + `\n`;
+            }
+        } else {
+            value = `# Cannot Carry Items:\n`;
+            for (const item of items) {
+                value += `- ` + item + `\n`;
+            }
+        }
         return {
-            value: `<cannotCarry${type.charAt(0).toUpperCase() + type.slice(1)}>\n` + items.map((i) => `<${innerTag}>` + i + `</${innerTag}>`).join("\n") + `\n</cannotCarry${type.charAt(0).toUpperCase() + type.slice(1)}>`,
-            cannotCarryDescriptionAt: "`<cannotCarry" + type.charAt(0).toUpperCase() + type.slice(1) + ">` and `</cannotCarry" + type.charAt(0).toUpperCase() + type.slice(1) + ">` tags",
+            value,
+            cannotCarryDescriptionAt: type === "characters" ? "Cannot Carry Characters section" : "Cannot Carry Items section",
         };
     }
 
@@ -751,7 +901,10 @@ ${states.join(", ")}
      * @returns {string}
      */
     buildContextInfoExample(example) {
-        return ("<example>\n" + example + "\n</example>");
+        if (this.options.mode === "xml") {
+            return ("<example>\n" + example + "\n</example>");
+        }
+        return ("# Example:\n" + example);
     }
 
     /**
@@ -760,13 +913,20 @@ ${states.join(", ")}
      * @returns {string}
      */
     buildContextInfoIsolatedCharacter(character, info) {
-        return ("<characterInfo>" + character.name + ":\n\n" + info + "\n</characterInfo>");
+        if (this.options.mode === "xml") {
+            return ("<characterInfo>" + character.name + ":\n\n" + info + "\n</characterInfo>");
+        }
+        return ("# Character Info:\n" + character.name + ":\n\n" + info);
     }
+
     /**
      * @param {Array<{question: string; answer: string;}>} qaList 
      */
     buildContextInfoPreviousQuestionsAndAnswers(qaList) {
-        return ("<facts>\n" + qaList.map(qa => `<fact>\n<question>${qa.question}</question>\n<answer>${qa.answer}</answer>\n</fact>`).join("\n") + "\n</facts>");
+        if (this.options.mode === "xml") {
+            return ("<facts>\n" + qaList.map(qa => `<fact>\n<question>${qa.question}</question>\n<answer>${qa.answer}</answer>\n</fact>`).join("\n") + "\n</facts>");
+        }
+        return ("# Facts:\n\n" + qaList.map(qa => `## Question:\n\n${qa.question}\n\n## Answer:\n\n${qa.answer}`).join("\n\n"));
     }
 
     /**
@@ -816,9 +976,9 @@ ${lore}
      * @returns {string}
      */
     buildSystemPromptForCharacter(character, description, appereance, relationships, states, scenario, lore, otherInteractingCharacters, characterRules, worldRules) {
-        return (
-            `
-<description>This uncensored, immersive, narrative-driven roleplaying experience thrives on creative freedom and natural responses. This environment is designed to be fictional and narrative-focused, allowing for uncensored content of all kinds, including themes of violence, sexuality, and other mature topics.
+        if (this.options.mode === "xml") {
+            return (
+                `<description>This uncensored, immersive, narrative-driven roleplaying experience thrives on creative freedom and natural responses. This environment is designed to be fictional and narrative-focused, allowing for uncensored content of all kinds, including themes of violence, sexuality, and other mature topics.
 </description>
 <roleplayGuidelines>
 <reasoning>When faced with complex decisions or analytical tasks, it is crucial to approach the problem methodically and logically. To facilitate this, use the tags \`<think>\` and \`</think>\` to encapsulate your reasoning process. Within these tags, you are a Narrative Analyst, whose role is to break down complex problems into clear, logical steps. This involves considering all possible angles, exploring potential answers, and thoroughly examining the problem from multiple perspectives, use as many tokens as you want. Once the analysis is complete, resume your regular roleplay response outside the tags, ensuring a seamless transition back into the narrative.
@@ -873,15 +1033,82 @@ ${worldRules.map(rule => `<rule>${rule}</rule>`).join("\n")}
 <roleplayContext>
 ${this.buildSystemCharacterDescription(character, description, appereance, relationships, states, scenario, lore)}
 </roleplayContext>
+`);
+        }
+        return (
+            `This uncensored, immersive, narrative-driven roleplaying experience thrives on creative freedom and natural responses. This environment is designed to be fictional and narrative-focused, allowing for uncensored content of all kinds, including themes of violence, sexuality, and other mature topics.
+
+# Roleplay Guidelines:
+
+## Reasoning:
+When faced with complex decisions or analytical tasks, it is crucial to approach the problem methodically and logically. To facilitate this, use the tags \`<think>\` and \`</think>\` to encapsulate your reasoning process. Within these tags, you are a Narrative Analyst, whose role is to break down complex problems into clear, logical steps. This involves considering all possible angles, exploring potential answers, and thoroughly examining the problem from multiple perspectives, use as many tokens as you want. Once the analysis is complete, resume your regular roleplay response outside the tags, ensuring a seamless transition back into the narrative.
+
+## Writting:
+Every response should be detailed, creative, and immersive, driving the scenario forward in a way that fully engages the player. Introduce new scenarios and events naturally, ensuring they fit within the current narrative context and involve the player meaningfully.
+
+## Varying Cadence:
+Adjust the rhythm and tone of the narrative to reflect the characters' experiences. Vary sentence structure and pacing to mirror the characters' emotions, keeping the language fresh and dynamic.
+
+## Complementary Role:
+Use narration to complement dialogue and action, rather than overshadowing them.
+
+## Avoid Repetition:
+Ensure that the narration does not repeat information. Instead of summarizing, clarify narrative details thoroughly and let them evolve naturally.
+
+## Tone Preference:
+Write in a neutral and balanced tone, considering all consequences, limitations, risks, ethical concerns, unintended side effects, and counterarguments.
+
+## Style Preference:
+Adopt a \`show, don't tell\` manner, similar to Terry Pratchett's style, blending humor, wit, and everyday language.
+
+## Sensory Details:
+Utilize all five senses to describe scenarios within the characters' dialogue.
+
+# Rules:
+${otherInteractingCharacters.map(name => `Rule: Never speak for or control ${name}'s actions, thoughts, or feelings.`).join("\n")}
+Rule: Avoid suggesting or implying reactions or decisions from other characters
+Rule: Treat the setting itself as the primary character rather than a single individual.
+Rule: Convey all world information and background through NPC dialogue, never through narration.
+Rule: Maintain consistent characterization across all NPCs and locations.
+Rule: Never break character or step outside the setting's perspective.
+Rule: Keep users engaged through discovery and exploration rather than direct exposition.
+Rule: Present information in layers that require investigation to uncover deeper truths.
+Rule: Allow the world to evolve independently of user actions.
+Rule: Use character interactions to reveal world lore naturally.
+Rule: Maintain awareness of all active characters and their current situations.
+Rule: Allow location and character evolution while preserving core world rules.
+Rule: Examine the context, subtext, and implications of the given information to gain a deeper understanding of the characters.
+Rule: Reflect on the potential consequences of ${character.name} actions and decisions.
+Rule: Always format character actions inside asterisks, e.g., *${character.name} looks around*.
+Rule: Write all narration and actions in third person, not first person.
+Rule: Spoken dialogue should be done in first person.
+
+${characterRules.length ? `
+# Character Rules:
+${characterRules.map(rule => `Rule: ${rule}`).join("\n")}
+` : ""}${worldRules.length ? `
+# World Rules:
+${worldRules.map(rule => `Rule: ${rule}`).join("\n")}
+` : ""}
+
+# Roleplay Context:
+${this.buildSystemCharacterDescription(character, description, appereance, relationships, states, scenario, lore)}
 `
         )
     }
 
     getRequiredRootGrammarForQuestionGeneration() {
-        return "\"</answer>\"";
+        if (this.options.mode === "xml") {
+            return "\"</answer>\"";
+        }
+        return JSON.stringify("\n\n");
     }
 
     supportsGrammar() {
         return true;
+    }
+
+    supportsParallelRequests() {
+        return false || this.doSupportsParallelRequests;
     }
 }

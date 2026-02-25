@@ -27,6 +27,15 @@ export class BaseInferenceAdapter {
             throw new TypeError("Cannot construct BaseInferenceAdapter instances directly");
         }
         this.engine = parent;
+
+        /**
+         * @type {Array<(status: {connected: boolean, reason?: string}) => void>}
+         */
+        this.onConnectionStatusChangeFns = [];
+        /**
+         * @type {Array<[() => void, (err: string) => void]>}
+         */
+        this.onConnectionStatusChangePromises = [];
     }
     
     async initialize() {
@@ -230,9 +239,49 @@ export class BaseInferenceAdapter {
     }
 
     /**
+     * Specifies whether the adapter supports parallel requests, meaning multiple ongoing questioning agents or inference processes at the same time
+     * @returns {boolean}
+     */
+    supportsParallelRequests() {
+        throw new Error("Method 'supportsParallelRequests()' must be implemented.");
+    }
+
+    /**
      * @param {Array<{question: string; answer: string;}>} qaList 
      */
     buildContextInfoPreviousQuestionsAndAnswers(qaList) {
         throw new Error("Method 'buildContextInfoPreviousQuestionsAndAnswers()' must be implemented.");
+    }
+
+    /**
+     * Triggers the on connection status change event
+     * @param {boolean} connected 
+     * @param {string} [reason] 
+     */
+    triggerOnConnectionStatusChange(connected, reason) {
+        const status = { connected, reason };
+        this.onConnectionStatusChangeFns.forEach(fn => fn(status));
+        this.onConnectionStatusChangePromises.forEach(([resolve, reject]) => {
+            if (connected) {
+                resolve();
+            } else {
+                reject(reason || "Unknown reason");
+            }
+        });
+        this.onConnectionStatusChangePromises = [];
+    }
+
+    /**
+     * @param {(status: {connected: boolean, reason?: string}) => any} callback
+     */
+    addEventListenerOnConnectStatusChange(callback) {
+        this.onConnectionStatusChangeFns.push(callback);
+    }
+
+    /**
+     * @param {(status: {connected: boolean, reason?: string}) => any} callback
+     */
+    removeEventListenerOnConnectStatusChange(callback) {
+        this.onConnectionStatusChangeFns = this.onConnectionStatusChangeFns.filter(fn => fn !== callback);
     }
 }
