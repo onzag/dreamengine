@@ -116,7 +116,12 @@ export async function nodejsCharacterImportResolver(characterFileId) {
         if (fs.existsSync(characterFileAtHomeDir)) {
             characterFile = characterFileAtHomeDir;
         } else {
-            throw new Error(`Character file ${characterFileId} not found in characters locally or at ${localDEPathAtHomeDir}`);
+            const characterFileAtDefaultCharacters = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'default-characters', characterFileId);
+            if (fs.existsSync(characterFileAtDefaultCharacters)) {
+                characterFile = characterFileAtDefaultCharacters;
+            } else {
+                throw new Error(`Character file ${characterFileId} not found in characters locally, at ${localDEPathAtHomeDir} or in default-characters at ${characterFileAtDefaultCharacters}`);
+            }
         }
     }
     const fileContent = await fsAsync.readFile(characterFile, 'utf-8');

@@ -122,8 +122,7 @@
     },
     "spawn_script": {
         "imports": [
-            "sfw-simplified-standard-bond-system.json",
-            "dema-states.json"
+            "sfw-simplified-standard-bond-system.json"
         ],
         "ts": "// Internal",
         "script": "console.log('hello world');"
