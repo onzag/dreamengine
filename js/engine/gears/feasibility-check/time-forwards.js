@@ -57,6 +57,7 @@ export default async function timeForwardsUsingLastMessage(engine, character) {
     const answer = await timePassedGenerator.next({
         maxCharacters: 100,
         maxParagraphs: 1,
+        maxSafetyCharacters: 100,
         nextQuestion: nextQuestion,
         stopAt: ["\n", "."],
         stopAfter: [],

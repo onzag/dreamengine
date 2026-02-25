@@ -9,7 +9,9 @@ const jsonWorld = JSON.parse(fs.readFileSync('../default-worlds/simple-lunar-sta
 const world = importWorldFromJSON(jsonWorld);
 
 const engine = new DEngine();
-const inferenceAdapter = new InferenceAdapterLlamaUncensored(engine, {});
+const inferenceAdapter = new InferenceAdapterLlamaUncensored(engine, {
+    secret: "98a15e879f05238e6323729aea9fb2b19fe60ee93796e2cb0189f96f66a9b0fd3fa14f1fd8010fb320455a6907495220469da066358468797b89a9614f0ba84017a8fb9eaedee3d93490bde2220065646877965029af9dff05ee8ceb28d88567a75d652a991b4e861ad44ba04d9456faa153a25a922d9d59b5494215ced89d71",
+});
 engine.setInferenceAdapter(inferenceAdapter);
 engine.initialize({
     ageYears: 30,

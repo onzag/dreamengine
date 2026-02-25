@@ -70,7 +70,7 @@ export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
         }
 
         const rid = cheapRID();
-        this.socket.send(JSON.stringify({ action: "count-tokens", payload: { text } }));
+        this.socket.send(JSON.stringify({ action: "count-tokens", payload: { text }, rid }));
         const data = await (new Promise((resolve, reject) => {
             this.listener[rid] = [resolve, (err) => {
                 delete this.listener[rid];
@@ -109,7 +109,7 @@ export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
         console.log("InferenceAdapterLlamaUncensored: Initializing connection to server at " + (this.options.host || 'ws://127.0.0.1:8765'));
 
         // set a websocket to the local server
-        this.socket = new WebSocket(this.options.host || 'ws://127.0.0.1:8765');
+        this.socket = new WebSocket((this.options.host || 'ws://127.0.0.1:8765') + "?apiKey=" + encodeURIComponent(this.options.apiKey || "") + "&secret=" + encodeURIComponent(this.options.secret || ""));
         this.socket.addEventListener("message", this.onData);
 
         /**
@@ -217,7 +217,11 @@ export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
 
             if (data.rid) {
                 if (this.listener[data.rid]) {
-                    this.listener[data.rid][0](data);
+                    if (data.type === "error") {
+                        this.listener[data.rid][1](new Error(data.message));
+                    } else {
+                        this.listener[data.rid][0](data);
+                    }
                 }
             }
         } catch (err) {
@@ -546,6 +550,7 @@ ${states.join(", ")}
             messagesToAdd = getHistoryForCharacter;
         }
 
+        const rid = cheapRID();
         if (!remarkLastMessageForAnalysis) {
             const messagesFormatted = messagesToAdd.map(msg => `[` + msg.name + `]: ` + msg.message).join("\n\n");
 
@@ -555,14 +560,14 @@ ${states.join(", ")}
                     userTrail: (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "") + "<messages>\n" + messagesFormatted + "\n</messages>" + (contextInfoAfter ? "\n" + contextInfoAfter : ""),
                 };
 
-                this.socket.send(JSON.stringify({ action: "analyze-prepare", payload }));
+                this.socket.send(JSON.stringify({ action: "analyze-prepare", payload, rid }));
             } else {
                 const payload = {
                     system: system,
                     userTrail: (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "") + "# Messages:\n" + messagesFormatted + "\n\n" + (contextInfoAfter ? "\n" + contextInfoAfter : ""),
                 };
 
-                this.socket.send(JSON.stringify({ action: "analyze-prepare", payload }));
+                this.socket.send(JSON.stringify({ action: "analyze-prepare", payload, rid }));
             }
         } else {
             const lastMessage = messagesToAdd[messagesToAdd.length - 1];
@@ -577,16 +582,24 @@ ${states.join(", ")}
                     userTrail: (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "") + "<previousMessages>\n" + restMessagesFormatted + "\n</previousMessages><analyze><lastMessage>" + lastMessageFormatted + "</lastMessage></analyze>" + (contextInfoAfter ? "\n" + contextInfoAfter : ""),
                 };
 
-                this.socket.send(JSON.stringify({ action: "analyze-prepare", payload }));
+                this.socket.send(JSON.stringify({ action: "analyze-prepare", payload, rid }));
             } else {
                 const payload = {
                     system: system,
                     userTrail: (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "") + "# Previous Messages:\n" + restMessagesFormatted + "\n\n# Last Message to Analyze:\n" + lastMessageFormatted + (contextInfoAfter ? "\n" + contextInfoAfter : ""),
                 };
 
-                this.socket.send(JSON.stringify({ action: "analyze-prepare", payload }));
+                this.socket.send(JSON.stringify({ action: "analyze-prepare", payload, rid }));
             }
         }
+
+        await new Promise((resolve, reject) => {
+            this.listener[rid] = [resolve, (err) => {
+                delete this.listener[rid];
+                reject(new Error(err));
+            }];
+        });
+        delete this.listener[rid];
 
         let questionCache = new Map();
         let nextQuestion = yield "ready";
