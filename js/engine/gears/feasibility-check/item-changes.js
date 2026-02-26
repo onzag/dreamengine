@@ -172,8 +172,8 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
             stopAt: [],
             answerTrail: "Only the items physically interacted with:\n\n",
             grammar: `root ::= ("none" | itemList) ${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()}\n` +
-                 `itemList ::= itemName (", " itemName)*\n` +
-                 `itemName ::= ${itemsAtLocationLower.map((item) => caseInsensitiveGrammar(item)).join(" | ")}`,
+                `itemList ::= itemName (", " itemName)*\n` +
+                `itemName ::= ${itemsAtLocationLower.map((item) => caseInsensitiveGrammar(item)).join(" | ")}`,
             instructions: `Answer ONLY with items that a character physically touched, grabbed, picked up, moved, wore, dropped, placed, or directly used in the last message. Items that are merely present in the scene, mentioned, looked at, or described do not count. Most messages interact with very few items or none at all. If no items were physically interacted with, answer none. Do not repeat item names.`,
         });
 
@@ -186,7 +186,9 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
         await itemsInteractionGenerator.next(null); // end the generator
 
         const extraAdded = answer.value.trim() === "none" ? [] : answer.value.split(",").map((v) => v.trim()).filter((v) => !!v);
-        itemsInteractedWith = removeRepeatsInArray(itemsInteractedWith.concat(extraAdded));
+        // we append extraAdded first to prefer the order given by the LLM over ours, since
+        // ordering may have a subtle effect
+        itemsInteractedWith = removeRepeatsInArray(extraAdded.concat(itemsAtLocation));
     }
 
     const charactersAtLocation = [...charState.surroundingNonStrangers, ...charState.surroundingTotalStrangers, character.name];
@@ -242,7 +244,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
             "Only consider characters from this list: " + charactersAtLocation.join(", ") + ".",
             "Answer in the format: Character Name, Character Name, Character Name, ...",
             "If no characters were mentioned or interacted with, answer none",
-            "Keep in mind the description of the characters at " + charactersDesriptionsAtLocation.availableCharactersAt + " to analyze the last message and figure out indirect mentions and interactions with characters based on their descriptions." ,
+            "Keep in mind the description of the characters at " + charactersDesriptionsAtLocation.availableCharactersAt + " to analyze the last message and figure out indirect mentions and interactions with characters based on their descriptions.",
             "Do not repeat character names, if a character was mentioned many times, just mention them once in the answer",
         ].filter((v) => v !== null), null);
 
@@ -326,6 +328,15 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
 
     const yesNoGrammar = `root ::= ("yes" | "no" | "Yes" | "No" | "YES" | "NO") ${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()}\n`;
 
+    /**
+     * @type {string[]}
+     */
+    const addedMessagesForStoryMaster = [];
+    /**
+     * @type {string[]}
+     */
+    const forcedInteractionCharacters = [];
+
     // we will start looping through the item interacted with
     // to figure out if they were moved, and where they ended
     for (const item of itemsInteractedWith) {
@@ -389,7 +400,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
 
         // if it was moved, we will ask a confirmation question to make sure the agent is consistent in its answers, since this is a crucial point for the rest of the checks for this item, if the item was not moved, we will skip the rest of the checks for this item, since if it was not moved, it can't have its location changed or be stolen
         if (wasMoved) {
-            const wasItMovedConfirmationQuestion = `Is the following statement correct? In the last message, the item "${item}" was moved, picked up, carried, put on, or had its location changed. Answer "yes" if this statement is correct, or "no" if this statement is incorrect.`;
+            const wasItMovedConfirmationQuestion = `Is the following statement correct? In the last message, the item "${item}" was moved, worn, picked up, carried, put on, or had its location changed. Answer "yes" if this statement is correct, or "no" if this statement is incorrect.`;
             console.log("Asking question, " + wasItMovedConfirmationQuestion);
             const wasItMovedConfirmation = await interactionGenerator.next({
                 maxCharacters: 0, maxSafetyCharacters: 100,
@@ -472,451 +483,216 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
         }
 
 
-        /**
-         * @type {Array<Array<Array<string | number>>>}
-         */
-        let endsAtPath = [];
-        /**
-         * @type {number[]}
-         */
-        let endsAtAmount = [];
+        console.log(`Item "${item}" was moved or had its location changed`);
 
-        let wasStolen = false;
-        /**
-         * @type {string|null}
-         */
-        let wasStolenBy = null;
+        // Now we want to know how many of the item were moved
+        const baseAmountMovedQuestion = `By the end of the last message, how many of "${item}" were moved or had their location changed? Answer with a number, or if the amount is not clear, answer with one of the following: "a few", "several", "many", "a lot", "some", "half", "most", or "all".`;
+        const amountGrammar = `root ::= ([0-9]+ | "a few" | "several" | "many" | "a lot" | "some" | "half" | "most" | "all" | "none") ${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()}`;
+        console.log("Asking question, " + baseAmountMovedQuestion);
+        const baseAmountMovedAnswer = await interactionGenerator.next({
+            maxCharacters: 0, maxSafetyCharacters: 100,
+            maxParagraphs: 1,
+            nextQuestion: baseAmountMovedQuestion,
+            contextInfo: engine.inferenceAdapter.buildContextInfoExample(
+                `Example: If the last message said that "Alice picked up ${item} and put it in her backpack", the answer would be "1", since only one of the item was moved.`,
+            ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                `Example: If the last message said that "Bob moved a couple of ${item} on the table to the box", the answer would be "some" or "several", since only some of the item was moved.`,
+            ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                `Example: If the last message said that "Emma took a few of the ${item} and gave them to Alice", the answer would be "a few", since only a few of the item were moved.`,
+            ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                `Example: If the last message said that "Joe moved most of the ${item} from the table to the box, but left some on the table", the answer would be "most", since most of the item was moved.`,
+            ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                `Example: If the last message said that "Alice moved 10 of ${item} from the box to the shelf", the answer would be "10", since only 10 of the item were moved.`,
+            ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                `Example: If the last message said that "Bob moved two of ${item} from the ground to the table and two of ${item} from the table to the box", the answer would be "4", since a total of 4 of the item were moved.`,
+            ),
+            stopAfter: [],
+            stopAt: [],
+            grammar: amountGrammar,
+        });
 
-        /**
-         * @type {string[]}
-         */
-        let witnesses = [];
-        /**
-         * @type {string[]}
-         */
-        let ignorers = [];
-        /**
-         * @type {string[]}
-         */
-        let witnessesThatIgnoredTheft = [];
-        /**
-         * @type {string[]}
-         */
-        let witnessesThatTurnHeroes = [];
+        if (baseAmountMovedAnswer.done) {
+            throw new Error("Questioning agent finished without providing an answer for base amount of item moved check.");
+        }
 
-        if (wasMoved) {
-            console.log(`Item "${item}" was moved or had its location changed`);
+        console.log("Received answer, " + baseAmountMovedAnswer.value);
+        const baseAmountMovedStr = baseAmountMovedAnswer.value.trim().toLowerCase();
+        if (baseAmountMovedStr === "none" || baseAmountMovedStr === "0") {
+            console.log(`The answer for the amount of "${item}" that was moved or had its location changed is none or 0, which seems to be a contradiction with the previous answer that indicated that the item was moved. This may indicate a false positive in the initial movement question, or it may indicate that the item was moved but then moved back to its original location by the end of the message. Skipping further checks for this item due to this inconsistency.`);
+            continue;
+        }
 
-            // Now we want to know how many of the item were moved
-            const baseAmountMovedQuestion = `By the end of the last message, how many of "${item}" were moved or had their location changed? Answer with a number, or if the amount is not clear, answer with one of the following: "a few", "several", "many", "a lot", "some", "half", "most", or "all".`;
-            const amountGrammar = `root ::= ([0-9]+ | "a few" | "several" | "many" | "a lot" | "some" | "half" | "most" | "all" | "none") ${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()}`;
-            console.log("Asking question, " + baseAmountMovedQuestion);
-            const baseAmountMovedAnswer = await interactionGenerator.next({
-                maxCharacters: 0, maxSafetyCharacters: 100,
-                maxParagraphs: 1,
-                nextQuestion: baseAmountMovedQuestion,
-                contextInfo: engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last message said that "Alice picked up ${item} and put it in her backpack", the answer would be "1", since only one of the item was moved.`,
-                ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last message said that "Bob moved a couple of ${item} on the table to the box", the answer would be "some" or "several", since only some of the item was moved.`,
-                ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last message said that "Emma took a few of the ${item} and gave them to Alice", the answer would be "a few", since only a few of the item were moved.`,
-                ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last message said that "Joe moved most of the ${item} from the table to the box, but left some on the table", the answer would be "most", since most of the item was moved.`,
-                ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last message said that "Alice moved 10 of ${item} from the box to the shelf", the answer would be "10", since only 10 of the item were moved.`,
-                ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last message said that "Bob moved two of ${item} from the ground to the table and two of ${item} from the table to the box", the answer would be "4", since a total of 4 of the item were moved.`,
-                ),
-                stopAfter: [],
-                stopAt: [],
-                grammar: amountGrammar,
-            });
+        await calculatePotentialOriginalLocationOfItem();
 
-            if (baseAmountMovedAnswer.done) {
-                throw new Error("Questioning agent finished without providing an answer for base amount of item moved check.");
+        // so now we know the total amount of items that were moved
+        // this is basically what we want to aim for
+        const expectedAmountToMove = convertItemAmountToNumericValue(baseAmountMovedStr, allPotentialItemsForItem.filter((v, index) => answerForLocationIndexes.includes(index)).flat());
+
+        console.log("### Total expected amount of item moved or had its location changed (not final): ", expectedAmountToMove);
+
+        // we have currently moving nothing, we will start moving these items
+        let totalMovedSoFar = 0;
+
+        // so the first thing is that we want to figure out where they were moved to, so we will
+        // start asking questions about where it may have ended, first we start by pondering
+        // if they ended atop or inside other items
+        for (const otherItem of itemsInteractedWith) {
+            let isAnother = otherItem === item;
+
+            // we want now to get the potential locations for the other item, this will help figure things out
+            const otherItemPotentialLocations = calculateAllPotentialLocationsForItem(engine, charState, allCharactersAtLocation, charactersToQuestion, location, otherItem);
+
+            // if the other item is the same as our current item
+            if (otherItem === item) {
+                // the we are going to check if there is only one, after all we cannot have a thing be inside or atop itself
+                // so it is useless to ask those questions
+                const thereIsOnlyOne = otherItemPotentialLocations.allPotentialItemsForItem.length === 1 &&
+                    otherItemPotentialLocations.allPotentialItemsForItem[0].length === 1 &&
+                    otherItemPotentialLocations.allPotentialItemsForItem[0][0].amount === 1;
+                if (thereIsOnlyOne) {
+                    continue;
+                }
             }
 
-            console.log("Received answer, " + baseAmountMovedAnswer.value);
-            const baseAmountMovedStr = baseAmountMovedAnswer.value.trim().toLowerCase();
-            if (baseAmountMovedStr === "none" || baseAmountMovedStr === "0") {
-                console.log(`The answer for the amount of "${item}" that was moved or had its location changed is none or 0, which seems to be a contradiction with the previous answer that indicated that the item was moved. This may indicate a false positive in the initial movement question, or it may indicate that the item was moved but then moved back to its original location by the end of the message. Skipping further checks for this item due to this inconsistency.`);
-                continue;
-            }
+            // now we can check for this, by ambiguous it means
+            // we don't know the target specifically, we only know
+            // that it is atop or contained by another item of that type
+            // but we don't know which one specifically, for example if the message is "Alice put the book on top of the box",
+            // and there are two boxes, we don't know on which box the book was placed, so it is ambiguous if the book is on top of box 1 or box 2,
+            // but we do know that it is on top of a box, so it is ambiguous but we do have some information about the location of the item
 
-            await calculatePotentialOriginalLocationOfItem();
+            // having ambiguous is useful because most of the time language is vague, and users will not specify
+            // exactly which item they are interacting with
+            let isAmbiguouslyContained = false;
+            let isAmbiguouslyAtop = false;
 
-            // so now we know the total amount of items that were moved
-            // this is basically what we want to aim for
-            const baseAmountMoved = convertItemAmountToNumericValue(baseAmountMovedStr, allPotentialItemsForItem.filter((v, index) => answerForLocationIndexes.includes(index)).flat());
-            
-            console.log("### Total expected amount of item moved or had its location changed (not final): ", baseAmountMoved);
+            let ambiguousAmountMovedFromOneItemToAnotherAtop = 0;
+            let ambiguousAmountMovedFromOneItemToAnotherContained = 0;
 
-            // we have currently moving nothing, we will start moving these items
-            let totalMovedSoFar = 0;
+            let ambiguousAmountTotalMovedFromOneItemToAnother = 0;
 
-            // so the first thing is that we want to figure out where they were moved to, so we will
-            // start asking questions about where it may have ended, first we start by pondering
-            // if they ended atop or inside other items
-            for (const otherItem of itemsInteractedWith) {
-                let isAnother = otherItem === item;
+            // we are going to check if any of the other items we are checking, could contain something
+            // it would be very weird that not all of them do, like having a box that can contain other items, and others that do not
+            // but we will check anyway to see if any of them can do it
+            const canContain = otherItemPotentialLocations.allPotentialItemsForItem.some((itemList) => itemList.some((itemInstance) => itemInstance.capacityKg && itemInstance.capacityKg > 0));
 
-                // we want now to get the potential locations for the other item, this will help figure things out
-                const otherItemPotentialLocations = calculateAllPotentialLocationsForItem(engine, charState, allCharactersAtLocation, charactersToQuestion, location, otherItem);
+            // so our default is no, that our original item was not contained inside the other item
+            let ambiguousPlacementContainedValue = "no";
 
-                // if the other item is the same as our current item
-                if (otherItem === item) {
-                    // the we are going to check if there is only one, after all we cannot have a thing be inside or atop itself
-                    // so it is useless to ask those questions
-                    const thereIsOnlyOne = otherItemPotentialLocations.allPotentialItemsForItem.length === 1 &&
-                        otherItemPotentialLocations.allPotentialItemsForItem[0].length === 1 &&
-                        otherItemPotentialLocations.allPotentialItemsForItem[0][0].amount === 1;
-                    if (thereIsOnlyOne) {
-                        continue;
-                    }
-                }
-
-                // now we can check for this, by ambiguous it means
-                // we don't know the target specifically, we only know
-                // that it is atop or contained by another item of that type
-                // but we don't know which one specifically, for example if the message is "Alice put the book on top of the box",
-                // and there are two boxes, we don't know on which box the book was placed, so it is ambiguous if the book is on top of box 1 or box 2,
-                // but we do know that it is on top of a box, so it is ambiguous but we do have some information about the location of the item
-
-                // having ambiguous is useful because most of the time language is vague, and users will not specify
-                // exactly which item they are interacting with
-                let isAmbiguouslyContained = false;
-                let isAmbiguouslyAtop = false;
-
-                let ambiguousAmountAtop = 0;
-                let ambiguousAmountContained = 0;
-
-                let ambiguousAmountTotal = 0;
-
-                // we are going to check if any of the other items we are checking, could contain something
-                // it would be very weird that not all of them do, like having a box that can contain other items, and others that do not
-                // but we will check anyway to see if any of them can do it
-                const canContain = otherItemPotentialLocations.allPotentialItemsForItem.some((itemList) => itemList.some((itemInstance) => itemInstance.capacityKg && itemInstance.capacityKg > 0));
-
-                // so our default is no, that our original item was not contained inside the other item
-                let ambiguousPlacementContainedValue = "no";
-
-                // now if our heuristics say that there is an item that can contain
-                if (canContain) {
-                    // we will ask the LLM if that happened
-                    const nextQuestion = `By the end of the last message, was the item "${item}" placed inside ${isAnother ? "another " : "the item "}"${otherItem}"? As a container, ${item} must have been placed inside the item "${otherItem}", not the opposite. Answer "yes" ONLY if ${item} was PUT INTO or PLACED INSIDE ${otherItem}.`;
-                    console.log("Asking question, " + nextQuestion);
-                    const ambiguousPlacement = await interactionGenerator.next({
-                        maxCharacters: 0, maxSafetyCharacters: 100,
-                        maxParagraphs: 1,
-                        nextQuestion: nextQuestion,
-                        useQuestionCache: true,
-                        stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
-                        stopAt: [],
-                        grammar: yesNoGrammar,
-                        contextInfo: engine.inferenceAdapter.buildContextInfoExample(
-                            `Example: If the last message said that "${item} was placed inside ${otherItem}", the answer would be "yes", since by the end of the message, ${item} is now inside ${otherItem}.`,
-                        ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                            `Example: If the last message said that "${item} was left on top of ${otherItem}", the answer would be "no", since by the end of the message, ${item} is on top of ${otherItem}, not inside it.`,
-                        ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                            `Example: If the last message said that "${item} was taken out from the inside of ${otherItem} and put on top of ${otherItem}", the answer would be "no", since by the end of the message, ${item} is on top of ${otherItem}.`,
-                        ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                            `Example: If the last message said that "${otherItem} was placed inside ${item}", the answer would be "no", since ${otherItem} is the one that was placed inside ${item}.`,
-                        ),
-                    });
-
-                    if (ambiguousPlacement.done) {
-                        throw new Error("Questioning agent finished without providing an answer for item placement check.");
-                    }
-
-                    console.log("Received answer, " + ambiguousPlacement.value);
-                    ambiguousPlacementContainedValue = ambiguousPlacement.value.trim().toLowerCase();
-                }
-
-                // Now we are going to ask for atop, atop is always possible, since we can always have something on top of something else
-                // even if it is ridiculous, like a cabinet on top of a plastic cup, it can happen, it will merely destroy the plastic cup
-                const nextQuestion2 = `By the end of the last message, was the item "${item}" on top of ${isAnother ? "another " : "the item "}"${otherItem}"? As a surface, ${item} must have been placed on top of ${isAnother ? "another " : "the item "}"${otherItem}", not the opposite. Answer "yes" ONLY if ${item} was PLACED ON TOP of ${otherItem}.`;
-                console.log("Asking question, " + nextQuestion2);
-                const ambiguousPlacement2 = await interactionGenerator.next({
+            // now if our heuristics say that there is an item that can contain
+            if (canContain) {
+                // we will ask the LLM if that happened
+                const nextQuestion = `By the end of the last message, was the item "${item}" placed inside ${isAnother ? "another " : "the item "}"${otherItem}"? As a container, ${item} must have been placed inside the item "${otherItem}", not the opposite. Answer "yes" ONLY if ${item} was PUT INTO or PLACED INSIDE ${otherItem}.`;
+                console.log("Asking question, " + nextQuestion);
+                const ambiguousPlacement = await interactionGenerator.next({
                     maxCharacters: 0, maxSafetyCharacters: 100,
                     maxParagraphs: 1,
-                    nextQuestion: nextQuestion2,
+                    nextQuestion: nextQuestion,
                     useQuestionCache: true,
                     stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
                     stopAt: [],
                     grammar: yesNoGrammar,
                     contextInfo: engine.inferenceAdapter.buildContextInfoExample(
-                        `Example: If the last message said that "${item} was placed on top of ${otherItem}", the answer would be "yes", since by the end of the message, ${item} is now on top of ${otherItem}.`,
+                        `Example: If the last message said that "${item} was placed inside ${otherItem}", the answer would be "yes", since by the end of the message, ${item} is now inside ${otherItem}.`,
                     ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                        `Example: If the last message said that "${item} was placed next to ${otherItem}", the answer would be "no", since by the end of the message, ${item} is next to ${otherItem}, not on top of it.`,
+                        `Example: If the last message said that "${item} was left on top of ${otherItem}", the answer would be "no", since by the end of the message, ${item} is on top of ${otherItem}, not inside it.`,
                     ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                        `Example: If the last message said that "${otherItem} was placed on top of ${item}", the answer would be "no", since ${otherItem} is the one that was placed on top of ${item}.`,
+                        `Example: If the last message said that "${item} was taken out from the inside of ${otherItem} and put on top of ${otherItem}", the answer would be "no", since by the end of the message, ${item} is on top of ${otherItem}.`,
+                    ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                        `Example: If the last message said that "${otherItem} was placed inside ${item}", the answer would be "no", since ${otherItem} is the one that was placed inside ${item}.`,
                     ),
                 });
 
-                if (ambiguousPlacement2.done) {
+                if (ambiguousPlacement.done) {
                     throw new Error("Questioning agent finished without providing an answer for item placement check.");
                 }
 
-                console.log("Received answer, " + ambiguousPlacement2.value);
-
-                // now we know if it is ambiguously atop or contained
-                isAmbiguouslyAtop = ambiguousPlacement2.value.trim().toLowerCase() === "yes";
-                isAmbiguouslyContained = ambiguousPlacementContainedValue === "yes";
-
-                // we will check
-                if (isAmbiguouslyAtop || isAmbiguouslyContained) {
-                    // comfirm because the AI keeps answering yes when the answer is NO
-                    if (isAmbiguouslyAtop) {
-                        const confirmQuestionAtop = `Is the following statement correct? By the end of the last message, the item "${item}" was placed on top of ${isAnother ? "another " : "the item "}"${otherItem}". Answer "yes" if this statement is correct, or "no" if this statement is incorrect.`;
-                        
-                        console.log("Asking question, " + confirmQuestionAtop);
-
-                        const ambiguousPlacement2 = await interactionGenerator.next({
-                            maxCharacters: 0, maxSafetyCharacters: 100,
-                            maxParagraphs: 1,
-                            nextQuestion: confirmQuestionAtop,
-                            stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
-                            stopAt: [],
-                            grammar: yesNoGrammar,
-                        });
-
-                        if (ambiguousPlacement2.done) {
-                            throw new Error("Questioning agent finished without providing an answer for item placement confirmation check.");
-                        }
-                        console.log("Received answer, " + ambiguousPlacement2.value);
-                        isAmbiguouslyAtop = ambiguousPlacement2.value.trim().toLowerCase() === "yes";
-                    }
-
-                    if (isAmbiguouslyContained) {
-                        const confirmQuestionContained = `Is the following statement correct? By the end of the last message, the item "${item}" was placed inside ${isAnother ? "another " : "the item "}"${otherItem}". Answer "yes" if this statement is correct, or "no" if this statement is incorrect.`;
-                        
-                        console.log("Asking question, " + confirmQuestionContained);
-
-                        const ambiguousPlacementContained = await interactionGenerator.next({
-                            maxCharacters: 0, maxSafetyCharacters: 100,
-                            maxParagraphs: 1,
-                            nextQuestion: confirmQuestionContained,
-                            stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
-                            stopAt: [],
-                            grammar: yesNoGrammar,
-                        });
-
-                        if (ambiguousPlacementContained.done) {
-                            throw new Error("Questioning agent finished without providing an answer for item placement confirmation check.");
-                        }
-                        console.log("Received answer, " + ambiguousPlacementContained.value);
-                        isAmbiguouslyContained = ambiguousPlacementContained.value.trim().toLowerCase() === "yes";
-                    }
-                }
-
-                // now if we are here, certainly one of these must hold true
-                if (isAmbiguouslyAtop || isAmbiguouslyContained) {
-                    // now we will ask for a general amount question, to figure out how many of the item are either atop or inside the other item, we will ask a general question first, and then we will ask a specific question for inside, and by difference we can get the atop amount
-                    const nextQuestion = `By the end of the last message, how many of "${item}" are ${canContain ? "inside or on top" : "on top"} of ${otherItem}? Answer with a number, or if the amount is not clear, answer with one of the following: "a few", "several", "many", "a lot", "some", "half", "most", "all", or "none".`;
-                    const amountGrammar = `root ::= ([0-9]+ | "a few" | "several" | "many" | "a lot" | "some" | "half" | "most" | "all" | "none") ${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()}`;
-
-                    console.log("Asking question, " + nextQuestion);
-
-                    const possessionQuestion = await interactionGenerator.next({
-                        maxCharacters: 0, maxSafetyCharacters: 100,
-                        maxParagraphs: 1,
-                        nextQuestion: nextQuestion,
-                        stopAfter: [],
-                        stopAt: [],
-                        grammar: amountGrammar,
-                    });
-
-                    if (possessionQuestion.done) {
-                        throw new Error("Questioning agent finished without providing an answer for item amount in possession check.");
-                    }
-
-                    console.log("Received answer, " + possessionQuestion.value);
-
-                    const amountTransferred = possessionQuestion.value.trim().toLowerCase();
-                    if (amountTransferred === "0" || amountTransferred === "none") {
-                        console.log(`The answer for the amount of "${item}" that is inside or atop ${otherItem} is 0 or none, which seems to be a contradiction with the previous answer that indicated there is at least some amount of "${item}" inside or atop ${otherItem}. This may indicate a false positive in the initial placement question, or it may indicate that the item was moved but then removed from its new location by the end of the message. Skipping this relationship due to this inconsistency.`);
-                        continue;
-                    } else {
-                        ambiguousAmountTotal = convertItemAmountToNumericValue(amountTransferred, allPotentialItemsForItem.filter((v, index) => answerForLocationIndexes.includes(index)).flat());
-                    }
-
-                    // now we check how many we moved inside or atop that other item
-                    // we need to take the minimum of the total of that item we have moved
-                    ambiguousAmountTotal = Math.min(ambiguousAmountTotal, baseAmountMoved - totalMovedSoFar);
-
-                    // if we can contain, let's see how many of those are inside
-                    if (canContain) {
-                        // We ask
-                        const nextQuestion = `By the end of the last message, how many of "${item}" are inside of ${otherItem}? Answer with a number, or if the amount is not clear, answer with one of the following: "a few", "several", "many", "a lot", "some", "half", "most", or "all"; note that the ${item} must be INSIDE ${otherItem} to be counted for this question.`;
-
-                        console.log("Asking question, " + nextQuestion);
-
-                        const possessionQuestion = await interactionGenerator.next({
-                            maxCharacters: 0, maxSafetyCharacters: 100,
-                            maxParagraphs: 1,
-                            nextQuestion: nextQuestion,
-                            stopAfter: [],
-                            stopAt: [],
-                            contextInfo: engine.inferenceAdapter.buildContextInfoExample(
-                                `Example: If the last message said that "${item} was placed inside ${otherItem}", the answer would be "1"`,
-                            ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                                `Example: If the last message said that "${item} was placed on top of ${otherItem}", the answer would be "0" or "none"`,
-                            ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                                `Example: If the last message said that "${item} was placed on top of ${otherItem}, but some of the ${item} were also placed inside ${otherItem}", the answer would be "some"`,
-                            ),
-                            grammar: amountGrammar,
-                        });
-
-                        if (possessionQuestion.done) {
-                            throw new Error("Questioning agent finished without providing an answer for item amount in possession check.");
-                        }
-
-                        console.log("Received answer, " + possessionQuestion.value);
-
-                        const amountTransferred = possessionQuestion.value.trim().toLowerCase();
-                        ambiguousAmountContained = convertItemAmountToNumericValue(amountTransferred, allPotentialItemsForItem.filter((v, index) => answerForLocationIndexes.includes(index)).flat());
-                    }
-
-                    // and the difference would be the atop value
-                    ambiguousAmountAtop = ambiguousAmountTotal - ambiguousAmountContained;
-                }
-
-                console.log("### Concluded that at least " + ambiguousAmountAtop + " of item " + item + " is atop " + otherItem + " and at least " + ambiguousAmountContained + " of item " + item + " is inside " + otherItem + ", for a total of at least " + ambiguousAmountTotal + " of item " + item + " that is atop or inside " + otherItem);
-
-                // now we need to start moving it
-                let totalMovedAmountForThisOtherItemAtop = 0;
-                let totalMovedAmountForThisOtherItemContained = 0;
-
-                // now this is a bit more tricky, so at this point we know that the character has moved the item on top or inside another
-                // and we know how many of those have been placed there, but we don't know which ones specifically
-                // now note how we check in this condition if there are 2 or more potential locations for the other item, because if there is only one potential location for the other item,
-                // then it doesn't matter if it is ambiguous or not, since it can only be that one location
-                if ((isAmbiguouslyAtop || isAmbiguouslyContained) && otherItemPotentialLocations.allPotentialLocationsForItem.length >= 2) {
-                    // so now we are in the case where there are more, and we are now looking for explicit mentions, because if there are explicit mentions, then we can be sure that at least some of the item were placed at a specific location4
-                    const allPotentialLocationsList = otherItemPotentialLocations.allPotentialLocationsForItem.join("\n - ");
-                    for (let i = 0; i < otherItemPotentialLocations.allPotentialLocationsForItem.length; i++) {
-                        // this is the potential location for the other item
-                        const potentialLocation = otherItemPotentialLocations.allPotentialLocationsForItem[i];
-                        let itemsInQuestion = otherItemPotentialLocations.allPotentialItemsForItem[i];
-                        const hasContainer = itemsInQuestion.some((it) => it.capacityKg && it.capacityKg > 0);
-
-                        if (hasContainer && totalMovedAmountForThisOtherItemContained < ambiguousAmountContained) {
-                            const nextQuestion = `How many of "${item}" were placed inside ${isAnother ? "another " : ""}"${otherItem}" where the target location of ${otherItem} is EXPLICITLY stated to be ${JSON.stringify(potentialLocation)}? ${item} must have been explcitly specified to be placed inside ${otherItem} at the explicit location ${potentialLocation}. Answer with the amount of ONLY the ${item} that were explicitly stated to be placed INSIDE ${otherItem} at the location ${potentialLocation}.`;
-                            console.log("Asking question, " + nextQuestion);
-                            const placementQuestion2 = await interactionGenerator.next({
-                                maxCharacters: 0, maxSafetyCharacters: 100,
-                                maxParagraphs: 1,
-                                nextQuestion: nextQuestion,
-                                useQuestionCache: true,
-                                stopAfter: [],
-                                stopAt: [],
-                                contextInfo: engine.inferenceAdapter.buildContextInfoExample(
-                                    `Example: If the last message said that "2 ${item} were placed inside ${otherItem} at ${potentialLocation}", the answer would be "2"`,
-                                ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                                    `Example: If the last message said that "2 ${item} were placed inside ${otherItem}, but the location was not specified, the answer would be "0" or "none" since it was not explicitly stated to be at the location ${potentialLocation}.`,
-                                ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                                    `Example: If the last message said that "many of ${item} were placed on top of ${otherItem} at ${potentialLocation}, the answer would be "0" or "none" since it was explicitly stated to be on top of ${otherItem}, not inside it, even if the location was specified as ${potentialLocation}.`,
-                                ),
-                                grammar: amountGrammar,
-                                instructions: `The location "${potentialLocation}" must be EXPLICITLY WRITTEN in the last message text as the location of ${otherItem}. Do NOT infer or guess the location, all available locations where ${otherItem} might be are:\n\n` + allPotentialLocationsList,
-                            });
-
-                            if (placementQuestion2.done) {
-                                throw new Error("Questioning agent finished without providing an answer for item placement check.");
-                            }
-
-                            console.log("Received answer, " + placementQuestion2.value);
-                            const amountAtThisLocationStr = placementQuestion2.value.trim().toLowerCase();
-                            if (amountAtThisLocationStr !== "0" && amountAtThisLocationStr !== "none") {
-                                const amountAtThisLocation = convertItemAmountToNumericValue(amountAtThisLocationStr, allPotentialItemsForItem.filter((v, index) => answerForLocationIndexes.includes(index)).flat());
-                                totalMovedAmountForThisOtherItemContained += amountAtThisLocation;
-                                totalMovedAmountForThisOtherItemContained = Math.min(totalMovedAmountForThisOtherItemContained, ambiguousAmountContained);
-                            }
-                        }
-
-                        if (totalMovedAmountForThisOtherItemAtop < ambiguousAmountAtop) {
-                            const nextQuestion = `How many of "${item}" were placed on top of ${isAnother ? "another " : ""}"${otherItem}" where the target location of ${otherItem} is EXPLICITLY stated to be ${JSON.stringify(potentialLocation)}? ${item} must have been explcitly specified to be placed on top of ${otherItem} at the explicit location ${potentialLocation}. Answer with the amount of ONLY the ${item} that were explicitly stated to be placed ON TOP OF ${otherItem} at the location ${potentialLocation}.`;
-                            console.log("Asking question, " + nextQuestion);
-                            const placementQuestion2 = await interactionGenerator.next({
-                                maxCharacters: 0, maxSafetyCharacters: 100,
-                                maxParagraphs: 1,
-                                nextQuestion: nextQuestion,
-                                stopAfter: [],
-                                stopAt: [],
-                                grammar: amountGrammar,
-                                contextInfo: engine.inferenceAdapter.buildContextInfoExample(
-                                    `Example: If the last message said that "2 ${item} were placed on top of ${otherItem} at ${potentialLocation}", the answer would be "2"`,
-                                ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                                    `Example: If the last message said that "2 ${item} were placed on top of ${otherItem}, but the location was not specified, the answer would be "0" or "none" since it was not explicitly stated to be at the location ${potentialLocation}.`,
-                                ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                                    `Example: If the last message said that "many of ${item} were placed inside of ${otherItem} at ${potentialLocation}, the answer would be "0" or "none" since it was explicitly stated to be inside of ${otherItem}, not on top of it, even if the location was specified as ${potentialLocation}.`,
-                                ),
-                                instructions: `The location "${potentialLocation}" must be EXPLICITLY WRITTEN in the last message text as the location of ${otherItem}. Do NOT infer or guess the location, all available locations where ${otherItem} might be are:\n\n` + allPotentialLocationsList,
-                            });
-
-                            if (placementQuestion2.done) {
-                                throw new Error("Questioning agent finished without providing an answer for item placement check.");
-                            }
-
-                            console.log("Received answer, " + placementQuestion2.value);
-                            const amountAtThisLocationStr = placementQuestion2.value.trim().toLowerCase();
-                            if (amountAtThisLocationStr !== "0" && amountAtThisLocationStr !== "none") {
-                                const amountAtThisLocation = convertItemAmountToNumericValue(amountAtThisLocationStr, allPotentialItemsForItem.filter((v, index) => answerForLocationIndexes.includes(index)).flat());
-                                totalMovedAmountForThisOtherItemAtop += amountAtThisLocation;
-                                totalMovedAmountForThisOtherItemAtop = Math.min(totalMovedAmountForThisOtherItemAtop, ambiguousAmountAtop);
-
-                                // TODO move these spec
-                            }
-                        }
-                    }
-                }
-
-                if (totalMovedAmountForThisOtherItemAtop < ambiguousAmountAtop) {
-                    // TODO move the remaining ambiguous amount of items atop to any of the other
-                }
-                if (totalMovedAmountForThisOtherItemContained < ambiguousAmountContained) {
-                    // TODO move the remaining ambiguous amount of items contained to any of the other
-                }
+                console.log("Received answer, " + ambiguousPlacement.value);
+                ambiguousPlacementContainedValue = ambiguousPlacement.value.trim().toLowerCase();
             }
-        }
 
-        continue; // TODO remove
-
-        for (const charName of charactersToQuestion) {
-            const nextQuestion = `By the end of the last message, is the item "${item}" in the possession of ${charName}?`;
-            console.log("Asking question, " + nextQuestion);
-            const anotherChar = charName === "${getCharacterNameForExample([charName], 0)}" ? "Fiona" : "${getCharacterNameForExample([charName], 0)}";
-            const possessionQuestion = await interactionGenerator.next({
+            // Now we are going to ask for atop, atop is always possible, since we can always have something on top of something else
+            // even if it is ridiculous, like a cabinet on top of a plastic cup, it can happen, it will merely destroy the plastic cup
+            const nextQuestion2 = `By the end of the last message, was the item "${item}" on top of ${isAnother ? "another " : "the item "}"${otherItem}"? As a surface, ${item} must have been placed on top of ${isAnother ? "another " : "the item "}"${otherItem}", not the opposite. Answer "yes" ONLY if ${item} was PLACED ON TOP of ${otherItem}.`;
+            console.log("Asking question, " + nextQuestion2);
+            const ambiguousPlacement2 = await interactionGenerator.next({
                 maxCharacters: 0, maxSafetyCharacters: 100,
                 maxParagraphs: 1,
-                nextQuestion: nextQuestion,
+                nextQuestion: nextQuestion2,
+                useQuestionCache: true,
                 stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
                 stopAt: [],
                 grammar: yesNoGrammar,
                 contextInfo: engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last message said that "${anotherChar} gave ${item} to ${charName}", the answer would be "yes", since by the end of the message, ${charName} has the item in their possession.`,
+                    `Example: If the last message said that "${item} was placed on top of ${otherItem}", the answer would be "yes", since by the end of the message, ${item} is now on top of ${otherItem}.`,
                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last message said that "${anotherChar} took ${item}", the answer would be "no", since by the end of the message, ${charName} does not have the item in their possession.`,
+                    `Example: If the last message said that "${item} was placed next to ${otherItem}", the answer would be "no", since by the end of the message, ${item} is next to ${otherItem}, not on top of it.`,
                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last message said that "${charName} carefully drops ${item} on the ground", the answer would be "no", since by the end of the message, ${charName} dropped the item and does not have it in their possession.`,
-                ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last message said that "${charName} picks up ${item} from ${anotherChar} and then throws it down the window", the answer would be "no", since by the end of the message, ${charName} threw the item away`,
-                ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last message said that "${anotherChar} picks up ${item} and then gives it to ${charName}", the answer would be "yes", since by the end of the message, ${charName} has the item in their possession`,
+                    `Example: If the last message said that "${otherItem} was placed on top of ${item}", the answer would be "no", since ${otherItem} is the one that was placed on top of ${item}.`,
                 ),
             });
-            if (possessionQuestion.done) {
-                throw new Error("Questioning agent finished without providing an answer for item possession check.");
+
+            if (ambiguousPlacement2.done) {
+                throw new Error("Questioning agent finished without providing an answer for item placement check.");
             }
-            console.log("Received answer, " + possessionQuestion.value);
 
-            // if yes, ask further questions
-            if (possessionQuestion.value.trim().toLowerCase() === "yes") {
-                const expectedPath = ["characters", charName, "carrying"];
+            console.log("Received answer, " + ambiguousPlacement2.value);
 
-                const nextQuestion = `By the end of the last message, how many of "${item}" are in possession by ${charName}? Answer with a number, or if the amount is not clear, answer with one of the following: "a few", "several", "many", "a lot", "some", "half", "most", or "all".`;
-                const amountGrammar = `root ::= ([0-9]+ | "a few" | "several" | "many" | "a lot" | "some" | "half" | "most" | "all") ${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()}`;
+            // now we know if it is ambiguously atop or contained
+            isAmbiguouslyAtop = ambiguousPlacement2.value.trim().toLowerCase() === "yes";
+            isAmbiguouslyContained = ambiguousPlacementContainedValue === "yes";
+
+            // we will check
+            if (isAmbiguouslyAtop || isAmbiguouslyContained) {
+                // comfirm because the AI keeps answering yes when the answer is NO
+                if (isAmbiguouslyAtop) {
+                    const confirmQuestionAtop = `Is the following statement correct? By the end of the last message, the item "${item}" was placed on top of ${isAnother ? "another " : "the item "}"${otherItem}". Answer "yes" if this statement is correct, or "no" if this statement is incorrect.`;
+
+                    console.log("Asking question, " + confirmQuestionAtop);
+
+                    const ambiguousPlacement2 = await interactionGenerator.next({
+                        maxCharacters: 0, maxSafetyCharacters: 100,
+                        maxParagraphs: 1,
+                        nextQuestion: confirmQuestionAtop,
+                        stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
+                        stopAt: [],
+                        grammar: yesNoGrammar,
+                    });
+
+                    if (ambiguousPlacement2.done) {
+                        throw new Error("Questioning agent finished without providing an answer for item placement confirmation check.");
+                    }
+                    console.log("Received answer, " + ambiguousPlacement2.value);
+                    isAmbiguouslyAtop = ambiguousPlacement2.value.trim().toLowerCase() === "yes";
+                }
+
+                if (isAmbiguouslyContained) {
+                    const confirmQuestionContained = `Is the following statement correct? By the end of the last message, the item "${item}" was placed inside ${isAnother ? "another " : "the item "}"${otherItem}". Answer "yes" if this statement is correct, or "no" if this statement is incorrect.`;
+
+                    console.log("Asking question, " + confirmQuestionContained);
+
+                    const ambiguousPlacementContained = await interactionGenerator.next({
+                        maxCharacters: 0, maxSafetyCharacters: 100,
+                        maxParagraphs: 1,
+                        nextQuestion: confirmQuestionContained,
+                        stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
+                        stopAt: [],
+                        grammar: yesNoGrammar,
+                    });
+
+                    if (ambiguousPlacementContained.done) {
+                        throw new Error("Questioning agent finished without providing an answer for item placement confirmation check.");
+                    }
+                    console.log("Received answer, " + ambiguousPlacementContained.value);
+                    isAmbiguouslyContained = ambiguousPlacementContained.value.trim().toLowerCase() === "yes";
+                }
+            }
+
+            // now if we are here, certainly one of these must hold true
+            if (isAmbiguouslyAtop || isAmbiguouslyContained) {
+                // now we will ask for a general amount question, to figure out how many of the item are either atop or inside the other item, we will ask a general question first, and then we will ask a specific question for inside, and by difference we can get the atop amount
+                const nextQuestion = `By the end of the last message, how many of "${item}" are ${canContain ? "inside or on top" : "on top"} of ${otherItem}? Answer with a number, or if the amount is not clear, answer with one of the following: "a few", "several", "many", "a lot", "some", "half", "most", "all", or "none".`;
+                const amountGrammar = `root ::= ([0-9]+ | "a few" | "several" | "many" | "a lot" | "some" | "half" | "most" | "all" | "none") ${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()}`;
 
                 console.log("Asking question, " + nextQuestion);
 
@@ -933,53 +709,345 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                     throw new Error("Questioning agent finished without providing an answer for item amount in possession check.");
                 }
 
-                const expectedAmount = possessionQuestion.value.trim().toLowerCase();
-
                 console.log("Received answer, " + possessionQuestion.value);
 
-                const hasAWornPotential = allPotentialItemsForItem.some((itemOptions) => itemOptions.some((it) => it.wearableProperties));
-                if (hasAWornPotential) {
-                    const nextQuestion = `By the end of the last message, is the item "${item}" being worn by ${charName}? Answer "yes" ONLY if ${item} was PUT ON or WORN by ${charName}. If ${item} was taken off, removed, or not put on, answer "no".`;
+                const amountTransferred = possessionQuestion.value.trim().toLowerCase();
+                if (amountTransferred === "0" || amountTransferred === "none") {
+                    console.log(`The answer for the amount of "${item}" that is inside or atop ${otherItem} is 0 or none, which seems to be a contradiction with the previous answer that indicated there is at least some amount of "${item}" inside or atop ${otherItem}. This may indicate a false positive in the initial placement question, or it may indicate that the item was moved but then removed from its new location by the end of the message. Skipping this relationship due to this inconsistency.`);
+                    continue;
+                } else {
+                    ambiguousAmountTotalMovedFromOneItemToAnother = convertItemAmountToNumericValue(amountTransferred, allPotentialItemsForItem.filter((v, index) => answerForLocationIndexes.includes(index)).flat());
+                }
+
+                // now we check how many we moved inside or atop that other item
+                // we need to take the minimum of the total of that item we have moved
+                ambiguousAmountTotalMovedFromOneItemToAnother = Math.min(ambiguousAmountTotalMovedFromOneItemToAnother, expectedAmountToMove - totalMovedSoFar);
+
+                // if we can contain, let's see how many of those are inside
+                if (canContain) {
+                    // We ask
+                    const nextQuestion = `By the end of the last message, how many of "${item}" are inside of ${otherItem}? Answer with a number, or if the amount is not clear, answer with one of the following: "a few", "several", "many", "a lot", "some", "half", "most", or "all"; note that the ${item} must be INSIDE ${otherItem} to be counted for this question.`;
+
                     console.log("Asking question, " + nextQuestion);
-                    const wornQuestion = await interactionGenerator.next({
+
+                    const possessionQuestion = await interactionGenerator.next({
                         maxCharacters: 0, maxSafetyCharacters: 100,
                         maxParagraphs: 1,
                         nextQuestion: nextQuestion,
-                        stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
+                        stopAfter: [],
                         stopAt: [],
-                        grammar: yesNoGrammar,
                         contextInfo: engine.inferenceAdapter.buildContextInfoExample(
-                            `Example: If the last message said that "${charName} put on ${item}", the answer would be "yes", since by the end of the message, ${charName} is wearing the item.`,
+                            `Example: If the last message said that "${item} was placed inside ${otherItem}", the answer would be "1"`,
                         ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                            `Example: If the last message said that "${charName} took off ${item}", the answer would be "no", since by the end of the message, ${charName} is not wearing the item.`,
+                            `Example: If the last message said that "${item} was placed on top of ${otherItem}", the answer would be "0" or "none"`,
                         ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                            `Example: If the last message said that "${charName} is wearing ${item}", the answer would be "yes", since by the end of the message, ${charName} is wearing the item.`,
-                        ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                            `Example: If the last message said that "${charName} has ${item} in their inventory but is not wearing it", the answer would be "no", since by the end of the message, ${charName} is not wearing the item.`,
+                            `Example: If the last message said that "${item} was placed on top of ${otherItem}, but some of the ${item} were also placed inside ${otherItem}", the answer would be "some"`,
                         ),
+                        grammar: amountGrammar,
                     });
 
-                    if (wornQuestion.done) {
-                        throw new Error("Questioning agent finished without providing an answer for item worn check.");
+                    if (possessionQuestion.done) {
+                        throw new Error("Questioning agent finished without providing an answer for item amount in possession check.");
                     }
 
-                    console.log("Received answer, " + wornQuestion.value);
+                    console.log("Received answer, " + possessionQuestion.value);
 
-                    if (wornQuestion.value.trim().toLowerCase() === "yes") {
-                        expectedPath[2] = "wearing";
-                        const rewrite = calculateAllPotentialLocationsForItem(engine, charState, allCharactersAtLocation, charactersToQuestion, location, item, true);
-                        allPotentialLocationsForItem = rewrite.allPotentialLocationsForItem;
-                        allPotentialLocationTraversePath = rewrite.allPotentialLocationTraversePath;
-                        allPotentialItemsForItem = rewrite.allPotentialItemsForItem;
-                    }
+                    const amountTransferred = possessionQuestion.value.trim().toLowerCase();
+                    ambiguousAmountMovedFromOneItemToAnotherContained = convertItemAmountToNumericValue(amountTransferred, allPotentialItemsForItem.filter((v, index) => answerForLocationIndexes.includes(index)).flat());
                 }
 
-                endsAtPath.push([expectedPath]);
-                endsAtAmount.push(expectedAmount);
+                // and the difference would be the atop value
+                ambiguousAmountMovedFromOneItemToAnotherAtop = ambiguousAmountTotalMovedFromOneItemToAnother - ambiguousAmountMovedFromOneItemToAnotherContained;
+            }
+
+            console.log("### Concluded that at least " + ambiguousAmountMovedFromOneItemToAnotherAtop + " of item " + item + " is atop " + otherItem + " and at least " + ambiguousAmountMovedFromOneItemToAnotherContained + " of item " + item + " is inside " + otherItem + ", for a total of at least " + ambiguousAmountTotalMovedFromOneItemToAnother + " of item " + item + " that is atop or inside " + otherItem);
+
+            // now we need to start moving it
+            let currentAmountOfItemsMovedToAnotherAtop = 0;
+            let currentAmountOfItemsMovedToAnotherContained = 0;
+
+            // now this is a bit more tricky, so at this point we know that the character has moved the item on top or inside another
+            // and we know how many of those have been placed there, but we don't know which ones specifically
+            // now note how we check in this condition if there are 2 or more potential locations for the other item, because if there is only one potential location for the other item,
+            // then it doesn't matter if it is ambiguous or not, since it can only be that one location
+            if ((isAmbiguouslyAtop || isAmbiguouslyContained) && otherItemPotentialLocations.allPotentialLocationsForItem.length >= 2) {
+                // so now we are in the case where there are more, and we are now looking for explicit mentions, because if there are explicit mentions, then we can be sure that at least some of the item were placed at a specific location4
+                const allPotentialLocationsList = otherItemPotentialLocations.allPotentialLocationsForItem.join("\n - ");
+                for (let i = 0; i < otherItemPotentialLocations.allPotentialLocationsForItem.length; i++) {
+                    // this is the potential location for the other item
+                    const potentialLocation = otherItemPotentialLocations.allPotentialLocationsForItem[i];
+                    let itemsInQuestion = otherItemPotentialLocations.allPotentialItemsForItem[i];
+                    const hasContainer = itemsInQuestion.some((it) => it.capacityKg && it.capacityKg > 0);
+
+                    if (hasContainer && currentAmountOfItemsMovedToAnotherContained < ambiguousAmountMovedFromOneItemToAnotherContained) {
+                        const nextQuestion = `How many of "${item}" were placed inside ${isAnother ? "another " : ""}"${otherItem}" where the target location of ${otherItem} is EXPLICITLY stated to be ${JSON.stringify(potentialLocation)}? ${item} must have been explcitly specified to be placed inside ${otherItem} at the explicit location ${potentialLocation}. Answer with the amount of ONLY the ${item} that were explicitly stated to be placed INSIDE ${otherItem} at the location ${potentialLocation}.`;
+                        console.log("Asking question, " + nextQuestion);
+                        const placementQuestion2 = await interactionGenerator.next({
+                            maxCharacters: 0, maxSafetyCharacters: 100,
+                            maxParagraphs: 1,
+                            nextQuestion: nextQuestion,
+                            useQuestionCache: true,
+                            stopAfter: [],
+                            stopAt: [],
+                            contextInfo: engine.inferenceAdapter.buildContextInfoExample(
+                                `Example: If the last message said that "2 ${item} were placed inside ${otherItem} at ${potentialLocation}", the answer would be "2"`,
+                            ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                                `Example: If the last message said that "2 ${item} were placed inside ${otherItem}, but the location was not specified, the answer would be "0" or "none" since it was not explicitly stated to be at the location ${potentialLocation}.`,
+                            ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                                `Example: If the last message said that "many of ${item} were placed on top of ${otherItem} at ${potentialLocation}, the answer would be "0" or "none" since it was explicitly stated to be on top of ${otherItem}, not inside it, even if the location was specified as ${potentialLocation}.`,
+                            ),
+                            grammar: amountGrammar,
+                            instructions: `The location "${potentialLocation}" must be EXPLICITLY WRITTEN in the last message text as the location of ${otherItem}. Do NOT infer or guess the location, all available locations where ${otherItem} might be are:\n\n` + allPotentialLocationsList,
+                        });
+
+                        if (placementQuestion2.done) {
+                            throw new Error("Questioning agent finished without providing an answer for item placement check.");
+                        }
+
+                        console.log("Received answer, " + placementQuestion2.value);
+                        const amountAtThisLocationStr = placementQuestion2.value.trim().toLowerCase();
+                        if (amountAtThisLocationStr !== "0" && amountAtThisLocationStr !== "none") {
+                            const amountAtThisLocation = convertItemAmountToNumericValue(amountAtThisLocationStr, allPotentialItemsForItem.filter((v, index) => answerForLocationIndexes.includes(index)).flat());
+                            const amountToMove = Math.min(amountAtThisLocation, ambiguousAmountMovedFromOneItemToAnotherContained - currentAmountOfItemsMovedToAnotherContained);
+                            currentAmountOfItemsMovedToAnotherContained += amountToMove;
+
+                            moveItems(
+                                engine,
+                                charState,
+                                item,
+                                allPotentialLocationTraversePath.filter((p, index) => answerForLocationIndexes.includes(index)),
+                                otherItemPotentialLocations.allPotentialLocationTraversePath[i],
+                                "containing",
+                                amountToMove,
+                                addedMessagesForStoryMaster,
+                            );
+                        }
+                    }
+
+                    if (currentAmountOfItemsMovedToAnotherAtop < ambiguousAmountMovedFromOneItemToAnotherAtop) {
+                        const nextQuestion = `How many of "${item}" were placed on top of ${isAnother ? "another " : ""}"${otherItem}" where the target location of ${otherItem} is EXPLICITLY stated to be ${JSON.stringify(potentialLocation)}? ${item} must have been explcitly specified to be placed on top of ${otherItem} at the explicit location ${potentialLocation}. Answer with the amount of ONLY the ${item} that were explicitly stated to be placed ON TOP OF ${otherItem} at the location ${potentialLocation}.`;
+                        console.log("Asking question, " + nextQuestion);
+                        const placementQuestion2 = await interactionGenerator.next({
+                            maxCharacters: 0, maxSafetyCharacters: 100,
+                            maxParagraphs: 1,
+                            nextQuestion: nextQuestion,
+                            stopAfter: [],
+                            stopAt: [],
+                            grammar: amountGrammar,
+                            contextInfo: engine.inferenceAdapter.buildContextInfoExample(
+                                `Example: If the last message said that "2 ${item} were placed on top of ${otherItem} at ${potentialLocation}", the answer would be "2"`,
+                            ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                                `Example: If the last message said that "2 ${item} were placed on top of ${otherItem}, but the location was not specified, the answer would be "0" or "none" since it was not explicitly stated to be at the location ${potentialLocation}.`,
+                            ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                                `Example: If the last message said that "many of ${item} were placed inside of ${otherItem} at ${potentialLocation}, the answer would be "0" or "none" since it was explicitly stated to be inside of ${otherItem}, not on top of it, even if the location was specified as ${potentialLocation}.`,
+                            ),
+                            instructions: `The location "${potentialLocation}" must be EXPLICITLY WRITTEN in the last message text as the location of ${otherItem}. Do NOT infer or guess the location, all available locations where ${otherItem} might be are:\n\n` + allPotentialLocationsList,
+                        });
+
+                        if (placementQuestion2.done) {
+                            throw new Error("Questioning agent finished without providing an answer for item placement check.");
+                        }
+
+                        console.log("Received answer, " + placementQuestion2.value);
+                        const amountAtThisLocationStr = placementQuestion2.value.trim().toLowerCase();
+                        if (amountAtThisLocationStr !== "0" && amountAtThisLocationStr !== "none") {
+                            const amountAtThisLocation = convertItemAmountToNumericValue(amountAtThisLocationStr, allPotentialItemsForItem.filter((v, index) => answerForLocationIndexes.includes(index)).flat());
+                            const amountToMove = Math.min(amountAtThisLocation, ambiguousAmountMovedFromOneItemToAnotherAtop - currentAmountOfItemsMovedToAnotherAtop);
+                            currentAmountOfItemsMovedToAnotherAtop += amountToMove;
+
+                            moveItems(
+                                engine,
+                                charState,
+                                item,
+                                allPotentialLocationTraversePath.filter((p, index) => answerForLocationIndexes.includes(index)),
+                                otherItemPotentialLocations.allPotentialLocationTraversePath[i],
+                                "atop",
+                                amountToMove,
+                                addedMessagesForStoryMaster,
+                            );
+                        }
+                    }
+                }
+            }
+
+            if (currentAmountOfItemsMovedToAnotherAtop < ambiguousAmountMovedFromOneItemToAnotherAtop) {
+                const amountToMove = ambiguousAmountMovedFromOneItemToAnotherAtop - currentAmountOfItemsMovedToAnotherAtop;
+                currentAmountOfItemsMovedToAnotherAtop += amountToMove;
+                moveItemsPickClosestToCharacter(
+                    engine,
+                    charState,
+                    item,
+                    allPotentialLocationTraversePath.filter((p, index) => answerForLocationIndexes.includes(index)),
+                    otherItemPotentialLocations.allPotentialLocationTraversePath,
+                    "atop",
+                    amountToMove,
+                    addedMessagesForStoryMaster,
+                );
+            }
+            if (currentAmountOfItemsMovedToAnotherContained < ambiguousAmountMovedFromOneItemToAnotherContained) {
+                const amountToMove = ambiguousAmountMovedFromOneItemToAnotherContained - currentAmountOfItemsMovedToAnotherContained;
+                currentAmountOfItemsMovedToAnotherContained += amountToMove;
+                moveItemsPickClosestToCharacter(
+                    engine,
+                    charState,
+                    item,
+                    allPotentialLocationTraversePath.filter((p, index) => answerForLocationIndexes.includes(index)),
+                    otherItemPotentialLocations.allPotentialLocationTraversePath,
+                    "contained",
+                    amountToMove,
+                    addedMessagesForStoryMaster,
+                );
+            }
+
+            totalMovedSoFar += currentAmountOfItemsMovedToAnotherAtop + currentAmountOfItemsMovedToAnotherContained;
+        }
+
+        // we still have some amount left to move, so now
+        // we will ponder on whether they end in the hands of characters
+        // instead of inside or atop other items
+        if (totalMovedSoFar < expectedAmountToMove) {
+            const hasAWornPotential = allPotentialItemsForItem.filter((p, index) => answerForLocationIndexes.includes(index)).some((itemOptions) => itemOptions.some((it) => it.wearableProperties));
+
+            for (const charName of charactersToQuestion) {
+
+                if (totalMovedSoFar >= expectedAmountToMove) {
+                    break;
+                }
+
+                const nextQuestion = `By the end of the last message, is the item "${item}" in direct possession of ${charName}? they are carrying it or wearing it`;
+                console.log("Asking question, " + nextQuestion);
+                const anotherChar = `${getCharacterNameForExample([charName], 0)}`;
+                const possessionQuestion = await interactionGenerator.next({
+                    maxCharacters: 0, maxSafetyCharacters: 100,
+                    maxParagraphs: 1,
+                    nextQuestion: nextQuestion,
+                    stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
+                    stopAt: [],
+                    grammar: yesNoGrammar,
+                    contextInfo: engine.inferenceAdapter.buildContextInfoExample(
+                        `Example: If the last message said that "${anotherChar} gave ${item} to ${charName}", the answer would be "yes", since by the end of the message, ${charName} has the item in their possession.`,
+                    ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                        `Example: If the last message said that "${anotherChar} took ${item}", the answer would be "no", since by the end of the message, ${charName} does not have the item in their possession.`,
+                    ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                        `Example: If the last message said that "${charName} carefully drops ${item} on the ground", the answer would be "no", since by the end of the message, ${charName} dropped the item and does not have it in their possession.`,
+                    ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                        `Example: If the last message said that "${charName} picks up ${item} from ${anotherChar} and then throws it down the window", the answer would be "no", since by the end of the message, ${charName} threw the item away`,
+                    ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                        `Example: If the last message said that "${anotherChar} picks up ${item} and then gives it to ${charName}", the answer would be "yes", since by the end of the message, ${charName} has the item in their possession`,
+                    ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                        `Example: If the last message said that "${charName} wears ${item}", the answer would be "yes", since by the end of the message, ${charName} has the item in their possession and is wearing it`,
+                    ),
+                });
+                if (possessionQuestion.done) {
+                    throw new Error("Questioning agent finished without providing an answer for item possession check.");
+                }
+                console.log("Received answer, " + possessionQuestion.value);
+
+                // if yes, ask further questions
+                if (possessionQuestion.value.trim().toLowerCase() === "yes") {
+                    let expectedLocLast = "carrying";
+                    const nextQuestion = `By the end of the last message, how many of "${item}" are in possession by ${charName}? Answer with a number, or if the amount is not clear, answer with one of the following: "a few", "several", "many", "a lot", "some", "half", "most", or "all".`;
+                    const amountGrammar = `root ::= ([0-9]+ | "a few" | "several" | "many" | "a lot" | "some" | "half" | "most" | "all") ${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()}`;
+
+                    console.log("Asking question, " + nextQuestion);
+
+                    const possessionQuestion = await interactionGenerator.next({
+                        maxCharacters: 0, maxSafetyCharacters: 100,
+                        maxParagraphs: 1,
+                        nextQuestion: nextQuestion,
+                        stopAfter: [],
+                        stopAt: [],
+                        grammar: amountGrammar,
+                    });
+
+                    if (possessionQuestion.done) {
+                        throw new Error("Questioning agent finished without providing an answer for item amount in possession check.");
+                    }
+
+                    const expectedAmount = possessionQuestion.value.trim().toLowerCase();
+                    const actualAmount = convertItemAmountToNumericValue(expectedAmount, allPotentialItemsForItem.filter((v, index) => answerForLocationIndexes.includes(index)).flat());
+
+                    console.log("Received answer, " + possessionQuestion.value);
+
+                    if (actualAmount === 0) {
+                        console.log(`The answer for the amount of "${item}" that is in possession of ${charName} is 0 or none, which seems to be a contradiction with the previous answer that indicated that ${charName} has the item in their possession. This may indicate a false positive in the initial possession question, or it may indicate that the item was in their possession at some point during the message but then was removed from their possession by the end of the message. Skipping this relationship due to this inconsistency.`);
+                        continue;
+                    }
+
+                    if (hasAWornPotential) {
+                        const nextQuestion = `By the end of the last message, is the item "${item}" being worn by ${charName}? Answer "yes" ONLY if ${item} was PUT ON or WORN by ${charName}. If ${item} was taken off, removed, or not put on, answer "no".`;
+                        console.log("Asking question, " + nextQuestion);
+                        const wornQuestion = await interactionGenerator.next({
+                            maxCharacters: 0, maxSafetyCharacters: 100,
+                            maxParagraphs: 1,
+                            nextQuestion: nextQuestion,
+                            stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
+                            stopAt: [],
+                            grammar: yesNoGrammar,
+                            contextInfo: engine.inferenceAdapter.buildContextInfoExample(
+                                `Example: If the last message said that "${charName} put on ${item}", the answer would be "yes", since by the end of the message, ${charName} is wearing the item.`,
+                            ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                                `Example: If the last message said that "${charName} took off ${item}", the answer would be "no", since by the end of the message, ${charName} is not wearing the item.`,
+                            ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                                `Example: If the last message said that "${charName} is wearing ${item}", the answer would be "yes", since by the end of the message, ${charName} is wearing the item.`,
+                            ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                                `Example: If the last message said that "${charName} has ${item} in their inventory but is not wearing it", the answer would be "no", since by the end of the message, ${charName} is not wearing the item.`,
+                            ),
+                        });
+
+                        if (wornQuestion.done) {
+                            throw new Error("Questioning agent finished without providing an answer for item worn check.");
+                        }
+
+                        console.log("Received answer, " + wornQuestion.value);
+
+                        if (wornQuestion.value.trim().toLowerCase() === "yes") {
+                            expectedLocLast = "wearing";
+                        }
+                    }
+
+                    const actualAmountToMove = Math.min(actualAmount, expectedAmountToMove - totalMovedSoFar);
+
+                    moveItems(
+                        engine,
+                        charState,
+                        item,
+                        allPotentialLocationTraversePath.filter((p, index) => answerForLocationIndexes.includes(index)),
+                        ["characters", charName],
+                        expectedLocLast,
+                        actualAmountToMove,
+                        addedMessagesForStoryMaster,
+                    );
+
+                    totalMovedSoFar += actualAmountToMove;
+                }
             }
         }
 
-        if (endsAtPath.length > 0) {
+        if (totalMovedSoFar > 0) {
+            let wasStolen = false;
+            /**
+             * @type {string|null}
+             */
+            let wasStolenBy = null;
+
+            /**
+             * @type {string[]}
+             */
+            let witnesses = [];
+            /**
+             * @type {string[]}
+             */
+            let ignorers = [];
+            /**
+             * @type {string[]}
+             */
+            let witnessesThatIgnoredTheft = [];
+            /**
+             * @type {string[]}
+             */
+            let witnessesThatTurnHeroes = [];
+
             const nextQuestionSteal = `By the last message, was the item "${item}" stolen? Answer "yes" ONLY if a character took the item without permission from its previous possessor. If the item was obtained through other means (like finding it, being given it, or moving it from one place to another without taking it from someone else), answer "no".`;
             console.log("Asking question, " + nextQuestionSteal);
             const stealQuestion = await interactionGenerator.next({
@@ -1100,6 +1168,22 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                         }
                     }
                 }
+            }
+
+            if (wasStolen) {
+                informStolen(
+                    engine,
+                    item,
+                    wasStolenBy,
+                    witnesses,
+                    ignorers,
+                    witnessesThatIgnoredTheft,
+                    witnessesThatTurnHeroes,
+                    addedMessagesForStoryMaster,
+                );
+
+                // add the witnesses that turn heroes and will call out the thief
+                forcedInteractionCharacters.push(...witnessesThatTurnHeroes);
             }
         }
     }
