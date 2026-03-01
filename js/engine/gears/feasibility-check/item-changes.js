@@ -94,6 +94,20 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
         throw new Error(`Character state for ${character.name} not found.`);
     }
 
+    // resolvePath(engine, charState.location,
+    //     [
+    //         'slots',
+    //         'Cooking Area',
+    //         'items',
+    //         3,
+    //         'containing',
+    //         0,
+    //         'containing',
+    //         0
+    //     ]
+    // );
+    // process.exit(1); // TODO remove
+
     // get the item list at the location, if there are no items, skip the check since there can't be any item changes
     const itemsAtLocation = engine.getFullItemListAtLocation(charState.location);
 
@@ -123,7 +137,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
     for (const item of itemsAtLocation) {
         const itemLowerCase = item.toLowerCase();
         if (lastMessageLowerCase.includes(itemLowerCase)) {
-            itemsInteractedWith.push(item);
+            itemsInteractedWith.push(itemLowerCase);
         }
     }
 
@@ -188,7 +202,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
         const extraAdded = answer.value.trim() === "none" ? [] : answer.value.split(",").map((v) => v.trim()).filter((v) => !!v);
         // we append extraAdded first to prefer the order given by the LLM over ours, since
         // ordering may have a subtle effect
-        itemsInteractedWith = removeRepeatsInArray(extraAdded.concat(itemsAtLocation));
+        itemsInteractedWith = removeRepeatsInArray(extraAdded.concat(itemsInteractedWith).map((v) => v.toLowerCase()));
     }
 
     const charactersAtLocation = [...charState.surroundingNonStrangers, ...charState.surroundingTotalStrangers, character.name];
@@ -357,67 +371,96 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
             continue;
         }
 
-        // now we will ask the agent if the item was moved, if it was picked up, carried, worn, or had its location changed in the last message, based on the definition of interaction we give them, and only considering the item locations we just calculated as potential locations for the item
-        const wasItMovedNextQuestion = `In the last message, did any character move, picked up, wear, carry, put on, or change the location of the item "${item}" itself? IMPORTANT: The item "${item}" must be the DIRECT OBJECT being physically relocated. If "${item}" is only a DESTINATION or LOCATION where something else was placed, the answer is NO.`;
+        let isTotallyCertainAndConfirmedOfTheMovingState = false;
+        let wasMoved = false;
 
-        console.log("Asking question, " + wasItMovedNextQuestion);
+        while (!isTotallyCertainAndConfirmedOfTheMovingState) {
+            // TODO ask twice, because sometimes it gets it wrong and says NO
+            // now we will ask the agent if the item was moved, if it was picked up, carried, worn, or had its location changed in the last message, based on the definition of interaction we give them, and only considering the item locations we just calculated as potential locations for the item
+            const wasItMovedNextQuestion = `In the last message, did any character move, picked up, wear, carry, put on, or change the location of the item "${item}" itself? IMPORTANT: The item "${item}" must be the DIRECT OBJECT being physically relocated. If "${item}" is only a DESTINATION or LOCATION where something else was placed, the answer is NO.`;
 
-        const wasItMovedQuestion = await interactionGenerator.next({
-            maxCharacters: 0, maxSafetyCharacters: 100,
-            maxParagraphs: 1,
-            nextQuestion: wasItMovedNextQuestion,
-            stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
-            stopAt: [],
-            answerTrail: `regarding specifically the item ${item} being moved, picked up, carried, put on, or relocated; the answer is:\n\n`,
-            grammar: yesNoGrammar,
-            contextInfo: engine.inferenceAdapter.buildContextInfoExample(
-                `Example: "Alice picked up ${item} and put it in her backpack" -> Answer: YES, because ${item} itself was picked up and moved.`,
-            ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                `Example: "Bob looked at ${item} on the table" -> Answer: NO, because ${item} was not moved.`,
-            ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                `Example: "Emma gave ${item} to Bob" -> Answer: YES, because ${item} was handed over (moved from Emma to Bob).`,
-            ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                `Example: "Joe kicked ${item} on an angry rampage" -> Answer: NO, because kicking does not relocate the item.`,
-            ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                `Example: "Alice grabbed a fork from the ${item}" -> Answer: NO, because ${item} is the SOURCE. A fork was taken FROM ${item}, but ${item} stayed in place.`,
-            ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                `Example: "Bob placed the book on top of the ${item}" -> Answer: NO, because ${item} is the DESTINATION. The book was placed ON ${item}, but ${item} itself was not moved.`,
-            ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                `Example: "Carol puts a bowl on top of a ${item}" -> Answer: NO, because ${item} is the DESTINATION. The bowl was placed ON ${item}, but ${item} itself stayed where it was.`,
-            ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                `KEY RULE: If something is placed ON, INTO, ONTO, or INSIDE "${item}", then "${item}" is a destination, NOT the object being moved. Answer NO in such cases.`,
-            ),
-        });
-        if (wasItMovedQuestion.done) {
-            throw new Error("Questioning agent finished without providing an answer for item movement check.");
-        }
-        console.log("Received answer, " + wasItMovedQuestion.value);
+            console.log("Asking question, " + wasItMovedNextQuestion);
 
-        let wasMoved = true;
-        if (wasItMovedQuestion.value.trim().toLowerCase() !== "yes") {
-            wasMoved = false;
-        }
-
-        // if it was moved, we will ask a confirmation question to make sure the agent is consistent in its answers, since this is a crucial point for the rest of the checks for this item, if the item was not moved, we will skip the rest of the checks for this item, since if it was not moved, it can't have its location changed or be stolen
-        if (wasMoved) {
-            const wasItMovedConfirmationQuestion = `Is the following statement correct? In the last message, the item "${item}" was moved, worn, picked up, carried, put on, or had its location changed. Answer "yes" if this statement is correct, or "no" if this statement is incorrect.`;
-            console.log("Asking question, " + wasItMovedConfirmationQuestion);
-            const wasItMovedConfirmation = await interactionGenerator.next({
+            const wasItMovedQuestion = await interactionGenerator.next({
                 maxCharacters: 0, maxSafetyCharacters: 100,
                 maxParagraphs: 1,
-                nextQuestion: wasItMovedConfirmationQuestion,
+                nextQuestion: wasItMovedNextQuestion,
                 stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
                 stopAt: [],
+                answerTrail: `regarding specifically the item ${item} being moved, picked up, carried, put on, or relocated; the answer is:\n\n`,
                 grammar: yesNoGrammar,
+                contextInfo: engine.inferenceAdapter.buildContextInfoExample(
+                    `Example: "Alice picked up ${item} and put it in her backpack" -> Answer: YES, because ${item} itself was picked up and moved.`,
+                ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                    `Example: "Bob looked at ${item} on the table" -> Answer: NO, because ${item} was not moved.`,
+                ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                    `Example: "Emma gave ${item} to Bob" -> Answer: YES, because ${item} was handed over (moved from Emma to Bob).`,
+                ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                    `Example: "Joe kicked ${item} on an angry rampage" -> Answer: NO, because kicking does not relocate the item.`,
+                ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                    `Example: "Alice grabbed a fork from the ${item}" -> Answer: NO, because ${item} is the SOURCE. A fork was taken FROM ${item}, but ${item} stayed in place.`,
+                ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                    `Example: "Bob placed the book on top of the ${item}" -> Answer: NO, because ${item} is the DESTINATION. The book was placed ON ${item}, but ${item} itself was not moved.`,
+                ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                    `Example: "Carol puts a bowl on top of a ${item}" -> Answer: NO, because ${item} is the DESTINATION. The bowl was placed ON ${item}, but ${item} itself stayed where it was.`,
+                ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                    `KEY RULE: If something is placed ON, INTO, ONTO, or INSIDE "${item}", then "${item}" is a destination, NOT the object being moved. Answer NO in such cases.`,
+                ),
             });
-            if (wasItMovedConfirmation.done) {
-                throw new Error("Questioning agent finished without providing an answer for item movement confirmation check.");
+            if (wasItMovedQuestion.done) {
+                throw new Error("Questioning agent finished without providing an answer for item movement check.");
             }
-            console.log("Received answer, " + wasItMovedConfirmation.value);
+            console.log("Received answer, " + wasItMovedQuestion.value);
 
-            if (wasItMovedConfirmation.value.trim().toLowerCase() !== "yes") {
-                console.log(`The confirmation question for item movement check received a "no" answer, which contradicts the initial answer that indicated the item "${item}" was moved. This may indicate a false positive in the initial movement question, or it may indicate that the item was moved but then moved back to its original location by the end of the message. Skipping further checks for this item due to this inconsistency.`);
+            wasMoved = true;
+            if (wasItMovedQuestion.value.trim().toLowerCase() !== "yes") {
                 wasMoved = false;
+            }
+
+            // if it was moved, we will ask a confirmation question to make sure the agent is consistent in its answers, since this is a crucial point for the rest of the checks for this item, if the item was not moved, we will skip the rest of the checks for this item, since if it was not moved, it can't have its location changed or be stolen
+            if (wasMoved) {
+                const wasItMovedConfirmationQuestion = `Is the following statement correct? In the last message, the item "${item}" was moved, worn, picked up, carried, put on, or had its location changed. Answer "yes" if this statement is correct, or "no" if this statement is incorrect.`;
+                console.log("Asking question, " + wasItMovedConfirmationQuestion);
+                const wasItMovedConfirmation = await interactionGenerator.next({
+                    maxCharacters: 0, maxSafetyCharacters: 100,
+                    maxParagraphs: 1,
+                    nextQuestion: wasItMovedConfirmationQuestion,
+                    stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
+                    stopAt: [],
+                    grammar: yesNoGrammar,
+                });
+                if (wasItMovedConfirmation.done) {
+                    throw new Error("Questioning agent finished without providing an answer for item movement confirmation check.");
+                }
+                console.log("Received answer, " + wasItMovedConfirmation.value);
+
+                if (wasItMovedConfirmation.value.trim().toLowerCase() !== "yes") {
+                    console.log(`The confirmation question for item movement check received a "no" answer, which contradicts the initial answer that indicated the item "${item}" was moved. This may indicate a false positive in the initial movement question, or it may indicate that the item was moved but then moved back to its original location by the end of the message.`);
+                } else {
+                    isTotallyCertainAndConfirmedOfTheMovingState = true;
+                }
+            } else {
+                // TODO this gives false positives... fix, again keeps trying to move the chair, causing infinite loop
+                const wasItMovedConfirmationQuestion = `Is the following statement correct? In the last message, the item "${item}" was not moved, "${item}" was not worn, "${item}" was not picked up, "${item}" was not carried, "${item}" was not put on and "${item}" did not have its location changed. Answer "yes" if this statement is correct, or "no" if this statement is incorrect.`;
+                console.log("Asking question, " + wasItMovedConfirmationQuestion);
+                const wasItMovedConfirmation = await interactionGenerator.next({
+                    maxCharacters: 0, maxSafetyCharacters: 100,
+                    maxParagraphs: 1,
+                    nextQuestion: wasItMovedConfirmationQuestion,
+                    stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
+                    stopAt: [],
+                    grammar: yesNoGrammar,
+                });
+                if (wasItMovedConfirmation.done) {
+                    throw new Error("Questioning agent finished without providing an answer for item movement confirmation check.");
+                }
+                console.log("Received answer, " + wasItMovedConfirmation.value);
+
+                if (wasItMovedConfirmation.value.trim().toLowerCase() !== "yes") {
+                    console.log(`The confirmation question for item movement check received a "no" answer, which contradicts the initial answer that indicated the item "${item}" was not moved. This may indicate a false positive in the initial movement question, or it may indicate that the item was moved but then moved back to its original location by the end of the message.`);
+                } else {
+                    isTotallyCertainAndConfirmedOfTheMovingState = true;
+                }
             }
         }
 
@@ -813,6 +856,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
 
                             moveItems(
                                 engine,
+                                character.name,
                                 charState,
                                 item,
                                 allPotentialLocationTraversePath.filter((p, index) => answerForLocationIndexes.includes(index)),
@@ -857,11 +901,12 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
 
                             moveItems(
                                 engine,
+                                character.name,
                                 charState,
                                 item,
                                 allPotentialLocationTraversePath.filter((p, index) => answerForLocationIndexes.includes(index)),
                                 otherItemPotentialLocations.allPotentialLocationTraversePath[i],
-                                "atop",
+                                "ontop",
                                 amountToMove,
                                 addedMessagesForStoryMaster,
                             );
@@ -875,11 +920,12 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                 currentAmountOfItemsMovedToAnotherAtop += amountToMove;
                 moveItemsPickClosestToCharacter(
                     engine,
+                    character.name,
                     charState,
                     item,
                     allPotentialLocationTraversePath.filter((p, index) => answerForLocationIndexes.includes(index)),
                     otherItemPotentialLocations.allPotentialLocationTraversePath,
-                    "atop",
+                    "ontop",
                     amountToMove,
                     addedMessagesForStoryMaster,
                 );
@@ -889,11 +935,12 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                 currentAmountOfItemsMovedToAnotherContained += amountToMove;
                 moveItemsPickClosestToCharacter(
                     engine,
+                    character.name,
                     charState,
                     item,
                     allPotentialLocationTraversePath.filter((p, index) => answerForLocationIndexes.includes(index)),
                     otherItemPotentialLocations.allPotentialLocationTraversePath,
-                    "contained",
+                    "containing",
                     amountToMove,
                     addedMessagesForStoryMaster,
                 );
@@ -1010,10 +1057,11 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
 
                     moveItems(
                         engine,
+                        character.name,
                         charState,
                         item,
                         allPotentialLocationTraversePath.filter((p, index) => answerForLocationIndexes.includes(index)),
-                        ["characters", charName],
+                        [["characters", charName]],
                         expectedLocLast,
                         actualAmountToMove,
                         addedMessagesForStoryMaster,
@@ -1173,7 +1221,9 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
             if (wasStolen) {
                 informStolen(
                     engine,
+                    totalMovedSoFar,
                     item,
+                    // @ts-ignore
                     wasStolenBy,
                     witnesses,
                     ignorers,
@@ -1187,6 +1237,8 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
             }
         }
     }
+
+    console.log(addedMessagesForStoryMaster);
 
     process.exit(1); // TODO remove
 
@@ -1663,9 +1715,10 @@ function convertItemAmountToNumericValue(text, allPotentialItems) {
 /**
  * @param {DEngine} engine
  * @param {string} currentLocation
- * @param {Array<string | number>} locationPath 
+ * @param {Array<string | number>} locationPath
+ * @param {boolean} [ignoreCarrierWearer] whether to ignore the carrier/wearer in the message, this is used for example when we are trying to figure out if an item is being worn by a character, as the LLM may refer to the item in a different way than how it is named in the world state, for example it may say "hat" instead of "red hat", so we want to ignore case and also check if the item name includes the name we are looking for instead of checking for an exact match, this is just to increase the chances of finding the item and thus accepting feasible changes even if they are not perfectly formatted
  */
-function locationPathToMessage(engine, currentLocation, locationPath) {
+function locationPathToMessage(engine, currentLocation, locationPath, ignoreCarrierWearer = false) {
     if (!engine.deObject) {
         throw new Error("DEngine not initialized");
     }
@@ -1675,21 +1728,34 @@ function locationPathToMessage(engine, currentLocation, locationPath) {
      */
     let elementToFollow = null;
     if (locationPath[0] === "characters") {
-        base = `${locationPath[2] === "carrying" ? "carried" : "worn"} by ${locationPath[1]}`;
+        base = ignoreCarrierWearer ? "" : `${locationPath[2] === "carrying" ? "carried" : "worn"} by ${locationPath[1]}`;
         // @ts-ignore
         elementToFollow = engine.deObject.stateFor[locationPath[1]][locationPath[2]];
     } else if (locationPath[0] === "slots") {
-        base = `in ${locationPath[1]}`;
+        let locationSlotNameToUse = /** @type {string} */ (locationPath[1]);
+        if (!locationSlotNameToUse.toLowerCase().startsWith("a ") && !locationSlotNameToUse.toLowerCase().startsWith("an ") && !locationSlotNameToUse.toLowerCase().startsWith("the ")) {
+            locationSlotNameToUse = "the " + locationSlotNameToUse;
+        }
+        base = `in ${locationSlotNameToUse}`;
         elementToFollow = engine.deObject.world.locations[currentLocation].slots[locationPath[1]].items;
     }
 
     for (let i = 3; i < locationPath.length; i += 2) {
         const itemId = locationPath[i];
         const relation = locationPath[i + 1];
+
+        let itemNameToUse = elementToFollow[itemId].name;
+        if (!itemNameToUse.toLowerCase().startsWith("a ") && !itemNameToUse.toLowerCase().startsWith("an ") && !itemNameToUse.toLowerCase().startsWith("the ")) {
+            if (itemNameToUse.toLowerCase().startsWith("a")) {
+                itemNameToUse = "an " + itemNameToUse;
+            } else {
+                itemNameToUse = "a " + itemNameToUse;
+            }
+        }
         if (relation === "containing") {
-            base = `inside ${elementToFollow[itemId].name}, ${base}`;
-        } else if (relation === "atop") {
-            base = `on top of ${elementToFollow[itemId].name}, ${base}`;
+            base = `inside ${itemNameToUse}, ${base}`;
+        } else if (relation === "ontop") {
+            base = `on top of ${itemNameToUse}, ${base}`;
         }
         elementToFollow = elementToFollow[itemId][relation];
     }
@@ -1700,14 +1766,606 @@ function locationPathToMessage(engine, currentLocation, locationPath) {
 /**
  * @param {DEngine} engine
  * @param {string} currentLocation
- * @param {DEItem} item 
- * @param {Array<string | number>} fromLocationPath 
- * @param {Array<Array<string | number>>} toPotentialLocationPaths 
- * @param {number} amount 
+ * @param {Array<string | number>} path
+ * @return {{
+ *   resolved: *,
+ *   pathToResolved: Array<string | number>
+ * }}
  */
-function transferItems(engine, currentLocation, item, fromLocationPath, toPotentialLocationPaths, amount) {
-    console.log(fromLocationPath, toPotentialLocationPaths);
-    console.log(`>>>>>>>> Transferring ${amount} of ${item.name} obtained ${locationPathToMessage(engine, currentLocation, fromLocationPath)} to be ${toPotentialLocationPaths.map(path => locationPathToMessage(engine, currentLocation, path)).join(" OR ")}`);
-    // TODO handle everything including if it overflows, falls down, etc...
-    return "";
+function resolvePath(engine, currentLocation, path) {
+    if (!engine.deObject) {
+        throw new Error("DEngine not initialized");
+    }
+    /**
+     * @type {*}
+     */
+    let current = path[0] === "slots" ? engine.deObject.world.locations[currentLocation].slots[path[1]] : engine.deObject.stateFor[path[1]];
+    const startIndex = 2;
+    for (let i = startIndex; i < path.length; i++) {
+        // console.log(current)
+        const part = path[i];
+        // @ts-ignore
+        current = current[part];
+    }
+    if (current._moved_to) {
+        return resolvePath(engine, currentLocation, current._moved_to);
+    }
+    return {
+        resolved: current,
+        pathToResolved: path,
+    };
+}
+
+
+/**
+ * @param {DEngine} engine
+ * @param {string} characterName
+ * @param {DEStateForDescriptionWithHistory} charState
+ * @param {string} item 
+ * @param {Array<Array<Array<string | number>>>} fromPotentialLocationPaths 
+ * @param {Array<Array<string | number>>} toPotentialLocationPaths 
+ * @param {string} finalPath
+ * @param {number} amountToMove
+ * @param {string[]} addedMessagesForStoryMaster
+ */
+function moveItems(
+    engine,
+    characterName,
+    charState,
+    item,
+    fromPotentialLocationPaths,
+    toPotentialLocationPaths,
+    finalPath,
+    amountToMove,
+    addedMessagesForStoryMaster,
+) {
+    if (amountToMove <= 0) {
+        return;
+    }
+    // TODO remove
+    console.log("FROM", fromPotentialLocationPaths);
+    console.log("TO", toPotentialLocationPaths);
+
+    // TODO figure out when moving the target to may have an amount but it should
+    // only be one item, so we will need to most likely duplicate 
+
+    if (!engine.deObject) {
+        throw new Error("DEngine not initialized");
+    }
+    const slotReference = charState.locationSlot;
+
+    /**
+     * @type {Array<Array<Array<string | number>>>}
+     */
+    const fromPathsAtTheSameSlot = [];
+    /**
+     * @type {Array<Array<Array<string | number>>>}
+     */
+    const fromPathsNotAtTheSameSlot = [];
+    for (const potentialFromPath of fromPotentialLocationPaths) {
+        // all others are guaranteed to be in the same slot, what changes is the number
+        if (potentialFromPath[0][0] === "slots") {
+            if (potentialFromPath[0][1] === slotReference) {
+                fromPathsAtTheSameSlot.push(potentialFromPath);
+            } else {
+                fromPathsNotAtTheSameSlot.push(potentialFromPath);
+            }
+        } else if (potentialFromPath[0][0] === "characters") {
+            const charName = potentialFromPath[0][1];
+            const charState = engine.deObject.stateFor[charName];
+            if (charState.locationSlot === slotReference) {
+                fromPathsAtTheSameSlot.push(potentialFromPath);
+            } else {
+                fromPathsNotAtTheSameSlot.push(potentialFromPath);
+            }
+        } else {
+            throw new Error("Unexpected from path that is not from a slot or character, got " + potentialFromPath[0][0]);
+        }
+    }
+
+    const toPathsAtTheSameSlot = [];
+    const toPathsNotAtTheSameSlot = [];
+    for (const potentialToPath of toPotentialLocationPaths) {
+        if (potentialToPath[0] === "slots") {
+            if (potentialToPath[1] === slotReference) {
+                toPathsAtTheSameSlot.push(potentialToPath);
+            } else {
+                toPathsNotAtTheSameSlot.push(potentialToPath);
+            }
+        } else if (potentialToPath[0] === "characters") {
+            const charName = potentialToPath[1];
+            const charState = engine.deObject.stateFor[charName];
+            if (charState.locationSlot === slotReference) {
+                toPathsAtTheSameSlot.push(potentialToPath);
+            } else {
+                toPathsNotAtTheSameSlot.push(potentialToPath);
+            }
+        } else {
+            throw new Error("Unexpected to path that is not from a slot or character, got " + potentialToPath[0]);
+        }
+    }
+
+    /**
+     * @type {Array<string|number> | null}
+     */
+    let toPath = null;
+
+    if (toPathsAtTheSameSlot.length > 0) {
+        // pick one at random
+        toPath = toPathsAtTheSameSlot[Math.floor(Math.random() * toPathsAtTheSameSlot.length)];
+    } else {
+        // first we will see if the item was used before to place new things and prefer one of those paths if they exist
+        const preferrablePaths = [];
+        for (const potentialToPath of toPathsNotAtTheSameSlot) {
+            const resolveInfo = resolvePath(engine, charState.location, potentialToPath);
+            if (resolveInfo.resolved._just_placed) {
+                preferrablePaths.push(potentialToPath);
+            }
+        }
+        if (preferrablePaths.length > 0) {
+            toPath = preferrablePaths[Math.floor(Math.random() * preferrablePaths.length)];
+        } else {
+            // pick one at random from all potential paths
+            toPath = toPotentialLocationPaths[Math.floor(Math.random() * toPotentialLocationPaths.length)];
+        }
+    }
+
+    /**
+     * Counts the total amount of items in the given paths.
+     * @param {Array<Array<string | number>>} paths 
+     */
+    const countAmount = (paths) => {
+        let total = 0;
+        for (const path of paths) {
+            const resolveInfo = resolvePath(engine, charState.location, path);
+            total += resolveInfo.resolved.amount || 1;
+        }
+        return total;
+    }
+
+    // let's sort fromPathsAtTheSameSlot by amount, the ones with largest amount first
+    const newFromPaths = fromPathsAtTheSameSlot.map((v) => {
+        return { paths: v, amount: countAmount(v) };
+    }).sort((a, b) => {
+        return b.amount - a.amount;
+    });
+
+    // now let's do the same for fromPathsNotAtTheSameSlot
+    const newFromPathNotSameSlot = fromPathsNotAtTheSameSlot.map((v) => {
+        return { paths: v, amount: countAmount(v) };
+    }).sort((a, b) => {
+        return b.amount - a.amount;
+    });
+
+    /**
+     * @type {Array<Array<Array<string | number>>>}
+     */
+    const fromPathsConsumable = [];
+
+    const newFromPathsThatCanTakeTheWholeAmount = newFromPaths.filter((v) => v.amount >= amountToMove);
+    const newFromPathsThatCanTakeTheWholeAmountNotSameSlot = newFromPathNotSameSlot.filter((v) => v.amount >= amountToMove);
+
+    console.log("newFromPaths", newFromPaths);
+    console.log("newFromPathNotSameSlot", newFromPathNotSameSlot);
+
+    console.log("newFromPathsThatCanTakeTheWholeAmount", newFromPathsThatCanTakeTheWholeAmount);
+    console.log("newFromPathsThatCanTakeTheWholeAmountNotSameSlot", newFromPathsThatCanTakeTheWholeAmountNotSameSlot);
+
+    if (newFromPathsThatCanTakeTheWholeAmount.length > 0) {
+        // all the items are available at this path that is close so we assume the transfer happens from here, we can pick one at random if there are multiple
+        fromPathsConsumable.push(newFromPathsThatCanTakeTheWholeAmount[Math.floor(Math.random() * newFromPathsThatCanTakeTheWholeAmount.length)].paths);
+    } else if (newFromPathsThatCanTakeTheWholeAmountNotSameSlot.length > 0) {
+        fromPathsConsumable.push(newFromPathsThatCanTakeTheWholeAmountNotSameSlot[Math.floor(Math.random() * newFromPathsThatCanTakeTheWholeAmountNotSameSlot.length)].paths);
+    } else {
+        fromPathsConsumable.push(...newFromPaths.map((v) => v.paths));
+        fromPathsConsumable.push(...newFromPathNotSameSlot.map((v) => v.paths));
+    }
+
+    // this is guaranteed to be either a character, a slot, or another item
+    const resolveInfo = resolvePath(
+        engine,
+        charState.location,
+        toPath
+    );
+    const toElement = resolveInfo.resolved;
+
+    // ensure that the path we are moving is a path of one item only
+    ensurePathOfOne(engine, charState.location, resolveInfo.pathToResolved);
+
+    console.log("Determined transfer paths for", amountToMove, "of item", item, ", from paths: ", fromPathsConsumable, "to path:", resolveInfo.pathToResolved);
+
+    // now we will start moving the items
+    let amountMoved = 0;
+    for (const fromPath of fromPathsConsumable) {
+        if (amountMoved >= amountToMove) {
+            break;
+        }
+        const componentFromPathsSorted = fromPath.map((path) => {
+            const resolveInfo = resolvePath(engine, charState.location, path);
+            return { path, item: resolveInfo.resolved, amount: resolveInfo.resolved.amount || 1 };
+        }).sort((a, b) => {
+            return b.amount - a.amount;
+        });
+        for (const componentFromPath of componentFromPathsSorted) {
+            if (amountMoved >= amountToMove) {
+                break;
+            }
+            const amountAvailable = componentFromPath.amount;
+            const amountToTransfer = Math.min(amountAvailable, amountToMove - amountMoved);
+            if (amountToTransfer <= 0) {
+                continue;
+            }
+            componentFromPath.item.amount = (componentFromPath.item.amount || 1) - amountToTransfer;
+            amountMoved += amountToTransfer;
+
+            const clonedItem = { ...componentFromPath.item, amount: amountToTransfer, _just_placed: true };
+
+            toElement[finalPath].push(clonedItem);
+
+            const lastIndex = toElement[finalPath].length - 1;
+            const actualEndingPath = [...toPath, finalPath, lastIndex];
+
+            if (componentFromPath.item.amount === 0) {
+                // @ts-ignore
+                componentFromPath.item._moved_to = actualEndingPath;
+            }
+
+            // some nicer messages potentials
+            if (actualEndingPath[0] === "characters" && actualEndingPath[2] === "carrying") {
+                // A character picked up or received an item
+                const messageSoFar = `${actualEndingPath[1]} is now carrying ${utilItemCount(engine, characterName, charState, amountToTransfer, item)} which previously ${amountToTransfer === 1 ? "was" : "were"} ${locationPathToMessage(engine, charState.location, componentFromPath.path)}`;
+                if (actualEndingPath.length > 4) {
+                    // eg. ["characters", "Alice", "carrying", 0, "containing", 1] we check above 4 to avoid the index of where the item is located in the carrying list
+                    addedMessagesForStoryMaster.push(messageSoFar + `, and is now specifically ${locationPathToMessage(engine, charState.location, actualEndingPath, true)}`);
+                } else {
+                    addedMessagesForStoryMaster.push(messageSoFar);
+                }
+            } else if (actualEndingPath[0] === "slots" && actualEndingPath[2] === "items" && actualEndingPath.length <= 4) {
+                // an item was dropped on the ground
+                const messageSoFar = `${utilItemCount(engine, characterName, charState, amountToTransfer, item, true)} was dropped on the ground at ${actualEndingPath[1]}, which previously was ${locationPathToMessage(engine, charState.location, componentFromPath.path)}`;
+                addedMessagesForStoryMaster.push(messageSoFar);
+            } else {
+                const messageSoFar = `${utilItemCount(engine, characterName, charState, amountToTransfer, item, true)} was moved from ${locationPathToMessage(engine, charState.location, componentFromPath.path)} to be ${locationPathToMessage(engine, charState.location, actualEndingPath)}.`;
+                addedMessagesForStoryMaster.push(messageSoFar);
+            }
+        }
+    }
+}
+
+/**
+ * @param {DEngine} engine
+ * @param {string} characterName
+ * @param {DEStateForDescriptionWithHistory} charState
+ * @param {string} item 
+ * @param {Array<Array<Array<string | number>>>} fromPotentialLocationPaths 
+ * @param {Array<Array<Array<string | number>>>} toPotentialLocationPaths 
+ * @param {string} finalPath
+ * @param {number} amountToMove
+ * @param {string[]} addedMessagesForStoryMaster
+ */
+function moveItemsPickClosestToCharacter(
+    engine,
+    characterName,
+    charState,
+    item,
+    fromPotentialLocationPaths,
+    toPotentialLocationPaths,
+    finalPath,
+    amountToMove,
+    addedMessagesForStoryMaster,
+) {
+    if (!engine.deObject) {
+        throw new Error("DEngine not initialized");
+    }
+    const slotReference = charState.locationSlot;
+
+    const toPathsAtTheSameSlot = [];
+    for (const toPath of toPotentialLocationPaths) {
+        if (toPath[0][0] === "slots" && toPath[0][1] === slotReference) {
+            toPathsAtTheSameSlot.push(toPath);
+        }
+        if (toPath[0][0] === "characters") {
+            const charName = toPath[0][1];
+            const charState = engine.deObject.stateFor[charName];
+            if (charState.locationSlot === slotReference) {
+                toPathsAtTheSameSlot.push(toPath);
+            }
+        }
+    }
+
+    if (toPathsAtTheSameSlot.length > 0) {
+        return moveItems(engine, characterName, charState, item, fromPotentialLocationPaths, toPathsAtTheSameSlot[Math.floor(Math.random() * toPathsAtTheSameSlot.length)], finalPath, amountToMove, addedMessagesForStoryMaster);
+    } else {
+        return moveItems(engine, characterName, charState, item, fromPotentialLocationPaths, toPotentialLocationPaths[Math.floor(Math.random() * toPotentialLocationPaths.length)], finalPath, amountToMove, addedMessagesForStoryMaster);
+    }
+}
+
+/**
+ * 
+ * @param {DEngine} engine
+ * @param {number} totalMoved
+ * @param {string} item
+ * @param {string} wasStolenBy 
+ * @param {Array<string>} witnesses 
+ * @param {Array<string>} ignorers 
+ * @param {Array<string>} witnessesThatIgnoredTheft 
+ * @param {Array<string>} witnessesThatTurnHeroes 
+ * @param {Array<string>} addedMessagesForStoryMaster 
+ */
+function informStolen(
+    engine,
+    totalMoved,
+    item,
+    wasStolenBy,
+    witnesses,
+    ignorers,
+    witnessesThatIgnoredTheft,
+    witnessesThatTurnHeroes,
+    addedMessagesForStoryMaster,
+) {
+    let message = `${totalMoved} of ${item} ${totalMoved === 1 ? "was" : "were"} stolen by ${wasStolenBy}`;
+    if (witnesses.length <= 0) {
+        message += " with no witnesses, so none noticed the theft.";
+    } else {
+        message += ` and this was witnessed by ${engine.deObject?.functions.format_and(engine.deObject, null, witnesses)}`;
+        if (ignorers.length > 0) {
+            message += `, while ${engine.deObject?.functions.format_and(engine.deObject, null, ignorers)} were nearby but did not notice the theft`;
+        }
+        if (witnessesThatIgnoredTheft.length > 0) {
+            message += `. Out of the witnesses, ${engine.deObject?.functions.format_and(engine.deObject, null, witnessesThatIgnoredTheft)} decided to ignore the theft and not intervene`;
+        }
+        if (witnessesThatTurnHeroes.length > 0) {
+            message += `. Out of the witnesses, ${engine.deObject?.functions.format_and(engine.deObject, null, witnessesThatTurnHeroes)} have decided to call out the thief and intervene`;
+        }
+    }
+
+    addedMessagesForStoryMaster.push(message);
+}
+
+function cleanDirtyItemTree(
+
+) {
+    // TODO Remove _moved_to
+    // TODO Remove _just_placed
+    // remove any items with amount 0
+    // merge items that are equal
+    // determine overflowing containers
+    // crushed items
+    // characters dropping items because they are too heavy
+}
+
+const irregularPlurals = {
+    // Inanimate objects/items only
+    "axis": "axes",
+    "basis": "bases",
+    "cactus": "cacti",
+    "focus": "foci",
+    "fungus": "fungi",
+    "nucleus": "nuclei",
+    "syllabus": "syllabi",
+    "analysis": "analyses",
+    "diagnosis": "diagnoses",
+    "oasis": "oases",
+    "thesis": "theses",
+    "crisis": "crises",
+    "phenomenon": "phenomena",
+    "criterion": "criteria",
+    "datum": "data",
+    "index": "indices",
+    "appendix": "appendices",
+    "bacterium": "bacteria",
+    "medium": "media",
+    "radius": "radii",
+    "formula": "formulae",
+    "vertebra": "vertebrae",
+    "curriculum": "curricula",
+    "aircraft": "aircraft",
+    "species": "species",
+    "fish": "fish",
+    "sheep": "sheep",
+    "deer": "deer",
+    "dice": "dice",
+    "die": "dice",
+    "leaf": "leaves",
+    "loaf": "loaves",
+    "knife": "knives",
+    "life": "lives",
+    "wife": "wives",
+    "self": "selves",
+    "wolf": "wolves",
+    "calf": "calves",
+    "elf": "elves",
+    "scarf": "scarves",
+    "hoof": "hooves",
+    "tomato": "tomatoes",
+    "potato": "potatoes",
+    "torpedo": "torpedoes",
+    "veto": "vetoes",
+    "echo": "echoes",
+    "hero": "heroes",
+    "zero": "zeroes"
+};
+
+/**
+ * @param {DEngine} engine
+ * @param {string} characterName
+ * @param {DEStateForDescriptionWithHistory} charState
+ * @param {number} amount 
+ * @param {string} item
+ * @param {boolean} [capitalize] whether to capitalize the first letter of the item, this is used for example when the item is at the beginning of a sentence, so we want to make sure the message looks good
+ */
+function utilItemCount(engine, characterName, charState, amount, item, capitalize = false) {
+    if (!engine.deObject) {
+        throw new Error("DEngine not initialized");
+    }
+
+    const itemTrimmedLower = item.trim().toLowerCase();
+    // List of common irregular plurals
+
+    let toReturn = "";
+    if (amount === 1 && itemTrimmedLower.startsWith("the ")) {
+        toReturn = item;
+    } else if (amount === 1) {
+        const isOneOfAKind = checkItemIsOneOfAKindAtLocation(engine, characterName, charState, item);
+        if (isOneOfAKind) {
+            toReturn = `the ${item}`;
+        } else if (itemTrimmedLower.startsWith("a")) {
+            toReturn = `an ${item}`;
+        } else {
+            toReturn = `a ${item}`;
+        }
+    } else {
+        // Try to pluralize using irregulars first
+        const lastWord = itemTrimmedLower.split(" ").slice(-1)[0];
+        // @ts-ignore
+        if (irregularPlurals[lastWord]) {
+            // Replace only the last word with its irregular plural
+            const words = item.split(" ");
+            // @ts-ignore
+            words[words.length - 1] = irregularPlurals[lastWord];
+            toReturn = `${amount} ${words.join(" ")}`;
+        } else if (lastWord.endsWith("s") || lastWord.endsWith("x") || lastWord.endsWith("z") || lastWord.endsWith("ch") || lastWord.endsWith("sh")) {
+            toReturn = `${amount} ${item}es`;
+        } else if (lastWord.endsWith("y") && !["a", "e", "i", "o", "u"].includes(lastWord.slice(-2, -1))) {
+            toReturn = `${amount} ${item.slice(0, -1)}ies`;
+        } else {
+            toReturn = `${amount} ${item}s`;
+        }
+    }
+    if (capitalize) {
+        toReturn = toReturn.charAt(0).toUpperCase() + toReturn.slice(1);
+    }
+    return toReturn;
+}
+
+/**
+ * 
+ * @param {DEngine} engine
+ * @param {string} characterName
+ * @param {DEStateForDescriptionWithHistory} charState 
+ * @param {string} item
+ */
+function checkItemIsOneOfAKindAtLocation(engine, characterName, charState, item) {
+    if (!engine.deObject) {
+        throw new Error("DEngine not initialized");
+    }
+    let totalCount = 0;
+    const itemTrimmedLower = item.trim().toLowerCase();
+
+    /**
+     * @param {DEItem[]} itemList 
+     */
+    const countInList = (itemList) => {
+        for (const itemInList of itemList) {
+            if (itemInList.name.trim().toLowerCase() === itemTrimmedLower) {
+                totalCount += itemInList.amount || 1;
+            } else if (itemInList.name.trim().toLowerCase().includes(itemTrimmedLower)) {
+                // we also check if the item name includes the item we are looking for, this is just to increase the chances of finding
+                totalCount += itemInList.amount || 1;
+            }
+            if (totalCount > 1) {
+                return;
+            }
+            countInList(itemInList.containing);
+            if (totalCount > 1) {
+                return;
+            }
+            countInList(itemInList.ontop);
+            if (totalCount > 1) {
+                return;
+            }
+        }
+    }
+
+    const itemLower = item.trim().toLowerCase();
+    const allCharactersToCheck = [...charState.surroundingNonStrangers, ...charState.surroundingTotalStrangers, characterName];
+    for (const charName of allCharactersToCheck) {
+        const characterState = engine.deObject.stateFor[charName];
+        countInList(characterState.carrying);
+        if (totalCount > 1) {
+            return;
+        }
+        countInList(characterState.wearing);
+        if (totalCount > 1) {
+            return;
+        }
+    }
+    for (const [slotName, slot] of Object.entries(engine.deObject.world.locations[charState.location].slots)) {
+        countInList(slot.items);
+        if (totalCount > 1) {
+            return;
+        }
+    }
+
+    return totalCount <= 1;
+}
+
+/**
+ * When placing items on another, these items may be grouped when many are of the same type, and contain the same things, but now
+ * we are adding another item on top of one of them, so we need to make sure that the path we are placing on top of only has one item all the way down
+ * @param {DEngine} engine
+ * @param {string} currentLocation
+ * @param {Array<string | number>} pathResolved 
+ */
+function ensurePathOfOne(engine, currentLocation, pathResolved) {
+    if (!engine.deObject) {
+        throw new Error("DEngine not initialized");
+    }
+    /**
+     * @type {*}
+     */
+    let current = pathResolved[0] === "slots" ? engine.deObject.world.locations[currentLocation].slots[pathResolved[1]] : engine.deObject.stateFor[pathResolved[1]];
+
+    const startIndex = 2;
+    for (let i = startIndex; i < pathResolved.length; i++) {
+        // console.log(current)
+        const part = pathResolved[i];
+        // @ts-ignore
+        const next = current[part];
+        if (
+            typeof next.amount === "number" &&
+            next.amount > 1 &&
+            Array.isArray(current)
+        ) {
+            // TODO remove this log
+            console.log("SPLIT: Splitting item stack because we are placing on top / inside of it and it has amount", next.amount, "item:", next.name);
+            // make a deep copy of the item
+            const nextDeepCopy = deepCopyItem(next);
+            // that copy will contain the remaining items, while the original will be left with one item, and we will place the copy next to it
+            nextDeepCopy.amount -= 1;
+            // the original now only has one item
+            next.amount = 1;
+            // we place the remaining items next to the original
+            current.push(nextDeepCopy);
+        }
+        current = next;
+    }
+}
+
+/**
+ * Deep copies an item
+ * @param {DEItem} item 
+ */
+function deepCopyItem(item) {
+    const newItem = { ...item };
+    if (item.containing) {
+        newItem.containing = item.containing.map(deepCopyItem);
+    }
+    if (item.ontop) {
+        newItem.ontop = item.ontop.map(deepCopyItem);
+    }
+    if (item.wearableProperties) {
+        newItem.wearableProperties = { ...item.wearableProperties };
+    }
+    if (item.carriableProperties) {
+        newItem.carriableProperties = { ...item.carriableProperties };
+    }
+    if (item.consumableProperties) {
+        newItem.consumableProperties = { ...item.consumableProperties };
+    }
+    if (item.communicator) {
+        newItem.communicator = { ...item.communicator };
+    }
+
+    return newItem;
 }

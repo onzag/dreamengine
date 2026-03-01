@@ -612,7 +612,8 @@ export default async function testMessageFeasibilityForCharacter(engine, charact
     // this is for users only as a check, because we will deny the message if
     // it was not feasible, eg. they forced a giant dragon to a mountain (which may be impossible if they are weak)
     // we will try to detect such situations and reject the message as infeasible
-    if (character.name === engine.userCharacter.name) {
+    // TODO remove the false, it's just for testing to not trigger this right now, but we want to trigger it later
+    if (character.name === engine.userCharacter.name && false) {
         const returnValue = await testMessageFeasibilityForce(engine, character);
         if (returnValue) {
             return returnValue;
@@ -620,8 +621,9 @@ export default async function testMessageFeasibilityForCharacter(engine, charact
     }
 
     // FORWARD TIME
+    // TODO uncomment
     // this message is only relevant if we stay at the same location and don't happen to move while that is the case
-    const storyMasterMessagesToAddFromTimeForwards = await timeForwardsUsingLastMessage(engine, character);
+    // const storyMasterMessagesToAddFromTimeForwards = await timeForwardsUsingLastMessage(engine, character);
 
     // THIRD ITEM CHANGES
     const storyMasterMessagesToAddFromItemChanges = await testMessageFeasibilityItemChanges(engine, character);
