@@ -923,13 +923,38 @@ ${states.join(", ")}
     /**
      * @param {DECompleteCharacterReference} character
      * @param {string} info
-     * @returns {string}
+     * @returns {{characterDescriptionAt: string, value: string}}
      */
-    buildContextInfoIsolatedCharacter(character, info) {
+    buildContextInfoCharacterDescription(character, info) {
         if (this.options.mode === "xml") {
-            return ("<characterInfo>" + character.name + ":\n\n" + info + "\n</characterInfo>");
+            return {
+                characterDescriptionAt: "`<characterDescription>` and `</characterDescription>` tags for " + character.name,
+                value: ("<characterDescription>" + character.name + ":\n\n" + info + "\n</characterDescription>"),
+            }
         }
-        return ("# Character Info:\n" + character.name + ":\n\n" + info);
+        return {
+            characterDescriptionAt: character.name + " Description section",
+            value: "# " + character.name + " Description:\n\n" + info
+        };
+    }
+
+    /**
+     * @param {string} itemName
+     * @param {string} title
+     * @param {string[]} descriptions
+     * @return {{itemDescriptionAt: string, value: string}}
+     */
+    buildContextInfoItemDescription(itemName, title, descriptions) {
+        if (this.options.mode === "xml") {
+            return {
+                itemDescriptionAt: "`<itemDescription>` and `</itemDescription>` tags for " + itemName,
+                value: ("<itemDescription><for>" + itemName + "</for>" + title + ":\n\n" + descriptions.join("\n") + "\n</itemDescription>"),
+            }
+        }
+        return {
+            itemDescriptionAt: itemName + " Description section",
+            value: "# " + itemName + " Description:\n" + title + ":\n\n" + descriptions.join("\n")
+        };
     }
 
     /**

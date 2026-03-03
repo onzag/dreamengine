@@ -215,10 +215,20 @@ export class BaseInferenceAdapter {
     /**
      * @param {DECompleteCharacterReference} character
      * @param {string} info
-     * @returns {string}
+     * @returns {{characterDescriptionAt: string, value: string}}
      */
-    buildContextInfoIsolatedCharacter(character, info) {
-        throw new Error("Method 'buildContextInfoIsolatedCharacter()' must be implemented.");
+    buildContextInfoCharacterDescription(character, info) {
+        throw new Error("Method 'buildContextInfoCharacterDescription()' must be implemented.");
+    }
+
+    /**
+     * @param {string} itemName
+     * @param {string} title
+     * @param {string[]} descriptions
+     * @return {{itemDescriptionAt: string, value: string}}
+     */
+    buildContextInfoItemDescription(itemName, title, descriptions) {
+        throw new Error("Method 'buildContextInfoItemDescription()' must be implemented.");
     }
 
     /**

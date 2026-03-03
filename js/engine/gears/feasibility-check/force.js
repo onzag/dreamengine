@@ -231,7 +231,7 @@ export default async function testMessageFeasibilityForce(engine, character) {
                 );
             }
 
-            const isolatedCharacterInfo = engine.inferenceAdapter.buildContextInfoIsolatedCharacter(character, ownCharacterDescription) + "\n\n" + engine.inferenceAdapter.buildContextInfoIsolatedCharacter(forcedCharacter, forcedCharacterDescription);
+            const isolatedCharacterInfo = engine.inferenceAdapter.buildContextInfoCharacterDescription(character, ownCharacterDescription).value + "\n\n" + engine.inferenceAdapter.buildContextInfoCharacterDescription(forcedCharacter, forcedCharacterDescription).value;
 
             // we will build a custom system prompt for each character because even when we can add things in the user space
             // we really want to make sure the LLM focuses on the forced character's capabilities

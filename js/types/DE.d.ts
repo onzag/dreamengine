@@ -1572,10 +1572,18 @@ declare interface StateForDescription {
      */
     insideItem: string | null;
     /**
+     * The item they are inside but in name only
+     */
+    insideItemNameOnly: string | null;
+    /**
      * The name of the item the character is currently on top of, this is just the name
      * for the specific item, it needs to be found in the item tree
      */
     atopItem: string | null;
+    /**
+     * The item they are on top of but in name only
+     */
+    atopItemNameOnly: string | null;
     carrying: DEItem[];
     carryingCharacters: Array<string>;
     wearing: DEItem[];
@@ -1608,6 +1616,30 @@ declare interface StateForDescription {
      * These can be subject to memory
      */
     seenCharacters: Array<string>;
+    /**
+     * Interactions that can happen with this item that
+     * have a narrative effect or action
+     */
+    interactions?: Record<string, DEItemInteraction>
+}
+
+declare interface DEItemInteraction {
+    /**
+     * A question template to ask about the interaction, for example "did {{char}} open the chest?" or "did {{char}} eat the apple?"
+     */
+    action: DEStringTemplate;
+    /**
+     * An effect template to describe the effect of the interaction, for example "the chest creaks open revealing a hidden treasure inside" or "the apple poisons {{char}}, causing them to feel sick"
+     */
+    effect: DEStringTemplate;
+    /**
+     * States that it applied towards the character as a result of the interaction
+     */
+    appliedStates: Array<string>;
+    /**
+     * States that are applied to the surrounding characters
+     */
+    appliedStatesEverySurroundingCharacter: Array<string>;
 }
 
 declare interface DEStateForDescriptionWithHistory extends StateForDescription {

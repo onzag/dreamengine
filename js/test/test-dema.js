@@ -14,9 +14,9 @@ const world = importWorldFromJSON(jsonWorld);
 
 const engine = new DEngine();
 const inferenceAdapter = new InferenceAdapterLlamaUncensored(engine, {
-    host: "ws://localhost:8765",
+    host: "wss://95.133.253.99:8765",
     // used for development
-    secret: "123456",
+    secret: "5b381d365a529c44aae7944d6fdcc4ee83b90170f020c885faa60c5b906540029c4d2fb07d2efb57ef434ca61ab7916f486e3e2bdd2f92d5f69a5363d11b6232",
 });
 engine.setInferenceAdapter(inferenceAdapter);
 engine.initialize({

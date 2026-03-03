@@ -596,7 +596,9 @@ export class DEngine {
             fullyExposedToWeather: null,
             posture: "standing",
             atopItem: null,
+            atopItemNameOnly: null,
             insideItem: null,
+            insideItemNameOnly: null,
 
             // chars start out empty handed
             carrying: [],
@@ -1930,73 +1932,74 @@ export class DEngine {
             finalDescription += ` Carrying characters: ` + this.deObject.functions.format_and(this.deObject, null, characterState.carryingCharacters) + ".";
         }
 
-        let postureAppliedOnDescription = "on the ground/floor";
+        let postureAppliedOnDescription = "currently on the ground/floor at " + characterState.locationSlot;
         if (characterState.atopItem) {
-            postureAppliedOnDescription = "on " + characterState.atopItem;
+            postureAppliedOnDescription = "currently " + characterState.atopItem;
         } else if (characterState.insideItem) {
-            postureAppliedOnDescription = "inside " + characterState.insideItem;
+            postureAppliedOnDescription = "currently " + characterState.insideItem;
         }
 
-        if (characterState.atopItem || characterState.insideItem) {
-            /**
-             * @type {DEItem | null}
-             */
-            let itemCarriedOn = null;
-            let directlyFound = false;
+        // The description now contains all information
+        // if (characterState.atopItem || characterState.insideItem) {
+        //     /**
+        //      * @type {DEItem | null}
+        //      */
+        //     let itemCarriedOn = null;
+        //     let directlyFound = false;
 
-            /**
-             * @param {DEItem[]} itemList 
-             * @returns 
-             */
-            const recurseItemCarriedOn = (itemList, depth = 0) => {
-                for (const item of itemList) {
-                    if (item.ontopCharacters.includes(characterName) || item.containingCharacters.includes(characterName)) {
-                        itemCarriedOn = item;
-                        if (depth === 0) {
-                            directlyFound = true;
-                        }
-                        return;
-                    }
-                    if (item.containing.length > 0) {
-                        recurseItemCarriedOn(item.containing, depth + 1);
-                    }
-                }
-            }
+        //     /**
+        //      * @param {DEItem[]} itemList 
+        //      * @returns 
+        //      */
+        //     const recurseItemCarriedOn = (itemList, depth = 0) => {
+        //         for (const item of itemList) {
+        //             if (item.ontopCharacters.includes(characterName) || item.containingCharacters.includes(characterName)) {
+        //                 itemCarriedOn = item;
+        //                 if (depth === 0) {
+        //                     directlyFound = true;
+        //                 }
+        //                 return;
+        //             }
+        //             if (item.containing.length > 0) {
+        //                 recurseItemCarriedOn(item.containing, depth + 1);
+        //             }
+        //         }
+        //     }
 
-            if (characterState.beingCarriedByCharacter) {
-                // let's see if we can be more specific
-                const carryingCharacterState = this.deObject.stateFor[characterState.beingCarriedByCharacter];
-                if (carryingCharacterState) {
+        //     if (characterState.beingCarriedByCharacter) {
+        //         // let's see if we can be more specific
+        //         const carryingCharacterState = this.deObject.stateFor[characterState.beingCarriedByCharacter];
+        //         if (carryingCharacterState) {
 
 
-                    recurseItemCarriedOn(carryingCharacterState.carrying);
-                    let worn = false;
-                    if (!itemCarriedOn) {
-                        recurseItemCarriedOn(carryingCharacterState.wearing);
-                        worn = directlyFound;
-                    }
+        //             recurseItemCarriedOn(carryingCharacterState.carrying);
+        //             let worn = false;
+        //             if (!itemCarriedOn) {
+        //                 recurseItemCarriedOn(carryingCharacterState.wearing);
+        //                 worn = directlyFound;
+        //             }
 
-                    if (itemCarriedOn) {
-                        postureAppliedOnDescription += " (" + (/** @type {DEItem} */ (itemCarriedOn)).descriptionWhenContainingCharacter || (/** @type {DEItem} */ (itemCarriedOn)).description;
-                        postureAppliedOnDescription += `. ${worn ? "worn" : "carried"} by ${characterState.beingCarriedByCharacter})`;
-                    }
-                }
-            } else {
-                // find items in the location slot
-                const location = this.deObject.world.locations[characterState.location];
-                if (location) {
-                    const locationSlot = location.slots[characterState.locationSlot];
-                    if (locationSlot) {
-                        recurseItemCarriedOn(locationSlot.items);
-                        if (itemCarriedOn) {
-                            postureAppliedOnDescription += " (" + (/** @type {DEItem} */ (itemCarriedOn)).descriptionWhenContainingCharacter || (/** @type {DEItem} */ (itemCarriedOn)).description + ")";
-                        }
-                    }
-                }
-            }
-        }
+        //             if (itemCarriedOn) {
+        //                 postureAppliedOnDescription += " (" + (/** @type {DEItem} */ (itemCarriedOn)).descriptionWhenContainingCharacter || (/** @type {DEItem} */ (itemCarriedOn)).description;
+        //                 postureAppliedOnDescription += `. ${worn ? "worn" : "carried"} by ${characterState.beingCarriedByCharacter})`;
+        //             }
+        //         }
+        //     } else {
+        //         // find items in the location slot
+        //         const location = this.deObject.world.locations[characterState.location];
+        //         if (location) {
+        //             const locationSlot = location.slots[characterState.locationSlot];
+        //             if (locationSlot) {
+        //                 recurseItemCarriedOn(locationSlot.items);
+        //                 if (itemCarriedOn) {
+        //                     postureAppliedOnDescription += " (" + (/** @type {DEItem} */ (itemCarriedOn)).descriptionWhenContainingCharacter || (/** @type {DEItem} */ (itemCarriedOn)).description + ")";
+        //                 }
+        //             }
+        //         }
+        //     }
+        // }
 
-        finalDescription += " " + character.name + " is currently " + characterState.posture + postureAppliedOnDescription + ".";
+        finalDescription += " " + character.name + " is currently " + characterState.posture + " " + postureAppliedOnDescription + ".";
 
         return finalDescription;
     }
