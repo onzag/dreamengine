@@ -332,7 +332,7 @@ ${states.join(", ")}
         }
 
         /**
-         * @type {Array<{name: string, message: string}>}
+         * @type {Array<string>}
          */
         let messagesToAdd = [];
 
@@ -340,8 +340,9 @@ ${states.join(", ")}
             let generator = await getHistoryForCharacter.next(true);
             while (!generator.done) {
                 if (!generator.value.debug && !generator.value.rejected) {
-                    messagesToAdd.push(generator.value);
-                    tokensExhaustedApprox += await this.countTokens("[" + generator.value.name + "]: " + generator.value.message) + 10; // some wiggle room
+                    const messageParsed = this.engine.parseMessageInComponentsAsText(generator.value.name, generator.value.message);
+                    messagesToAdd.push(messageParsed);
+                    tokensExhaustedApprox += await this.countTokens(messageParsed) + 10; // some wiggle room
                     if (tokensExhaustedApprox >= contextWindowSize) {
                         await getHistoryForCharacter.return();
                         if (tokensExhaustedApprox > contextWindowSize) {
@@ -356,16 +357,10 @@ ${states.join(", ")}
 
             messagesToAdd = messagesToAdd.reverse();
         } else {
-            messagesToAdd = getHistoryForCharacter;
+            messagesToAdd = getHistoryForCharacter.map(msg => this.engine.parseMessageInComponentsAsText(msg.name, msg.message));
         }
 
-        const otherCharacterNames = new Set();
-        for (const msg of messagesToAdd) {
-            if (msg.name !== character.name) {
-                otherCharacterNames.add(msg.name);
-            }
-        }
-
+        // TODO fix the grammar here
         const payload = {
             messages: [
                 {
@@ -373,8 +368,8 @@ ${states.join(", ")}
                     content: system,
                 },
             ],
-            trail: "[" + character.name + "]: " + (this.options.thinkTag ? "<think>" : ""),
-            stopAt: this.options.thinkTag ? ["<think>"].concat(Array.from(otherCharacterNames).map(name => `\n[${name}]:`)) : Array.from(otherCharacterNames).map(name => `\n[${name}]:`),
+            trail: (this.options.thinkTag ? "<think>" : ""),
+            //stopAt: this.options.thinkTag ? ["<think>"].concat(Array.from(otherCharacterNames).map(name => `\n[${name}]:`)) : Array.from(otherCharacterNames).map(name => `\n[${name}]:`),
             stopAfter: [],
             startCountingFromToken: this.options.thinkTag ? "</think>" : null,
             maxParagraphs: 3,
@@ -382,24 +377,25 @@ ${states.join(", ")}
             maxSafetyCharacters: 5000,
         };
 
-        for (const msg of messagesToAdd) {
-            if (msg.name === character.name) {
-                payload.messages.push({
-                    role: "assistant",
-                    content: "[" + msg.name + "]: " + msg.message,
-                });
-            } else {
-                let lastMessage = payload.messages[payload.messages.length - 1];
-                if (lastMessage.role === "user") {
-                    lastMessage.content += "\n\n[" + msg.name + "]: " + msg.message;
-                } else {
-                    payload.messages.push({
-                        role: "user",
-                        content: "[" + msg.name + "]: " + msg.message,
-                    });
-                }
-            }
-        }
+        // TODO fix this chaos
+        // for (const msg of messagesToAdd) {
+        //     if (msg.name === character.name) {
+        //         payload.messages.push({
+        //             role: "assistant",
+        //             content: "[" + msg.name + "]: " + msg.message,
+        //         });
+        //     } else {
+        //         let lastMessage = payload.messages[payload.messages.length - 1];
+        //         if (lastMessage.role === "user") {
+        //             lastMessage.content += "\n\n[" + msg.name + "]: " + msg.message;
+        //         } else {
+        //             payload.messages.push({
+        //                 role: "user",
+        //                 content: "[" + msg.name + "]: " + msg.message,
+        //             });
+        //         }
+        //     }
+        // }
 
         if (action && action.trim().length > 0) {
             let lastMessage = payload.messages[payload.messages.length - 1];
@@ -490,7 +486,7 @@ ${states.join(", ")}
         tokensExhaustedApprox += await this.countTokens("messages: ");
 
         /**
-         * @type {Array<{name: string, message: string}>}
+         * @type {Array<string>}
          */
         let messagesToAdd = [];
 
@@ -502,8 +498,10 @@ ${states.join(", ")}
                     let shouldAddMessage = false;
                     let shouldStopAddingMessages = false;
 
+                    const messageParsed = this.engine.parseMessageInComponentsAsText(generator.value.name, generator.value.message);
+
                     if (msgLimit === "ALL") {
-                        tokensExhaustedApprox += await this.countTokens("[" + generator.value.name + "]: " + generator.value.message) + 10; // some wiggle room
+                        tokensExhaustedApprox += await this.countTokens(messageParsed) + 10; // some wiggle room
                         shouldStopAddingMessages = tokensExhaustedApprox >= contextWindowSize;
                         shouldAddMessage = !shouldStopAddingMessages;
                     } else if (msgLimit === "LAST_MESSAGE") {
@@ -534,7 +532,7 @@ ${states.join(", ")}
                     }
 
                     if (shouldAddMessage) {
-                        messagesToAdd.push(generator.value);
+                        messagesToAdd.push(messageParsed);
                     }
 
                     if (shouldStopAddingMessages) {
@@ -552,7 +550,7 @@ ${states.join(", ")}
 
         const rid = cheapRID();
         if (!remarkLastMessageForAnalysis) {
-            const messagesFormatted = messagesToAdd.map(msg => `[` + msg.name + `]: ` + msg.message).join("\n\n");
+            const messagesFormatted = messagesToAdd.join("\n\n");
 
             if (this.options.mode === "xml") {
                 const payload = {
@@ -573,20 +571,19 @@ ${states.join(", ")}
             const lastMessage = messagesToAdd[messagesToAdd.length - 1];
             const restMessages = messagesToAdd.slice(0, -1);
 
-            const restMessagesFormatted = restMessages.map(msg => `[` + msg.name + `]: ` + msg.message).join("\n\n");
-            const lastMessageFormatted = `[` + lastMessage.name + `]: ` + lastMessage.message;
+            const restMessagesFormatted = restMessages.join("\n\n");
 
             if (this.options.mode === "xml") {
                 const payload = {
                     system: system,
-                    userTrail: (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "") + "<previousMessages>\n" + restMessagesFormatted + "\n</previousMessages><analyze><lastMessage>" + lastMessageFormatted + "</lastMessage></analyze>" + (contextInfoAfter ? "\n" + contextInfoAfter : ""),
+                    userTrail: (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "") + "<previousMessages>\n" + restMessagesFormatted + "\n</previousMessages><analyze><lastMessage>" + lastMessage + "</lastMessage></analyze>" + (contextInfoAfter ? "\n" + contextInfoAfter : ""),
                 };
 
                 this.socket.send(JSON.stringify({ action: "analyze-prepare", payload, rid }));
             } else {
                 const payload = {
                     system: system,
-                    userTrail: (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "") + "# Previous Messages:\n" + restMessagesFormatted + "\n\n# Last Message to Analyze:\n" + lastMessageFormatted + (contextInfoAfter ? "\n" + contextInfoAfter : ""),
+                    userTrail: (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "") + "# Previous Messages:\n" + restMessagesFormatted + "\n\n# Last Message to Analyze:\n" + lastMessage + (contextInfoAfter ? "\n" + contextInfoAfter : ""),
                 };
 
                 this.socket.send(JSON.stringify({ action: "analyze-prepare", payload, rid }));

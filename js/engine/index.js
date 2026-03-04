@@ -703,7 +703,6 @@ export class DEngine {
                         amount: item.amount || 1,
                         location: characterLocation,
                         locationSlot: slotName,
-                        placement: item.placement || "on the ground",
                         carriedByCharacter: carriedByCharacter,
                         wornByCharacter: wornByCharacter,
                     });
@@ -1044,6 +1043,200 @@ export class DEngine {
                 }
             }
         });
+
+        for (const charName in this.deObject.characters) {
+            const charState = this.deObject.stateFor[charName];
+            if (!charState) {
+                throw new Error(`Character ${charName} does not have a corresponding state in stateFor.`);
+            }
+            if ((charState.insideItem || charState.insideItemNameOnly) && (charState.atopItem || charState.atopItemNameOnly)) {
+                throw new Error(`Character ${charName} cannot be both inside an item and atop an item.`);
+            }
+            if (charState.beingCarriedByCharacter === charName) {
+                throw new Error(`Character ${charName} cannot be beingCarriedByCharacter themselves.`);
+            }
+            charState.carryingCharacters.forEach(carriedChar => {
+                if (carriedChar === charName) {
+                    throw new Error(`Character ${charName} cannot be carryingCharacters themselves.`);
+                }
+                if (charState.beingCarriedByCharacter === carriedChar) {
+                    throw new Error(`Character ${charName} cannot be beingCarriedByCharacter ${carriedChar} while also carryingCharacters them.`);
+                }
+            });
+            if (charState.insideItem || charState.insideItemNameOnly) {
+                /**
+                 * @type {DEItem|null}
+                 */
+                let foundContainingItem = null;
+                /**
+                 * @type {string|null}
+                 */
+                let foundItemCarriedByCharacter = null;
+                /**
+                 * @type {string|null}
+                 */
+                let foundAtSlot = null;
+                /**
+                 * @type {string|null}
+                 */
+                let foundAtLocation = null;
+                /**
+                 * @param {DEItem[]} items 
+                 */
+                const loopThroughItemsRecursive = (items) => {
+                    for (const item of items) {
+                        if (item.containingCharacters && item.containingCharacters.includes(charName)) {
+                            if (foundContainingItem) {
+                                throw new Error(`Character ${charName} is inside multiple items, which is not possible.`);
+                            }
+                            foundContainingItem = item;
+                            if (charState.insideItemNameOnly !== item.name) {
+                                throw new Error(`Character ${charName} is inside item ${item.name} but their insideItemNameOnly is set to ${charState.insideItemNameOnly}.`);
+                            }
+                        }
+                    }
+                }
+                if (!charState.insideItemNameOnly) {
+                    throw new Error(`Character ${charName} is inside an item but does not have insideItemNameOnly set.`);
+                }
+                if (!charState.insideItem) {
+                    throw new Error(`Character ${charName} is inside an item but does not have insideItem set.`);
+                }
+                for (const locationName in this.deObject.world.locations) {
+                    for (const [slotName, slot] of Object.entries(this.deObject.world.locations[locationName].slots)) {
+                        loopThroughItemsRecursive(slot.items);
+                        if (foundContainingItem) {
+                            foundAtLocation = locationName
+                            foundAtSlot = slotName;
+                        }
+                    }
+                }
+                for (const otherCharName in this.deObject.stateFor) {
+                    const otherCharState = this.deObject.stateFor[otherCharName];
+                    loopThroughItemsRecursive(otherCharState.carrying);
+                    loopThroughItemsRecursive(otherCharState.wearing);
+                    if (foundContainingItem) {
+                        foundItemCarriedByCharacter = otherCharName;
+                        foundAtLocation = otherCharState.location;
+                        foundAtSlot = otherCharState.locationSlot;
+                    }
+                }
+                if (!foundContainingItem) {
+                    throw new Error(`Character ${charName} is inside item ${charState.insideItemNameOnly} but that item was not found in the world.`);
+                } else if (foundItemCarriedByCharacter && charState.beingCarriedByCharacter !== foundItemCarriedByCharacter) {
+                    // @ts-ignore, typescript buggy
+                    throw new Error(`Character ${charName} is inside item ${foundContainingItem.name} which is carried by ${foundItemCarriedByCharacter} but their beingCarriedByCharacter is set to ${charState.beingCarriedByCharacter}.`);
+                } else if (!foundItemCarriedByCharacter && charState.beingCarriedByCharacter) {
+                    // @ts-ignore, typescript buggy
+                    throw new Error(`Character ${charName} is inside item ${foundContainingItem.name} which is not carried by any character but their beingCarriedByCharacter is set to ${charState.beingCarriedByCharacter}.`);
+                }
+
+                if (foundContainingItem) {
+                    /**
+                     * @type {DEItem}
+                     */
+                    const foundContainingItemTypescriptBugfix = foundContainingItem /** @type {DEItem} */;
+                    if (!foundContainingItemTypescriptBugfix.containingCharacters.includes(charName)) {
+                        throw new Error(`Character ${charName} is inside item ${foundContainingItemTypescriptBugfix.name} but that item does not have them in its containingCharacters.`);
+                    }
+
+                    if (charState.location !== foundAtLocation || charState.locationSlot !== foundAtSlot) {
+                        throw new Error(`Character ${charName} is inside item ${foundContainingItemTypescriptBugfix.name} which is at location ${foundAtLocation} slot ${foundAtSlot} but the character is at location ${charState.location} slot ${charState.locationSlot}.`);
+                    }
+                }
+            } else if (charState.atopItem || charState.atopItemNameOnly) {
+                /**
+                 * @type {DEItem|null}
+                 */
+                let foundOntopItem = null;
+                /**
+                 * @type {string|null}
+                 */
+                let foundItemCarriedByCharacter = null;
+                /**
+                 * @type {string|null}
+                 */
+                let foundAtSlot = null;
+                /**
+                 * @type {string|null}
+                 */
+                let foundAtLocation = null;
+                /**
+                 * @param {DEItem[]} items 
+                 */
+                const loopThroughItemsRecursive = (items) => {
+                    for (const item of items) {
+                        if (item.ontopCharacters && item.ontopCharacters.includes(charName)) {
+                            if (foundOntopItem) {
+                                throw new Error(`Character ${charName} is atop multiple items, which is not possible.`);
+                            }
+                            foundOntopItem = item;
+                            if (charState.atopItemNameOnly !== item.name) {
+                                throw new Error(`Character ${charName} is atop item ${item.name} but their atopItemNameOnly is set to ${charState.atopItemNameOnly}.`);
+                            }
+                        }
+                    }
+                }
+                if (!charState.atopItemNameOnly) {
+                    throw new Error(`Character ${charName} is atop an item but does not have atopItemNameOnly set.`);
+                }
+                if (!charState.atopItem) {
+                    throw new Error(`Character ${charName} is atop an item but does not have atopItem set.`);
+                }
+                for (const locationName in this.deObject.world.locations) {
+                    for (const [slotName, slot] of Object.entries(this.deObject.world.locations[locationName].slots)) {
+                        loopThroughItemsRecursive(slot.items);
+                        if (foundOntopItem) {
+                            foundAtLocation = locationName
+                            foundAtSlot = slotName;
+                        }
+                    }
+                }
+                for (const otherCharName in this.deObject.stateFor) {
+                    const otherCharState = this.deObject.stateFor[otherCharName];
+                    loopThroughItemsRecursive(otherCharState.carrying);
+                    loopThroughItemsRecursive(otherCharState.wearing);
+                    if (foundOntopItem) {
+                        foundItemCarriedByCharacter = otherCharName;
+                        foundAtLocation = otherCharState.location;
+                        foundAtSlot = otherCharState.locationSlot;
+                    }
+                }
+                if (!foundOntopItem) {
+                    throw new Error(`Character ${charName} is atop item ${charState.atopItemNameOnly} but that item was not found in the world.`);
+                } else if (foundItemCarriedByCharacter && charState.beingCarriedByCharacter !== foundItemCarriedByCharacter) {
+                    // @ts-ignore, typescript buggy
+                    throw new Error(`Character ${charName} is atop item ${foundOntopItem.name} which is carried by ${foundItemCarriedByCharacter} but their beingCarriedByCharacter is set to ${charState.beingCarriedByCharacter}.`);
+                } else if (!foundItemCarriedByCharacter && charState.beingCarriedByCharacter) {
+                    // @ts-ignore, typescript buggy
+                    throw new Error(`Character ${charName} is atop item ${foundOntopItem.name} which is not carried by any character but their beingCarriedByCharacter is set to ${charState.beingCarriedByCharacter}.`);
+                }
+
+                if (foundOntopItem) {
+                    /**
+                     * @type {DEItem}
+                     */
+                    const foundOntopItemTypescriptBugfix = foundOntopItem /** @type {DEItem} */;
+                    if (!foundOntopItemTypescriptBugfix.ontopCharacters.includes(charName)) {
+                        throw new Error(`Character ${charName} is atop item ${foundOntopItemTypescriptBugfix.name} but that item does not have them in its ontopCharacters.`);
+                    }
+
+                    if (charState.location !== foundAtLocation || charState.locationSlot !== foundAtSlot) {
+                        throw new Error(`Character ${charName} is atop item ${foundOntopItemTypescriptBugfix.name} which is at location ${foundAtLocation} slot ${foundAtSlot} but the character is at location ${charState.location} slot ${charState.locationSlot}.`);
+                    }
+                }
+            }
+
+            if (charState.beingCarriedByCharacter) {
+                const carrierState = this.deObject.stateFor[charState.beingCarriedByCharacter];
+                if (carrierState.location !== charState.location || carrierState.locationSlot !== charState.locationSlot) {
+                    throw new Error(`Character ${charName} is being carried by ${charState.beingCarriedByCharacter} but they are not in the same location.`);
+                }
+                if (carrierState.carryingCharacters && !carrierState.carryingCharacters.includes(charName)) {
+                    throw new Error(`Character ${charName} is being carried by ${charState.beingCarriedByCharacter} but that character does not have them in their carryingCharacters.`);
+                }
+            }
+        }
     }
 
     deleteOrphanedScriptSources() {
@@ -1555,19 +1748,18 @@ export class DEngine {
 
         /**
          * @param {string} space 
-         * @param {DEItem} item 
-         * @param {string} extraMessage
+         * @param {DEItem} item
          */
-        const listItems = (space, item, extraMessage) => {
-            message += `${space}- ${item.owner ? item.owner + "'s " : ""}${item.name}${item.amount >= 2 ? " x" + item.amount : ""}, placement: ${item.placement}${extraMessage}\n`;
+        const listItems = (space, item) => {
+            message += `${space}- ${item.owner ? item.owner + "'s " : ""}${item.name}${item.amount >= 2 ? " x" + item.amount : ""}\n`;
             if (item.containing.length !== 0) {
                 message += `${space}  Containing:\n`;
             }
             for (const containedItem of item.containing) {
-                listItems(space + "  ", containedItem, ", contained by: " + item.name + extraMessage);
+                listItems(space + "  ", containedItem);
             }
             for (const ontopItem of item.ontop) {
-                listItems(space + "  ", ontopItem, ", on top of: " + item.name + extraMessage);
+                listItems(space + "  ", ontopItem);
             }
             cheapList.push(`${item.owner ? item.owner + "'s " : ""}${item.name}${item.amount >= 2 ? " x" + item.amount : ""}`);
         }
@@ -1576,9 +1768,9 @@ export class DEngine {
         } else {
             for (const slotName of slotNames) {
                 const slot = location.slots[slotName];
-                message += `\nItems at ${slotName}:\n`;
+                message += `\n# Items at ${slotName}:\n`;
                 for (const item of slot.items) {
-                    listItems("", item, "");
+                    listItems("", item);
                 }
             }
         }
@@ -1588,51 +1780,71 @@ export class DEngine {
             if (otherCharName === characterName) continue;
             const otherCharState = this.deObject.stateFor[otherCharName];
             if (otherCharState.location === locationName) {
-                message += `\nItems carried by ${otherCharName}:\n`;
+                message += `\n# Items worn by ${otherCharName}:\n`;
                 if (otherCharState.wearing.length === 0) {
                     message += `${otherCharName} Is currently naked.\n`;
                 } else {
                     for (const item of otherCharState.wearing) {
-                        listItems("", item, `, worn by: ${otherCharName}`);
+                        listItems("", item);
                     }
                 }
                 if (otherCharState.carryingCharacters.length > 0) {
+                    message += `\n# Characters carried by ${otherCharName}:\n`;
                     for (const carriedCharName of otherCharState.carryingCharacters) {
-                        message += `${otherCharName} is carrying character: ${carriedCharName}.\n`;
+                        const carriedCharState = this.deObject.stateFor[carriedCharName];
+                        if (carriedCharState.insideItem) {
+                            message += `${otherCharName} is carrying ${carriedCharName} ${carriedCharState.insideItem}.\n`;
+                        } else if (carriedCharState.atopItem) {
+                            message += `${otherCharName} is carrying ${carriedCharName} ${carriedCharState.atopItem}.\n`;
+                        } else {
+                            message += `${otherCharName} is carrying ${carriedCharName}.\n`;
+                        }
                     }
                 }
-                if (otherCharState.carrying.length === 0 && otherCharState.wearing.length === 0 && otherCharState.carryingCharacters.length === 0) {
-                    message += `No items or characters carried by ${otherCharName}.\n`;
+                message += `\n# Items carried by ${otherCharName}:\n`;
+                if (otherCharState.carrying.length === 0) {
+                    message += `No items carried by ${otherCharName}.\n`;
                 } else {
                     for (const item of otherCharState.carrying) {
-                        listItems("", item, `, carried by: ${otherCharName}`);
+                        listItems("", item);
                     }
                 }
             }
         }
 
         // now let's do our own character
-        message += `\nItems carried by ${characterName}:\n`;
+        message += `\n# Items worn by ${characterName}:\n`;
         if (characterState.wearing.length === 0) {
             message += `${characterName} Is currently naked.\n`;
         } else {
             for (const item of characterState.wearing) {
-                listItems("", item, `, worn by: ${characterName}`);
+                listItems("", item);
             }
         }
         if (characterState.carryingCharacters.length > 0) {
+            message += `\n# Characters carried by ${characterName}:\n`;
             for (const carriedCharName of characterState.carryingCharacters) {
-                message += `${characterName} is carrying character: ${carriedCharName}.\n`;
+                const carriedCharState = this.deObject.stateFor[carriedCharName];
+                if (carriedCharState.insideItem) {
+                    message += `${characterName} is carrying ${carriedCharName} ${carriedCharState.insideItem}.\n`;
+                } else if (carriedCharState.atopItem) {
+                    message += `${characterName} is carrying ${carriedCharName} ${carriedCharState.atopItem}.\n`;
+                } else {
+                    message += `${characterName} is carrying ${carriedCharName}.\n`;
+                }
             }
         }
-        if (characterState.carrying.length === 0 && characterState.wearing.length === 0 && characterState.carryingCharacters.length === 0) {
+        message += `\n# Items carried by ${characterName}:\n`;
+        if (characterState.carrying.length === 0) {
             message += `No items or characters carried by ${characterName}.\n`;
         } else {
             for (const item of characterState.carrying) {
-                listItems("", item, `, carried by: ${characterName}`);
+                listItems("", item);
             }
         }
+
         if (characterState.beingCarriedByCharacter) {
+            message += `\n# ${characterName} is being carried by another character:\n`;
             message += `${characterName} is being carried by character: ${characterState.beingCarriedByCharacter}.\n`;
         }
 
@@ -3145,6 +3357,117 @@ export class DEngine {
                 return;
             }
         }
+    }
+
+    /**
+     * Takes a complete message in the narrative form and converts it into components that conform the message
+     * 
+     * Returns an array of messages with each author and content separated, for example the following message:
+     * 
+     * *Alice looks around worried* Hello Jonh how are you doing?
+     * 
+     * Will turn into:
+     * 
+     * [
+     *   { author: null, origin: "Alice", content: "Alice looks around worried" },
+     *   { author: "Alice", origin: "Alice", content: "Hello John how are you doing?" }
+     * ]
+     * 
+     * This allows the engine to separate the narrative parts of the message from the dialogue parts, and also to know who is saying what in a message that may contain multiple sentences and multiple narrative actions.
+     * this can later be passed onto parseMessageInComponentsAsText to get
+     * 
+     * *Alice Looks Around Worried*
+     * [Alice]: Hello Jonh how are you doing?
+     * 
+     * or it can be used to create more complex UI
+     * 
+     * This function is also able to take output in the same format, but cannot distinguish character when in such case as it
+     * is expected that every time an author is given no spoken part belongs to another character, for example:
+     * 
+     * When the author is Alice and the message is:
+     * 
+     * *Alice looks around worried*
+     * [Bob]: Hello Jonh how are you doing?
+     * *Alice looks at Bob and smiles*
+     * [Alice]: I'm doing great Bob, thanks for asking!
+     * 
+     * Would just cause all messages to be attributed to Alice because she is the author
+     * 
+     * @param {string} author 
+     * @param {string} message
+     */
+    parseMessageInComponents(author, message) {
+        /**
+         * @type {Array<{author: string | null, origin: string, content: string}>}
+         */
+        const finalMessages = [];
+
+        if (author === "Story Master") {
+            // for story master messages we will not do any parsing, we will just return the whole message as a single component
+            return [{
+                author: null,
+                origin: author,
+                content: message,
+            }];
+        }
+
+        const splittedLines = message.split("\n");
+        for (const line of splittedLines) {
+            const trimmedLine = line.trim();
+            if (trimmedLine.startsWith("[" + author + "]:")) {
+                finalMessages.push({
+                    author: author,
+                    origin: author,
+                    content: trimmedLine.substring(author.length + 3).trim(),
+                });
+            }
+            let inContext = false;
+            let accumulatedContext = "";
+            for (const char of line) {
+                if (char === "*") {
+                    if (accumulatedContext.trim().length > 0) {
+                        finalMessages.push({
+                            author: inContext ? null : author,
+                            origin: author,
+                            content: accumulatedContext.trim(),
+                        });
+                    }
+
+                    inContext = !inContext;
+                    accumulatedContext = "";
+                } else {
+                    accumulatedContext += char;
+                }
+            }
+
+            if (accumulatedContext.trim().length > 0) {
+                finalMessages.push({
+                    author: inContext ? null : author,
+                    origin: author,
+                    content: accumulatedContext.trim(),
+                });
+            }
+        }
+
+        return finalMessages;
+    }
+
+    /**
+     * @param {string} author 
+     * @param {string} message 
+     * @returns {string}
+     */
+    parseMessageInComponentsAsText(author, message) {
+        const components = this.parseMessageInComponents(author, message);
+        let finalText = "";
+        for (const component of components) {
+            if (component.author) {
+                finalText += `[${component.author}]: ${component.content}\n`;
+            } else {
+                finalText += `*${component.content}*\n`;
+            }
+        }
+        return finalText.trim();
     }
 
     /**

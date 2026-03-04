@@ -1513,16 +1513,6 @@ declare interface DEItem {
      * The amount of this item in the stack
      */
     amount: number;
-
-    /**
-     * The placement of the item in the location or on the character
-     * or within the container item
-     * 
-     * this should not be relative to other items. But only relative to the location, character or a container item if it is inside one
-     * 
-     * this should be generated using the LLM
-     */
-    placement: string;
     
     /**
      * The id of the character that owns this item, null if no owner
@@ -1543,7 +1533,6 @@ declare interface DESeenItem {
     locationSlot: string;
     carriedByCharacter: string | null;
     wornByCharacter: string | null;
-    placement: string;
 }
 
 declare interface StateForDescription {

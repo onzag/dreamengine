@@ -1116,10 +1116,38 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                         }
                         console.log("Received answer, " + possessionQuestion.value);
 
+                        const isPossessed = isYes(possessionQuestion.value);
+                        let wasThrownTowards = false;
+                        let questionPiece = "are in possession by";
+                        let questionPiece2 = "";
+
+                        if (!isPossessed) {
+                            const nextQuestion = `By the end of the last message, was the item "${item}" thrown/launched towards ${charName} or in their general direction?`;
+                            console.log("Asking question, " + nextQuestion);
+                            const thrownQuestion = await interactionGenerator.next({
+                                maxCharacters: 0, maxSafetyCharacters: 100,
+                                maxParagraphs: 1,
+                                nextQuestion: nextQuestion,
+                                stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
+                                stopAt: [],
+                                grammar: yesNoGrammar,
+                            });
+                            if (thrownQuestion.done) {
+                                throw new Error("Questioning agent finished without providing an answer for item thrown towards character check.");
+                            }
+                            console.log("Received answer, " + thrownQuestion.value);
+
+                            wasThrownTowards = isYes(thrownQuestion.value);
+                            if (wasThrownTowards) {
+                                questionPiece = "were thrown at";
+                                questionPiece2 = " or in their general direction";
+                            }
+                        }
+
                         // if yes, ask further questions
-                        if (isYes(possessionQuestion.value)) {
+                        if (isPossessed || wasThrownTowards) {
                             let expectedLocLast = "carrying";
-                            const nextQuestion = `By the end of the last message, how many of "${item}" are in possession by ${charName}? Answer with a number, or if the amount is not clear, answer with one of the following: "a few", "several", "many", "a lot", "some", "half", "most", or "all".`;
+                            const nextQuestion = `By the end of the last message, how many of "${item}" ${questionPiece} ${charName}${questionPiece2}? Answer with a number, or if the amount is not clear, answer with one of the following: "a few", "several", "many", "a lot", "some", "half", "most", or "all".`;
                             const amountGrammar = `root ::= ([0-9]+ | "a few" | "several" | "many" | "a lot" | "some" | "half" | "most" | "all") ${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()}`;
 
                             console.log("Asking question, " + nextQuestion);
@@ -1147,7 +1175,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                                 continue;
                             }
 
-                            if (hasAWornPotential) {
+                            if (hasAWornPotential && isPossessed) {
                                 const nextQuestion = `By the end of the last message, is the item "${item}" being worn by ${charName}? Answer "yes" ONLY if ${item} was PUT ON or WORN by ${charName}. If ${item} was taken off, removed, or not put on, answer "no".`;
                                 console.log("Asking question, " + nextQuestion);
                                 const wornQuestion = await interactionGenerator.next({
@@ -1181,19 +1209,145 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
 
                             const actualAmountToMove = Math.min(actualAmount, expectedAmountToMove - totalMovedSoFar);
 
-                            moveItems(
-                                engine,
-                                character.name,
-                                charState,
-                                item,
-                                allPotentialLocationTraversePath.filter((p, index) => answerForLocationIndexes.includes(index)),
-                                [["characters", charName]],
-                                expectedLocLast,
-                                actualAmountToMove,
-                                addedMessagesForStoryMaster,
-                            );
+                            if (isPossessed) {
+                                moveItems(
+                                    engine,
+                                    character.name,
+                                    charState,
+                                    item,
+                                    allPotentialLocationTraversePath.filter((p, index) => answerForLocationIndexes.includes(index)),
+                                    [["characters", charName]],
+                                    expectedLocLast,
+                                    actualAmountToMove,
+                                    addedMessagesForStoryMaster,
+                                );
+                            } else if (wasThrownTowards) {
+                                moveItems(
+                                    engine,
+                                    character.name,
+                                    charState,
+                                    item,
+                                    allPotentialLocationTraversePath.filter((p, index) => answerForLocationIndexes.includes(index)),
+                                    [["slots", engine.deObject.stateFor[charName].locationSlot]],
+                                    "items",
+                                    actualAmountToMove,
+                                    addedMessagesForStoryMaster,
+                                    charName,
+                                );
+                            }
 
                             totalMovedSoFar += actualAmountToMove;
+                        }
+                    }
+
+                    if (totalMovedSoFar < expectedAmountToMove) {
+                        // ask whether it was dropped on the ground
+                        const nextQuestion = `By the end of the last message, was the item "${item}" dropped on the ground? Answer "yes" ONLY if the item is on the ground and not inside or atop another item. If the item is inside or atop another item, answer "no".`;
+                        console.log("Asking question, " + nextQuestion);
+                        const charName = character.name;
+                        const droppedQuestion = await interactionGenerator.next({
+                            maxCharacters: 0, maxSafetyCharacters: 100,
+                            maxParagraphs: 1,
+                            nextQuestion: nextQuestion,
+                            stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
+                            stopAt: [],
+                            grammar: yesNoGrammar,
+                            contextInfo: engine.inferenceAdapter.buildContextInfoExample(
+                                `Example: If the last message said that "${charName} drops ${item} on the ground", the answer would be "yes", since by the end of the message, the item is on the ground and not inside or atop another item.`,
+                            ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                                `Example: If the last message said that "${charName} places ${item} on top of a table", the answer would be "no", since by the end of the message, the item is atop another item (the table) and not on the ground.`,
+                            ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
+                                `Example: If the last message said that "${charName} launches/throws ${item}" the answer should be "yes"`,
+                            ),
+                            instructions: `Actions that should answer YES for include: throwing, dropping, or placing ${item} on the ground or floor`
+                        });
+                        if (droppedQuestion.done) {
+                            throw new Error("Questioning agent finished without providing an answer for item dropped on the ground check.");
+                        }
+                        console.log("Received answer, " + droppedQuestion.value);
+
+                        if (isYes(droppedQuestion.value)) {
+                            const howManyDroppedQuestion = `By the end of the last message, how many of "${item}" were dropped on the ground? Answer with a number, or if the amount is not clear, answer with one of the following: "a few", "several", "many", "a lot", "some", "half", "most", or "all".`;
+                            console.log("Asking question, " + howManyDroppedQuestion);
+                            const amountGrammar = `root ::= ([0-9]+ | "a few" | "several" | "many" | "a lot" | "some" | "half" | "most" | "all") ${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()}`;
+                            const droppedAmountQuestion = await interactionGenerator.next({
+                                maxCharacters: 0, maxSafetyCharacters: 100,
+                                maxParagraphs: 1,
+                                nextQuestion: howManyDroppedQuestion,
+                                stopAfter: [],
+                                stopAt: [],
+                                grammar: amountGrammar,
+                                instructions: `Throwing ${item} also counts as dropping it on the ground`,
+                            });
+                            if (droppedAmountQuestion.done) {
+                                throw new Error("Questioning agent finished without providing an answer for item amount dropped on the ground check.");
+                            }
+                            console.log("Received answer, " + droppedAmountQuestion.value);
+
+                            const expectedAmount = droppedAmountQuestion.value.trim().toLowerCase();
+                            const actualAmountDropped = convertItemAmountToNumericValue(expectedAmount, allPotentialItemsForItem.filter((v, index) => answerForLocationIndexes.includes(index)).flat());
+
+                            if (actualAmountDropped === 0) {
+                                console.log(`The answer for the amount of "${item}" that was dropped on the ground is 0 or none, which seems to be a contradiction with the previous answer that indicated that the item was dropped on the ground. This may indicate a false positive in the initial dropped on the ground question, or it may indicate that the item was dropped on the ground at some point during the message but then picked up again by the end of the message. Skipping this relationship due to this inconsistency.`);
+                            } else {
+                                const wasThrown = await interactionGenerator.next({
+                                    maxCharacters: 0, maxSafetyCharacters: 100,
+                                    maxParagraphs: 1,
+                                    stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
+                                    stopAt: [],
+                                    grammar: yesNoGrammar,
+                                    nextQuestion: `By the end of the last message, was the item "${item}" thrown/launched? Answer "yes" ONLY if the item was thrown or launched. If the item was dropped without being thrown or launched, answer "no".`,
+                                });
+
+                                if (wasThrown.done) {
+                                    throw new Error("Questioning agent finished without providing an answer for item thrown check.");
+                                }
+                                console.log("Received answer, " + wasThrown.value);
+
+                                const thrown = isYes(wasThrown.value);
+
+                                const potentialSlotsDroppedAt = Object.keys(location.slots);
+                                let expectedSlot = potentialSlotsDroppedAt[Math.floor(Math.random() * potentialSlotsDroppedAt.length)];
+                                // now let's pick a slot asking the LLM
+
+                                for (const slot of potentialSlotsDroppedAt) {
+                                    const nextQuestion = thrown ? `By the end of the last message, did "${item}" land in "${slot}"? Answer "yes" ONLY if it is explicitly stated or very strongly implied that the item landed in "${slot}". If it is not clear that the item landed in "${slot}", answer "no".` : `By the end of the last message, did "${item}" get dropped at the location of "${slot}"? Answer "yes" ONLY if it is explicitly stated or very strongly implied that the item was dropped at the location of "${slot}". If it is not clear that the item was dropped at the location of "${slot}", answer "no".`;
+                                    console.log("Asking question, " + nextQuestion);
+                                    const slotQuestion = await interactionGenerator.next({
+                                        maxCharacters: 0, maxSafetyCharacters: 100,
+                                        maxParagraphs: 1,
+                                        nextQuestion: nextQuestion,
+                                        stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
+                                        stopAt: [],
+                                        grammar: yesNoGrammar,
+                                    });
+
+                                    if (slotQuestion.done) {
+                                        throw new Error("Questioning agent finished without providing an answer for item dropped slot check.");
+                                    }
+                                    console.log("Received answer, " + slotQuestion.value);
+
+                                    if (isYes(slotQuestion.value)) {
+                                        expectedSlot = slot;
+                                        break;
+                                    }
+                                }
+
+                                console.log("Moving " + actualAmountDropped + " of " + item + " to " + expectedSlot + " with relation " + (thrown ? "thrown" : "dropped") + " and with expected location last as ground");
+
+                                moveItems(
+                                    engine,
+                                    character.name,
+                                    charState,
+                                    item,
+                                    allPotentialLocationTraversePath.filter((p, index) => answerForLocationIndexes.includes(index)),
+                                    [["slots", expectedSlot]],
+                                    "items",
+                                    actualAmountDropped,
+                                    addedMessagesForStoryMaster,
+                                    thrown,
+                                );
+                            }
                         }
                     }
                 }
@@ -1995,6 +2149,7 @@ function resolvePath(engine, currentLocation, path) {
  * @param {string} finalPath
  * @param {number} amountToMove
  * @param {string[]} addedMessagesForStoryMaster
+ * @param {boolean | string} [thrown] whether the item was thrown there
  */
 function moveItems(
     engine,
@@ -2006,6 +2161,7 @@ function moveItems(
     finalPath,
     amountToMove,
     addedMessagesForStoryMaster,
+    thrown = false,
 ) {
     if (amountToMove <= 0) {
         return;
@@ -2013,9 +2169,6 @@ function moveItems(
     // TODO remove
     console.log("FROM", fromPotentialLocationPaths);
     console.log("TO", toPotentialLocationPaths);
-
-    // TODO figure out when moving the target to may have an amount but it should
-    // only be one item, so we will need to most likely duplicate 
 
     if (!engine.deObject) {
         throw new Error("DEngine not initialized");
@@ -2198,10 +2351,15 @@ function moveItems(
                 componentFromPath.item._moved_to = actualEndingPath;
             }
 
+            let thrownAddition = thrown ? "After being thrown, " : "";
+            if (typeof thrown === "string") {
+                thrownAddition = `After being thrown towards ${thrown}, `;
+            }
+
             // some nicer messages potentials
             if (actualEndingPath[0] === "characters" && actualEndingPath[2] === "carrying") {
                 // A character picked up or received an item
-                const messageSoFar = `${actualEndingPath[1]} is now carrying ${utilItemCount(engine, characterName, charState, amountToTransfer, item)} which previously ${amountToTransfer === 1 ? "was" : "were"} ${locationPathToMessage(engine, characterName, charState.location, componentFromPath.path)}`;
+                const messageSoFar = `${thrownAddition}${actualEndingPath[1]}${thrown ? " caught and is" : " is"} now carrying ${utilItemCount(engine, characterName, charState, amountToTransfer, item)} which previously ${amountToTransfer === 1 ? "was" : "were"} ${locationPathToMessage(engine, characterName, charState.location, componentFromPath.path)}`;
                 if (actualEndingPath.length > 4) {
                     // eg. ["characters", "Alice", "carrying", 0, "containing", 1] we check above 4 to avoid the index of where the item is located in the carrying list
                     addedMessagesForStoryMaster.push(messageSoFar + `, and is now specifically ${locationPathToMessage(engine, characterName, charState.location, actualEndingPath, true)}`);
@@ -2210,11 +2368,16 @@ function moveItems(
                 }
             } else if (actualEndingPath[0] === "slots" && actualEndingPath[2] === "items" && actualEndingPath.length <= 4) {
                 // an item was dropped on the ground
-                const messageSoFar = `${utilItemCount(engine, characterName, charState, amountToTransfer, item, true)} was dropped on the ground at ${actualEndingPath[1]}, which previously was ${locationPathToMessage(engine, characterName, charState.location, componentFromPath.path)}`;
+                const messageSoFar = `${thrownAddition}${utilItemCount(engine, characterName, charState, amountToTransfer, item, true)}${thrown ? "" : amountToTransfer === 1 ? " was" : " were"} dropped on the ground at ${actualEndingPath[1]}, which previously was ${locationPathToMessage(engine, characterName, charState.location, componentFromPath.path)}`;
                 addedMessagesForStoryMaster.push(messageSoFar);
             } else {
-                const messageSoFar = `${utilItemCount(engine, characterName, charState, amountToTransfer, item, true)} was moved from ${locationPathToMessage(engine, characterName, charState.location, componentFromPath.path)} to be ${locationPathToMessage(engine, characterName, charState.location, actualEndingPath)}.`;
-                addedMessagesForStoryMaster.push(messageSoFar);
+                if (thrown) {
+                    const messageSoFar = `${thrownAddition}${utilItemCount(engine, characterName, charState, amountToTransfer, item, true)} dropped ${locationPathToMessage(engine, characterName, charState.location, actualEndingPath)}, which previously was ${locationPathToMessage(engine, characterName, charState.location, componentFromPath.path)}.`;
+                    addedMessagesForStoryMaster.push(messageSoFar);
+                } else {
+                    const messageSoFar = `${utilItemCount(engine, characterName, charState, amountToTransfer, item, true)}${amountToTransfer === 1 ? " was moved" : " were moved"} from ${locationPathToMessage(engine, characterName, charState.location, componentFromPath.path)} to be ${locationPathToMessage(engine, characterName, charState.location, actualEndingPath)}.`;
+                    addedMessagesForStoryMaster.push(messageSoFar);
+                }
             }
         }
     }
