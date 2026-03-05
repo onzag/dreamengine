@@ -742,7 +742,7 @@ def run_inference(user_input, dangling_user_message):
             "prompt": scenery_change_analysis_prompt,
             "max_tokens": 24,
             "stream": True,
-            "stop": ["<|eot_id|>", "<|start_header_id|>"],
+            "stop": ["</s>"] if MODE == "MISTRAL" else ["<|eot_id|>", "<|start_header_id|>"],
 
             # different settings for this as we want a more focused response
             "repeat_penalty": 1.0,           # No repeat penalty
@@ -751,7 +751,7 @@ def run_inference(user_input, dangling_user_message):
             "temperature": 0.8,              # Lower temperature for focused responses
             "top_p": 0.8,                   # Nucleus sampling
         }
-        ws = websocket.create_connection("ws://localhost:8000")
+        ws = websocket.create_connection(SERVER_HOST)
         ws.send(json.dumps(action))
 
         scenery_change_response = ""
@@ -819,7 +819,7 @@ def run_inference(user_input, dangling_user_message):
             "prompt": scenery_change_sanity_analysis_prompt,
             "max_tokens": 24,
             "stream": True,
-            "stop": ["<|eot_id|>", "<|start_header_id|>"],
+            "stop": ["</s>"] if MODE == "MISTRAL" else ["<|eot_id|>", "<|start_header_id|>"],
 
             # different settings for this as we want a more focused response
             "repeat_penalty": 1.0,           # No repeat penalty
@@ -882,6 +882,8 @@ def run_inference(user_input, dangling_user_message):
     states_triggered_discard = set([])
 
     stop = ["<|eot_id|>", "<|start_header_id|>", f"\n{chat_window.username}:", f"\n{chat_window.username.lower()}:"]
+    if MODE == "MISTRAL":
+        stop = ["</s>", f"\n{chat_window.username}:", f"\n{chat_window.username.lower()}:"]
 
     action = {
         "action": "generate",
@@ -1040,7 +1042,7 @@ def run_post_inference():
         "prompt": post_bond_analysis_prompt,
         "max_tokens": 24,
         "stream": True,
-        "stop": ["<|eot_id|>", "<|start_header_id|>"],
+        "stop": ["</s>"] if MODE == "MISTRAL" else ["<|eot_id|>", "<|start_header_id|>"],
 
         # different settings for this as we want a more focused response
         "repeat_penalty": 1.0,           # No repeat penalty
@@ -1099,7 +1101,7 @@ def run_post_inference():
             "prompt": post_2nd_bond_analysis_prompt,
             "max_tokens": 24,
             "stream": True,
-            "stop": ["<|eot_id|>", "<|start_header_id|>"],
+            "stop": ["</s>"] if MODE == "MISTRAL" else ["<|eot_id|>", "<|start_header_id|>"],
 
             # different settings for this as we want a more focused response
             "repeat_penalty": 1.0,           # No repeat penalty
@@ -1151,7 +1153,7 @@ def run_post_inference():
         "max_tokens": 64,
         "stream": True,
         # default ones
-        "stop": ["<|eot_id|>", "<|start_header_id|>"],
+        "stop": ["</s>"] if MODE == "MISTRAL" else ["<|eot_id|>", "<|start_header_id|>"],
 
         # different settings for this as we want a more focused response
         "repeat_penalty": 1.0,           # No repeat penalty
