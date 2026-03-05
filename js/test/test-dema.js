@@ -53,8 +53,6 @@ engine.initialize({
  */
 const clothes = {
     amount: 1,
-    capacityKg: 0,
-    capacityLiters: 0,
     description: "A single set of space clothing",
     consumableProperties: null,
     containing: [],
@@ -72,8 +70,6 @@ const clothes = {
         addedCarryingCapacityLiters: 0,
         extraBodyVolumeWhenWornLiters: 1,
     },
-    descriptionWhenContainingCharacter: null,
-    descriptionWhenWorn: null,
     isConsumable: false,
     isSeeThrough: false,
     name: "Space Clothes",

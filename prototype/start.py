@@ -31,8 +31,14 @@ character_system_description_path = path.join(character_folder, "system.txt")
 character_name_path = path.join(character_folder, "name.txt")
 character_pronouns_path = path.join(character_folder, "pronouns.txt")
 
-MODE = "L3"
-#MODE = "MISTRAL"
+#MODE = "L3"
+MODE = "MISTRAL"
+
+# SERVER_MODE = "NEW"
+# SERVER_MODE = "LEGACY"
+
+SERVER_HOST = "ws://localhost:8000"
+SERVER_KEY = "dev-secret-12345678900abcdef"
 
 # wait until the server is ready
 import time
@@ -210,7 +216,7 @@ def count_tokens(text):
         return CACHE_TOKENS[text]["value"]
     
     # call to webserver to get token count
-    ws = websocket.create_connection("ws://localhost:8000")
+    ws = websocket.create_connection(SERVER_HOST)
     ws.send(json.dumps({"action": "count_tokens", "text": text}))
     response = json.loads(ws.recv())
     ws.close()
@@ -487,7 +493,7 @@ def prepare_llm():
     model_path_absolute = path.abspath(model_path)
     
     # call to webserver to get token count
-    ws = websocket.create_connection("ws://localhost:8000")
+    ws = websocket.create_connection(SERVER_HOST)
     ws.send(json.dumps({"action": "load_model", "model_path": model_path_absolute}))
     response = json.loads(ws.recv())
     ws.close()
