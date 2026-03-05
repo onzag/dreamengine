@@ -13,45 +13,21 @@ export default async function timeForwardsUsingLastMessage(engine, character) {
         throw new Error("Inference adapter not initialized");
     }
 
-    const messageHistoryGenerator = engine.getHistoryForCharacter(character, { includeDebugMessages: false, includeRejectedMessages: false });
-    /**
-     * @type {string|null}
-     */
-    let message = null;
-    let generator = await messageHistoryGenerator.next(true);
-    while (!generator.done) {
-        if (!generator.value.debug && !generator.value.rejected) {
-            const shouldStopAddingMessages = generator.value.name === character.name;
-
-            message = generator.value.message;
-
-            if (shouldStopAddingMessages) {
-                await messageHistoryGenerator.return();
-                break;
-            }
-        }
-        generator = await messageHistoryGenerator.next(true);
-    }
-
-    if (!message) {
-        throw new Error(`No message found for character ${character.name}, yet time-forwards was requested.`);
-    }
-
-    const systemMessage = `You are an assistant and story analyst that helps determine how much time has passed in a story based on a single message from ${character.name}:\n\n"${message}"\n\nBased on the content, context, and any time-related references in the message, estimate how much time has passed within the boundaries of that message.`;
+    const systemMessage = `You are an assistant and story analyst that helps determine how much time has passed in a story based the last message.`;
     const systemPrompt = engine.inferenceAdapter.buildSystemPromptForQuestioningAgent(systemMessage, [
         "You must respond in the format, 'Time Passed: X', where X is the amount of time that has passed (e.g., '8 seconds', '5 minutes', '2 hours', '3 days', '1 week').",
         "Be realistic about how long actions take.",
         "Vary your estimates naturally - do not default to 1 of any unit. Consider the actual duration implied by the actions described, don't be afraid to estimate or guess if it is unclear and give variety in your responses.",
         "If the message does not provide enough information to determine the time passed, give a rough estimate regardless.",
     ], null);
-    const timePassedGenerator = engine.inferenceAdapter.runQuestioningCustomAgentOn(character, systemPrompt, null, [{ name: character.name, message: message }], "ALL", null);
+    const timePassedGenerator = engine.inferenceAdapter.runQuestioningCustomAgentOn(character, systemPrompt, null, engine.getHistoryForCharacter(character, {}), "LAST_MESSAGE", null, true);
 
     const timePassedResponse = await timePassedGenerator.next();
     if (timePassedResponse.done) {
         throw new Error("Failed to prime time-forwards agent.");
     }
 
-    const nextQuestion = `According to the last message provided from ${character.name}, how much time has passed?`;
+    const nextQuestion = `According to the last message provided, how much time has passed?`;
     console.log("Asking question, " + nextQuestion);
 
     const answer = await timePassedGenerator.next({

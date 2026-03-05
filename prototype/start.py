@@ -31,6 +31,9 @@ character_system_description_path = path.join(character_folder, "system.txt")
 character_name_path = path.join(character_folder, "name.txt")
 character_pronouns_path = path.join(character_folder, "pronouns.txt")
 
+MODE = "L3"
+#MODE = "MISTRAL"
+
 # wait until the server is ready
 import time
 time.sleep(1)  # wait a bit for the server to start, cheap, trash code but whatever
@@ -232,7 +235,7 @@ def prepare_token_cache():
     for key in CACHE_TOKENS:
         CACHE_TOKENS[key]["used_in_last_count"] = False
 
-def format_prompt(history, max_context=6000, special_instructions="", special_instructions_in_assistant_space=False):
+def format_prompt(history, username, charname, max_context=6000, special_instructions="", special_instructions_in_assistant_space=False):
     """Format the conversation history with proper role tags for Llama 3.3
     Uses sliding window to keep only recent messages that fit in context.
     Reserves space for system prompt, new message, and response generation.
@@ -241,17 +244,26 @@ def format_prompt(history, max_context=6000, special_instructions="", special_in
 
     # Start with system prompt
     combined_system_prompt = SYSTEM_PROMPT + "\n" + SYSTEM_PROMPT_EMOTIONS + "\n" + SYSTEM_PROMPT_STATES + "\n" + SYSTEM_PROMPT_BONDS
-    system_part = f"<|start_header_id|>system<|end_header_id|>\n\n{combined_system_prompt}<|eot_id|>"
+    if MODE == "L3":
+        system_part = f"<|start_header_id|>system<|end_header_id|>\n\n{combined_system_prompt}<|eot_id|>"
+    else:
+        system_part = f"<s>[SYSTEM_PROMPT] {combined_system_prompt}[/SYSTEM_PROMPT][INST]"
 
-    end_prompt = "<|start_header_id|>assistant<|end_header_id|>\n\n"
+    if MODE == "L3":
+        end_prompt = "<|start_header_id|>assistant<|end_header_id|>\n\n"
+    else:
+        end_prompt = "[/INST]\n\n"
     
     # Format the new user message
     special_instructions_user = ""
     assistant_start = ""
     if special_instructions and not special_instructions_in_assistant_space:
-        special_instructions_user = f"<|start_header_id|>user<|end_header_id|>\n\n*{special_instructions}*<|eot_id|>"
+        if MODE == "L3":
+            special_instructions_user = f"<|start_header_id|>user<|end_header_id|>\n\n*{special_instructions}*<|eot_id|>"
+        else:
+            special_instructions_user = f"*{special_instructions}*\n\n"
     elif special_instructions and special_instructions_in_assistant_space:
-        assistant_start = f"*{special_instructions}*\n"
+        assistant_start = f"*{special_instructions}*\n\n"
     
     # Count tokens for system and user parts (reserve space)
     system_tokens = count_tokens(system_part)
@@ -274,9 +286,16 @@ def format_prompt(history, max_context=6000, special_instructions="", special_in
         role = msg["role"]
         content = msg["content"]
         if role == "user":
-            msg_text = f"<|start_header_id|>user<|end_header_id|>\n\n{content}<|eot_id|>"
+            if MODE == "L3":
+                msg_text = f"<|start_header_id|>user<|end_header_id|>\n\n{content}<|eot_id|>"
+            else:
+                msg_text = f"{msg['name']}: {content}\n\n"
         elif role == "assistant":
-            msg_text = f"<|start_header_id|>assistant<|end_header_id|>\n\n{content}<|eot_id|>"
+            if MODE == "L3":
+                msg_text = f"<|start_header_id|>assistant<|end_header_id|>\n\n{content}<|eot_id|>"
+            else:
+                name_to_use = username if msg["role"] == "user" else charname
+                msg_text = f"{name_to_use}: {content}\n\n"
         else:
             #internal role, skip
             continue
@@ -321,8 +340,16 @@ def format_prompt_for_analysis(
         feed_history_raw_to=None,
     ):
     """Format the conversation history for bond calculation prompt"""
-    system_part = f"<|start_header_id|>system<|end_header_id|>\n\n{system_prompt}<|eot_id|>"
-    end_prompt = "<|start_header_id|>assistant<|end_header_id|>\n\n"
+
+    if MODE == "L3":
+        system_part = f"<|start_header_id|>system<|end_header_id|>\n\n{system_prompt}<|eot_id|>"
+    else:
+        system_part = f"<s>[SYSTEM_PROMPT] {system_prompt}[/SYSTEM_PROMPT][INST]"
+
+    if MODE == "L3":
+        end_prompt = "<|start_header_id|>assistant<|end_header_id|>\n\n"
+    else:
+        end_prompt = "[/INST]\n\n"
     
     messages_to_use = ""
 
@@ -350,9 +377,15 @@ def format_prompt_for_analysis(
     
     # Format as a clear classification task, not continuation
     if special_user_message:
-        user_part = f"<|start_header_id|>user<|end_header_id|>Interaction to analyze:\n\n{special_user_message}\n{messages_to_use}\n\n{confirmation_prompt}<|eot_id|>"
+        if MODE == "L3":
+            user_part = f"<|start_header_id|>user<|end_header_id|>Interaction to analyze:\n\n{special_user_message}\n{messages_to_use}\n\n{confirmation_prompt}<|eot_id|>"
+        else:
+            user_part = f"{special_user_message}\n\n{messages_to_use}\n\n{confirmation_prompt}\n\n"
     else:
-        user_part = f"<|start_header_id|>user<|end_header_id|>Interaction to analyze:\n\n{messages_to_use}\n\n{confirmation_prompt}<|eot_id|>"
+        if MODE == "L3":
+            user_part = f"<|start_header_id|>user<|end_header_id|>Interaction to analyze:\n\n{messages_to_use}\n\n{confirmation_prompt}<|eot_id|>"
+        else:
+            user_part = f"{messages_to_use}\n\n{confirmation_prompt}\n\n"
 
     # we don't count because this is guaranteed to be small enough
     prompt = system_part + user_part + end_prompt
@@ -828,6 +861,8 @@ def run_inference(user_input, dangling_user_message):
     # Format the prompt with history
     prompt = format_prompt(
         chat_history,
+        username=chat_window.username,
+        charname=character_name_value,
         max_context=CONTEXT_WINDOW_SIZE - 512,
         special_instructions=system_prompt_for_end,
         special_instructions_in_assistant_space=is_dead_end_due_to_bond is not None,

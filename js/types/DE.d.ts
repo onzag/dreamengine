@@ -1419,14 +1419,8 @@ declare interface DEItem {
     name: string;
     volumeLiters: number;
     weightKg: number;
-    capacityLiters: number;
-    capacityKg: number;
     description: string;
-    descriptionWhenWorn: string | null;
-    descriptionWhenContainingCharacter: string | null;
     isSeeThrough: boolean;
-    // canSitOn: boolean;
-    // canLieOn: boolean;
     properties: Record<string, DEPropertyValueInItemSpace>;
     isConsumable: boolean;
     consumableProperties?: {
@@ -1473,6 +1467,36 @@ declare interface DEItem {
         partiallyProtectsFromWeathers?: Array<string>;
         negativelyExposesToWeathers?: Array<string>;
     } | null;
+    containerProperties?: {
+        capacityKg: number;
+        capacityLiters: number;
+        /**
+         * Whether the container is rigid or flexible, a rigid container does not take
+         * more volume when more items are put inside it, while a flexible container grows in volume with the items put inside it
+         * so keep in mind the volume of a flexible container
+         * 
+         * By default containers are rigid, but you can specify them as flexible for things like bags, backpacks, etc... that grow in volume as you put more items inside them
+         * then specify the smallest volume that the container takes when empty as the volumeLiters of the item, and then the extra volume that it takes when full as the capacityLiters minus the volumeLiters, that way you can have a flexible container that grows in volume as you put more items inside it, up to its maximum capacity
+         */
+        structure: "rigid" | "flexible";
+
+        /**
+         * Characters inside this item in one way or another are fully protected from these weathers,
+         * for example, a plastic box may fully protect from rain, provided the character fits
+         */
+        fullyProtectsFromWeathers?: Array<string>;
+        /**
+         * Characters inside this item in one way or another are partially protected from these weathers,
+         * for example, a cardboard box may partially protect from rain, provided the character fits
+         */
+        partiallyProtectsFromWeathers?: Array<string>;
+        /**
+         * Characters inside this item in one way or another are negatively exposed to these weathers,
+         * for example, a metal box may negatively expose characters to lightning, provided the character fits
+         */
+        negativelyExposesToWeathers?: Array<string>;
+    } | null;
+
     /**
      * The items that are inside this item if it is a container, for example a backpack may have items inside it
      * this is different from ontop as these items are actually inside the container and may be hidden from view, while ontop items are on top of the item
@@ -1575,8 +1599,10 @@ declare interface StateForDescription {
     atopItemNameOnly: string | null;
     carrying: DEItem[];
     carryingCharacters: Array<string>;
+    carryingCharactersDirectly: Array<string>;
     wearing: DEItem[];
     beingCarriedByCharacter: string | null;
+    beingCarriedByCharacterDirectly: boolean;
     currentAgeMinutes: number;
     currentWeightKg: number;
     /**

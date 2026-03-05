@@ -1,4 +1,5 @@
 import { deepCopy, DEngine } from "../../index.js";
+import { getCharacterVolume, getItemExcessElements, getItemVolume } from "../../util/weight-and-volume.js";
 
 // TODO repair locations not here, but somewhere during creating the world
 // because the placement of an item does not fall in line with how they are
@@ -233,79 +234,10 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
             }
         }
 
-        // const nextQuestion = "Which items, if any, were directly physically interacted with (grabbed, picked up, moved, worn, dropped, used, etc.) in the last message? Do not list items that are only mentioned, seen, or described without physical interaction.";
-        // console.log("Asking question, " + nextQuestion)
-        // const answer = await itemsInteractionGenerator.next({
-        //     maxCharacters: 0,
-        //     maxSafetyCharacters: 250,
-        //     maxParagraphs: 10,
-        //     nextQuestion: nextQuestion,
-        //     stopAfter: [],
-        //     stopAt: [],
-        //     answerTrail: "Only the items physically interacted with:\n\n",
-        //     grammar: `root ::= ("none" | itemList) ${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()}\n` +
-        //         `itemList ::= itemName (", " itemName)*\n` +
-        //         `itemName ::= ${itemsAtLocationLower.map((item) => caseInsensitiveGrammar(item)).join(" | ")}`,
-        //     instructions: `Answer ONLY with items that a character physically touched, grabbed, picked up, moved, wore, dropped, placed, or directly used in the last message. Items that are merely present in the scene, mentioned, looked at, or described do not count. Most messages interact with very few items or none at all. If no items were physically interacted with, answer none. Do not repeat item names.`,
-        // });
-
-        // if (answer.done) {
-        //     throw new Error("Questioning agent finished without providing an answer for item changes check.");
-        // }
-
-        // console.log("Received answer, " + answer.value);
-
         await itemsInteractionGenerator.next(null); // end the generator
-
-        // const extraAdded = answer.value.trim() === "none" ? [] : answer.value.split(",").map((v) => v.trim()).filter((v) => !!v);
-        // // we append extraAdded first to prefer the order given by the LLM over ours, since
-        // // ordering may have a subtle effect
-        // itemsInteractedWith = removeRepeatsInArray(extraAdded.concat(itemsInteractedWith).map((v) => v.toLowerCase()));
     }
 
     const charactersAtLocation = [...charState.surroundingNonStrangers, ...charState.surroundingTotalStrangers, character.name];
-
-    // /**
-    //  * @type {Array<{groupDescription: string, characters: Array<{name: string, description: string}>}>}
-    //  */
-    // const charactersAtLocationInfoObject = [
-    //     {
-    //         groupDescription: "Character " + character.name + ", who wrote the last message",
-    //         characters: [
-    //             {
-    //                 name: character.name,
-    //                 description: engine.getExternalDescriptionOfCharacter(character.name),
-    //             }
-    //         ]
-    //     }
-    // ];
-
-    // if (charState.surroundingNonStrangers.length) {
-    //     charactersAtLocationInfoObject.push({
-    //         groupDescription: "Non-stranger characters at the location for " + character.name,
-    //         characters: charState.surroundingNonStrangers.map((charName) => {
-    //             const charInfo = engine.getExternalDescriptionOfCharacter(charName);
-    //             return {
-    //                 name: charName,
-    //                 description: charInfo,
-    //             }
-    //         })
-    //     })
-    // }
-    // if (charState.surroundingTotalStrangers.length) {
-    //     charactersAtLocationInfoObject.push({
-    //         groupDescription: "Stranger characters at the location for " + character.name,
-    //         characters: charState.surroundingTotalStrangers.map((charName) => {
-    //             const charInfo = engine.getExternalDescriptionOfCharacter(charName);
-    //             return {
-    //                 name: charName,
-    //                 description: charInfo,
-    //             }
-    //         })
-    //     })
-    // }
-
-    // const charactersDesriptionsAtLocation = engine.inferenceAdapter.buildContextInfoForAvailableCharacters(charactersAtLocationInfoObject);
 
     const systemPromptCharactersInteracted = engine.inferenceAdapter.buildSystemPromptForQuestioningAgent(
         `You are an asistant and story analyst that checks for interactions among characters in a story\n` +
@@ -313,11 +245,6 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
         [
             `Keep in mind any mention of any character, direct or indirect, it counts as an interaction, including talking, looking at, thinking about, mentioning, etc.`,
             "Keep in mind descriptions of characters also count as mentions, for example if the message says 'Bob gave the book to the woman', figure out who the woman is based on the description and the context, and if it's a character, it counts as an interaction",
-            //"Only consider characters from this list: " + charactersAtLocation.join(", ") + ".",
-            //"Answer in the format: Character Name, Character Name, Character Name, ...",
-            //"If no characters were mentioned or interacted with, answer none",
-            //"Keep in mind the description of the characters at " + charactersDesriptionsAtLocation.availableCharactersAt + " to analyze the last message and figure out indirect mentions and interactions with characters based on their descriptions.",
-            //"Do not repeat character names, if a character was mentioned many times, just mention them once in the answer",
         ].filter((v) => v !== null), null);
 
     /**
@@ -328,7 +255,6 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
     const charactersInteractionGenerator = engine.inferenceAdapter.runQuestioningCustomAgentOn(
         character,
         systemPromptCharactersInteracted,
-        //charactersDesriptionsAtLocation.value,
         null,
         engine.getHistoryForCharacter(character, {}), "LAST_CYCLE_EXPANDED",
         null,
@@ -350,9 +276,9 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
 
         const charDescription = engine.getExternalDescriptionOfCharacter(charName);
         const charDescriptionContextInfo = engine.inferenceAdapter.buildContextInfoCharacterDescription(
-                engine.deObject.characters[charName],
-                charDescription,
-            );
+            engine.deObject.characters[charName],
+            charDescription,
+        );
 
         const answer = await charactersInteractionGenerator.next({
             maxCharacters: 0,
@@ -381,34 +307,6 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
     }
 
     await charactersInteractionGenerator.next(null);
-
-    // const nextQuestionCharacters = "What characters were mentioned or interacted with by any character in the last message?";
-    // console.log("Asking question, " + nextQuestionCharacters)
-    // const answerCharacters = await charactersInteractionGenerator.next({
-    //     maxCharacters: 0,
-    //     maxSafetyCharacters: 250,
-    //     maxParagraphs: 1,
-    //     nextQuestion: nextQuestionCharacters,
-    //     stopAfter: [],
-    //     stopAt: [],
-    //     answerTrail: "The list of the characters mentioned or interacted with is:\n\n",
-    //     grammar: `root ::= ("none" | characterList) ${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()}\n` +
-    //         `characterList ::= characterName (", " characterName)*\n` +
-    //         `characterName ::= ${charactersAtLocation.map((char) => JSON.stringify(char)).join(" | ")}`,
-    //     useAggressiveListRepetitionBuster: true,
-    // });
-
-    // if (answerCharacters.done) {
-    //     throw new Error("Questioning agent finished without providing an answer for character interactions check.");
-    // }
-
-    // console.log("Received answer, " + answerCharacters.value);
-
-    // await charactersInteractionGenerator.next(null); // end the generator
-
-    // const charactersInteractedWith = answerCharacters.value.trim() === "none" ? [] : answerCharacters.value.split(",").map((v) => v.trim()).filter((v) => !!v);
-    // charactersToQuestion = charactersToQuestion.concat(charactersInteractedWith);
-    // charactersToQuestion = removeRepeatsInArray(charactersToQuestion);
 
     console.log("Items interacted with: ", itemsInteractedWith);
     console.log("Characters to question: ", charactersToQuestion);
@@ -742,7 +640,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                     // we are going to check if any of the other items we are checking, could contain something
                     // it would be very weird that not all of them do, like having a box that can contain other items, and others that do not
                     // but we will check anyway to see if any of them can do it
-                    const canContain = otherItemPotentialLocations.allPotentialItemsForItem.some((itemList) => itemList.some((itemInstance) => itemInstance.capacityKg && itemInstance.capacityKg > 0));
+                    const canContain = otherItemPotentialLocations.allPotentialItemsForItem.some((itemList) => itemList.some((itemInstance) => itemInstance.containerProperties && itemInstance.containerProperties.capacityKg && itemInstance.containerProperties.capacityKg > 0));
 
                     // so our default is no, that our original item was not contained inside the other item
                     let ambiguousPlacementContainedValue = "no";
@@ -946,7 +844,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                             // this is the potential location for the other item
                             const potentialLocation = otherItemPotentialLocations.allPotentialLocationsForItem[i];
                             let itemsInQuestion = otherItemPotentialLocations.allPotentialItemsForItem[i];
-                            const hasContainer = itemsInQuestion.some((it) => it.capacityKg && it.capacityKg > 0);
+                            const hasContainer = itemsInQuestion.some((it) => it.containerProperties && it.containerProperties.capacityKg && it.containerProperties.capacityKg > 0);
 
                             if (hasContainer && currentAmountOfItemsMovedToAnotherContained < ambiguousAmountMovedFromOneItemToAnotherContained) {
                                 const nextQuestion = `How many of "${item}" were placed inside ${isAnother ? "another " : ""}"${otherItem}" where the target location of ${otherItem} is EXPLICITLY stated to be ${JSON.stringify(potentialLocation)}? ${item} must have been explcitly specified to be placed inside ${otherItem} at the explicit location ${potentialLocation}. Answer with the amount of ONLY the ${item} that were explicitly stated to be placed INSIDE ${otherItem} at the location ${potentialLocation}.`;
@@ -1584,7 +1482,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
             let isInsideItem = false;
             let isAtopItem = false;
 
-            const canBeInside = allPotentialItemsForItem.some((itemOptions) => itemOptions.some((it) => it.capacityKg && it.capacityKg > 0));
+            const canBeInside = allPotentialItemsForItem.some((itemOptions) => itemOptions.some((it) => it.containerProperties && it.containerProperties.capacityKg && it.containerProperties.capacityKg > 0));
             const alreadyInside = engine.deObject.stateFor[charName].insideItemNameOnly === item;
             if (canBeInside && !alreadyInside) {
                 const nextQuestion = `By the end of the last message, is ${charName} inside ${item}? Answer "yes" ONLY if ${charName} got inside ${item} by entering it, climbing into it, or being put into it. If ${charName} is near ${item} but not inside it, or if it's not clear if they are inside it, answer "no".`;
@@ -1667,7 +1565,6 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
             }
         }
     }
-
 
     // by the end of the message has Y sat, stood, or laid on x? [YESNO]
     for (const charName of charactersToQuestion) {
@@ -1907,6 +1804,17 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
 
         // we consider now the position of the character to be established
         charactersWithAEstablishedPositionSoFar.push(charName);
+    }
+
+    // TODO determine items broken or transformed
+
+    for (const [slotName, slot] of Object.entries(location.slots)) {
+        await cleanDirtyItemTree(engine, character.name, charState, slot.items, ["slots", slotName, "items"], addedMessagesForStoryMaster);
+    }
+    for (const charName of charactersToQuestion) {
+        const characterState = engine.deObject.stateFor[charName];
+        await cleanDirtyItemTree(engine, charName, characterState, characterState.carrying, ["characters", charName, "carrying"], addedMessagesForStoryMaster);
+        await cleanDirtyItemTree(engine, charName, characterState, characterState.wearing, ["characters", charName, "wearing"], addedMessagesForStoryMaster);
     }
 
     console.log(addedMessagesForStoryMaster);
@@ -2434,12 +2342,23 @@ function moveCharacters(
             const index = otherCharState.carryingCharacters.indexOf(characterName);
             otherCharState.carryingCharacters.splice(index, 1);
         }
+        if (otherCharState.carryingCharactersDirectly.includes(characterName)) {
+            const index = otherCharState.carryingCharactersDirectly.indexOf(characterName);
+            otherCharState.carryingCharactersDirectly.splice(index, 1);
+        }
         clearList(otherCharState.wearing);
         clearList(otherCharState.carrying);
     }
     for (const slot of Object.values(engine.deObject.world.locations[charState.location].slots)) {
         clearList(slot.items);
     }
+
+    engine.deObject.stateFor[characterName].insideItem = null;
+    engine.deObject.stateFor[characterName].insideItemNameOnly = null;
+    engine.deObject.stateFor[characterName].atopItem = null;
+    engine.deObject.stateFor[characterName].atopItemNameOnly = null;
+    engine.deObject.stateFor[characterName].beingCarriedByCharacter = null;
+    engine.deObject.stateFor[characterName].beingCarriedByCharacterDirectly = false;
 
     const toPathsAtTheSameSlot = [];
     const toPathsNotAtTheSameSlot = [];
@@ -2515,6 +2434,13 @@ function moveCharacters(
         const carryingCharactersArr = engine.deObject.stateFor[resolveInfo.pathToResolved[1]].carryingCharacters;
         if (!carryingCharactersArr.includes(characterName)) {
             carryingCharactersArr.push(characterName);
+        }
+        charState.beingCarriedByCharacterDirectly = resolveInfo.pathToResolved.length === 2;
+        if (charState.beingCarriedByCharacterDirectly) {
+            const carryingCharactersDirectlyArr = engine.deObject.stateFor[resolveInfo.pathToResolved[1]].carryingCharactersDirectly;
+            if (!carryingCharactersDirectlyArr.includes(characterName)) {
+                carryingCharactersDirectlyArr.push(characterName);
+            }
         }
         addedMessagesForStoryMaster.push(`${characterName} is now being carried by ${resolveInfo.pathToResolved[1]}.`);
     } else {
@@ -2669,16 +2595,252 @@ function informStolen(
     addedMessagesForStoryMaster.push(message);
 }
 
-function cleanDirtyItemTree(
+/**
+ * 
+ * @param {*} a 
+ * @param {*} b
+ * @param {boolean} [firstLayer]
+ * @returns 
+ */
+function deepEqualItem(a, b, firstLayer = true) {
+    if (a === b) {
+        return true;
+    }
+    if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) {
+        return false;
+    }
+    const keysA = Object.keys(a);
+    const keysB = Object.keys(b);
+    if (keysA.length !== keysB.length) {
+        return false;
+    }
+    for (const key of keysA) {
+        // do not compare amount
+        if (firstLayer && (key === "amount" || key === "_just_placed" || key === "_moved_to")) {
+            continue;
+        }
+        if (!keysB.includes(key) || !deepEqualItem(a[key], b[key], false)) {
+            return false;
+        }
+    }
+    return true;
+}
 
+/**
+ * @param {DEngine} engine
+ * @param {string} characterName
+ * @param {DEStateForDescriptionWithHistory} charState
+ * @param {DEItem[]} list
+ * @param {Array<string | number>} path
+ * @param {Array<string>} addedMessagesForStoryMaster
+ */
+async function cleanDirtyItemTree(
+    engine,
+    characterName,
+    charState,
+    list,
+    path,
+    addedMessagesForStoryMaster,
 ) {
-    // TODO Remove _moved_to
-    // TODO Remove _just_placed
-    // remove any items with amount 0
+    if (!engine.deObject) {
+        throw new Error("DEngine not initialized");
+    }
+    const deletedIndices = [];
+    for (let i = 0; i < list.length; i++) {
+        const item = list[i];
+        const currentPath = [...path, i];
+
+        // @ts-ignore
+        if (item._moved_to) {
+            // @ts-ignore
+            delete item._moved_to;
+        }
+
+        if (item.amount === 0) {
+            deletedIndices.push(i);
+            continue;
+        }
+
+        for (const relation of ["containing", "ontop"]) {
+            // @ts-ignore
+            if (item[relation] && item[relation].length > 0) {
+                // @ts-ignore
+                await cleanDirtyItemTree(engine, characterName, charState, item[relation], [...currentPath, relation], addedMessagesForStoryMaster, relation, item);
+            }
+        }
+    }
+    for (let i = deletedIndices.length - 1; i >= 0; i--) {
+        list.splice(deletedIndices[i], 1);
+    }
+
+    /**
+     * @type {Array<number>}
+     */
+    const deletedIndicesDueToMerging = [];
+    for (let i = 0; i < list.length; i++) {
+        if (deletedIndicesDueToMerging.includes(i)) {
+            continue;
+        }
+        for (let j = i + 1; j < list.length; j++) {
+            if (deletedIndicesDueToMerging.includes(j)) {
+                continue;
+            }
+            if (deepEqualItem(list[i], list[j])) {
+                deletedIndicesDueToMerging.push(j);
+                list[i].amount = (list[i].amount || 1) + (list[j].amount || 1);
+                // @ts-ignore
+                if (list[j]._just_placed) {
+                    // @ts-ignore
+                    list[i]._just_placed = true;
+                }
+            }
+        }
+    }
+
+    for (let i = deletedIndicesDueToMerging.length - 1; i >= 0; i--) {
+        list.splice(deletedIndicesDueToMerging[i], 1);
+    }
+
+    const expectedPathForFallenItems = path[0] === "slots" ? ["slots", path[1]] : ["slots", charState.locationSlot];
+    const resolvedFallenItems = resolvePath(engine, charState.location, expectedPathForFallenItems);
+
+    // this is specific to items on items only, I know it is going to be verbose but more readable this way, we can optimize later if needed
+    if (path.length > 3) {
+        for (const item of list) {
+            const excess = getItemExcessElements(engine, item);
+            if (excess.breaks) {
+                // TODO
+                console.log("TODO BROKEN", excess.breakReason);
+                process.exit(1);
+            } else {
+                for (const expelledFromOnTopItem of excess.expelledOntopItems) {
+                    // the amount expelled multiplies by the amount of the item
+                    const amountExpelled = (expelledFromOnTopItem.amount || 1) * (item.amount || 1);
+                    expelledFromOnTopItem.amount -= expelledFromOnTopItem.amount;
+
+                    const expelledItemVolume = getItemVolume(engine, expelledFromOnTopItem.item);
+
+                    const copied = deepCopyItem(expelledFromOnTopItem.item);
+                    copied.amount = amountExpelled;
+                    resolvedFallenItems.resolved.items.push(copied);
+                    if (expelledItemVolume.singularVolume > item.maxVolumeOnTopLiters) {
+                        addedMessagesForStoryMaster.push(`${utilItemCount(engine, characterName, charState, amountExpelled, expelledFromOnTopItem.item.name, true)} ${amountExpelled === 1 ? "was" : "were"} far too large to be on top of ${item.name} and fell off onto the ground in ${expectedPathForFallenItems[1]}`);
+                    } else {
+                        addedMessagesForStoryMaster.push(`${utilItemCount(engine, characterName, charState, amountExpelled, expelledFromOnTopItem.item.name, true)} ${amountExpelled === 1 ? "was" : "were"} did not fit on top of ${item.name} and fell off onto the ground in ${expectedPathForFallenItems[1]}`);
+                    }
+                }
+                for (const expelledFromInsideItem of excess.expelledContainedItems) {
+                    // the amount expelled multiplies by the amount of the item
+                    const amountExpelled = (expelledFromInsideItem.amount || 1) * (item.amount || 1);
+                    expelledFromInsideItem.amount -= expelledFromInsideItem.amount;
+
+                    const expelledItemVolume = getItemVolume(engine, expelledFromInsideItem.item);
+
+                    const copied = deepCopyItem(expelledFromInsideItem.item);
+                    copied.amount = amountExpelled;
+                    resolvedFallenItems.resolved.items.push(copied);
+                    if (item.containerProperties && expelledItemVolume.singularVolume > item.containerProperties.capacityLiters) {
+                        addedMessagesForStoryMaster.push(`${utilItemCount(engine, characterName, charState, amountExpelled, expelledFromInsideItem.item.name, true)} ${amountExpelled === 1 ? "was" : "were"} far too large to fit inside ${item.name} and fell out onto the ground in ${expectedPathForFallenItems[1]}`);
+                    } else {
+                        addedMessagesForStoryMaster.push(`${utilItemCount(engine, characterName, charState, amountExpelled, expelledFromInsideItem.item.name, true)} ${amountExpelled === 1 ? "was" : "were"} did not fit inside ${item.name} and fell out onto the ground in ${expectedPathForFallenItems[1]}`);
+                    }
+                }
+                for (const expelledOnTopCharacter of excess.expelledOntopCharacters) {
+                    // a character is only one so that is easier to handle
+                    item.ontopCharacters = item.ontopCharacters.filter((v) => v !== expelledOnTopCharacter);
+                    const charState = engine.deObject.stateFor[expelledOnTopCharacter];
+                    charState.atopItem = null;
+                    charState.atopItemNameOnly = null;
+
+                    const charVolume = getCharacterVolume(engine, expelledOnTopCharacter);
+
+                    if (path[0] === "characters") {
+                        const characterCarryingOrWearingTheItem = path[1];
+                        const charStateOfCarrierOrWearer = engine.deObject.stateFor[characterCarryingOrWearingTheItem];
+                        if (charStateOfCarrierOrWearer.carryingCharactersDirectly.includes(expelledOnTopCharacter)) {
+                            charStateOfCarrierOrWearer.carryingCharactersDirectly = charStateOfCarrierOrWearer.carryingCharactersDirectly.filter((v) => v !== expelledOnTopCharacter);
+                        }
+                        if (charStateOfCarrierOrWearer.carryingCharacters.includes(expelledOnTopCharacter)) {
+                            charStateOfCarrierOrWearer.carryingCharacters = charStateOfCarrierOrWearer.carryingCharacters.filter((v) => v !== expelledOnTopCharacter);
+                        }
+                        if (charVolume.volume > item.maxVolumeOnTopLiters) {
+                            addedMessagesForStoryMaster.push(`${expelledOnTopCharacter} was too large to fit on top of ${item.name} and fell down from it, ${item.name} is being carried by ${characterCarryingOrWearingTheItem}, and ${expelledOnTopCharacter} is now on the ground at ${expectedPathForFallenItems[1]}.`);
+                        } else {
+                            addedMessagesForStoryMaster.push(`${expelledOnTopCharacter} did not fit on top of ${item.name} and fell down from it, ${item.name} is being carried by ${characterCarryingOrWearingTheItem}, and ${expelledOnTopCharacter} is now on the ground at ${expectedPathForFallenItems[1]}.`);
+                        }
+                    } else {
+                        if (charVolume.volume > item.maxVolumeOnTopLiters) {
+                            addedMessagesForStoryMaster.push(`${expelledOnTopCharacter} was too large to fit on top of ${item.name} and fell down from it, and is now on the ground at ${expectedPathForFallenItems[1]}.`);
+                        } else {
+                            addedMessagesForStoryMaster.push(`${expelledOnTopCharacter} did not fit on top of ${item.name} and fell down from it, and is now on the ground at ${expectedPathForFallenItems[1]}.`);
+                        }
+                    }
+                }
+                for (const expelledInsideCharacter of excess.expelledContainedCharacters) {
+                    // a character is only one so that is easier to handle
+                    item.containingCharacters = item.containingCharacters.filter((v) => v !== expelledInsideCharacter);
+                    const charState = engine.deObject.stateFor[expelledInsideCharacter];
+                    charState.insideItem = null;
+                    charState.insideItemNameOnly = null;
+
+                    const charVolume = getCharacterVolume(engine, expelledInsideCharacter);
+                    
+                    if (path[0] === "characters") {
+                        const characterCarryingOrWearingTheItem = path[1];
+                        const charStateOfCarrierOrWearer = engine.deObject.stateFor[characterCarryingOrWearingTheItem];
+                        if (charStateOfCarrierOrWearer.carryingCharactersDirectly.includes(expelledInsideCharacter)) {
+                            charStateOfCarrierOrWearer.carryingCharactersDirectly = charStateOfCarrierOrWearer.carryingCharactersDirectly.filter((v) => v !== expelledInsideCharacter);
+                        }
+                        if (charStateOfCarrierOrWearer.carryingCharacters.includes(expelledInsideCharacter)) {
+                            charStateOfCarrierOrWearer.carryingCharacters = charStateOfCarrierOrWearer.carryingCharacters.filter((v) => v !== expelledInsideCharacter);
+                        }
+                        if (item.containerProperties && charVolume.volume > item.containerProperties.capacityLiters) {
+                            addedMessagesForStoryMaster.push(`${expelledInsideCharacter} was too large to fit inside ${item.name} and fell out from it, ${item.name} is being carried by ${characterCarryingOrWearingTheItem}, and ${expelledInsideCharacter} is now on the ground at ${expectedPathForFallenItems[1]}.`);
+                        } else {
+                            addedMessagesForStoryMaster.push(`${expelledInsideCharacter} did not fit inside ${item.name} and fell out from it, ${item.name} is being carried by ${characterCarryingOrWearingTheItem}, and ${expelledInsideCharacter} is now on the ground at ${expectedPathForFallenItems[1]}.`);
+                        }
+                    } else {
+                        if (item.containerProperties && charVolume.volume > item.containerProperties.capacityLiters) {
+                            addedMessagesForStoryMaster.push(`${expelledInsideCharacter} was too large to fit inside ${item.name} and fell out from it, and is now on the ground at ${expectedPathForFallenItems[1]}.`);
+                        } else {
+                            addedMessagesForStoryMaster.push(`${expelledInsideCharacter} did not fit inside ${item.name} and fell out from it, and is now on the ground at ${expectedPathForFallenItems[1]}.`);
+                        }
+                    }
+                }
+            }
+        }
+    } else if (path.length === 3 && path[0] === "slots") {
+        // now for items that are directly on the ground, we are going to check if the slot is overfilled and has
+        // zero capacity, so the items will begin to pile up in other slots instead
+        // TODO
+    } else if (path.length === 3 && path[0] === "characters") {
+        // now for items on characters
+        // TODO
+        // 1. if they are worn, and they are too heavy they will make the character fall down and drop, until the garment is removed
+        // 2. if they are worn, but the garment is too big and doesn't fit, the item will fall off and drop on the ground
+        // 3. if they are worn, but the garment is too tight, it will break and fall on the ground broken
+        // 4. if they are carried, but they are too heavy, the item will fall on the ground (and maybe the character too)
+        // 5. if they are carried, but the item is too big, the item will fall on the ground (and maybe the character too)
+        // 6. Check for other carried characters too
+    }
+
+    for (let i = list.length - 1; i >= 0; i--) {
+        const item = list[i];
+        // @ts-ignore
+        if (item._just_placed) {
+            // @ts-ignore
+            delete item._just_placed;
+        }
+        if (item.amount === 0) {
+            list.splice(i, 1);
+        }
+    }
+
     // merge items that are equal
     // determine overflowing containers
     // crushed items
     // characters dropping items because they are too heavy
+    // TODO characters dropping items at character level
 }
 
 const irregularPlurals = {

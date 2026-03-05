@@ -603,7 +603,9 @@ export class DEngine {
             // chars start out empty handed
             carrying: [],
             carryingCharacters: [],
+            carryingCharactersDirectly: [],
             beingCarriedByCharacter: null,
+            beingCarriedByCharacterDirectly: false,
             currentAgeMinutes: character.ageYears * 525600, // approximate minutes in a year
             currentWeightKg: character.weightKg,
 
@@ -767,6 +769,11 @@ export class DEngine {
                 }
                 if (carrierState.beingCarriedByCharacter !== charName) {
                     throw new Error(`Character ${charName} is carrying ${carrier} but that character does not have them as beingCarriedByCharacter.`);
+                }
+            }
+            for (const directlyCarried of charState.carryingCharactersDirectly) {
+                if (!charState.carryingCharacters.includes(directlyCarried)) {
+                    throw new Error(`Character ${charName} has ${directlyCarried} in carryingCharactersDirectly but not in carryingCharacters.`);
                 }
             }
 
@@ -1744,7 +1751,7 @@ export class DEngine {
             }
         }
 
-        let message = "Items at the location:\n";
+        let message = "# Items at the location:\n";
 
         /**
          * @param {string} space 
@@ -1768,7 +1775,7 @@ export class DEngine {
         } else {
             for (const slotName of slotNames) {
                 const slot = location.slots[slotName];
-                message += `\n# Items at ${slotName}:\n`;
+                message += `\n## Items at ${slotName}:\n`;
                 for (const item of slot.items) {
                     listItems("", item);
                 }
@@ -1780,7 +1787,7 @@ export class DEngine {
             if (otherCharName === characterName) continue;
             const otherCharState = this.deObject.stateFor[otherCharName];
             if (otherCharState.location === locationName) {
-                message += `\n# Items worn by ${otherCharName}:\n`;
+                message += `\n## Items worn by ${otherCharName}:\n`;
                 if (otherCharState.wearing.length === 0) {
                     message += `${otherCharName} Is currently naked.\n`;
                 } else {
@@ -1789,7 +1796,7 @@ export class DEngine {
                     }
                 }
                 if (otherCharState.carryingCharacters.length > 0) {
-                    message += `\n# Characters carried by ${otherCharName}:\n`;
+                    message += `\n## Characters carried by ${otherCharName}:\n`;
                     for (const carriedCharName of otherCharState.carryingCharacters) {
                         const carriedCharState = this.deObject.stateFor[carriedCharName];
                         if (carriedCharState.insideItem) {
@@ -1801,7 +1808,7 @@ export class DEngine {
                         }
                     }
                 }
-                message += `\n# Items carried by ${otherCharName}:\n`;
+                message += `\n## Items carried by ${otherCharName}:\n`;
                 if (otherCharState.carrying.length === 0) {
                     message += `No items carried by ${otherCharName}.\n`;
                 } else {
@@ -1813,7 +1820,7 @@ export class DEngine {
         }
 
         // now let's do our own character
-        message += `\n# Items worn by ${characterName}:\n`;
+        message += `\n## Items worn by ${characterName}:\n`;
         if (characterState.wearing.length === 0) {
             message += `${characterName} Is currently naked.\n`;
         } else {
@@ -1822,7 +1829,7 @@ export class DEngine {
             }
         }
         if (characterState.carryingCharacters.length > 0) {
-            message += `\n# Characters carried by ${characterName}:\n`;
+            message += `\n## Characters carried by ${characterName}:\n`;
             for (const carriedCharName of characterState.carryingCharacters) {
                 const carriedCharState = this.deObject.stateFor[carriedCharName];
                 if (carriedCharState.insideItem) {
@@ -1834,7 +1841,7 @@ export class DEngine {
                 }
             }
         }
-        message += `\n# Items carried by ${characterName}:\n`;
+        message += `\n## Items carried by ${characterName}:\n`;
         if (characterState.carrying.length === 0) {
             message += `No items or characters carried by ${characterName}.\n`;
         } else {
@@ -1844,7 +1851,7 @@ export class DEngine {
         }
 
         if (characterState.beingCarriedByCharacter) {
-            message += `\n# ${characterName} is being carried by another character:\n`;
+            message += `\n## ${characterName} is being carried by another character:\n`;
             message += `${characterName} is being carried by character: ${characterState.beingCarriedByCharacter}.\n`;
         }
 
@@ -2454,6 +2461,14 @@ export class DEngine {
      * @returns 
      */
     getItemsCharacterMayCarryWithReasons(canOrCannot, characterName, locationName, includeCharacters, excludeItems, addVerboseContainmentInfo = false) {
+        // TODO refactor this, we should use the util weight and volume that has the standarized way to measure weight and volume of
+        // characters and items, also maybe it's better to specify list of interactions...
+        // 1. what can be carried
+        // 2. what cannot be carried with reasons
+        // 3. what can be worn
+        // 4. what cannot be worn with reasons
+        // 5. What items and characters can get atop
+        // 6. What items and characters cannot get atop with reasons (eg. will break, will crush)
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         }
@@ -2907,6 +2922,54 @@ export class DEngine {
             throw new Error(`Slot ${slotName} not found in location ${locationName}.`);
         }
 
+        const characterState = this.deObject.stateFor[characterName];
+        if (!characterState) {
+            throw new Error(`Character state for ${characterName} not found.`);
+        }
+
+        /**
+         * @type {DEItem[] | null}
+         */
+        let potentiallyProtectingItemsCharacterIsInsideOf = null;
+
+        if (characterState.insideItem) {
+            /**
+             * @param {DEItem[]} itemList
+             * @return {DEItem[] | null} the list of items that fully protect the character from the weather, starting from the innermost item to the outermost, or null if no item in the list provides full protection
+             */
+            const recurseUntilFound = (itemList) => {
+                for (const childItem of itemList) {
+                    if (childItem.containingCharacters.includes(characterName)) {
+                        return [childItem];
+                    }
+                    const found2 = recurseUntilFound(childItem.containing);
+                    if (found2) return [childItem, ...found2];
+                    const found3 = recurseUntilFound(childItem.ontop);
+                    if (found3) return [childItem, ...found3];
+                }
+                return null;
+            }
+
+            for (const locationSlotName in locationInfo.slots) {
+                const locationSlot = locationInfo.slots[locationSlotName];
+                const foundInSlot = recurseUntilFound(locationSlot.items);
+                if (foundInSlot) {
+                    potentiallyProtectingItemsCharacterIsInsideOf = foundInSlot;
+                    break;
+                }
+            }
+            if (!potentiallyProtectingItemsCharacterIsInsideOf) {
+                const surroundingCharacters = characterState.surroundingNonStrangers.concat(characterState.surroundingTotalStrangers);
+                for (const surroundingCharacterName of surroundingCharacters) {
+                    const surroundingCharacterState = this.deObject.stateFor[surroundingCharacterName];
+                    potentiallyProtectingItemsCharacterIsInsideOf = recurseUntilFound(surroundingCharacterState.wearing);
+                    if (potentiallyProtectingItemsCharacterIsInsideOf) break;
+                    potentiallyProtectingItemsCharacterIsInsideOf = recurseUntilFound(surroundingCharacterState.carrying);
+                    if (potentiallyProtectingItemsCharacterIsInsideOf) break;
+                }
+            }
+        }
+
         // FULLY PROTECTED CHECKS
         // check for location based sheltering
         if ((slotInfo.slotFullyBlocksWeather || locationInfo.locationFullyBlocksWeather).includes(weatherName)) {
@@ -2916,10 +2979,6 @@ export class DEngine {
         }
 
         // check if an item the character is carrying or wearing provides full sheltering
-        const characterState = this.deObject.stateFor[characterName];
-        if (!characterState) {
-            throw new Error(`Character state for ${characterName} not found.`);
-        }
         for (const item of characterState.wearing) {
             if (item.wearableProperties?.fullyProtectsFromWeathers?.includes(weatherName)) {
                 returnInformation.fullySheltered = true;
@@ -2958,6 +3017,14 @@ export class DEngine {
                 }
             }
         }
+        for (const potentialProtectingItem of potentiallyProtectingItemsCharacterIsInsideOf || []) {
+            if (potentialProtectingItem.containerProperties?.fullyProtectsFromWeathers?.includes(weatherName)) {
+                returnInformation.fullySheltered = true;
+                returnInformation.reason = `The item "${potentialProtectingItem.name}" that "${characterName}" is inside of fully protects from the weather condition "${weatherName}"`;
+                return returnInformation;
+            }
+        }
+
         if (weatherSystem.fullyProtectingStates.length > 0) {
             for (const state of characterState.states) {
                 if (weatherSystem.fullyProtectingStates.includes(state.state)) {
@@ -3027,6 +3094,14 @@ export class DEngine {
                     returnInformation.reason = `The item "${item.name}" carried by "${characterName}" partially protects from the weather condition "${weatherName}"`;
                     return returnInformation;
                 }
+            }
+        }
+
+        for (const potentialProtectingItem of potentiallyProtectingItemsCharacterIsInsideOf || []) {
+            if (potentialProtectingItem.containerProperties?.partiallyProtectsFromWeathers?.includes(weatherName)) {
+                returnInformation.partiallySheltered = true;
+                returnInformation.reason = `The item "${potentialProtectingItem.name}" that "${characterName}" is inside of partially protects from the weather condition "${weatherName}"`;
+                return returnInformation;
             }
         }
 
@@ -3102,6 +3177,14 @@ export class DEngine {
                     returnInformation.reason = `The item "${item.name}" carried by "${characterName}" negatively exposes to the weather condition "${weatherName}"`;
                     return returnInformation;
                 }
+            }
+        }
+
+        for (const potentialProtectingItem of potentiallyProtectingItemsCharacterIsInsideOf || []) {
+            if (potentialProtectingItem.containerProperties?.negativelyExposesToWeathers?.includes(weatherName)) {
+                returnInformation.negativelyExposed = true;
+                returnInformation.reason = `The item "${potentialProtectingItem.name}" that "${characterName}" is inside of negatively exposes ${characterName} to the weather condition "${weatherName}"`;
+                return returnInformation;
             }
         }
 
