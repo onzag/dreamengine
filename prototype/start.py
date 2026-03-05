@@ -295,7 +295,8 @@ def format_prompt(history, username, charname, max_context=6000, special_instruc
             if MODE == "L3":
                 msg_text = f"<|start_header_id|>user<|end_header_id|>\n\n{content}<|eot_id|>"
             else:
-                msg_text = f"{msg['name']}: {content}\n\n"
+                name_to_use = username if msg["role"] == "user" else charname
+                msg_text = f"{name_to_use}: {content}\n\n"
         elif role == "assistant":
             if MODE == "L3":
                 msg_text = f"<|start_header_id|>assistant<|end_header_id|>\n\n{content}<|eot_id|>"
