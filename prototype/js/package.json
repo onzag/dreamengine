@@ -11,7 +11,7 @@
     "start": "node server.js"
   },
   "dependencies": {
-    "node-llama-cpp": "^3.14.5",
+    "node-llama-cpp": "^3.17.1",
     "ws": "^8.18.3"
   }
 }

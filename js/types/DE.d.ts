@@ -1439,6 +1439,35 @@ declare interface DEItem {
         volumeRangeMinLiters: number;
         volumeRangeMaxLiters: number;
         /**
+         * When an item is too tight, how much will it stretch to fit without breaking, this is useful for things like elastic clothing that
+         * can fit tightly and snuggly
+         */
+        volumeRangeFlexibilityLeewaySnug: number;
+        /**
+         * When an item is too lose, how big can it be to still be considered wearable and not just fall down
+         */
+        volumeRangeFlexibilityLeewayLoose: number;
+        /**
+         * Traits that get added to the fitness of the item being worn regardless of fit, for example, a suit may have "looks sharp", "looks professional" regardless of fit
+         */
+        otherFitmentTraitsAny?: Array<string>;
+        /**
+         * Traits that get added to the fitness of the item
+         * being worn when the worn is ideal
+         * for example, a suit may have "looks sharp", "looks professional"
+         */
+        otherFitmentTraitsIdeal?: Array<string>;
+        /**
+         * Traits that get added to the fitness of the item when
+         * they fit snugly, for example, a tight dress may have "sexy", "revealing", "restricts movement" etc...
+         */
+        otherFitmentTraitsSnug?: Array<string>;
+        /**
+         * Traits that get added to the fitness of the item when
+         * they are loose, for example, a loose dress may have "comfortable", "baggy", "hides figure" etc...
+         */
+        otherFitmentTraitsLoose?: Array<string>;
+        /**
          * The extra body volume in liters that this item adds
          * when worn by the character, useful for bulky clothing
          * or armor that adds volume to the character wearing it
@@ -1461,6 +1490,7 @@ declare interface DEItem {
         fullyProtectsFromWeathers?: Array<string>;
         partiallyProtectsFromWeathers?: Array<string>;
         negativelyExposesToWeathers?: Array<string>;
+
     } | null;
     carriableProperties?: {
         fullyProtectsFromWeathers?: Array<string>;
@@ -2202,6 +2232,23 @@ declare interface DEConversationMessage {
      * if null, the message can be seen by all participants in the conversation
      */
     canOnlyBeSeenByCharacter: string | null;
+
+    /**
+     * A very short summary of this same message, this is used because the LLM has a hard time keeping track
+     * of long conversations, so this summary kicks in to keep the context window short
+     */
+    singleSummary: string;
+
+    /**
+     * The collective summaries of this message in layers
+     * where the first item represents a summary of say, a collection of 10 messages, the second
+     * 100 messages, the third 1000 messages, etc... this is used to keep the context window short for long conversations
+     * 
+     * The summary size used is created using the exponentialSummaryScale property
+     * 
+     * Summaries are available at "summaries" property on the DE object
+     */
+    collectiveSummaryIds: Array<string>;
 }
 
 /**
@@ -2264,8 +2311,7 @@ declare interface DEConversation {
      */
     bondsAtEnd: Record<string, DEBondDescription> | null;
     /**
-     * An optonal short summary of the conversation and what happened in it
-     * it should be available when it is a pseudoConversation
+     * An short summary of a pseudo conversation and what happened in it
      * 
      * if one is not found, the LLM will be prompted to generate one
      * randomly, or whatever is set as the pseudoConversation generator in the world scripts
@@ -2275,7 +2321,7 @@ declare interface DEConversation {
      * as part of the world scripts after each pseudo-conversation ends
      * to avoid having to generate them on demand later
      */
-    summary: string | null;
+    pseudoConversationSummary?: string | null;
 }
 
 declare interface DEScript {

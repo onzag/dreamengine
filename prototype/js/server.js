@@ -75,7 +75,7 @@ async function generateCompletion(data, onToken, onDone, onError) {
 
         const basicConfig = {
             temperature: data.temperature || 0.9,
-            topP: data.top_p || 0.95,
+            //topP: data.top_p || 0.95,
             repeatPenalty: {
                 penalty: data.repeat_penalty || 1.1,
                 frequencyPenalty: data.frequency_penalty || 0,
@@ -93,6 +93,13 @@ async function generateCompletion(data, onToken, onDone, onError) {
         console.log("Generation config:", basicConfig);
         await completion.generateCompletion(prompt, {
             ...basicConfig,
+            minP: 0.025,
+            dryRepeatPenalty: {
+                strength: 0.8,
+                base: 1.74,
+                length: 5,
+                allowedLength: 6,
+            },
             signal: controller.signal,
             onToken(tokens) {
                 if (isDisposed || stopFeedingTokens) return;

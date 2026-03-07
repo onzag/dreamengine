@@ -9,6 +9,7 @@ import calculateStateChange from "./gears/state-change.js";
 import calculateBondsChangesDueToMessages from "./gears/bond-change.js";
 import testWorldRulesOn from "./gears/rules-enforce.js";
 import testMessageFeasibilityForCharacter from "./gears/feasibility-check.js";
+import { getWearableFitment } from "./util/weight-and-volume.js";
 
 const INVALID_NAMES = ["system", "assistant", "user", "everyone", "nobody",
     "anyone", "somebody", "narrator", "observer", "admin", "moderator",
@@ -976,6 +977,8 @@ export class DEngine {
                     isStoryMasterMessage: true,
                     isUser: false,
                     startTime: { ...this.deObject.currentTime },
+                    collectiveSummaryIds: [],
+                    singleSummary: narration,
                 }
             ],
             bondsAtStart: getFrozenBonds(this, expectedParticipants),
@@ -987,7 +990,6 @@ export class DEngine {
             previousConversationIdsPerParticipant: {},
             pseudoConversation: false,
             remoteParticipants: [],
-            summary: null,
         };
         for (const participantName of expectedParticipants) {
             this.deObject.conversations["INITIAL_SCENE_NARRATION"].previousConversationIdsPerParticipant[participantName] = null;
@@ -2128,7 +2130,7 @@ export class DEngine {
             }
         }
         if (characterState.wearing.length > 0) {
-            finalDescription += " Wearing " + this.deObject.functions.format_and(this.deObject, null, characterState.wearing.map(item => item.amount >= 2 ? item.amount + " of " + (item.descriptionWhenWorn || item.description) : (item.descriptionWhenWorn || item.description))) + ".";
+            finalDescription += " Wearing " + this.deObject.functions.format_and(this.deObject, null, characterState.wearing.map(item => item.amount >= 2 ? item.amount + " of " + item.description + " (" + getWearableFitment(this, item, characterName).fitment + ")" : item.description + " (" + getWearableFitment(this, item, characterName).fitment + ")")) + ".";
         } else {
             finalDescription += " Not wearing any clothes.";
         }
@@ -2138,7 +2140,7 @@ export class DEngine {
         }
 
         if (characterState.carrying.length > 0) {
-            finalDescription += " Carrying " + this.deObject.functions.format_and(this.deObject, null, characterState.carrying.map(item => item.amount >= 2 ? item.amount + " of " + (item.descriptionWhenContainingCharacter || item.description) : (item.descriptionWhenContainingCharacter || item.description))) + ".";
+            finalDescription += " Carrying " + this.deObject.functions.format_and(this.deObject, null, characterState.carrying.map(item => item.amount >= 2 ? item.amount + " of " + item.description + " (" + getWearableFitment(this, item, characterName).fitment + ")" : item.description + " (" + getWearableFitment(this, item, characterName).fitment + ")")) + ".";
         } else {
             finalDescription += " Not carrying any items.";
         }
@@ -2244,13 +2246,13 @@ export class DEngine {
         }
         let finalDescription = "";
         if (characterState.wearing.length > 0) {
-            finalDescription += `${character.name} is wearing ` + this.deObject.functions.format_and(this.deObject, null, characterState.wearing.map(item => item.amount >= 2 ? item.amount + " of " + (item.descriptionWhenWorn || item.description) : (item.descriptionWhenWorn || item.description))) + ".";
+            finalDescription += `${character.name} is wearing ` + this.deObject.functions.format_and(this.deObject, null, characterState.wearing.map(item => item.amount >= 2 ? item.amount + " of " + item.description + " (" + getWearableFitment(this, item, characterName).fitment + ")" : item.description + " (" + getWearableFitment(this, item, characterName).fitment + ")")) + ".";
         } else {
             finalDescription += `${character.name} is not wearing any clothes.`;
         }
 
         if (characterState.carrying.length > 0) {
-            finalDescription += `\n${character.name} is carrying ` + this.deObject.functions.format_and(this.deObject, null, characterState.carrying.map(item => item.amount >= 2 ? item.amount + " of " + (item.descriptionWhenContainingCharacter || item.description) : (item.descriptionWhenContainingCharacter || item.description))) + ".";
+            finalDescription += `\n${character.name} is carrying ` + this.deObject.functions.format_and(this.deObject, null, characterState.carrying.map(item => item.amount >= 2 ? item.amount + " of " + item.description + " (" + getWearableFitment(this, item, characterName).fitment + ")" : item.description + " (" + getWearableFitment(this, item, characterName).fitment + ")")) + ".";
         } else {
             finalDescription += `\n${character.name} is not carrying any items.`;
         }
@@ -2267,6 +2269,7 @@ export class DEngine {
     }
 
     /**
+     * TODO fix this function, it's iffy
      * @param {"can" | "cannot"} canOrCannot
      * @param {string} characterName 
      * @param {string} locationName 

@@ -75,25 +75,47 @@ export function getItemWeight(engine, item) {
             singularWeight: 0,
             completeWeight: 0,
             amount: 0,
+            allCharactersInvolved: [],
+            charactersOnlyDirectlyInside: [],
+            charactersOnlyDirectlyOnTop: [],
         }
     }
 
     singularWeight += item.weightKg;
 
+    /**
+     * @type {string[]}
+     */
+    const charactersOnlyDirectlyInside = [];
+    /**
+     * @type {string[]}
+     */
+    const charactersOnlyDirectlyOnTop = [];
+    /**
+     * @type {string[]}
+     */
+    const allCharactersInvolved = [];
+
     for (const childItem of item.containing) {
         const results = getItemWeight(engine, childItem);
+        allCharactersInvolved.push(...results.allCharactersInvolved, ...results.charactersOnlyDirectlyInside, ...results.charactersOnlyDirectlyOnTop);
         singularWeight += results.completeWeight;
     }
     for (const childItem of item.ontop) {
         const results = getItemWeight(engine, childItem);
+        allCharactersInvolved.push(...results.allCharactersInvolved, ...results.charactersOnlyDirectlyInside, ...results.charactersOnlyDirectlyOnTop);
         singularWeight += results.completeWeight;
     }
     for (const character of item.ontopCharacters) {
         const results = getCharacterWeight(engine, character);
+        charactersOnlyDirectlyOnTop.push(character);
+        allCharactersInvolved.push(character);
         singularWeight += results.weight;
     }
     for (const character of item.containingCharacters) {
         const results = getCharacterWeight(engine, character);
+        charactersOnlyDirectlyInside.push(character);
+        allCharactersInvolved.push(character);
         singularWeight += results.weight;
     }
 
@@ -101,6 +123,9 @@ export function getItemWeight(engine, item) {
         singularWeight,
         completeWeight: singularWeight * item.amount,
         amount: item.amount,
+        allCharactersInvolved,
+        charactersOnlyDirectlyInside,
+        charactersOnlyDirectlyOnTop,
     }
 }
 
@@ -116,26 +141,50 @@ export function getItemVolume(engine, item) {
             singularVolume: 0,
             completeVolume: 0,
             amount: 0,
+            allCharactersInvolved: [],
+            charactersOnlyDirectlyInside: [],
+            charactersOnlyDirectlyOnTop: [],
         }
     }
 
+    /**
+     * @type {string[]}
+     */
+    const charactersOnlyDirectlyOnTop = [];
+    /**
+     * @type {string[]}
+     */
+    const charactersOnlyDirectlyInside = [];
+    /**
+     * @type {string[]}
+     */
+    const allCharactersInvolved = [];
+
     singularVolume += item.volumeLiters;
     const isRigid = item.containerProperties ? item.containerProperties.structure === "rigid" : true;
-    if (!isRigid) {
-        for (const childItem of item.containing) {
-            const results = getItemVolume(engine, childItem);
+    for (const childItem of item.containing) {
+        const results = getItemVolume(engine, childItem);
+        allCharactersInvolved.push(...results.allCharactersInvolved, ...results.charactersOnlyDirectlyInside, ...results.charactersOnlyDirectlyOnTop);
+        if (!isRigid) {
             singularVolume += results.completeVolume;
         }
-        for (const character of item.containingCharacters) {
-            const results = getCharacterVolume(engine, character);
+    }
+    for (const character of item.containingCharacters) {
+        const results = getCharacterVolume(engine, character);
+        allCharactersInvolved.push(character);
+        charactersOnlyDirectlyInside.push(character);
+        if (!isRigid) {
             singularVolume += results.volume;
         }
     }
     for (const childItem of item.ontop) {
         const results = getItemVolume(engine, childItem);
+        allCharactersInvolved.push(...results.allCharactersInvolved, ...results.charactersOnlyDirectlyInside, ...results.charactersOnlyDirectlyOnTop);
         singularVolume += results.completeVolume;
     }
     for (const character of item.ontopCharacters) {
+        allCharactersInvolved.push(character);
+        charactersOnlyDirectlyOnTop.push(character);
         const results = getCharacterVolume(engine, character);
         singularVolume += results.volume;
     }
@@ -144,7 +193,38 @@ export function getItemVolume(engine, item) {
         singularVolume,
         completeVolume: singularVolume * item.amount,
         amount: item.amount,
+        allCharactersInvolved,
+        charactersOnlyDirectlyInside,
+        charactersOnlyDirectlyOnTop,
     }
+}
+
+/**
+ * 
+ * @param {DEngine} engine 
+ * @param {string} characterName 
+ */
+export function getCharacterCarryingCapacity(engine, characterName) {
+    if (!engine.deObject?.characters?.[characterName]) {
+        throw new Error(`Character ${characterName} not found in engine`);
+    }
+
+    const character = engine.deObject.characters[characterName];
+    let carryingCapacityKg = character.carryingCapacityKg;
+    let carryingCapacityLiters = character.carryingCapacityLiters;
+
+    const wearableItems = engine.deObject.stateFor[characterName].wearing;
+    for (const item of wearableItems) {
+        if (item.wearableProperties) {
+            carryingCapacityKg += item.wearableProperties.addedCarryingCapacityKg;
+            carryingCapacityLiters += item.wearableProperties.addedCarryingCapacityLiters;
+        }
+    }
+
+    return {
+        carryingCapacityKg,
+        carryingCapacityLiters,
+    };
 }
 
 /**
@@ -211,6 +291,7 @@ export function getItemExcessElements(engine, item) {
                 amount: i.amount,
             })),
             breaks: true,
+            breakStyle: "overweight",
             breakReason: `${engine.deObject?.functions.format_and(engine.deObject, null, breakReasonsItemsAndCharacters)} causes ${item.name} to be overweight and break`,
         }
     }
@@ -248,6 +329,7 @@ export function getItemExcessElements(engine, item) {
                 amount: i.amount,
             })),
             breaks: true,
+            breakStyle: "crushed",
             breakReason: `${engine.deObject?.functions.format_and(engine.deObject, null, breakReasonsItemsAndCharacters)} causes ${item.name} to be overloaded and break`,
         }
     }
@@ -326,6 +408,269 @@ export function getItemExcessElements(engine, item) {
         expelledContainedItems,
         expelledOntopItems,
         breaks: false,
+        breakStyle: null,
         breakReason: null,
     }
+}
+
+/** 
+ * @param {DEngine} engine 
+ * @param {DEItem} item 
+ * @param {string} character
+ * @param {boolean} [isNotBeingCurrentlyWorn] this is used for example when we want to check the fitment of an item that is currently being worn, in that case we want to ignore the extra body volume that it provides, because it is already being worn, so it is not providing that extra body volume to itself
+ * @returns {{
+ *       fitment: string,
+ *       shouldFallDown: boolean,
+ *       shouldBreak: boolean,
+ *    }}
+ */
+export function getWearableFitment(engine, item, character, isNotBeingCurrentlyWorn = false) {
+    if (!engine.deObject) {
+        throw new Error("DEngine not initialized");
+    }
+    if (item.wearableProperties) {
+        let extraAddedExtraTraitsAtTheEnd = []
+        for (const trait of item.wearableProperties.otherFitmentTraitsAny || []) {
+            extraAddedExtraTraitsAtTheEnd.push(trait);
+        }
+
+        let removeBodyVolume = item.wearableProperties.extraBodyVolumeWhenWornLiters || 0;
+        let totalBodyVolume = engine.deObject.characters[character].weightKg; // assume water density, so same as weight in kg
+        const currentlyWornItems = engine.deObject.stateFor[character].wearing;
+        for (const wornItem of currentlyWornItems) {
+            if (wornItem.wearableProperties) {
+                totalBodyVolume += wornItem.wearableProperties.extraBodyVolumeWhenWornLiters || 0;
+            }
+        }
+        if (!isNotBeingCurrentlyWorn) {
+            totalBodyVolume -= removeBodyVolume;
+        }
+        const minSizePerfectFit = item.wearableProperties.volumeRangeMinLiters;
+        const maxSizePerfectFit = item.wearableProperties.volumeRangeMaxLiters;
+        const fitIdeally = totalBodyVolume >= minSizePerfectFit && totalBodyVolume <= maxSizePerfectFit;
+        const fitTooSmall = totalBodyVolume > maxSizePerfectFit;
+
+        if (fitIdeally) {
+            for (const trait of item.wearableProperties.otherFitmentTraitsIdeal || []) {
+                extraAddedExtraTraitsAtTheEnd.push(trait);
+            }
+            return {
+                fitment: engine.deObject.functions.format_and(engine.deObject, null, ["fits perfectly", ...extraAddedExtraTraitsAtTheEnd]),
+                shouldFallDown: false,
+                shouldBreak: false,
+            }
+        } else if (fitTooSmall) {
+            for (const trait of item.wearableProperties.otherFitmentTraitsSnug || []) {
+                extraAddedExtraTraitsAtTheEnd.push(trait);
+            }
+
+            const largestSizeItCanFit = maxSizePerfectFit + (item.wearableProperties.volumeRangeFlexibilityLeewaySnug || 0);
+            const pointOfExtremeTightness = maxSizePerfectFit + ((item.wearableProperties.volumeRangeFlexibilityLeewaySnug || 0) / 2);
+
+            let fitmentDescription = "fits snugly";
+            if (totalBodyVolume > pointOfExtremeTightness) {
+                fitmentDescription = "fits extremely tightly";
+            }
+
+            return {
+                fitment: engine.deObject.functions.format_and(engine.deObject, null, [fitmentDescription, ...extraAddedExtraTraitsAtTheEnd]),
+                shouldFallDown: false,
+                shouldBreak: totalBodyVolume > largestSizeItCanFit,
+            }
+        } else {
+            for (const trait of item.wearableProperties.otherFitmentTraitsLoose || []) {
+                extraAddedExtraTraitsAtTheEnd.push(trait);
+            }
+
+            const smallestSizeItCanFit = minSizePerfectFit - (item.wearableProperties.volumeRangeFlexibilityLeewayLoose || 0);
+            const pointOfExtremeLooseness = minSizePerfectFit - ((item.wearableProperties.volumeRangeFlexibilityLeewayLoose || 0) / 2);
+
+            let fitmentDescription = "fits loosely";
+            if (totalBodyVolume < pointOfExtremeLooseness) {
+                fitmentDescription = "fits extremely loosely";
+            }
+
+            return {
+                fitment: engine.deObject.functions.format_and(engine.deObject, null, [fitmentDescription, ...extraAddedExtraTraitsAtTheEnd]),
+                shouldFallDown: totalBodyVolume < smallestSizeItCanFit,
+                shouldBreak: false,
+            }
+        }
+    } else {
+        return {
+            fitment: "does not fit",
+            shouldFallDown: true,
+            shouldBreak: false,
+        };
+    }
+}
+
+const irregularPlurals = {
+    // Inanimate objects/items only
+    "axis": "axes",
+    "basis": "bases",
+    "cactus": "cacti",
+    "focus": "foci",
+    "fungus": "fungi",
+    "nucleus": "nuclei",
+    "syllabus": "syllabi",
+    "analysis": "analyses",
+    "diagnosis": "diagnoses",
+    "oasis": "oases",
+    "thesis": "theses",
+    "crisis": "crises",
+    "phenomenon": "phenomena",
+    "criterion": "criteria",
+    "datum": "data",
+    "index": "indices",
+    "appendix": "appendices",
+    "bacterium": "bacteria",
+    "medium": "media",
+    "radius": "radii",
+    "formula": "formulae",
+    "vertebra": "vertebrae",
+    "curriculum": "curricula",
+    "aircraft": "aircraft",
+    "species": "species",
+    "fish": "fish",
+    "sheep": "sheep",
+    "deer": "deer",
+    "dice": "dice",
+    "die": "dice",
+    "leaf": "leaves",
+    "loaf": "loaves",
+    "knife": "knives",
+    "life": "lives",
+    "wife": "wives",
+    "self": "selves",
+    "wolf": "wolves",
+    "calf": "calves",
+    "elf": "elves",
+    "scarf": "scarves",
+    "hoof": "hooves",
+    "tomato": "tomatoes",
+    "potato": "potatoes",
+    "torpedo": "torpedoes",
+    "veto": "vetoes",
+    "echo": "echoes",
+    "hero": "heroes",
+    "zero": "zeroes"
+};
+
+/**
+ * @param {DEngine} engine
+ * @param {string} characterName
+ * @param {DEStateForDescriptionWithHistory} charState
+ * @param {number} amount 
+ * @param {string} item
+ * @param {boolean} [capitalize] whether to capitalize the first letter of the item, this is used for example when the item is at the beginning of a sentence, so we want to make sure the message looks good
+ * @param {boolean} [forceThe] whether to force "the" in front of the item, this is used for example when we want to refer to a specific item that we know is present, so we want to make sure the message reflects that, even if there is only one of that item, for example "the apple" instead of just "an apple"
+ */
+export function utilItemCount(engine, characterName, charState, amount, item, capitalize = false, forceThe = false) {
+    if (!engine.deObject) {
+        throw new Error("DEngine not initialized");
+    }
+
+    const itemTrimmedLower = item.trim().toLowerCase();
+    // List of common irregular plurals
+
+    let toReturn = "";
+    if (amount === 1 && itemTrimmedLower.startsWith("the ")) {
+        toReturn = item;
+    } else if (amount === 1) {
+        const isOneOfAKind = checkItemIsOneOfAKindAtLocation(engine, characterName, charState, item);
+        if (forceThe || isOneOfAKind) {
+            toReturn = `the ${item}`;
+        } else if (itemTrimmedLower.startsWith("a")) {
+            toReturn = `an ${item}`;
+        } else {
+            toReturn = `a ${item}`;
+        }
+    } else {
+        // Try to pluralize using irregulars first
+        const lastWord = itemTrimmedLower.split(" ").slice(-1)[0];
+        // @ts-ignore
+        if (irregularPlurals[lastWord]) {
+            // Replace only the last word with its irregular plural
+            const words = item.split(" ");
+            // @ts-ignore
+            words[words.length - 1] = irregularPlurals[lastWord];
+            toReturn = `${forceThe ? "the " : ""}${amount} ${words.join(" ")}`;
+        } else if (lastWord.endsWith("s") || lastWord.endsWith("x") || lastWord.endsWith("z") || lastWord.endsWith("ch") || lastWord.endsWith("sh")) {
+            toReturn = `${forceThe ? "the " : ""}${amount} ${item}es`;
+        } else if (lastWord.endsWith("y") && !["a", "e", "i", "o", "u"].includes(lastWord.slice(-2, -1))) {
+            toReturn = `${forceThe ? "the " : ""}${amount} ${item.slice(0, -1)}ies`;
+        } else {
+            toReturn = `${forceThe ? "the " : ""}${amount} ${item}s`;
+        }
+    }
+    if (capitalize) {
+        toReturn = toReturn.charAt(0).toUpperCase() + toReturn.slice(1);
+    }
+    return toReturn;
+}
+
+/**
+ * 
+ * @param {DEngine} engine
+ * @param {string} characterName
+ * @param {DEStateForDescriptionWithHistory} charState 
+ * @param {string} item
+ */
+export function checkItemIsOneOfAKindAtLocation(engine, characterName, charState, item) {
+    if (!engine.deObject) {
+        throw new Error("DEngine not initialized");
+    }
+    let totalCount = 0;
+    const itemTrimmedLower = item.trim().toLowerCase();
+
+    /**
+     * @param {DEItem[]} itemList 
+     */
+    const countInList = (itemList) => {
+        for (const itemInList of itemList) {
+            // @ts-ignore
+            if (itemInList._moved_to) {
+                continue; // skip items that have been moved, as they are not really present in the location anymore
+            }
+            if (itemInList.name.trim().toLowerCase() === itemTrimmedLower) {
+                totalCount += itemInList.amount || 1;
+            } else if (itemInList.name.trim().toLowerCase().includes(itemTrimmedLower)) {
+                // we also check if the item name includes the item we are looking for, this is just to increase the chances of finding
+                totalCount += itemInList.amount || 1;
+            }
+            if (totalCount > 1) {
+                return;
+            }
+            countInList(itemInList.containing);
+            if (totalCount > 1) {
+                return;
+            }
+            countInList(itemInList.ontop);
+            if (totalCount > 1) {
+                return;
+            }
+        }
+    }
+
+    const allCharactersToCheck = [...charState.surroundingNonStrangers, ...charState.surroundingTotalStrangers, characterName];
+    for (const charName of allCharactersToCheck) {
+        const characterState = engine.deObject.stateFor[charName];
+        countInList(characterState.carrying);
+        if (totalCount > 1) {
+            return;
+        }
+        countInList(characterState.wearing);
+        if (totalCount > 1) {
+            return;
+        }
+    }
+    for (const [slotName, slot] of Object.entries(engine.deObject.world.locations[charState.location].slots)) {
+        countInList(slot.items);
+        if (totalCount > 1) {
+            return;
+        }
+    }
+
+    return totalCount <= 1;
 }
