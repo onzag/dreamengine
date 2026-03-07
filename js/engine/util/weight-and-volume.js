@@ -559,14 +559,13 @@ const irregularPlurals = {
 
 /**
  * @param {DEngine} engine
- * @param {string} characterName
- * @param {DEStateForDescriptionWithHistory} charState
+ * @param {string} location
  * @param {number} amount 
  * @param {string} item
  * @param {boolean} [capitalize] whether to capitalize the first letter of the item, this is used for example when the item is at the beginning of a sentence, so we want to make sure the message looks good
  * @param {boolean} [forceThe] whether to force "the" in front of the item, this is used for example when we want to refer to a specific item that we know is present, so we want to make sure the message reflects that, even if there is only one of that item, for example "the apple" instead of just "an apple"
  */
-export function utilItemCount(engine, characterName, charState, amount, item, capitalize = false, forceThe = false) {
+export function utilItemCount(engine, location, amount, item, capitalize = false, forceThe = false) {
     if (!engine.deObject) {
         throw new Error("DEngine not initialized");
     }
@@ -578,7 +577,7 @@ export function utilItemCount(engine, characterName, charState, amount, item, ca
     if (amount === 1 && itemTrimmedLower.startsWith("the ")) {
         toReturn = item;
     } else if (amount === 1) {
-        const isOneOfAKind = checkItemIsOneOfAKindAtLocation(engine, characterName, charState, item);
+        const isOneOfAKind = checkItemIsOneOfAKindAtLocation(engine, location, item);
         if (forceThe || isOneOfAKind) {
             toReturn = `the ${item}`;
         } else if (itemTrimmedLower.startsWith("a")) {
@@ -613,11 +612,10 @@ export function utilItemCount(engine, characterName, charState, amount, item, ca
 /**
  * 
  * @param {DEngine} engine
- * @param {string} characterName
- * @param {DEStateForDescriptionWithHistory} charState 
+ * @param {string} location
  * @param {string} item
  */
-export function checkItemIsOneOfAKindAtLocation(engine, characterName, charState, item) {
+export function checkItemIsOneOfAKindAtLocation(engine, location, item) {
     if (!engine.deObject) {
         throw new Error("DEngine not initialized");
     }
@@ -653,7 +651,13 @@ export function checkItemIsOneOfAKindAtLocation(engine, characterName, charState
         }
     }
 
-    const allCharactersToCheck = [...charState.surroundingNonStrangers, ...charState.surroundingTotalStrangers, characterName];
+    const allCharactersToCheck = [];
+    for (const charName in engine.deObject.characters) {
+        const charState = engine.deObject.stateFor[charName];
+        if (charState.location === location) {
+            allCharactersToCheck.push(charName);
+        }
+    }
     for (const charName of allCharactersToCheck) {
         const characterState = engine.deObject.stateFor[charName];
         countInList(characterState.carrying);
@@ -665,7 +669,7 @@ export function checkItemIsOneOfAKindAtLocation(engine, characterName, charState
             return;
         }
     }
-    for (const [slotName, slot] of Object.entries(engine.deObject.world.locations[charState.location].slots)) {
+    for (const [slotName, slot] of Object.entries(engine.deObject.world.locations[location].slots)) {
         countInList(slot.items);
         if (totalCount > 1) {
             return;

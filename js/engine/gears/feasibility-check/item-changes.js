@@ -237,7 +237,16 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
         await itemsInteractionGenerator.next(null); // end the generator
     }
 
-    const charactersAtLocation = [...charState.surroundingNonStrangers, ...charState.surroundingTotalStrangers, character.name];
+    /**
+     * @type {string[]}
+     */
+    const charactersAtLocation = [];
+    for (const charName in engine.deObject.stateFor) {
+        const charState = engine.deObject.stateFor[charName];
+        if (charState.location === charState.location) {
+            charactersAtLocation.push(charName);
+        }
+    }
 
     const systemPromptCharactersInteracted = engine.inferenceAdapter.buildSystemPromptForQuestioningAgent(
         `You are an asistant and story analyst that checks for interactions among characters in a story\n` +
@@ -336,7 +345,16 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
         throw new Error("Questioning agent could not be started properly for item-character interactions check.");
     }
 
-    const allCharactersAtLocation = [...charState.surroundingNonStrangers, ...charState.surroundingTotalStrangers, character.name];
+    /**
+     * @type {string[]}
+     */
+    const allCharactersAtLocation = [];
+    for (const charName in engine.deObject.stateFor) {
+        const charState = engine.deObject.stateFor[charName];
+        if (charState.location === charState.location) {
+            allCharactersAtLocation.push(charName);
+        }
+    }
 
     /**
      * @type {string[]}
@@ -1808,43 +1826,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
 
     // TODO determine items broken or transformed
 
-    for (const [slotName, slot] of Object.entries(location.slots)) {
-        await cleanDirtyItemTree(engine, character.name, charState, slot.items, ["slots", slotName, "items"], addedMessagesForStoryMaster, "first");
-    }
-    for (const charName of charactersToQuestion) {
-        const characterState = engine.deObject.stateFor[charName];
-
-        // cheap and cheat way to check if we took items off
-        let cycleN = 0;
-        while (true) {
-            // inefficient as hell, but no big deal
-            // just keep dropping items until we are satisfied
-            // that we are not dropping more
-            // all because some items give us extra strength and we may have dropped
-            // one of those while checking
-            const currStoryMasterMessages = addedMessagesForStoryMaster.length;
-            checkDirectlyCarriedCharacters(engine, charName, characterState, addedMessagesForStoryMaster);
-            await cleanDirtyItemTree(engine, charName, characterState, characterState.carrying, ["characters", charName, "carrying"], addedMessagesForStoryMaster, cycleN === 0 ? "first" : "mid");
-            await cleanDirtyItemTree(engine, charName, characterState, characterState.wearing, ["characters", charName, "wearing"], addedMessagesForStoryMaster, cycleN === 0 ? "first" : "mid");
-
-            // congrats no more dropped items, you can move on to the next character
-            if (currStoryMasterMessages === addedMessagesForStoryMaster.length) {
-                break;
-            }
-            cycleN++;
-        }
-
-        // one last time, inefficient yes I know
-        cleanDirtyItemTree(engine, charName, characterState, characterState.carrying, ["characters", charName, "carrying"], addedMessagesForStoryMaster, "last");
-        cleanDirtyItemTree(engine, charName, characterState, characterState.wearing, ["characters", charName, "wearing"], addedMessagesForStoryMaster, "last");
-
-        cleanTemporaryProperties(engine, charState.carrying);
-        cleanTemporaryProperties(engine, charState.wearing);
-    }
-
-    for (const [slotName, slot] of Object.entries(location.slots)) {
-        cleanTemporaryProperties(engine, slot.items);
-    }
+    await cleanAll(engine, charState.location, addedMessagesForStoryMaster);
 
     console.log(addedMessagesForStoryMaster);
     process.exit(0);
@@ -2023,7 +2005,7 @@ function locationPathToMessage(engine, characterName, currentLocation, locationP
 
         let itemNameToUse = elementToFollow[itemId].name;
         if (!itemNameToUse.toLowerCase().startsWith("a ") && !itemNameToUse.toLowerCase().startsWith("an ") && !itemNameToUse.toLowerCase().startsWith("the ")) {
-            if (checkItemIsOneOfAKindAtLocation(engine, characterName, engine.deObject.stateFor[characterName], elementToFollow[itemId].name)) {
+            if (checkItemIsOneOfAKindAtLocation(engine, engine.deObject.stateFor[characterName].location, elementToFollow[itemId].name)) {
                 itemNameToUse = "the " + itemNameToUse;
             } else if (itemNameToUse.toLowerCase().startsWith("a")) {
                 itemNameToUse = "an " + itemNameToUse;
@@ -2297,7 +2279,7 @@ function moveItems(
             // given to a character directly or indirectly (eg. put in a bag that they are carrying or wearing)
             if (actualEndingPath[0] === "characters" && (actualEndingPath[2] === "carrying" || (actualEndingPath[2] === "wearing" && actualEndingPath.length > 4))) {
                 // A character picked up or received an item
-                const messageSoFar = `${thrownAddition}${actualEndingPath[1]}${thrown ? " caught and is" : " is"} now carrying ${utilItemCount(engine, characterName, charState, amountToTransfer, item)} which previously ${amountToTransfer === 1 ? "was" : "were"} ${locationPathToMessage(engine, characterName, charState.location, componentFromPath.path)}`;
+                const messageSoFar = `${thrownAddition}${actualEndingPath[1]}${thrown ? " caught and is" : " is"} now carrying ${utilItemCount(engine, charState.location, amountToTransfer, item)} which previously ${amountToTransfer === 1 ? "was" : "were"} ${locationPathToMessage(engine, characterName, charState.location, componentFromPath.path)}`;
                 if (actualEndingPath.length > 4) {
                     // eg. ["characters", "Alice", "carrying", 0, "containing", 1] we check above 4 to avoid the index of where the item is located in the carrying list
                     addedMessagesForStoryMaster.push(messageSoFar + `, and is now specifically ${locationPathToMessage(engine, characterName, charState.location, actualEndingPath, true)}`);
@@ -2308,18 +2290,18 @@ function moveItems(
                 // wearing directly on the body
             } else if (actualEndingPath[0] === "characters" && actualEndingPath[2] === "wearing" && actualEndingPath.length <= 4) {
                 // A character picked up or received an item
-                const messageSoFar = `${thrownAddition}${actualEndingPath[1]}${thrown ? " caught and is" : " is"} now wearing ${utilItemCount(engine, characterName, charState, amountToTransfer, item)} which previously ${amountToTransfer === 1 ? "was" : "were"} ${locationPathToMessage(engine, characterName, charState.location, componentFromPath.path)}`;
+                const messageSoFar = `${thrownAddition}${actualEndingPath[1]}${thrown ? " caught and is" : " is"} now wearing ${utilItemCount(engine, charState.location, amountToTransfer, item)} which previously ${amountToTransfer === 1 ? "was" : "were"} ${locationPathToMessage(engine, characterName, charState.location, componentFromPath.path)}`;
                 addedMessagesForStoryMaster.push(messageSoFar);
             } else if (actualEndingPath[0] === "slots" && actualEndingPath[2] === "items" && actualEndingPath.length <= 4) {
                 // an item was dropped on the ground
-                const messageSoFar = `${thrownAddition}${utilItemCount(engine, characterName, charState, amountToTransfer, item, true)}${thrown ? "" : amountToTransfer === 1 ? " is" : " are"} dropped on the ground at ${actualEndingPath[1]}, which previously was ${locationPathToMessage(engine, characterName, charState.location, componentFromPath.path)}`;
+                const messageSoFar = `${thrownAddition}${utilItemCount(engine, charState.location, amountToTransfer, item, true)}${thrown ? "" : amountToTransfer === 1 ? " is" : " are"} dropped on the ground at ${actualEndingPath[1]}, which previously was ${locationPathToMessage(engine, characterName, charState.location, componentFromPath.path)}`;
                 addedMessagesForStoryMaster.push(messageSoFar);
             } else {
                 if (thrown) {
-                    const messageSoFar = `${thrownAddition}${utilItemCount(engine, characterName, charState, amountToTransfer, item, true)} drops ${locationPathToMessage(engine, characterName, charState.location, actualEndingPath)}, which previously was ${locationPathToMessage(engine, characterName, charState.location, componentFromPath.path)}.`;
+                    const messageSoFar = `${thrownAddition}${utilItemCount(engine, charState.location, amountToTransfer, item, true)} drops ${locationPathToMessage(engine, characterName, charState.location, actualEndingPath)}, which previously was ${locationPathToMessage(engine, characterName, charState.location, componentFromPath.path)}.`;
                     addedMessagesForStoryMaster.push(messageSoFar);
                 } else {
-                    const messageSoFar = `${utilItemCount(engine, characterName, charState, amountToTransfer, item, true)}${amountToTransfer === 1 ? " is moved" : " are moved"} from ${locationPathToMessage(engine, characterName, charState.location, componentFromPath.path)} to be ${locationPathToMessage(engine, characterName, charState.location, actualEndingPath)}.`;
+                    const messageSoFar = `${utilItemCount(engine, charState.location, amountToTransfer, item, true)}${amountToTransfer === 1 ? " is moved" : " are moved"} from ${locationPathToMessage(engine, characterName, charState.location, componentFromPath.path)} to be ${locationPathToMessage(engine, characterName, charState.location, actualEndingPath)}.`;
                     addedMessagesForStoryMaster.push(messageSoFar);
                 }
             }
@@ -2371,7 +2353,12 @@ function moveCharacters(
     }
 
     // loop through all the items and remove any item that has the character on top of it or inside
-    const allOtherCharacters = [...charState.surroundingNonStrangers, ...charState.surroundingTotalStrangers, characterName];
+    const allOtherCharacters = [];
+    for (const charName in engine.deObject.stateFor) {
+        if (engine.deObject.stateFor[charName].location === charState.location) {
+            allOtherCharacters.push(charName);
+        }
+    }
     for (const charNameInQuestion of allOtherCharacters) {
         const otherCharState = engine.deObject.stateFor[charNameInQuestion];
         if (otherCharState.carryingCharacters.includes(characterName)) {
@@ -2664,8 +2651,8 @@ function deepEqualItem(a, b, firstLayer = true) {
 
 /**
  * @param {DEngine} engine
- * @param {string} characterName
- * @param {DEStateForDescriptionWithHistory} charState
+ * @param {string} location
+ * @param {string} locationSlot
  * @param {DEItem[]} list
  * @param {Array<string | number>} path
  * @param {Array<string>} addedMessagesForStoryMaster
@@ -2674,8 +2661,8 @@ function deepEqualItem(a, b, firstLayer = true) {
  */
 async function cleanDirtyItemTree(
     engine,
-    characterName,
-    charState,
+    location,
+    locationSlot,
     list,
     path,
     addedMessagesForStoryMaster,
@@ -2704,7 +2691,7 @@ async function cleanDirtyItemTree(
             // @ts-ignore
             if (item[relation] && item[relation].length > 0) {
                 // @ts-ignore
-                await cleanDirtyItemTree(engine, characterName, charState, item[relation], [...currentPath, relation], addedMessagesForStoryMaster, relation, item);
+                await cleanDirtyItemTree(engine, location, locationSlot, item[relation], [...currentPath, relation], addedMessagesForStoryMaster, relation, item);
             }
         }
     }
@@ -2740,8 +2727,8 @@ async function cleanDirtyItemTree(
         list.splice(deletedIndicesDueToMerging[i], 1);
     }
 
-    const expectedPathForFallenItems = path[0] === "slots" ? ["slots", path[1]] : ["slots", charState.locationSlot];
-    const resolvedFallenItems = resolvePath(engine, charState.location, expectedPathForFallenItems);
+    const expectedPathForFallenItems = path[0] === "slots" ? ["slots", path[1]] : ["slots", locationSlot];
+    const resolvedFallenItems = resolvePath(engine, location, expectedPathForFallenItems);
 
     // this is specific to items on items only, I know it is going to be verbose but more readable this way, we can optimize later if needed
     if (path.length > 3) {
@@ -2757,7 +2744,7 @@ async function cleanDirtyItemTree(
                     copied.amount = amountExpelled;
                     resolvedFallenItems.resolved.items.push(copied);
 
-                    fallsDownList.push(utilItemCount(engine, characterName, charState, amountExpelled, expelledFromOnTopItem.item.name));
+                    fallsDownList.push(utilItemCount(engine, location, amountExpelled, expelledFromOnTopItem.item.name));
                 }
                 for (const expelledFromInsideItem of excess.expelledContainedItems) {
                     const amountExpelled = (expelledFromInsideItem.amount || 1) * (item.amount || 1);
@@ -2766,7 +2753,7 @@ async function cleanDirtyItemTree(
                     copied.amount = amountExpelled;
                     resolvedFallenItems.resolved.items.push(copied);
 
-                    fallsDownList.push(utilItemCount(engine, characterName, charState, amountExpelled, expelledFromInsideItem.item.name));
+                    fallsDownList.push(utilItemCount(engine, location, amountExpelled, expelledFromInsideItem.item.name));
                 }
                 for (const expelledOnTopCharacter of excess.expelledOntopCharacters) {
                     item.ontopCharacters = item.ontopCharacters.filter((v) => v !== expelledOnTopCharacter);
@@ -2831,9 +2818,9 @@ async function cleanDirtyItemTree(
                     copied.amount = amountExpelled;
                     resolvedFallenItems.resolved.items.push(copied);
                     if (expelledItemVolume.singularVolume > item.maxVolumeOnTopLiters) {
-                        addedMessagesForStoryMaster.push(`${utilItemCount(engine, characterName, charState, amountExpelled, expelledFromOnTopItem.item.name, true)} ${amountExpelled === 1 ? "is" : "are"} far too large to be on top of ${item.name} and ${amountExpelled === 1 ? "falls" : "fall"} off onto the ground in ${expectedPathForFallenItems[1]}`);
+                        addedMessagesForStoryMaster.push(`${utilItemCount(engine, location, amountExpelled, expelledFromOnTopItem.item.name, true)} ${amountExpelled === 1 ? "is" : "are"} far too large to be on top of ${item.name} and ${amountExpelled === 1 ? "falls" : "fall"} off onto the ground in ${expectedPathForFallenItems[1]}`);
                     } else {
-                        addedMessagesForStoryMaster.push(`${utilItemCount(engine, characterName, charState, amountExpelled, expelledFromOnTopItem.item.name, true)} ${amountExpelled === 1 ? "does" : "do"} not fit on top of ${item.name} and ${amountExpelled === 1 ? "falls" : "fall"} off onto the ground in ${expectedPathForFallenItems[1]}`);
+                        addedMessagesForStoryMaster.push(`${utilItemCount(engine, location, amountExpelled, expelledFromOnTopItem.item.name, true)} ${amountExpelled === 1 ? "does" : "do"} not fit on top of ${item.name} and ${amountExpelled === 1 ? "falls" : "fall"} off onto the ground in ${expectedPathForFallenItems[1]}`);
                     }
                 }
                 for (const expelledFromInsideItem of excess.expelledContainedItems) {
@@ -2847,9 +2834,9 @@ async function cleanDirtyItemTree(
                     copied.amount = amountExpelled;
                     resolvedFallenItems.resolved.items.push(copied);
                     if (item.containerProperties && expelledItemVolume.singularVolume > item.containerProperties.capacityLiters) {
-                        addedMessagesForStoryMaster.push(`${utilItemCount(engine, characterName, charState, amountExpelled, expelledFromInsideItem.item.name, true)} ${amountExpelled === 1 ? "is" : "are"} far too large to fit inside ${item.name} and ${amountExpelled === 1 ? "falls" : "fall"} out onto the ground in ${expectedPathForFallenItems[1]}`);
+                        addedMessagesForStoryMaster.push(`${utilItemCount(engine, location, amountExpelled, expelledFromInsideItem.item.name, true)} ${amountExpelled === 1 ? "is" : "are"} far too large to fit inside ${item.name} and ${amountExpelled === 1 ? "falls" : "fall"} out onto the ground in ${expectedPathForFallenItems[1]}`);
                     } else {
-                        addedMessagesForStoryMaster.push(`${utilItemCount(engine, characterName, charState, amountExpelled, expelledFromInsideItem.item.name, true)} ${amountExpelled === 1 ? "does" : "do"} not fit inside ${item.name} and ${amountExpelled === 1 ? "falls" : "fall"} out onto the ground in ${expectedPathForFallenItems[1]}`);
+                        addedMessagesForStoryMaster.push(`${utilItemCount(engine, location, amountExpelled, expelledFromInsideItem.item.name, true)} ${amountExpelled === 1 ? "does" : "do"} not fit inside ${item.name} and ${amountExpelled === 1 ? "falls" : "fall"} out onto the ground in ${expectedPathForFallenItems[1]}`);
                     }
                 }
                 for (const expelledOnTopCharacter of excess.expelledOntopCharacters) {
@@ -2928,55 +2915,6 @@ async function cleanDirtyItemTree(
             path[1],
         );
 
-        /**
-         * @param {string} otherCharName
-         * @param {DEItem[]} list
-         * @param {Array<string | number>} pathSoFar
-         * @returns {Array<string | number> | null}
-         */
-        const findContainingPathToOtherCharRecursive = function (otherCharName, list, pathSoFar) {
-            for (let i = 0; i < list.length; i++) {
-                const item = list[i];
-                if (item.amount === 0) {
-                    continue;
-                }
-                if (item.containingCharacters && item.containingCharacters.includes(otherCharName)) {
-                    return [...pathSoFar, i];
-                } else {
-                    const found = findContainingPathToOtherCharRecursive(otherCharName, item.containing, [...pathSoFar, i, "containing"]);
-                    if (found) {
-                        return found;
-                    }
-                }
-            }
-            return null;
-        }
-
-        /**
-         * @param {string} otherCharName
-         * @param {DEItem[]} list
-         * @param {Array<string | number>} pathSoFar
-         * @returns {Array<string | number> | null}
-         */
-        const findAtopPathToOtherCharRecursive = function (otherCharName, list, pathSoFar) {
-            for (let i = 0; i < list.length; i++) {
-                const item = list[i];
-                if (item.amount === 0) {
-                    continue;
-                }
-                if (item.ontopCharacters && item.ontopCharacters.includes(otherCharName)) {
-                    return [...pathSoFar, i];
-                } else {
-                    const found = findAtopPathToOtherCharRecursive(otherCharName, item.ontop, [...pathSoFar, i, "ontop"]);
-                    if (found) {
-                        return found;
-                    }
-                }
-            }
-            return null;
-        }
-
-
         if (path[2] === "carrying") {
             let userHasFallen = false;
             let totalCarriedWeight = 0;
@@ -3014,7 +2952,7 @@ async function cleanDirtyItemTree(
                         resolvedFallenItems.resolved.items.push(copied);
 
                         const couldCarryEvenOneInOptimalConditions = carriedItemWeight.singularWeight <= carryingCapacity.carryingCapacityKg;
-                        let storyMasterMessageSoFar = `${utilItemCount(engine, characterName, charState, amountThatWillFall, carriedItem.name, true)} ${amountThatWillFall === 1 ? "is" : "are"} too heavy to be carried by ${path[1]}${!couldCarryEvenOneInOptimalConditions ? "" : " who is already carrying too much weight, "} and the items fall on the ground at ${expectedPathForFallenItems[1]}.`;
+                        let storyMasterMessageSoFar = `${utilItemCount(engine, charState.location, amountThatWillFall, carriedItem.name, true)} ${amountThatWillFall === 1 ? "is" : "are"} too heavy to be carried by ${path[1]}${!couldCarryEvenOneInOptimalConditions ? "" : " who is already carrying too much weight, "} and the items fall on the ground at ${expectedPathForFallenItems[1]}.`;
                         if (!couldCarryEvenOneInOptimalConditions) {
                             let exceedCapacityBy = carriedItemWeight.singularWeight / carryingCapacity.carryingCapacityKg;
                             if (exceedCapacityBy > 5) {
@@ -3045,12 +2983,12 @@ async function cleanDirtyItemTree(
                                 otherCharState.beingCarriedByCharacter = null;
                                 otherCharState.beingCarriedByCharacterDirectly = false;
 
-                                const atopPath = findAtopPathToOtherCharRecursive(otherCharName, charState.carrying, [...resolvedFallenItems.pathToResolved, "items"]);
-                                const containingPath = findContainingPathToOtherCharRecursive(otherCharName, charState.carrying, [...resolvedFallenItems.pathToResolved, "items"]);
+                                const atopPath = findAtopPathToOtherCharRecursive(otherCharName, resolvedFallenItems.resolved.items, [...resolvedFallenItems.pathToResolved, "items"]);
+                                const containingPath = findContainingPathToOtherCharRecursive(otherCharName, resolvedFallenItems.resolved.items, [...resolvedFallenItems.pathToResolved, "items"]);
                                 if (atopPath) {
-                                    otherCharState.atopItem = locationPathToMessage(engine, characterName, charState.location, atopPath);
+                                    otherCharState.atopItem = locationPathToMessage(engine, otherCharName, charState.location, atopPath);
                                 } else if (containingPath) {
-                                    otherCharState.insideItem = locationPathToMessage(engine, characterName, charState.location, containingPath);
+                                    otherCharState.insideItem = locationPathToMessage(engine, otherCharName, charState.location, containingPath);
                                 }
                             }
                         }
@@ -3077,7 +3015,7 @@ async function cleanDirtyItemTree(
                         resolvedFallenItems.resolved.items.push(copied);
 
                         const couldCarryEvenOneInOptimalConditions = carriedItemVolume.singularVolume <= carryingCapacity.carryingCapacityLiters;
-                        let storyMasterMessageSoFar = `${utilItemCount(engine, characterName, charState, amountThatWillFall, carriedItem.name, true)} ${amountThatWillFall === 1 ? "is" : "are"} too large to be carried by ${path[1]}${!couldCarryEvenOneInOptimalConditions ? "" : " who is already carrying too many items, "} and the items fall on the ground at ${expectedPathForFallenItems[1]}.`;
+                        let storyMasterMessageSoFar = `${utilItemCount(engine, charState.location, amountThatWillFall, carriedItem.name, true)} ${amountThatWillFall === 1 ? "is" : "are"} too large to be carried by ${path[1]}${!couldCarryEvenOneInOptimalConditions ? "" : " who is already carrying too many items, "} and the items fall on the ground at ${expectedPathForFallenItems[1]}.`;
 
                         // no point in saying they fell down twice
                         if (!couldCarryEvenOneInOptimalConditions && !userHasFallen) {
@@ -3110,13 +3048,13 @@ async function cleanDirtyItemTree(
                                 const otherCharState = engine.deObject.stateFor[otherCharName];
                                 otherCharState.beingCarriedByCharacter = null;
                                 otherCharState.beingCarriedByCharacterDirectly = false;
-                                const atopPath = findAtopPathToOtherCharRecursive(otherCharName, charState.carrying, [...resolvedFallenItems.pathToResolved, "items"]);
-                                const containingPath = findContainingPathToOtherCharRecursive(otherCharName, charState.carrying, [...resolvedFallenItems.pathToResolved, "items"]);
+                                const atopPath = findAtopPathToOtherCharRecursive(otherCharName, resolvedFallenItems.resolved.items, [...resolvedFallenItems.pathToResolved, "items"]);
+                                const containingPath = findContainingPathToOtherCharRecursive(otherCharName, resolvedFallenItems.resolved.items, [...resolvedFallenItems.pathToResolved, "items"]);
                                 if (atopPath) {
-                                    otherCharState.atopItem = locationPathToMessage(engine, characterName, charState.location, atopPath);
+                                    otherCharState.atopItem = locationPathToMessage(engine, otherCharName, charState.location, atopPath);
                                 }
                                 if (containingPath) {
-                                    otherCharState.insideItem = locationPathToMessage(engine, characterName, charState.location, containingPath);
+                                    otherCharState.insideItem = locationPathToMessage(engine, otherCharName, charState.location, containingPath);
                                 }
                             }
                         }
@@ -3170,22 +3108,22 @@ async function cleanDirtyItemTree(
                         "this item got worn by a large character and that caused it to expand and break",
                     );
                     wornItem.amount = 0;
-                    addedMessagesForStoryMaster.push(`${utilItemCount(engine, characterName, charState, wornItem.amount || 1, wornItem.name, true, true)} ${wornItem.amount === 1 ? "is" : "are"} too tight to be worn by ${path[1]} and ${wornItem.amount === 1 ? "breaks" : "break"}, so ${wornItem.amount === 1 ? "it" : "they"} ${wornItem.amount === 1 ? "falls" : "fall"} on the ground at ${expectedPathForFallenItems[1]}.`);
+                    addedMessagesForStoryMaster.push(`${utilItemCount(engine, charState.location, wornItem.amount || 1, wornItem.name, true, true)} ${wornItem.amount === 1 ? "is" : "are"} too tight to be worn by ${path[1]} and ${wornItem.amount === 1 ? "breaks" : "break"}, so ${wornItem.amount === 1 ? "it" : "they"} ${wornItem.amount === 1 ? "falls" : "fall"} on the ground at ${expectedPathForFallenItems[1]}.`);
                 } else if (wearableFitment.shouldFallDown) {
                     const copy = deepCopyItem(wornItem);
                     resolvedFallenItems.resolved.items.push(copy);
                     wornItem.amount = 0;
                     if (wornItem.wearableProperties) {
-                        addedMessagesForStoryMaster.push(`${utilItemCount(engine, characterName, charState, wornItem.amount || 1, wornItem.name, true, true)} ${wornItem.amount === 1 ? "is" : "are"} too large to fit on ${path[1]} and ${wornItem.amount === 1 ? "falls" : "fall"} down from it onto the ground at ${expectedPathForFallenItems[1]}.`);
+                        addedMessagesForStoryMaster.push(`${utilItemCount(engine, charState.location, wornItem.amount || 1, wornItem.name, true, true)} ${wornItem.amount === 1 ? "is" : "are"} too large to fit on ${path[1]} and ${wornItem.amount === 1 ? "falls" : "fall"} down from it onto the ground at ${expectedPathForFallenItems[1]}.`);
                     } else {
-                        addedMessagesForStoryMaster.push(`${utilItemCount(engine, characterName, charState, wornItem.amount || 1, wornItem.name, true, true)} ${wornItem.amount === 1 ? "is" : "are"} not possible to wear by ${path[1]} and ${wornItem.amount === 1 ? "falls" : "fall"} down from it onto the ground at ${expectedPathForFallenItems[1]}.`);
+                        addedMessagesForStoryMaster.push(`${utilItemCount(engine, charState.location, wornItem.amount || 1, wornItem.name, true, true)} ${wornItem.amount === 1 ? "is" : "are"} not possible to wear by ${path[1]} and ${wornItem.amount === 1 ? "falls" : "fall"} down from it onto the ground at ${expectedPathForFallenItems[1]}.`);
                     }
                 } else {
                     totalWornWeight += wornItemWeight.completeWeight;
                     // @ts-ignore
                     if (wornItem._just_placed && cycle === "first") {
                         // only on the first cycle because this will keep appearing over and over otherwise
-                        addedMessagesForStoryMaster.push(`${utilItemCount(engine, characterName, charState, wornItem.amount || 1, wornItem.name, true, true)} is now worn by ${path[1]}, ${wornItem.amount === 1 ? "it" : "they"} ${wearableFitment.fitment}.`);
+                        addedMessagesForStoryMaster.push(`${utilItemCount(engine, charState.location, wornItem.amount || 1, wornItem.name, true, true)} is now worn by ${path[1]}, ${wornItem.amount === 1 ? "it" : "they"} ${wearableFitment.fitment}.`);
                     }
                 }
 
@@ -3194,7 +3132,7 @@ async function cleanDirtyItemTree(
                         if (wornItemWeight.charactersOnlyDirectlyInside.length > 0) {
                             addedMessagesForStoryMaster.push(`Since ${engine.deObject.functions.format_and(engine.deObject, null, wornItemWeight.charactersOnlyDirectlyInside)} are inside the item, they also fall down with it.`);
                         }
-                        
+
                         if (wornItemWeight.charactersOnlyDirectlyOnTop.length > 0) {
                             addedMessagesForStoryMaster.push(`Since ${engine.deObject.functions.format_and(engine.deObject, null, wornItemWeight.charactersOnlyDirectlyOnTop)} are on top of the item, they also fall down with it.`);
                         }
@@ -3212,13 +3150,13 @@ async function cleanDirtyItemTree(
                             const otherCharState = engine.deObject.stateFor[otherCharName];
                             otherCharState.beingCarriedByCharacter = null;
                             otherCharState.beingCarriedByCharacterDirectly = false;
-                            const atopPath = findAtopPathToOtherCharRecursive(otherCharName, charState.carrying, [...resolvedFallenItems.pathToResolved, "items"]);
-                            const containingPath = findContainingPathToOtherCharRecursive(otherCharName, charState.carrying, [...resolvedFallenItems.pathToResolved, "items"]);
+                            const atopPath = findAtopPathToOtherCharRecursive(otherCharName, resolvedFallenItems.resolved.items, [...resolvedFallenItems.pathToResolved, "items"]);
+                            const containingPath = findContainingPathToOtherCharRecursive(otherCharName, resolvedFallenItems.resolved.items, [...resolvedFallenItems.pathToResolved, "items"]);
                             if (atopPath) {
-                                otherCharState.atopItem = locationPathToMessage(engine, characterName, charState.location, atopPath);
+                                otherCharState.atopItem = locationPathToMessage(engine, otherCharName, charState.location, atopPath);
                             }
                             if (containingPath) {
-                                otherCharState.insideItem = locationPathToMessage(engine, characterName, charState.location, containingPath);
+                                otherCharState.insideItem = locationPathToMessage(engine, otherCharName, charState.location, containingPath);
                             }
                         }
                     }
@@ -3443,4 +3381,192 @@ function checkDirectlyCarriedCharacters(engine, characterName, charState, addedM
             totalCarriedVolume += carriedCharVolume.volume;
         }
     }
+}
+
+/**
+ * @param {DEngine} engine
+ * @param {string} location
+ * @param {string[]} addedMessagesForStoryMaster
+ */
+async function cleanAll(engine, location, addedMessagesForStoryMaster) {
+    if (!engine.deObject) {
+        throw new Error("DEngine not initialized");
+    }
+    const locationObj = engine.deObject.world.locations[location];
+    for (const [slotName, slot] of Object.entries(locationObj.slots)) {
+        await cleanDirtyItemTree(engine, location, slotName, slot.items, ["slots", slotName, "items"], addedMessagesForStoryMaster, "first");
+    }
+
+    const allCharactersAtLocation = [];
+    for (const charName in engine.deObject.stateFor) {
+        const charState = engine.deObject.stateFor[charName];
+        if (charState.location === location) {
+            allCharactersAtLocation.push(charName);
+        }
+    }
+    for (const charName of allCharactersAtLocation) {
+        const characterState = engine.deObject.stateFor[charName];
+
+        // cheap and cheat way to check if we took items off
+        let cycleN = 0;
+        while (true) {
+            // inefficient as hell, but no big deal
+            // just keep dropping items until we are satisfied
+            // that we are not dropping more
+            // all because some items give us extra strength and we may have dropped
+            // one of those while checking
+            const currStoryMasterMessages = addedMessagesForStoryMaster.length;
+            checkDirectlyCarriedCharacters(engine, charName, characterState, addedMessagesForStoryMaster);
+            await cleanDirtyItemTree(engine, characterState.location, characterState.locationSlot, characterState.carrying, ["characters", charName, "carrying"], addedMessagesForStoryMaster, cycleN === 0 ? "first" : "mid");
+            await cleanDirtyItemTree(engine, characterState.location, characterState.locationSlot, characterState.wearing, ["characters", charName, "wearing"], addedMessagesForStoryMaster, cycleN === 0 ? "first" : "mid");
+
+            // congrats no more dropped items, you can move on to the next character
+            if (currStoryMasterMessages === addedMessagesForStoryMaster.length) {
+                break;
+            }
+            cycleN++;
+        }
+
+        // one last time, inefficient yes I know
+        cleanDirtyItemTree(engine, characterState.location, characterState.locationSlot, characterState.carrying, ["characters", charName, "carrying"], addedMessagesForStoryMaster, "last");
+        cleanDirtyItemTree(engine, characterState.location, characterState.locationSlot, characterState.wearing, ["characters", charName, "wearing"], addedMessagesForStoryMaster, "last");
+
+        cleanTemporaryProperties(engine, characterState.carrying);
+        cleanTemporaryProperties(engine, characterState.wearing);
+    }
+
+    for (const [slotName, slot] of Object.entries(locationObj.slots)) {
+        cleanTemporaryProperties(engine, slot.items);
+    }
+
+    // regenerate, this is redundant but it makes sure things are fine
+    for (const charName of allCharactersAtLocation) {
+        const charState = engine.deObject.stateFor[charName];
+
+        const atopOrInside = getItemWhereCharacterIsAtopOrInside(engine, charName, location);
+        if (atopOrInside) {
+            const { item, path, position } = atopOrInside;
+            if (position === "atop") {
+                charState.atopItem = locationPathToMessage(engine, charName, charState.location, path);
+                charState.atopItemNameOnly = item.name;
+                charState.insideItem = null;
+                charState.insideItemNameOnly = null;
+            } else if (position === "inside") {
+                charState.atopItem = null;
+                charState.atopItemNameOnly = null;
+                charState.insideItem = locationPathToMessage(engine, charName, charState.location, path);
+                charState.insideItemNameOnly = item.name;
+            }
+            if (path[0] === "characters") {
+                const carryingCharName = path[1];
+                const carryingCharState = engine.deObject.stateFor[carryingCharName];
+                if (!carryingCharState.carryingCharacters.includes(charName)) {
+                    carryingCharState.carryingCharacters.push(charName);
+                }
+                // @ts-ignore
+                charState.beingCarriedByCharacter = carryingCharName;
+                charState.beingCarriedByCharacterDirectly = false;
+            }
+        } else {
+            charState.atopItem = null;
+            charState.atopItemNameOnly = null;
+            charState.insideItem = null;
+            charState.insideItemNameOnly = null;
+        }
+    }
+}
+
+/**
+ * @param {string} otherCharName
+ * @param {DEItem[]} list
+ * @param {Array<string | number>} pathSoFar
+ * @returns {Array<string | number> | null}
+ */
+const findContainingPathToOtherCharRecursive = function (otherCharName, list, pathSoFar) {
+    for (let i = 0; i < list.length; i++) {
+        const item = list[i];
+        if (item.amount === 0) {
+            continue;
+        }
+        if (item.containingCharacters && item.containingCharacters.includes(otherCharName)) {
+            return [...pathSoFar, i];
+        } else {
+            const found = findContainingPathToOtherCharRecursive(otherCharName, item.containing, [...pathSoFar, i, "containing"]);
+            if (found) {
+                return found;
+            }
+        }
+    }
+    return null;
+}
+
+/**
+ * @param {string} otherCharName
+ * @param {DEItem[]} list
+ * @param {Array<string | number>} pathSoFar
+ * @returns {Array<string | number> | null}
+ */
+const findAtopPathToOtherCharRecursive = function (otherCharName, list, pathSoFar) {
+    for (let i = 0; i < list.length; i++) {
+        const item = list[i];
+        if (item.amount === 0) {
+            continue;
+        }
+        if (item.ontopCharacters && item.ontopCharacters.includes(otherCharName)) {
+            return [...pathSoFar, i];
+        } else {
+            const found = findAtopPathToOtherCharRecursive(otherCharName, item.ontop, [...pathSoFar, i, "ontop"]);
+            if (found) {
+                return found;
+            }
+        }
+    }
+    return null;
+}
+
+/**
+ * @param {DEngine} engine
+ * @param {string} characterName
+ * @param {string} location
+ * @returns {{item: DEItem, path: Array<string | number>, position: "atop" | "inside"} | null}
+ */
+export function getItemWhereCharacterIsAtopOrInside(engine, characterName, location) {
+    if (!engine.deObject) {
+        throw new Error("DEngine not initialized");
+    }
+
+    const locationObj = engine.deObject.world.locations[location];
+    for (const [slotName, slot] of Object.entries(locationObj.slots)) {
+        const atopPath = findAtopPathToOtherCharRecursive(characterName, slot.items, ["slots", slotName, "items"]);
+        if (atopPath) {
+            const resolved = resolvePath(engine, location, atopPath);
+            return { item: resolved.resolved, path: atopPath, position: "atop" };
+        }
+        const containingPath = findContainingPathToOtherCharRecursive(characterName, slot.items, ["slots", slotName, "items"]);
+        if (containingPath) {
+            const resolved = resolvePath(engine, location, containingPath);
+            return { item: resolved.resolved, path: containingPath, position: "inside" };
+        }
+    }
+    const allCharactersAtLocation = [];
+    for (const charName in engine.deObject.stateFor) {
+        const charState = engine.deObject.stateFor[charName];
+        if (charState.location === location) {
+            allCharactersAtLocation.push(charName);
+        }
+    }
+    for (const charName of allCharactersAtLocation) {
+        const charState = engine.deObject.stateFor[charName];
+        const atopPath = findAtopPathToOtherCharRecursive(characterName, charState.carrying, ["characters", charName, "carrying"]);
+        if (atopPath) {
+            const resolved = resolvePath(engine, location, atopPath);
+            return { item: resolved.resolved, path: atopPath, position: "atop" };
+        }
+        const containingPath = findContainingPathToOtherCharRecursive(characterName, charState.carrying, ["characters", charName, "carrying"]);
+        if (containingPath) {
+            const resolved = resolvePath(engine, location, containingPath);
+            return { item: resolved.resolved, path: containingPath, position: "inside" };
+        }
+    }
+    return null;
 }
