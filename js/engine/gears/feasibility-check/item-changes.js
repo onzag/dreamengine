@@ -101,7 +101,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
         throw new Error("User character not set, cannot perform feasibility check for user");
     }
 
-    // Step by step first we grab the character state that sent that last message
+    // Step by step first we grab the character state that sent that last story fragment
     const charState = engine.deObject.stateFor[character.name];
     if (!charState) {
         throw new Error(`Character state for ${character.name} not found.`);
@@ -146,12 +146,12 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
 
     if (itemsAtLocation.length) {
         // now we want to know which items were interacted with in the last 
-        // message, so we will ask the questioning agent to analyze the last message and answer which items were interacted with, if any, based on the definition of interaction we give them, and only considering items that are at the location of the character state that sent the last message
+        // message, so we will ask the questioning agent to analyze the last story fragment and answer which items were interacted with, if any, based on the definition of interaction we give them, and only considering items that are at the location of the character state that sent the last story fragment
         // hopefully we will get a small list of items
 
         const systemPromptItemsInteracted = engine.inferenceAdapter.buildSystemPromptForQuestioningAgent(
             `You are an asistant and story analyst that checks for interactions with items in an story\n` +
-            "You will be questioned to mention any of the items that were mentioned as being interacted in the last message of a interactive story, and the interaction type (lifting, carrying, moving, using, manipulating, grabbing, etc.)\n",
+            "You will be questioned to mention any of the items that were mentioned as being interacted in the last story fragment of a interactive story, and the interaction type (lifting, carrying, moving, using, manipulating, grabbing, etc.)\n",
             [
                 `An interaction with an item is defined as lifting, carrying, moving, using, or manipulating the item in any way, giving, carrying, dropping, stealing, wearing, taking off, putting on, or any other form of direct physical interaction with the item. Just mentioning or describing the item without any of these interactions does not count as an interaction.`,
                 "If an item is only mentioned or described but not interacted with, answer No, since no interaction happened",
@@ -209,7 +209,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                 processItemList(charState.carrying);
             }
 
-            const nextQuestion = `In the last message, was the item "${item}" interacted with? Remember that interaction means lifting, carrying, moving, using, or manipulating the item in any way, giving, carrying, dropping, stealing, wearing, taking off, putting on, or any other form of direct physical interaction with the item. Just mentioning or describing the item without any of these interactions does not count as an interaction. Answer yes if "${item}" was interacted with, or no if it was not interacted with.`;
+            const nextQuestion = `In the last story fragment, was the item "${item}" interacted with? Remember that interaction means lifting, carrying, moving, using, or manipulating the item in any way, giving, carrying, dropping, stealing, wearing, taking off, putting on, or any other form of direct physical interaction with the item. Just mentioning or describing the item without any of these interactions does not count as an interaction. Answer yes if "${item}" was interacted with, or no if it was not interacted with.`;
             console.log("Asking question, " + nextQuestion)
             const answer = await itemsInteractionGenerator.next({
                 maxCharacters: 0,
@@ -220,7 +220,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                 stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
                 stopAt: [],
                 grammar: yesNoGrammar,
-                answerTrail: `Regarding specifically the item ${item} being interacted with in the last message, the answer is:\n\n`,
+                answerTrail: `Regarding specifically the item ${item} being interacted with in the last story fragment, the answer is:\n\n`,
             });
             if (answer.done) {
                 throw new Error("Questioning agent finished without providing an answer for item interaction check for item " + item);
@@ -228,9 +228,9 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
             console.log("Received answer, " + answer.value);
             if (isYes(answer.value)) {
                 itemsInteractedWith.push(itemLowerCase);
-                console.log(`The item "${item}" was identified as interacted with in the last message, according to the questioning agent.`);
+                console.log(`The item "${item}" was identified as interacted with in the last story fragment, according to the questioning agent.`);
             } else {
-                console.log(`The item "${item}" was not identified as interacted with in the last message, according to the questioning agent.`);
+                console.log(`The item "${item}" was not identified as interacted with in the last story fragment, according to the questioning agent.`);
             }
         }
 
@@ -267,7 +267,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
         null,
         engine.getHistoryForCharacter(character, {}), "LAST_CYCLE_EXPANDED",
         null,
-        true, // remark last message for analysis, so the agent can analyze it to figure out indirect mentions and descriptions
+        true, // remark last story fragment for analysis, so the agent can analyze it to figure out indirect mentions and descriptions
     );
 
     const readyCharacters = await charactersInteractionGenerator.next();
@@ -280,7 +280,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
             continue;
         }
 
-        const nextQuestion = `In the last message, was the character "${charName}" mentioned or interacted with in any way (talked to, looked at, thought about, mentioned, described, etc.)? Answer yes if "${charName}" was mentioned or interacted with, or no if they were not.`;
+        const nextQuestion = `In the last story fragment, was the character "${charName}" mentioned or interacted with in any way (talked to, looked at, thought about, mentioned, described, etc.)? Answer yes if "${charName}" was mentioned or interacted with, or no if they were not.`;
         console.log("Asking question, " + nextQuestion);
 
         const charDescription = engine.getExternalDescriptionOfCharacter(charName);
@@ -297,7 +297,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
             contextInfo: charDescriptionContextInfo.value,
             stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
             stopAt: [],
-            answerTrail: `Regarding specifically the character ${charName} being mentioned or interacted with in the last message, the answer is:\n\n`,
+            answerTrail: `Regarding specifically the character ${charName} being mentioned or interacted with in the last story fragment, the answer is:\n\n`,
             grammar: yesNoGrammar,
             instructions: "Use the character description at: " + charDescriptionContextInfo.characterDescriptionAt + " to figure out if the character was indirectly interacted with by a description",
         });
@@ -309,9 +309,9 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
 
         if (isYes(answer.value)) {
             charactersToQuestion.push(charName);
-            console.log(`The character "${charName}" was identified as mentioned or interacted with in the last message, according to the questioning agent.`);
+            console.log(`The character "${charName}" was identified as mentioned or interacted with in the last story fragment, according to the questioning agent.`);
         } else {
-            console.log(`The character "${charName}" was not identified as mentioned or interacted with in the last message, according to the questioning agent.`);
+            console.log(`The character "${charName}" was not identified as mentioned or interacted with in the last story fragment, according to the questioning agent.`);
         }
     }
 
@@ -322,9 +322,9 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
 
     const systemPrompt = engine.inferenceAdapter.buildSystemPromptForQuestioningAgent(
         `You are an asistant and story analyst that checks for interactions among characters and items in a story\n` +
-        "You will be questioned about interactions among items and characters in the last message of a interactive story",
+        "You will be questioned about interactions among items and characters in the last story fragment of a interactive story",
         [
-            "The responses should refer to the last message only.",
+            "The responses should refer to the last story fragment only.",
         ],
         null,
     );
@@ -336,7 +336,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
         engine.getHistoryForCharacter(character, {}),
         "LAST_CYCLE_EXPANDED",
         null,
-        true, // remark last message for analysis, so the agent can analyze it to figure out indirect mentions and descriptions
+        true, // remark last story fragment for analysis, so the agent can analyze it to figure out indirect mentions and descriptions
     );
 
     const result = await interactionGenerator.next(); // start the generator for each item
@@ -398,13 +398,13 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
             loops++;
 
             if (loops > 3) {
-                console.log(`Too many loops trying to confirm the moving state of item "${item}", breaking the loop to avoid infinite questioning. This may indicate that the questioning agent is having trouble determining the moving state of the item with certainty, possibly due to ambiguous or insufficient information in the last message.`);
+                console.log(`Too many loops trying to confirm the moving state of item "${item}", breaking the loop to avoid infinite questioning. This may indicate that the questioning agent is having trouble determining the moving state of the item with certainty, possibly due to ambiguous or insufficient information in the last story fragment.`);
                 // assume it was moved
                 wasMoved = true;
                 break;
             }
 
-            const wasItMovedNextQuestion = `In the last message, did any character move, picked up, wear, carry, or change the location of the item "${item}" itself? IMPORTANT: The item "${item}" must be the DIRECT OBJECT being physically relocated. If "${item}" is only a DESTINATION or LOCATION where something else was placed, the answer is NO.`;
+            const wasItMovedNextQuestion = `In the last story fragment, did any character move, picked up, wear, carry, or change the location of the item "${item}" itself? IMPORTANT: The item "${item}" must be the DIRECT OBJECT being physically relocated. If "${item}" is only a DESTINATION or LOCATION where something else was placed, the answer is NO.`;
 
             console.log("Asking question, " + wasItMovedNextQuestion);
 
@@ -446,7 +446,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
 
             // if it was moved, we will ask a confirmation question to make sure the agent is consistent in its answers, since this is a crucial point for the rest of the checks for this item, if the item was not moved, we will skip the rest of the checks for this item, since if it was not moved, it can't have its location changed or be stolen
             if (wasMoved) {
-                const wasItMovedConfirmationQuestion = `Is the following statement correct? In the last message, the item "${item}" was moved, worn, picked up, carried, or had its location changed. Answer "yes" if this statement is correct, or "no" if this statement is incorrect.`;
+                const wasItMovedConfirmationQuestion = `Is the following statement correct? In the last story fragment, the item "${item}" was moved, worn, picked up, carried, or had its location changed. Answer "yes" if this statement is correct, or "no" if this statement is incorrect.`;
                 console.log("Asking question, " + wasItMovedConfirmationQuestion);
                 const wasItMovedConfirmation = await interactionGenerator.next({
                     maxCharacters: 0, maxSafetyCharacters: 100,
@@ -528,7 +528,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                 if (allPotentialLocationsForItem.length > 1) {
                     for (let i = 0; i < allPotentialLocationsForItem.length; i++) {
                         const answerAlt = allPotentialLocationsForItem[i].includes("table") ? "on the table" : "on the ground";
-                        const nextQuestion = `For the item "${item}", according to the last message to analyze, before it was interacted with, was it originally ${allPotentialLocationsForItem[i]}?`;
+                        const nextQuestion = `For the item "${item}", according to the last story fragment to analyze, before it was interacted with, was it originally ${allPotentialLocationsForItem[i]}?`;
                         console.log("Asking question, " + nextQuestion);
                         const whereWasItQuestion = await interactionGenerator.next({
                             maxCharacters: 0, maxSafetyCharacters: 100,
@@ -538,9 +538,9 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                             stopAt: [],
                             grammar: yesNoGrammar,
                             contextInfo: engine.inferenceAdapter.buildContextInfoExample(
-                                `Example: If the last message said that "Alice picked up ${item} from ${answerAlt}", the answer would be "no", since it was originally ${answerAlt}, not ${allPotentialLocationsForItem[i]}.`,
+                                `Example: If the last story fragment reads that "Alice picked up ${item} from ${answerAlt}", the answer would be "no", since it was originally ${answerAlt}, not ${allPotentialLocationsForItem[i]}.`,
                             ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                                `Example: If the last message said that "Bob saw the item ${item} ${allPotentialLocationsForItem[i]} and moved it to be ${answerAlt}", the answer would be "yes", since it was originally ${allPotentialLocationsForItem[i]}.`,
+                                `Example: If the last story fragment reads that "Bob saw the item ${item} ${allPotentialLocationsForItem[i]} and moved it to be ${answerAlt}", the answer would be "yes", since it was originally ${allPotentialLocationsForItem[i]}.`,
                             ),
                         });
 
@@ -569,7 +569,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
             console.log(`Item "${item}" was moved or had its location changed`);
 
             // Now we want to know how many of the item were moved
-            const baseAmountMovedQuestion = `By the end of the last message, how many of "${item}" were moved or had their location changed? Answer with a number, or if the amount is not clear, answer with one of the following: "a few", "several", "many", "a lot", "some", "half", "most", or "all".`;
+            const baseAmountMovedQuestion = `By the end of the last story fragment, how many of "${item}" were moved or had their location changed? Answer with a number, or if the amount is not clear, answer with one of the following: "a few", "several", "many", "a lot", "some", "half", "most", or "all".`;
             const amountGrammar = `root ::= ([0-9]+ | "a few" | "several" | "many" | "a lot" | "some" | "half" | "most" | "all" | "none") ${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()}`;
             console.log("Asking question, " + baseAmountMovedQuestion);
             const baseAmountMovedAnswer = await interactionGenerator.next({
@@ -577,17 +577,17 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                 maxParagraphs: 1,
                 nextQuestion: baseAmountMovedQuestion,
                 contextInfo: engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last message said that "Alice picked up ${item} and put it in her backpack", the answer would be "1", since only one of the item was moved.`,
+                    `Example: If the last story fragment reads that "Alice picked up ${item} and put it in her backpack", the answer would be "1", since only one of the item was moved.`,
                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last message said that "Bob moved a couple of ${item} on the table to the box", the answer would be "some" or "several", since only some of the item was moved.`,
+                    `Example: If the last story fragment reads that "Bob moved a couple of ${item} on the table to the box", the answer would be "some" or "several", since only some of the item was moved.`,
                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last message said that "Emma took a few of the ${item} and gave them to Alice", the answer would be "a few", since only a few of the item were moved.`,
+                    `Example: If the last story fragment reads that "Emma took a few of the ${item} and gave them to Alice", the answer would be "a few", since only a few of the item were moved.`,
                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last message said that "Joe moved most of the ${item} from the table to the box, but left some on the table", the answer would be "most", since most of the item was moved.`,
+                    `Example: If the last story fragment reads that "Joe moved most of the ${item} from the table to the box, but left some on the table", the answer would be "most", since most of the item was moved.`,
                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last message said that "Alice moved 10 of ${item} from the box to the shelf", the answer would be "10", since only 10 of the item were moved.`,
+                    `Example: If the last story fragment reads that "Alice moved 10 of ${item} from the box to the shelf", the answer would be "10", since only 10 of the item were moved.`,
                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last message said that "Bob moved two of ${item} from the ground to the table and two of ${item} from the table to the box", the answer would be "4", since a total of 4 of the item were moved.`,
+                    `Example: If the last story fragment reads that "Bob moved two of ${item} from the ground to the table and two of ${item} from the table to the box", the answer would be "4", since a total of 4 of the item were moved.`,
                 ),
                 stopAfter: [],
                 stopAt: [],
@@ -666,7 +666,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                     // now if our heuristics say that there is an item that can contain
                     if (canContain) {
                         // we will ask the LLM if that happened
-                        const nextQuestion = `By the end of the last message, was the item "${item}" placed inside ${isAnother ? "another " : "the item "}"${otherItem}"? As a container, ${item} must have been placed inside the item "${otherItem}", not the opposite. Answer "yes" ONLY if ${item} was PUT INTO or PLACED INSIDE ${otherItem}.`;
+                        const nextQuestion = `By the end of the last story fragment, was the item "${item}" placed inside ${isAnother ? "another " : "the item "}"${otherItem}"? As a container, ${item} must have been placed inside the item "${otherItem}", not the opposite. Answer "yes" ONLY if ${item} was PUT INTO or PLACED INSIDE ${otherItem}.`;
                         console.log("Asking question, " + nextQuestion);
                         const ambiguousPlacement = await interactionGenerator.next({
                             maxCharacters: 0, maxSafetyCharacters: 100,
@@ -677,13 +677,13 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                             stopAt: [],
                             grammar: yesNoGrammar,
                             contextInfo: engine.inferenceAdapter.buildContextInfoExample(
-                                `Example: If the last message said that "${item} was placed inside ${otherItem}", the answer would be "yes", since by the end of the message, ${item} is now inside ${otherItem}.`,
+                                `Example: If the last story fragment reads that "${item} was placed inside ${otherItem}", the answer would be "yes", since by the end of the message, ${item} is now inside ${otherItem}.`,
                             ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                                `Example: If the last message said that "${item} was left on top of ${otherItem}", the answer would be "no", since by the end of the message, ${item} is on top of ${otherItem}, not inside it.`,
+                                `Example: If the last story fragment reads that "${item} was left on top of ${otherItem}", the answer would be "no", since by the end of the message, ${item} is on top of ${otherItem}, not inside it.`,
                             ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                                `Example: If the last message said that "${item} was taken out from the inside of ${otherItem} and put on top of ${otherItem}", the answer would be "no", since by the end of the message, ${item} is on top of ${otherItem}.`,
+                                `Example: If the last story fragment reads that "${item} was taken out from the inside of ${otherItem} and put on top of ${otherItem}", the answer would be "no", since by the end of the message, ${item} is on top of ${otherItem}.`,
                             ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                                `Example: If the last message said that "${otherItem} was placed inside ${item}", the answer would be "no", since ${otherItem} is the one that was placed inside ${item}.`,
+                                `Example: If the last story fragment reads that "${otherItem} was placed inside ${item}", the answer would be "no", since ${otherItem} is the one that was placed inside ${item}.`,
                             ),
                         });
 
@@ -697,7 +697,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
 
                     // Now we are going to ask for atop, atop is always possible, since we can always have something on top of something else
                     // even if it is ridiculous, like a cabinet on top of a plastic cup, it can happen, it will merely destroy the plastic cup
-                    const nextQuestion2 = `By the end of the last message, was the item "${item}" placed on top of ${isAnother ? "another " : "the item "}"${otherItem}"? In other words, "${otherItem}" is the surface and "${item}" is what was placed on it. Answer "yes" ONLY if ${item} ended up on top of ${otherItem}, not the other way around.`;
+                    const nextQuestion2 = `By the end of the last story fragment, was the item "${item}" placed on top of ${isAnother ? "another " : "the item "}"${otherItem}"? In other words, "${otherItem}" is the surface and "${item}" is what was placed on it. Answer "yes" ONLY if ${item} ended up on top of ${otherItem}, not the other way around.`;
                     console.log("Asking question, " + nextQuestion2);
                     const ambiguousPlacement2 = await interactionGenerator.next({
                         maxCharacters: 0, maxSafetyCharacters: 100,
@@ -707,13 +707,13 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                         stopAt: [],
                         grammar: yesNoGrammar,
                         contextInfo: engine.inferenceAdapter.buildContextInfoExample(
-                            `Example: If the last message said that "${item} was placed on top of ${otherItem}", the answer would be "yes", since by the end of the message, ${item} is now on top of ${otherItem}.`,
+                            `Example: If the last story fragment reads that "${item} was placed on top of ${otherItem}", the answer would be "yes", since by the end of the message, ${item} is now on top of ${otherItem}.`,
                         ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                            `Example: If the last message said that "Alice picks two ${item} and puts one on the table and another on top of ${otherItem}", the answer would be "yes", since "another" refers to a ${item}, and it was placed on top of ${otherItem}.`,
+                            `Example: If the last story fragment reads that "Alice picks two ${item} and puts one on the table and another on top of ${otherItem}", the answer would be "yes", since "another" refers to a ${item}, and it was placed on top of ${otherItem}.`,
                         ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                            `Example: If the last message said that "${item} was placed next to ${otherItem}", the answer would be "no", since by the end of the message, ${item} is next to ${otherItem}, not on top of it.`,
+                            `Example: If the last story fragment reads that "${item} was placed next to ${otherItem}", the answer would be "no", since by the end of the message, ${item} is next to ${otherItem}, not on top of it.`,
                         ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                            `Example: If the last message said that "${otherItem} was placed on top of ${item}", the answer would be "no", since ${otherItem} is the one that was placed on top of ${item}, not the other way around.`,
+                            `Example: If the last story fragment reads that "${otherItem} was placed on top of ${item}", the answer would be "no", since ${otherItem} is the one that was placed on top of ${item}, not the other way around.`,
                         ),
                     });
 
@@ -731,7 +731,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                     if (isAmbiguouslyAtop || isAmbiguouslyContained) {
                         // comfirm because the AI keeps answering yes when the answer is NO
                         if (isAmbiguouslyAtop) {
-                            const confirmQuestionAtop = `Is the following statement correct? By the end of the last message, the item "${item}" was placed on top of ${isAnother ? "another " : "the item "}"${otherItem}". Answer "yes" if this statement is correct, or "no" if this statement is incorrect.`;
+                            const confirmQuestionAtop = `Is the following statement correct? By the end of the last story fragment, the item "${item}" was placed on top of ${isAnother ? "another " : "the item "}"${otherItem}". Answer "yes" if this statement is correct, or "no" if this statement is incorrect.`;
 
                             console.log("Asking question, " + confirmQuestionAtop);
 
@@ -752,7 +752,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                         }
 
                         if (isAmbiguouslyContained) {
-                            const confirmQuestionContained = `Is the following statement correct? By the end of the last message, the item "${item}" was placed inside ${isAnother ? "another " : "the item "}"${otherItem}". Answer "yes" if this statement is correct, or "no" if this statement is incorrect.`;
+                            const confirmQuestionContained = `Is the following statement correct? By the end of the last story fragment, the item "${item}" was placed inside ${isAnother ? "another " : "the item "}"${otherItem}". Answer "yes" if this statement is correct, or "no" if this statement is incorrect.`;
 
                             console.log("Asking question, " + confirmQuestionContained);
 
@@ -776,7 +776,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                     // now if we are here, certainly one of these must hold true
                     if (isAmbiguouslyAtop || isAmbiguouslyContained) {
                         // now we will ask for a general amount question, to figure out how many of the item are either atop or inside the other item, we will ask a general question first, and then we will ask a specific question for inside, and by difference we can get the atop amount
-                        const nextQuestion = `By the end of the last message, how many of "${item}" are ${canContain ? "inside or on top" : "on top"} of ${otherItem}? Answer with a number, or if the amount is not clear, answer with one of the following: "a few", "several", "many", "a lot", "some", "half", "most", "all", or "none".`;
+                        const nextQuestion = `By the end of the last story fragment, how many of "${item}" are ${canContain ? "inside or on top" : "on top"} of ${otherItem}? Answer with a number, or if the amount is not clear, answer with one of the following: "a few", "several", "many", "a lot", "some", "half", "most", "all", or "none".`;
                         const amountGrammar = `root ::= ([0-9]+ | "a few" | "several" | "many" | "a lot" | "some" | "half" | "most" | "all" | "none") ${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()}`;
 
                         console.log("Asking question, " + nextQuestion);
@@ -811,7 +811,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                         // if we can contain, let's see how many of those are inside
                         if (canContain) {
                             // We ask
-                            const nextQuestion = `By the end of the last message, how many of "${item}" are inside of ${otherItem}? Answer with a number, or if the amount is not clear, answer with one of the following: "a few", "several", "many", "a lot", "some", "half", "most", or "all"; note that the ${item} must be INSIDE ${otherItem} to be counted for this question.`;
+                            const nextQuestion = `By the end of the last story fragment, how many of "${item}" are inside of ${otherItem}? Answer with a number, or if the amount is not clear, answer with one of the following: "a few", "several", "many", "a lot", "some", "half", "most", or "all"; note that the ${item} must be INSIDE ${otherItem} to be counted for this question.`;
 
                             console.log("Asking question, " + nextQuestion);
 
@@ -822,11 +822,11 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                                 stopAfter: [],
                                 stopAt: [],
                                 contextInfo: engine.inferenceAdapter.buildContextInfoExample(
-                                    `Example: If the last message said that "${item} was placed inside ${otherItem}", the answer would be "1"`,
+                                    `Example: If the last story fragment reads that "${item} was placed inside ${otherItem}", the answer would be "1"`,
                                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                                    `Example: If the last message said that "${item} was placed on top of ${otherItem}", the answer would be "0" or "none"`,
+                                    `Example: If the last story fragment reads that "${item} was placed on top of ${otherItem}", the answer would be "0" or "none"`,
                                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                                    `Example: If the last message said that "${item} was placed on top of ${otherItem}, but some of the ${item} were also placed inside ${otherItem}", the answer would be "some"`,
+                                    `Example: If the last story fragment reads that "${item} was placed on top of ${otherItem}, but some of the ${item} were also placed inside ${otherItem}", the answer would be "some"`,
                                 ),
                                 grammar: amountGrammar,
                             });
@@ -875,14 +875,14 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                                     stopAfter: [],
                                     stopAt: [],
                                     contextInfo: engine.inferenceAdapter.buildContextInfoExample(
-                                        `Example: If the last message said that "2 ${item} were placed inside ${otherItem} at ${potentialLocation}", the answer would be "2"`,
+                                        `Example: If the last story fragment reads that "2 ${item} were placed inside ${otherItem} at ${potentialLocation}", the answer would be "2"`,
                                     ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                                        `Example: If the last message said that "2 ${item} were placed inside ${otherItem}, but the location was not specified, the answer would be "0" or "none" since it was not explicitly stated to be at the location ${potentialLocation}.`,
+                                        `Example: If the last story fragment reads that "2 ${item} were placed inside ${otherItem}, but the location was not specified, the answer would be "0" or "none" since it was not explicitly stated to be at the location ${potentialLocation}.`,
                                     ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                                        `Example: If the last message said that "many of ${item} were placed on top of ${otherItem} at ${potentialLocation}, the answer would be "0" or "none" since it was explicitly stated to be on top of ${otherItem}, not inside it, even if the location was specified as ${potentialLocation}.`,
+                                        `Example: If the last story fragment reads that "many of ${item} were placed on top of ${otherItem} at ${potentialLocation}, the answer would be "0" or "none" since it was explicitly stated to be on top of ${otherItem}, not inside it, even if the location was specified as ${potentialLocation}.`,
                                     ),
                                     grammar: amountGrammar,
-                                    instructions: `The location "${potentialLocation}" must be EXPLICITLY WRITTEN in the last message text as the location of ${otherItem}. Do NOT infer or guess the location, all available locations where ${otherItem} might be are:\n\n` + allPotentialLocationsList,
+                                    instructions: `The location "${potentialLocation}" must be EXPLICITLY WRITTEN in the last story fragment text as the location of ${otherItem}. Do NOT infer or guess the location, all available locations where ${otherItem} might be are:\n\n` + allPotentialLocationsList,
                                 });
 
                                 if (placementQuestion2.done) {
@@ -921,13 +921,13 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                                     stopAt: [],
                                     grammar: amountGrammar,
                                     contextInfo: engine.inferenceAdapter.buildContextInfoExample(
-                                        `Example: If the last message said that "2 ${item} were placed on top of ${otherItem} at ${potentialLocation}", the answer would be "2"`,
+                                        `Example: If the last story fragment reads that "2 ${item} were placed on top of ${otherItem} at ${potentialLocation}", the answer would be "2"`,
                                     ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                                        `Example: If the last message said that "2 ${item} were placed on top of ${otherItem}, but the location was not specified, the answer would be "0" or "none" since it was not explicitly stated to be at the location ${potentialLocation}.`,
+                                        `Example: If the last story fragment reads that "2 ${item} were placed on top of ${otherItem}, but the location was not specified, the answer would be "0" or "none" since it was not explicitly stated to be at the location ${potentialLocation}.`,
                                     ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                                        `Example: If the last message said that "many of ${item} were placed inside of ${otherItem} at ${potentialLocation}, the answer would be "0" or "none" since it was explicitly stated to be inside of ${otherItem}, not on top of it, even if the location was specified as ${potentialLocation}.`,
+                                        `Example: If the last story fragment reads that "many of ${item} were placed inside of ${otherItem} at ${potentialLocation}, the answer would be "0" or "none" since it was explicitly stated to be inside of ${otherItem}, not on top of it, even if the location was specified as ${potentialLocation}.`,
                                     ),
-                                    instructions: `The location "${potentialLocation}" must be EXPLICITLY WRITTEN in the last message text as the location of ${otherItem}. Do NOT infer or guess the location, all available locations where ${otherItem} might be are:\n\n` + allPotentialLocationsList,
+                                    instructions: `The location "${potentialLocation}" must be EXPLICITLY WRITTEN in the last story fragment text as the location of ${otherItem}. Do NOT infer or guess the location, all available locations where ${otherItem} might be are:\n\n` + allPotentialLocationsList,
                                 });
 
                                 if (placementQuestion2.done) {
@@ -1003,7 +1003,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                             break;
                         }
 
-                        const nextQuestion = `By the end of the last message, is the item "${item}" in direct possession of ${charName}? they are carrying it or wearing it`;
+                        const nextQuestion = `By the end of the last story fragment, is the item "${item}" in direct possession of ${charName}? they are carrying it or wearing it`;
                         console.log("Asking question, " + nextQuestion);
                         const anotherChar = `${getCharacterNameForExample([charName], 0)}`;
                         const possessionQuestion = await interactionGenerator.next({
@@ -1014,17 +1014,17 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                             stopAt: [],
                             grammar: yesNoGrammar,
                             contextInfo: engine.inferenceAdapter.buildContextInfoExample(
-                                `Example: If the last message said that "${anotherChar} gave ${item} to ${charName}", the answer would be "yes", since by the end of the message, ${charName} has the item in their possession.`,
+                                `Example: If the last story fragment reads that "${anotherChar} gave ${item} to ${charName}", the answer would be "yes", since by the end of the message, ${charName} has the item in their possession.`,
                             ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                                `Example: If the last message said that "${anotherChar} took ${item}", the answer would be "no", since by the end of the message, ${charName} does not have the item in their possession.`,
+                                `Example: If the last story fragment reads that "${anotherChar} took ${item}", the answer would be "no", since by the end of the message, ${charName} does not have the item in their possession.`,
                             ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                                `Example: If the last message said that "${charName} carefully drops ${item} on the ground", the answer would be "no", since by the end of the message, ${charName} dropped the item and does not have it in their possession.`,
+                                `Example: If the last story fragment reads that "${charName} carefully drops ${item} on the ground", the answer would be "no", since by the end of the message, ${charName} dropped the item and does not have it in their possession.`,
                             ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                                `Example: If the last message said that "${charName} picks up ${item} from ${anotherChar} and then throws it down the window", the answer would be "no", since by the end of the message, ${charName} threw the item away`,
+                                `Example: If the last story fragment reads that "${charName} picks up ${item} from ${anotherChar} and then throws it down the window", the answer would be "no", since by the end of the message, ${charName} threw the item away`,
                             ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                                `Example: If the last message said that "${anotherChar} picks up ${item} and then gives it to ${charName}", the answer would be "yes", since by the end of the message, ${charName} has the item in their possession`,
+                                `Example: If the last story fragment reads that "${anotherChar} picks up ${item} and then gives it to ${charName}", the answer would be "yes", since by the end of the message, ${charName} has the item in their possession`,
                             ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                                `Example: If the last message said that "${charName} wears ${item}", the answer would be "yes", since by the end of the message, ${charName} has the item in their possession and is wearing it`,
+                                `Example: If the last story fragment reads that "${charName} wears ${item}", the answer would be "yes", since by the end of the message, ${charName} has the item in their possession and is wearing it`,
                             ),
                         });
                         if (possessionQuestion.done) {
@@ -1038,7 +1038,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                         let questionPiece2 = "";
 
                         if (!isPossessed) {
-                            const nextQuestion = `By the end of the last message, was the item "${item}" thrown/launched towards ${charName} or in their general direction?`;
+                            const nextQuestion = `By the end of the last story fragment, was the item "${item}" thrown/launched towards ${charName} or in their general direction?`;
                             console.log("Asking question, " + nextQuestion);
                             const thrownQuestion = await interactionGenerator.next({
                                 maxCharacters: 0, maxSafetyCharacters: 100,
@@ -1063,7 +1063,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                         // if yes, ask further questions
                         if (isPossessed || wasThrownTowards) {
                             let expectedLocLast = "carrying";
-                            const nextQuestion = `By the end of the last message, how many of "${item}" ${questionPiece} ${charName}${questionPiece2}? Answer with a number, or if the amount is not clear, answer with one of the following: "a few", "several", "many", "a lot", "some", "half", "most", or "all".`;
+                            const nextQuestion = `By the end of the last story fragment, how many of "${item}" ${questionPiece} ${charName}${questionPiece2}? Answer with a number, or if the amount is not clear, answer with one of the following: "a few", "several", "many", "a lot", "some", "half", "most", or "all".`;
                             const amountGrammar = `root ::= ([0-9]+ | "a few" | "several" | "many" | "a lot" | "some" | "half" | "most" | "all") ${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()}`;
 
                             console.log("Asking question, " + nextQuestion);
@@ -1092,7 +1092,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                             }
 
                             if (hasAWornPotential && isPossessed) {
-                                const nextQuestion = `By the end of the last message, is the item "${item}" being worn by ${charName}? Answer "yes" ONLY if ${item} was PUT ON or WORN by ${charName}. If ${item} was taken off, removed, or not put on, answer "no".`;
+                                const nextQuestion = `By the end of the last story fragment, is the item "${item}" being worn by ${charName}? Answer "yes" ONLY if ${item} was PUT ON or WORN by ${charName}. If ${item} was taken off, removed, or not put on, answer "no".`;
                                 console.log("Asking question, " + nextQuestion);
                                 const wornQuestion = await interactionGenerator.next({
                                     maxCharacters: 0, maxSafetyCharacters: 100,
@@ -1102,13 +1102,13 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                                     stopAt: [],
                                     grammar: yesNoGrammar,
                                     contextInfo: engine.inferenceAdapter.buildContextInfoExample(
-                                        `Example: If the last message said that "${charName} put on ${item}", the answer would be "yes", since by the end of the message, ${charName} is wearing the item.`,
+                                        `Example: If the last story fragment reads that "${charName} put on ${item}", the answer would be "yes", since by the end of the message, ${charName} is wearing the item.`,
                                     ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                                        `Example: If the last message said that "${charName} took off ${item}", the answer would be "no", since by the end of the message, ${charName} is not wearing the item.`,
+                                        `Example: If the last story fragment reads that "${charName} took off ${item}", the answer would be "no", since by the end of the message, ${charName} is not wearing the item.`,
                                     ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                                        `Example: If the last message said that "${charName} is wearing ${item}", the answer would be "yes", since by the end of the message, ${charName} is wearing the item.`,
+                                        `Example: If the last story fragment reads that "${charName} is wearing ${item}", the answer would be "yes", since by the end of the message, ${charName} is wearing the item.`,
                                     ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                                        `Example: If the last message said that "${charName} has ${item} in their inventory but is not wearing it", the answer would be "no", since by the end of the message, ${charName} is not wearing the item.`,
+                                        `Example: If the last story fragment reads that "${charName} has ${item} in their inventory but is not wearing it", the answer would be "no", since by the end of the message, ${charName} is not wearing the item.`,
                                     ),
                                 });
 
@@ -1158,7 +1158,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
 
                     if (totalMovedSoFar < expectedAmountToMove) {
                         // ask whether it was dropped on the ground
-                        const nextQuestion = `By the end of the last message, was the item "${item}" dropped on the ground? Answer "yes" ONLY if the item is on the ground and not inside or atop another item. If the item is inside or atop another item, answer "no".`;
+                        const nextQuestion = `By the end of the last story fragment, was the item "${item}" dropped on the ground? Answer "yes" ONLY if the item is on the ground and not inside or atop another item. If the item is inside or atop another item, answer "no".`;
                         console.log("Asking question, " + nextQuestion);
                         const charName = character.name;
                         const droppedQuestion = await interactionGenerator.next({
@@ -1169,11 +1169,11 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                             stopAt: [],
                             grammar: yesNoGrammar,
                             contextInfo: engine.inferenceAdapter.buildContextInfoExample(
-                                `Example: If the last message said that "${charName} drops ${item} on the ground", the answer would be "yes", since by the end of the message, the item is on the ground and not inside or atop another item.`,
+                                `Example: If the last story fragment reads that "${charName} drops ${item} on the ground", the answer would be "yes", since by the end of the message, the item is on the ground and not inside or atop another item.`,
                             ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                                `Example: If the last message said that "${charName} places ${item} on top of a table", the answer would be "no", since by the end of the message, the item is atop another item (the table) and not on the ground.`,
+                                `Example: If the last story fragment reads that "${charName} places ${item} on top of a table", the answer would be "no", since by the end of the message, the item is atop another item (the table) and not on the ground.`,
                             ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                                `Example: If the last message said that "${charName} launches/throws ${item}" the answer should be "yes"`,
+                                `Example: If the last story fragment reads that "${charName} launches/throws ${item}" the answer should be "yes"`,
                             ),
                             instructions: `Actions that should answer YES for include: throwing, dropping, or placing ${item} on the ground or floor`
                         });
@@ -1183,7 +1183,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                         console.log("Received answer, " + droppedQuestion.value);
 
                         if (isYes(droppedQuestion.value)) {
-                            const howManyDroppedQuestion = `By the end of the last message, how many of "${item}" were dropped on the ground? Answer with a number, or if the amount is not clear, answer with one of the following: "a few", "several", "many", "a lot", "some", "half", "most", or "all".`;
+                            const howManyDroppedQuestion = `By the end of the last story fragment, how many of "${item}" were dropped on the ground? Answer with a number, or if the amount is not clear, answer with one of the following: "a few", "several", "many", "a lot", "some", "half", "most", or "all".`;
                             console.log("Asking question, " + howManyDroppedQuestion);
                             const amountGrammar = `root ::= ([0-9]+ | "a few" | "several" | "many" | "a lot" | "some" | "half" | "most" | "all") ${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()}`;
                             const droppedAmountQuestion = await interactionGenerator.next({
@@ -1212,7 +1212,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                                     stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
                                     stopAt: [],
                                     grammar: yesNoGrammar,
-                                    nextQuestion: `By the end of the last message, was the item "${item}" thrown/launched? Answer "yes" ONLY if the item was thrown or launched. If the item was dropped without being thrown or launched, answer "no".`,
+                                    nextQuestion: `By the end of the last story fragment, was the item "${item}" thrown/launched? Answer "yes" ONLY if the item was thrown or launched. If the item was dropped without being thrown or launched, answer "no".`,
                                 });
 
                                 if (wasThrown.done) {
@@ -1227,7 +1227,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                                 // now let's pick a slot asking the LLM
 
                                 for (const slot of potentialSlotsDroppedAt) {
-                                    const nextQuestion = thrown ? `By the end of the last message, did "${item}" land in "${slot}"? Answer "yes" ONLY if it is explicitly stated or very strongly implied that the item landed in "${slot}". If it is not clear that the item landed in "${slot}", answer "no".` : `By the end of the last message, did "${item}" get dropped at the location of "${slot}"? Answer "yes" ONLY if it is explicitly stated or very strongly implied that the item was dropped at the location of "${slot}". If it is not clear that the item was dropped at the location of "${slot}", answer "no".`;
+                                    const nextQuestion = thrown ? `By the end of the last story fragment, did "${item}" land in "${slot}"? Answer "yes" ONLY if it is explicitly stated or very strongly implied that the item landed in "${slot}". If it is not clear that the item landed in "${slot}", answer "no".` : `By the end of the last story fragment, did "${item}" get dropped at the location of "${slot}"? Answer "yes" ONLY if it is explicitly stated or very strongly implied that the item was dropped at the location of "${slot}". If it is not clear that the item was dropped at the location of "${slot}", answer "no".`;
                                     console.log("Asking question, " + nextQuestion);
                                     const slotQuestion = await interactionGenerator.next({
                                         maxCharacters: 0, maxSafetyCharacters: 100,
@@ -1292,7 +1292,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                      */
                     let witnessesThatTurnHeroes = [];
 
-                    const nextQuestionSteal = `By the last message, was the item "${item}" stolen? Answer "yes" ONLY if a character took the item without permission from its previous possessor. If the item was obtained through other means (like finding it, being given it, or moving it from one place to another without taking it from someone else), answer "no".`;
+                    const nextQuestionSteal = `By the last story fragment, was the item "${item}" stolen? Answer "yes" ONLY if a character took the item without permission from its previous possessor. If the item was obtained through other means (like finding it, being given it, or moving it from one place to another without taking it from someone else), answer "no".`;
                     console.log("Asking question, " + nextQuestionSteal);
                     const stealQuestion = await interactionGenerator.next({
                         maxCharacters: 0, maxSafetyCharacters: 100,
@@ -1302,13 +1302,13 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                         stopAt: [],
                         grammar: yesNoGrammar,
                         contextInfo: engine.inferenceAdapter.buildContextInfoExample(
-                            `Example: If the last message said that "Alice took ${item} from Bob without asking", the answer would be "yes", since by the end of the message, Alice has stolen the item from Bob.`,
+                            `Example: If the last story fragment reads that "Alice took ${item} from Bob without asking", the answer would be "yes", since by the end of the message, Alice has stolen the item from Bob.`,
                         ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                            `Example: If the last message said that "Bob found ${item} on the ground and picked it up", the answer would be "no", since by the end of the message, Bob obtained the item by finding it, not stealing it from someone else.`,
+                            `Example: If the last story fragment reads that "Bob found ${item} on the ground and picked it up", the answer would be "no", since by the end of the message, Bob obtained the item by finding it, not stealing it from someone else.`,
                         ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                            `Example: If the last message said that "Charlie was given ${item} by Alice", the answer would be "no", since by the end of the message, Charlie obtained the item through being given it, not stealing it from someone else.`,
+                            `Example: If the last story fragment reads that "Charlie was given ${item} by Alice", the answer would be "no", since by the end of the message, Charlie obtained the item through being given it, not stealing it from someone else.`,
                         ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                            `Example: If the last message said that "Dave moved ${item} from the table to their backpack", the answer would be "no", since by the end of the message, Dave obtained the item by moving it, not stealing it from someone else.`,
+                            `Example: If the last story fragment reads that "Dave moved ${item} from the table to their backpack", the answer would be "no", since by the end of the message, Dave obtained the item by moving it, not stealing it from someone else.`,
                         ),
                     });
 
@@ -1323,7 +1323,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                     }
 
                     if (wasStolen) {
-                        const nextQuestion = `By the last message, who stole the item "${item}"? Answer with the name of the character who stole it. If it's not clear who stole it, answer with "none".`;
+                        const nextQuestion = `By the last story fragment, who stole the item "${item}"? Answer with the name of the character who stole it. If it's not clear who stole it, answer with "none".`;
 
                         console.log("Asking question, " + nextQuestion);
                         const stealByQuestion = await interactionGenerator.next({
@@ -1334,13 +1334,13 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                             stopAt: [],
                             grammar: `root ::= (${charactersToQuestion.map((char) => JSON.stringify(char)).join(" | ")} | "none") ${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()}\n`,
                             contextInfo: engine.inferenceAdapter.buildContextInfoExample(
-                                `Example: If the last message said that "Alice took ${item} from Bob without asking", the answer would be "Alice", since Alice is the character who stole the item.`,
+                                `Example: If the last story fragment reads that "Alice took ${item} from Bob without asking", the answer would be "Alice", since Alice is the character who stole the item.`,
                             ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                                `Example: If the last message said that "Bob found ${item} on the ground and picked it up", the answer would be "none", since no character stole the item from someone else.`,
+                                `Example: If the last story fragment reads that "Bob found ${item} on the ground and picked it up", the answer would be "none", since no character stole the item from someone else.`,
                             ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                                `Example: If the last message said that "Charlie stole ${item} from Bob and gave it to Alice", the answer would be "Charlie", since Charlie is the character who stole the item.`,
+                                `Example: If the last story fragment reads that "Charlie stole ${item} from Bob and gave it to Alice", the answer would be "Charlie", since Charlie is the character who stole the item.`,
                             ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                                `Example: If the last message said that "Dave picked up ${item} without permission and placed it in his backpack", the answer would be "Dave", since Dave is the character who stole the item from its previous possessor.`,
+                                `Example: If the last story fragment reads that "Dave picked up ${item} without permission and placed it in his backpack", the answer would be "Dave", since Dave is the character who stole the item from its previous possessor.`,
                             ),
                             answerTrail: "The character who stole " + JSON.stringify(item) + " is:\n\n",
                         });
@@ -1353,7 +1353,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                         if (stealByQuestion.value.trim().toLowerCase() !== "none") {
                             wasStolenBy = stealByQuestion.value.trim();
 
-                            const nextQuestion = `By the last message, which characters could have witnessed the theft of "${item}"? Answer with the names of the characters who witnessed it, separated by commas. If it's not clear who witnessed it, answer with "none".`;
+                            const nextQuestion = `By the last story fragment, which characters could have witnessed the theft of "${item}"? Answer with the names of the characters who witnessed it, separated by commas. If it's not clear who witnessed it, answer with "none".`;
                             console.log("Asking question, " + nextQuestion);
                             const witnessesQuestion = await interactionGenerator.next({
                                 maxCharacters: 0, maxSafetyCharacters: 100,
@@ -1363,13 +1363,13 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                                 stopAt: [],
                                 grammar: `root ::= ((charactername (", " charactername)*) | "none") ${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()}\n`,
                                 contextInfo: engine.inferenceAdapter.buildContextInfoExample(
-                                    `Example: If the last message said that "Alice took ${item} from Bob without asking, and Charlie saw it happen", the answer would be "Charlie", since Charlie is the character who witnessed the theft.`,
+                                    `Example: If the last story fragment reads that "Alice took ${item} from Bob without asking, and Charlie saw it happen", the answer would be "Charlie", since Charlie is the character who witnessed the theft.`,
                                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                                    `Example: If the last message said that "Bob found ${item} on the ground and picked it up, and no one else was around", the answer would be "none", since no character witnessed the theft (since there was no theft).`,
+                                    `Example: If the last story fragment reads that "Bob found ${item} on the ground and picked it up, and no one else was around", the answer would be "none", since no character witnessed the theft (since there was no theft).`,
                                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                                    `Example: If the last message said that "Charlie stole ${item} from Bob, and Alice and Dave saw it happen", the answer would be "Alice, Dave", since Alice and Dave are the characters who witnessed the theft.`,
+                                    `Example: If the last story fragment reads that "Charlie stole ${item} from Bob, and Alice and Dave saw it happen", the answer would be "Alice, Dave", since Alice and Dave are the characters who witnessed the theft.`,
                                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                                    `Example: If the last message said that "Dave picked up ${item} without permission and placed it in his backpack, and Charlie was nearby but it's not clear if he saw it", the answer would be "none", since it's not clear if Charlie witnessed the theft.`,
+                                    `Example: If the last story fragment reads that "Dave picked up ${item} without permission and placed it in his backpack, and Charlie was nearby but it's not clear if he saw it", the answer would be "none", since it's not clear if Charlie witnessed the theft.`,
                                 ),
                                 answerTrail: "The characters who witnessed the theft of " + JSON.stringify(item) + ":\n\n",
                                 instructions: "Use the previous messages to help you determine who witnessed the theft, making necessary assumptions with a bias towards assuming that if a character was nearby, they likely witnessed the theft, unless there is information suggesting otherwise. Remember that witnesses are characters who SAW the theft happen, so if it's not clear if they saw it, it's safer to assume they did not witness it to avoid false positives.",
@@ -1459,7 +1459,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                 if (allPotentialLocationsForItem.length > 1) {
                     for (let i = 0; i < allPotentialLocationsForItem.length; i++) {
                         const answerAlt = allPotentialLocationsForItem[i].includes("table") ? "on the table" : "on the ground";
-                        const nextQuestion = `According to the last message to analyze, did ${charName} get ${interactionType} the ${item} that was originally ${allPotentialLocationsForItem[i]}?`;
+                        const nextQuestion = `According to the last story fragment to analyze, did ${charName} get ${interactionType} the ${item} that was originally ${allPotentialLocationsForItem[i]}?`;
                         console.log("Asking question, " + nextQuestion);
                         const whereWasItQuestion = await interactionGenerator.next({
                             maxCharacters: 0, maxSafetyCharacters: 100,
@@ -1469,9 +1469,9 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                             stopAt: [],
                             grammar: yesNoGrammar,
                             contextInfo: engine.inferenceAdapter.buildContextInfoExample(
-                                `Example: If the last message said that "${charName} got ${interactionType} ${item} from ${answerAlt}", the answer would be "no", since it was originally ${answerAlt}, not ${allPotentialLocationsForItem[i]}.`,
+                                `Example: If the last story fragment reads that "${charName} got ${interactionType} ${item} from ${answerAlt}", the answer would be "no", since it was originally ${answerAlt}, not ${allPotentialLocationsForItem[i]}.`,
                             ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                                `Example: If the last message said that "${charName} got ${interactionType} ${item} ${allPotentialLocationsForItem[i]}", the answer would be "yes", since it was originally ${allPotentialLocationsForItem[i]}.`,
+                                `Example: If the last story fragment reads that "${charName} got ${interactionType} ${item} ${allPotentialLocationsForItem[i]}", the answer would be "yes", since it was originally ${allPotentialLocationsForItem[i]}.`,
                             ),
                         });
 
@@ -1503,7 +1503,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
             const canBeInside = allPotentialItemsForItem.some((itemOptions) => itemOptions.some((it) => it.containerProperties && it.containerProperties.capacityKg && it.containerProperties.capacityKg > 0));
             const alreadyInside = engine.deObject.stateFor[charName].insideItemNameOnly === item;
             if (canBeInside && !alreadyInside) {
-                const nextQuestion = `By the end of the last message, is ${charName} inside ${item}? Answer "yes" ONLY if ${charName} got inside ${item} by entering it, climbing into it, or being put into it. If ${charName} is near ${item} but not inside it, or if it's not clear if they are inside it, answer "no".`;
+                const nextQuestion = `By the end of the last story fragment, is ${charName} inside ${item}? Answer "yes" ONLY if ${charName} got inside ${item} by entering it, climbing into it, or being put into it. If ${charName} is near ${item} but not inside it, or if it's not clear if they are inside it, answer "no".`;
                 console.log("Asking question, " + nextQuestion);
                 const insideQuestion = await interactionGenerator.next({
                     maxCharacters: 0, maxSafetyCharacters: 100,
@@ -1513,15 +1513,15 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                     stopAt: [],
                     grammar: yesNoGrammar,
                     contextInfo: engine.inferenceAdapter.buildContextInfoExample(
-                        `Example: If the last message said that "${charName} climbed into ${item}", the answer would be "yes", since by the end of the message, ${charName} is inside ${item}.`,
+                        `Example: If the last story fragment reads that "${charName} climbed into ${item}", the answer would be "yes", since by the end of the message, ${charName} is inside ${item}.`,
                     ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                        `Example: If the last message said that "${charName} is near ${item}", the answer would be "no", since by the end of the message, ${charName} is not inside ${item}.`,
+                        `Example: If the last story fragment reads that "${charName} is near ${item}", the answer would be "no", since by the end of the message, ${charName} is not inside ${item}.`,
                     ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                        `Example: If the last message said that "${charName} was put inside ${item} by ${getCharacterNameForExample([charName], 0)}", the answer would be "yes", since by the end of the message, ${charName} is inside ${item}.`,
+                        `Example: If the last story fragment reads that "${charName} was put inside ${item} by ${getCharacterNameForExample([charName], 0)}", the answer would be "yes", since by the end of the message, ${charName} is inside ${item}.`,
                     ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                        `Example: If the last message said that "${charName} is on top of ${item}", the answer would be "no", since by the end of the message, ${charName} is not inside ${item}.`,
+                        `Example: If the last story fragment reads that "${charName} is on top of ${item}", the answer would be "no", since by the end of the message, ${charName} is not inside ${item}.`,
                     ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                        `Example: If the last message said that "${charName} entered ${item}", the answer would be "yes", since by the end of the message, ${charName} is inside ${item}.`,
+                        `Example: If the last story fragment reads that "${charName} entered ${item}", the answer would be "yes", since by the end of the message, ${charName} is inside ${item}.`,
                     ),
                 });
                 if (insideQuestion.done) {
@@ -1535,7 +1535,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
 
             const alreadyAtop = engine.deObject.stateFor[charName].atopItemNameOnly === item;
             if (!isInsideItem && !alreadyAtop) {
-                const nextQuestion = `By the end of the last message, is ${charName} on top of ${item} (sitting, standing, or laying on it, or any other position atop)? Answer "yes" ONLY if ${charName} got on top of ${item} by sitting, standing, laying on it, or being placed on top of it. If ${charName} is near ${item} but not on top of it, or if it's not clear if they are on top of it, answer "no".`;
+                const nextQuestion = `By the end of the last story fragment, is ${charName} on top of ${item} (sitting, standing, or laying on it, or any other position atop)? Answer "yes" ONLY if ${charName} got on top of ${item} by sitting, standing, laying on it, or being placed on top of it. If ${charName} is near ${item} but not on top of it, or if it's not clear if they are on top of it, answer "no".`;
                 console.log("Asking question, " + nextQuestion);
                 const atopQuestion = await interactionGenerator.next({
                     maxCharacters: 0, maxSafetyCharacters: 100,
@@ -1545,15 +1545,15 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                     stopAt: [],
                     grammar: yesNoGrammar,
                     contextInfo: engine.inferenceAdapter.buildContextInfoExample(
-                        `Example: If the last message said that "${charName} is sitting on top of ${item}", the answer would be "yes", since by the end of the message, ${charName} is on top of ${item}.`,
+                        `Example: If the last story fragment reads that "${charName} is sitting on top of ${item}", the answer would be "yes", since by the end of the message, ${charName} is on top of ${item}.`,
                     ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                        `Example: If the last message said that "${charName} is near ${item}", the answer would be "no", since by the end of the message, ${charName} is not on top of ${item}.`,
+                        `Example: If the last story fragment reads that "${charName} is near ${item}", the answer would be "no", since by the end of the message, ${charName} is not on top of ${item}.`,
                     ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                        `Example: If the last message said that "${charName} was placed on top of ${item} by ${getCharacterNameForExample([charName], 0)}", the answer would be "yes", since by the end of the message, ${charName} is on top of ${item}.`,
+                        `Example: If the last story fragment reads that "${charName} was placed on top of ${item} by ${getCharacterNameForExample([charName], 0)}", the answer would be "yes", since by the end of the message, ${charName} is on top of ${item}.`,
                     ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                        `Example: If the last message said that "${charName} is inside ${item}", the answer would be "no", since by the end of the message, ${charName} is not on top of ${item}.`,
+                        `Example: If the last story fragment reads that "${charName} is inside ${item}", the answer would be "no", since by the end of the message, ${charName} is not on top of ${item}.`,
                     ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                        `Example: If the last message said that "${charName} stood on top of ${item}", the answer would be "yes", since by the end of the message, ${charName} is on top of ${item}.`,
+                        `Example: If the last story fragment reads that "${charName} stood on top of ${item}", the answer would be "yes", since by the end of the message, ${charName} is on top of ${item}.`,
                     ),
                 });
 
@@ -1614,7 +1614,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                 continue;
             }
 
-            const nextQuestion = `By the end of the last message, did ${charName} get on top of ${otherCharName}? Answer "yes" ONLY if ${charName} themselves physically ended up on top of ${otherCharName} (for example, ${charName} is sitting, standing, laying, or riding on ${otherCharName}, or was placed on ${otherCharName}'s back, shoulders, head, etc...). Be careful about directionality: if ${otherCharName} picked up or carried ${charName}, then ${charName} is on top — but if ${charName} picked up or carried ${otherCharName}, then ${charName} is NOT on top. If ${charName} is near ${otherCharName} but not physically on top of them, or if it's not clear, answer "NO".`;
+            const nextQuestion = `By the end of the last story fragment, did ${charName} get on top of ${otherCharName}? Answer "yes" ONLY if ${charName} themselves physically ended up on top of ${otherCharName} (for example, ${charName} is sitting, standing, laying, or riding on ${otherCharName}, or was placed on ${otherCharName}'s back, shoulders, head, etc...). Be careful about directionality: if ${otherCharName} picked up or carried ${charName}, then ${charName} is on top — but if ${charName} picked up or carried ${otherCharName}, then ${charName} is NOT on top. If ${charName} is near ${otherCharName} but not physically on top of them, or if it's not clear, answer "NO".`;
             console.log("Asking question, " + nextQuestion);
             const atopQuestion = await interactionGenerator.next({
                 maxCharacters: 0, maxSafetyCharacters: 100,
@@ -1624,17 +1624,17 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                 stopAt: [],
                 grammar: yesNoGrammar,
                 contextInfo: engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last message said that "${charName} is sitting on top of ${otherCharName}", the answer would be "yes", since by the end of the message, ${charName} is on top of ${otherCharName}.`,
+                    `Example: If the last story fragment reads that "${charName} is sitting on top of ${otherCharName}", the answer would be "yes", since by the end of the message, ${charName} is on top of ${otherCharName}.`,
                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last message said that "${charName} is near ${otherCharName}", the answer would be "no", since by the end of the message, ${charName} is not on top of ${otherCharName}.`,
+                    `Example: If the last story fragment reads that "${charName} is near ${otherCharName}", the answer would be "no", since by the end of the message, ${charName} is not on top of ${otherCharName}.`,
                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last message said that "${charName} was placed on top of ${otherCharName} by ${getCharacterNameForExample([charName, otherCharName], 0)}", the answer would be "yes", since by the end of the message, ${charName} is on top of ${otherCharName}.`,
+                    `Example: If the last story fragment reads that "${charName} was placed on top of ${otherCharName} by ${getCharacterNameForExample([charName, otherCharName], 0)}", the answer would be "yes", since by the end of the message, ${charName} is on top of ${otherCharName}.`,
                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last message said that "${charName} jumped and began riding ${otherCharName}", the answer would be "yes", since by the end of the message, ${charName} is on top of ${otherCharName}.`,
+                    `Example: If the last story fragment reads that "${charName} jumped and began riding ${otherCharName}", the answer would be "yes", since by the end of the message, ${charName} is on top of ${otherCharName}.`,
                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last message said that "${charName} picked up ${otherCharName} and carried them", the answer would be "no", since ${charName} is the one carrying — it is ${otherCharName} who is on top of ${charName}, not the other way around.`,
+                    `Example: If the last story fragment reads that "${charName} picked up ${otherCharName} and carried them", the answer would be "no", since ${charName} is the one carrying — it is ${otherCharName} who is on top of ${charName}, not the other way around.`,
                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last message said that "${charName} is hugging ${otherCharName}", the answer would be "no", since by the end of the message, ${charName} is not on top of ${otherCharName}.`,
+                    `Example: If the last story fragment reads that "${charName} is hugging ${otherCharName}", the answer would be "no", since by the end of the message, ${charName} is not on top of ${otherCharName}.`,
                 ),
             });
 
@@ -1657,7 +1657,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                 break;
             }
 
-            const nextQuestionGrabbedOrPickedUp = `By the end of the last message, did ${otherCharName} pick up or start carrying ${charName}? Answer "yes" ONLY if ${otherCharName} is now carrying ${charName} in any way — such as lifting them onto a shoulder, placing them on their head, lifting them, letting them ride on their back, holding them in their arms, carrying them by hand, or any other form of carrying (characters can vary greatly in size). If ${otherCharName} is merely near ${charName} but is not carrying them, or if it's not clear, answer "no".`;
+            const nextQuestionGrabbedOrPickedUp = `By the end of the last story fragment, did ${otherCharName} pick up or start carrying ${charName}? Answer "yes" ONLY if ${otherCharName} is now carrying ${charName} in any way — such as lifting them onto a shoulder, placing them on their head, lifting them, letting them ride on their back, holding them in their arms, carrying them by hand, or any other form of carrying (characters can vary greatly in size). If ${otherCharName} is merely near ${charName} but is not carrying them, or if it's not clear, answer "no".`;
             console.log("Asking question, " + nextQuestionGrabbedOrPickedUp);
             const grabbedOrPickedUpQuestion = await interactionGenerator.next({
                 maxCharacters: 0, maxSafetyCharacters: 100,
@@ -1667,15 +1667,15 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                 stopAt: [],
                 grammar: yesNoGrammar,
                 contextInfo: engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last message said that "${otherCharName} picked up ${charName} and is now carrying them", the answer would be "yes", since by the end of the message, ${otherCharName} is carrying ${charName}.`,
+                    `Example: If the last story fragment reads that "${otherCharName} picked up ${charName} and is now carrying them", the answer would be "yes", since by the end of the message, ${otherCharName} is carrying ${charName}.`,
                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last message said that "${otherCharName} is near ${charName} but is not carrying them", the answer would be "no", since by the end of the message, ${otherCharName} is not carrying ${charName}.`,
+                    `Example: If the last story fragment reads that "${otherCharName} is near ${charName} but is not carrying them", the answer would be "no", since by the end of the message, ${otherCharName} is not carrying ${charName}.`,
                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last message said that "${otherCharName} lifted ${charName} onto their shoulder", the answer would be "yes", since by the end of the message, ${otherCharName} is carrying ${charName}.`,
+                    `Example: If the last story fragment reads that "${otherCharName} lifted ${charName} onto their shoulder", the answer would be "yes", since by the end of the message, ${otherCharName} is carrying ${charName}.`,
                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last message said that "${otherCharName} is hugging ${charName}", the answer would be "no", since by the end of the message, ${otherCharName} is not carrying ${charName}.`,
+                    `Example: If the last story fragment reads that "${otherCharName} is hugging ${charName}", the answer would be "no", since by the end of the message, ${otherCharName} is not carrying ${charName}.`,
                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last message said that "${charName} picked up ${otherCharName} and carried them", the answer would be "no", since ${charName} is the one carrying — it is ${otherCharName} who is on top of ${charName}, not the other way around.`,
+                    `Example: If the last story fragment reads that "${charName} picked up ${otherCharName} and carried them", the answer would be "no", since ${charName} is the one carrying — it is ${otherCharName} who is on top of ${charName}, not the other way around.`,
                 )
             });
 
@@ -1705,7 +1705,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
 
         const charState = engine.deObject.stateFor[charName];
         if (charState.insideItem) {
-            const nextQuestion = `By the end of the last message, did ${charName} get out of ${charState.insideItemNameOnly} (the item they were inside)? Answer "yes" ONLY if ${charName} got out of ${charState.insideItemNameOnly} by exiting it, climbing out of it, or being taken out of it. If ${charName} is still inside ${charState.insideItemNameOnly}, or if it's not clear if they got out of it, answer "no".`;
+            const nextQuestion = `By the end of the last story fragment, did ${charName} get out of ${charState.insideItemNameOnly} (the item they were inside)? Answer "yes" ONLY if ${charName} got out of ${charState.insideItemNameOnly} by exiting it, climbing out of it, or being taken out of it. If ${charName} is still inside ${charState.insideItemNameOnly}, or if it's not clear if they got out of it, answer "no".`;
             console.log("Asking question, " + nextQuestion);
             const outsideQuestion = await interactionGenerator.next({
                 maxCharacters: 0, maxSafetyCharacters: 100,
@@ -1715,15 +1715,15 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                 stopAt: [],
                 grammar: yesNoGrammar,
                 contextInfo: engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last message said that "${charName} climbed out of ${charState.insideItemNameOnly}", the answer would be "yes", since by the end of the message, ${charName} is no longer inside ${charState.insideItemNameOnly}.`,
+                    `Example: If the last story fragment reads that "${charName} climbed out of ${charState.insideItemNameOnly}", the answer would be "yes", since by the end of the message, ${charName} is no longer inside ${charState.insideItemNameOnly}.`,
                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last message said that "${charName} is still inside ${charState.insideItemNameOnly}", the answer would be "no", since by the end of the message, ${charName} is still inside ${charState.insideItemNameOnly}.`,
+                    `Example: If the last story fragment reads that "${charName} is still inside ${charState.insideItemNameOnly}", the answer would be "no", since by the end of the message, ${charName} is still inside ${charState.insideItemNameOnly}.`,
                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last message said that "${charName} was taken out of ${charState.insideItemNameOnly} by ${getCharacterNameForExample([charName], 0)}", the answer would be "yes", since by the end of the message, ${charName} is no longer inside ${charState.insideItemNameOnly}.`,
+                    `Example: If the last story fragment reads that "${charName} was taken out of ${charState.insideItemNameOnly} by ${getCharacterNameForExample([charName], 0)}", the answer would be "yes", since by the end of the message, ${charName} is no longer inside ${charState.insideItemNameOnly}.`,
                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last message said that "${charName} exited ${charState.insideItemNameOnly}", the answer would be "yes", since by the end of the message, ${charName} is no longer inside ${charState.insideItemNameOnly}.`,
+                    `Example: If the last story fragment reads that "${charName} exited ${charState.insideItemNameOnly}", the answer would be "yes", since by the end of the message, ${charName} is no longer inside ${charState.insideItemNameOnly}.`,
                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last message said that "${charName} is on top of ${charState.insideItemNameOnly}", the answer would be "no", since by the end of the message, ${charName} is not inside ${charState.insideItemNameOnly}.`,
+                    `Example: If the last story fragment reads that "${charName} is on top of ${charState.insideItemNameOnly}", the answer would be "no", since by the end of the message, ${charName} is not inside ${charState.insideItemNameOnly}.`,
                 ),
             });
 
@@ -1743,7 +1743,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                 )
             }
         } else if (charState.atopItem) {
-            const nextQuestion = `By the end of the last message, did ${charName} get out from being on top of ${charState.atopItemNameOnly} (the item they were laying/sitting/standing on)? Answer "yes" ONLY if ${charName} got out from ${charState.atopItemNameOnly} by exiting it, climbing out of it, or being taken out of it. If ${charName} is still on top of ${charState.atopItemNameOnly}, or if it's not clear if they got out of it, answer "no".`;
+            const nextQuestion = `By the end of the last story fragment, did ${charName} get out from being on top of ${charState.atopItemNameOnly} (the item they were laying/sitting/standing on)? Answer "yes" ONLY if ${charName} got out from ${charState.atopItemNameOnly} by exiting it, climbing out of it, or being taken out of it. If ${charName} is still on top of ${charState.atopItemNameOnly}, or if it's not clear if they got out of it, answer "no".`;
             console.log("Asking question, " + nextQuestion);
             const outsideQuestion = await interactionGenerator.next({
                 maxCharacters: 0, maxSafetyCharacters: 100,
@@ -1753,15 +1753,15 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                 stopAt: [],
                 grammar: yesNoGrammar,
                 contextInfo: engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last message said that "${charName} climbed out of ${charState.atopItemNameOnly}", the answer would be "yes", since by the end of the message, ${charName} is no longer on top of ${charState.atopItemNameOnly}.`,
+                    `Example: If the last story fragment reads that "${charName} climbed out of ${charState.atopItemNameOnly}", the answer would be "yes", since by the end of the message, ${charName} is no longer on top of ${charState.atopItemNameOnly}.`,
                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last message said that "${charName} is still on top of ${charState.atopItemNameOnly}", the answer would be "no", since by the end of the message, ${charName} is still on top of ${charState.atopItemNameOnly}.`,
+                    `Example: If the last story fragment reads that "${charName} is still on top of ${charState.atopItemNameOnly}", the answer would be "no", since by the end of the message, ${charName} is still on top of ${charState.atopItemNameOnly}.`,
                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last message said that "${charName} was taken out of ${charState.atopItemNameOnly} by ${getCharacterNameForExample([charName], 0)}", the answer would be "yes", since by the end of the message, ${charName} is no longer on top of ${charState.atopItemNameOnly}.`,
+                    `Example: If the last story fragment reads that "${charName} was taken out of ${charState.atopItemNameOnly} by ${getCharacterNameForExample([charName], 0)}", the answer would be "yes", since by the end of the message, ${charName} is no longer on top of ${charState.atopItemNameOnly}.`,
                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last message said that "${charName} exited ${charState.atopItemNameOnly}", the answer would be "yes", since by the end of the message, ${charName} is no longer on top of ${charState.atopItemNameOnly}.`,
+                    `Example: If the last story fragment reads that "${charName} exited ${charState.atopItemNameOnly}", the answer would be "yes", since by the end of the message, ${charName} is no longer on top of ${charState.atopItemNameOnly}.`,
                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last message said that "${charName} is on top of ${charState.atopItemNameOnly}", the answer would be "no", since by the end of the message, ${charName} is still on top of ${charState.atopItemNameOnly}.`,
+                    `Example: If the last story fragment reads that "${charName} is on top of ${charState.atopItemNameOnly}", the answer would be "no", since by the end of the message, ${charName} is still on top of ${charState.atopItemNameOnly}.`,
                 ),
             });
 
@@ -1781,7 +1781,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                 )
             }
         } else if (charState.beingCarriedByCharacter) {
-            const nextQuestion = `By the end of the last message, did ${charName} is no longer being carried by ${charState.beingCarriedByCharacter}? Answer "yes" ONLY if ${charName} got put down from being carried by ${charState.beingCarriedByCharacter} by being set down on the ground or on a surface, or being given to someone else. If ${charName} is still being carried by ${charState.beingCarriedByCharacter}, or if it's not clear if they got put down, answer "no".`;
+            const nextQuestion = `By the end of the last story fragment, did ${charName} is no longer being carried by ${charState.beingCarriedByCharacter}? Answer "yes" ONLY if ${charName} got put down from being carried by ${charState.beingCarriedByCharacter} by being set down on the ground or on a surface, or being given to someone else. If ${charName} is still being carried by ${charState.beingCarriedByCharacter}, or if it's not clear if they got put down, answer "no".`;
             console.log("Asking question, " + nextQuestion);
             const outsideQuestion = await interactionGenerator.next({
                 maxCharacters: 0, maxSafetyCharacters: 100,
@@ -1791,15 +1791,15 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                 stopAt: [],
                 grammar: yesNoGrammar,
                 contextInfo: engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last message said that "${charName} was put down by ${charState.beingCarriedByCharacter} on the ground", the answer would be "yes", since by the end of the message, ${charName} is no longer being carried by ${charState.beingCarriedByCharacter}.`,
+                    `Example: If the last story fragment reads that "${charName} was put down by ${charState.beingCarriedByCharacter} on the ground", the answer would be "yes", since by the end of the message, ${charName} is no longer being carried by ${charState.beingCarriedByCharacter}.`,
                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last message said that "${charName} is still being carried by ${charState.beingCarriedByCharacter}", the answer would be "no", since by the end of the message, ${charName} is still being carried by ${charState.beingCarriedByCharacter}.`,
+                    `Example: If the last story fragment reads that "${charName} is still being carried by ${charState.beingCarriedByCharacter}", the answer would be "no", since by the end of the message, ${charName} is still being carried by ${charState.beingCarriedByCharacter}.`,
                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last message said that "${charName} was given to ${getCharacterNameForExample([charName], 0)} by ${charState.beingCarriedByCharacter}", the answer would be "yes", since by the end of the message, ${charName} is no longer being carried by ${charState.beingCarriedByCharacter}.`,
+                    `Example: If the last story fragment reads that "${charName} was given to ${getCharacterNameForExample([charName], 0)} by ${charState.beingCarriedByCharacter}", the answer would be "yes", since by the end of the message, ${charName} is no longer being carried by ${charState.beingCarriedByCharacter}.`,
                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last message said that "${charName} was got down from ${charState.beingCarriedByCharacter} shoulder by themselves", the answer would be "yes", since by the end of the message, ${charName} is no longer being carried by ${charState.beingCarriedByCharacter}.`,
+                    `Example: If the last story fragment reads that "${charName} was got down from ${charState.beingCarriedByCharacter} shoulder by themselves", the answer would be "yes", since by the end of the message, ${charName} is no longer being carried by ${charState.beingCarriedByCharacter}.`,
                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last message said that "${charName} completed riding ${charState.beingCarriedByCharacter} and got down", the answer would be "yes", since by the end of the message, ${charName} is no longer being carried by ${charState.beingCarriedByCharacter}.`,
+                    `Example: If the last story fragment reads that "${charName} completed riding ${charState.beingCarriedByCharacter} and got down", the answer would be "yes", since by the end of the message, ${charName} is no longer being carried by ${charState.beingCarriedByCharacter}.`,
                 ),
             });
 
@@ -2279,7 +2279,7 @@ function moveItems(
             // given to a character directly or indirectly (eg. put in a bag that they are carrying or wearing)
             if (actualEndingPath[0] === "characters" && (actualEndingPath[2] === "carrying" || (actualEndingPath[2] === "wearing" && actualEndingPath.length > 4))) {
                 // A character picked up or received an item
-                const messageSoFar = `${thrownAddition}${actualEndingPath[1]}${thrown ? " caught and is" : " is"} now carrying ${utilItemCount(engine, charState.location, amountToTransfer, item)} which previously ${amountToTransfer === 1 ? "was" : "were"} ${locationPathToMessage(engine, characterName, charState.location, componentFromPath.path)}`;
+                const messageSoFar = `${thrownAddition}${actualEndingPath[1]}${thrown ? " caught and is" : " is"} now carrying ${utilItemCount(engine, charState.location, null, amountToTransfer, item)} which previously ${amountToTransfer === 1 ? "was" : "were"} ${locationPathToMessage(engine, characterName, charState.location, componentFromPath.path)}`;
                 if (actualEndingPath.length > 4) {
                     // eg. ["characters", "Alice", "carrying", 0, "containing", 1] we check above 4 to avoid the index of where the item is located in the carrying list
                     addedMessagesForStoryMaster.push(messageSoFar + `, and is now specifically ${locationPathToMessage(engine, characterName, charState.location, actualEndingPath, true)}`);
@@ -2290,18 +2290,18 @@ function moveItems(
                 // wearing directly on the body
             } else if (actualEndingPath[0] === "characters" && actualEndingPath[2] === "wearing" && actualEndingPath.length <= 4) {
                 // A character picked up or received an item
-                const messageSoFar = `${thrownAddition}${actualEndingPath[1]}${thrown ? " caught and is" : " is"} now wearing ${utilItemCount(engine, charState.location, amountToTransfer, item)} which previously ${amountToTransfer === 1 ? "was" : "were"} ${locationPathToMessage(engine, characterName, charState.location, componentFromPath.path)}`;
+                const messageSoFar = `${thrownAddition}${actualEndingPath[1]}${thrown ? " caught and is" : " is"} now wearing ${utilItemCount(engine, charState.location, null, amountToTransfer, item)} which previously ${amountToTransfer === 1 ? "was" : "were"} ${locationPathToMessage(engine, characterName, charState.location, componentFromPath.path)}`;
                 addedMessagesForStoryMaster.push(messageSoFar);
             } else if (actualEndingPath[0] === "slots" && actualEndingPath[2] === "items" && actualEndingPath.length <= 4) {
                 // an item was dropped on the ground
-                const messageSoFar = `${thrownAddition}${utilItemCount(engine, charState.location, amountToTransfer, item, true)}${thrown ? "" : amountToTransfer === 1 ? " is" : " are"} dropped on the ground at ${actualEndingPath[1]}, which previously was ${locationPathToMessage(engine, characterName, charState.location, componentFromPath.path)}`;
+                const messageSoFar = `${thrownAddition}${utilItemCount(engine, charState.location, null, amountToTransfer, item, true)}${thrown ? "" : amountToTransfer === 1 ? " is" : " are"} dropped on the ground at ${actualEndingPath[1]}, which previously was ${locationPathToMessage(engine, characterName, charState.location, componentFromPath.path)}`;
                 addedMessagesForStoryMaster.push(messageSoFar);
             } else {
                 if (thrown) {
-                    const messageSoFar = `${thrownAddition}${utilItemCount(engine, charState.location, amountToTransfer, item, true)} drops ${locationPathToMessage(engine, characterName, charState.location, actualEndingPath)}, which previously was ${locationPathToMessage(engine, characterName, charState.location, componentFromPath.path)}.`;
+                    const messageSoFar = `${thrownAddition}${utilItemCount(engine, charState.location, null, amountToTransfer, item, true)} drops ${locationPathToMessage(engine, characterName, charState.location, actualEndingPath)}, which previously was ${locationPathToMessage(engine, characterName, charState.location, componentFromPath.path)}.`;
                     addedMessagesForStoryMaster.push(messageSoFar);
                 } else {
-                    const messageSoFar = `${utilItemCount(engine, charState.location, amountToTransfer, item, true)}${amountToTransfer === 1 ? " is moved" : " are moved"} from ${locationPathToMessage(engine, characterName, charState.location, componentFromPath.path)} to be ${locationPathToMessage(engine, characterName, charState.location, actualEndingPath)}.`;
+                    const messageSoFar = `${utilItemCount(engine, charState.location, null, amountToTransfer, item, true)}${amountToTransfer === 1 ? " is moved" : " are moved"} from ${locationPathToMessage(engine, characterName, charState.location, componentFromPath.path)} to be ${locationPathToMessage(engine, characterName, charState.location, actualEndingPath)}.`;
                     addedMessagesForStoryMaster.push(messageSoFar);
                 }
             }
@@ -2730,6 +2730,23 @@ async function cleanDirtyItemTree(
     const expectedPathForFallenItems = path[0] === "slots" ? ["slots", path[1]] : ["slots", locationSlot];
     const resolvedFallenItems = resolvePath(engine, location, expectedPathForFallenItems);
 
+    /**
+     * 
+     * @param {DEItem} item 
+     * @param {number} amount
+     */
+    const expellItemToFallen = (item, amount) => {
+        // @ts-ignore
+        const alreadyFound = resolvedFallenItems.resolved.items.find((fallenItem) => deepEqualItem(fallenItem, item));
+        if (alreadyFound) {
+            alreadyFound.amount = (alreadyFound.amount || 1) + amount;
+        } else {
+            const copied = deepCopyItem(item);
+            copied.amount = amount;
+            resolvedFallenItems.resolved.items.push(copied);
+        }
+    }
+
     // this is specific to items on items only, I know it is going to be verbose but more readable this way, we can optimize later if needed
     if (path.length > 3) {
         for (const item of list) {
@@ -2740,28 +2757,23 @@ async function cleanDirtyItemTree(
                     const amountExpelled = (expelledFromOnTopItem.amount || 1) * (item.amount || 1);
                     expelledFromOnTopItem.amount = 0;
 
-                    const copied = deepCopyItem(expelledFromOnTopItem.item);
-                    copied.amount = amountExpelled;
-                    resolvedFallenItems.resolved.items.push(copied);
+                    expellItemToFallen(expelledFromOnTopItem.item, amountExpelled);
 
-                    fallsDownList.push(utilItemCount(engine, location, amountExpelled, expelledFromOnTopItem.item.name));
+                    fallsDownList.push(utilItemCount(engine, location, expelledFromOnTopItem.item.owner, amountExpelled, expelledFromOnTopItem.item.name));
                 }
                 for (const expelledFromInsideItem of excess.expelledContainedItems) {
                     const amountExpelled = (expelledFromInsideItem.amount || 1) * (item.amount || 1);
                     expelledFromInsideItem.amount = 0;
-                    const copied = deepCopyItem(expelledFromInsideItem.item);
-                    copied.amount = amountExpelled;
-                    resolvedFallenItems.resolved.items.push(copied);
 
-                    fallsDownList.push(utilItemCount(engine, location, amountExpelled, expelledFromInsideItem.item.name));
+                    expellItemToFallen(expelledFromInsideItem.item, amountExpelled);
+
+                    fallsDownList.push(utilItemCount(engine, location, expelledFromInsideItem.item.owner, amountExpelled, expelledFromInsideItem.item.name));
                 }
                 for (const expelledOnTopCharacter of excess.expelledOntopCharacters) {
                     item.ontopCharacters = item.ontopCharacters.filter((v) => v !== expelledOnTopCharacter);
                     const charState = engine.deObject.stateFor[expelledOnTopCharacter];
                     charState.atopItem = null;
                     charState.atopItemNameOnly = null;
-                    const copied = expelledOnTopCharacter;
-                    resolvedFallenItems.resolved.items.push(copied);
 
                     if (path[0] === "characters") {
                         const characterCarryingOrWearingTheItem = path[1];
@@ -2781,8 +2793,6 @@ async function cleanDirtyItemTree(
                     const charState = engine.deObject.stateFor[expelledInsideCharacter];
                     charState.insideItem = null;
                     charState.insideItemNameOnly = null;
-                    const copied = expelledInsideCharacter;
-                    resolvedFallenItems.resolved.items.push(copied);
 
                     if (path[0] === "characters") {
                         const characterCarryingOrWearingTheItem = path[1];
@@ -2814,13 +2824,12 @@ async function cleanDirtyItemTree(
 
                     const expelledItemVolume = getItemVolume(engine, expelledFromOnTopItem.item);
 
-                    const copied = deepCopyItem(expelledFromOnTopItem.item);
-                    copied.amount = amountExpelled;
-                    resolvedFallenItems.resolved.items.push(copied);
+                    expellItemToFallen(expelledFromOnTopItem.item, amountExpelled);
+
                     if (expelledItemVolume.singularVolume > item.maxVolumeOnTopLiters) {
-                        addedMessagesForStoryMaster.push(`${utilItemCount(engine, location, amountExpelled, expelledFromOnTopItem.item.name, true)} ${amountExpelled === 1 ? "is" : "are"} far too large to be on top of ${item.name} and ${amountExpelled === 1 ? "falls" : "fall"} off onto the ground in ${expectedPathForFallenItems[1]}`);
+                        addedMessagesForStoryMaster.push(`${utilItemCount(engine, location, expelledFromOnTopItem.item.owner, amountExpelled, expelledFromOnTopItem.item.name, true)} ${amountExpelled === 1 ? "is" : "are"} far too large to be on top of ${item.name} and ${amountExpelled === 1 ? "falls" : "fall"} off onto the ground in ${expectedPathForFallenItems[1]}`);
                     } else {
-                        addedMessagesForStoryMaster.push(`${utilItemCount(engine, location, amountExpelled, expelledFromOnTopItem.item.name, true)} ${amountExpelled === 1 ? "does" : "do"} not fit on top of ${item.name} and ${amountExpelled === 1 ? "falls" : "fall"} off onto the ground in ${expectedPathForFallenItems[1]}`);
+                        addedMessagesForStoryMaster.push(`${utilItemCount(engine, location, expelledFromOnTopItem.item.owner, amountExpelled, expelledFromOnTopItem.item.name, true)} ${amountExpelled === 1 ? "does" : "do"} not fit on top of ${item.name} and ${amountExpelled === 1 ? "falls" : "fall"} off onto the ground in ${expectedPathForFallenItems[1]}`);
                     }
                 }
                 for (const expelledFromInsideItem of excess.expelledContainedItems) {
@@ -2830,13 +2839,12 @@ async function cleanDirtyItemTree(
 
                     const expelledItemVolume = getItemVolume(engine, expelledFromInsideItem.item);
 
-                    const copied = deepCopyItem(expelledFromInsideItem.item);
-                    copied.amount = amountExpelled;
-                    resolvedFallenItems.resolved.items.push(copied);
+                    expellItemToFallen(expelledFromInsideItem.item, amountExpelled);
+
                     if (item.containerProperties && expelledItemVolume.singularVolume > item.containerProperties.capacityLiters) {
-                        addedMessagesForStoryMaster.push(`${utilItemCount(engine, location, amountExpelled, expelledFromInsideItem.item.name, true)} ${amountExpelled === 1 ? "is" : "are"} far too large to fit inside ${item.name} and ${amountExpelled === 1 ? "falls" : "fall"} out onto the ground in ${expectedPathForFallenItems[1]}`);
+                        addedMessagesForStoryMaster.push(`${utilItemCount(engine, location, expelledFromInsideItem.item.owner, amountExpelled, expelledFromInsideItem.item.name, true)} ${amountExpelled === 1 ? "is" : "are"} far too large to fit inside ${item.name} and ${amountExpelled === 1 ? "falls" : "fall"} out onto the ground in ${expectedPathForFallenItems[1]}`);
                     } else {
-                        addedMessagesForStoryMaster.push(`${utilItemCount(engine, location, amountExpelled, expelledFromInsideItem.item.name, true)} ${amountExpelled === 1 ? "does" : "do"} not fit inside ${item.name} and ${amountExpelled === 1 ? "falls" : "fall"} out onto the ground in ${expectedPathForFallenItems[1]}`);
+                        addedMessagesForStoryMaster.push(`${utilItemCount(engine, location, expelledFromInsideItem.item.owner, amountExpelled, expelledFromInsideItem.item.name, true)} ${amountExpelled === 1 ? "does" : "do"} not fit inside ${item.name} and ${amountExpelled === 1 ? "falls" : "fall"} out onto the ground in ${expectedPathForFallenItems[1]}`);
                     }
                 }
                 for (const expelledOnTopCharacter of excess.expelledOntopCharacters) {
@@ -2947,12 +2955,10 @@ async function cleanDirtyItemTree(
                     carriedItem.amount = amountThatCanBeCarried;
 
                     if (amountThatWillFall > 0) {
-                        const copied = deepCopyItem(carriedItem);
-                        copied.amount = amountThatWillFall;
-                        resolvedFallenItems.resolved.items.push(copied);
+                        expellItemToFallen(carriedItem, amountThatWillFall);
 
                         const couldCarryEvenOneInOptimalConditions = carriedItemWeight.singularWeight <= carryingCapacity.carryingCapacityKg;
-                        let storyMasterMessageSoFar = `${utilItemCount(engine, charState.location, amountThatWillFall, carriedItem.name, true)} ${amountThatWillFall === 1 ? "is" : "are"} too heavy to be carried by ${path[1]}${!couldCarryEvenOneInOptimalConditions ? "" : " who is already carrying too much weight,"} and ${amountThatWillFall === 1 ? "it falls" : "they fall"} on the ground at the ${expectedPathForFallenItems[1]}.`;
+                        let storyMasterMessageSoFar = `${utilItemCount(engine, charState.location, carriedItem.owner, amountThatWillFall, carriedItem.name, true)} ${amountThatWillFall === 1 ? "is" : "are"} too heavy to be carried by ${path[1]}${!couldCarryEvenOneInOptimalConditions ? "" : " who is already carrying too much weight,"} and ${amountThatWillFall === 1 ? "it falls" : "they fall"} on the ground at the ${expectedPathForFallenItems[1]}.`;
                         if (!couldCarryEvenOneInOptimalConditions) {
                             let exceedCapacityBy = carriedItemWeight.singularWeight / carryingCapacity.carryingCapacityKg;
                             if (exceedCapacityBy > 5) {
@@ -3010,12 +3016,10 @@ async function cleanDirtyItemTree(
                     carriedItem.amount = amountThatCanBeCarried;
 
                     if (amountThatWillFall > 0) {
-                        const copied = deepCopyItem(carriedItem);
-                        copied.amount = amountThatWillFall;
-                        resolvedFallenItems.resolved.items.push(copied);
+                        expellItemToFallen(carriedItem, amountThatWillFall);
 
                         const couldCarryEvenOneInOptimalConditions = carriedItemVolume.singularVolume <= carryingCapacity.carryingCapacityLiters;
-                        let storyMasterMessageSoFar = `${utilItemCount(engine, charState.location, amountThatWillFall, carriedItem.name, true)} ${amountThatWillFall === 1 ? "is" : "are"} too large to be carried by ${path[1]}${!couldCarryEvenOneInOptimalConditions ? "" : " who is already carrying too many items,"} and ${amountThatWillFall === 1 ? "it falls" : "they fall"} on the ground at the ${expectedPathForFallenItems[1]}.`;
+                        let storyMasterMessageSoFar = `${utilItemCount(engine, charState.location, carriedItem.owner, amountThatWillFall, carriedItem.name, true)} ${amountThatWillFall === 1 ? "is" : "are"} too large to be carried by ${path[1]}${!couldCarryEvenOneInOptimalConditions ? "" : " who is already carrying too many items,"} and ${amountThatWillFall === 1 ? "it falls" : "they fall"} on the ground at the ${expectedPathForFallenItems[1]}.`;
 
                         // no point in saying they fell down twice
                         if (!couldCarryEvenOneInOptimalConditions && !userHasFallen) {
@@ -3107,23 +3111,23 @@ async function cleanDirtyItemTree(
                         copy,
                         "this item got worn by a large character and that caused it to expand and break",
                     );
+                    // TODO merge in case somehow by sheer luck the copy got updated with a similar name and properties as another item already on the ground
                     wornItem.amount = 0;
-                    addedMessagesForStoryMaster.push(`${utilItemCount(engine, charState.location, wornItem.amount || 1, wornItem.name, true, true)} ${wornItem.amount === 1 ? "is" : "are"} too tight to be worn by ${path[1]} and ${wornItem.amount === 1 ? "breaks" : "break"}, so ${wornItem.amount === 1 ? "it" : "they"} ${wornItem.amount === 1 ? "falls" : "fall"} on the ground at the ${expectedPathForFallenItems[1]}.`);
+                    addedMessagesForStoryMaster.push(`${utilItemCount(engine, charState.location, wornItem.owner, wornItem.amount || 1, wornItem.name, true, true)} ${wornItem.amount === 1 ? "is" : "are"} too tight to be worn by ${path[1]} and ${wornItem.amount === 1 ? "breaks" : "break"}, so ${wornItem.amount === 1 ? "it" : "they"} ${wornItem.amount === 1 ? "falls" : "fall"} on the ground at the ${expectedPathForFallenItems[1]}.`);
                 } else if (wearableFitment.shouldFallDown) {
-                    const copy = deepCopyItem(wornItem);
-                    resolvedFallenItems.resolved.items.push(copy);
+                    expellItemToFallen(wornItem, wornItem.amount || 1);
                     wornItem.amount = 0;
                     if (wornItem.wearableProperties) {
-                        addedMessagesForStoryMaster.push(`${utilItemCount(engine, charState.location, wornItem.amount || 1, wornItem.name, true, true)} ${wornItem.amount === 1 ? "is" : "are"} too large to fit on ${path[1]} and ${wornItem.amount === 1 ? "falls" : "fall"} down from it onto the ground at the ${expectedPathForFallenItems[1]}.`);
+                        addedMessagesForStoryMaster.push(`${utilItemCount(engine, charState.location, wornItem.owner, wornItem.amount || 1, wornItem.name, true, true)} ${wornItem.amount === 1 ? "is" : "are"} too large to fit on ${path[1]} and ${wornItem.amount === 1 ? "falls" : "fall"} down from it onto the ground at the ${expectedPathForFallenItems[1]}.`);
                     } else {
-                        addedMessagesForStoryMaster.push(`${utilItemCount(engine, charState.location, wornItem.amount || 1, wornItem.name, true, true)} ${wornItem.amount === 1 ? "is" : "are"} not possible to wear by ${path[1]} and ${wornItem.amount === 1 ? "falls" : "fall"} down from it onto the ground at the ${expectedPathForFallenItems[1]}.`);
+                        addedMessagesForStoryMaster.push(`${utilItemCount(engine, charState.location, wornItem.owner, wornItem.amount || 1, wornItem.name, true, true)} ${wornItem.amount === 1 ? "is" : "are"} not possible to wear by ${path[1]} and ${wornItem.amount === 1 ? "falls" : "fall"} down from it onto the ground at the ${expectedPathForFallenItems[1]}.`);
                     }
                 } else {
                     totalWornWeight += wornItemWeight.completeWeight;
                     // @ts-ignore
                     if (wornItem._just_placed && cycle === "first") {
                         // only on the first cycle because this will keep appearing over and over otherwise
-                        addedMessagesForStoryMaster.push(`${utilItemCount(engine, charState.location, wornItem.amount || 1, wornItem.name, true, true)} is now worn by ${path[1]}, ${wornItem.amount === 1 ? "it" : "they"} ${wearableFitment.fitment}.`);
+                        addedMessagesForStoryMaster.push(`${utilItemCount(engine, charState.location, wornItem.owner, wornItem.amount || 1, wornItem.name, true, true)} is now worn by ${path[1]}, ${wornItem.amount === 1 ? "it" : "they"} ${wearableFitment.fitment}.`);
                     }
                 }
 

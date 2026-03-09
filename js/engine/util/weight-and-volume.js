@@ -560,12 +560,13 @@ const irregularPlurals = {
 /**
  * @param {DEngine} engine
  * @param {string} location
+ * @param {string|null} owner
  * @param {number} amount 
  * @param {string} item
  * @param {boolean} [capitalize] whether to capitalize the first letter of the item, this is used for example when the item is at the beginning of a sentence, so we want to make sure the message looks good
  * @param {boolean} [forceThe] whether to force "the" in front of the item, this is used for example when we want to refer to a specific item that we know is present, so we want to make sure the message reflects that, even if there is only one of that item, for example "the apple" instead of just "an apple"
  */
-export function utilItemCount(engine, location, amount, item, capitalize = false, forceThe = false) {
+export function utilItemCount(engine, location, owner, amount, item, capitalize = false, forceThe = false) {
     if (!engine.deObject) {
         throw new Error("DEngine not initialized");
     }
@@ -574,8 +575,14 @@ export function utilItemCount(engine, location, amount, item, capitalize = false
     // List of common irregular plurals
 
     let toReturn = "";
-    if (amount === 1 && itemTrimmedLower.startsWith("the ")) {
+    if (amount === 1 && itemTrimmedLower.startsWith("the ") && !owner) {
         toReturn = item;
+    } else if (amount === 1 && owner) {
+        if (forceThe) {
+            toReturn = `the ${item} of ${owner}`;
+        } else {
+            toReturn = `${owner}'s ${item}`;
+        }
     } else if (amount === 1) {
         const isOneOfAKind = checkItemIsOneOfAKindAtLocation(engine, location, item);
         if (forceThe || isOneOfAKind) {
@@ -588,19 +595,53 @@ export function utilItemCount(engine, location, amount, item, capitalize = false
     } else {
         // Try to pluralize using irregulars first
         const lastWord = itemTrimmedLower.split(" ").slice(-1)[0];
-        // @ts-ignore
-        if (irregularPlurals[lastWord]) {
-            // Replace only the last word with its irregular plural
-            const words = item.split(" ");
+        if (!owner) {
             // @ts-ignore
-            words[words.length - 1] = irregularPlurals[lastWord];
-            toReturn = `${forceThe ? "the " : ""}${amount} ${words.join(" ")}`;
-        } else if (lastWord.endsWith("s") || lastWord.endsWith("x") || lastWord.endsWith("z") || lastWord.endsWith("ch") || lastWord.endsWith("sh")) {
-            toReturn = `${forceThe ? "the " : ""}${amount} ${item}es`;
-        } else if (lastWord.endsWith("y") && !["a", "e", "i", "o", "u"].includes(lastWord.slice(-2, -1))) {
-            toReturn = `${forceThe ? "the " : ""}${amount} ${item.slice(0, -1)}ies`;
+            if (irregularPlurals[lastWord]) {
+                // Replace only the last word with its irregular plural
+                const words = item.split(" ");
+                // @ts-ignore
+                words[words.length - 1] = irregularPlurals[lastWord];
+                toReturn = `${forceThe ? "the " : ""}${amount} ${words.join(" ")}`;
+            } else if (lastWord.endsWith("s") || lastWord.endsWith("x") || lastWord.endsWith("z") || lastWord.endsWith("ch") || lastWord.endsWith("sh")) {
+                toReturn = `${forceThe ? "the " : ""}${amount} ${item}es`;
+            } else if (lastWord.endsWith("y") && !["a", "e", "i", "o", "u"].includes(lastWord.slice(-2, -1))) {
+                toReturn = `${forceThe ? "the " : ""}${amount} ${item.slice(0, -1)}ies`;
+            } else {
+                toReturn = `${forceThe ? "the " : ""}${amount} ${item}s`;
+            }
         } else {
-            toReturn = `${forceThe ? "the " : ""}${amount} ${item}s`;
+            if (forceThe) {
+                // @ts-ignore
+                if (irregularPlurals[lastWord]) {
+                    // Replace only the last word with its irregular plural
+                    const words = item.split(" ");
+                    // @ts-ignore
+                    words[words.length - 1] = irregularPlurals[lastWord];
+                    toReturn = `the ${amount} ${words.join(" ")} of ${owner}`;
+                } else if (lastWord.endsWith("s") || lastWord.endsWith("x") || lastWord.endsWith("z") || lastWord.endsWith("ch") || lastWord.endsWith("sh")) {
+                    toReturn = `the ${amount} ${item}es of ${owner}`;
+                } else if (lastWord.endsWith("y") && !["a", "e", "i", "o", "u"].includes(lastWord.slice(-2, -1))) {
+                    toReturn = `the ${amount} ${item.slice(0, -1)}ies of ${owner}`;
+                } else {
+                    toReturn = `the ${amount} ${item}s of ${owner}`;
+                }
+            } else {
+                // @ts-ignore
+                if (irregularPlurals[lastWord]) {
+                    // Replace only the last word with its irregular plural
+                    const words = item.split(" ");
+                    // @ts-ignore
+                    words[words.length - 1] = irregularPlurals[lastWord];
+                    toReturn = `${owner}'s ${amount} ${words.join(" ")}`;
+                } else if (lastWord.endsWith("s") || lastWord.endsWith("x") || lastWord.endsWith("z") || lastWord.endsWith("ch") || lastWord.endsWith("sh")) {
+                    toReturn = `${owner}'s ${amount} ${item}es`;
+                } else if (lastWord.endsWith("y") && !["a", "e", "i", "o", "u"].includes(lastWord.slice(-2, -1))) {
+                    toReturn = `${owner}'s ${amount} ${item.slice(0, -1)}ies`;
+                } else {
+                    toReturn = `${owner}'s ${amount} ${item}s`;
+                }
+            }
         }
     }
     if (capitalize) {

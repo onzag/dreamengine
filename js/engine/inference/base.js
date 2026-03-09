@@ -71,9 +71,9 @@ export class BaseInferenceAdapter {
      * @param {string} system
      * @param {string|null} contextInfoBefore additional context information to provide to the agent
      * @param {(AsyncGenerator<{name: string, message: string, id: string, conversationId: string | null, debug: boolean, rejected: boolean}, void, boolean> | Array<{name: string, message: string}>)} getHistoryForCharacter
-     * @param {"LAST_CYCLE" | "LAST_MESSAGE" | "LAST_CYCLE_EXPANDED" | "LAST_CYCLE_EXPANDED_TWICE" | "LAST_CYCLE_EXPANDED_EXCLUDE_CHAR" | "ALL"} msgLimit what to limit the history to
+     * @param {"LAST_CYCLE" | "LAST_STORY_FRAGMENT" | "LAST_CYCLE_EXPANDED" | "LAST_CYCLE_EXPANDED_TWICE" | "LAST_CYCLE_EXPANDED_EXCLUDE_CHAR" | "ALL"} msgLimit what to limit the history to
      * @param {string|null} contextInfoAfter additional context information to provide to the agent
-     * @param {boolean} [remarkLastMessageForAnalysis] whether to mark the last message with an special token so the agent can analyze it
+     * @param {boolean} [remarkLastStoryFragmentForAnalysis] whether to mark the last message with an special token so the agent can analyze it
      * @returns {QuestionAgentGeneratorResponse}
      */
     async *runQuestioningCustomAgentOn(
@@ -83,7 +83,7 @@ export class BaseInferenceAdapter {
         getHistoryForCharacter,
         msgLimit,
         contextInfoAfter,
-        remarkLastMessageForAnalysis,
+        remarkLastStoryFragmentForAnalysis,
     ) {
         throw new Error("Method 'runQuestioningCustomAgentOn()' must be implemented.");
     }

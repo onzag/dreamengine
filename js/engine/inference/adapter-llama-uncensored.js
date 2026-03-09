@@ -459,9 +459,9 @@ ${states.join(", ")}
      * @param {string} system
      * @param {string|null} contextInfoBefore additional context information to provide to the agent
      * @param {AsyncGenerator<{name: string, message: string, id: string, conversationId: string | null, debug: boolean, rejected: boolean}, void, boolean>} getHistoryForCharacter
-     * @param {"LAST_CYCLE" | "LAST_MESSAGE" | "LAST_CYCLE_EXPANDED" | "LAST_CYCLE_EXPANDED_EXCLUDE_CHAR" | "LAST_CYCLE_EXPANDED_TWICE" | "ALL"} msgLimit what to limit the history to
+     * @param {"LAST_CYCLE" | "LAST_STORY_FRAGMENT" | "LAST_CYCLE_EXPANDED" | "LAST_CYCLE_EXPANDED_EXCLUDE_CHAR" | "LAST_CYCLE_EXPANDED_TWICE" | "ALL"} msgLimit what to limit the history to
      * @param {string|null} contextInfoAfter additional context information to provide to the agent
-     * @param {boolean} [remarkLastMessageForAnalysis] whether to mark the last message with an special token so the agent can analyze it
+     * @param {boolean} [remarkLastStoryFragmentForAnalysis] whether to mark the last message with an special token so the agent can analyze it
      * @returns {import('./base.js').QuestionAgentGeneratorResponse}
      */
     async *runQuestioningCustomAgentOn(
@@ -471,7 +471,7 @@ ${states.join(", ")}
         getHistoryForCharacter,
         msgLimit,
         contextInfoAfter,
-        remarkLastMessageForAnalysis
+        remarkLastStoryFragmentForAnalysis
     ) {
         await this.ensureInitialized();
         
@@ -508,7 +508,7 @@ ${states.join(", ")}
                         tokensExhaustedApprox += await this.countTokens(messageParsed) + 10; // some wiggle room
                         shouldStopAddingMessages = tokensExhaustedApprox >= contextWindowSize;
                         shouldAddMessage = !shouldStopAddingMessages;
-                    } else if (msgLimit === "LAST_MESSAGE") {
+                    } else if (msgLimit === "LAST_STORY_FRAGMENT") {
                         shouldAddMessage = generator.value.name === character.name;
                         shouldStopAddingMessages = shouldAddMessage;
                     } else if (msgLimit === "LAST_CYCLE") {
@@ -553,20 +553,20 @@ ${states.join(", ")}
         }
 
         const rid = cheapRID();
-        if (!remarkLastMessageForAnalysis) {
+        if (!remarkLastStoryFragmentForAnalysis) {
             const messagesFormatted = messagesToAdd.join("\n\n");
 
             if (this.options.mode === "xml") {
                 const payload = {
                     system: system,
-                    userTrail: (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "") + "<messages>\n" + messagesFormatted + "\n</messages>" + (contextInfoAfter ? "\n" + contextInfoAfter : ""),
+                    userTrail: (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "") + "<story>\n" + messagesFormatted + "\n</story>" + (contextInfoAfter ? "\n" + contextInfoAfter : ""),
                 };
 
                 this.socket.send(JSON.stringify({ action: "analyze-prepare", payload, rid }));
             } else {
                 const payload = {
                     system: system,
-                    userTrail: (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "") + "# Messages:\n" + messagesFormatted + "\n\n" + (contextInfoAfter ? "\n" + contextInfoAfter : ""),
+                    userTrail: (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "") + "# Story:\n" + messagesFormatted + "\n\n" + (contextInfoAfter ? "\n" + contextInfoAfter : ""),
                 };
 
                 this.socket.send(JSON.stringify({ action: "analyze-prepare", payload, rid }));
@@ -580,14 +580,14 @@ ${states.join(", ")}
             if (this.options.mode === "xml") {
                 const payload = {
                     system: system,
-                    userTrail: (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "") + "<previousMessages>\n" + restMessagesFormatted + "\n</previousMessages><analyze><lastMessage>" + lastMessage + "</lastMessage></analyze>" + (contextInfoAfter ? "\n" + contextInfoAfter : ""),
+                    userTrail: (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "") + "<previousStory>\n" + restMessagesFormatted + "\n</previousStory><analyze><lastStoryFragment>" + lastMessage + "</lastStoryFragment></analyze>" + (contextInfoAfter ? "\n" + contextInfoAfter : ""),
                 };
 
                 this.socket.send(JSON.stringify({ action: "analyze-prepare", payload, rid }));
             } else {
                 const payload = {
                     system: system,
-                    userTrail: (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "") + "# Previous Messages:\n" + restMessagesFormatted + "\n\n# Last Message to Analyze:\n" + lastMessage + (contextInfoAfter ? "\n" + contextInfoAfter : ""),
+                    userTrail: (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "") + "# Previous Story:\n" + restMessagesFormatted + "\n\n# Last Story Fragment to Analyze:\n" + lastMessage + (contextInfoAfter ? "\n" + contextInfoAfter : ""),
                 };
 
                 this.socket.send(JSON.stringify({ action: "analyze-prepare", payload, rid }));

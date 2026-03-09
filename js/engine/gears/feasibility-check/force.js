@@ -63,20 +63,20 @@ export default async function testMessageFeasibilityForce(engine, character) {
         }
     ]);
 
-    // 1. Gather all the characters that have been succesfully forced by the user in the last message
-    const systemMessage = `You are an assistant and story analyst that determines if the last message from ${character.name} contains any characters that have been successfully forced to do something by ${character.name}.`
+    // 1. Gather all the characters that have been succesfully forced by the user in the last story fragment
+    const systemMessage = `You are an assistant and story analyst that determines if the last story fragment contains any characters that have been successfully forced to do something by ${character.name}.`
     const systemPrompt = engine.inferenceAdapter.buildSystemPromptForQuestioningAgent(systemMessage, [
         "By successfully forced we mean that it is explicitly stated that the character complied with the forceful action or command given by " + character.name + ".",
         "If the character resisted or the outcome is unknown, it does not count as successfully forced.",
         "An attempt to force does not count, only successful compliance.",
-        "Consider only the last message from " + character.name + ".",
+        "Consider only the last story fragment",
     ], null);
     const generator = engine.inferenceAdapter.runQuestioningCustomAgentOn(character, systemPrompt, contextInfoSurroundingCharacters.value, engine.getHistoryForCharacter(character, {}), "LAST_CYCLE_EXPANDED", null);
     const ready = await generator.next();
     if (ready.value !== "ready") {
         throw new Error("Questioning agent could not be started properly.");
     }
-    const nextQuestion = "Considering the list at " + contextInfoSurroundingCharacters.availableCharactersAt + ". Which characters, if any, have been successfully forced to do something by " + character.name + " in the last message by such character? Provide a comma separated list of names only, or say 'none' if no characters were successfully forced.";
+    const nextQuestion = "Considering the list at " + contextInfoSurroundingCharacters.availableCharactersAt + ". Which characters, if any, have been successfully forced to do something in the last story fragment? Provide a comma separated list of names only, or say 'none' if no characters were successfully forced.";
     console.log("Asking question, " + nextQuestion);
     const answerToQuestion = await generator.next({
         maxParagraphs: 1,
@@ -129,7 +129,7 @@ export default async function testMessageFeasibilityForce(engine, character) {
                 continue;
             }
 
-            const nextQuestion = "In the last message from " + character.name + ", what specific action or actions has " + forcedCharacterName + " been successfully forced to do by " + character.name + "? Provide a brief description of the action or actions, if no action was forced, say 'they have not been forced to do anything'.";
+            const nextQuestion = "In the last story fragment, what specific action or actions has " + forcedCharacterName + " been successfully forced to do? Provide a brief description of the action or actions, if no action was forced, say 'they have not been forced to do anything'.";
             console.log("Asking question, " + nextQuestion);
 
             const answerAboutWhat = await generator.next({
@@ -235,13 +235,13 @@ export default async function testMessageFeasibilityForce(engine, character) {
 
             // we will build a custom system prompt for each character because even when we can add things in the user space
             // we really want to make sure the LLM focuses on the forced character's capabilities
-            const feasibilitySystemMessage = `You are an assistant and story analyst that determines if it is feasible for ${forcedCharacterName} to be forced to do the action described in the last message from ${character.name} in an interactive story.`;
+            const feasibilitySystemMessage = `You are an assistant and story analyst that determines if it is feasible for ${forcedCharacterName} to be forced to do the action described in the last story fragment from ${character.name} in an interactive story.`;
             const feasibilitySystemPrompt = engine.inferenceAdapter.buildSystemPromptForQuestioningAgent(feasibilitySystemMessage, [
                 "Consider the physical, mental, and situational capabilities of " + forcedCharacterName + " based on their character description and current state.",
                 "Consider the general description of both " + character.name + " and " + forcedCharacterName + " to understand their relationship and typical behaviour.",
                 "If it is unreasonable for " + forcedCharacterName + " to comply to the forced action due to their behaviour and it's not aligned with their character, answer 'no'.",
-                "If the action described in the last message from " + character.name + " is beyond the capabilities of " + forcedCharacterName + ", answer 'no'.",
-                "If " + forcedCharacterName + " is being physically forced but " + forcedCharacterName + " is much larger/stronger so it cannot be physically coerced, answer 'no'.",
+                "If the action described in the last story fragment is beyond the capabilities of " + forcedCharacterName + ", answer 'no'.",
+                "If " + forcedCharacterName + " is being physically forced but " + forcedCharacterName + " is much larger/stronger than the force attempting to coerce them, answer 'no'.",
                 "Only if the action is within the capabilities of " + forcedCharacterName + " and is reasonable for them to comply, answer 'yes'.",
                 "If the answer is no, elaborate briefly on why it is not feasible.",
             ], null);
@@ -251,7 +251,7 @@ export default async function testMessageFeasibilityForce(engine, character) {
             if (feasibilityReady.value !== "ready") {
                 throw new Error("Questioning agent could not be started properly for feasibility check.");
             }
-            const nextQuestion = "Considering the character descriptions and current states of both characters, is it feasible for " + forcedCharacterName + " to be successfully been forced to " + forcedAction + " by " + character.name + " in the last message from such character? Answer 'yes' if it is feasible, 'no' and elaborate if it is not feasible.";
+            const nextQuestion = "Considering the character descriptions and current states of both characters, is it feasible for " + forcedCharacterName + " to be successfully been forced to " + forcedAction + " by " + character.name + " in the last story fragment from such character? Answer 'yes' if it is feasible, 'no' and elaborate if it is not feasible.";
 
             console.log("Asking question, " + nextQuestion);
 

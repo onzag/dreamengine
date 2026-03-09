@@ -289,7 +289,7 @@ export default async function testWorldRulesOn(engine, character) {
         return await rule.rule.execute(engine.deObject, characterObj);
     }))).filter((v) => v !== null && v !== undefined && v !== "");
 
-    const generator = engine.inferenceAdapter.runQuestioningCustomAgentOn(character, systemPrompt, null, engine.getHistoryForCharacter(character, {}), "LAST_MESSAGE", null, true);
+    const generator = engine.inferenceAdapter.runQuestioningCustomAgentOn(character, systemPrompt, null, engine.getHistoryForCharacter(character, {}), "LAST_STORY_FRAGMENT", null, true);
     const ready = await generator.next(); // start the generator
     if (ready.done) {
         throw new Error("Inference adapter questioning generator ended unexpectedly.");
@@ -408,7 +408,7 @@ export default async function testWorldRulesOn(engine, character) {
         character,
         systemPromptSpawnItems,
         availableItemsContextInfo.value,
-        engine.getHistoryForCharacter(character, {}), "LAST_MESSAGE",
+        engine.getHistoryForCharacter(character, {}), "LAST_STORY_FRAGMENT",
         null,
     );
     const readyItemsInteraction = await itemsInteractionGenerator.next(); // start the generator
