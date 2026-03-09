@@ -14,7 +14,8 @@ const world = importWorldFromJSON(jsonWorld);
 
 const engine = new DEngine();
 const inferenceAdapter = new InferenceAdapterLlamaUncensored(engine, {
-    host: "wss://95.133.252.166:8765",
+    // host: "wss://95.133.252.166:8765",
+    host: "ws://localhost:8765",
     // used for development
     secret: "dev-secret-12345678900abcdef",
 });
@@ -89,6 +90,53 @@ engine.deObject.stateFor["Onza"].wearing = [
     clothes,
 ];
 
+/**
+ * @type {DEItem}
+ */
+const massiveDumbell = {
+    amount: 1,
+    description: "A massive dumbell meant for testing the limits of carrying capacity of a character. It is very heavy and bulky, and not meant to be easily carried.",
+    isConsumable: false,
+    isSeeThrough: false,
+    name: "Massive Dumbell",
+    consumableProperties: null,
+    containing: [],
+    ontop: [],
+    containingCharacters: [],
+    maxVolumeOnTopLiters: 0,
+    maxWeightOnTopKg: 0,
+    ontopCharacters: [],
+    wearableProperties: null,
+    owner: "Onza",
+    properties: {},
+    volumeLiters: 100,
+    weightKg: 150,
+    communicator: null,
+    madeOf: [],
+}
+
+const sticks = {
+    amount: 100,
+    description: "A sturdy stick that can be used for various purposes.",
+    isConsumable: false,
+    isSeeThrough: false,
+    name: "Stick",
+    consumableProperties: null,
+    containing: [],
+    ontop: [],
+    containingCharacters: [],
+    maxVolumeOnTopLiters: 0,
+    maxWeightOnTopKg: 0,
+    ontopCharacters: [],
+    wearableProperties: null,
+    owner: "Onza",
+    properties: {},
+    volumeLiters: 10,
+    weightKg: 1.5,
+    communicator: null,
+    madeOf: [],
+}
+
 engine.setScriptImportResolver(nodejsImportResolver);
 engine.setCharacterImportResolver(nodejsCharacterImportResolver);
 
@@ -101,6 +149,10 @@ try {
     console.error("Error initializing world:", err);
     process.exit(1);
 }
+
+// Test that gives Dema a massive dumbell that exceeds the carrying capacity of the character, to see how the engine handles it. Dema should not be able to carry it, and the engine should handle this gracefully without crashing or getting into an invalid state.
+// @ts-expect-error
+engine.deObject.stateFor["Dema"].carrying.push(sticks);
 
 const ui = new TextOnlyUI(engine, "Onza");
 ui.run();

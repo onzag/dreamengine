@@ -2952,7 +2952,7 @@ async function cleanDirtyItemTree(
                         resolvedFallenItems.resolved.items.push(copied);
 
                         const couldCarryEvenOneInOptimalConditions = carriedItemWeight.singularWeight <= carryingCapacity.carryingCapacityKg;
-                        let storyMasterMessageSoFar = `${utilItemCount(engine, charState.location, amountThatWillFall, carriedItem.name, true)} ${amountThatWillFall === 1 ? "is" : "are"} too heavy to be carried by ${path[1]}${!couldCarryEvenOneInOptimalConditions ? "" : " who is already carrying too much weight, "} and the items fall on the ground at ${expectedPathForFallenItems[1]}.`;
+                        let storyMasterMessageSoFar = `${utilItemCount(engine, charState.location, amountThatWillFall, carriedItem.name, true)} ${amountThatWillFall === 1 ? "is" : "are"} too heavy to be carried by ${path[1]}${!couldCarryEvenOneInOptimalConditions ? "" : " who is already carrying too much weight,"} and ${amountThatWillFall === 1 ? "it falls" : "they fall"} on the ground at the ${expectedPathForFallenItems[1]}.`;
                         if (!couldCarryEvenOneInOptimalConditions) {
                             let exceedCapacityBy = carriedItemWeight.singularWeight / carryingCapacity.carryingCapacityKg;
                             if (exceedCapacityBy > 5) {
@@ -3015,7 +3015,7 @@ async function cleanDirtyItemTree(
                         resolvedFallenItems.resolved.items.push(copied);
 
                         const couldCarryEvenOneInOptimalConditions = carriedItemVolume.singularVolume <= carryingCapacity.carryingCapacityLiters;
-                        let storyMasterMessageSoFar = `${utilItemCount(engine, charState.location, amountThatWillFall, carriedItem.name, true)} ${amountThatWillFall === 1 ? "is" : "are"} too large to be carried by ${path[1]}${!couldCarryEvenOneInOptimalConditions ? "" : " who is already carrying too many items, "} and the items fall on the ground at ${expectedPathForFallenItems[1]}.`;
+                        let storyMasterMessageSoFar = `${utilItemCount(engine, charState.location, amountThatWillFall, carriedItem.name, true)} ${amountThatWillFall === 1 ? "is" : "are"} too large to be carried by ${path[1]}${!couldCarryEvenOneInOptimalConditions ? "" : " who is already carrying too many items,"} and ${amountThatWillFall === 1 ? "it falls" : "they fall"} on the ground at the ${expectedPathForFallenItems[1]}.`;
 
                         // no point in saying they fell down twice
                         if (!couldCarryEvenOneInOptimalConditions && !userHasFallen) {
@@ -3108,15 +3108,15 @@ async function cleanDirtyItemTree(
                         "this item got worn by a large character and that caused it to expand and break",
                     );
                     wornItem.amount = 0;
-                    addedMessagesForStoryMaster.push(`${utilItemCount(engine, charState.location, wornItem.amount || 1, wornItem.name, true, true)} ${wornItem.amount === 1 ? "is" : "are"} too tight to be worn by ${path[1]} and ${wornItem.amount === 1 ? "breaks" : "break"}, so ${wornItem.amount === 1 ? "it" : "they"} ${wornItem.amount === 1 ? "falls" : "fall"} on the ground at ${expectedPathForFallenItems[1]}.`);
+                    addedMessagesForStoryMaster.push(`${utilItemCount(engine, charState.location, wornItem.amount || 1, wornItem.name, true, true)} ${wornItem.amount === 1 ? "is" : "are"} too tight to be worn by ${path[1]} and ${wornItem.amount === 1 ? "breaks" : "break"}, so ${wornItem.amount === 1 ? "it" : "they"} ${wornItem.amount === 1 ? "falls" : "fall"} on the ground at the ${expectedPathForFallenItems[1]}.`);
                 } else if (wearableFitment.shouldFallDown) {
                     const copy = deepCopyItem(wornItem);
                     resolvedFallenItems.resolved.items.push(copy);
                     wornItem.amount = 0;
                     if (wornItem.wearableProperties) {
-                        addedMessagesForStoryMaster.push(`${utilItemCount(engine, charState.location, wornItem.amount || 1, wornItem.name, true, true)} ${wornItem.amount === 1 ? "is" : "are"} too large to fit on ${path[1]} and ${wornItem.amount === 1 ? "falls" : "fall"} down from it onto the ground at ${expectedPathForFallenItems[1]}.`);
+                        addedMessagesForStoryMaster.push(`${utilItemCount(engine, charState.location, wornItem.amount || 1, wornItem.name, true, true)} ${wornItem.amount === 1 ? "is" : "are"} too large to fit on ${path[1]} and ${wornItem.amount === 1 ? "falls" : "fall"} down from it onto the ground at the ${expectedPathForFallenItems[1]}.`);
                     } else {
-                        addedMessagesForStoryMaster.push(`${utilItemCount(engine, charState.location, wornItem.amount || 1, wornItem.name, true, true)} ${wornItem.amount === 1 ? "is" : "are"} not possible to wear by ${path[1]} and ${wornItem.amount === 1 ? "falls" : "fall"} down from it onto the ground at ${expectedPathForFallenItems[1]}.`);
+                        addedMessagesForStoryMaster.push(`${utilItemCount(engine, charState.location, wornItem.amount || 1, wornItem.name, true, true)} ${wornItem.amount === 1 ? "is" : "are"} not possible to wear by ${path[1]} and ${wornItem.amount === 1 ? "falls" : "fall"} down from it onto the ground at the ${expectedPathForFallenItems[1]}.`);
                     }
                 } else {
                     totalWornWeight += wornItemWeight.completeWeight;
@@ -3165,15 +3165,15 @@ async function cleanDirtyItemTree(
                 if (wearableFitment.shouldBreak) {
                     if (wornItemWeight.allCharactersInvolved.length > 0) {
                         if (wornItemWeight.charactersOnlyDirectlyInside.length > 0) {
-                            addedMessagesForStoryMaster.push(`Since ${engine.deObject.functions.format_and(engine.deObject, null, wornItemWeight.charactersOnlyDirectlyInside)} are inside the item that just broke, they fall out from it onto the ground at ${expectedPathForFallenItems[1]}.`);
+                            addedMessagesForStoryMaster.push(`Since ${engine.deObject.functions.format_and(engine.deObject, null, wornItemWeight.charactersOnlyDirectlyInside)} are inside the item that just broke, they fall out from it onto the ground at the ${expectedPathForFallenItems[1]}.`);
                         }
                         if (wornItemWeight.charactersOnlyDirectlyOnTop.length > 0) {
-                            addedMessagesForStoryMaster.push(`Since ${engine.deObject.functions.format_and(engine.deObject, null, wornItemWeight.charactersOnlyDirectlyOnTop)} are on top of the item that just broke, they fall down with it onto the ground at ${expectedPathForFallenItems[1]}.`);
+                            addedMessagesForStoryMaster.push(`Since ${engine.deObject.functions.format_and(engine.deObject, null, wornItemWeight.charactersOnlyDirectlyOnTop)} are on top of the item that just broke, they fall down with it onto the ground at the ${expectedPathForFallenItems[1]}.`);
                         }
                         if (wornItemWeight.allCharactersInvolved.length > 0) {
                             const remainingCharacters = wornItemWeight.allCharactersInvolved.filter((char) => !wornItemWeight.charactersOnlyDirectlyInside.includes(char) && !wornItemWeight.charactersOnlyDirectlyOnTop.includes(char));
                             if (remainingCharacters.length > 0) {
-                                addedMessagesForStoryMaster.push(`Since ${engine.deObject.functions.format_and(engine.deObject, null, remainingCharacters)} are also involved with the item that just broke, they fall down with it onto the ground at ${expectedPathForFallenItems[1]}.`);
+                                addedMessagesForStoryMaster.push(`Since ${engine.deObject.functions.format_and(engine.deObject, null, remainingCharacters)} are also involved with the item that just broke, they fall down with it onto the ground at the ${expectedPathForFallenItems[1]}.`);
                             }
                         }
                         for (const otherCharName of wornItemWeight.allCharactersInvolved) {
@@ -3357,9 +3357,9 @@ function checkDirectlyCarriedCharacters(engine, characterName, charState, addedM
 
             const couldHaveCarriedOneInOptimalConditions = carriedCharWeight.weight <= carryingCapacity.carryingCapacityKg;
             if (!couldHaveCarriedOneInOptimalConditions) {
-                addedMessagesForStoryMaster.push(`${carriedCharName} is too heavy to be carried by ${characterName}, and falls on the ground at ${carriedCharState.locationSlot}.`);
+                addedMessagesForStoryMaster.push(`${carriedCharName} is too heavy to be carried by ${characterName}, and falls on the ground at the ${carriedCharState.locationSlot}.`);
             } else {
-                addedMessagesForStoryMaster.push(`${carriedCharName} is too heavy to be carried by ${characterName} who is already carrying too much weight, and falls on the ground at ${carriedCharState.locationSlot}.`);
+                addedMessagesForStoryMaster.push(`${carriedCharName} is too heavy to be carried by ${characterName} who is already carrying too much weight, and falls on the ground at the ${carriedCharState.locationSlot}.`);
             }
         } else if (totalCarriedVolume + carriedCharVolume.volume > carryingCapacity.carryingCapacityLiters) {
             // the character is too large to be carried, so it will fall on the ground
@@ -3372,9 +3372,9 @@ function checkDirectlyCarriedCharacters(engine, characterName, charState, addedM
 
             const couldHaveCarriedOneInOptimalConditions = carriedCharVolume.volume <= carryingCapacity.carryingCapacityLiters;
             if (!couldHaveCarriedOneInOptimalConditions) {
-                addedMessagesForStoryMaster.push(`${carriedCharName} is too large to be carried by ${characterName}, and falls on the ground at ${carriedCharState.locationSlot}.`);
+                addedMessagesForStoryMaster.push(`${carriedCharName} is too large to be carried by ${characterName}, and falls on the ground at the ${carriedCharState.locationSlot}.`);
             } else {
-                addedMessagesForStoryMaster.push(`${carriedCharName} is too large to be carried by ${characterName} who is already carrying too many items, and falls on the ground at ${carriedCharState.locationSlot}.`);
+                addedMessagesForStoryMaster.push(`${carriedCharName} is too large to be carried by ${characterName} who is already carrying too many items, and falls on the ground at the ${carriedCharState.locationSlot}.`);
             }
         } else {
             totalCarriedWeight += carriedCharWeight.weight;
@@ -3388,7 +3388,7 @@ function checkDirectlyCarriedCharacters(engine, characterName, charState, addedM
  * @param {string} location
  * @param {string[]} addedMessagesForStoryMaster
  */
-async function cleanAll(engine, location, addedMessagesForStoryMaster) {
+export async function cleanAll(engine, location, addedMessagesForStoryMaster) {
     if (!engine.deObject) {
         throw new Error("DEngine not initialized");
     }

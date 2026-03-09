@@ -10,6 +10,7 @@ import calculateBondsChangesDueToMessages from "./gears/bond-change.js";
 import testWorldRulesOn from "./gears/rules-enforce.js";
 import testMessageFeasibilityForCharacter from "./gears/feasibility-check.js";
 import { getWearableFitment } from "./util/weight-and-volume.js";
+import { cleanAll } from "./gears/feasibility-check/item-changes.js";
 
 const INVALID_NAMES = ["system", "assistant", "user", "everyone", "nobody",
     "anyone", "somebody", "narrator", "observer", "admin", "moderator",
@@ -921,7 +922,11 @@ export class DEngine {
             throw new Error("Inference adapter not set");
         }
 
-        await this.inferenceAdapter.initialize();
+        try {
+            await this.inferenceAdapter.initialize();
+        } catch (error) {
+            console.warn("Inference adapter failed to initialize, continuing anyway. Error:", error);
+        }
 
         const initialScene = this.deObject.world.initialScenes[optionName];
         if (!initialScene) {
@@ -978,8 +983,8 @@ export class DEngine {
                     isUser: false,
                     startTime: { ...this.deObject.currentTime },
                     collectiveSummaryIds: [],
-                    singleSummary: narration,
-                }
+                    singleSummary: null,
+                },
             ],
             bondsAtStart: getFrozenBonds(this, expectedParticipants),
             // TODO what do we do with bonds at end here?
@@ -1009,6 +1014,30 @@ export class DEngine {
         this.deObject.world.initialScenes = {};
 
         this.deleteOrphanedScriptSources();
+
+        const extraMessage = await this.fixPotentiallyBrokenItemStates();
+        if (extraMessage) {
+            this.deObject.conversations["INITIAL_SCENE_NARRATION"].messages.push({
+                id: "INITIAL_SCENE_ITEM_FIXTURE_MESSAGE",
+                canOnlyBeSeenByCharacter: null,
+                content: extraMessage,
+                sender: "Story Master",
+                duration: {
+                    inDays: 0,
+                    inHours: 0,
+                    inMinutes: 0,
+                },
+                endTime: { ...this.deObject.currentTime },
+                isCharacter: false,
+                isDebugMessage: false,
+                isStoryMasterMessage: true,
+                isUser: false,
+                startTime: { ...this.deObject.currentTime },
+                collectiveSummaryIds: [],
+                singleSummary: null,
+                isRejectedMessage: false,
+            });
+        }
     }
 
     checkDEObjectIntegrity(initialization = false) {
@@ -1534,7 +1563,13 @@ export class DEngine {
             throw new Error("Inference adapter not set");
         }
 
-        await this.inferenceAdapter.initialize();
+        try {
+            await this.inferenceAdapter.initialize();
+        } catch (error) {
+            // only a warning for now, as you can still initialize the world
+            // without the inference adapter, in theory at least
+            console.warn("Error initializing inference adapter:", error);
+        }
 
         this.refreshCharacterStates();
 
@@ -1568,10 +1603,33 @@ export class DEngine {
             throw new Error("Inference adapter not set");
         }
 
-        await this.inferenceAdapter.initialize();
-
         this.refreshCharacterStates();
         this.checkDEObjectIntegrity();
+    }
+
+    async fixPotentiallyBrokenItemStates() {
+        if (!this.deObject) {
+            throw new Error("DEngine not initialized");
+        } else if (!this.deObject.world.hasInitializedWorld) {
+            throw new Error("DEngine world not initialized");
+        } else if (!this.deObject.world.hasStartedScene) {
+            throw new Error("DEngine world scene not started");
+        } else if (!this.userCharacter) {
+            throw new Error("User character not set");
+        }
+        /**
+         * @type {string[]}
+         */
+        const storyMasterMessages = [];
+
+        await cleanAll(this, this.deObject.stateFor[this.userCharacter.name].location, storyMasterMessages);
+
+        if (storyMasterMessages.length > 0) {
+            const addedMessageStr = storyMasterMessages.join("\n");
+            return addedMessageStr;
+        }
+
+        return null;
     }
 
     /**
@@ -2509,8 +2567,8 @@ export class DEngine {
             let addedVolume = 0;
             for (const carriedItem of itemList) {
                 remainingCarryingCapacity -= carriedItem.weightKg * carriedItem.amount;
-                if (carriedItem.capacityLiters) {
-                    addedVolume += carriedItem.capacityLiters * carriedItem.amount;
+                if (carriedItem.containerProperties?.capacityLiters) {
+                    addedVolume += carriedItem.containerProperties.capacityLiters * carriedItem.amount;
                 }
                 takenVolume += carriedItem.volumeLiters * carriedItem.amount;
 
@@ -3350,12 +3408,12 @@ export class DEngine {
                 const conversationStartTime = currentConversationObject.startTime;
                 const firstMessageIsStoryMaster = conversationMessages.length > 0 && conversationMessages[0].sender === "Story Master";
 
-                if (currentConversationObject.summary || currentConversationObject.pseudoConversation) {
-                    if (!currentConversationObject.summary) {
+                if (currentConversationObject.pseudoConversationSummary || currentConversationObject.pseudoConversation) {
+                    if (!currentConversationObject.pseudoConversationSummary) {
                         // generate summary, it doesn't exist yet, but we need to have a conversation for what this
                         // character has been through and been doing
                         // @ts-ignore
-                        currentConversationObject.summary = await this.pseudoConversationSummaryGenerator(
+                        currentConversationObject.pseudoConversationSummary = await this.pseudoConversationSummaryGenerator(
                             this.deObject,
                             // @ts-expect-error
                             currentConversationObject.participants.map((v) => this.deObject?.characters[v]),
@@ -3369,7 +3427,7 @@ export class DEngine {
                     const expectedId = `story-master-${state.conversationId}-summary`;
                     const keepgoing = yield {
                         name: "Story Master",
-                        message: (timeMark === "Now" ? "Right Now" : "At " + timeMark) + ", " + character.name + " is at " + conversationLocation + " " + withOrAlone + ". Conversation summary: " + currentConversationObject.summary,
+                        message: (timeMark === "Now" ? "Right Now" : "At " + timeMark) + ", " + character.name + " is at " + conversationLocation + " " + withOrAlone + ". The interaction happened as follows:\n\n" + currentConversationObject.pseudoConversationSummary,
                         id: expectedId,
                         conversationId: state.conversationId,
                         debug: false,
@@ -3706,6 +3764,9 @@ export class DEngine {
                     isStoryMasterMessage: false,
                     isRejectedMessage: makeRejected,
                     canOnlyBeSeenByCharacter: null,
+                    collectiveSummaryIds: [],
+                    // @ts-ignore
+                    singleSummary: userMessage.length < 50 ? userMessage : null,
                 }
                 if (!userCharacterState.conversationId) {
                     // need to make a new conversation
@@ -3730,7 +3791,6 @@ export class DEngine {
                         remoteParticipants: [],
                         location: userCharacterState.location,
                         pseudoConversation: false,
-                        summary: null,
                         bondsAtStart: getFrozenBonds(this, [user.name]),
                         bondsAtEnd: null,
                     };
@@ -3823,6 +3883,9 @@ export class DEngine {
             await calculateStateChange(this, this.userCharacter);
             this.informCycleState("info", `Cycle completed successfully`);
             await this.informDEObjectUpdated();
+
+            // TODO summarize in a detached way all the conversation messages added last cycle
+            // TODO run fixPotentiallyBrokenItemStates at the end of each character reply, who knows what scripts may have done
         } catch (error) {
             // @ts-ignore
             this.informCycleState("error", `Internal Error during cycle execution: ${error.message}`);

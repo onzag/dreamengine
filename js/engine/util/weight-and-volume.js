@@ -1,4 +1,4 @@
-import { DEngine } from "..";
+import { DEngine } from "../index.js";
 
 /**
  * @param {DEngine} engine 

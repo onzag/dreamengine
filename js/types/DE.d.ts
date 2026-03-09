@@ -2237,7 +2237,7 @@ declare interface DEConversationMessage {
      * A very short summary of this same message, this is used because the LLM has a hard time keeping track
      * of long conversations, so this summary kicks in to keep the context window short
      */
-    singleSummary: string;
+    singleSummary: string | null;
 
     /**
      * The collective summaries of this message in layers

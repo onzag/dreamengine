@@ -318,6 +318,8 @@ ${states.join(", ")}
         getHistoryForCharacter,
         action,
     ) {
+        await this.ensureInitialized();
+
         if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
             throw new Error("WebSocket is not open");
         }
@@ -471,6 +473,8 @@ ${states.join(", ")}
         contextInfoAfter,
         remarkLastMessageForAnalysis
     ) {
+        await this.ensureInitialized();
+        
         if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
             throw new Error("WebSocket is not open");
         }

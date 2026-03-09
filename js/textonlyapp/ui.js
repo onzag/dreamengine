@@ -150,7 +150,7 @@ export class TextOnlyUI {
                 break;
             }
             accumulatedMessages.push(next.value);
-            next = await generator.next();
+            next = await generator.next(true);
         }
         accumulatedMessages = accumulatedMessages.reverse();
 
