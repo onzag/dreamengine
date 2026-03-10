@@ -90,6 +90,10 @@ engine.deObject.stateFor["Onza"].wearing = [
     clothes,
 ];
 
+const MASSIVE_DUMBELL_TEST = false;
+const STICKS_TEST = false;
+const WEIRD_BOX_TEST = true;
+
 /**
  * @type {DEItem}
  */
@@ -137,6 +141,30 @@ const sticks = {
     madeOf: [],
 }
 
+const weirdBox = {
+    amount: 1,
+    description: "A weird box that can be used for various purposes.",
+    isConsumable: false,
+    isSeeThrough: false,
+    name: "Weird Box",
+    consumableProperties: null,
+    containing: [],
+    ontop: [],
+    containingCharacters: [
+        "Onza",
+    ],
+    maxVolumeOnTopLiters: 0,
+    maxWeightOnTopKg: 0,
+    ontopCharacters: [],
+    wearableProperties: null,
+    owner: null,
+    properties: {},
+    volumeLiters: 50,
+    weightKg: 50,
+    communicator: null,
+    madeOf: [],
+}
+
 engine.setScriptImportResolver(nodejsImportResolver);
 engine.setCharacterImportResolver(nodejsCharacterImportResolver);
 
@@ -150,9 +178,24 @@ try {
     process.exit(1);
 }
 
-// Test that gives Dema a massive dumbell that exceeds the carrying capacity of the character, to see how the engine handles it. Dema should not be able to carry it, and the engine should handle this gracefully without crashing or getting into an invalid state.
-// @ts-expect-error
-engine.deObject.stateFor["Dema"].carrying.push(sticks);
+if (WEIRD_BOX_TEST) {
+    // @ts-expect-error
+    engine.deObject.stateFor["Onza"].beingCarriedByCharacter = "Dema";
+    // @ts-expect-error
+    engine.deObject.stateFor["Dema"].carrying.push(weirdBox);
+    // @ts-expect-error
+    engine.deObject.stateFor["Dema"].carryingCharacters.push("Onza");
+}
+
+if (STICKS_TEST) {
+    // @ts-expect-error
+    engine.deObject.stateFor["Dema"].carrying.push(sticks);
+}
+
+if (MASSIVE_DUMBELL_TEST) {
+    // @ts-expect-error
+    engine.deObject.stateFor["Dema"].carrying.push(massiveDumbell);
+}
 
 const ui = new TextOnlyUI(engine, "Onza");
 ui.run();

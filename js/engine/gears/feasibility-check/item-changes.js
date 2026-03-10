@@ -2866,15 +2866,39 @@ async function cleanDirtyItemTree(
                             charStateOfCarrierOrWearer.carryingCharacters = charStateOfCarrierOrWearer.carryingCharacters.filter((v) => v !== expelledOnTopCharacter);
                         }
                         if (charVolume.volume > item.maxVolumeOnTopLiters) {
-                            addedMessagesForStoryMaster.push(`${expelledOnTopCharacter} is too large to fit on top of ${item.name} and falls down from it, ${item.name} is being carried by ${characterCarryingOrWearingTheItem}, and ${expelledOnTopCharacter} is now on the ground at ${expectedPathForFallenItems[1]}.`);
+                            const tooLargeCarriedVariations = [
+                                `${expelledOnTopCharacter} is too large to fit on top of the ${item.name} and falls down from it, the ${item.name} is being carried by ${characterCarryingOrWearingTheItem}, and ${expelledOnTopCharacter} is now on the ground at the ${expectedPathForFallenItems[1]}.`,
+                                `${expelledOnTopCharacter} can't stay on top of the ${item.name} — far too large — and tumbles off while ${characterCarryingOrWearingTheItem} is carrying it, ending up on the ground at the ${expectedPathForFallenItems[1]}.`,
+                                `Being too large to balance on top of the ${item.name}, ${expelledOnTopCharacter} slides off and drops to the ground at the ${expectedPathForFallenItems[1]}, as ${characterCarryingOrWearingTheItem} carries the item.`,
+                                `The ${item.name}, being carried by ${characterCarryingOrWearingTheItem}, can't support ${expelledOnTopCharacter} on top who is simply too large, and ${expelledOnTopCharacter} falls off onto the ground at the ${expectedPathForFallenItems[1]}.`,
+                            ];
+                            addedMessagesForStoryMaster.push(tooLargeCarriedVariations[Math.floor(Math.random() * tooLargeCarriedVariations.length)]);
                         } else {
-                            addedMessagesForStoryMaster.push(`${expelledOnTopCharacter} does not fit on top of ${item.name} and falls down from it, ${item.name} is being carried by ${characterCarryingOrWearingTheItem}, and ${expelledOnTopCharacter} is now on the ground at ${expectedPathForFallenItems[1]}.`);
+                            const doesntFitCarriedVariations = [
+                                `${expelledOnTopCharacter} does not fit on top of the ${item.name} and falls down from it, the ${item.name} is being carried by ${characterCarryingOrWearingTheItem}, and ${expelledOnTopCharacter} is now on the ground at the ${expectedPathForFallenItems[1]}.`,
+                                `${expelledOnTopCharacter} can't fit on top of the ${item.name} anymore and slips off while ${characterCarryingOrWearingTheItem} is carrying it, landing on the ground at the ${expectedPathForFallenItems[1]}.`,
+                                `There's no room for ${expelledOnTopCharacter} on top of the ${item.name}, and they fall off as ${characterCarryingOrWearingTheItem} carries it, ending up on the ground at the ${expectedPathForFallenItems[1]}.`,
+                                `The ${item.name}, carried by ${characterCarryingOrWearingTheItem}, can no longer hold ${expelledOnTopCharacter} on top, who tumbles off onto the ground at the ${expectedPathForFallenItems[1]}.`,
+                            ];
+                            addedMessagesForStoryMaster.push(doesntFitCarriedVariations[Math.floor(Math.random() * doesntFitCarriedVariations.length)]);
                         }
                     } else {
                         if (charVolume.volume > item.maxVolumeOnTopLiters) {
-                            addedMessagesForStoryMaster.push(`${expelledOnTopCharacter} is too large to fit on top of ${item.name} and falls down from it, and is now on the ground at ${expectedPathForFallenItems[1]}.`);
+                            const tooLargeVariations = [
+                                `${expelledOnTopCharacter} is too large to fit on top of the ${item.name} and falls down from it, and is now on the ground at the ${expectedPathForFallenItems[1]}.`,
+                                `${expelledOnTopCharacter} can't stay on top of the ${item.name} — far too large — and tumbles off, ending up on the ground at the ${expectedPathForFallenItems[1]}.`,
+                                `Being too large to balance on top of the ${item.name}, ${expelledOnTopCharacter} slides off and drops to the ground at the ${expectedPathForFallenItems[1]}.`,
+                                `The ${item.name} can't support ${expelledOnTopCharacter} on top who is simply too large, and ${expelledOnTopCharacter} falls off onto the ground at the ${expectedPathForFallenItems[1]}.`,
+                            ];
+                            addedMessagesForStoryMaster.push(tooLargeVariations[Math.floor(Math.random() * tooLargeVariations.length)]);
                         } else {
-                            addedMessagesForStoryMaster.push(`${expelledOnTopCharacter} does not fit on top of ${item.name} and falls down from it, and is now on the ground at ${expectedPathForFallenItems[1]}.`);
+                            const doesntFitVariations = [
+                                `${expelledOnTopCharacter} does not fit on top of the ${item.name} and falls down from it, and is now on the ground at the ${expectedPathForFallenItems[1]}.`,
+                                `${expelledOnTopCharacter} can't fit on top of the ${item.name} anymore and slips off, landing on the ground at the ${expectedPathForFallenItems[1]}.`,
+                                `There's no room for ${expelledOnTopCharacter} on top of the ${item.name}, and they fall off, ending up on the ground at the ${expectedPathForFallenItems[1]}.`,
+                                `The ${item.name} can no longer hold ${expelledOnTopCharacter} on top, who tumbles off onto the ground at the ${expectedPathForFallenItems[1]}.`,
+                            ];
+                            addedMessagesForStoryMaster.push(doesntFitVariations[Math.floor(Math.random() * doesntFitVariations.length)]);
                         }
                     }
                 }
@@ -2897,15 +2921,39 @@ async function cleanDirtyItemTree(
                             charStateOfCarrierOrWearer.carryingCharacters = charStateOfCarrierOrWearer.carryingCharacters.filter((v) => v !== expelledInsideCharacter);
                         }
                         if (item.containerProperties && charVolume.volume > item.containerProperties.capacityLiters) {
-                            addedMessagesForStoryMaster.push(`${expelledInsideCharacter} is too large to fit inside ${item.name} and falls out from it, ${item.name} is being carried by ${characterCarryingOrWearingTheItem}, and ${expelledInsideCharacter} is now on the ground at ${expectedPathForFallenItems[1]}.`);
+                            const tooLargeCarriedVariations = [
+                                `${expelledInsideCharacter} is too large to fit inside the ${item.name} and falls out from it, the ${item.name} is being carried by ${characterCarryingOrWearingTheItem}, and ${expelledInsideCharacter} is now on the ground at the ${expectedPathForFallenItems[1]}.`,
+                                `${expelledInsideCharacter} can't squeeze inside the ${item.name} — far too large — and tumbles out while ${characterCarryingOrWearingTheItem} is carrying it, ending up on the ground at the ${expectedPathForFallenItems[1]}.`,
+                                `Being too large for the ${item.name}, ${expelledInsideCharacter} is forced out and drops to the ground at the ${expectedPathForFallenItems[1]}, as ${characterCarryingOrWearingTheItem} carries the item.`,
+                                `The ${item.name}, being carried by ${characterCarryingOrWearingTheItem}, can't contain ${expelledInsideCharacter} who is simply too large, and ${expelledInsideCharacter} spills out onto the ground at the ${expectedPathForFallenItems[1]}.`,
+                            ];
+                            addedMessagesForStoryMaster.push(tooLargeCarriedVariations[Math.floor(Math.random() * tooLargeCarriedVariations.length)]);
                         } else {
-                            addedMessagesForStoryMaster.push(`${expelledInsideCharacter} does not fit inside ${item.name} and falls out from it, ${item.name} is being carried by ${characterCarryingOrWearingTheItem}, and ${expelledInsideCharacter} is now on the ground at ${expectedPathForFallenItems[1]}.`);
+                            const doesntFitCarriedVariations = [
+                                `${expelledInsideCharacter} does not fit inside the ${item.name} and falls out from it, the ${item.name} is being carried by ${characterCarryingOrWearingTheItem}, and ${expelledInsideCharacter} is now on the ground at the ${expectedPathForFallenItems[1]}.`,
+                                `${expelledInsideCharacter} can't fit inside the ${item.name} anymore and slips out while ${characterCarryingOrWearingTheItem} is carrying it, landing on the ground at the ${expectedPathForFallenItems[1]}.`,
+                                `There's no room for ${expelledInsideCharacter} inside the ${item.name}, and they fall out of it as ${characterCarryingOrWearingTheItem} carries it, ending up on the ground at the ${expectedPathForFallenItems[1]}.`,
+                                `The ${item.name}, carried by ${characterCarryingOrWearingTheItem}, can no longer hold ${expelledInsideCharacter} inside, who tumbles out onto the ground at the ${expectedPathForFallenItems[1]}.`,
+                            ];
+                            addedMessagesForStoryMaster.push(doesntFitCarriedVariations[Math.floor(Math.random() * doesntFitCarriedVariations.length)]);
                         }
                     } else {
                         if (item.containerProperties && charVolume.volume > item.containerProperties.capacityLiters) {
-                            addedMessagesForStoryMaster.push(`${expelledInsideCharacter} is too large to fit inside ${item.name} and falls out from it, and is now on the ground at ${expectedPathForFallenItems[1]}.`);
+                            const tooLargeVariations = [
+                                `${expelledInsideCharacter} is too large to fit inside the ${item.name} and falls out from it, and is now on the ground at the ${expectedPathForFallenItems[1]}.`,
+                                `${expelledInsideCharacter} can't fit inside the ${item.name} — far too large — and tumbles out, ending up on the ground at the ${expectedPathForFallenItems[1]}.`,
+                                `Being too large for the ${item.name}, ${expelledInsideCharacter} is forced out and drops to the ground at the ${expectedPathForFallenItems[1]}.`,
+                                `The ${item.name} can't contain ${expelledInsideCharacter} who is simply too large, and ${expelledInsideCharacter} spills out onto the ground at the ${expectedPathForFallenItems[1]}.`,
+                            ];
+                            addedMessagesForStoryMaster.push(tooLargeVariations[Math.floor(Math.random() * tooLargeVariations.length)]);
                         } else {
-                            addedMessagesForStoryMaster.push(`${expelledInsideCharacter} does not fit inside ${item.name} and falls out from it, and is now on the ground at ${expectedPathForFallenItems[1]}.`);
+                            const doesntFitVariations = [
+                                `${expelledInsideCharacter} does not fit inside the ${item.name} and falls out from it, and is now on the ground at the ${expectedPathForFallenItems[1]}.`,
+                                `${expelledInsideCharacter} can't fit inside the ${item.name} anymore and slips out, landing on the ground at the ${expectedPathForFallenItems[1]}.`,
+                                `There's no room for ${expelledInsideCharacter} inside the ${item.name}, and they fall out of it, ending up on the ground at the ${expectedPathForFallenItems[1]}.`,
+                                `The ${item.name} can no longer hold ${expelledInsideCharacter} inside, who tumbles out onto the ground at the ${expectedPathForFallenItems[1]}.`,
+                            ];
+                            addedMessagesForStoryMaster.push(doesntFitVariations[Math.floor(Math.random() * doesntFitVariations.length)]);
                         }
                     }
                 }
@@ -2954,6 +3002,14 @@ async function cleanDirtyItemTree(
 
                     carriedItem.amount = amountThatCanBeCarried;
 
+                    let expellInsideLikelihood = 0.25;
+                    let expellOnTopLikelihood = 0.5;
+
+                    if (userHasFallen) {
+                        expellInsideLikelihood = 0.5;
+                        expellOnTopLikelihood = 0.75;
+                    }
+
                     if (amountThatWillFall > 0) {
                         expellItemToFallen(carriedItem, amountThatWillFall);
 
@@ -2968,19 +3024,134 @@ async function cleanDirtyItemTree(
                             const hasFallen = Math.random() < chanceOfFalling;
                             if (hasFallen) {
                                 userHasFallen = true;
-                                storyMasterMessageSoFar += ` Since the item is so heavy, ${path[1]} also falls down while trying to carry it, slamming with the item on the ground.`;
+                                const itemIsPotentiallyBiggerThanCharacter = getItemVolume(engine, carriedItem).singularVolume > engine.deObject.characters[path[1]].weightKg; // rough check
+                                const fallingVariations = itemIsPotentiallyBiggerThanCharacter ? [
+                                    ` Since the item is so heavy, ${path[1]} also falls down while trying to carry it, crumbling under its weight and hitting the ground next to it.`,
+                                    ` The sheer weight of the item drags ${path[1]} down, and they collapse to the ground beside it, unable to bear the load.`,
+                                    ` ${path[1]} buckles under the crushing weight of the item, their legs giving way as they topple to the ground next to it.`,
+                                    ` Overwhelmed by how heavy the item is, ${path[1]} loses their footing and crashes to the ground alongside it.`,
+                                ] : [
+                                    ` Since the item is so heavy, ${path[1]} also falls down while trying to carry it, slamming with the item on the ground.`,
+                                    ` The weight of the item catches ${path[1]} off guard, pulling them off balance and sending them to the ground with it.`,
+                                    ` ${path[1]} staggers under the unexpected weight and crumples to the ground, the heavy item landing beside them.`,
+                                    ` Unable to support the item's weight any longer, ${path[1]} stumbles and drops to the ground along with it.`,
+                                ];
+                                storyMasterMessageSoFar += fallingVariations[Math.floor(Math.random() * fallingVariations.length)];
+
+                                expellInsideLikelihood = 0.5;
+                                expellOnTopLikelihood = 1;
                             }
                         }
+
                         if (carriedItemWeight.allCharactersInvolved.length > 0) {
+                            const willExpellOnTop = Math.random() < expellOnTopLikelihood;
+                            const willExpellInside = Math.random() < expellInsideLikelihood;
+                            const willExpellAnyRemainingCharacters = willExpellOnTop || willExpellInside;
+
+                            const expelledCharacters = [];
+
                             if (carriedItemWeight.charactersOnlyDirectlyInside.length > 0) {
-                                storyMasterMessageSoFar += ` Since ${engine.deObject.functions.format_and(engine.deObject, null, carriedItemWeight.charactersOnlyDirectlyInside)} are inside the item, they also fall down with it.`;
+                                if (willExpellInside) {
+                                    expelledCharacters.push(...carriedItemWeight.charactersOnlyDirectlyInside);
+                                }
+                                const insideNames = engine.deObject.functions.format_and(engine.deObject, null, carriedItemWeight.charactersOnlyDirectlyInside);
+                                const insideItemName = utilItemCount(engine, charState.location, carriedItem.owner, 1, carriedItem.name, false, true);
+                                const insidePlural = carriedItemWeight.charactersOnlyDirectlyInside.length === 1;
+                                const insideVariations = willExpellInside ? (
+                                    userHasFallen ? [
+                                        ` ${insideNames}, who ${insidePlural ? "was" : "were"} inside ${insideItemName}, ${insidePlural ? "is" : "are"} violently thrown out as the heavy item crashes to the ground under its own weight.`,
+                                        ` The crushing weight brings ${insideItemName} down hard, and the impact sends ${insideNames} tumbling out from inside.`,
+                                        ` ${insideNames} ${insidePlural ? "is" : "are"} flung out of ${insideItemName} as its weight drags it to the ground with brutal force.`,
+                                        ` As the weight of ${insideItemName} slams it into the ground, ${insideNames} ${insidePlural ? "is" : "are"} ejected from inside by the heavy impact.`,
+                                    ] : [
+                                        ` ${insideNames}, who ${insidePlural ? "was" : "were"} inside ${insideItemName}, ${insidePlural ? "slides" : "slide"} out as the heavy item tips over from its weight.`,
+                                        ` ${insideNames} ${insidePlural ? "tumbles" : "tumble"} out of ${insideItemName} as it drops under its own weight, ending up on the ground.`,
+                                        ` The weight of ${insideItemName} causes it to fall, and ${insideNames} ${insidePlural ? "spills" : "spill"} out from inside.`,
+                                        ` As ${insideItemName} sinks to the ground from sheer weight, ${insideNames} ${insidePlural ? "is" : "are"} expelled from inside.`,
+                                    ]
+                                ) : (
+                                    userHasFallen ? [
+                                        ` ${insideNames}, still inside ${insideItemName}, ${insidePlural ? "is" : "are"} rattled around violently as the heavy item crashes down under its weight.`,
+                                        ` The brutal weight-driven impact shakes ${insideNames} inside ${insideItemName}, though ${insidePlural ? "they remain" : "they remain"} trapped within.`,
+                                        ` ${insideNames} ${insidePlural ? "is" : "are"} jolted hard inside ${insideItemName} as its weight slams it into the ground, but ${insidePlural ? "stays" : "stay"} within.`,
+                                        ` Still inside ${insideItemName}, ${insideNames} ${insidePlural ? "feels" : "feel"} the full force as the item's weight brings it crashing down, though ${insidePlural ? "they don't" : "they don't"} come out.`,
+                                    ] : [
+                                        ` Since ${insideNames} ${insidePlural ? "is" : "are"} inside of ${insideItemName}, they also fall down while remaining inside the object as it drops from the weight.`,
+                                        ` ${insideNames}, tucked inside ${insideItemName}, ${insidePlural ? "goes" : "go"} down with it as the weight pulls it to the ground, staying inside.`,
+                                        ` ${insideNames} ${insidePlural ? "remains" : "remain"} inside ${insideItemName} as the heavy item falls to the ground.`,
+                                        ` Still inside ${insideItemName}, ${insideNames} ${insidePlural ? "is" : "are"} go${insidePlural ? "es" : ""} down with it.`,
+                                    ]
+                                );
+                                storyMasterMessageSoFar += insideVariations[Math.floor(Math.random() * insideVariations.length)];
                             }
                             if (carriedItemWeight.charactersOnlyDirectlyOnTop.length > 0) {
-                                storyMasterMessageSoFar += ` Since ${engine.deObject.functions.format_and(engine.deObject, null, carriedItemWeight.charactersOnlyDirectlyOnTop)} are on top of the item, they also fall down with it.`;
+                                if (willExpellOnTop) {
+                                    expelledCharacters.push(...carriedItemWeight.charactersOnlyDirectlyOnTop);
+                                }
+                                const onTopNames = engine.deObject.functions.format_and(engine.deObject, null, carriedItemWeight.charactersOnlyDirectlyOnTop);
+                                const onTopItemName = utilItemCount(engine, charState.location, carriedItem.owner, 1, carriedItem.name, false, true);
+                                const onTopPlural = carriedItemWeight.charactersOnlyDirectlyOnTop.length === 1;
+                                const onTopVariations = willExpellOnTop ? (
+                                    userHasFallen ? [
+                                        ` ${onTopNames}, who ${onTopPlural ? "was" : "were"} on top of ${onTopItemName}, ${onTopPlural ? "is" : "are"} launched off as the heavy item crashes to the ground under its weight.`,
+                                        ` The weight of ${onTopItemName} pulls it down hard, hurling ${onTopNames} off the top and onto the ground.`,
+                                        ` ${onTopNames} ${onTopPlural ? "is" : "are"} thrown clear off ${onTopItemName} as its weight smashes it into the ground, landing roughly nearby.`,
+                                        ` As the weight of ${onTopItemName} slams it down, ${onTopNames} ${onTopPlural ? "is" : "are"} catapulted off the top and sent sprawling across the ground.`,
+                                    ] : [
+                                        ` ${onTopNames}, who ${onTopPlural ? "was" : "were"} perched on top of ${onTopItemName}, ${onTopPlural ? "slides" : "slide"} off as the heavy item drops from its weight.`,
+                                        ` ${onTopNames} ${onTopPlural ? "topples" : "topple"} off ${onTopItemName} as the weight pulls it down, ending up on the ground.`,
+                                        ` The weight of ${onTopItemName} tips it over, sending ${onTopNames} sliding off the top to the ground.`,
+                                        ` As ${onTopItemName} sinks under its own weight, ${onTopNames} ${onTopPlural ? "loses" : "lose"} ${onTopPlural ? "their" : "their"} balance on top and ${onTopPlural ? "falls" : "fall"} to the ground.`,
+                                    ]
+                                ) : (
+                                    userHasFallen ? [
+                                        ` ${onTopNames}, still on top of ${onTopItemName}, ${onTopPlural ? "is" : "are"} shaken hard as the heavy item crashes down under its weight, but ${onTopPlural ? "manages" : "manage"} to hold on.`,
+                                        ` The violent weight-driven impact rattles ${onTopNames} atop ${onTopItemName}, though ${onTopPlural ? "they cling" : "they cling"} on for dear life.`,
+                                        ` ${onTopNames} ${onTopPlural ? "is" : "are"} jarred atop ${onTopItemName} as its weight slams it down, barely staying on.`,
+                                        ` Despite the heavy crash, ${onTopNames} ${onTopPlural ? "remains" : "remain"} clinging to the top of ${onTopItemName} as its weight brings it down.`,
+                                    ] : [
+                                        ` Since ${onTopNames} ${onTopPlural ? "is" : "are"} on top of ${onTopItemName}, they also fall down while remaining on top as the heavy item drops.`,
+                                        ` ${onTopNames}, riding on top of ${onTopItemName}, ${onTopPlural ? "goes" : "go"} down with it as the weight pulls it to the ground, staying put on top.`,
+                                        ` ${onTopNames} ${onTopPlural ? "remains" : "remain"} on top of ${onTopItemName} as the heavy item falls to the ground.`,
+                                        ` Still perched on ${onTopItemName}, ${onTopNames} ${onTopPlural ? "is" : "are"} brought down along with it as the weight becomes too much.`,
+                                    ]
+                                );
+                                storyMasterMessageSoFar += onTopVariations[Math.floor(Math.random() * onTopVariations.length)];
                             }
                             const remainingCharacters = carriedItemWeight.allCharactersInvolved.filter((char) => !carriedItemWeight.charactersOnlyDirectlyInside.includes(char) && !carriedItemWeight.charactersOnlyDirectlyOnTop.includes(char));
                             if (remainingCharacters.length > 0) {
-                                storyMasterMessageSoFar += ` Since ${engine.deObject.functions.format_and(engine.deObject, null, remainingCharacters)} are also involved with the item, they also fall down with it.`;
+                                if (willExpellAnyRemainingCharacters) {
+                                    expelledCharacters.push(...remainingCharacters);
+                                }
+                                const remainNames = engine.deObject.functions.format_and(engine.deObject, null, remainingCharacters);
+                                const remainItemName = utilItemCount(engine, charState.location, carriedItem.owner, 1, carriedItem.name, false, true);
+                                const remainPlural = remainingCharacters.length === 1;
+                                const remainVariations = willExpellAnyRemainingCharacters ? (
+                                    userHasFallen ? [
+                                        ` ${remainNames}, also caught up with ${remainItemName}, ${remainPlural ? "is" : "are"} thrown free as the heavy item's weight brings it crashing down.`,
+                                        ` The weight-driven impact dislodges ${remainNames} from ${remainItemName}, sending them tumbling across the ground.`,
+                                        ` ${remainNames} ${remainPlural ? "is" : "are"} ripped away from ${remainItemName} as its weight slams it down, ending up scattered on the ground.`,
+                                        ` As the weight of ${remainItemName} crashes it to the ground, ${remainNames} ${remainPlural ? "is" : "are"} shaken loose and tossed onto the ground.`,
+                                    ] : [
+                                        ` ${remainNames}, also involved with ${remainItemName}, ${remainPlural ? "is" : "are"} dislodged as the heavy item drops under its weight.`,
+                                        ` ${remainNames} ${remainPlural ? "comes" : "come"} loose from ${remainItemName} as the weight pulls it down, landing on the ground.`,
+                                        ` The weight of ${remainItemName} drags it down, separating ${remainNames} from it in the process.`,
+                                        ` As ${remainItemName} gives way under its own weight, ${remainNames} ${remainPlural ? "is" : "are"} shaken free and left on the ground.`,
+                                    ]
+                                ) : (
+                                    userHasFallen ? [
+                                        ` ${remainNames}, also involved with ${remainItemName}, ${remainPlural ? "is" : "are"} rattled by the violent weight-driven crash but ${remainPlural ? "stays" : "stay"} in place.`,
+                                        ` The heavy impact shakes ${remainNames}, still associated with ${remainItemName}, but ${remainPlural ? "they hold" : "they hold"} their position.`,
+                                        ` ${remainNames} ${remainPlural ? "is" : "are"} jolted as the weight of ${remainItemName} crashes it down, but ${remainPlural ? "manages" : "manage"} to stay where ${remainPlural ? "they are" : "they are"}.`,
+                                        ` Despite the heavy item's violent fall, ${remainNames} ${remainPlural ? "remains" : "remain"} where ${remainPlural ? "they were" : "they were"} on ${remainItemName}, shaken but in place.`,
+                                    ] : [
+                                        ` Since ${remainNames} ${remainPlural ? "is" : "are"} also involved with ${remainItemName}, they also fall down while remaining where they are as the heavy item drops.`,
+                                        ` ${remainNames}, also associated with ${remainItemName}, ${remainPlural ? "goes" : "go"} down with it as the weight takes it to the ground, staying in place.`,
+                                        ` ${remainNames} ${remainPlural ? "remains" : "remain"} in position as the weight of ${remainItemName} brings it to the ground.`,
+                                        ` Still attached to ${remainItemName}, ${remainNames} ${remainPlural ? "is" : "are"} carried down as the heavy item gives way, but ${remainPlural ? "stays" : "stay"} where ${remainPlural ? "they were" : "they were"}.`,
+                                    ]
+                                );
+                                storyMasterMessageSoFar += remainVariations[Math.floor(Math.random() * remainVariations.length)];
                             }
 
                             charState.carryingCharacters = charState.carryingCharacters.filter((v) => !carriedItemWeight.allCharactersInvolved.includes(v));
@@ -2989,12 +3160,37 @@ async function cleanDirtyItemTree(
                                 otherCharState.beingCarriedByCharacter = null;
                                 otherCharState.beingCarriedByCharacterDirectly = false;
 
-                                const atopPath = findAtopPathToOtherCharRecursive(otherCharName, resolvedFallenItems.resolved.items, [...resolvedFallenItems.pathToResolved, "items"]);
-                                const containingPath = findContainingPathToOtherCharRecursive(otherCharName, resolvedFallenItems.resolved.items, [...resolvedFallenItems.pathToResolved, "items"]);
-                                if (atopPath) {
-                                    otherCharState.atopItem = locationPathToMessage(engine, otherCharName, charState.location, atopPath);
-                                } else if (containingPath) {
-                                    otherCharState.insideItem = locationPathToMessage(engine, otherCharName, charState.location, containingPath);
+                                if (!expelledCharacters.includes(otherCharName)) {
+                                    const atopPath = findAtopPathToOtherCharRecursive(otherCharName, resolvedFallenItems.resolved.items, [...resolvedFallenItems.pathToResolved, "items"]);
+                                    const containingPath = findContainingPathToOtherCharRecursive(otherCharName, resolvedFallenItems.resolved.items, [...resolvedFallenItems.pathToResolved, "items"]);
+                                    if (atopPath) {
+                                        otherCharState.atopItem = locationPathToMessage(engine, otherCharName, charState.location, atopPath);
+                                    } else if (containingPath) {
+                                        otherCharState.insideItem = locationPathToMessage(engine, otherCharName, charState.location, containingPath);
+                                    }
+                                } else {
+                                    const atopPath = findAtopPathToOtherCharRecursive(otherCharName, resolvedFallenItems.resolved.items, [...resolvedFallenItems.pathToResolved, "items"]);
+                                    const containingPath = findContainingPathToOtherCharRecursive(otherCharName, resolvedFallenItems.resolved.items, [...resolvedFallenItems.pathToResolved, "items"]);
+
+                                    otherCharState.atopItem = null;
+                                    otherCharState.atopItemNameOnly = null;
+                                    otherCharState.insideItem = null;
+                                    otherCharState.insideItemNameOnly = null;
+
+                                    if (atopPath) {
+                                        const resolvedAtop = resolvePath(engine, charState.location, atopPath);
+                                        if (resolvedAtop.resolved) {
+                                            // @ts-ignore
+                                            resolvedAtop.resolved.ontopCharacters = resolvedAtop.resolved.ontopCharacters.filter((v) => v !== otherCharName);
+                                        }
+                                    }
+                                    if (containingPath) {
+                                        const resolvedContaining = resolvePath(engine, charState.location, containingPath);
+                                        if (resolvedContaining.resolved) {
+                                            // @ts-ignore
+                                            resolvedContaining.resolved.containingCharacters = resolvedContaining.resolved.containingCharacters.filter((v) => v !== otherCharName);
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -3021,6 +3217,14 @@ async function cleanDirtyItemTree(
                         const couldCarryEvenOneInOptimalConditions = carriedItemVolume.singularVolume <= carryingCapacity.carryingCapacityLiters;
                         let storyMasterMessageSoFar = `${utilItemCount(engine, charState.location, carriedItem.owner, amountThatWillFall, carriedItem.name, true)} ${amountThatWillFall === 1 ? "is" : "are"} too large to be carried by ${path[1]}${!couldCarryEvenOneInOptimalConditions ? "" : " who is already carrying too many items,"} and ${amountThatWillFall === 1 ? "it falls" : "they fall"} on the ground at the ${expectedPathForFallenItems[1]}.`;
 
+                        let expellInsideLikelihood = 0.25;
+                        let expellOnTopLikelihood = 0.5;
+
+                        if (userHasFallen) {
+                            expellInsideLikelihood = 0.5;
+                            expellOnTopLikelihood = 0.75;
+                        }
+
                         // no point in saying they fell down twice
                         if (!couldCarryEvenOneInOptimalConditions && !userHasFallen) {
                             let exceedCapacityBy = carriedItemVolume.singularVolume / carryingCapacity.carryingCapacityLiters;
@@ -3031,34 +3235,172 @@ async function cleanDirtyItemTree(
                             const hasFallen = Math.random() < chanceOfFalling;
                             if (hasFallen) {
                                 userHasFallen = true;
-                                storyMasterMessageSoFar += ` Since the item is so large, ${path[1]} also falls down while trying to carry it, slamming with the item on the ground.`;
+                                const itemIsPotentiallyBiggerThanCharacter = carriedItemVolume.singularVolume > engine.deObject.characters[path[1]].weightKg; // rough check
+                                const fallingVariations = itemIsPotentiallyBiggerThanCharacter ? [
+                                    ` Since the item is so large, ${path[1]} also falls down while trying to carry it, tumbling to the ground alongside the oversized item.`,
+                                    ` The item dwarfs ${path[1]} entirely, and they buckle under its sheer size, collapsing to the ground next to it.`,
+                                    ` ${path[1]} staggers under the enormous item before losing their footing and crumpling to the ground beside it.`,
+                                    ` Overwhelmed by the massive item, ${path[1]} loses their grip and topples over, landing on the ground next to it.`,
+                                ] : [
+                                    ` Since the item is so large, ${path[1]} also falls down while trying to carry it, slamming with the item on the ground.`,
+                                    ` The unwieldy item throws ${path[1]} off balance, sending them sprawling to the ground with it.`,
+                                    ` ${path[1]} stumbles under the item's bulk and crashes to the ground, the item landing beside them.`,
+                                    ` Unable to keep a steady hold, ${path[1]} trips and goes down hard, dropping to the ground along with the item.`,
+                                ];
+                                storyMasterMessageSoFar += fallingVariations[Math.floor(Math.random() * fallingVariations.length)];
+                                expellInsideLikelihood = 0.5;
+                                expellOnTopLikelihood = 1;
                             }
                         }
+
                         if (carriedItemVolume.allCharactersInvolved.length > 0) {
+                            const willExpellOnTop = Math.random() < expellOnTopLikelihood;
+                            const willExpellInside = Math.random() < expellInsideLikelihood;
+                            const willExpellAnyRemainingCharacters = willExpellOnTop || willExpellInside;
+
+                            const expelledCharacters = [];
                             if (carriedItemVolume.charactersOnlyDirectlyInside.length > 0) {
-                                storyMasterMessageSoFar += ` Since ${engine.deObject.functions.format_and(engine.deObject, null, carriedItemVolume.charactersOnlyDirectlyInside)} are inside the item, they also fall down with it.`;
+                                if (willExpellInside) {
+                                    expelledCharacters.push(...carriedItemVolume.charactersOnlyDirectlyInside);
+                                }
+                                const insideNames = engine.deObject.functions.format_and(engine.deObject, null, carriedItemVolume.charactersOnlyDirectlyInside);
+                                const insideItemName = utilItemCount(engine, charState.location, carriedItem.owner, 1, carriedItem.name, false, true);
+                                const insidePlural = carriedItemVolume.charactersOnlyDirectlyInside.length === 1;
+                                const insideVariations = willExpellInside ? (
+                                    userHasFallen ? [
+                                        ` ${insideNames}, who ${insidePlural ? "was" : "were"} inside ${insideItemName}, ${insidePlural ? "is" : "are"} violently thrown out as the item crashes to the ground.`,
+                                        ` The hard impact sends ${insideNames} tumbling out of ${insideItemName}, ejected from the inside as it slams down.`,
+                                        ` ${insideNames} ${insidePlural ? "is" : "are"} flung out of ${insideItemName} from the force of the crash, rolling onto the ground.`,
+                                        ` As ${insideItemName} hits the ground hard, ${insideNames} ${insidePlural ? "is" : "are"} catapulted out of it by the violent impact.`,
+                                    ] : [
+                                        ` ${insideNames}, who ${insidePlural ? "was" : "were"} inside ${insideItemName}, ${insidePlural ? "slides" : "slide"} out as the item tips over.`,
+                                        ` ${insideNames} ${insidePlural ? "tumbles" : "tumble"} out of ${insideItemName} as it falls, ending up on the ground.`,
+                                        ` The fall causes ${insideNames} to spill out of ${insideItemName}, landing on the ground nearby.`,
+                                        ` As ${insideItemName} drops, ${insideNames} ${insidePlural ? "is" : "are"} expelled from inside, ending up on the ground.`,
+                                    ]
+                                ) : (
+                                    userHasFallen ? [
+                                        ` ${insideNames}, still inside ${insideItemName}, ${insidePlural ? "is" : "are"} rattled around violently as the item crashes to the ground.`,
+                                        ` The brutal impact shakes ${insideNames} inside ${insideItemName}, though ${insidePlural ? "they remain" : "they remain"} trapped within.`,
+                                        ` ${insideNames} ${insidePlural ? "is" : "are"} jolted hard inside ${insideItemName} as it slams into the ground, but ${insidePlural ? "stays" : "stay"} within.`,
+                                        ` Still inside ${insideItemName}, ${insideNames} ${insidePlural ? "feels" : "feel"} the full force of the crash, though ${insidePlural ? "they don't" : "they don't"} come out.`,
+                                    ] : [
+                                        ` Since ${insideNames} ${insidePlural ? "is" : "are"} inside of ${insideItemName}, they also fall down while remaining inside the object.`,
+                                        ` ${insideNames}, tucked inside ${insideItemName}, ${insidePlural ? "goes" : "go"} down with it, staying inside as it hits the ground.`,
+                                        ` ${insideNames} ${insidePlural ? "remains" : "remain"} inside ${insideItemName} as it falls to the ground.`,
+                                        ` Still inside ${insideItemName}, ${insideNames} ${insidePlural ? "is" : "are"} carried down with it as it drops.`,
+                                    ]
+                                );
+                                storyMasterMessageSoFar += insideVariations[Math.floor(Math.random() * insideVariations.length)];
                             }
                             if (carriedItemVolume.charactersOnlyDirectlyOnTop.length > 0) {
-                                storyMasterMessageSoFar += ` Since ${engine.deObject.functions.format_and(engine.deObject, null, carriedItemVolume.charactersOnlyDirectlyOnTop)} are on top of the item, they also fall down with it.`;
+                                if (willExpellOnTop) {
+                                    expelledCharacters.push(...carriedItemVolume.charactersOnlyDirectlyOnTop);
+                                }
+                                const onTopNames = engine.deObject.functions.format_and(engine.deObject, null, carriedItemVolume.charactersOnlyDirectlyOnTop);
+                                const onTopItemName = utilItemCount(engine, charState.location, carriedItem.owner, 1, carriedItem.name, false, true);
+                                const onTopPlural = carriedItemVolume.charactersOnlyDirectlyOnTop.length === 1;
+                                const onTopVariations = willExpellOnTop ? (
+                                    userHasFallen ? [
+                                        ` ${onTopNames}, who ${onTopPlural ? "was" : "were"} on top of ${onTopItemName}, ${onTopPlural ? "is" : "are"} launched off by the violent crash, hitting the ground hard.`,
+                                        ` The force of the impact hurls ${onTopNames} off ${onTopItemName}, sending them crashing to the ground.`,
+                                        ` ${onTopNames} ${onTopPlural ? "is" : "are"} thrown clear off ${onTopItemName} as it smashes into the ground, landing roughly nearby.`,
+                                        ` As ${onTopItemName} slams down, ${onTopNames} ${onTopPlural ? "is" : "are"} catapulted off the top and sent sprawling across the ground.`,
+                                    ] : [
+                                        ` ${onTopNames}, who ${onTopPlural ? "was" : "were"} perched on top of ${onTopItemName}, ${onTopPlural ? "slides" : "slide"} off as it falls, landing on the ground.`,
+                                        ` ${onTopNames} ${onTopPlural ? "topples" : "topple"} off ${onTopItemName} as it goes down, ending up on the ground.`,
+                                        ` The fall tips ${onTopNames} off the top of ${onTopItemName}, depositing them on the ground.`,
+                                        ` As ${onTopItemName} drops, ${onTopNames} ${onTopPlural ? "loses" : "lose"} ${onTopPlural ? "their" : "their"} balance on top and ${onTopPlural ? "falls" : "fall"} to the ground.`,
+                                    ]
+                                ) : (
+                                    userHasFallen ? [
+                                        ` ${onTopNames}, still on top of ${onTopItemName}, ${onTopPlural ? "is" : "are"} shaken hard as the item crashes to the ground, but ${onTopPlural ? "manages" : "manage"} to hold on.`,
+                                        ` The violent impact rattles ${onTopNames} atop ${onTopItemName}, though ${onTopPlural ? "they cling" : "they cling"} on for dear life.`,
+                                        ` ${onTopNames} ${onTopPlural ? "is" : "are"} jarred atop ${onTopItemName} as it slams down, barely staying on.`,
+                                        ` Despite the brutal crash, ${onTopNames} ${onTopPlural ? "remains" : "remain"} clinging to the top of ${onTopItemName} as it hits the ground.`,
+                                    ] : [
+                                        ` Since ${onTopNames} ${onTopPlural ? "is" : "are"} on top of ${onTopItemName}, they also fall down while remaining on top of the object.`,
+                                        ` ${onTopNames}, riding on top of ${onTopItemName}, ${onTopPlural ? "goes" : "go"} down with it, staying put on top.`,
+                                        ` ${onTopNames} ${onTopPlural ? "remains" : "remain"} on top of ${onTopItemName} as it falls to the ground.`,
+                                        ` Still perched on ${onTopItemName}, ${onTopNames} ${onTopPlural ? "is" : "are"} brought down along with it.`,
+                                    ]
+                                );
+                                storyMasterMessageSoFar += onTopVariations[Math.floor(Math.random() * onTopVariations.length)];
                             }
                             const remainingCharacters = carriedItemVolume.allCharactersInvolved.filter((char) => !carriedItemVolume.charactersOnlyDirectlyInside.includes(char) && !carriedItemVolume.charactersOnlyDirectlyOnTop.includes(char));
                             if (remainingCharacters.length > 0) {
-                                storyMasterMessageSoFar += ` Since ${engine.deObject.functions.format_and(engine.deObject, null, remainingCharacters)} are also involved with the item, they also fall down with it.`;
+                                if (willExpellAnyRemainingCharacters) {
+                                    expelledCharacters.push(...remainingCharacters);
+                                }
+                                const remainNames = engine.deObject.functions.format_and(engine.deObject, null, remainingCharacters);
+                                const remainItemName = utilItemCount(engine, charState.location, carriedItem.owner, 1, carriedItem.name, false, true);
+                                const remainPlural = remainingCharacters.length === 1;
+                                const remainVariations = willExpellAnyRemainingCharacters ? (
+                                    userHasFallen ? [
+                                        ` ${remainNames}, also caught up with ${remainItemName}, ${remainPlural ? "is" : "are"} thrown free by the force of the crash, landing hard on the ground.`,
+                                        ` The violent impact dislodges ${remainNames} from ${remainItemName}, sending them tumbling across the ground.`,
+                                        ` ${remainNames} ${remainPlural ? "is" : "are"} ripped away from ${remainItemName} as it crashes down, ending up scattered on the ground.`,
+                                        ` As ${remainItemName} hits the ground with force, ${remainNames} ${remainPlural ? "is" : "are"} shaken loose and tossed onto the ground.`,
+                                    ] : [
+                                        ` ${remainNames}, also involved with ${remainItemName}, ${remainPlural ? "is" : "are"} dislodged as it falls, ending up on the ground.`,
+                                        ` ${remainNames} ${remainPlural ? "comes" : "come"} loose from ${remainItemName} during the fall, landing on the ground.`,
+                                        ` The drop separates ${remainNames} from ${remainItemName}, leaving them on the ground.`,
+                                        ` As ${remainItemName} goes down, ${remainNames} ${remainPlural ? "is" : "are"} shaken free and left on the ground.`,
+                                    ]
+                                ) : (
+                                    userHasFallen ? [
+                                        ` ${remainNames}, also involved with ${remainItemName}, ${remainPlural ? "is" : "are"} rattled by the violent crash but ${remainPlural ? "stays" : "stay"} in place.`,
+                                        ` The hard impact shakes ${remainNames}, still associated with ${remainItemName}, but ${remainPlural ? "they hold" : "they hold"} their position.`,
+                                        ` ${remainNames} ${remainPlural ? "is" : "are"} jolted as ${remainItemName} crashes down, but ${remainPlural ? "manages" : "manage"} to stay where ${remainPlural ? "they are" : "they are"}.`,
+                                        ` Despite the violent fall, ${remainNames} ${remainPlural ? "remains" : "remain"} where ${remainPlural ? "they were" : "they were"} on ${remainItemName}, shaken but in place.`,
+                                    ] : [
+                                        ` Since ${remainNames} ${remainPlural ? "is" : "are"} also involved with ${remainItemName}, they also fall down while remaining where they are.`,
+                                        ` ${remainNames}, also associated with ${remainItemName}, ${remainPlural ? "goes" : "go"} down with it, staying in place.`,
+                                        ` ${remainNames} ${remainPlural ? "remains" : "remain"} in position as ${remainItemName} falls, going down along with it.`,
+                                        ` Still attached to ${remainItemName}, ${remainNames} ${remainPlural ? "is" : "are"} carried down but ${remainPlural ? "stays" : "stay"} where ${remainPlural ? "they were" : "they were"}.`,
+                                    ]
+                                );
+                                storyMasterMessageSoFar += remainVariations[Math.floor(Math.random() * remainVariations.length)];
                             }
-                        }
-                        if (carriedItemVolume.allCharactersInvolved.length > 0) {
+
                             charState.carryingCharacters = charState.carryingCharacters.filter((v) => !carriedItemVolume.allCharactersInvolved.includes(v));
                             for (const otherCharName of carriedItemVolume.allCharactersInvolved) {
                                 const otherCharState = engine.deObject.stateFor[otherCharName];
                                 otherCharState.beingCarriedByCharacter = null;
                                 otherCharState.beingCarriedByCharacterDirectly = false;
-                                const atopPath = findAtopPathToOtherCharRecursive(otherCharName, resolvedFallenItems.resolved.items, [...resolvedFallenItems.pathToResolved, "items"]);
-                                const containingPath = findContainingPathToOtherCharRecursive(otherCharName, resolvedFallenItems.resolved.items, [...resolvedFallenItems.pathToResolved, "items"]);
-                                if (atopPath) {
-                                    otherCharState.atopItem = locationPathToMessage(engine, otherCharName, charState.location, atopPath);
-                                }
-                                if (containingPath) {
-                                    otherCharState.insideItem = locationPathToMessage(engine, otherCharName, charState.location, containingPath);
+
+                                if (!expelledCharacters.includes(otherCharName)) {
+                                    const atopPath = findAtopPathToOtherCharRecursive(otherCharName, resolvedFallenItems.resolved.items, [...resolvedFallenItems.pathToResolved, "items"]);
+                                    const containingPath = findContainingPathToOtherCharRecursive(otherCharName, resolvedFallenItems.resolved.items, [...resolvedFallenItems.pathToResolved, "items"]);
+                                    if (atopPath) {
+                                        otherCharState.atopItem = locationPathToMessage(engine, otherCharName, charState.location, atopPath);
+                                    }
+                                    if (containingPath) {
+                                        otherCharState.insideItem = locationPathToMessage(engine, otherCharName, charState.location, containingPath);
+                                    }
+                                } else {
+                                    const atopPath = findAtopPathToOtherCharRecursive(otherCharName, resolvedFallenItems.resolved.items, [...resolvedFallenItems.pathToResolved, "items"]);
+                                    const containingPath = findContainingPathToOtherCharRecursive(otherCharName, resolvedFallenItems.resolved.items, [...resolvedFallenItems.pathToResolved, "items"]);
+
+                                    otherCharState.atopItem = null;
+                                    otherCharState.atopItemNameOnly = null;
+                                    otherCharState.insideItem = null;
+                                    otherCharState.insideItemNameOnly = null;
+
+                                    if (atopPath) {
+                                        const resolvedAtop = resolvePath(engine, charState.location, atopPath);
+                                        if (resolvedAtop.resolved) {
+                                            // @ts-ignore
+                                            resolvedAtop.resolved.ontopCharacters = resolvedAtop.resolved.ontopCharacters.filter((v) => v !== otherCharName);
+                                        }
+                                    }
+                                    if (containingPath) {
+                                        const resolvedContaining = resolvePath(engine, charState.location, containingPath);
+                                        if (resolvedContaining.resolved) {
+                                            // @ts-ignore
+                                            resolvedContaining.resolved.insideCharacters = resolvedContaining.resolved.insideCharacters.filter((v) => v !== otherCharName);
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -3105,62 +3447,170 @@ async function cleanDirtyItemTree(
 
                 if (wearableFitment.shouldBreak) {
                     const copy = deepCopyItem(wornItem);
+                    copy.ontopCharacters = [];
+                    copy.containingCharacters = [];
                     resolvedFallenItems.resolved.items.push(copy);
                     await updateItemTitleAndDescription(
                         engine,
                         copy,
                         "this item got worn by a large character and that caused it to expand and break",
                     );
+                    // TODO be careful there can still be items inside the broken item, they do not necessarily need to be expelled, but characters always are
                     // TODO merge in case somehow by sheer luck the copy got updated with a similar name and properties as another item already on the ground
                     wornItem.amount = 0;
-                    addedMessagesForStoryMaster.push(`${utilItemCount(engine, charState.location, wornItem.owner, wornItem.amount || 1, wornItem.name, true, true)} ${wornItem.amount === 1 ? "is" : "are"} too tight to be worn by ${path[1]} and ${wornItem.amount === 1 ? "breaks" : "break"}, so ${wornItem.amount === 1 ? "it" : "they"} ${wornItem.amount === 1 ? "falls" : "fall"} on the ground at the ${expectedPathForFallenItems[1]}.`);
+                    const itemDesc = utilItemCount(engine, charState.location, wornItem.owner, wornItem.amount || 1, wornItem.name, true, true);
+                    const singular = wornItem.amount === 1;
+                    const tooTightVariations = [
+                        `${itemDesc} ${singular ? "is" : "are"} too tight to be worn by ${path[1]} and ${singular ? "breaks" : "break"}, so ${singular ? "it" : "they"} ${singular ? "falls" : "fall"} on the ground at the ${expectedPathForFallenItems[1]}.`,
+                        `${path[1]} tries to wear ${itemDesc}, but ${singular ? "it's" : "they're"} far too tight and ${singular ? "snaps" : "snap"} apart, falling to the ground at the ${expectedPathForFallenItems[1]}.`,
+                        `${itemDesc} ${singular ? "can't" : "can't"} stretch around ${path[1]} and ${singular ? "tears" : "tear"} from the strain, dropping to the ground at the ${expectedPathForFallenItems[1]}.`,
+                        `The fit is hopeless — ${itemDesc} ${singular ? "is" : "are"} way too tight on ${path[1]} and ${singular ? "breaks" : "break"} apart, ending up on the ground at the ${expectedPathForFallenItems[1]}.`,
+                    ];
+                    addedMessagesForStoryMaster.push(tooTightVariations[Math.floor(Math.random() * tooTightVariations.length)]);
                 } else if (wearableFitment.shouldFallDown) {
                     expellItemToFallen(wornItem, wornItem.amount || 1);
                     wornItem.amount = 0;
                     if (wornItem.wearableProperties) {
-                        addedMessagesForStoryMaster.push(`${utilItemCount(engine, charState.location, wornItem.owner, wornItem.amount || 1, wornItem.name, true, true)} ${wornItem.amount === 1 ? "is" : "are"} too large to fit on ${path[1]} and ${wornItem.amount === 1 ? "falls" : "fall"} down from it onto the ground at the ${expectedPathForFallenItems[1]}.`);
+                        const wearItemDesc = utilItemCount(engine, charState.location, wornItem.owner, wornItem.amount || 1, wornItem.name, true, true);
+                        const wearSingular = wornItem.amount === 1;
+                        const tooLargeWearVariations = [
+                            `${wearItemDesc} ${wearSingular ? "is" : "are"} too large to fit on ${path[1]} and ${wearSingular ? "falls" : "fall"} down from it onto the ground at the ${expectedPathForFallenItems[1]}.`,
+                            `${wearItemDesc} ${wearSingular ? "is" : "are"} far too loose on ${path[1]} and ${wearSingular ? "slides" : "slide"} right off, dropping to the ground at the ${expectedPathForFallenItems[1]}.`,
+                            `${path[1]} can't keep ${wearItemDesc} on — ${wearSingular ? "it's" : "they're"} too large and ${wearSingular ? "slips" : "slip"} off onto the ground at the ${expectedPathForFallenItems[1]}.`,
+                            `Too large to stay on ${path[1]}, ${wearItemDesc} ${wearSingular ? "falls" : "fall"} off and ${wearSingular ? "lands" : "land"} on the ground at the ${expectedPathForFallenItems[1]}.`,
+                        ];
+                        addedMessagesForStoryMaster.push(tooLargeWearVariations[Math.floor(Math.random() * tooLargeWearVariations.length)]);
                     } else {
-                        addedMessagesForStoryMaster.push(`${utilItemCount(engine, charState.location, wornItem.owner, wornItem.amount || 1, wornItem.name, true, true)} ${wornItem.amount === 1 ? "is" : "are"} not possible to wear by ${path[1]} and ${wornItem.amount === 1 ? "falls" : "fall"} down from it onto the ground at the ${expectedPathForFallenItems[1]}.`);
+                        const wearItemDesc = utilItemCount(engine, charState.location, wornItem.owner, wornItem.amount || 1, wornItem.name, true, true);
+                        const wearSingular = wornItem.amount === 1;
+                        const notWearableVariations = [
+                            `${wearItemDesc} ${wearSingular ? "is" : "are"} not possible to wear by ${path[1]} and ${wearSingular ? "falls" : "fall"} down from it onto the ground at the ${expectedPathForFallenItems[1]}.`,
+                            `${path[1]} can't wear ${wearItemDesc} — ${wearSingular ? "it" : "they"} simply ${wearSingular ? "won't" : "won't"} stay on, and ${wearSingular ? "drops" : "drop"} to the ground at the ${expectedPathForFallenItems[1]}.`,
+                            `${wearItemDesc} ${wearSingular ? "isn't" : "aren't"} something ${path[1]} can wear, and ${wearSingular ? "it slides" : "they slide"} off onto the ground at the ${expectedPathForFallenItems[1]}.`,
+                            `Unable to wear ${wearItemDesc}, ${path[1]} loses hold of ${wearSingular ? "it" : "them"} and ${wearSingular ? "it falls" : "they fall"} to the ground at the ${expectedPathForFallenItems[1]}.`,
+                        ];
+                        addedMessagesForStoryMaster.push(notWearableVariations[Math.floor(Math.random() * notWearableVariations.length)]);
                     }
                 } else {
                     totalWornWeight += wornItemWeight.completeWeight;
                     // @ts-ignore
                     if (wornItem._just_placed && cycle === "first") {
                         // only on the first cycle because this will keep appearing over and over otherwise
-                        addedMessagesForStoryMaster.push(`${utilItemCount(engine, charState.location, wornItem.owner, wornItem.amount || 1, wornItem.name, true, true)} is now worn by ${path[1]}, ${wornItem.amount === 1 ? "it" : "they"} ${wearableFitment.fitment}.`);
+                        const fitmentInfo = `${wornItem.amount === 1 ? "it" : "they"} ${wearableFitment.fitment}`;
+                        const wornDesc = utilItemCount(engine, charState.location, wornItem.owner, wornItem.amount || 1, wornItem.name, true, true);
+                        const wornVariations = [
+                            `${wornDesc} is now worn by ${path[1]}, ${fitmentInfo}.`,
+                            `${path[1]} is now wearing ${wornDesc}, ${fitmentInfo}.`,
+                            `${path[1]} puts on ${wornDesc} — ${fitmentInfo}.`
+                        ];
+                        addedMessagesForStoryMaster.push(wornVariations[Math.floor(Math.random() * wornVariations.length)]);
                     }
                 }
 
-                if (wearableFitment.shouldFallDown) {
+                if (wearableFitment.shouldFallDown && !wearableFitment.shouldBreak) {
                     if (wornItemWeight.allCharactersInvolved.length > 0) {
+                        const charState = engine.deObject.stateFor[path[1]];
+                        const expelledLikelyHoodInside = 0.5;
+                        const expelledLikelyHoodOnTop = 0.5;
+                        const expelledCharacters = [];
+
+                        const willExpellInside = Math.random() < expelledLikelyHoodInside;
+                        const willExpellOnTop = Math.random() < expelledLikelyHoodOnTop;
+                        const willExpellAnyRemainingCharacters = willExpellInside || willExpellOnTop;
+
                         if (wornItemWeight.charactersOnlyDirectlyInside.length > 0) {
-                            addedMessagesForStoryMaster.push(`Since ${engine.deObject.functions.format_and(engine.deObject, null, wornItemWeight.charactersOnlyDirectlyInside)} are inside the item, they also fall down with it.`);
+                            if (willExpellInside) {
+                                expelledCharacters.push(...wornItemWeight.charactersOnlyDirectlyInside);
+                            }
+                            const insideNames = engine.deObject.functions.format_and(engine.deObject, null, wornItemWeight.charactersOnlyDirectlyInside);
+                            const insideItemName = utilItemCount(engine, charState.location, wornItem.owner, 1, wornItem.name, false, true);
+                            const insidePlural = wornItemWeight.charactersOnlyDirectlyInside.length === 1;
+                            const insideVariations = willExpellInside ? [
+                                `${insideNames}, who ${insidePlural ? "was" : "were"} inside ${insideItemName}, ${insidePlural ? "tumbles" : "tumble"} out as the oversized garment slides off and hits the ground at ${expectedPathForFallenItems[1]}.`,
+                                `As ${insideItemName} slips off, ${insideNames} ${insidePlural ? "is" : "are"} shaken loose from inside and ${insidePlural ? "rolls" : "roll"} out onto the ground at ${expectedPathForFallenItems[1]}.`,
+                                `The loose clothing falls away and ${insideNames} ${insidePlural ? "spills" : "spill"} out from inside ${insideItemName}, ending up on the ground at ${expectedPathForFallenItems[1]}.`,
+                                `${insideNames} ${insidePlural ? "is" : "are"} tossed out of ${insideItemName} as the garment drops off, landing on the ground at ${expectedPathForFallenItems[1]}.`,
+                            ] : [
+                                `${insideNames}, who ${insidePlural ? "was" : "were"} inside ${insideItemName}, ${insidePlural ? "falls" : "fall"} down with it, still tucked inside the clothing as it hits the ground.`,
+                                `${insideNames}, nestled inside ${insideItemName}, ${insidePlural ? "tumbles" : "tumble"} to the ground along with the garment, rolling to a stop while still inside it.`,
+                                `As ${insideItemName} slips off, ${insideNames} ${insidePlural ? "goes" : "go"} down with it, landing safely on the ground while remaining inside the clothing.`,
+                                `${insideNames} ${insidePlural ? "is" : "are"} carried to the ground inside ${insideItemName} as it slides off, ending up bundled within the fallen garment.`,
+                            ];
+                            addedMessagesForStoryMaster.push(insideVariations[Math.floor(Math.random() * insideVariations.length)]);
                         }
 
                         if (wornItemWeight.charactersOnlyDirectlyOnTop.length > 0) {
-                            addedMessagesForStoryMaster.push(`Since ${engine.deObject.functions.format_and(engine.deObject, null, wornItemWeight.charactersOnlyDirectlyOnTop)} are on top of the item, they also fall down with it.`);
+                            if (willExpellOnTop) {
+                                expelledCharacters.push(...wornItemWeight.charactersOnlyDirectlyOnTop);
+                            }
+                            const onTopNames = engine.deObject.functions.format_and(engine.deObject, null, wornItemWeight.charactersOnlyDirectlyOnTop);
+                            const onTopItemName = utilItemCount(engine, charState.location, wornItem.owner, 1, wornItem.name, false, true);
+                            const onTopPlural = wornItemWeight.charactersOnlyDirectlyOnTop.length === 1;
+                            const onTopVariations = willExpellOnTop ? [
+                                `${onTopNames}, who ${onTopPlural ? "was" : "were"} on top of ${onTopItemName}, ${onTopPlural ? "slides" : "slide"} off as the loose garment falls away, ending up on the ground at ${expectedPathForFallenItems[1]}.`,
+                                `As ${onTopItemName} drops off, ${onTopNames} ${onTopPlural ? "is" : "are"} thrown from the top and ${onTopPlural ? "lands" : "land"} on the ground at ${expectedPathForFallenItems[1]}.`,
+                                `The clothing slips off and ${onTopNames} ${onTopPlural ? "tumbles" : "tumble"} off the top of ${onTopItemName}, rolling onto the ground at ${expectedPathForFallenItems[1]}.`,
+                                `${onTopNames} ${onTopPlural ? "loses" : "lose"} ${onTopPlural ? "their" : "their"} perch on ${onTopItemName} as the garment falls, ending up on the ground at ${expectedPathForFallenItems[1]}.`,
+                            ] : [
+                                `${onTopNames}, who ${onTopPlural ? "was" : "were"} on top of ${onTopItemName}, ${onTopPlural ? "rides" : "ride"} the garment down to the ground, staying on top of it.`,
+                                `${onTopNames}, perched on ${onTopItemName}, ${onTopPlural ? "goes" : "go"} along for the ride as the clothing slips off, landing on top of the crumpled garment on the ground.`,
+                                `As ${onTopItemName} slides off and falls, ${onTopNames} ${onTopPlural ? "clings" : "cling"} to the top, ending up still on top of the garment on the ground.`,
+                                `${onTopNames} ${onTopPlural ? "tumbles" : "tumble"} down with ${onTopItemName} as it falls off, remaining on top of the clothing on the ground.`,
+                            ];
+                            addedMessagesForStoryMaster.push(onTopVariations[Math.floor(Math.random() * onTopVariations.length)]);
                         }
 
                         if (wornItemWeight.allCharactersInvolved.length > 0) {
                             const remainingCharacters = wornItemWeight.allCharactersInvolved.filter((char) => !wornItemWeight.charactersOnlyDirectlyInside.includes(char) && !wornItemWeight.charactersOnlyDirectlyOnTop.includes(char));
                             if (remainingCharacters.length > 0) {
-                                addedMessagesForStoryMaster.push(`Since ${engine.deObject.functions.format_and(engine.deObject, null, remainingCharacters)} are also involved with the item, they also fall down with it.`);
+                                if (willExpellAnyRemainingCharacters) {
+                                    expelledCharacters.push(...remainingCharacters);
+                                }
+                                const remainNames = engine.deObject.functions.format_and(engine.deObject, null, remainingCharacters);
+                                const remainItemName = utilItemCount(engine, charState.location, wornItem.owner, 1, wornItem.name, false, true);
+                                const remainPlural = remainingCharacters.length === 1;
+                                const remainVariations = willExpellAnyRemainingCharacters ? [
+                                    `${remainNames}, also involved with ${remainItemName}, ${remainPlural ? "is" : "are"} shaken loose as the oversized garment falls off and ${remainPlural ? "ends" : "end"} up on the ground at ${expectedPathForFallenItems[1]}.`,
+                                    `As ${remainItemName} slips off, ${remainNames} ${remainPlural ? "is" : "are"} separated from it, tumbling onto the ground at ${expectedPathForFallenItems[1]}.`,
+                                    `The loose clothing drops away and ${remainNames} ${remainPlural ? "comes" : "come"} free from ${remainItemName}, landing on the ground at ${expectedPathForFallenItems[1]}.`,
+                                    `${remainNames} ${remainPlural ? "is" : "are"} dislodged from ${remainItemName} as the garment falls off, ending up on the ground at ${expectedPathForFallenItems[1]}.`,
+                                ] : [
+                                    `${remainNames}, also involved with ${remainItemName}, ${remainPlural ? "falls" : "fall"} down with the garment, staying where ${remainPlural ? "they are" : "they are"} on the fallen clothing.`,
+                                    `${remainNames}, caught up with ${remainItemName}, ${remainPlural ? "tumbles" : "tumble"} to the ground along with the clothing, remaining in place.`,
+                                    `As ${remainItemName} slips off, ${remainNames} ${remainPlural ? "goes" : "go"} down with it, landing on the ground while staying put on the garment.`,
+                                    `${remainNames} ${remainPlural ? "is" : "are"} taken along for the fall as ${remainItemName} slides off, ending up on the ground but still where ${remainPlural ? "they were" : "they were"}.`,
+                                ];
+                                addedMessagesForStoryMaster.push(remainVariations[Math.floor(Math.random() * remainVariations.length)]);
                             }
                         }
 
-                        const charState = engine.deObject.stateFor[path[1]];
                         charState.carryingCharacters = charState.carryingCharacters.filter((v) => !wornItemWeight.allCharactersInvolved.includes(v));
                         for (const otherCharName of wornItemWeight.allCharactersInvolved) {
-                            const otherCharState = engine.deObject.stateFor[otherCharName];
-                            otherCharState.beingCarriedByCharacter = null;
-                            otherCharState.beingCarriedByCharacterDirectly = false;
-                            const atopPath = findAtopPathToOtherCharRecursive(otherCharName, resolvedFallenItems.resolved.items, [...resolvedFallenItems.pathToResolved, "items"]);
-                            const containingPath = findContainingPathToOtherCharRecursive(otherCharName, resolvedFallenItems.resolved.items, [...resolvedFallenItems.pathToResolved, "items"]);
-                            if (atopPath) {
-                                otherCharState.atopItem = locationPathToMessage(engine, otherCharName, charState.location, atopPath);
-                            }
-                            if (containingPath) {
-                                otherCharState.insideItem = locationPathToMessage(engine, otherCharName, charState.location, containingPath);
+                            if (!expelledCharacters.includes(otherCharName)) {
+                                const otherCharState = engine.deObject.stateFor[otherCharName];
+                                otherCharState.beingCarriedByCharacter = null;
+                                otherCharState.beingCarriedByCharacterDirectly = false;
+                                // TODO destroy any potential carryingCharacters that has this character, it's an extreme case whenever we do these nulls
+                                // we need to check every case, as say a rat fell down that had a flea on top, the flea was; CHECK AS THIS ERROR IS IN MANY PLACES
+                                const atopPath = findAtopPathToOtherCharRecursive(otherCharName, resolvedFallenItems.resolved.items, [...resolvedFallenItems.pathToResolved, "items"]);
+                                const containingPath = findContainingPathToOtherCharRecursive(otherCharName, resolvedFallenItems.resolved.items, [...resolvedFallenItems.pathToResolved, "items"]);
+                                if (atopPath) {
+                                    otherCharState.atopItem = locationPathToMessage(engine, otherCharName, charState.location, atopPath);
+                                }
+                                if (containingPath) {
+                                    otherCharState.insideItem = locationPathToMessage(engine, otherCharName, charState.location, containingPath);
+                                }
+                            } else {
+                                const otherCharState = engine.deObject.stateFor[otherCharName];
+                                otherCharState.beingCarriedByCharacter = null;
+                                otherCharState.beingCarriedByCharacterDirectly = false;
+                                otherCharState.location = charState.location;
+                                // @ts-ignore
+                                otherCharState.locationSlot = expectedPathForFallenItems[1];
+                                otherCharState.atopItem = null;
+                                otherCharState.atopItemNameOnly = null;
+                                otherCharState.insideItem = null;
+                                otherCharState.insideItemNameOnly = null;
                             }
                         }
                     }
@@ -3169,15 +3619,39 @@ async function cleanDirtyItemTree(
                 if (wearableFitment.shouldBreak) {
                     if (wornItemWeight.allCharactersInvolved.length > 0) {
                         if (wornItemWeight.charactersOnlyDirectlyInside.length > 0) {
-                            addedMessagesForStoryMaster.push(`Since ${engine.deObject.functions.format_and(engine.deObject, null, wornItemWeight.charactersOnlyDirectlyInside)} are inside the item that just broke, they fall out from it onto the ground at the ${expectedPathForFallenItems[1]}.`);
+                            const insideNames = engine.deObject.functions.format_and(engine.deObject, null, wornItemWeight.charactersOnlyDirectlyInside);
+                            const insidePlural = wornItemWeight.charactersOnlyDirectlyInside.length === 1;
+                            const insideVariations = [
+                                `Since ${insideNames} ${insidePlural ? "was" : "were"} inside the item that just broke, ${insidePlural ? engine.deObject.functions.format_pronoun(engine.deObject, null, wornItemWeight.charactersOnlyDirectlyInside[0]) : "they"} fall${insidePlural ? "s" : ""} out from it onto the ground at the ${expectedPathForFallenItems[1]}.`,
+                                `${insideNames}, who ${insidePlural ? "was" : "were"} squeezed inside the tight garment, ${insidePlural ? "is" : "are"} finally freed as it tears apart, tumbling onto the ground at ${expectedPathForFallenItems[1]}.`,
+                                `The garment rips open and ${insideNames}, compressed inside it, ${insidePlural ? "spills" : "spill"} out onto the ground at ${expectedPathForFallenItems[1]}, no longer squeezed.`,
+                                `As the overly tight clothing snaps apart, ${insideNames} ${insidePlural ? "is" : "are"} expelled from inside, having been squished within it, and ${insidePlural ? "lands" : "land"} on the ground at ${expectedPathForFallenItems[1]}.`,
+                            ];
+                            addedMessagesForStoryMaster.push(insideVariations[Math.floor(Math.random() * insideVariations.length)]);
                         }
                         if (wornItemWeight.charactersOnlyDirectlyOnTop.length > 0) {
-                            addedMessagesForStoryMaster.push(`Since ${engine.deObject.functions.format_and(engine.deObject, null, wornItemWeight.charactersOnlyDirectlyOnTop)} are on top of the item that just broke, they fall down with it onto the ground at the ${expectedPathForFallenItems[1]}.`);
+                            const onTopNames = engine.deObject.functions.format_and(engine.deObject, null, wornItemWeight.charactersOnlyDirectlyOnTop);
+                            const onTopPlural = wornItemWeight.charactersOnlyDirectlyOnTop.length === 1;
+                            const onTopVariations = [
+                                `Since ${onTopNames} ${onTopPlural ? "was" : "were"} on top of the item that just broke, ${onTopPlural ? engine.deObject.functions.format_pronoun(engine.deObject, null, wornItemWeight.charactersOnlyDirectlyOnTop[0]) : "they"} fall${onTopPlural ? "s" : ""} down from it onto the ground at the ${expectedPathForFallenItems[1]}.`,
+                                `${onTopNames}, who ${onTopPlural ? "was" : "were"} perched on top of the garment, ${onTopPlural ? "tumbles" : "tumble"} off as it tears apart and ${onTopPlural ? "lands" : "land"} on the ground at ${expectedPathForFallenItems[1]}.`,
+                                `As the clothing rips open, ${onTopNames} ${onTopPlural ? "loses" : "lose"} ${onTopPlural ? "their" : "their"} footing on top of it and ${onTopPlural ? "drops" : "drop"} to the ground at ${expectedPathForFallenItems[1]}.`,
+                                `The garment breaks apart beneath ${onTopNames}, and ${onTopPlural ? "they slide" : "they slide"} off the top, ending up on the ground at ${expectedPathForFallenItems[1]}.`,
+                            ];
+                            addedMessagesForStoryMaster.push(onTopVariations[Math.floor(Math.random() * onTopVariations.length)]);
                         }
                         if (wornItemWeight.allCharactersInvolved.length > 0) {
                             const remainingCharacters = wornItemWeight.allCharactersInvolved.filter((char) => !wornItemWeight.charactersOnlyDirectlyInside.includes(char) && !wornItemWeight.charactersOnlyDirectlyOnTop.includes(char));
                             if (remainingCharacters.length > 0) {
-                                addedMessagesForStoryMaster.push(`Since ${engine.deObject.functions.format_and(engine.deObject, null, remainingCharacters)} are also involved with the item that just broke, they fall down with it onto the ground at the ${expectedPathForFallenItems[1]}.`);
+                                const remainNames = engine.deObject.functions.format_and(engine.deObject, null, remainingCharacters);
+                                const remainPlural = remainingCharacters.length === 1;
+                                const remainVariations = [
+                                    `Since ${remainNames} ${remainPlural ? "was" : "were"} also involved with the item that just broke, ${remainPlural ? engine.deObject.functions.format_pronoun(engine.deObject, null, remainingCharacters[0]) : "they"} fall${remainPlural ? "s" : ""} down with it onto the ground at the ${expectedPathForFallenItems[1]}.`,
+                                    `${remainNames}, also associated with the garment that just tore apart, ${remainPlural ? "ends" : "end"} up on the ground at ${expectedPathForFallenItems[1]}.`,
+                                    `As the clothing breaks, ${remainNames} ${remainPlural ? "is" : "are"} brought down with it, landing on the ground at ${expectedPathForFallenItems[1]}.`,
+                                    `The garment's destruction takes ${remainNames} down as well, and ${remainPlural ? "they end" : "they end"} up on the ground at ${expectedPathForFallenItems[1]}.`,
+                                ];
+                                addedMessagesForStoryMaster.push(remainVariations[Math.floor(Math.random() * remainVariations.length)]);
                             }
                         }
                         for (const otherCharName of wornItemWeight.allCharactersInvolved) {

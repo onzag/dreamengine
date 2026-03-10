@@ -640,7 +640,7 @@ export class DEngine {
         this.invalidCharacterStates = true;
     }
 
-    refreshCharacterStates() {
+    refreshCharacterStates(initializing = false) {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         }
@@ -753,8 +753,11 @@ export class DEngine {
             // Sadly these cannot be regenerated
 
             // if the character is being carried by another character, they must be at the same location as that character
-            if (charState.beingCarriedByCharacter) {
+            if (charState.beingCarriedByCharacter && !initializing) {
                 const carrierState = this.deObject.stateFor[charState.beingCarriedByCharacter];
+                if (!carrierState) {
+                    throw new Error(`Character ${charName} is being carried by ${charState.beingCarriedByCharacter} but that character does not exist.`);
+                }
                 if (carrierState.location !== charState.location || carrierState.locationSlot !== charState.locationSlot) {
                     throw new Error(`Character ${charName} is being carried by ${charState.beingCarriedByCharacter} but they are not in the same location.`);
                 }
@@ -764,18 +767,23 @@ export class DEngine {
             }
 
             // do the same but for carryingCharacters, they must be in the same location as well
-            for (const carrier of charState.carryingCharacters) {
-                const carrierState = this.deObject.stateFor[carrier];
-                if (carrierState.location !== charState.location || carrierState.locationSlot !== charState.locationSlot) {
-                    throw new Error(`Character ${charName} is carrying ${carrier} but they are not in the same location.`);
+            if (!initializing) {
+                for (const carrier of charState.carryingCharacters) {
+                    const carrierState = this.deObject.stateFor[carrier];
+                    if (!carrierState) {
+                        throw new Error(`Character ${charName} is carrying ${carrier} but that character does not exist.`);
+                    }
+                    if (carrierState.location !== charState.location || carrierState.locationSlot !== charState.locationSlot) {
+                        throw new Error(`Character ${charName} is carrying ${carrier} but they are not in the same location.`);
+                    }
+                    if (carrierState.beingCarriedByCharacter !== charName) {
+                        throw new Error(`Character ${charName} is carrying ${carrier} but that character does not have them as beingCarriedByCharacter.`);
+                    }
                 }
-                if (carrierState.beingCarriedByCharacter !== charName) {
-                    throw new Error(`Character ${charName} is carrying ${carrier} but that character does not have them as beingCarriedByCharacter.`);
-                }
-            }
-            for (const directlyCarried of charState.carryingCharactersDirectly) {
-                if (!charState.carryingCharacters.includes(directlyCarried)) {
-                    throw new Error(`Character ${charName} has ${directlyCarried} in carryingCharactersDirectly but not in carryingCharacters.`);
+                for (const directlyCarried of charState.carryingCharactersDirectly) {
+                    if (!charState.carryingCharacters.includes(directlyCarried)) {
+                        throw new Error(`Character ${charName} has ${directlyCarried} in carryingCharactersDirectly but not in carryingCharacters.`);
+                    }
                 }
             }
 
@@ -818,8 +826,10 @@ export class DEngine {
                 }
             }
 
-            processItemRecursive(charState.carrying);
-            processItemRecursive(charState.wearing);
+            if (!initializing) {
+                processItemRecursive(charState.carrying);
+                processItemRecursive(charState.wearing);
+            }
         }
 
         this.invalidCharacterStates = false;
@@ -947,6 +957,8 @@ export class DEngine {
         this.deObject.world.currentLocationSlot = sceneObject.startingLocationSlot;
         // @ts-ignore
         const narration = await sceneObject.narration.execute(this.deObject, this.userCharacter);
+
+        // TODO add startup script for the scene
 
         const expectedParticipants = sceneObject.startingEngagedCharacters || [];
         expectedParticipants.push(this.userCharacter.name);
@@ -1082,196 +1094,201 @@ export class DEngine {
             }
         });
 
-        for (const charName in this.deObject.characters) {
-            const charState = this.deObject.stateFor[charName];
-            if (!charState) {
-                throw new Error(`Character ${charName} does not have a corresponding state in stateFor.`);
-            }
-            if ((charState.insideItem || charState.insideItemNameOnly) && (charState.atopItem || charState.atopItemNameOnly)) {
-                throw new Error(`Character ${charName} cannot be both inside an item and atop an item.`);
-            }
-            if (charState.beingCarriedByCharacter === charName) {
-                throw new Error(`Character ${charName} cannot be beingCarriedByCharacter themselves.`);
-            }
-            charState.carryingCharacters.forEach(carriedChar => {
-                if (carriedChar === charName) {
-                    throw new Error(`Character ${charName} cannot be carryingCharacters themselves.`);
+        if (!initialization) {
+            for (const charName in this.deObject.characters) {
+                const charState = this.deObject.stateFor[charName];
+                if (!charState) {
+                    throw new Error(`Character ${charName} does not have a corresponding state in stateFor.`);
                 }
-                if (charState.beingCarriedByCharacter === carriedChar) {
-                    throw new Error(`Character ${charName} cannot be beingCarriedByCharacter ${carriedChar} while also carryingCharacters them.`);
+                if ((charState.insideItem || charState.insideItemNameOnly) && (charState.atopItem || charState.atopItemNameOnly)) {
+                    throw new Error(`Character ${charName} cannot be both inside an item and atop an item.`);
                 }
-            });
-            if (charState.insideItem || charState.insideItemNameOnly) {
-                /**
-                 * @type {DEItem|null}
-                 */
-                let foundContainingItem = null;
-                /**
-                 * @type {string|null}
-                 */
-                let foundItemCarriedByCharacter = null;
-                /**
-                 * @type {string|null}
-                 */
-                let foundAtSlot = null;
-                /**
-                 * @type {string|null}
-                 */
-                let foundAtLocation = null;
-                /**
-                 * @param {DEItem[]} items 
-                 */
-                const loopThroughItemsRecursive = (items) => {
-                    for (const item of items) {
-                        if (item.containingCharacters && item.containingCharacters.includes(charName)) {
-                            if (foundContainingItem) {
-                                throw new Error(`Character ${charName} is inside multiple items, which is not possible.`);
-                            }
-                            foundContainingItem = item;
-                            if (charState.insideItemNameOnly !== item.name) {
-                                throw new Error(`Character ${charName} is inside item ${item.name} but their insideItemNameOnly is set to ${charState.insideItemNameOnly}.`);
+                if (charState.beingCarriedByCharacter === charName) {
+                    throw new Error(`Character ${charName} cannot be beingCarriedByCharacter themselves.`);
+                }
+                charState.carryingCharacters.forEach(carriedChar => {
+                    if (carriedChar === charName) {
+                        throw new Error(`Character ${charName} cannot be carryingCharacters themselves.`);
+                    }
+                    if (charState.beingCarriedByCharacter === carriedChar) {
+                        throw new Error(`Character ${charName} cannot be beingCarriedByCharacter ${carriedChar} while also carryingCharacters them.`);
+                    }
+                });
+                if (charState.insideItem || charState.insideItemNameOnly) {
+                    /**
+                     * @type {DEItem|null}
+                     */
+                    let foundContainingItem = null;
+                    /**
+                     * @type {string|null}
+                     */
+                    let foundItemCarriedByCharacter = null;
+                    /**
+                     * @type {string|null}
+                     */
+                    let foundAtSlot = null;
+                    /**
+                     * @type {string|null}
+                     */
+                    let foundAtLocation = null;
+                    /**
+                     * @param {DEItem[]} items 
+                     */
+                    const loopThroughItemsRecursive = (items) => {
+                        for (const item of items) {
+                            if (item.containingCharacters && item.containingCharacters.includes(charName)) {
+                                if (foundContainingItem) {
+                                    throw new Error(`Character ${charName} is inside multiple items, which is not possible.`);
+                                }
+                                foundContainingItem = item;
+                                if (charState.insideItemNameOnly !== item.name) {
+                                    throw new Error(`Character ${charName} is inside item ${item.name} but their insideItemNameOnly is set to ${charState.insideItemNameOnly}.`);
+                                }
                             }
                         }
                     }
-                }
-                if (!charState.insideItemNameOnly) {
-                    throw new Error(`Character ${charName} is inside an item but does not have insideItemNameOnly set.`);
-                }
-                if (!charState.insideItem) {
-                    throw new Error(`Character ${charName} is inside an item but does not have insideItem set.`);
-                }
-                for (const locationName in this.deObject.world.locations) {
-                    for (const [slotName, slot] of Object.entries(this.deObject.world.locations[locationName].slots)) {
-                        loopThroughItemsRecursive(slot.items);
-                        if (foundContainingItem) {
-                            foundAtLocation = locationName
-                            foundAtSlot = slotName;
+                    if (!charState.insideItemNameOnly) {
+                        throw new Error(`Character ${charName} is inside an item but does not have insideItemNameOnly set.`);
+                    }
+                    if (!charState.insideItem) {
+                        throw new Error(`Character ${charName} is inside an item but does not have insideItem set.`);
+                    }
+                    for (const locationName in this.deObject.world.locations) {
+                        for (const [slotName, slot] of Object.entries(this.deObject.world.locations[locationName].slots)) {
+                            const hadPreviouslyFoundItem = !!foundContainingItem;
+                            loopThroughItemsRecursive(slot.items);
+                            if (foundContainingItem && !hadPreviouslyFoundItem) {
+                                foundAtLocation = locationName
+                                foundAtSlot = slotName;
+                            }
                         }
                     }
-                }
-                for (const otherCharName in this.deObject.stateFor) {
-                    const otherCharState = this.deObject.stateFor[otherCharName];
-                    loopThroughItemsRecursive(otherCharState.carrying);
-                    loopThroughItemsRecursive(otherCharState.wearing);
+                    for (const otherCharName in this.deObject.stateFor) {
+                        const otherCharState = this.deObject.stateFor[otherCharName];
+                        const hadPreviouslyFoundItem = !!foundContainingItem;
+                        loopThroughItemsRecursive(otherCharState.carrying);
+                        loopThroughItemsRecursive(otherCharState.wearing);
+                        if (foundContainingItem && !hadPreviouslyFoundItem) {
+                            foundItemCarriedByCharacter = otherCharName;
+                            foundAtLocation = otherCharState.location;
+                            foundAtSlot = otherCharState.locationSlot;
+                        }
+                    }
+
+                    if (!foundContainingItem) {
+                        throw new Error(`Character ${charName} is inside item ${charState.insideItemNameOnly} but that item was not found in the world.`);
+                    } else if (foundItemCarriedByCharacter && charState.beingCarriedByCharacter !== foundItemCarriedByCharacter) {
+                        // @ts-ignore, typescript buggy
+                        throw new Error(`Character ${charName} is inside item ${foundContainingItem.name} which is carried by ${foundItemCarriedByCharacter} but their beingCarriedByCharacter is set to ${charState.beingCarriedByCharacter}.`);
+                    } else if (!foundItemCarriedByCharacter && charState.beingCarriedByCharacter) {
+                        // @ts-ignore, typescript buggy
+                        throw new Error(`Character ${charName} is inside item ${foundContainingItem.name} which is not carried by any character but their beingCarriedByCharacter is set to ${charState.beingCarriedByCharacter}.`);
+                    }
+
                     if (foundContainingItem) {
-                        foundItemCarriedByCharacter = otherCharName;
-                        foundAtLocation = otherCharState.location;
-                        foundAtSlot = otherCharState.locationSlot;
-                    }
-                }
-                if (!foundContainingItem) {
-                    throw new Error(`Character ${charName} is inside item ${charState.insideItemNameOnly} but that item was not found in the world.`);
-                } else if (foundItemCarriedByCharacter && charState.beingCarriedByCharacter !== foundItemCarriedByCharacter) {
-                    // @ts-ignore, typescript buggy
-                    throw new Error(`Character ${charName} is inside item ${foundContainingItem.name} which is carried by ${foundItemCarriedByCharacter} but their beingCarriedByCharacter is set to ${charState.beingCarriedByCharacter}.`);
-                } else if (!foundItemCarriedByCharacter && charState.beingCarriedByCharacter) {
-                    // @ts-ignore, typescript buggy
-                    throw new Error(`Character ${charName} is inside item ${foundContainingItem.name} which is not carried by any character but their beingCarriedByCharacter is set to ${charState.beingCarriedByCharacter}.`);
-                }
+                        /**
+                         * @type {DEItem}
+                         */
+                        const foundContainingItemTypescriptBugfix = foundContainingItem /** @type {DEItem} */;
+                        if (!foundContainingItemTypescriptBugfix.containingCharacters.includes(charName)) {
+                            throw new Error(`Character ${charName} is inside item ${foundContainingItemTypescriptBugfix.name} but that item does not have them in its containingCharacters.`);
+                        }
 
-                if (foundContainingItem) {
+                        if (charState.location !== foundAtLocation || charState.locationSlot !== foundAtSlot) {
+                            throw new Error(`Character ${charName} is inside item ${foundContainingItemTypescriptBugfix.name} which is at location ${foundAtLocation} slot ${foundAtSlot} but the character is at location ${charState.location} slot ${charState.locationSlot}.`);
+                        }
+                    }
+                } else if (charState.atopItem || charState.atopItemNameOnly) {
                     /**
-                     * @type {DEItem}
+                     * @type {DEItem|null}
                      */
-                    const foundContainingItemTypescriptBugfix = foundContainingItem /** @type {DEItem} */;
-                    if (!foundContainingItemTypescriptBugfix.containingCharacters.includes(charName)) {
-                        throw new Error(`Character ${charName} is inside item ${foundContainingItemTypescriptBugfix.name} but that item does not have them in its containingCharacters.`);
+                    let foundOntopItem = null;
+                    /**
+                     * @type {string|null}
+                     */
+                    let foundItemCarriedByCharacter = null;
+                    /**
+                     * @type {string|null}
+                     */
+                    let foundAtSlot = null;
+                    /**
+                     * @type {string|null}
+                     */
+                    let foundAtLocation = null;
+                    /**
+                     * @param {DEItem[]} items 
+                     */
+                    const loopThroughItemsRecursive = (items) => {
+                        for (const item of items) {
+                            if (item.ontopCharacters && item.ontopCharacters.includes(charName)) {
+                                if (foundOntopItem) {
+                                    throw new Error(`Character ${charName} is atop multiple items, which is not possible.`);
+                                }
+                                foundOntopItem = item;
+                                if (charState.atopItemNameOnly !== item.name) {
+                                    throw new Error(`Character ${charName} is atop item ${item.name} but their atopItemNameOnly is set to ${charState.atopItemNameOnly}.`);
+                                }
+                            }
+                        }
                     }
-
-                    if (charState.location !== foundAtLocation || charState.locationSlot !== foundAtSlot) {
-                        throw new Error(`Character ${charName} is inside item ${foundContainingItemTypescriptBugfix.name} which is at location ${foundAtLocation} slot ${foundAtSlot} but the character is at location ${charState.location} slot ${charState.locationSlot}.`);
+                    if (!charState.atopItemNameOnly) {
+                        throw new Error(`Character ${charName} is atop an item but does not have atopItemNameOnly set.`);
                     }
-                }
-            } else if (charState.atopItem || charState.atopItemNameOnly) {
-                /**
-                 * @type {DEItem|null}
-                 */
-                let foundOntopItem = null;
-                /**
-                 * @type {string|null}
-                 */
-                let foundItemCarriedByCharacter = null;
-                /**
-                 * @type {string|null}
-                 */
-                let foundAtSlot = null;
-                /**
-                 * @type {string|null}
-                 */
-                let foundAtLocation = null;
-                /**
-                 * @param {DEItem[]} items 
-                 */
-                const loopThroughItemsRecursive = (items) => {
-                    for (const item of items) {
-                        if (item.ontopCharacters && item.ontopCharacters.includes(charName)) {
+                    if (!charState.atopItem) {
+                        throw new Error(`Character ${charName} is atop an item but does not have atopItem set.`);
+                    }
+                    for (const locationName in this.deObject.world.locations) {
+                        for (const [slotName, slot] of Object.entries(this.deObject.world.locations[locationName].slots)) {
+                            loopThroughItemsRecursive(slot.items);
                             if (foundOntopItem) {
-                                throw new Error(`Character ${charName} is atop multiple items, which is not possible.`);
-                            }
-                            foundOntopItem = item;
-                            if (charState.atopItemNameOnly !== item.name) {
-                                throw new Error(`Character ${charName} is atop item ${item.name} but their atopItemNameOnly is set to ${charState.atopItemNameOnly}.`);
+                                foundAtLocation = locationName
+                                foundAtSlot = slotName;
                             }
                         }
                     }
-                }
-                if (!charState.atopItemNameOnly) {
-                    throw new Error(`Character ${charName} is atop an item but does not have atopItemNameOnly set.`);
-                }
-                if (!charState.atopItem) {
-                    throw new Error(`Character ${charName} is atop an item but does not have atopItem set.`);
-                }
-                for (const locationName in this.deObject.world.locations) {
-                    for (const [slotName, slot] of Object.entries(this.deObject.world.locations[locationName].slots)) {
-                        loopThroughItemsRecursive(slot.items);
+                    for (const otherCharName in this.deObject.stateFor) {
+                        const otherCharState = this.deObject.stateFor[otherCharName];
+                        loopThroughItemsRecursive(otherCharState.carrying);
+                        loopThroughItemsRecursive(otherCharState.wearing);
                         if (foundOntopItem) {
-                            foundAtLocation = locationName
-                            foundAtSlot = slotName;
+                            foundItemCarriedByCharacter = otherCharName;
+                            foundAtLocation = otherCharState.location;
+                            foundAtSlot = otherCharState.locationSlot;
+                        }
+                    }
+                    if (!foundOntopItem) {
+                        throw new Error(`Character ${charName} is atop item ${charState.atopItemNameOnly} but that item was not found in the world.`);
+                    } else if (foundItemCarriedByCharacter && charState.beingCarriedByCharacter !== foundItemCarriedByCharacter) {
+                        // @ts-ignore, typescript buggy
+                        throw new Error(`Character ${charName} is atop item ${foundOntopItem.name} which is carried by ${foundItemCarriedByCharacter} but their beingCarriedByCharacter is set to ${charState.beingCarriedByCharacter}.`);
+                    } else if (!foundItemCarriedByCharacter && charState.beingCarriedByCharacter) {
+                        // @ts-ignore, typescript buggy
+                        throw new Error(`Character ${charName} is atop item ${foundOntopItem.name} which is not carried by any character but their beingCarriedByCharacter is set to ${charState.beingCarriedByCharacter}.`);
+                    }
+
+                    if (foundOntopItem) {
+                        /**
+                         * @type {DEItem}
+                         */
+                        const foundOntopItemTypescriptBugfix = foundOntopItem /** @type {DEItem} */;
+                        if (!foundOntopItemTypescriptBugfix.ontopCharacters.includes(charName)) {
+                            throw new Error(`Character ${charName} is atop item ${foundOntopItemTypescriptBugfix.name} but that item does not have them in its ontopCharacters.`);
+                        }
+
+                        if (charState.location !== foundAtLocation || charState.locationSlot !== foundAtSlot) {
+                            throw new Error(`Character ${charName} is atop item ${foundOntopItemTypescriptBugfix.name} which is at location ${foundAtLocation} slot ${foundAtSlot} but the character is at location ${charState.location} slot ${charState.locationSlot}.`);
                         }
                     }
                 }
-                for (const otherCharName in this.deObject.stateFor) {
-                    const otherCharState = this.deObject.stateFor[otherCharName];
-                    loopThroughItemsRecursive(otherCharState.carrying);
-                    loopThroughItemsRecursive(otherCharState.wearing);
-                    if (foundOntopItem) {
-                        foundItemCarriedByCharacter = otherCharName;
-                        foundAtLocation = otherCharState.location;
-                        foundAtSlot = otherCharState.locationSlot;
-                    }
-                }
-                if (!foundOntopItem) {
-                    throw new Error(`Character ${charName} is atop item ${charState.atopItemNameOnly} but that item was not found in the world.`);
-                } else if (foundItemCarriedByCharacter && charState.beingCarriedByCharacter !== foundItemCarriedByCharacter) {
-                    // @ts-ignore, typescript buggy
-                    throw new Error(`Character ${charName} is atop item ${foundOntopItem.name} which is carried by ${foundItemCarriedByCharacter} but their beingCarriedByCharacter is set to ${charState.beingCarriedByCharacter}.`);
-                } else if (!foundItemCarriedByCharacter && charState.beingCarriedByCharacter) {
-                    // @ts-ignore, typescript buggy
-                    throw new Error(`Character ${charName} is atop item ${foundOntopItem.name} which is not carried by any character but their beingCarriedByCharacter is set to ${charState.beingCarriedByCharacter}.`);
-                }
 
-                if (foundOntopItem) {
-                    /**
-                     * @type {DEItem}
-                     */
-                    const foundOntopItemTypescriptBugfix = foundOntopItem /** @type {DEItem} */;
-                    if (!foundOntopItemTypescriptBugfix.ontopCharacters.includes(charName)) {
-                        throw new Error(`Character ${charName} is atop item ${foundOntopItemTypescriptBugfix.name} but that item does not have them in its ontopCharacters.`);
+                if (charState.beingCarriedByCharacter) {
+                    const carrierState = this.deObject.stateFor[charState.beingCarriedByCharacter];
+                    if (carrierState.location !== charState.location || carrierState.locationSlot !== charState.locationSlot) {
+                        throw new Error(`Character ${charName} is being carried by ${charState.beingCarriedByCharacter} but they are not in the same location, charState location: ${charState.location} charState locationSlot: ${charState.locationSlot}, carrierState location: ${carrierState.location} carrierState locationSlot: ${carrierState.locationSlot}`);
                     }
-
-                    if (charState.location !== foundAtLocation || charState.locationSlot !== foundAtSlot) {
-                        throw new Error(`Character ${charName} is atop item ${foundOntopItemTypescriptBugfix.name} which is at location ${foundAtLocation} slot ${foundAtSlot} but the character is at location ${charState.location} slot ${charState.locationSlot}.`);
+                    if (carrierState.carryingCharacters && !carrierState.carryingCharacters.includes(charName)) {
+                        throw new Error(`Character ${charName} is being carried by ${charState.beingCarriedByCharacter} but that character does not have them in their carryingCharacters.`);
                     }
-                }
-            }
-
-            if (charState.beingCarriedByCharacter) {
-                const carrierState = this.deObject.stateFor[charState.beingCarriedByCharacter];
-                if (carrierState.location !== charState.location || carrierState.locationSlot !== charState.locationSlot) {
-                    throw new Error(`Character ${charName} is being carried by ${charState.beingCarriedByCharacter} but they are not in the same location.`);
-                }
-                if (carrierState.carryingCharacters && !carrierState.carryingCharacters.includes(charName)) {
-                    throw new Error(`Character ${charName} is being carried by ${charState.beingCarriedByCharacter} but that character does not have them in their carryingCharacters.`);
                 }
             }
         }
@@ -1571,22 +1588,22 @@ export class DEngine {
             console.warn("Error initializing inference adapter:", error);
         }
 
-        this.refreshCharacterStates();
+        this.refreshCharacterStates(true);
 
         // now let's check that all function are defined
         if (!this.deObject.world.hasInitializedWorld) {
             await this.patchScripts();
-            this.refreshCharacterStates();
+            this.refreshCharacterStates(true);
             await this.runAllWorldCreationScripts();
-            this.refreshCharacterStates();
+            this.refreshCharacterStates(true);
             await this.addCharactersInWorld();
-            this.refreshCharacterStates();
+            this.refreshCharacterStates(true);
             await this.patchScripts();
             await this.runAllSpawnScripts();
             this.deleteOrphanedScriptSources();
         }
 
-        this.refreshCharacterStates();
+        this.refreshCharacterStates(true);
         this.checkDEObjectIntegrity(true);
 
         this.deObject.world.hasInitializedWorld = true;
@@ -1828,6 +1845,18 @@ export class DEngine {
             for (const ontopItem of item.ontop) {
                 listItems(space + "  ", ontopItem);
             }
+            if (item.containingCharacters.length !== 0) {
+                message += `${space}  Characters inside:\n`;
+            }
+            for (const containedCharacters of item.containingCharacters) {
+                message += `${space}  - ${containedCharacters}\n`;
+            }
+            if (item.ontopCharacters.length !== 0) {
+                message += `${space}  Characters on top:\n`;
+            }
+            for (const ontopCharacters of item.ontopCharacters) {
+                message += `${space}  - ${ontopCharacters}\n`;
+            }
             cheapList.push(`${item.owner ? item.owner + "'s " : ""}${item.name}${item.amount >= 2 ? " x" + item.amount : ""}`);
         }
         if (noItemsInAnySlot) {
@@ -1888,19 +1917,21 @@ export class DEngine {
                 listItems("", item);
             }
         }
+
         if (characterState.carryingCharacters.length > 0) {
             message += `\n## Characters carried by ${characterName}:\n`;
             for (const carriedCharName of characterState.carryingCharacters) {
                 const carriedCharState = this.deObject.stateFor[carriedCharName];
                 if (carriedCharState.insideItem) {
-                    message += `${characterName} is carrying ${carriedCharName} ${carriedCharState.insideItem}.\n`;
+                    message += `${characterName} is carrying ${carriedCharName}, ${carriedCharState.insideItem}.\n`;
                 } else if (carriedCharState.atopItem) {
-                    message += `${characterName} is carrying ${carriedCharName} ${carriedCharState.atopItem}.\n`;
+                    message += `${characterName} is carrying ${carriedCharName}, ${carriedCharState.atopItem}.\n`;
                 } else {
                     message += `${characterName} is carrying ${carriedCharName}.\n`;
                 }
             }
         }
+
         message += `\n## Items carried by ${characterName}:\n`;
         if (characterState.carrying.length === 0) {
             message += `No items or characters carried by ${characterName}.\n`;
@@ -1913,6 +1944,16 @@ export class DEngine {
         if (characterState.beingCarriedByCharacter) {
             message += `\n## ${characterName} is being carried by another character:\n`;
             message += `${characterName} is being carried by character: ${characterState.beingCarriedByCharacter}.\n`;
+        }
+
+        if (characterState.insideItem) {
+            message += `\n## ${characterName} is inside an item:\n`;
+            message += `${characterName} is inside ${characterState.insideItem}.\n`;
+        }
+
+        if (characterState.atopItem) {
+            message += `\n## ${characterName} is on top of an item:\n`;
+            message += `${characterName} is on top of ${characterState.atopItem}.\n`;
         }
 
         return { complete: message, cheapList };
