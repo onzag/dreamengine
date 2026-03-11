@@ -1,4 +1,5 @@
 import { deepCopy, deepCopyNoHistory, DEngine } from "../../index.js";
+import { getSurroundingCharacters } from "../../util/character-info.js";
 
 /**
  * @param {DEngine} engine 
@@ -7,8 +8,6 @@ import { deepCopy, deepCopyNoHistory, DEngine } from "../../index.js";
 export default async function testMessageFeasibilityForce(engine, character) {
     if (!engine.deObject) {
         throw new Error("DEngine not initialized");
-    } else if (engine.invalidCharacterStates) {
-        throw new Error("DEngine has invalid character states, cannot determine message feasibility");
     } else if (!engine.inferenceAdapter) {
         throw new Error("Inference adapter not set, cannot perform inference");
     } else if (!engine.userCharacter) {
@@ -35,22 +34,15 @@ export default async function testMessageFeasibilityForce(engine, character) {
      * @type {Array<{name: string, description: string}>}
      */
     const characters = [];
-    for (const characterName of charState.surroundingTotalStrangers) {
-        if (characterName === character.name) {
-            continue;
-        }
+    const surroundingCharactersInfo = getSurroundingCharacters(engine, character.name);
+    for (const characterName of surroundingCharactersInfo.totalStrangers) {
         const characterInfo = engine.deObject.characters[characterName];
-        const characterState = engine.deObject.stateFor[characterName];
         if (characterInfo) {
             characters.push({ name: characterName, description: engine.getExternalDescriptionOfCharacter(characterName, true) });
         }
     }
-    for (const characterName of charState.surroundingNonStrangers) {
-        if (characterName === character.name) {
-            continue;
-        }
+    for (const characterName of surroundingCharactersInfo.nonStrangers) {
         const characterInfo = engine.deObject.characters[characterName];
-        const characterState = engine.deObject.stateFor[characterName];
         if (characterInfo) {
             characters.push({ name: characterName, description: engine.getExternalDescriptionOfCharacter(characterName, true) });
         }

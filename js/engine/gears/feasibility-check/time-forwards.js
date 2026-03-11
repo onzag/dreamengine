@@ -114,8 +114,6 @@ export default async function timeForwardsUsingLastMessage(engine, character) {
         console.log(`Time-Forwards: Weather at ${characterState.location} changed from ${currentWeatherAtLocation} to ${newWeatherAtLocation} after time advanced.`);
         storyMasterMessagesToAdd.push(`The weather at ${characterState.location} has changed from ${currentWeatherAtLocation} to ${newWeatherAtLocation}.`);
     }
-    // refresh character states, so that any effect of weather is updated
-    engine.refreshCharacterStates();
 
     return storyMasterMessagesToAdd;
 }

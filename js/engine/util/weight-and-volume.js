@@ -719,3 +719,92 @@ export function checkItemIsOneOfAKindAtLocation(engine, location, item) {
 
     return totalCount <= 1;
 }
+
+/**
+ * @param {DEngine} engine
+ * @param {string} characterName
+ * @param {string} currentLocation
+ * @param {Array<string | number>} locationPath
+ * @param {boolean} [ignoreCarrierWearer] whether to ignore the carrier/wearer in the message, this is used for example when we are trying to figure out if an item is being worn by a character, as the LLM may refer to the item in a different way than how it is named in the world state, for example it may say "hat" instead of "red hat", so we want to ignore case and also check if the item name includes the name we are looking for instead of checking for an exact match, this is just to increase the chances of finding the item and thus accepting feasible changes even if they are not perfectly formatted
+ */
+export function locationPathToMessage(engine, characterName, currentLocation, locationPath, ignoreCarrierWearer = false) {
+    if (!engine.deObject) {
+        throw new Error("DEngine not initialized");
+    }
+    let base = "";
+    /**
+     * @type {*}
+     */
+    let elementToFollow = null;
+    if (locationPath[0] === "characters") {
+        base = ignoreCarrierWearer ? "" : `${locationPath[2] === "carrying" ? "carried" : "worn"} by ${locationPath[1]}`;
+        // @ts-ignore
+        elementToFollow = engine.deObject.stateFor[locationPath[1]][locationPath[2]];
+    } else if (locationPath[0] === "slots") {
+        let locationSlotNameToUse = /** @type {string} */ (locationPath[1]);
+        if (!locationSlotNameToUse.toLowerCase().startsWith("a ") && !locationSlotNameToUse.toLowerCase().startsWith("an ") && !locationSlotNameToUse.toLowerCase().startsWith("the ")) {
+            locationSlotNameToUse = "the " + locationSlotNameToUse;
+        }
+        base = `in ${locationSlotNameToUse}`;
+        elementToFollow = engine.deObject.world.locations[currentLocation].slots[locationPath[1]].items;
+    }
+
+    for (let i = 3; i < locationPath.length; i += 2) {
+        const itemId = locationPath[i];
+        const relation = locationPath[i + 1];
+
+        let itemNameToUse = elementToFollow[itemId].name;
+        if (!itemNameToUse.toLowerCase().startsWith("a ") && !itemNameToUse.toLowerCase().startsWith("an ") && !itemNameToUse.toLowerCase().startsWith("the ")) {
+            if (checkItemIsOneOfAKindAtLocation(engine, engine.deObject.stateFor[characterName].location, elementToFollow[itemId].name)) {
+                itemNameToUse = "the " + itemNameToUse;
+            } else if (itemNameToUse.toLowerCase().startsWith("a")) {
+                itemNameToUse = "an " + itemNameToUse;
+            } else {
+                itemNameToUse = "a " + itemNameToUse;
+            }
+        }
+        if (relation === "containing" || relation === "containingCharacters") {
+            base = `inside ${itemNameToUse}, ${base}`;
+        } else if (relation === "ontop" || relation === "ontopCharacters") {
+            base = `on top of ${itemNameToUse}, ${base}`;
+        } else {
+            base = `${itemNameToUse}, ${base}`;
+        }
+        elementToFollow = elementToFollow[itemId][relation];
+    }
+
+    return base;
+}
+
+/**
+ * @param {DEngine} engine
+ * @param {string} currentLocation
+ * @param {Array<string | number>} path
+ * @return {{
+ *   resolved: *,
+ *   pathToResolved: Array<string | number>
+ * }}
+ */
+export function resolvePath(engine, currentLocation, path) {
+    if (!engine.deObject) {
+        throw new Error("DEngine not initialized");
+    }
+    /**
+     * @type {*}
+     */
+    let current = path[0] === "slots" ? engine.deObject.world.locations[currentLocation].slots[path[1]] : engine.deObject.stateFor[path[1]];
+    const startIndex = 2;
+    for (let i = startIndex; i < path.length; i++) {
+        // console.log(current)
+        const part = path[i];
+        // @ts-ignore
+        current = current[part];
+    }
+    if (current._moved_to) {
+        return resolvePath(engine, currentLocation, current._moved_to);
+    }
+    return {
+        resolved: current,
+        pathToResolved: path,
+    };
+}

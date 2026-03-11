@@ -1,4 +1,5 @@
 import { DEngine } from "../index.js";
+import { getSurroundingCharacters } from "../util/character-info.js";
 
 /**
  * Removes any punctuation from a string.
@@ -47,9 +48,6 @@ export default async function testWorldRulesOn(engine, character) {
     if (!engine.deObject) {
         throw new Error("DEngine not initialized");
     }
-    if (engine.invalidCharacterStates) {
-        throw new Error("DEngine has invalid character states, cannot validate world rules");
-    }
     const characterState = engine.deObject.stateFor[character.name];
     if (!characterState) {
         throw new Error(`Character state for ${character.name} not found.`);
@@ -72,22 +70,21 @@ export default async function testWorldRulesOn(engine, character) {
      * @type {Array<{name: string, description: string}>}
      */
     const characters = [];
-    for (const characterName of charState.surroundingTotalStrangers) {
+    const characterSurroundInfo = getSurroundingCharacters(engine, character.name);
+    for (const characterName of characterSurroundInfo.totalStrangers) {
         if (characterName === character.name) {
             continue;
         }
         const characterInfo = engine.deObject.characters[characterName];
-        const characterState = engine.deObject.stateFor[characterName];
         if (characterInfo) {
             characters.push({ name: characterName, description: engine.getExternalDescriptionOfCharacter(characterName, true) });
         }
     }
-    for (const characterName of charState.surroundingNonStrangers) {
+    for (const characterName of characterSurroundInfo.nonStrangers) {
         if (characterName === character.name) {
             continue;
         }
         const characterInfo = engine.deObject.characters[characterName];
-        const characterState = engine.deObject.stateFor[characterName];
         if (characterInfo) {
             characters.push({ name: characterName, description: engine.getExternalDescriptionOfCharacter(characterName, true) });
         }
@@ -112,7 +109,7 @@ export default async function testWorldRulesOn(engine, character) {
         "You must answer with Yes or No",
         "If answering Yes, you must provide a brief explanation",
         "Answer no for any characters that are already present at " + contextInfoSurroundingCharacters.availableCharactersAt + " list",
-        "Answer no for any of " + [...charState.surroundingTotalStrangers, ...charState.surroundingNonStrangers, character.name].map(name => `"${name}"`).join(", "),
+        "Answer no for any of " + [...characterSurroundInfo.totalStrangers, ...characterSurroundInfo.nonStrangers, character.name].map(name => `"${name}"`).join(", "),
     ], null);
 
     const characterInteractionGenerator = engine.inferenceAdapter.runQuestioningCustomAgentOn(
@@ -151,12 +148,6 @@ export default async function testWorldRulesOn(engine, character) {
     }
 
     // After this rule passed we can be sure that any character mentioned, must be physically present in the location
-
-    // we are going to build an special custom agent just to analyze actions and reactions because
-    // the normal question for the world rule was not being handled well by the LLMs
-    const characterNamesOptions = [...charState.surroundingTotalStrangers, ...charState.surroundingNonStrangers, character.name, "Unknown"].map(name => JSON.stringify(name)).join(" | ");
-    const characterNameOpenFormat = "\"\\\"\" .* \"\\\"\"";
-
     const systeMessageSpecial = `You are an assistant and story analyst that checks for actions and reactions of characters in an interactive story`;
     const systemPromptSpecial = engine.inferenceAdapter.buildSystemPromptForQuestioningAgent(
         systeMessageSpecial,
@@ -176,7 +167,7 @@ export default async function testWorldRulesOn(engine, character) {
         throw new Error("Inference adapter questioning generator ended unexpectedly.");
     }
 
-    for (const characterName of [...charState.surroundingTotalStrangers, ...charState.surroundingNonStrangers]) {
+    for (const characterName of [...characterSurroundInfo.totalStrangers, ...characterSurroundInfo.nonStrangers]) {
         const nextQuestion = `Has the last message described any actions or reactions performed by ${characterName}?`;
         console.log("Asking question, " + nextQuestion);
         let specialResult1 = await generatorSpecial.next({
@@ -378,12 +369,12 @@ export default async function testWorldRulesOn(engine, character) {
          */
     const otherCharacterNames = [];
 
-    for (const charName in charState.surroundingTotalStrangers) {
+    for (const charName of characterSurroundInfo.totalStrangers) {
         if (charName !== character.name) {
             otherCharacterNames.push(charName);
         }
     }
-    for (const charName in charState.surroundingNonStrangers) {
+    for (const charName of characterSurroundInfo.nonStrangers) {
         if (charName !== character.name && !otherCharacterNames.includes(charName)) {
             otherCharacterNames.push(charName);
         }

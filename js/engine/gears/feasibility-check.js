@@ -595,8 +595,6 @@ import testMessageFeasibilityForce from "./feasibility-check/force.js";
 export default async function testMessageFeasibilityForCharacter(engine, character, previouslyLeftOrderOfInteraction) {
     if (!engine.deObject) {
         throw new Error("DEngine not initialized");
-    } else if (engine.invalidCharacterStates) {
-        throw new Error("DEngine has invalid character states, cannot determine message feasibility");
     } else if (!engine.inferenceAdapter) {
         throw new Error("Inference adapter not set, cannot perform inference");
     } else if (!engine.userCharacter) {

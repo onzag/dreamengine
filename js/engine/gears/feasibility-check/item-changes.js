@@ -1,5 +1,6 @@
 import { deepCopy, DEngine } from "../../index.js";
-import { checkItemIsOneOfAKindAtLocation, getCharacterCarryingCapacity, getCharacterVolume, getCharacterWeight, getItemExcessElements, getItemVolume, getItemWeight, getWearableFitment, utilItemCount } from "../../util/weight-and-volume.js";
+import { getBeingCarriedByCharacter, getCharacterExactLocation } from "../../util/character-info.js";
+import { checkItemIsOneOfAKindAtLocation, getCharacterCarryingCapacity, getCharacterVolume, getCharacterWeight, getItemExcessElements, getItemVolume, getItemWeight, getWearableFitment, locationPathToMessage, resolvePath, utilItemCount } from "../../util/weight-and-volume.js";
 
 // TODO repair locations not here, but somewhere during creating the world
 // because the placement of an item does not fall in line with how they are
@@ -93,8 +94,6 @@ function isYes(answer) {
 export default async function testMessageFeasibilityItemChanges(engine, character) {
     if (!engine.deObject) {
         throw new Error("DEngine not initialized");
-    } else if (engine.invalidCharacterStates) {
-        throw new Error("DEngine has invalid character states, cannot determine message feasibility");
     } else if (!engine.inferenceAdapter) {
         throw new Error("Inference adapter not set, cannot perform inference");
     } else if (!engine.userCharacter) {
@@ -1501,7 +1500,8 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
             let isAtopItem = false;
 
             const canBeInside = allPotentialItemsForItem.some((itemOptions) => itemOptions.some((it) => it.containerProperties && it.containerProperties.capacityKg && it.containerProperties.capacityKg > 0));
-            const alreadyInside = engine.deObject.stateFor[charName].insideItemNameOnly === item;
+            const charExactLocation = getCharacterExactLocation(engine, charName);
+            const alreadyInside = charExactLocation.item && charExactLocation.item.name === item && charExactLocation.itemPathEnd === "containingCharacters";
             if (canBeInside && !alreadyInside) {
                 const nextQuestion = `By the end of the last story fragment, is ${charName} inside ${item}? Answer "yes" ONLY if ${charName} got inside ${item} by entering it, climbing into it, or being put into it. If ${charName} is near ${item} but not inside it, or if it's not clear if they are inside it, answer "no".`;
                 console.log("Asking question, " + nextQuestion);
@@ -1533,7 +1533,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                 }
             }
 
-            const alreadyAtop = engine.deObject.stateFor[charName].atopItemNameOnly === item;
+            const alreadyAtop = charExactLocation.item && charExactLocation.item.name === item && charExactLocation.itemPathEnd === "ontopCharacters";
             if (!isInsideItem && !alreadyAtop) {
                 const nextQuestion = `By the end of the last story fragment, is ${charName} on top of ${item} (sitting, standing, or laying on it, or any other position atop)? Answer "yes" ONLY if ${charName} got on top of ${item} by sitting, standing, laying on it, or being placed on top of it. If ${charName} is near ${item} but not on top of it, or if it's not clear if they are on top of it, answer "no".`;
                 console.log("Asking question, " + nextQuestion);
@@ -1595,7 +1595,8 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                 continue;
             }
 
-            const alreadyBeingCarriedBy = engine.deObject.stateFor[charName].beingCarriedByCharacter === otherCharName;
+            const beingCarriedInfo = getBeingCarriedByCharacter(engine, charName);
+            const alreadyBeingCarriedBy = beingCarriedInfo && beingCarriedInfo.carrierName === otherCharName;
 
             if (alreadyBeingCarriedBy) {
                 // do not ask again, maybe they are inside an item now, eg. in their backpack
@@ -1603,7 +1604,8 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                 continue;
             }
 
-            const carryingThatCharacterInsteadAndItIsEstablished = engine.deObject.stateFor[otherCharName].beingCarriedByCharacter === charName && charactersWithAEstablishedPositionSoFar.includes(otherCharName);
+            const otherCharCarriedInfo = getBeingCarriedByCharacter(engine, otherCharName);
+            const carryingThatCharacterInsteadAndItIsEstablished = otherCharCarriedInfo && otherCharCarriedInfo.carrierName === charName && charactersWithAEstablishedPositionSoFar.includes(otherCharName);
 
             if (carryingThatCharacterInsteadAndItIsEstablished) {
                 // this means that the other character we will check if our character got on top is actually carrying them, so it is pointless to ask
@@ -1650,7 +1652,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                     charName,
                     engine.deObject.stateFor[charName],
                     [["characters", otherCharName]],
-                    "ontopCharacters",
+                    "carryingCharactersDirectly",
                     addedMessagesForStoryMaster,
                 );
                 charactersWithAEstablishedPositionSoFar.push(charName);
@@ -1704,8 +1706,9 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
         }
 
         const charState = engine.deObject.stateFor[charName];
-        if (charState.insideItem) {
-            const nextQuestion = `By the end of the last story fragment, did ${charName} get out of ${charState.insideItemNameOnly} (the item they were inside)? Answer "yes" ONLY if ${charName} got out of ${charState.insideItemNameOnly} by exiting it, climbing out of it, or being taken out of it. If ${charName} is still inside ${charState.insideItemNameOnly}, or if it's not clear if they got out of it, answer "no".`;
+        const charExactLocation = getCharacterExactLocation(engine, charName);
+        if (charExactLocation.itemPathEnd === "containingCharacters") {
+            const nextQuestion = `By the end of the last story fragment, did ${charName} get out of ${charExactLocation.item?.name} (the item they were inside)? Answer "yes" ONLY if ${charName} got out of ${charExactLocation.item?.name} by exiting it, climbing out of it, or being taken out of it. If ${charName} is still inside ${charExactLocation.item?.name}, or if it's not clear if they got out of it, answer "no".`;
             console.log("Asking question, " + nextQuestion);
             const outsideQuestion = await interactionGenerator.next({
                 maxCharacters: 0, maxSafetyCharacters: 100,
@@ -1715,15 +1718,15 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                 stopAt: [],
                 grammar: yesNoGrammar,
                 contextInfo: engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last story fragment reads that "${charName} climbed out of ${charState.insideItemNameOnly}", the answer would be "yes", since by the end of the message, ${charName} is no longer inside ${charState.insideItemNameOnly}.`,
+                    `Example: If the last story fragment reads that "${charName} climbed out of ${charExactLocation.item?.name}", the answer would be "yes", since by the end of the message, ${charName} is no longer inside ${charExactLocation.item?.name}.`,
                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last story fragment reads that "${charName} is still inside ${charState.insideItemNameOnly}", the answer would be "no", since by the end of the message, ${charName} is still inside ${charState.insideItemNameOnly}.`,
+                    `Example: If the last story fragment reads that "${charName} is still inside ${charExactLocation.item?.name}", the answer would be "no", since by the end of the message, ${charName} is still inside ${charExactLocation.item?.name}.`,
                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last story fragment reads that "${charName} was taken out of ${charState.insideItemNameOnly} by ${getCharacterNameForExample([charName], 0)}", the answer would be "yes", since by the end of the message, ${charName} is no longer inside ${charState.insideItemNameOnly}.`,
+                    `Example: If the last story fragment reads that "${charName} was taken out of ${charExactLocation.item?.name} by ${getCharacterNameForExample([charName], 0)}", the answer would be "yes", since by the end of the message, ${charName} is no longer inside ${charExactLocation.item?.name}.`,
                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last story fragment reads that "${charName} exited ${charState.insideItemNameOnly}", the answer would be "yes", since by the end of the message, ${charName} is no longer inside ${charState.insideItemNameOnly}.`,
+                    `Example: If the last story fragment reads that "${charName} exited ${charExactLocation.item?.name}", the answer would be "yes", since by the end of the message, ${charName} is no longer inside ${charExactLocation.item?.name}.`,
                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last story fragment reads that "${charName} is on top of ${charState.insideItemNameOnly}", the answer would be "no", since by the end of the message, ${charName} is not inside ${charState.insideItemNameOnly}.`,
+                    `Example: If the last story fragment reads that "${charName} is on top of ${charExactLocation.item?.name}", the answer would be "no", since by the end of the message, ${charName} is not inside ${charExactLocation.item?.name}.`,
                 ),
             });
 
@@ -1742,8 +1745,8 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                     addedMessagesForStoryMaster,
                 )
             }
-        } else if (charState.atopItem) {
-            const nextQuestion = `By the end of the last story fragment, did ${charName} get out from being on top of ${charState.atopItemNameOnly} (the item they were laying/sitting/standing on)? Answer "yes" ONLY if ${charName} got out from ${charState.atopItemNameOnly} by exiting it, climbing out of it, or being taken out of it. If ${charName} is still on top of ${charState.atopItemNameOnly}, or if it's not clear if they got out of it, answer "no".`;
+        } else if (charExactLocation.itemPathEnd === "ontopCharacters") {
+            const nextQuestion = `By the end of the last story fragment, did ${charName} get out from being on top of ${charExactLocation.item?.name} (the item they were laying/sitting/standing on)? Answer "yes" ONLY if ${charName} got out from ${charExactLocation.item?.name} by exiting it, climbing out of it, or being taken out of it. If ${charName} is still on top of ${charExactLocation.item?.name}, or if it's not clear if they got out of it, answer "no".`;
             console.log("Asking question, " + nextQuestion);
             const outsideQuestion = await interactionGenerator.next({
                 maxCharacters: 0, maxSafetyCharacters: 100,
@@ -1753,15 +1756,15 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                 stopAt: [],
                 grammar: yesNoGrammar,
                 contextInfo: engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last story fragment reads that "${charName} climbed out of ${charState.atopItemNameOnly}", the answer would be "yes", since by the end of the message, ${charName} is no longer on top of ${charState.atopItemNameOnly}.`,
+                    `Example: If the last story fragment reads that "${charName} climbed out of ${charExactLocation.item?.name}", the answer would be "yes", since by the end of the message, ${charName} is no longer on top of ${charExactLocation.item?.name}.`,
                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last story fragment reads that "${charName} is still on top of ${charState.atopItemNameOnly}", the answer would be "no", since by the end of the message, ${charName} is still on top of ${charState.atopItemNameOnly}.`,
+                    `Example: If the last story fragment reads that "${charName} is still on top of ${charExactLocation.item?.name}", the answer would be "no", since by the end of the message, ${charName} is still on top of ${charExactLocation.item?.name}.`,
                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last story fragment reads that "${charName} was taken out of ${charState.atopItemNameOnly} by ${getCharacterNameForExample([charName], 0)}", the answer would be "yes", since by the end of the message, ${charName} is no longer on top of ${charState.atopItemNameOnly}.`,
+                    `Example: If the last story fragment reads that "${charName} was taken out of ${charExactLocation.item?.name} by ${getCharacterNameForExample([charName], 0)}", the answer would be "yes", since by the end of the message, ${charName} is no longer on top of ${charExactLocation.item?.name}.`,
                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last story fragment reads that "${charName} exited ${charState.atopItemNameOnly}", the answer would be "yes", since by the end of the message, ${charName} is no longer on top of ${charState.atopItemNameOnly}.`,
+                    `Example: If the last story fragment reads that "${charName} exited ${charExactLocation.item?.name}", the answer would be "yes", since by the end of the message, ${charName} is no longer on top of ${charExactLocation.item?.name}.`,
                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last story fragment reads that "${charName} is on top of ${charState.atopItemNameOnly}", the answer would be "no", since by the end of the message, ${charName} is still on top of ${charState.atopItemNameOnly}.`,
+                    `Example: If the last story fragment reads that "${charName} is on top of ${charExactLocation.item?.name}", the answer would be "no", since by the end of the message, ${charName} is still on top of ${charExactLocation.item?.name}.`,
                 ),
             });
 
@@ -1780,8 +1783,8 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                     addedMessagesForStoryMaster,
                 )
             }
-        } else if (charState.beingCarriedByCharacter) {
-            const nextQuestion = `By the end of the last story fragment, did ${charName} is no longer being carried by ${charState.beingCarriedByCharacter}? Answer "yes" ONLY if ${charName} got put down from being carried by ${charState.beingCarriedByCharacter} by being set down on the ground or on a surface, or being given to someone else. If ${charName} is still being carried by ${charState.beingCarriedByCharacter}, or if it's not clear if they got put down, answer "no".`;
+        } else if (charExactLocation.beingCarriedBy) {
+            const nextQuestion = `By the end of the last story fragment, did ${charName} is no longer being carried by ${charExactLocation.beingCarriedBy}? Answer "yes" ONLY if ${charName} got put down from being carried by ${charExactLocation.beingCarriedBy} by being set down on the ground or on a surface, or being given to someone else. If ${charName} is still being carried by ${charExactLocation.beingCarriedBy}, or if it's not clear if they got put down, answer "no".`;
             console.log("Asking question, " + nextQuestion);
             const outsideQuestion = await interactionGenerator.next({
                 maxCharacters: 0, maxSafetyCharacters: 100,
@@ -1791,15 +1794,15 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
                 stopAt: [],
                 grammar: yesNoGrammar,
                 contextInfo: engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last story fragment reads that "${charName} was put down by ${charState.beingCarriedByCharacter} on the ground", the answer would be "yes", since by the end of the message, ${charName} is no longer being carried by ${charState.beingCarriedByCharacter}.`,
+                    `Example: If the last story fragment reads that "${charName} was put down by ${charExactLocation.beingCarriedBy} on the ground", the answer would be "yes", since by the end of the message, ${charName} is no longer being carried by ${charExactLocation.beingCarriedBy}.`,
                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last story fragment reads that "${charName} is still being carried by ${charState.beingCarriedByCharacter}", the answer would be "no", since by the end of the message, ${charName} is still being carried by ${charState.beingCarriedByCharacter}.`,
+                    `Example: If the last story fragment reads that "${charName} is still being carried by ${charExactLocation.beingCarriedBy}", the answer would be "no", since by the end of the message, ${charName} is still being carried by ${charExactLocation.beingCarriedBy}.`,
                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last story fragment reads that "${charName} was given to ${getCharacterNameForExample([charName], 0)} by ${charState.beingCarriedByCharacter}", the answer would be "yes", since by the end of the message, ${charName} is no longer being carried by ${charState.beingCarriedByCharacter}.`,
+                    `Example: If the last story fragment reads that "${charName} was given to ${getCharacterNameForExample([charName], 0)} by ${charExactLocation.beingCarriedBy}", the answer would be "yes", since by the end of the message, ${charName} is no longer being carried by ${charExactLocation.beingCarriedBy}.`,
                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last story fragment reads that "${charName} was got down from ${charState.beingCarriedByCharacter} shoulder by themselves", the answer would be "yes", since by the end of the message, ${charName} is no longer being carried by ${charState.beingCarriedByCharacter}.`,
+                    `Example: If the last story fragment reads that "${charName} was got down from ${charExactLocation.beingCarriedBy} shoulder by themselves", the answer would be "yes", since by the end of the message, ${charName} is no longer being carried by ${charExactLocation.beingCarriedBy}.`,
                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
-                    `Example: If the last story fragment reads that "${charName} completed riding ${charState.beingCarriedByCharacter} and got down", the answer would be "yes", since by the end of the message, ${charName} is no longer being carried by ${charState.beingCarriedByCharacter}.`,
+                    `Example: If the last story fragment reads that "${charName} completed riding ${charExactLocation.beingCarriedBy} and got down", the answer would be "yes", since by the end of the message, ${charName} is no longer being carried by ${charExactLocation.beingCarriedBy}.`,
                 ),
             });
 
@@ -1968,93 +1971,6 @@ function convertItemAmountToNumericValue(text, allPotentialItems) {
     }
 
     return amount;
-}
-
-/**
- * @param {DEngine} engine
- * @param {string} characterName
- * @param {string} currentLocation
- * @param {Array<string | number>} locationPath
- * @param {boolean} [ignoreCarrierWearer] whether to ignore the carrier/wearer in the message, this is used for example when we are trying to figure out if an item is being worn by a character, as the LLM may refer to the item in a different way than how it is named in the world state, for example it may say "hat" instead of "red hat", so we want to ignore case and also check if the item name includes the name we are looking for instead of checking for an exact match, this is just to increase the chances of finding the item and thus accepting feasible changes even if they are not perfectly formatted
- */
-function locationPathToMessage(engine, characterName, currentLocation, locationPath, ignoreCarrierWearer = false) {
-    if (!engine.deObject) {
-        throw new Error("DEngine not initialized");
-    }
-    let base = "";
-    /**
-     * @type {*}
-     */
-    let elementToFollow = null;
-    if (locationPath[0] === "characters") {
-        base = ignoreCarrierWearer ? "" : `${locationPath[2] === "carrying" ? "carried" : "worn"} by ${locationPath[1]}`;
-        // @ts-ignore
-        elementToFollow = engine.deObject.stateFor[locationPath[1]][locationPath[2]];
-    } else if (locationPath[0] === "slots") {
-        let locationSlotNameToUse = /** @type {string} */ (locationPath[1]);
-        if (!locationSlotNameToUse.toLowerCase().startsWith("a ") && !locationSlotNameToUse.toLowerCase().startsWith("an ") && !locationSlotNameToUse.toLowerCase().startsWith("the ")) {
-            locationSlotNameToUse = "the " + locationSlotNameToUse;
-        }
-        base = `in ${locationSlotNameToUse}`;
-        elementToFollow = engine.deObject.world.locations[currentLocation].slots[locationPath[1]].items;
-    }
-
-    for (let i = 3; i < locationPath.length; i += 2) {
-        const itemId = locationPath[i];
-        const relation = locationPath[i + 1];
-
-        let itemNameToUse = elementToFollow[itemId].name;
-        if (!itemNameToUse.toLowerCase().startsWith("a ") && !itemNameToUse.toLowerCase().startsWith("an ") && !itemNameToUse.toLowerCase().startsWith("the ")) {
-            if (checkItemIsOneOfAKindAtLocation(engine, engine.deObject.stateFor[characterName].location, elementToFollow[itemId].name)) {
-                itemNameToUse = "the " + itemNameToUse;
-            } else if (itemNameToUse.toLowerCase().startsWith("a")) {
-                itemNameToUse = "an " + itemNameToUse;
-            } else {
-                itemNameToUse = "a " + itemNameToUse;
-            }
-        }
-        if (relation === "containing") {
-            base = `inside ${itemNameToUse}, ${base}`;
-        } else if (relation === "ontop") {
-            base = `on top of ${itemNameToUse}, ${base}`;
-        }
-        elementToFollow = elementToFollow[itemId][relation];
-    }
-
-    return base;
-}
-
-/**
- * @param {DEngine} engine
- * @param {string} currentLocation
- * @param {Array<string | number>} path
- * @return {{
- *   resolved: *,
- *   pathToResolved: Array<string | number>
- * }}
- */
-function resolvePath(engine, currentLocation, path) {
-    if (!engine.deObject) {
-        throw new Error("DEngine not initialized");
-    }
-    /**
-     * @type {*}
-     */
-    let current = path[0] === "slots" ? engine.deObject.world.locations[currentLocation].slots[path[1]] : engine.deObject.stateFor[path[1]];
-    const startIndex = 2;
-    for (let i = startIndex; i < path.length; i++) {
-        // console.log(current)
-        const part = path[i];
-        // @ts-ignore
-        current = current[part];
-    }
-    if (current._moved_to) {
-        return resolvePath(engine, currentLocation, current._moved_to);
-    }
-    return {
-        resolved: current,
-        pathToResolved: path,
-    };
 }
 
 
@@ -2314,7 +2230,7 @@ function moveItems(
  * @param {string} characterName
  * @param {DEStateForDescriptionWithHistory} charState
  * @param {Array<Array<string | number>>} toPotentialLocationPaths 
- * @param {"containingCharacters" | "ontopCharacters"} finalPath
+ * @param {"containingCharacters" | "ontopCharacters" | "carryingCharactersDirectly"} finalPath
  * @param {string[]} addedMessagesForStoryMaster
  */
 function moveCharacters(
@@ -2351,37 +2267,6 @@ function moveCharacters(
             clearList(item.ontop);
         }
     }
-
-    // loop through all the items and remove any item that has the character on top of it or inside
-    const allOtherCharacters = [];
-    for (const charName in engine.deObject.stateFor) {
-        if (engine.deObject.stateFor[charName].location === charState.location) {
-            allOtherCharacters.push(charName);
-        }
-    }
-    for (const charNameInQuestion of allOtherCharacters) {
-        const otherCharState = engine.deObject.stateFor[charNameInQuestion];
-        if (otherCharState.carryingCharacters.includes(characterName)) {
-            const index = otherCharState.carryingCharacters.indexOf(characterName);
-            otherCharState.carryingCharacters.splice(index, 1);
-        }
-        if (otherCharState.carryingCharactersDirectly.includes(characterName)) {
-            const index = otherCharState.carryingCharactersDirectly.indexOf(characterName);
-            otherCharState.carryingCharactersDirectly.splice(index, 1);
-        }
-        clearList(otherCharState.wearing);
-        clearList(otherCharState.carrying);
-    }
-    for (const slot of Object.values(engine.deObject.world.locations[charState.location].slots)) {
-        clearList(slot.items);
-    }
-
-    engine.deObject.stateFor[characterName].insideItem = null;
-    engine.deObject.stateFor[characterName].insideItemNameOnly = null;
-    engine.deObject.stateFor[characterName].atopItem = null;
-    engine.deObject.stateFor[characterName].atopItemNameOnly = null;
-    engine.deObject.stateFor[characterName].beingCarriedByCharacter = null;
-    engine.deObject.stateFor[characterName].beingCarriedByCharacterDirectly = false;
 
     const toPathsAtTheSameSlot = [];
     const toPathsNotAtTheSameSlot = [];
@@ -2452,19 +2337,6 @@ function moveCharacters(
     const isPureCharacter = resolveInfo.pathToResolved.length === 2 && resolveInfo.pathToResolved[0] === "characters";
 
     if (resolveInfo.pathToResolved[0] === "characters") {
-        // @ts-ignore
-        charState.beingCarriedByCharacter = resolveInfo.pathToResolved[1];
-        const carryingCharactersArr = engine.deObject.stateFor[resolveInfo.pathToResolved[1]].carryingCharacters;
-        if (!carryingCharactersArr.includes(characterName)) {
-            carryingCharactersArr.push(characterName);
-        }
-        charState.beingCarriedByCharacterDirectly = resolveInfo.pathToResolved.length === 2;
-        if (charState.beingCarriedByCharacterDirectly) {
-            const carryingCharactersDirectlyArr = engine.deObject.stateFor[resolveInfo.pathToResolved[1]].carryingCharactersDirectly;
-            if (!carryingCharactersDirectlyArr.includes(characterName)) {
-                carryingCharactersDirectlyArr.push(characterName);
-            }
-        }
         addedMessagesForStoryMaster.push(`${characterName} is now being carried by ${resolveInfo.pathToResolved[1]}.`);
     } else {
         // @ts-ignore
@@ -2475,12 +2347,8 @@ function moveCharacters(
     }
 
     if (finalPath === "containingCharacters" && !isPureCharacter && !isPureSlot) {
-        charState.insideItem = locationPathToMessage(engine, characterName, charState.location, resolveInfo.pathToResolved);
-        charState.insideItemNameOnly = resolveInfo.resolved.name;
         addedMessagesForStoryMaster.push(`${characterName} is now ${locationPathToMessage(engine, characterName, charState.location, [...resolveInfo.pathToResolved, "containing"])}.`);
     } else if (finalPath === "ontopCharacters" && !isPureCharacter && !isPureSlot) {
-        charState.atopItem = locationPathToMessage(engine, characterName, charState.location, resolveInfo.pathToResolved);
-        charState.atopItemNameOnly = resolveInfo.resolved.name;
         addedMessagesForStoryMaster.push(`${characterName} is now ${locationPathToMessage(engine, characterName, charState.location, [...resolveInfo.pathToResolved, "ontop"])}.`);
     }
 }
@@ -2539,7 +2407,7 @@ function moveItemsPickClosestToCharacter(
  * @param {string} characterName 
  * @param {DEStateForDescriptionWithHistory} charState 
  * @param {Array<Array<Array<string | number>>>} toPotentialLocationPaths 
- * @param {"containingCharacters" | "ontopCharacters"} finalPath
+ * @param {"containingCharacters" | "ontopCharacters" | "carryingCharactersDirectly"} finalPath
  * @param {Array<string>} addedMessagesForStoryMaster 
  * @returns 
  */
@@ -2771,40 +2639,10 @@ async function cleanDirtyItemTree(
                 }
                 for (const expelledOnTopCharacter of excess.expelledOntopCharacters) {
                     item.ontopCharacters = item.ontopCharacters.filter((v) => v !== expelledOnTopCharacter);
-                    const charState = engine.deObject.stateFor[expelledOnTopCharacter];
-                    charState.atopItem = null;
-                    charState.atopItemNameOnly = null;
-
-                    if (path[0] === "characters") {
-                        const characterCarryingOrWearingTheItem = path[1];
-                        const charStateOfCarrierOrWearer = engine.deObject.stateFor[characterCarryingOrWearingTheItem];
-                        if (charStateOfCarrierOrWearer.carryingCharactersDirectly.includes(expelledOnTopCharacter)) {
-                            charStateOfCarrierOrWearer.carryingCharactersDirectly = charStateOfCarrierOrWearer.carryingCharactersDirectly.filter((v) => v !== expelledOnTopCharacter);
-                        }
-                        if (charStateOfCarrierOrWearer.carryingCharacters.includes(expelledOnTopCharacter)) {
-                            charStateOfCarrierOrWearer.carryingCharacters = charStateOfCarrierOrWearer.carryingCharacters.filter((v) => v !== expelledOnTopCharacter);
-                        }
-                    }
-
                     fallsDownList.push(expelledOnTopCharacter);
                 }
                 for (const expelledInsideCharacter of excess.expelledContainedCharacters) {
                     item.containingCharacters = item.containingCharacters.filter((v) => v !== expelledInsideCharacter);
-                    const charState = engine.deObject.stateFor[expelledInsideCharacter];
-                    charState.insideItem = null;
-                    charState.insideItemNameOnly = null;
-
-                    if (path[0] === "characters") {
-                        const characterCarryingOrWearingTheItem = path[1];
-                        const charStateOfCarrierOrWearer = engine.deObject.stateFor[characterCarryingOrWearingTheItem];
-                        if (charStateOfCarrierOrWearer.carryingCharactersDirectly.includes(expelledInsideCharacter)) {
-                            charStateOfCarrierOrWearer.carryingCharactersDirectly = charStateOfCarrierOrWearer.carryingCharactersDirectly.filter((v) => v !== expelledInsideCharacter);
-                        }
-                        if (charStateOfCarrierOrWearer.carryingCharacters.includes(expelledInsideCharacter)) {
-                            charStateOfCarrierOrWearer.carryingCharacters = charStateOfCarrierOrWearer.carryingCharacters.filter((v) => v !== expelledInsideCharacter);
-                        }
-                    }
-
                     fallsDownList.push(expelledInsideCharacter);
                 }
 
@@ -2850,21 +2688,12 @@ async function cleanDirtyItemTree(
                 for (const expelledOnTopCharacter of excess.expelledOntopCharacters) {
                     // a character is only one so that is easier to handle
                     item.ontopCharacters = item.ontopCharacters.filter((v) => v !== expelledOnTopCharacter);
-                    const charState = engine.deObject.stateFor[expelledOnTopCharacter];
-                    charState.atopItem = null;
-                    charState.atopItemNameOnly = null;
 
                     const charVolume = getCharacterVolume(engine, expelledOnTopCharacter);
 
                     if (path[0] === "characters") {
                         const characterCarryingOrWearingTheItem = path[1];
-                        const charStateOfCarrierOrWearer = engine.deObject.stateFor[characterCarryingOrWearingTheItem];
-                        if (charStateOfCarrierOrWearer.carryingCharactersDirectly.includes(expelledOnTopCharacter)) {
-                            charStateOfCarrierOrWearer.carryingCharactersDirectly = charStateOfCarrierOrWearer.carryingCharactersDirectly.filter((v) => v !== expelledOnTopCharacter);
-                        }
-                        if (charStateOfCarrierOrWearer.carryingCharacters.includes(expelledOnTopCharacter)) {
-                            charStateOfCarrierOrWearer.carryingCharacters = charStateOfCarrierOrWearer.carryingCharacters.filter((v) => v !== expelledOnTopCharacter);
-                        }
+
                         if (charVolume.volume > item.maxVolumeOnTopLiters) {
                             const tooLargeCarriedVariations = [
                                 `${expelledOnTopCharacter} is too large to fit on top of the ${item.name} and falls down from it, the ${item.name} is being carried by ${characterCarryingOrWearingTheItem}, and ${expelledOnTopCharacter} is now on the ground at the ${expectedPathForFallenItems[1]}.`,
@@ -2906,20 +2735,11 @@ async function cleanDirtyItemTree(
                     // a character is only one so that is easier to handle
                     item.containingCharacters = item.containingCharacters.filter((v) => v !== expelledInsideCharacter);
                     const charState = engine.deObject.stateFor[expelledInsideCharacter];
-                    charState.insideItem = null;
-                    charState.insideItemNameOnly = null;
 
                     const charVolume = getCharacterVolume(engine, expelledInsideCharacter);
 
                     if (path[0] === "characters") {
                         const characterCarryingOrWearingTheItem = path[1];
-                        const charStateOfCarrierOrWearer = engine.deObject.stateFor[characterCarryingOrWearingTheItem];
-                        if (charStateOfCarrierOrWearer.carryingCharactersDirectly.includes(expelledInsideCharacter)) {
-                            charStateOfCarrierOrWearer.carryingCharactersDirectly = charStateOfCarrierOrWearer.carryingCharactersDirectly.filter((v) => v !== expelledInsideCharacter);
-                        }
-                        if (charStateOfCarrierOrWearer.carryingCharacters.includes(expelledInsideCharacter)) {
-                            charStateOfCarrierOrWearer.carryingCharacters = charStateOfCarrierOrWearer.carryingCharacters.filter((v) => v !== expelledInsideCharacter);
-                        }
                         if (item.containerProperties && charVolume.volume > item.containerProperties.capacityLiters) {
                             const tooLargeCarriedVariations = [
                                 `${expelledInsideCharacter} is too large to fit inside the ${item.name} and falls out from it, the ${item.name} is being carried by ${characterCarryingOrWearingTheItem}, and ${expelledInsideCharacter} is now on the ground at the ${expectedPathForFallenItems[1]}.`,
@@ -2980,7 +2800,7 @@ async function cleanDirtyItemTree(
                 const wornItemWeight = getItemWeight(engine, wornItem);
                 totalCarriedWeight += wornItemWeight.completeWeight;
             }
-            for (const carriedCharacter of charState.carryingCharacters) {
+            for (const carriedCharacter of charState.carryingCharactersDirectly) {
                 const carriedCharacterVolume = getCharacterVolume(engine, carriedCharacter);
                 totalCarriedVolume += carriedCharacterVolume.volume;
                 const carriedCharacterWeight = getCharacterWeight(engine, carriedCharacter);
@@ -3153,46 +2973,6 @@ async function cleanDirtyItemTree(
                                 );
                                 storyMasterMessageSoFar += remainVariations[Math.floor(Math.random() * remainVariations.length)];
                             }
-
-                            charState.carryingCharacters = charState.carryingCharacters.filter((v) => !carriedItemWeight.allCharactersInvolved.includes(v));
-                            for (const otherCharName of carriedItemWeight.allCharactersInvolved) {
-                                const otherCharState = engine.deObject.stateFor[otherCharName];
-                                otherCharState.beingCarriedByCharacter = null;
-                                otherCharState.beingCarriedByCharacterDirectly = false;
-
-                                if (!expelledCharacters.includes(otherCharName)) {
-                                    const atopPath = findAtopPathToOtherCharRecursive(otherCharName, resolvedFallenItems.resolved.items, [...resolvedFallenItems.pathToResolved, "items"]);
-                                    const containingPath = findContainingPathToOtherCharRecursive(otherCharName, resolvedFallenItems.resolved.items, [...resolvedFallenItems.pathToResolved, "items"]);
-                                    if (atopPath) {
-                                        otherCharState.atopItem = locationPathToMessage(engine, otherCharName, charState.location, atopPath);
-                                    } else if (containingPath) {
-                                        otherCharState.insideItem = locationPathToMessage(engine, otherCharName, charState.location, containingPath);
-                                    }
-                                } else {
-                                    const atopPath = findAtopPathToOtherCharRecursive(otherCharName, resolvedFallenItems.resolved.items, [...resolvedFallenItems.pathToResolved, "items"]);
-                                    const containingPath = findContainingPathToOtherCharRecursive(otherCharName, resolvedFallenItems.resolved.items, [...resolvedFallenItems.pathToResolved, "items"]);
-
-                                    otherCharState.atopItem = null;
-                                    otherCharState.atopItemNameOnly = null;
-                                    otherCharState.insideItem = null;
-                                    otherCharState.insideItemNameOnly = null;
-
-                                    if (atopPath) {
-                                        const resolvedAtop = resolvePath(engine, charState.location, atopPath);
-                                        if (resolvedAtop.resolved) {
-                                            // @ts-ignore
-                                            resolvedAtop.resolved.ontopCharacters = resolvedAtop.resolved.ontopCharacters.filter((v) => v !== otherCharName);
-                                        }
-                                    }
-                                    if (containingPath) {
-                                        const resolvedContaining = resolvePath(engine, charState.location, containingPath);
-                                        if (resolvedContaining.resolved) {
-                                            // @ts-ignore
-                                            resolvedContaining.resolved.containingCharacters = resolvedContaining.resolved.containingCharacters.filter((v) => v !== otherCharName);
-                                        }
-                                    }
-                                }
-                            }
                         }
                         addedMessagesForStoryMaster.push(storyMasterMessageSoFar);
                     }
@@ -3362,47 +3142,6 @@ async function cleanDirtyItemTree(
                                 );
                                 storyMasterMessageSoFar += remainVariations[Math.floor(Math.random() * remainVariations.length)];
                             }
-
-                            charState.carryingCharacters = charState.carryingCharacters.filter((v) => !carriedItemVolume.allCharactersInvolved.includes(v));
-                            for (const otherCharName of carriedItemVolume.allCharactersInvolved) {
-                                const otherCharState = engine.deObject.stateFor[otherCharName];
-                                otherCharState.beingCarriedByCharacter = null;
-                                otherCharState.beingCarriedByCharacterDirectly = false;
-
-                                if (!expelledCharacters.includes(otherCharName)) {
-                                    const atopPath = findAtopPathToOtherCharRecursive(otherCharName, resolvedFallenItems.resolved.items, [...resolvedFallenItems.pathToResolved, "items"]);
-                                    const containingPath = findContainingPathToOtherCharRecursive(otherCharName, resolvedFallenItems.resolved.items, [...resolvedFallenItems.pathToResolved, "items"]);
-                                    if (atopPath) {
-                                        otherCharState.atopItem = locationPathToMessage(engine, otherCharName, charState.location, atopPath);
-                                    }
-                                    if (containingPath) {
-                                        otherCharState.insideItem = locationPathToMessage(engine, otherCharName, charState.location, containingPath);
-                                    }
-                                } else {
-                                    const atopPath = findAtopPathToOtherCharRecursive(otherCharName, resolvedFallenItems.resolved.items, [...resolvedFallenItems.pathToResolved, "items"]);
-                                    const containingPath = findContainingPathToOtherCharRecursive(otherCharName, resolvedFallenItems.resolved.items, [...resolvedFallenItems.pathToResolved, "items"]);
-
-                                    otherCharState.atopItem = null;
-                                    otherCharState.atopItemNameOnly = null;
-                                    otherCharState.insideItem = null;
-                                    otherCharState.insideItemNameOnly = null;
-
-                                    if (atopPath) {
-                                        const resolvedAtop = resolvePath(engine, charState.location, atopPath);
-                                        if (resolvedAtop.resolved) {
-                                            // @ts-ignore
-                                            resolvedAtop.resolved.ontopCharacters = resolvedAtop.resolved.ontopCharacters.filter((v) => v !== otherCharName);
-                                        }
-                                    }
-                                    if (containingPath) {
-                                        const resolvedContaining = resolvePath(engine, charState.location, containingPath);
-                                        if (resolvedContaining.resolved) {
-                                            // @ts-ignore
-                                            resolvedContaining.resolved.insideCharacters = resolvedContaining.resolved.insideCharacters.filter((v) => v !== otherCharName);
-                                        }
-                                    }
-                                }
-                            }
                         }
 
                         addedMessagesForStoryMaster.push(storyMasterMessageSoFar);
@@ -3422,7 +3161,7 @@ async function cleanDirtyItemTree(
                 const carriedItemWeight = getItemWeight(engine, carriedItem);
                 totalCarriedWeight += carriedItemWeight.completeWeight;
             }
-            for (const carriedCharacter of charState.carryingCharacters) {
+            for (const carriedCharacter of charState.carryingCharactersDirectly) {
                 const carriedCharacterWeight = getCharacterWeight(engine, carriedCharacter);
                 totalCarriedWeight += carriedCharacterWeight.weight;
             }
@@ -3583,36 +3322,6 @@ async function cleanDirtyItemTree(
                                 addedMessagesForStoryMaster.push(remainVariations[Math.floor(Math.random() * remainVariations.length)]);
                             }
                         }
-
-                        charState.carryingCharacters = charState.carryingCharacters.filter((v) => !wornItemWeight.allCharactersInvolved.includes(v));
-                        for (const otherCharName of wornItemWeight.allCharactersInvolved) {
-                            if (!expelledCharacters.includes(otherCharName)) {
-                                const otherCharState = engine.deObject.stateFor[otherCharName];
-                                otherCharState.beingCarriedByCharacter = null;
-                                otherCharState.beingCarriedByCharacterDirectly = false;
-                                // TODO destroy any potential carryingCharacters that has this character, it's an extreme case whenever we do these nulls
-                                // we need to check every case, as say a rat fell down that had a flea on top, the flea was; CHECK AS THIS ERROR IS IN MANY PLACES
-                                const atopPath = findAtopPathToOtherCharRecursive(otherCharName, resolvedFallenItems.resolved.items, [...resolvedFallenItems.pathToResolved, "items"]);
-                                const containingPath = findContainingPathToOtherCharRecursive(otherCharName, resolvedFallenItems.resolved.items, [...resolvedFallenItems.pathToResolved, "items"]);
-                                if (atopPath) {
-                                    otherCharState.atopItem = locationPathToMessage(engine, otherCharName, charState.location, atopPath);
-                                }
-                                if (containingPath) {
-                                    otherCharState.insideItem = locationPathToMessage(engine, otherCharName, charState.location, containingPath);
-                                }
-                            } else {
-                                const otherCharState = engine.deObject.stateFor[otherCharName];
-                                otherCharState.beingCarriedByCharacter = null;
-                                otherCharState.beingCarriedByCharacterDirectly = false;
-                                otherCharState.location = charState.location;
-                                // @ts-ignore
-                                otherCharState.locationSlot = expectedPathForFallenItems[1];
-                                otherCharState.atopItem = null;
-                                otherCharState.atopItemNameOnly = null;
-                                otherCharState.insideItem = null;
-                                otherCharState.insideItemNameOnly = null;
-                            }
-                        }
                     }
                 }
 
@@ -3653,18 +3362,6 @@ async function cleanDirtyItemTree(
                                 ];
                                 addedMessagesForStoryMaster.push(remainVariations[Math.floor(Math.random() * remainVariations.length)]);
                             }
-                        }
-                        for (const otherCharName of wornItemWeight.allCharactersInvolved) {
-                            const otherCharState = engine.deObject.stateFor[otherCharName];
-                            otherCharState.beingCarriedByCharacter = null;
-                            otherCharState.beingCarriedByCharacterDirectly = false;
-                            otherCharState.atopItem = null;
-                            otherCharState.atopItemNameOnly = null;
-                            otherCharState.insideItem = null;
-                            otherCharState.insideItemNameOnly = null;
-
-                            // @ts-ignore
-                            otherCharState.locationSlot = expectedPathForFallenItems[1];
                         }
                     }
                 }
@@ -3827,11 +3524,8 @@ function checkDirectlyCarriedCharacters(engine, characterName, charState, addedM
         if (totalCarriedWeight + carriedCharWeight.weight > carryingCapacity.carryingCapacityKg) {
             // the character is too heavy to be carried, so it will fall on the ground
             const carriedCharState = engine.deObject.stateFor[carriedCharName];
-            carriedCharState.beingCarriedByCharacter = null;
-            carriedCharState.beingCarriedByCharacterDirectly = false;
 
             charState.carryingCharactersDirectly = charState.carryingCharactersDirectly.filter((v) => v !== carriedCharName);
-            charState.carryingCharacters = charState.carryingCharacters.filter((v) => v !== carriedCharName);
 
             const couldHaveCarriedOneInOptimalConditions = carriedCharWeight.weight <= carryingCapacity.carryingCapacityKg;
             if (!couldHaveCarriedOneInOptimalConditions) {
@@ -3842,11 +3536,8 @@ function checkDirectlyCarriedCharacters(engine, characterName, charState, addedM
         } else if (totalCarriedVolume + carriedCharVolume.volume > carryingCapacity.carryingCapacityLiters) {
             // the character is too large to be carried, so it will fall on the ground
             const carriedCharState = engine.deObject.stateFor[carriedCharName];
-            carriedCharState.beingCarriedByCharacter = null;
-            carriedCharState.beingCarriedByCharacterDirectly = false;
 
             charState.carryingCharactersDirectly = charState.carryingCharactersDirectly.filter((v) => v !== carriedCharName);
-            charState.carryingCharacters = charState.carryingCharacters.filter((v) => v !== carriedCharName);
 
             const couldHaveCarriedOneInOptimalConditions = carriedCharVolume.volume <= carryingCapacity.carryingCapacityLiters;
             if (!couldHaveCarriedOneInOptimalConditions) {
@@ -3915,42 +3606,6 @@ export async function cleanAll(engine, location, addedMessagesForStoryMaster) {
 
     for (const [slotName, slot] of Object.entries(locationObj.slots)) {
         cleanTemporaryProperties(engine, slot.items);
-    }
-
-    // regenerate, this is redundant but it makes sure things are fine
-    for (const charName of allCharactersAtLocation) {
-        const charState = engine.deObject.stateFor[charName];
-
-        const atopOrInside = getItemWhereCharacterIsAtopOrInside(engine, charName, location);
-        if (atopOrInside) {
-            const { item, path, position } = atopOrInside;
-            if (position === "atop") {
-                charState.atopItem = locationPathToMessage(engine, charName, charState.location, path);
-                charState.atopItemNameOnly = item.name;
-                charState.insideItem = null;
-                charState.insideItemNameOnly = null;
-            } else if (position === "inside") {
-                charState.atopItem = null;
-                charState.atopItemNameOnly = null;
-                charState.insideItem = locationPathToMessage(engine, charName, charState.location, path);
-                charState.insideItemNameOnly = item.name;
-            }
-            if (path[0] === "characters") {
-                const carryingCharName = path[1];
-                const carryingCharState = engine.deObject.stateFor[carryingCharName];
-                if (!carryingCharState.carryingCharacters.includes(charName)) {
-                    carryingCharState.carryingCharacters.push(charName);
-                }
-                // @ts-ignore
-                charState.beingCarriedByCharacter = carryingCharName;
-                charState.beingCarriedByCharacterDirectly = false;
-            }
-        } else {
-            charState.atopItem = null;
-            charState.atopItemNameOnly = null;
-            charState.insideItem = null;
-            charState.insideItemNameOnly = null;
-        }
     }
 }
 

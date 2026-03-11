@@ -1,4 +1,5 @@
 import { DEngine } from "./index.js";
+import { getSurroundingCharacters } from "./util/character-info.js";
 
 /**
  * 
@@ -322,23 +323,22 @@ export const commands = {
             }
 
             let answer = `You can see the following characters in your current location:\n\nPeople you know:\n`;
-            for (const characterName of userState.surroundingNonStrangers) {
+            const surroundingCharacters = getSurroundingCharacters(engine, engine.userCharacter.name);
+            for (const characterName of surroundingCharacters.nonStrangers) {
                 if (characterName === engine.userCharacter.name) {
                     continue;
                 }
                 const characterInfo = engine.deObject.characters[characterName];
-                const characterState = engine.deObject.stateFor[characterName];
                 if (characterInfo) {
                     answer += `- ${characterName}: ${engine.getExternalDescriptionOfCharacter(characterName, true)}\n`;
                 }
             }
             answer += `\nTotal Strangers:\n`;
-            for (const characterName of userState.surroundingTotalStrangers) {
+            for (const characterName of surroundingCharacters.totalStrangers) {
                 if (characterName === engine.userCharacter.name) {
                     continue;
                 }
                 const characterInfo = engine.deObject.characters[characterName];
-                const characterState = engine.deObject.stateFor[characterName];
                 if (characterInfo) {
                     answer += `- ${characterName}: ${engine.getExternalDescriptionOfCharacter(characterName, true)}\n`;
                 }

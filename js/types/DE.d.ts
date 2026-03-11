@@ -1602,37 +1602,10 @@ declare interface StateForDescription {
      * when this state was added
      */
     messageId: string | null;
-    isTopNaked: boolean;
-    isBottomNaked: boolean;
-    surroundingNonStrangers: Array<string>;
-    surroundingTotalStrangers: Array<string>;
-    partiallyExposedToWeather: string | null;
-    fullyExposedToWeather: string | null;
     posture: "standing" | "sitting" | "laying_down";
-    /**
-     * The name of the item the character is currently inside of, this is just the name
-     * for the specific item, it needs to be found in the item tree
-     */
-    insideItem: string | null;
-    /**
-     * The item they are inside but in name only
-     */
-    insideItemNameOnly: string | null;
-    /**
-     * The name of the item the character is currently on top of, this is just the name
-     * for the specific item, it needs to be found in the item tree
-     */
-    atopItem: string | null;
-    /**
-     * The item they are on top of but in name only
-     */
-    atopItemNameOnly: string | null;
     carrying: DEItem[];
-    carryingCharacters: Array<string>;
     carryingCharactersDirectly: Array<string>;
     wearing: DEItem[];
-    beingCarriedByCharacter: string | null;
-    beingCarriedByCharacterDirectly: boolean;
     currentAgeMinutes: number;
     currentWeightKg: number;
     /**
@@ -1655,8 +1628,6 @@ declare interface StateForDescription {
     seenItems: Array<DESeenItem>;
     /**
      * Characters that may have been seen when this state was active, reduced description
-     * 
-     * These can be subject to memory, do not modify surroundingNonStrangers or surroundingTotalStrangers
      * 
      * These can be subject to memory
      */
