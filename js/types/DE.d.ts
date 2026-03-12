@@ -62,6 +62,26 @@ declare interface DEMinimalCharacterReference {
      * to the end of the shortDescription when the character is bottom naked
      */
     shortDescriptionBottomNakedAdd: string | null;
+
+    /**
+     * A number from 0 to 1 that represents how likely the character is to perform stealthy actions or behaviours
+     * higher means more likely to perform stealthy actions, this is useful for characters that are sneaky or like to hide
+     * 
+     * Used in the following scenarios:
+     * - When a character performs a robbery, the LLM checks the characters that were interacted to see if they noticed; for the rest of the characters that were not with
+     * the character, the engine uses their stealth score to see if they noticed the robbery or not, higher stealth means less likely to notice
+     */
+    stealth: number;
+    
+    /**
+     * A number from 0 to 1 that represents how likely the character is to perform perceptive actions or behaviours
+     * higher means more likely to perform perceptive actions, this is useful for characters that are observant or like to pay attention to details
+     * 
+     * Used in the following scenarios:
+     * - When a character performs a robbery, and the character is deemed as noticing (aka passes the stealth check), then the engine uses their perception score to see
+     * if they actually noticed the robbery or just noticed that something happened but couldn't tell what, higher perception means more likely to actually notice the robbery and identify the robbery
+     */
+    perception: number;
 }
 
 interface DEStringTemplateWithIntensityAndCausants {
@@ -1201,24 +1221,6 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
     vocabularyLimit?: string[];
 
     /**
-     * A number from 0 to 1 that represents how likely the character is to perform stealthy actions or behaviours
-     * higher means more likely to perform stealthy actions, this is useful for characters that are sneaky or like to hide
-     * 
-     * Used in the following scenarios:
-     * - When a character performs a robbery, the LLM checks the characters that were interacted to see if they noticed; for the rest of the characters that were not with
-     * the character, the engine uses their stealth score to see if they noticed the robbery or not, higher stealth means less likely to notice
-     */
-    stealth: number;
-    /**
-     * A number from 0 to 1 that represents how likely the character is to perform perceptive actions or behaviours
-     * higher means more likely to perform perceptive actions, this is useful for characters that are observant or like to pay attention to details
-     * 
-     * Used in the following scenarios:
-     * - When a character performs a robbery, and the character is deemed as noticing (aka passes the stealth check), then the engine uses their perception score to see
-     * if they actually noticed the robbery or just noticed that something happened but couldn't tell what, higher perception means more likely to actually notice the robbery and identify the robbery
-     */
-    perception: number;
-    /**
      * A number from 0 to 1 that represents how heroic the character is, higher means more likely to perform heroic actions and behaviours
      * this is useful for characters that are brave or like to do good deeds, it can also be used to determine how likely they are to help others in need
      * 
@@ -1546,6 +1548,12 @@ declare interface DEItem {
      * otherwise null or not specified
      */
     communicator?: DEItemCommunicationDeviceProperties | null;
+    
+    /**
+     * Interactions that can happen with this item that
+     * have a narrative effect or action
+     */
+    interactions?: Record<string, DEItemInteraction> | null;
 }
 
 declare interface DESeenItem {
@@ -1574,7 +1582,6 @@ declare interface StateForDescription {
     carrying: DEItem[];
     carryingCharactersDirectly: Array<string>;
     wearing: DEItem[];
-    currentWeightKg: number;
     /**
      * Indicates if the character is dead, aka its deadEnd was a death scenario
      */
@@ -1599,11 +1606,6 @@ declare interface StateForDescription {
      * These can be subject to memory
      */
     seenCharacters: Array<string>;
-    /**
-     * Interactions that can happen with this item that
-     * have a narrative effect or action
-     */
-    interactions?: Record<string, DEItemInteraction>
 }
 
 declare interface DEItemInteraction {
@@ -2269,9 +2271,11 @@ declare type DEStringTemplate = string | ((
     DE: DEObject,
     info: {
         /**
-         * Always available the character invoking the template
+         * Available the character invoking the template
+         * Usually available, but in rare cases like in narration
+         * it may not be
          */
-        char: DECompleteCharacterReference,
+        char?: DECompleteCharacterReference,
         /**
          * Only available in bond description templates
          */
@@ -2418,7 +2422,6 @@ declare interface DEObject {
     social: {
         bonds: Record<string, DEBondDescription>;
     };
-    allNames: DENamePool;
     worldNames: DENamePool;
     stateFor: Record<string, DEStateForDescriptionWithHistory>;
     world: DEWorld;

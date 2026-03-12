@@ -39,10 +39,12 @@ engine.initialize({
     shortDescription: "A human male in decent physical condition",
     shortDescriptionTopNakedAdd: "He is currently not wearing a shirt revealing a well-toned upper body",
     shortDescriptionBottomNakedAdd: "He is currently not wearing any pants or underwear",
+    perception: 0.6,
+    stealth: 0.5,
 })
 
-engine.deObject.stateFor["Dema"].location = "Lunar Station";
-engine.deObject.stateFor["Dema"].locationSlot = "Common Area";
+engine.getDEObject().stateFor["Dema"].location = "Lunar Station";
+engine.getDEObject().stateFor["Dema"].locationSlot = "Common Area";
 
 
 /**
@@ -81,8 +83,8 @@ const clothes = {
     communicator: null,
     madeOf: [],
 }
-// @ts-expect-error
-engine.deObject.stateFor["Onza"].wearing = [
+
+engine.getDEObject().stateFor["Onza"].wearing = [
     clothes,
 ];
 
@@ -163,13 +165,6 @@ const weirdBox = {
 
 // debug speedups
 // engine.setWorldRulesDisabled(true);
-
-try {
-    await engine.initializeWorld();
-} catch (err) {
-    console.error("Error initializing world:", err);
-    process.exit(1);
-}
 
 if (WEIRD_BOX_TEST) {
     // @ts-expect-error

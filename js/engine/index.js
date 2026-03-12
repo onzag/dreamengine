@@ -1,4 +1,3 @@
-import { importScript, importScriptAsPropertyValueInCharacterSpace, importScriptAsPropertyValueInItemSpace, importScriptAsScript, importScriptAsTemplate } from "../imports/scripts.js";
 import { ALL_FUNCTIONS_WITH_SPECIALS } from "../schema/functions.js"
 import { weightedRandomByLikelihood } from "../util/random.js"
 import { EMOTIONS_LIST } from "./rolling-emotion.js";
@@ -9,9 +8,11 @@ import calculateStateChange from "./gears/state-change.js";
 import calculateBondsChangesDueToMessages from "./gears/bond-change.js";
 import testWorldRulesOn from "./gears/rules-enforce.js";
 import testMessageFeasibilityForCharacter from "./gears/feasibility-check.js";
-import { getWearableFitment, locationPathToMessage } from "./util/weight-and-volume.js";
+import { getCharacterVolume, getCharacterWeight, getItemVolume, getItemWeight, getWearableFitment, locationPathToMessage } from "./util/weight-and-volume.js";
 import { cleanAll } from "./gears/feasibility-check/item-changes.js";
 import { getAllItemsCharacterIsInsideOf, getBeingCarriedByCharacter, getCharacterExactLocation, getListOfCarriedCharactersByCharacter, getSurroundingCharacters, isBottomNaked, isTopNaked } from "./util/character-info.js";
+import { DEJSEngine } from "../jsengine/index.js";
+import defaultNamePool from "./util/name-pool.js";
 
 const INVALID_NAMES = ["system", "assistant", "user", "everyone", "nobody",
     "anyone", "somebody", "narrator", "observer", "admin", "moderator",
@@ -118,35 +119,19 @@ function createCharacterFromUser(user) {
         shortDescription: user.shortDescription,
         shortDescriptionBottomNakedAdd: user.shortDescriptionBottomNakedAdd,
         shortDescriptionTopNakedAdd: user.shortDescriptionTopNakedAdd,
-        general: {
-            type: "template",
-            id: "?INTERNAL_NOOP_TEMPLATE",
-            // @ts-expect-error
-            execute: null,
-        },
+        general: "",
         initiative: 1,
-        injectableInGeneralText: {},
-        injectableInReasoning: {},
         properties: {},
         schizophrenia: 0,
-        schizophrenicVoiceDescription: {
-            execute: () => "",
-            id: "?INTERNAL_NOOP_TEMPLATE",
-            type: "template",
-        },
-        scripts: {
-            firstInteract: {},
-            postAnyInference: {},
-            postInference: {},
-            preInference: {},
-            preStateCheck: {},
-            spawn: {},
-        },
+        schizophrenicVoiceDescription: "",
         states: {},
         sex: user.sex,
         strangerInitiative: 1,
         strangerRejection: 0,
         emotions: {},
+        heroism: 0,
+        stealth: user.stealth,
+        perception: user.perception,
     }
 }
 
@@ -158,7 +143,6 @@ export class DEngine {
          * @type {DEObject | null}
          */
         this.deObject = null;
-        this.initialized = false;
         /**
          * @type {DEMinimalCharacterReference | null}
          */
@@ -191,23 +175,14 @@ export class DEngine {
         this.startsToInferOverConversationMessageListeners = [];
 
         /**
-         * @type {((scriptId: string, scriptType: "script" | "template" | "value_getter_char_space" | "value_getter_item_space", existingScriptSources: DEScriptSource[]) => Promise<DEScriptSource>) | null}
-         */
-        this.scriptImportResolver = null;
-        /**
-         * @type {((characterFileId: string) => Promise<{character: DECompleteCharacterReference, scriptSources: DEScriptSource[]}>) | null}
-         */
-        this.characterImportResolver = null;
-
-        /**
          * @type {BaseInferenceAdapter | null}
          */
         this.inferenceAdapter = null;
 
         /**
-         * @type {(Array<{name: string; import: string; properties: Record<string, DEPropertyValueInCharSpace>; spawnLocations: string[]; spawnLocationSlots: string[]; spawnSpreadToChildrenLocations: boolean; instances: number}>) | null}
+         * @type {DEJSEngine | null}
          */
-        this.characters = null;
+        this.jsEngine = null;
 
         /**
          * @type {boolean}
@@ -216,6 +191,13 @@ export class DEngine {
          * this speeds up things greatly when testing other parts of the engine
          */
         this.disabledWorldRules = false;
+    }
+
+    getDEObject() {
+        if (!this.deObject) {
+            throw new Error("DEngine not initialized");
+        }
+        return this.deObject;
     }
 
     /**
@@ -238,44 +220,11 @@ export class DEngine {
     }
 
     /**
-     * Provides default script sources that are always available in the DEngine.
-     * @returns {DEScriptSource[]}
+     * 
+     * @param {DEJSEngine} jsEngine 
      */
-    getDefaultScriptSources() {
-        return [
-            {
-                type: "template",
-                sourceType: "handlebars",
-                id: "?INTERNAL_NOOP_TEMPLATE",
-                source: "",
-                imports: [],
-                run: (/*DE, character*/) => "",
-            },
-            {
-                type: "value_getter_char_space",
-                sourceType: "javascript",
-                id: "?INTERNAL_NOOP_VALUE_GETTER",
-                source: "",
-                imports: [],
-                run: (/*DE, character*/) => null,
-            },
-            // {
-            //     type: "template",
-            //     sourceType: "handlebars",
-            //     id: "?INTERNAL_ALL_CHARACTERS_INJECTABLE_IN_GENERAL_TEXT",
-            //     /**
-            //      * @param {DEObject} DE 
-            //      * @param {DECompleteCharacterReference} character 
-            //      * @returns 
-            //      */
-            //     run: async (DE, character) => {
-            //         return `As ${character.name} you should always respect the Story Master's decisions and narrations, ` +
-            //             `if the Story Master says something about you or the world, you should accept it as true and adapt your behavior accordingly. Never do anything that contradicts the Story Master's narration.`;
-            //     },
-            //     source: "",
-            //     imports: [],
-            // },
-        ];
+    setJSEngine(jsEngine) {
+        this.jsEngine = jsEngine;
     }
 
     /**
@@ -295,151 +244,29 @@ export class DEngine {
         this.deObject = JSON.parse(deObjectJSON);
         if (!this.deObject) {
             throw new Error("Invalid DEObject JSON");
+        } else if (!this.jsEngine) {
+            throw new Error("JS Engine not set, cannot import scripts");
         }
+
         // @ts-ignore
         this.deObject.functions = this.allInternalFunctions;
-        this.deObject.scriptSources = this.deObject.scriptSources.filter(src => !src.id.startsWith("?INTERNAL_"));
         this.deObject.utils = deEngineUtils;
         this.user = this.deObject.user;
         this.userCharacter = this.deObject.characters[this.user.name];
 
-        // these internals have no source so they cannot be recreated from JSON, but they are the same for every DEngine
-        // so we can just add them back in
-        for (const internalSrc of this.getDefaultScriptSources()) {
-            this.deObject.scriptSources.push(internalSrc);
-        }
+        /**
+         * @type {DEScript[]}
+         */
+        const worldScripts =
+            // @ts-ignore typescript bugs
+            this.jsEngine.scriptOrder.map(scriptKey => this.jsEngine.scriptCache[scriptKey]).filter(script => script.type === "world");
 
-        // now we need to recreate all sources
-        for (const scriptSource of this.deObject.scriptSources) {
-            switch (scriptSource.type) {
-                case "script":
-                    scriptSource.run = importScriptAsScript(scriptSource.id, scriptSource.id, scriptSource.source).execute;
-                    break;
-                case "template":
-                    scriptSource.run = importScriptAsTemplate(scriptSource.id, scriptSource.id, scriptSource.sourceType, scriptSource.source).execute;
-                    break;
-                case "value_getter_char_space":
-                    scriptSource.run = importScriptAsPropertyValueInCharacterSpace(scriptSource.id, scriptSource.id, scriptSource.source, scriptSource.sourceType).value;
-                    break;
-                case "value_getter_item_space":
-                    scriptSource.run = importScriptAsPropertyValueInItemSpace(scriptSource.id, scriptSource.id, scriptSource.source, scriptSource.sourceType).value;
-                    break;
-                default:
-                    throw new Error(`Unknown script source type: ${scriptSource.type}`);
-            }
+        for (const script of worldScripts) {
+            // @ts-ignore typescript continues to bug
+            script.initialize && await script.initialize(this.deObject);
         }
-
-        // patch all the scripts in the deObject to have their execute functions
-        await this.patchScripts(true);
 
         this.initialized = true;
-    }
-
-    /**
-     * @param {(scriptId: string, scriptType: "script" | "template" | "value_getter_char_space" | "value_getter_item_space", existingScriptSources: DEScriptSource[]) => Promise<DEScriptSource>} fn 
-     */
-    setScriptImportResolver(fn) {
-        this.scriptImportResolver = fn
-    }
-
-    /**
-     * @param {(characterFileId: string) => Promise<{character: DECompleteCharacterReference, scriptSources: DEScriptSource[]}>} fn 
-     */
-    setCharacterImportResolver(fn) {
-        this.characterImportResolver = fn;
-    }
-
-    async patchScripts(noImport = false) {
-        await checkObjectRecursivelyAsync(null, this.deObject, async (parent, obj) => {
-            if (obj.type === "script" || obj.type === "template") {
-                if (typeof obj.execute !== "function") {
-                    // find the script in the deObject.scriptSources and see if we can set it up
-                    // @ts-ignore
-                    const scriptSourceFound = this.deObject.scriptSources.find(src => src.id === obj.id);
-                    if (scriptSourceFound) {
-                        obj.execute = scriptSourceFound.run;
-                    } else if (noImport || !this.scriptImportResolver) {
-                        throw new Error(`Script with id ${obj.id} does not have a valid source.`);
-                    } else {
-                        // @ts-ignore
-                        const scriptSource = await this.scriptImportResolver(obj.id, obj.type, this.deObject.scriptSources);
-                        if (!scriptSource || scriptSource.id !== obj.id || scriptSource.type !== obj.type) {
-                            throw new Error(`Imported script source for id ${obj.id} is invalid.`);
-                        } else {
-                            // add the script source to the deObject script sources
-                            // @ts-ignore
-                            this.deObject.scriptSources.push(scriptSource);
-                            obj.execute = scriptSource.run;
-                        }
-                    }
-                }
-            } else if (obj.type === "value_getter_char_space" || obj.type === "value_getter_item_space") {
-                if (typeof obj.value !== "function") {
-                    // find the script in the deObject.scriptSources and see if we can set it up
-                    // @ts-ignore
-                    const scriptSourceFound = this.deObject.scriptSources.find(src => src.id === obj.id);
-                    if (scriptSourceFound) {
-                        obj.value = scriptSourceFound.run;
-                    } else if (noImport || !this.scriptImportResolver) {
-                        throw new Error(`Script with id ${obj.id} does not have a valid source`);
-                    } else {
-                        // @ts-ignore
-                        const scriptSource = await this.scriptImportResolver(obj.id, obj.type, this.deObject.scriptSources);
-                        if (!scriptSource || scriptSource.id !== obj.id || scriptSource.type !== obj.type) {
-                            throw new Error(`Imported script source for id ${obj.id} is invalid.`);
-                        } else {
-                            // add the script source to the deObject script sources
-                            // @ts-ignore
-                            this.deObject.scriptSources.push(scriptSource);
-                            obj.value = scriptSource.run;
-                        }
-                    }
-                }
-            }
-        });
-
-        // now we will check the imports of all script sources and ensure they are also imported
-        let hasMissingImports = false;
-        do {
-            /**
-             * @type {Set<string>}
-             */
-            const missingImports = new Set();
-            // @ts-ignore
-            for (const scriptSource of this.deObject.scriptSources) {
-                if (scriptSource.imports && scriptSource.imports.length > 0) {
-                    for (const importId of scriptSource.imports) {
-                        // @ts-ignore
-                        const found = this.deObject.scriptSources.find(src => src.id === importId);
-                        if (!found) {
-                            missingImports.add(importId);
-                        }
-                    }
-                }
-            }
-
-            // @ts-ignore
-            hasMissingImports = missingImports.size > 0;
-            if (hasMissingImports) {
-                for (const importId of missingImports) {
-                    if (noImport) {
-                        throw new Error(`Cannot find missing imported script ${importId}`);
-                    } else if (!this.scriptImportResolver) {
-                        throw new Error(`Script import resolver not set, cannot import missing script ${importId}`);
-                    } else {
-                        // @ts-ignore
-                        const scriptSource = await this.scriptImportResolver(importId, "script", this.deObject.scriptSources);
-                        if (!scriptSource || scriptSource.id !== importId || scriptSource.type !== "script") {
-                            throw new Error(`Imported script source for id ${importId} is invalid.`);
-                        } else {
-                            // add the script source to the deObject script sources
-                            // @ts-ignore
-                            this.deObject.scriptSources.push(scriptSource);
-                        }
-                    }
-                }
-            }
-        } while (hasMissingImports);
     }
 
     getStateAsJSON() {
@@ -455,11 +282,8 @@ export class DEngine {
     }
     /**
      * @param {DEMinimalCharacterReference} user
-     * @param {DEWorld} world
-     * @param {DEScriptSource[]} worldScriptsSources
-     * @param {Array<{name: string; import: string; properties: Record<string, DEPropertyValueInCharSpace>; spawnLocations: string[]; spawnLocationSlots: string[]; spawnSpreadToChildrenLocations: boolean; instances: number}>} characters
      */
-    async initialize(user, world, worldScriptsSources, characters) {
+    async initialize(user) {
         const defaultTime = new Date();
         /**
          * @type {DETimeDescription}
@@ -475,13 +299,19 @@ export class DEngine {
         }
         this.deObject = {
             user: user,
-            world: world,
-            characters: {},
-            allNames: {
-                mal: [],
-                fem: [],
-                amb: [],
+            world: {
+                connections: {},
+                // @ts-ignore
+                currentLocation: null,
+                // @ts-ignore
+                currentLocationSlot: null,
+                initialScenes: {},
+                locations: {},
+                lore: "",
+                properties: {},
+                selectedScene: null,
             },
+            characters: {},
             worldNames: {
                 mal: [],
                 fem: [],
@@ -495,58 +325,265 @@ export class DEngine {
             social: {
                 bonds: {},
             },
-            scriptSources: [...this.getDefaultScriptSources(), ...worldScriptsSources],
             wanderHeuristics: {},
             utils: deEngineUtils,
             gameOver: false,
             worldRules: {},
             actionAccumulators: {},
+            internal: {},
         }
 
         this.user = user;
         this.userCharacter = createCharacterFromUser(user);
 
-        this.characters = characters;
+        const randomLocation = this.pickRandomLocationForCharacter(this.userCharacter);
+        this.addCharacter(this.userCharacter, randomLocation.location, randomLocation.locationSlot);
 
-        // @ts-ignore
-        this.addCharacter(this.userCharacter, [], null, null);
+        if (!this.jsEngine) {
+            throw new Error("JS Engine not set, cannot import scripts");
+        }
 
+        await this.runInitializationScripts();
+    }
+
+    async runInitializationScripts() {
+        if (!this.deObject) {
+            throw new Error("DEngine not initialized");
+        }
+        const orderOfExecution = [
+            "world",
+            "characters",
+            "world-mechanic",
+            "character-mechanic",
+            "misc",
+        ];
+
+        const needsAtLeastOne = [
+            "world",
+        ];
+
+        for (const type of orderOfExecution) {
+            /**
+             * @type {DEScript[]}
+             */
+            const scripts =
+                // @ts-ignore typescript bugs
+                this.jsEngine.scriptOrder.map(scriptKey => this.jsEngine.scriptCache[scriptKey]).filter(script => script.type === type);
+
+            if (needsAtLeastOne.includes(type) && scripts.length === 0) {
+                throw new Error(`At least one script of type ${type} is required.`);
+            }
+
+            for (const script of scripts) {
+                // @ts-ignore typescript continues to bug
+                script.initialize && await script.initialize(this.deObject);
+            }
+
+            if (type === "characters") {
+                for (const charName in this.deObject.characters) {
+                    const character = this.deObject.characters[charName];
+                    if (INVALID_NAMES.includes(character.name.toLowerCase())) {
+                        throw new Error(`Character name ${character.name} is invalid or reserved.`);
+                    }
+
+                    // ensure the character name starts with a capital letter and is a-z with spaces only
+                    if (!/^[A-Z][a-zA-Z ]*$/.test(character.name)) {
+                        throw new Error(`Character name ${character.name} is invalid. It must start with a capital letter and contain only letters and spaces.`);
+                    }
+
+                    const charState = this.deObject.stateFor[charName];
+                    if (!charState) {
+                        // adding a char state for this character by default
+                        const futureLocation = this.pickRandomLocationForCharacter(character);
+                        this.deObject.stateFor[charName] = {
+                            history: [],
+                            carrying: [],
+                            carryingCharactersDirectly: [],
+                            conversationId: null,
+                            dead: false,
+                            deadEnded: false,
+                            deadEndReason: null,
+                            id: crypto.randomUUID(),
+                            location: futureLocation.location,
+                            locationSlot: futureLocation.locationSlot,
+                            messageId: null,
+                            posture: "standing",
+                            seenCharacters: [],
+                            seenItems: [],
+                            states: [],
+                            time: this.deObject.initialTime,
+                            type: "BACKGROUND",
+                            wearing: [],
+                        }
+                    }
+
+                    const bonds = this.deObject.social.bonds[charName];
+                    if (!bonds) {
+                        this.deObject.social.bonds[charName] = {
+                            active: [],
+                            ex: [],
+                        };
+                    }
+
+                    const wanderHeuristic = this.deObject.wanderHeuristics[charName];
+                    if (!wanderHeuristic) {
+                        this.deObject.wanderHeuristics[charName] = {
+                            wanderConfinement: null,
+                            wanderPrimaryLocation: null,
+                            wanderOutsideConfinementActivatesState: null,
+                        };
+                    }
+
+                    if (!this.deObject.actionAccumulators[charName]) {
+                        this.deObject.actionAccumulators[charName] = {
+                            accumulators: {},
+                        }
+                    }
+                }
+            }
+        }
+
+        for (const type of orderOfExecution) {
+            /**
+             * @type {DEScript[]}
+             */
+            const scripts =
+                // @ts-ignore typescript bugs
+                this.jsEngine.scriptOrder.map(scriptKey => this.jsEngine.scriptCache[scriptKey]).filter(script => script.type === type);
+
+            for (const script of scripts) {
+                // @ts-ignore typescript continues to bug
+                script.postSpawnAllCharacters && await script.postSpawnAllCharacters(this.deObject);
+            }
+        }
+
+        // this initializes the world but no characters have been added yet
         this.initialized = true;
     }
-    /**
-     * 
-     * @param {DENamePool} pool 
-     */
-    setNamePool(pool) {
-        if (!this.deObject) {
-            throw new Error("DEngine not initialized");
-        }
-        this.deObject.allNames = pool;
-    }
-    getCurrentDEObject() {
-        if (!this.deObject) {
-            throw new Error("DEngine not initialized");
-        }
-        return this.deObject;
-    }
 
     /**
-     * @param {string} id 
+     * @param {DEMinimalCharacterReference} char 
+     * @returns 
      */
-    getScriptSourceForId(id) {
+    pickRandomLocationForCharacter(char) {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         }
-        return this.deObject.scriptSources.find(src => src.id === id) || null;
+        const locationNames = Object.keys(this.deObject.world.locations);
+        if (locationNames.length === 0) {
+            throw new Error("No locations found in world to pick from.");
+        }
+
+        const charHeight = char.heightCm;
+
+        const viableLocations = locationNames.map(locationName => {
+            // @ts-ignore
+            const allSlots = this.deObject.world.locations[locationName].slots;
+            const viableSlots = [];
+            for (const slotName in allSlots) {
+                const slot = allSlots[slotName];
+                if (slot.maxHeightCm && charHeight > slot.maxHeightCm) {
+                    continue;
+                } else if (slot.maxWeightKg && char.weightKg > slot.maxWeightKg) {
+                    continue;
+                } else if (slot.maxVolumeLiters && char.carryingCapacityLiters > slot.maxVolumeLiters) {
+                    continue;
+                }
+
+                if (!slot.maxHeightCm && !slot.maxWeightKg && !slot.maxVolumeLiters) {
+                    viableSlots.push(slotName);
+                    continue;
+                }
+
+                let allItemWeight = 0;
+                let allItemVolume = 0;
+
+                const measuredCharacters = [];
+                for (const item of slot.items) {
+                    const weight = getItemWeight(this, item);
+                    measuredCharacters.push(...weight.allCharactersInvolved);
+                    allItemWeight += weight.completeWeight;
+                    const volume = getItemVolume(this, item);
+                    measuredCharacters.push(...volume.allCharactersInvolved);
+                    allItemVolume += volume.completeVolume;
+                }
+
+                // @ts-ignore
+                for (const charName in this.deObject.stateFor) {
+                    // @ts-ignore
+                    const charState = this.deObject.stateFor[charName];
+                    if (charState.location === locationName && charState.locationSlot === slotName) {
+                        if (measuredCharacters.includes(charName)) {
+                            continue;
+                        }
+                        allItemWeight += getCharacterWeight(this, charName).weight;
+                        allItemVolume += getCharacterVolume(this, charName).volume;
+                    }
+                }
+
+                const remainingWeight = slot.maxWeightKg - allItemWeight;
+                const remainingVolume = slot.maxVolumeLiters - allItemVolume;
+
+                if (slot.maxWeightKg && char.weightKg > remainingWeight) {
+                    continue;
+                } else if (slot.maxVolumeLiters && char.carryingCapacityLiters > remainingVolume) {
+                    continue;
+                }
+
+                viableSlots.push(slotName);
+            }
+
+            return {
+                location: locationName,
+                viableSlots,
+            };
+        }).filter(loc => loc.viableSlots.length > 0);
+
+        const randomViableLocation = viableLocations[Math.floor(Math.random() * viableLocations.length)];
+
+        const doFallback = () => {
+            if (!this.deObject) {
+                // stupid typescript
+                throw new Error("DEngine not initialized");
+            }
+            console.warn(`No viable slots found for character ${char.name}, picking random slot without checking viability.`);
+            const locationNames = Object.keys(this.deObject.world.locations);
+            if (locationNames.length === 0) {
+                throw new Error(`No locations found in world to pick from for fallback.`);
+            }
+            const randomLocationName = locationNames[Math.floor(Math.random() * locationNames.length)];
+            if (!randomLocationName) {
+                throw new Error(`No locations found in world to pick from for fallback.`);
+            }
+            const location = this.deObject.world.locations[randomLocationName];
+            if (!location) {
+                throw new Error(`Location ${randomLocationName} not found in world for fallback.`);
+            }
+            const slotNames = Object.keys(location.slots);
+            if (!slotNames || slotNames.length === 0) {
+                throw new Error(`No slots found in location ${randomLocationName} to pick from for fallback.`);
+            }
+            const randomSlotName = slotNames[Math.floor(Math.random() * slotNames.length)];
+            if (!randomSlotName) {
+                throw new Error(`No valid slot found in location ${randomLocationName} for fallback.`);
+            }
+            return { location: randomLocationName, locationSlot: randomSlotName };
+        }
+
+        if (!randomViableLocation) {
+            return doFallback();
+        }
+
+        const randomSlot = randomViableLocation.viableSlots[Math.floor(Math.random() * randomViableLocation.viableSlots.length)];
+        return { location: randomViableLocation.location, locationSlot: randomSlot };
     }
 
     /**
      * @param {DECompleteCharacterReference} character
-     * @param {DEScriptSource[]} scriptSources
      * @param {string} location
      * @param {string} locationSlot
      */
-    addCharacter(character, scriptSources, location, locationSlot) {
+    addCharacter(character, location, locationSlot) {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         }
@@ -595,8 +632,6 @@ export class DEngine {
             // chars start out empty handed
             carrying: [],
             carryingCharactersDirectly: [],
-            currentAgeMinutes: character.ageYears * 525600, // approximate minutes in a year
-            currentWeightKg: character.weightKg,
 
             // chars start up naked
             // hopefully they give them some clothes soon :)
@@ -614,90 +649,6 @@ export class DEngine {
         this.deObject.actionAccumulators[character.name] = {
             accumulators: {},
         };
-
-        if (scriptSources && scriptSources.length > 0) {
-            for (const scriptSource of scriptSources) {
-                this.deObject.scriptSources.push(scriptSource);
-            }
-        }
-    }
-
-    async runAllSpawnScripts() {
-        if (!this.deObject) {
-            throw new Error("DEngine not initialized");
-        }
-
-        /**
-         * @type {Record<string, Set<string>>}
-         */
-        let scriptsRan = {};
-        for (const script of Object.values(this.deObject.world.worldAllCharacterSpawnScripts)) {
-            for (const charName in this.deObject.characters) {
-                const character = this.deObject.characters[charName];
-                scriptsRan[character.name] = await this.runScriptById(script.id, character, scriptsRan[character.name] || new Set());
-            }
-        }
-        for (const charName in this.deObject.characters) {
-            const character = this.deObject.characters[charName];
-            for (const scriptId of Object.keys(character.scripts.spawn)) {
-                scriptsRan[character.name] = await this.runScriptById(scriptId, character, scriptsRan[character.name] || new Set());
-            }
-            character.scripts.spawn = {};
-        }
-
-        // save memory by clearing out the worldAllCharacterSpawnScripts after they have run
-        this.deObject.world.worldAllCharacterSpawnScripts = {};
-    }
-
-    /**
-     * @param {string} scriptId
-     * @param {DECompleteCharacterReference} character
-     * @param {Set<string>} scriptsRanInAnotherContext
-     */
-    async runScriptById(scriptId, character, scriptsRanInAnotherContext = new Set()) {
-        if (!this.deObject) {
-            throw new Error("DEngine not initialized");
-        }
-        const scriptsRan = new Set(scriptsRanInAnotherContext);
-
-        /**
-         * 
-         * @param {string} internalScriptId 
-         * @returns 
-         */
-        const runScriptInternal = async (internalScriptId) => {
-            if (scriptsRan.has(internalScriptId)) {
-                return;
-            }
-            const source = this.getScriptSourceForId(internalScriptId);
-            if (!source) {
-                throw new Error(`Script source with id ${internalScriptId} not found.`);
-            }
-            const imports = source.imports || [];
-            for (const importId of imports) {
-                await runScriptInternal(importId);
-            }
-            await source.run(this.deObject, character);
-            scriptsRan.add(internalScriptId);
-        }
-        await runScriptInternal(scriptId);
-        return scriptsRan;
-    }
-
-    async runAllWorldCreationScripts() {
-        if (!this.deObject) {
-            throw new Error("DEngine not initialized");
-        }
-        if (!this.userCharacter) {
-            throw new Error("DEngine user character not initialized");
-        }
-        let scriptsRan = new Set();
-        for (const script of Object.values(this.deObject.world.worldScripts)) {
-            scriptsRan = await this.runScriptById(script.id, this.userCharacter, scriptsRan);
-        }
-
-        // save memory by clearing out the worldScripts after they have run
-        this.deObject.world.worldScripts = {};
     }
 
     /**
@@ -706,10 +657,8 @@ export class DEngine {
     async startScene(optionName) {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
-        } else if (!this.deObject.world.hasInitializedWorld) {
-            throw new Error("World has not been initialized yet.");
-        } else if (this.deObject.world.hasStartedScene) {
-            throw new Error("Scene has already been started.");
+        } else if (this.deObject.world.selectedScene) {
+            throw new Error("A scene has already been selected.");
         } else if (!this.userCharacter) {
             throw new Error("DEngine user character not initialized");
         } else if (!this.inferenceAdapter) {
@@ -739,10 +688,8 @@ export class DEngine {
         this.deObject.stateFor[this.userCharacter.name].locationSlot = sceneObject.startingLocationSlot;
         this.deObject.world.currentLocation = sceneObject.startingLocation;
         this.deObject.world.currentLocationSlot = sceneObject.startingLocationSlot;
-        // @ts-ignore
-        const narration = await sceneObject.narration.execute(this.deObject, this.userCharacter);
 
-        // TODO add startup script for the scene
+        // TODO add startup script for the scene?
 
         const expectedParticipants = sceneObject.startingEngagedCharacters || [];
         expectedParticipants.push(this.userCharacter.name);
@@ -757,6 +704,8 @@ export class DEngine {
             this.deObject.stateFor[participantName].conversationId = "INITIAL_SCENE_NARRATION";
             this.deObject.stateFor[participantName].type = "INTERACTING";
         }
+
+        const narration = typeof sceneObject.narration === "string" ? sceneObject.narration : await sceneObject.narration(this.deObject, {});
 
         this.deObject.conversations["INITIAL_SCENE_NARRATION"] = {
             id: "INITIAL_SCENE_NARRATION",
@@ -797,18 +746,10 @@ export class DEngine {
         }
 
         this.rerollWorldWeather();
-        const scriptTorRun = this.deObject.world.worldSceneInitializationScripts[optionName];
-        if (scriptTorRun) {
-            // @ts-ignore
-            await this.runScriptById(scriptTorRun.id, this.userCharacter);
-        }
+        this.deObject.world.selectedScene = optionName;
+        this.deObject.world.initialScenes = {}; // we can remove the initial scenes from the world object to save memory, we don't need them anymore
 
-        this.deObject.world.hasStartedScene = true;
-        // remove initial scenes to save memory
-        this.deObject.world.worldSceneInitializationScripts = {};
-        this.deObject.world.initialScenes = {};
-
-        this.deleteOrphanedScriptSources();
+        // TODO post scene started script?
 
         const extraMessage = await this.fixPotentiallyBrokenItemStates();
         if (extraMessage) {
@@ -835,111 +776,11 @@ export class DEngine {
         }
     }
 
-    checkDEObjectIntegrity(initialization = false) {
-        if (!this.deObject) {
-            throw new Error("DEngine not initialized");
-        }
-
-        // now let's check that all function are defined
-        checkObjectRecursively(null, this.deObject, (parent, obj) => {
-            if (obj.type === "script" || obj.type === "template") {
-                if (typeof obj.execute !== "function") {
-                    // find the script in the deObject.scriptSources and see if we can set it up
-                    // @ts-ignore
-                    const scriptSourceFound = this.deObject.scriptSources.find(src => src.id === obj.id);
-                    if (scriptSourceFound) {
-                        obj.execute = scriptSourceFound.run;
-                    } else {
-                        throw new Error(`Script with id ${obj.id} does not have a valid execute function.`);
-                    }
-                } else {
-                    const scriptSourceFound = this.deObject?.scriptSources.find(src => src.id === obj.id);
-                    if (!scriptSourceFound) {
-                        throw new Error(`Value getter with id ${obj.id} does not have a valid source.`);
-                    }
-                }
-            } else if (obj.type === "value_getter" || obj.type === "value_getter_char_space") {
-                if (typeof obj.value !== "function") {
-                    // find the script in the deObject.scriptSources and see if we can set it up
-                    // @ts-ignore
-                    const scriptSourceFound = this.deObject.scriptSources.find(src => src.id === obj.id);
-                    if (scriptSourceFound) {
-                        obj.value = scriptSourceFound.run;
-                    } else {
-                        throw new Error(`Value getter with id ${obj.id} does not have a valid value function.`);
-                    }
-                } else {
-                    const scriptSourceFound = this.deObject?.scriptSources.find(src => src.id === obj.id);
-                    if (!scriptSourceFound) {
-                        throw new Error(`Value getter with id ${obj.id} does not have a valid source.`);
-                    }
-                }
-            }
-        });
-
-        if (!initialization) {
-            for (const charName in this.deObject.characters) {
-                const charState = this.deObject.stateFor[charName];
-                if (!charState) {
-                    throw new Error(`Character ${charName} does not have a corresponding state in stateFor.`);
-                }
-            }
-        }
-    }
-
-    deleteOrphanedScriptSources() {
-        if (!this.deObject) {
-            throw new Error("DEngine not initialized");
-        }
-        console.log("Optimizing DEObject...");
-
-        // find all script source ids that are used in the deObject
-        let deletedSomething = false;
-        while (true) {
-            /** @type {Set<string>} */
-            const usedScriptSourceIds = new Set();
-            checkObjectRecursively(null, this.deObject, (parent, obj) => {
-                if (parent === this.deObject?.scriptSources) {
-                    // we are iterating over the script sources themselves
-                    return;
-                }
-                if (obj.type === "script" || obj.type === "template") {
-                    if (obj.id === "LUNAR_STATION_INITIAL_SCRIPT") {
-                        console.log(obj)
-                    }
-                    usedScriptSourceIds.add(obj.id);
-                } else if (obj.type === "value_getter" || obj.type === "value_getter_char_space" || obj.type === "value_getter_item_space") {
-                    usedScriptSourceIds.add(obj.id);
-                }
-            });
-            // I know it is not the most efficient way, but it is simple and works
-            // and easy to understand should be bombproof against bugs
-            this.deObject.scriptSources.forEach(src => {
-                for (const importId of src.imports) {
-                    usedScriptSourceIds.add(importId);
-                }
-            });
-            // now remove all script sources that are not used
-            const newScriptSources = this.deObject.scriptSources.filter(src => usedScriptSourceIds.has(src.id));
-            if (newScriptSources.length < this.deObject.scriptSources.length) {
-                deletedSomething = true;
-                const whatWasDeleted = this.deObject.scriptSources.filter(src => !usedScriptSourceIds.has(src.id)).map(src => src.id);
-                console.log(`Deleted orphaned script sources: ${whatWasDeleted.join(", ")}`);
-                this.deObject.scriptSources = newScriptSources;
-            } else {
-                deletedSomething = false;
-            }
-            if (!deletedSomething) {
-                break;
-            }
-        }
-    }
-
     /**
      * @param {string} locationName
      * @returns {Record<string, {maxWeightKg: number; maxVolumeLiters: number; currentWeightKg: number; currentVolumeLiters: number}>}
      */
-    getRemainingCapacityInLocationApprox(locationName) {
+    getRemainingCapacityInLocation(locationName) {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         }
@@ -958,263 +799,49 @@ export class DEngine {
                 currentWeightKg: 0,
                 currentVolumeLiters: 0,
             };
+            /**
+             * @type {string[]}
+             */
+            const measuredCharacters = [];
             locationInfo.slots[slotName].items.forEach(item => {
-                slots[slotName].currentWeightKg += item.weightKg;
-                slots[slotName].currentVolumeLiters += item.volumeLiters;
+                const weight = getItemWeight(this, item);
+                measuredCharacters.push(...weight.allCharactersInvolved);
+                slots[slotName].currentWeightKg += weight.completeWeight;
+                const volume = getItemVolume(this, item);
+                measuredCharacters.push(...volume.allCharactersInvolved);
+                slots[slotName].currentVolumeLiters += volume.completeVolume;
             });
 
             // find characters in this slot
             for (const charName in this.deObject.stateFor) {
                 const charState = this.deObject.stateFor[charName];
                 if (charState.location === locationName && charState.locationSlot === slotName) {
-                    const character = this.deObject.characters[charName];
-                    let weight = character.weightKg;
-                    let volume = weight;
-                    weight += character.carryingCapacityKg;
-                    volume += character.carryingCapacityLiters;
-                    slots[slotName].currentWeightKg += weight;
-                    slots[slotName].currentVolumeLiters += volume;
+                    if (measuredCharacters.includes(charName)) {
+                        continue;
+                    }
+
+                    slots[slotName].currentWeightKg += getCharacterWeight(this, charName).weight;
+                    slots[slotName].currentVolumeLiters += getCharacterVolume(this, charName).volume;
                 }
             }
         }
         return slots;
     }
 
-    async addCharactersInWorld() {
-        if (this.characters === null) {
-            throw new Error("No characters missing to add to the world");
-        } else if (!this.characterImportResolver) {
-            throw new Error("Character import resolver not set");
-        } else if (!this.scriptImportResolver) {
-            throw new Error("Script import resolver not set");
-        } else if (!this.deObject) {
-            throw new Error("DEngine not initialized");
-        }
-
-        /**
-         * @type {Record<string, DECompleteCharacterReference>}
-         */
-        const cache = {};
-        for (const charData of this.characters) {
-            if (charData.instances < 1) {
-                continue;
-            }
-            if (!cache[charData.import]) {
-                const character = await this.characterImportResolver(charData.import);
-                if (!character) {
-                    throw new Error(`Failed to import character ${charData.name} from ${charData.import}`);
-                }
-                cache[charData.import] = character.character;
-                // @ts-ignore
-                this.deObject.scriptSources.push(...character.scriptSources);
-            }
-
-            let weight = cache[charData.import].weightKg;
-            let volume = weight; // approximate 1kg = 1 liter
-            weight += cache[charData.import].carryingCapacityKg;
-            volume += cache[charData.import].carryingCapacityLiters;
-
-            // hopefully we can find a spot for them, we add all their potential
-            // weight and volume requirements in case some script gives
-            // them stuff as they spawn in that location
-
-            for (let i = 0; i < charData.instances; i++) {
-                const potentialSpawnLocations = (charData.spawnLocations.length > 0 ?
-                    charData.spawnLocations :
-                    Object.keys(this.deObject.world.locations));
-
-                if (charData.spawnLocations.length > 0 && charData.spawnSpreadToChildrenLocations) {
-                    // we need to add all child locations of the specified spawn locations
-                    /**
-                     * 
-                     * @param {string} locationName 
-                     */
-                    const addAllChildrenOf = (locationName) => {
-                        for (const locName in this.deObject?.world.locations) {
-                            const locObj = this.deObject.world.locations[locName];
-                            if (locObj.parent === locationName) {
-                                if (!potentialSpawnLocations.includes(locName)) {
-                                    potentialSpawnLocations.push(locName);
-                                }
-                                // recursively add children of this location
-                                addAllChildrenOf(locName);
-                            }
-                        }
-                    }
-                    for (const locName of charData.spawnLocations) {
-                        addAllChildrenOf(locName);
-                    }
-                }
-
-                const viableSlotsAtLocation = potentialSpawnLocations.map(locName => {
-                    const approx = this.getRemainingCapacityInLocationApprox(locName);
-                    const viableSlots = [];
-                    for (const slotName in approx) {
-                        if (approx[slotName].maxWeightKg - approx[slotName].currentWeightKg >= weight &&
-                            approx[slotName].maxVolumeLiters - approx[slotName].currentVolumeLiters >= volume) {
-                            viableSlots.push(slotName);
-                        }
-                    }
-                    return { location: locName, viableSlots, likelihood: viableSlots.length };
-                }).filter(locInfo => locInfo.viableSlots.length > 0);
-
-                if (!viableSlotsAtLocation || viableSlotsAtLocation.length === 0) {
-                    throw new Error(`Failed to find a viable spawn location and slot for character ${charData.name} instance number ${i + 1}`);
-                }
-
-                // pick one at random
-                const locationToSpawn = weightedRandomByLikelihood(viableSlotsAtLocation);
-
-                if (!locationToSpawn) {
-                    throw new Error(`Failed to pick a spawn location for character ${charData.name} instance number ${i + 1}`);
-                }
-
-                // now we are going to pick a slot at random
-                const slotsToSpawn = locationToSpawn.viableSlots.filter((slot) => {
-                    return charData.spawnLocationSlots.length > 0 ? charData.spawnLocationSlots.includes(slot) : true
-                });
-
-                if (!slotsToSpawn || slotsToSpawn.length === 0) {
-                    throw new Error(`Failed to pick a spawn slot for character ${charData.name} instance number ${i + 1} at location ${locationToSpawn.location},
-                        filtering of slots by spawnLocationSlots resulted in no viable slots, available slots were: ${locationToSpawn.viableSlots.join(", ")},
-                        requested spawnLocationSlots were: ${charData.spawnLocationSlots.join(", ")}`);
-                }
-
-                // pick one slot at random
-                const finalSlotToSpawn = slotsToSpawn[Math.floor(Math.random() * slotsToSpawn.length)];
-
-                if (charData.instances === 1) {
-                    const characterToWorkWith = deepCopy(cache[charData.import]);
-                    characterToWorkWith.name = charData.name;
-                    characterToWorkWith.properties = {
-                        ...characterToWorkWith.properties,
-                        ...charData.properties,
-                    };
-                    this.addCharacter(characterToWorkWith, [], locationToSpawn.location, finalSlotToSpawn);
-                } else {
-                    // now we need to get a name pool based on the location
-                    const locationObj = this.deObject.world.locations[locationToSpawn.location];
-
-                    const defaultNamePool = this.deObject.allNames;
-                    let selectedNamePool = defaultNamePool;
-
-                    /**
-                     * @param {DEStatefulLocationDefinition} locationObj
-                     */
-                    const getNamePoolForLocation = (locationObj) => {
-                        if (locationObj.namePool) {
-                            selectedNamePool = locationObj.namePool;
-                            return;
-                        }
-
-                        // find a parent location with a name pool
-                        if (locationObj.parent) {
-                            const parentLocationObj = this.deObject?.world.locations[locationObj.parent];
-                            if (parentLocationObj) {
-                                getNamePoolForLocation(parentLocationObj);
-                            }
-                        }
-                    }
-                    getNamePoolForLocation(locationObj);
-
-                    const gender = cache[charData.import].gender;
-
-                    // now we need to get a name from the selected name pool
-                    let namePicked = null;
-                    const pickName = () => {
-                        let poolToUse = gender === "male" ? selectedNamePool.mal :
-                            gender === "female" ? selectedNamePool.fem : selectedNamePool.amb;
-
-                        // give it a 0.15 chance to pick the ambiguous pool if not ambiguous already
-                        if (gender !== "ambiguous" && Math.random() < 0.15) {
-                            poolToUse = selectedNamePool.amb;
-                        }
-
-                        let availableNames = poolToUse.filter(name => {
-                            // ensure the name is not already used by another character
-                            if (this.deObject?.characters[name]) {
-                                return false;
-                            }
-                            return true;
-                        });
-
-                        if (availableNames.length === 0 && selectedNamePool !== defaultNamePool) {
-                            // try again with the default pool
-                            selectedNamePool = defaultNamePool;
-                            pickName();
-                            return;
-                        } else if (availableNames.length === 0) {
-                            throw new Error(`Failed to pick a name for character ${charData.name} instance number ${i + 1}, no available names left in the name pool.`);
-                        } else {
-                            namePicked = availableNames[Math.floor(Math.random() * availableNames.length)];
-                        }
-                    }
-
-                    const characterToWorkWith = deepCopy(cache[charData.import]);
-                    characterToWorkWith.name = namePicked;
-                    characterToWorkWith.properties = {
-                        ...characterToWorkWith.properties,
-                        ...charData.properties,
-                    };
-                    this.addCharacter(characterToWorkWith, [], locationToSpawn.location, finalSlotToSpawn);
-                }
-            }
-        }
-    }
-
-    async initializeWorld() {
-        if (!this.deObject) {
-            throw new Error("DEngine not initialized");
-        } else if (!this.characterImportResolver) {
-            throw new Error("Character import resolver not set");
-        } else if (!this.scriptImportResolver) {
-            throw new Error("Script import resolver not set");
-        } else if (!this.inferenceAdapter) {
-            throw new Error("Inference adapter not set");
-        }
-
-        try {
-            await this.inferenceAdapter.initialize();
-        } catch (error) {
-            // only a warning for now, as you can still initialize the world
-            // without the inference adapter, in theory at least
-            console.warn("Error initializing inference adapter:", error);
-        }
-
-        // now let's check that all function are defined
-        if (!this.deObject.world.hasInitializedWorld) {
-            await this.patchScripts();
-            await this.runAllWorldCreationScripts();
-            await this.addCharactersInWorld();
-            await this.patchScripts();
-            await this.runAllSpawnScripts();
-        }
-
-        this.checkDEObjectIntegrity(true);
-
-        this.deObject.world.hasInitializedWorld = true;
-    }
-
     async prepareNextCycle() {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
-        } else if (!this.deObject.world.hasInitializedWorld) {
-            throw new Error("DEngine world not initialized");
-        } else if (!this.deObject.world.hasStartedScene) {
+        } else if (!this.deObject.world.selectedScene) {
             throw new Error("DEngine world scene not started");
         } else if (!this.inferenceAdapter) {
             throw new Error("Inference adapter not set");
         }
-
-        this.checkDEObjectIntegrity();
     }
 
     async fixPotentiallyBrokenItemStates() {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
-        } else if (!this.deObject.world.hasInitializedWorld) {
-            throw new Error("DEngine world not initialized");
-        } else if (!this.deObject.world.hasStartedScene) {
+        } else if (!this.deObject.world.selectedScene) {
             throw new Error("DEngine world scene not started");
         } else if (!this.userCharacter) {
             throw new Error("User character not set");
@@ -1553,6 +1180,10 @@ export class DEngine {
             pseudoBond = true;
         }
 
+        if (!character.bonds) {
+            throw new Error(`Character ${characterName} has no bonds defined.`);
+        }
+
         const bondDecl = character.bonds.declarations.find((b => b.strangerBond === bond.stranger && b.minBondLevel <= bond.bond && bond.bond < (b.maxBondLevel === 100 ? 200 : b.maxBondLevel) && b.min2BondLevel <= bond.bond2 && bond.bond2 < (b.max2BondLevel === 100 ? 200 : b.max2BondLevel)));
         if (!bondDecl) {
             throw new Error(`No bond description found for bond level ${bond.bond} and secondary bond level ${bond.bond2} from character "${characterName}" towards character "${towards}".`);
@@ -1656,6 +1287,9 @@ export class DEngine {
         const relationships = [];
 
         for (const activeBond of bonds.active) {
+            if (!character.bonds) {
+                throw new Error(`Character ${characterName} has no bonds defined.`);
+            }
             const bondDeclaration = character.bonds.declarations.find(bondDecl => bondDecl.strangerBond === activeBond.stranger && bondDecl.minBondLevel <= activeBond.bond && activeBond.bond < (bondDecl.maxBondLevel === 100 ? 200 : bondDecl.maxBondLevel) && bondDecl.min2BondLevel <= activeBond.bond2 && activeBond.bond2 < (bondDecl.max2BondLevel === 100 ? 200 : bondDecl.max2BondLevel));
             if (bondDeclaration) {
                 // @ts-ignore
@@ -1687,6 +1321,9 @@ export class DEngine {
         // ex bonds only inject system prompts, as they are not active relationships but ex-relationships
         // they may be mourning or have other effects on the character's mindset so only relevant to system prompt injections
         for (const exBond of bonds.ex) {
+            if (!character.bonds) {
+                throw new Error(`Character ${characterName} has no bonds defined.`);
+            }
             const bondDeclaration = character.bonds.declarations.find(bondDecl => bondDecl.strangerBond === exBond.stranger && bondDecl.minBondLevel <= exBond.bond && exBond.bond < (bondDecl.maxBondLevel === 100 ? 200 : bondDecl.maxBondLevel) && bondDecl.min2BondLevel <= exBond.bond2 && exBond.bond2 < (bondDecl.max2BondLevel === 100 ? 200 : bondDecl.max2BondLevel));
             if (bondDeclaration) {
                 if (bondDeclaration.generalCharacterDescriptionInjectionEx) {
@@ -1703,6 +1340,9 @@ export class DEngine {
         }
 
         // make final descriptions for total strangers for the standard stranger bond
+        if (!character.bonds) {
+            throw new Error(`Character ${characterName} has no bonds defined.`);
+        }
         const strangerBondDeclaration = character.bonds.declarations.find(bondDecl => bondDecl.strangerBond === true && bondDecl.minBondLevel <= 0 && 0 < (bondDecl.maxBondLevel === 100 ? 200 : bondDecl.maxBondLevel) && bondDecl.min2BondLevel <= 0 && 0 < (bondDecl.max2BondLevel === 100 ? 200 : bondDecl.max2BondLevel));
         if (strangerBondDeclaration) {
             // these do apply to all the total strangers
@@ -1878,10 +1518,10 @@ export class DEngine {
                 remainingCarryingCapacity -= characterWeight;
                 processItemList(carriedCharacterState.carrying);
                 processItemList(carriedCharacterState.wearing);
-                processCharacterList(carriedCharacterState.carryingCharacters);
+                processCharacterList(carriedCharacterState.carryingCharactersDirectly);
             }
         }
-        processCharacterList(characterState.carryingCharacters);
+        processCharacterList(characterState.carryingCharactersDirectly);
         processItemList(characterState.carrying);
         processItemList(characterState.wearing);
 
@@ -2106,13 +1746,13 @@ export class DEngine {
                 const characterVolumesWearing = processItemList(carriedCharacterState.wearing, false, true);
                 takenVolume += characterVolumesWearing.takenVolume;
                 // the same is true for the characters they are carrying
-                const characterCharactersVolumes = processCharacterList(carriedCharacterState.carryingCharacters);
+                const characterCharactersVolumes = processCharacterList(carriedCharacterState.carryingCharactersDirectly);
                 takenVolume += characterCharactersVolumes.takenVolume;
             }
 
             return { takenVolume, addedVolume }
         }
-        const characterCharactersVolumes = processCharacterList(characterState.carryingCharacters);
+        const characterCharactersVolumes = processCharacterList(characterState.carryingCharactersDirectly);
         const carryingVolumes = processItemList(characterState.carrying);
         remainingCarryingVolume -= (carryingVolumes.takenVolume - carryingVolumes.addedVolume);
         remainingCarryingVolume -= characterCharactersVolumes.takenVolume;
@@ -2313,7 +1953,8 @@ export class DEngine {
             groupsList += ` - ${ownGroupParticipant}: ${this.getExternalDescriptionOfCharacter(ownGroupParticipant)}\n`;
         }
 
-        const allCharactersAround = characterState.surroundingNonStrangers.concat(characterState.surroundingTotalStrangers);
+        const allCharactersSurrounding = getSurroundingCharacters(this, character.name)
+        const allCharactersAround = [...allCharactersSurrounding.nonStrangers, ...allCharactersSurrounding.totalStrangers];
 
         /**
          * @type {string[][]}
@@ -3128,6 +2769,12 @@ export class DEngine {
      * @param {DESingleBondDescription} bond 
      */
     getBondDeclarationFromBondDescription(character, bond) {
+        if (!this.deObject) {
+            throw new Error("DEngine not initialized");
+        }
+        if (!character.bonds || !character.bonds.declarations) {
+            throw new Error(`Character ${character.name} has no bonds declarations, but trying to get bond declaration for a bond.`);
+        }
         const bondDeclaration =
             character.bonds.declarations.find(bondDecl => bondDecl.strangerBond === bond.stranger && bondDecl.minBondLevel <= bond.bond && bond.bond < (bondDecl.maxBondLevel === 100 ? 200 : bondDecl.maxBondLevel) && bondDecl.min2BondLevel <= bond.bond2 && bond.bond2 < (bondDecl.max2BondLevel === 100 ? 200 : bondDecl.max2BondLevel));
         return bondDeclaration;

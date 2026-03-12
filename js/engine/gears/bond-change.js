@@ -13,6 +13,9 @@ async function updateAllStrangerBonds(engine, character) {
     if (!engine.deObject) {
         throw new Error("DEngine not initialized");
     }
+    if (!character.bonds) {
+        throw new Error(`Character ${character.name} has no bonds defined.`);
+    }
     const strangerBonds = engine.deObject.social.bonds[character.name].active.filter(bond => bond.stranger);
 
     for (const bond of strangerBonds) {
@@ -136,6 +139,9 @@ export default async function calculateBondsChangesDueToMessages(engine, charact
 
         // now we can process the messages to update the bond
         for (const condition of currentBondDescription.bondConditions) {
+            if (!character.bonds) {
+                throw new Error(`Character ${character.name} has no bonds defined.`);
+            }
             const conditionMultiplier = (currentBond.stranger ? (condition.weight < 0 ? character.bonds.strangerNegativeMultiplier : character.bonds.strangerPositiveMultiplier) : (condition.weight < 0 ? character.bonds.bondChangeNegativityBias : character.bonds.bondChangeFineTune));
             // @ts-ignore
             const result = (await condition.template.execute(engine.deObject, character, engine.deObject.characters[characterNameToUpdate], undefined, undefined, undefined)).trim();
@@ -176,6 +182,7 @@ export default async function calculateBondsChangesDueToMessages(engine, charact
                     stopAfter: ["yes", "no"],
                     stopAt: [],
                     grammar: `root ::= ("yes" | "no") .*`,
+                    maxSafetyCharacters: 0,
                 });
 
                 if (questioningAgentResult.done) {
