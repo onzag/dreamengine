@@ -2186,16 +2186,46 @@ function moveItems(
                 componentFromPath.item._moved_to = actualEndingPath;
             }
 
-            let thrownAddition = thrown ? "After being thrown, " : "";
-            if (typeof thrown === "string") {
-                thrownAddition = `After being thrown towards ${thrown}, `;
+            let thrownAddition = "";
+            if (thrown) {
+                if (typeof thrown === "string") {
+                    const variations = [
+                        `After being thrown towards ${thrown}, `,
+                        `Having been tossed towards ${thrown}, `,
+                        `Flung in the direction of ${thrown}, `,
+                        `Hurled towards ${thrown}, `,
+                    ];
+                    thrownAddition = variations[Math.floor(Math.random() * variations.length)];
+                } else {
+                    const variations = [
+                        "After being thrown, ",
+                        "Having been tossed, ",
+                        "After being flung, ",
+                        "Hurled through the air, ",
+                    ];
+                    thrownAddition = variations[Math.floor(Math.random() * variations.length)];
+                }
             }
 
+            const _caughtAndIs = [" caught and is", " snatched and is", " grabbed and is", " caught hold of and is"];
+            const caughtAndIs = _caughtAndIs[Math.floor(Math.random() * _caughtAndIs.length)]; // followed by now carrying or now wearing, preceeded by the character that caught it, this is a thrown item
+            const _nowCarrying = [" now carrying", " now holding", " now in possession of", " carrying"];
+            const nowCarrying = _nowCarrying[Math.floor(Math.random() * _nowCarrying.length)]; // followed by the item is carrying
+            const _nowWearing = [" now wearing", " now sporting", " now fitted with", " now dressed in"];
+            const nowWearing = _nowWearing[Math.floor(Math.random() * _nowWearing.length)]; // followed by the item is wearing
+            const _whichPreviously = [" which previously", " which before this", " having previously", " which until now"];
+            const whichPreviously = _whichPreviously[Math.floor(Math.random() * _whichPreviously.length)]; // followed by was/were at location, preceeded by "some item" or "the item" or similar
+            const _droppedOnTheGround = [" dropped on the ground", " left on the ground", " set down on the ground", " placed on the ground"];
+            const droppedOnTheGround = _droppedOnTheGround[Math.floor(Math.random() * _droppedOnTheGround.length)]; // followed by at location, preceeded by "some item" or "the item" or similar
+            const _isMoved = [" is moved", " has been moved", " is relocated", " is transferred"];
+            const isMoved = _isMoved[Math.floor(Math.random() * _isMoved.length)]; // followed by from, preceeded by "some item" or "the item" or similar
+            const _areMoved = [" are moved", " have been moved", " are relocated", " are transferred"];
+            const areMoved = _areMoved[Math.floor(Math.random() * _areMoved.length)]; // followed by from, preceeded by "some items" or "the items" or similar
             // some nicer messages potentials
             // given to a character directly or indirectly (eg. put in a bag that they are carrying or wearing)
             if (actualEndingPath[0] === "characters" && (actualEndingPath[2] === "carrying" || (actualEndingPath[2] === "wearing" && actualEndingPath.length > 4))) {
                 // A character picked up or received an item
-                const messageSoFar = `${thrownAddition}${actualEndingPath[1]}${thrown ? " caught and is" : " is"} now carrying ${utilItemCount(engine, charState.location, null, amountToTransfer, item)} which previously ${amountToTransfer === 1 ? "was" : "were"} ${locationPathToMessage(engine, characterName, charState.location, componentFromPath.path)}`;
+                const messageSoFar = `${thrownAddition}${actualEndingPath[1]}${thrown ? caughtAndIs : ""}${nowCarrying} ${utilItemCount(engine, charState.location, null, amountToTransfer, item)}${whichPreviously} ${amountToTransfer === 1 ? "was" : "were"} ${locationPathToMessage(engine, characterName, charState.location, componentFromPath.path)}`;
                 if (actualEndingPath.length > 4) {
                     // eg. ["characters", "Alice", "carrying", 0, "containing", 1] we check above 4 to avoid the index of where the item is located in the carrying list
                     addedMessagesForStoryMaster.push(messageSoFar + `, and is now specifically ${locationPathToMessage(engine, characterName, charState.location, actualEndingPath, true)}`);
@@ -2206,18 +2236,18 @@ function moveItems(
                 // wearing directly on the body
             } else if (actualEndingPath[0] === "characters" && actualEndingPath[2] === "wearing" && actualEndingPath.length <= 4) {
                 // A character picked up or received an item
-                const messageSoFar = `${thrownAddition}${actualEndingPath[1]}${thrown ? " caught and is" : " is"} now wearing ${utilItemCount(engine, charState.location, null, amountToTransfer, item)} which previously ${amountToTransfer === 1 ? "was" : "were"} ${locationPathToMessage(engine, characterName, charState.location, componentFromPath.path)}`;
+                const messageSoFar = `${thrownAddition}${actualEndingPath[1]}${thrown ? caughtAndIs : ""}${nowWearing} ${utilItemCount(engine, charState.location, null, amountToTransfer, item)}${whichPreviously} ${amountToTransfer === 1 ? "was" : "were"} ${locationPathToMessage(engine, characterName, charState.location, componentFromPath.path)}`;
                 addedMessagesForStoryMaster.push(messageSoFar);
             } else if (actualEndingPath[0] === "slots" && actualEndingPath[2] === "items" && actualEndingPath.length <= 4) {
                 // an item was dropped on the ground
-                const messageSoFar = `${thrownAddition}${utilItemCount(engine, charState.location, null, amountToTransfer, item, true)}${thrown ? "" : amountToTransfer === 1 ? " is" : " are"} dropped on the ground at ${actualEndingPath[1]}, which previously was ${locationPathToMessage(engine, characterName, charState.location, componentFromPath.path)}`;
+                const messageSoFar = `${thrownAddition}${utilItemCount(engine, charState.location, null, amountToTransfer, item, true)}${thrown ? "" : amountToTransfer === 1 ? " is" : " are"}${droppedOnTheGround} at ${actualEndingPath[1]},${whichPreviously} ${amountToTransfer === 1 ? "was" : "were"} ${locationPathToMessage(engine, characterName, charState.location, componentFromPath.path)}`;
                 addedMessagesForStoryMaster.push(messageSoFar);
             } else {
                 if (thrown) {
-                    const messageSoFar = `${thrownAddition}${utilItemCount(engine, charState.location, null, amountToTransfer, item, true)} drops ${locationPathToMessage(engine, characterName, charState.location, actualEndingPath)}, which previously was ${locationPathToMessage(engine, characterName, charState.location, componentFromPath.path)}.`;
+                    const messageSoFar = `${thrownAddition}${utilItemCount(engine, charState.location, null, amountToTransfer, item, true)} drops ${locationPathToMessage(engine, characterName, charState.location, actualEndingPath)},${whichPreviously} ${amountToTransfer === 1 ? "was" : "were"} ${locationPathToMessage(engine, characterName, charState.location, componentFromPath.path)}.`;
                     addedMessagesForStoryMaster.push(messageSoFar);
                 } else {
-                    const messageSoFar = `${utilItemCount(engine, charState.location, null, amountToTransfer, item, true)}${amountToTransfer === 1 ? " is moved" : " are moved"} from ${locationPathToMessage(engine, characterName, charState.location, componentFromPath.path)} to be ${locationPathToMessage(engine, characterName, charState.location, actualEndingPath)}.`;
+                    const messageSoFar = `${utilItemCount(engine, charState.location, null, amountToTransfer, item, true)}${amountToTransfer === 1 ? isMoved : areMoved} from ${locationPathToMessage(engine, characterName, charState.location, componentFromPath.path)} to be ${locationPathToMessage(engine, characterName, charState.location, actualEndingPath)}.`;
                     addedMessagesForStoryMaster.push(messageSoFar);
                 }
             }
@@ -3517,6 +3547,7 @@ function checkDirectlyCarriedCharacters(engine, characterName, charState, addedM
 
     let totalCarriedWeight = currentCarriedItemsWeight + currentWornItemsWeight;
     let totalCarriedVolume = currentCarriedItemsVolume + currentWornItemsVolume;
+    let carrierHasFallenDown = false;
     for (const carriedCharName of charState.carryingCharactersDirectly) {
         const carriedCharWeight = getCharacterWeight(engine, carriedCharName);
         const carriedCharVolume = getCharacterVolume(engine, carriedCharName);
@@ -3528,10 +3559,79 @@ function checkDirectlyCarriedCharacters(engine, characterName, charState, addedM
             charState.carryingCharactersDirectly = charState.carryingCharactersDirectly.filter((v) => v !== carriedCharName);
 
             const couldHaveCarriedOneInOptimalConditions = carriedCharWeight.weight <= carryingCapacity.carryingCapacityKg;
-            if (!couldHaveCarriedOneInOptimalConditions) {
-                addedMessagesForStoryMaster.push(`${carriedCharName} is too heavy to be carried by ${characterName}, and falls on the ground at the ${carriedCharState.locationSlot}.`);
+            const hardLanding = Math.random() < 0.33;
+            if (!carrierHasFallenDown) {
+                if (!couldHaveCarriedOneInOptimalConditions) {
+                    const carrierFallsDown = Math.random() < (hardLanding ? 0.75 : 0.5);
+                    if (carrierFallsDown) {
+                        const carrierHardLanding = Math.random() < 0.33;
+                        if (carrierHardLanding) {
+                            carrierHasFallenDown = true;
+                        }
+                        if (hardLanding && carrierHardLanding) {
+                            const variations = [
+                                `${carriedCharName} is far too heavy for ${characterName} — they both crash to the ground at the ${carriedCharState.locationSlot}.`,
+                                `The weight of ${carriedCharName} overwhelms ${characterName}, and they both tumble hard onto the ground at the ${carriedCharState.locationSlot}.`,
+                                `${characterName} buckles under ${carriedCharName}'s weight and they both hit the ground hard at the ${carriedCharState.locationSlot}.`,
+                            ];
+                            addedMessagesForStoryMaster.push(variations[Math.floor(Math.random() * variations.length)]);
+                        } else if (hardLanding) {
+                            const variations = [
+                                `${carriedCharName} is too heavy and drops hard onto the ground at the ${carriedCharState.locationSlot}, pulling ${characterName} down too, though ${characterName} manages a softer landing.`,
+                                `${characterName} loses their grip and ${carriedCharName} crashes to the ground at the ${carriedCharState.locationSlot}, dragging ${characterName} down alongside — but ${characterName} catches themselves.`,
+                                `${carriedCharName} slips from ${characterName}'s grasp and hits the ground hard at the ${carriedCharState.locationSlot}, while ${characterName} stumbles down more gently beside them.`,
+                            ];
+                            addedMessagesForStoryMaster.push(variations[Math.floor(Math.random() * variations.length)]);
+                        } else if (carrierHardLanding) {
+                            const variations = [
+                                `${characterName} buckles under ${carriedCharName}'s weight and falls hard at the ${carriedCharState.locationSlot}, but ${carriedCharName} slides off and lands gently.`,
+                                `${carriedCharName} is too heavy for ${characterName}, who crashes to the ground at the ${carriedCharState.locationSlot}, while ${carriedCharName} eases down softly.`,
+                                `${characterName} collapses under the weight and hits the ground hard at the ${carriedCharState.locationSlot}, though ${carriedCharName} lands without much trouble.`,
+                            ];
+                            addedMessagesForStoryMaster.push(variations[Math.floor(Math.random() * variations.length)]);
+                        } else {
+                            const variations = [
+                                `${carriedCharName} is too heavy to be carried by ${characterName}, who stumbles as ${carriedCharName} slides to the ground at the ${carriedCharState.locationSlot}.`,
+                                `${characterName} can no longer support ${carriedCharName}'s weight and loses their balance, setting ${carriedCharName} down on the ground at the ${carriedCharState.locationSlot}.`,
+                                `${carriedCharName} is too heavy for ${characterName}, who staggers but stays upright as ${carriedCharName} eases onto the ground at the ${carriedCharState.locationSlot}.`,
+                            ];
+                            addedMessagesForStoryMaster.push(variations[Math.floor(Math.random() * variations.length)]);
+                        }
+                    } else {
+                        const variations = hardLanding ? [
+                            `${carriedCharName} is too heavy to be carried by ${characterName}, and crashes to the ground at the ${carriedCharState.locationSlot}.`,
+                            `${characterName} can't hold ${carriedCharName} — far too heavy — and ${carriedCharName} drops hard onto the ground at the ${carriedCharState.locationSlot}.`,
+                            `The weight of ${carriedCharName} is simply too much for ${characterName}, and ${carriedCharName} slips from their grasp and hits the ground at the ${carriedCharState.locationSlot}.`,
+                        ] : [
+                            `${carriedCharName} is too heavy to be carried by ${characterName}, and falls on the ground at the ${carriedCharState.locationSlot}.`,
+                            `${characterName} can't support ${carriedCharName}'s weight and gently sets them down at the ${carriedCharState.locationSlot}.`,
+                            `${carriedCharName} is too heavy for ${characterName} to carry, and slides down to the ground at the ${carriedCharState.locationSlot}.`,
+                        ];
+                        addedMessagesForStoryMaster.push(variations[Math.floor(Math.random() * variations.length)]);
+                    }
+                } else {
+                    const variations = hardLanding ? [
+                        `${carriedCharName} is too heavy to be carried by ${characterName} who is already carrying too much weight, and tumbles to the ground at the ${carriedCharState.locationSlot}.`,
+                        `Already overburdened, ${characterName} loses their grip on ${carriedCharName}, who drops hard onto the ground at the ${carriedCharState.locationSlot}.`,
+                        `${characterName} is carrying too much as it is and ${carriedCharName} slips from their hold, hitting the ground at the ${carriedCharState.locationSlot}.`,
+                    ] : [
+                        `${carriedCharName} is too heavy to be carried by ${characterName} who is already carrying too much weight, and falls on the ground at the ${carriedCharState.locationSlot}.`,
+                        `${characterName}, already weighed down with too much, can no longer hold ${carriedCharName}, who slides gently to the ground at the ${carriedCharState.locationSlot}.`,
+                        `With too much weight already, ${characterName} lets ${carriedCharName} down onto the ground at the ${carriedCharState.locationSlot}.`,
+                    ];
+                    addedMessagesForStoryMaster.push(variations[Math.floor(Math.random() * variations.length)]);
+                }
             } else {
-                addedMessagesForStoryMaster.push(`${carriedCharName} is too heavy to be carried by ${characterName} who is already carrying too much weight, and falls on the ground at the ${carriedCharState.locationSlot}.`);
+                const variations = hardLanding ? [
+                    `${carriedCharName} tumbles off ${characterName} and hits the ground hard at the ${carriedCharState.locationSlot}.`,
+                    `As ${characterName} goes down, ${carriedCharName} is thrown off and crashes onto the ground at the ${carriedCharState.locationSlot}.`,
+                    `${carriedCharName} drops hard off ${characterName} onto the ground at the ${carriedCharState.locationSlot}.`,
+                ] : [
+                    `${carriedCharName} slides off ${characterName} onto the ground at the ${carriedCharState.locationSlot}.`,
+                    `As ${characterName} goes down, ${carriedCharName} rolls gently off onto the ground at the ${carriedCharState.locationSlot}.`,
+                    `${carriedCharName} eases off ${characterName} and settles on the ground at the ${carriedCharState.locationSlot}.`,
+                ];
+                addedMessagesForStoryMaster.push(variations[Math.floor(Math.random() * variations.length)]);
             }
         } else if (totalCarriedVolume + carriedCharVolume.volume > carryingCapacity.carryingCapacityLiters) {
             // the character is too large to be carried, so it will fall on the ground
@@ -3540,10 +3640,79 @@ function checkDirectlyCarriedCharacters(engine, characterName, charState, addedM
             charState.carryingCharactersDirectly = charState.carryingCharactersDirectly.filter((v) => v !== carriedCharName);
 
             const couldHaveCarriedOneInOptimalConditions = carriedCharVolume.volume <= carryingCapacity.carryingCapacityLiters;
-            if (!couldHaveCarriedOneInOptimalConditions) {
-                addedMessagesForStoryMaster.push(`${carriedCharName} is too large to be carried by ${characterName}, and falls on the ground at the ${carriedCharState.locationSlot}.`);
+            const hardLanding = Math.random() < 0.33;
+            if (!carrierHasFallenDown) {
+                if (!couldHaveCarriedOneInOptimalConditions) {
+                    const carrierFallsDown = Math.random() < (hardLanding ? 0.75 : 0.5);
+                    if (carrierFallsDown) {
+                        const carrierHardLanding = Math.random() < 0.33;
+                        if (carrierHardLanding) {
+                            carrierHasFallenDown = true;
+                        }
+                        if (hardLanding && carrierHardLanding) {
+                            const variations = [
+                                `${carriedCharName} is far too large for ${characterName} to grip — they both crash to the ground at the ${carriedCharState.locationSlot}.`,
+                                `${characterName} can't get a hold on ${carriedCharName}, who is simply too big, and they both tumble hard onto the ground at the ${carriedCharState.locationSlot}.`,
+                                `${carriedCharName}'s size is too much for ${characterName} to manage, and they both hit the ground hard at the ${carriedCharState.locationSlot}.`,
+                            ];
+                            addedMessagesForStoryMaster.push(variations[Math.floor(Math.random() * variations.length)]);
+                        } else if (hardLanding) {
+                            const variations = [
+                                `${carriedCharName} is too big to hold onto and drops hard onto the ground at the ${carriedCharState.locationSlot}, pulling ${characterName} down too, though ${characterName} manages a softer landing.`,
+                                `${characterName} loses their grip on ${carriedCharName}'s unwieldy frame and ${carriedCharName} crashes to the ground at the ${carriedCharState.locationSlot}, while ${characterName} stumbles down more gently beside them.`,
+                                `${carriedCharName} slips from ${characterName}'s arms and hits the ground hard at the ${carriedCharState.locationSlot}, dragging ${characterName} down alongside — but ${characterName} catches themselves.`,
+                            ];
+                            addedMessagesForStoryMaster.push(variations[Math.floor(Math.random() * variations.length)]);
+                        } else if (carrierHardLanding) {
+                            const variations = [
+                                `${characterName} struggles with ${carriedCharName}'s size and falls hard at the ${carriedCharState.locationSlot}, but ${carriedCharName} slides off and lands gently.`,
+                                `${carriedCharName} is too big for ${characterName} to get a proper grip on, and ${characterName} crashes to the ground at the ${carriedCharState.locationSlot}, while ${carriedCharName} eases down softly.`,
+                                `${characterName} can't manage ${carriedCharName}'s bulk and hits the ground hard at the ${carriedCharState.locationSlot}, though ${carriedCharName} lands without much trouble.`,
+                            ];
+                            addedMessagesForStoryMaster.push(variations[Math.floor(Math.random() * variations.length)]);
+                        } else {
+                            const variations = [
+                                `${carriedCharName} is too large to be carried by ${characterName}, who stumbles as ${carriedCharName} slides to the ground at the ${carriedCharState.locationSlot}.`,
+                                `${characterName} can't keep a proper grip on ${carriedCharName} due to their size and loses their balance, setting ${carriedCharName} down on the ground at the ${carriedCharState.locationSlot}.`,
+                                `${carriedCharName} is too big for ${characterName} to hold, who staggers but stays upright as ${carriedCharName} eases onto the ground at the ${carriedCharState.locationSlot}.`,
+                            ];
+                            addedMessagesForStoryMaster.push(variations[Math.floor(Math.random() * variations.length)]);
+                        }
+                    } else {
+                        const variations = hardLanding ? [
+                            `${carriedCharName} is too large to be carried by ${characterName}, who can't get a proper grip, and ${carriedCharName} crashes to the ground at the ${carriedCharState.locationSlot}.`,
+                            `${characterName} can't get a hold on ${carriedCharName} — far too big to grip properly — and ${carriedCharName} drops hard onto the ground at the ${carriedCharState.locationSlot}.`,
+                            `${carriedCharName} is simply too large for ${characterName} to get a grip on, and ${carriedCharName} slips from their arms and hits the ground at the ${carriedCharState.locationSlot}.`,
+                        ] : [
+                            `${carriedCharName} is too large to be carried by ${characterName}, and falls on the ground at the ${carriedCharState.locationSlot}.`,
+                            `${characterName} can't get a proper grip on ${carriedCharName} due to their size and gently lets them slide to the ground at the ${carriedCharState.locationSlot}.`,
+                            `${carriedCharName} is too big for ${characterName} to hold onto, and eases down to the ground at the ${carriedCharState.locationSlot}.`,
+                        ];
+                        addedMessagesForStoryMaster.push(variations[Math.floor(Math.random() * variations.length)]);
+                    }
+                } else {
+                    const variations = hardLanding ? [
+                        `${carriedCharName} is too large to be carried by ${characterName} who is already carrying too many items, and tumbles to the ground at the ${carriedCharState.locationSlot}.`,
+                        `Already juggling too much, ${characterName} loses their grip on ${carriedCharName}, who is too big to hold alongside everything else, and ${carriedCharName} drops hard onto the ground at the ${carriedCharState.locationSlot}.`,
+                        `${characterName} is carrying too much as it is and can't keep a grip on ${carriedCharName}, who slips and hits the ground at the ${carriedCharState.locationSlot}.`,
+                    ] : [
+                        `${carriedCharName} is too large to be carried by ${characterName} who is already carrying too many items, and falls on the ground at the ${carriedCharState.locationSlot}.`,
+                        `${characterName}, already carrying too much, can no longer get a proper grip on ${carriedCharName}, who slides gently to the ground at the ${carriedCharState.locationSlot}.`,
+                        `With too much already in hand, ${characterName} can't hold onto ${carriedCharName} and lets them down onto the ground at the ${carriedCharState.locationSlot}.`,
+                    ];
+                    addedMessagesForStoryMaster.push(variations[Math.floor(Math.random() * variations.length)]);
+                }
             } else {
-                addedMessagesForStoryMaster.push(`${carriedCharName} is too large to be carried by ${characterName} who is already carrying too many items, and falls on the ground at the ${carriedCharState.locationSlot}.`);
+                const variations = hardLanding ? [
+                    `${carriedCharName} tumbles off ${characterName} and hits the ground hard at the ${carriedCharState.locationSlot}.`,
+                    `As ${characterName} goes down, ${carriedCharName} is thrown off and crashes onto the ground at the ${carriedCharState.locationSlot}.`,
+                    `${carriedCharName} drops hard off ${characterName} onto the ground at the ${carriedCharState.locationSlot}.`,
+                ] : [
+                    `${carriedCharName} slides off ${characterName} onto the ground at the ${carriedCharState.locationSlot}.`,
+                    `As ${characterName} goes down, ${carriedCharName} rolls gently off onto the ground at the ${carriedCharState.locationSlot}.`,
+                    `${carriedCharName} eases off ${characterName} and settles on the ground at the ${carriedCharState.locationSlot}.`,
+                ];
+                addedMessagesForStoryMaster.push(variations[Math.floor(Math.random() * variations.length)]);
             }
         } else {
             totalCarriedWeight += carriedCharWeight.weight;

@@ -1,25 +1,28 @@
-import { importWorldFromJSON } from '../imports/world.js';
 import { DEngine } from '../engine/index.js';
-import fs from 'fs';
-import { nodejsImportResolver, nodejsCharacterImportResolver } from '../imports/import-resolvers-node.js';
 import { TextOnlyUI } from '../textonlyapp/ui.js';
 import { InferenceAdapterLlamaUncensored } from "../engine/inference/adapter-llama-uncensored.js";
+import { DEJSEngine } from '../jsengine/index.js';
+import { localResolver } from '../jsengine/local-resolver.js';
+import { insecureSandbox } from '../jsengine/insecure-sandbox.js';
 
 if (typeof process !== "undefined" && process.versions && process.versions.node) {
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 }
 
-const jsonWorld = JSON.parse(fs.readFileSync('../default-worlds/simple-lunar-station.json', 'utf-8'));
-const world = importWorldFromJSON(jsonWorld);
-
 const engine = new DEngine();
+const jsEngine = new DEJSEngine(engine, localResolver, insecureSandbox);
+await jsEngine.addScripts([
+    { namespace: "worlds", id: "simple-lunar-station" },
+    { namespace: "characters", id: "dema-basic" },
+]);
+
 const inferenceAdapter = new InferenceAdapterLlamaUncensored(engine, {
     // host: "wss://95.133.252.166:8765",
     host: "ws://localhost:8765",
     // used for development
     secret: "dev-secret-12345678900abcdef",
 });
-engine.setInferenceAdapter(inferenceAdapter);
+
 engine.initialize({
     ageYears: 30,
     carryingCapacityKg: 30,
@@ -36,19 +39,12 @@ engine.initialize({
     shortDescription: "A human male in decent physical condition",
     shortDescriptionTopNakedAdd: "He is currently not wearing a shirt revealing a well-toned upper body",
     shortDescriptionBottomNakedAdd: "He is currently not wearing any pants or underwear",
-}, world.world, world.scriptSources, [
-    {
-        "import": "dema-basic.json",
-        "properties": {},
-        "spawnLocations": [
-            "Lunar Station",
-        ],
-        "spawnLocationSlots": ["Common Area"],
-        "spawnSpreadToChildrenLocations": false,
-        "instances": 1,
-        "name": "Dema",
-    }
-])
+})
+
+engine.deObject.stateFor["Dema"].location = "Lunar Station";
+engine.deObject.stateFor["Dema"].locationSlot = "Common Area";
+
+
 /**
  * @type {DEItem}
  */
@@ -165,9 +161,6 @@ const weirdBox = {
     madeOf: [],
 }
 
-engine.setScriptImportResolver(nodejsImportResolver);
-engine.setCharacterImportResolver(nodejsCharacterImportResolver);
-
 // debug speedups
 // engine.setWorldRulesDisabled(true);
 
@@ -180,11 +173,7 @@ try {
 
 if (WEIRD_BOX_TEST) {
     // @ts-expect-error
-    engine.deObject.stateFor["Onza"].beingCarriedByCharacter = "Dema";
-    // @ts-expect-error
     engine.deObject.stateFor["Dema"].carrying.push(weirdBox);
-    // @ts-expect-error
-    engine.deObject.stateFor["Dema"].carryingCharacters.push("Onza");
 }
 
 if (STICKS_TEST) {

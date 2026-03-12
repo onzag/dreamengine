@@ -785,30 +785,6 @@ declare interface DEEmotionDefinition {
     triggeredByStates: string[];
 }
 
-declare type DEPropertyValueGetterInCharSpace = (DE: DEObject, char: DECompleteCharacterReference) => any;
-
-declare interface DEPropertyValueInCharSpace {
-    type: "value_getter_char_space",
-    id: string;
-    value: DEPropertyValueGetterInCharSpace;
-}
-
-declare type DEPropertyValueGetter = (DE: DEObject) => any;
-
-declare interface DEPropertyValue {
-    type: "value_getter",
-    id: string;
-    value: DEPropertyValueGetter;
-}
-
-declare type DEPropertyValueGetterInItemSpace = (DE: DEObject, item: DEItem) => any;
-
-declare interface DEPropertyValueInItemSpace {
-    id: string;
-    value: DEPropertyValueGetterInItemSpace;
-    type: "value_getter_item_space";
-}
-
 type DEEmotionNames =
     // neutrals
     "neutral" | "calm" | "relaxed" |
@@ -849,7 +825,7 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
     /**
      * Arbitrary properties attached to the character
      */
-    properties: Record<string, DEPropertyValueInCharSpace>;
+    properties: Record<string, any>;
 
     /**
      * Injects extra information into the character's general description
@@ -857,7 +833,7 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
      * so it should be writte in 3rd person format
      */
     generalCharacterDescriptionInjection: Record<string, DEStringTemplate>;
-    
+
     /**
      * These are rules that the character must follow at all times,
      * they get injected into the character's system prompt every inference cycle
@@ -1047,7 +1023,7 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
      * just have bond between -100 to 0 (for stranger that give negative interactions) and 0 to 100 (for strangers that give positive interactions)
      * you can refer to bonds in the state conditions
      */
-    bonds: {
+    bonds: null | {
         /**
          * The bond system type, an arbitrary string to identify the bond system
          * by default DE engine will provide "DEFAULT" and "DEFAULT_WITH_ROMANCE"
@@ -1208,14 +1184,6 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
         descriptionGeneralInjection: DEStringTemplate | null;
     };
     emotions: Partial<Record<DEEmotionNames, DEEmotionDefinition>>;
-    scripts: {
-        spawn: Record<string, DEScript>;
-        preStateCheck: Record<string, DEScript>;
-        preInference: Record<string, DEScript>;
-        firstInteract: Record<string, DEScript>;
-        postInference: Record<string, DEScript>;
-        postAnyInference: Record<string, DEScript>;
-    };
     /**
      * Limit vocabulary to these specific words or grammatical tokens, ensure to double quote strings
      * that match specific words, these are used for grammar control so they should be in
@@ -1421,7 +1389,7 @@ declare interface DEItem {
     weightKg: number;
     description: string;
     isSeeThrough: boolean;
-    properties: Record<string, DEPropertyValueInItemSpace>;
+    properties: Record<string, any>;
     isConsumable: boolean;
     consumableProperties?: {
         calories: number;
@@ -1567,7 +1535,7 @@ declare interface DEItem {
      * The amount of this item in the stack
      */
     amount: number;
-    
+
     /**
      * The id of the character that owns this item, null if no owner
      * this is useful for items that are owned by specific characters
@@ -1606,7 +1574,6 @@ declare interface StateForDescription {
     carrying: DEItem[];
     carryingCharactersDirectly: Array<string>;
     wearing: DEItem[];
-    currentAgeMinutes: number;
     currentWeightKg: number;
     /**
      * Indicates if the character is dead, aka its deadEnd was a death scenario
@@ -2295,54 +2262,37 @@ declare interface DEConversation {
     pseudoConversationSummary?: string | null;
 }
 
-declare interface DEScript {
-    type: "script";
-    id: string;
-    execute: (DE: DEObject, char: DECompleteCharacterReference) => any | Promise<any>;
-}
-declare interface DEScriptSource {
-    id: string;
-    type: "template" | "script" | "value_getter_char_space" | "value_getter_item_space";
-    source: string;
-    sourceType: "handlebars" | "javascript";
-    imports: string[];
-    run: (...args: any[]) => any;
-}
-declare type DEStringTemplateFunction = (
+declare type DEStringTemplate = string | ((
     /**
      * Always available the DE object representing the whole simulation
      */
     DE: DEObject,
-    /**
-     * Always available the character invoking the template
-     */
-    char: DECompleteCharacterReference,
-    /**
-     * Only available in bond description templates
-     */
-    other: DECompleteCharacterReference,
-    /**
-     * Only available in state action/effect templates
-     */
-    causants: DEStateCausant[],
-    /**
-     * Only really available in
-     * potentialCausantNegativeDescription
-     * and
-     * potentialCausantPositiveDescription
-     */
-    potentialCausant: DECompleteCharacterReference,
-    /**
-     * Only really available when called from a state trigger template
-     */
-    potentialCausants: DECompleteCharacterReference[],
-) => Promise<string> | string;
-
-declare type DEStringTemplate = {
-    type: "template";
-    id: string;
-    execute: DEStringTemplateFunction;
-}
+    info: {
+        /**
+         * Always available the character invoking the template
+         */
+        char: DECompleteCharacterReference,
+        /**
+         * Only available in bond description templates
+         */
+        other?: DECompleteCharacterReference,
+        /**
+         * Only available in state action/effect templates
+         */
+        causants?: DEStateCausant[],
+        /**
+         * Only really available in
+         * potentialCausantNegativeDescription
+         * and
+         * potentialCausantPositiveDescription
+         */
+        potentialCausant?: DECompleteCharacterReference,
+        /**
+         * Only really available when called from a state trigger template
+         */
+        potentialCausants?: DECompleteCharacterReference[],
+    }
+) => Promise<string> | string);
 
 declare interface DEWanderHeuristic {
     /**
@@ -2431,17 +2381,6 @@ declare interface DEWorld {
      */
     initialScenes: Record<string, DEInitialScene>;
     /**
-     * Whether it has started the initial scene or not, useful to know
-     * when the world is just starting anew
-     */
-    hasStartedScene: boolean;
-    /**
-     * Whether the world has finished initializing or not, basically if
-     * all spawn scripts have ran and the world is ready for the first inference cycle
-     * and starting the scene
-     */
-    hasInitializedWorld: boolean;
-    /**
      * This is a template that describes the overall world lore and setting
      * it gets injected into various prompts to help ground the world simulation
      * it is also used by characters to understand the world they are in
@@ -2449,65 +2388,15 @@ declare interface DEWorld {
      */
     lore: DEStringTemplate | null;
     /**
-     * World scripts run at the world level when it initializes
-     * they run after each character has been set up and spawned
-     * but before the first inference cycle starts, the character will
-     * be the user character
-     * 
-     * These world scripts run to set up the world and add locations
-     * and items, because the json object representing the world does
-     * not really support that directly
+     * Properties of the world that can be used for various purposes, eg. "world_age": 1000, "technology_level": "medieval", "has_magic": true, etc...
      */
-    worldScripts: Record<string, DEScript>;
-    /**
-     * Scripts that run when any character spawns in the world
-     * these run for every character that spawns including the user character
-     * these run after the character spawn scripts
-     */
-    worldAllCharacterSpawnScripts: Record<string, DEScript>;
-    /**
-     * Scripts to run when the world scene initializes, the key
-     * being the scene id
-     */
-    worldSceneInitializationScripts: Record<string, DEScript>;
+    properties: Record<string, any>;
 }
 
 declare interface DEUtils {
-    newHandlebarsTemplate(DE: DEObject, id: string, source: string): DEStringTemplate;
-    newTemplateFromFunction(DE: DEObject, id: string, func: DEStringTemplateFunction): DEStringTemplate;
+    newHandlebarsTemplate(DE: DEObject, source: string): DEStringTemplate;
     newLocationFromStaticDefinition(DE: DEObject, definition: DELocationDefinition): DEStatefulLocationDefinition;
-    newConnectionFromStaticDefinition(DE: DEObject, definition: DEConnection): DEConnection;
-    /**
-     * Important anything created with this function cannot access variables outside its scope
-     * due to the way the function is created and sandboxed for security reasons
-     * @param DE 
-     * @param id 
-     * @param execute 
-     */
-    newValueGetterScriptForCharacterSpace(DE: DEObject, id: string, value: DEPropertyValueGetterInCharSpace): DEPropertyValueInCharSpace;
-    /**
-     * Important anything created with this function cannot access variables outside its scope
-     * due to the way the function is created and sandboxed for security reasons
-     * @param DE 
-     * @param id 
-     * @param execute 
-     */
-    newValueGetterScriptForItemSpace(DE: DEObject, id: string, value: DEPropertyValueGetterInItemSpace): DEPropertyValueInItemSpace;
-    /**
-     * Important anything created with this function cannot access variables outside its scope
-     * due to the way the function is created and sandboxed for security reasons
-     * @param DE 
-     * @param id 
-     * @param execute 
-     */
-    newScript(DE: DEObject, id: string, execute: (DE: DEObject, char: DECompleteCharacterReference) => any | Promise<any>): DEScript;
     newWeatherSystem(DE: DEObject, definition: DEWeatherSystem): DEWeatherSystem;
-    /**
-     * Converts the given property value into a template that can be executed
-     * @param value 
-     * @returns 
-     */
-    propertyValueToTemplate: (DE: DEObject, value: DEPropertyValueInCharSpace) => DEStringTemplate;
 }
 
 declare interface DEWorldRule {
@@ -2551,11 +2440,6 @@ declare interface DEObject {
      */
     currentTime: DETimeDescription;
     /**
-     * All the script sources available in the world for dynamic execution
-     * they can be handlebars templates or javascript functions
-     */
-    scriptSources: DEScriptSource[];
-    /**
      * The rules that govern the world simulation
      * these are used to guide the world simulation LLM reasoning
      * and help it make decisions about what happens in the world
@@ -2577,12 +2461,49 @@ declare interface DEObject {
      * whatever the world defines as game over conditions
      */
     gameOver: boolean;
+    /**
+     * Arbitrary internal properties that the world or characters can use for various purposes
+     * used internally by scripts and other code parts, not meant to be used by the UI, but can be used by the world and characters to store internal state and other information
+     */
+    internal: Record<string, any>;
 }
 
 declare type DE = DEObject;
-declare var DE: DEObject;
-declare var char: DECompleteCharacterReference;
-declare var other: DECompleteCharacterReference;
-declare var causant: DECompleteCharacterReference;
-declare var potentialCausant: DECompleteCharacterReference;
-declare var potentialCausants: DECompleteCharacterReference[];
+// declare var DE: DEObject;
+// declare var char: DECompleteCharacterReference;
+// declare var other: DECompleteCharacterReference;
+// declare var causant: DECompleteCharacterReference;
+// declare var potentialCausant: DECompleteCharacterReference;
+// declare var potentialCausants: DECompleteCharacterReference[];
+
+declare interface DEScript {
+    type: "world" | "characters" | "world-mechanic" | "character-mechanic" | "misc";
+    description?: string;
+    requires?: Array<{id: string, namespace: string}>;
+    /**
+     * Exposes properties that serve as configuration, these are set by the UI
+     * and are meant to be used by the UI
+     */
+    exposeProperties?: Record<string, {
+        type: "template" | "string" | "number" | "boolean" | "json";
+        description?: string;
+        propertyLocation: "world" | "characters" | "items";
+        filter?: {
+            name?: string;
+        }
+    }>;
+
+    initialize?(DE: DEObject): Promise<void> | void;
+    postSpawnAllCharacters?(DE: DEObject): Promise<void> | void;
+    postAnyInference?(DE: DEObject, characterName: string): Promise<void> | void;
+
+    // TODO more lifecycle methods like preInference, postInference, preAction, postAction, etc... to allow more fine grained control over the simulation and character behaviour
+}
+
+// declare a editable global variable that can be used to store a DEScript
+declare interface engine {
+    exports: DEScript;
+}
+declare var engine: engine;
+
+declare var importScript: (namespace: string, id: string) => Promise<any>;

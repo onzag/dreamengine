@@ -28,6 +28,8 @@ export class BaseInferenceAdapter {
         }
         this.engine = parent;
 
+        this.engine.setInferenceAdapter(this);
+
         /**
          * @type {Array<(status: {connected: boolean, reason?: string}) => void>}
          */
