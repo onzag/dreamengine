@@ -336,9 +336,6 @@ export class DEngine {
         this.user = user;
         this.userCharacter = createCharacterFromUser(user);
 
-        const randomLocation = this.pickRandomLocationForCharacter(this.userCharacter);
-        this.addCharacter(this.userCharacter, randomLocation.location, randomLocation.locationSlot);
-
         if (!this.jsEngine) {
             throw new Error("JS Engine not set, cannot import scripts");
         }
@@ -349,6 +346,8 @@ export class DEngine {
     async runInitializationScripts() {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
+        } else if (!this.jsEngine) {
+            throw new Error("JS Engine not set, cannot run initialization scripts");
         }
         const orderOfExecution = [
             "world",
@@ -362,21 +361,32 @@ export class DEngine {
             "world",
         ];
 
+        this.jsEngine.sanitizeManually();
+
         for (const type of orderOfExecution) {
             /**
-             * @type {DEScript[]}
+             * @type {Array<{script: DEScript, scriptKey: string}>}
              */
             const scripts =
                 // @ts-ignore typescript bugs
-                this.jsEngine.scriptOrder.map(scriptKey => this.jsEngine.scriptCache[scriptKey]).filter(script => script.type === type);
+                this.jsEngine.scriptOrder.map(scriptKey => ({script: this.jsEngine.scriptCache[scriptKey], scriptKey})).filter(script => script.script.type === type);
 
             if (needsAtLeastOne.includes(type) && scripts.length === 0) {
                 throw new Error(`At least one script of type ${type} is required.`);
             }
 
             for (const script of scripts) {
+                console.log(`Initializing script ${script.scriptKey} of type ${type}`);
                 // @ts-ignore typescript continues to bug
-                script.initialize && await script.initialize(this.deObject);
+                script.script.initialize && await script.script.initialize(this.deObject);
+            }
+
+            if (type === "world" && this.userCharacter) {
+                const stateForUserChar = this.deObject.stateFor[this.userCharacter.name];
+                if (!stateForUserChar) {
+                    const randomLocation = this.pickRandomLocationForCharacter(this.userCharacter);
+                    this.addCharacter(this.userCharacter, randomLocation.location, randomLocation.locationSlot);
+                }
             }
 
             if (type === "characters") {

@@ -4,13 +4,14 @@ import { InferenceAdapterLlamaUncensored } from "../engine/inference/adapter-lla
 import { DEJSEngine } from '../jsengine/index.js';
 import { localResolver } from '../jsengine/local-resolver.js';
 import { insecureSandbox } from '../jsengine/insecure-sandbox.js';
+import { vmSandbox } from '../jsengine/vm-sandbox.js';
 
 if (typeof process !== "undefined" && process.versions && process.versions.node) {
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 }
 
 const engine = new DEngine();
-const jsEngine = new DEJSEngine(engine, localResolver, insecureSandbox);
+const jsEngine = new DEJSEngine(engine, localResolver, vmSandbox);
 await jsEngine.addScripts([
     { namespace: "worlds", id: "simple-lunar-station" },
     { namespace: "characters", id: "dema-basic" },
@@ -23,7 +24,7 @@ const inferenceAdapter = new InferenceAdapterLlamaUncensored(engine, {
     secret: "dev-secret-12345678900abcdef",
 });
 
-engine.initialize({
+await engine.initialize({
     ageYears: 30,
     carryingCapacityKg: 30,
     carryingCapacityLiters: 100,
@@ -41,11 +42,10 @@ engine.initialize({
     shortDescriptionBottomNakedAdd: "He is currently not wearing any pants or underwear",
     perception: 0.6,
     stealth: 0.5,
-})
+});
 
 engine.getDEObject().stateFor["Dema"].location = "Lunar Station";
 engine.getDEObject().stateFor["Dema"].locationSlot = "Common Area";
-
 
 /**
  * @type {DEItem}

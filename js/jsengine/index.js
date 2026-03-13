@@ -1,5 +1,5 @@
-import { DEngine } from "../engine";
-import { sanitizeDE } from "./ensure-safe-de";
+import { DEngine } from "../engine/index.js";
+import { sanitizeDE } from "./ensure-safe-de.js";
 
 export class DEJSEngine {
     /**
@@ -68,11 +68,16 @@ export class DEJSEngine {
         return engine.exports;
     }
 
+    sanitizeManually() {
+        sanitizeDE(this.engine.deObject);
+    }
+
     async initialize() {
         sanitizeDE(this.engine.deObject);
         for (const scriptKey of this.scriptOrder) {
             const script = this.scriptCache[scriptKey];
             if (script.initialize) {
+                console.log(`Initializing script ${scriptKey}...`);
                 // @ts-ignore
                 await script.initialize(this.engine.deObject);
             }
@@ -86,6 +91,7 @@ export class DEJSEngine {
         for (const scriptKey of this.scriptOrder) {
             const script = this.scriptCache[scriptKey];
             if (script.postAnyInference) {
+                console.log(`Running postAnyInference for script ${scriptKey}...`);
                 // @ts-ignore
                 await script.postAnyInference(this.engine.deObject, characterName);
             }
@@ -96,9 +102,6 @@ export class DEJSEngine {
      * @param {Array<{namespace: string, id: string}>} scripts 
      */
     async addScripts(scripts) {
-        if (!this.engine || !this.engine.deObject) {
-            throw new Error("Engine not initialized yet, cannot add scripts");
-        }
         for (const { namespace, id } of scripts) {
             await this.importScript(namespace, id);
         }

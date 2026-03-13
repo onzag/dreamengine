@@ -27,7 +27,7 @@ export async function localResolver(namespace, id) {
     if (fs.existsSync(localPath)) {
         return {
             src: await fsPromises.readFile(localPath, 'utf-8'),
-            srcUrl: "file://" + namespace + "/" + id + ".js",
+            srcUrl: "file://" + localPath,
         };
     } else if (fs.existsSync(localDEPath)) {
         return {
@@ -41,5 +41,5 @@ export async function localResolver(namespace, id) {
         };
     }
 
-    throw new Error(`Script '${namespace}/${id}' not found in any of the search paths`);
+    throw new Error(`Script '${namespace}/${id}' not found in any of the search paths, searched at ${localPath}, ${localDEPath} and ${defaultScriptsPath}`);
 }

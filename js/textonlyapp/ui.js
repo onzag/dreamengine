@@ -70,7 +70,7 @@ export class TextOnlyUI {
         });
         this.engine.addInferringOverConversationMessageListener(this.addToTextBuffer);
 
-        if (!this.engine.deObject.world.hasStartedScene) {
+        if (!this.engine.deObject.world.selectedScene) {
             console.log("The world scene has not started yet.");
             console.log("Choose one of the following initial scenes to start:");
             /**
@@ -81,8 +81,9 @@ export class TextOnlyUI {
             for (const [sceneId, value] of Object.entries(this.engine.deObject.world.initialScenes)) {
                 index++;
                 sceneToIndex[index] = sceneId;
+                const narrationMessage = typeof value.narration === "string" ? value.narration : await value.narration(this.engine.deObject, {});
                 // @ts-ignore
-                console.log(`${index}: ${await value.narration.execute(this.engine.deObject, this.engine.userCharacter, undefined, undefined, undefined, undefined)}`);
+                console.log(`${index}: ${narrationMessage}`);
             }
 
             let chosenIndex = null;
