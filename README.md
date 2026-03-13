@@ -1,4 +1,4 @@
-# WildReality DreamEngine
+# WildReality DreamEngine (WIP)
 
 AI Simulation Engine created based on the RStory prototype, now written as an electron NodeJS app that can be used to create stories and mix and match them.
 
