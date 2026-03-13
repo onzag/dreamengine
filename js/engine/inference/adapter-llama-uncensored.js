@@ -6,6 +6,7 @@
  */
 
 import { DEngine } from '../index.js';
+import { parseMessageInComponentsAsText } from '../util/message-parse.js';
 import { BaseInferenceAdapter } from './base.js';
 
 function cheapRID() {
@@ -342,7 +343,7 @@ ${states.join(", ")}
             let generator = await getHistoryForCharacter.next(true);
             while (!generator.done) {
                 if (!generator.value.debug && !generator.value.rejected) {
-                    const messageParsed = this.engine.parseMessageInComponentsAsText(generator.value.name, generator.value.message);
+                    const messageParsed = parseMessageInComponentsAsText(generator.value.name, generator.value.message);
                     messagesToAdd.push(messageParsed);
                     tokensExhaustedApprox += await this.countTokens(messageParsed) + 10; // some wiggle room
                     if (tokensExhaustedApprox >= contextWindowSize) {
@@ -359,7 +360,7 @@ ${states.join(", ")}
 
             messagesToAdd = messagesToAdd.reverse();
         } else {
-            messagesToAdd = getHistoryForCharacter.map(msg => this.engine.parseMessageInComponentsAsText(msg.name, msg.message));
+            messagesToAdd = getHistoryForCharacter.map(msg => parseMessageInComponentsAsText(msg.name, msg.message));
         }
 
         // TODO fix the grammar here
@@ -502,7 +503,7 @@ ${states.join(", ")}
                     let shouldAddMessage = false;
                     let shouldStopAddingMessages = false;
 
-                    const messageParsed = this.engine.parseMessageInComponentsAsText(generator.value.name, generator.value.message);
+                    const messageParsed = parseMessageInComponentsAsText(generator.value.name, generator.value.message);
 
                     if (msgLimit === "ALL") {
                         tokensExhaustedApprox += await this.countTokens(messageParsed) + 10; // some wiggle room

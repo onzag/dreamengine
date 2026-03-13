@@ -1,0 +1,3 @@
+// One Punch Man Style power scale system, characters get stronger with training, but can also break through to higher power scales through intense training or emotional breakthroughs, allowing for more dramatic power progression and epic moments of growth.
+// Doing 100 pushups 100 situps, 100 squats, and a 10km run every single day is a common training routine for characters in this power scale, and can lead to significant increases in strength, speed, and endurance over time.
+// As they reach the universal scale they start going bald

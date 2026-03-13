@@ -11,7 +11,7 @@ if (typeof process !== "undefined" && process.versions && process.versions.node)
 }
 
 const engine = new DEngine();
-const jsEngine = new DEJSEngine(engine, localResolver, vmSandbox);
+const jsEngine = new DEJSEngine(engine, localResolver, insecureSandbox);
 await jsEngine.addScripts([
     { namespace: "worlds", id: "simple-lunar-station" },
     { namespace: "characters", id: "dema-basic" },
@@ -42,6 +42,9 @@ await engine.initialize({
     shortDescriptionBottomNakedAdd: "He is currently not wearing any pants or underwear",
     perception: 0.6,
     stealth: 0.5,
+    powerScale: "human",
+    powerScaleValue: 50,
+    powerGrowthRate: 0.25,
 });
 
 engine.getDEObject().stateFor["Dema"].location = "Lunar Station";

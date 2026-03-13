@@ -19,7 +19,7 @@ export const deEngineUtils = {
                 // @ts-ignore
                 obj[key] = (...args) => {
                     // @ts-ignore
-                    DE.functions[key](DE, info.char, ...args);
+                    return DE.functions[key](DE, info.char, ...args);
                 };
             });
             return compiled(obj);

@@ -2926,10 +2926,10 @@ async function cleanDirtyItemTree(
                                         ` ${insideNames} ${insidePlural ? "is" : "are"} jolted hard inside ${insideItemName} as its weight slams it into the ground, but ${insidePlural ? "stays" : "stay"} within.`,
                                         ` Still inside ${insideItemName}, ${insideNames} ${insidePlural ? "feels" : "feel"} the full force as the item's weight brings it crashing down, though ${insidePlural ? "they don't" : "they don't"} come out.`,
                                     ] : [
-                                        ` Since ${insideNames} ${insidePlural ? "is" : "are"} inside of ${insideItemName}, they also fall down while remaining inside the object as it drops from the weight.`,
+                                        ` Since ${insideNames} ${insidePlural ? "is" : "are"} inside of ${insideItemName}, ${engine.getDEObject().functions.format_pronoun(engine.getDEObject(), null, carriedItemWeight.charactersOnlyDirectlyInside)} also fall${insidePlural ? "s" : ""} down while remaining inside the object as it drops from the weight.`,
                                         ` ${insideNames}, tucked inside ${insideItemName}, ${insidePlural ? "goes" : "go"} down with it as the weight pulls it to the ground, staying inside.`,
                                         ` ${insideNames} ${insidePlural ? "remains" : "remain"} inside ${insideItemName} as the heavy item falls to the ground.`,
-                                        ` Still inside ${insideItemName}, ${insideNames} ${insidePlural ? "is" : "are"} go${insidePlural ? "es" : ""} down with it.`,
+                                        ` Still inside ${insideItemName}, ${insideNames} go${insidePlural ? "es" : ""} down with it.`,
                                     ]
                                 );
                                 storyMasterMessageSoFar += insideVariations[Math.floor(Math.random() * insideVariations.length)];

@@ -82,6 +82,31 @@ declare interface DEMinimalCharacterReference {
      * if they actually noticed the robbery or just noticed that something happened but couldn't tell what, higher perception means more likely to actually notice the robbery and identify the robbery
      */
     perception: number;
+
+    /**
+     * A power scale string that represents the overall power level of the character
+     */
+    powerScale: "insect" | "critter" | "human" | "apex" | "street_level" | "block_level" | "city_level" | "country_level" | "continental" | "planetary" | "stellar" | "galactic" | "universal" | "multiversal" | "limitless";
+    /**
+     * The numeric value on the power scale compared to others in the same power scale
+     * A number from 0 to 100, where 0 it means barely makes it and 100 means in peak condition
+     * this is used for probabilities to compare how characters fare against each other, provided they are in the same power scale
+     * if they are in a different power scale, the higher power scale wins regardless
+     * 
+     * A character 1 power scale below can hurt one a power level above, but they cannot really
+     * properly damage them, they can only annoy them or cause minor inconveniences, but not really cause them harm; for example, a human can hurt an apex character, but they cannot really damage them, they can only annoy them or cause minor inconveniences, but not really cause them harm
+     * 
+     * Note this is only true while disarmed
+     * 
+     * TODO implement power scales in interactions
+     */
+    powerScaleValue: number;
+    /**
+     * A 0 to 1 number that represents how fast the character can grow on their power scale, this is used to determine how much they grow after certain interactions or events, higher means faster growth
+     * 0.25 is recommended for a standard human character
+     * 0.5 to 1 is recommended for characters that grow fast, like shonen manga protagonists
+     */
+    powerGrowthRate: number;
 }
 
 interface DEStringTemplateWithIntensityAndCausants {

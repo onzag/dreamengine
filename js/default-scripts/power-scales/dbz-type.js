@@ -1,0 +1,4 @@
+// Dragon Ball Z style power scale system, limited to the universal scale, characters can increase their power scale through intense training, emotional breakthroughs, or by defeating powerful opponents
+// allowing for dramatic power progression and epic moments of growth.
+// Characters in this power scale often have signature training regimens, such as gravity training or meditation, that can lead to significant increases in strength, speed, and energy projection over time.
+// Ki control is important to achieve higher power scales, and characters often learn to harness their ki for powerful attacks and techniques as they grow stronger.

@@ -1,0 +1,3 @@
+// Standard power scale system, creatures get stronger by exercising and fighting but never leave their power scale
+// useful for stories where characters have a consistent level of power and growth is more about skill and experience than raw power increases, allowing for more grounded storytelling and character development.
+// Useful for science fiction too as the standard power scale is more grounded in realism and once characters reach a peak they don't grow further
