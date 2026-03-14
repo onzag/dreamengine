@@ -228,6 +228,9 @@ export function getCharacterCarryingCapacity(engine, characterName) {
 }
 
 /**
+ * For a given item, it returns the characters/items that are on top or inside it
+ * that are in excess of the item capacity, either weight or volume, and that would cause the item to break or fall down, along with the reason and style of the break if it breaks
+ * 
  * @param {DEngine} engine 
  * @param {DEItem} item 
  */
@@ -257,12 +260,16 @@ export function getItemExcessElements(engine, item) {
     let carriedWeight = 0;
     let ontopWeight = 0;
     let isOverweightAndBreaks = false;
-    let breakReasonsItemsAndCharacters = [];
+
+    /**
+     * @type {Array<string|DEItem>}
+     */
+    const breakReasonsItemsAndCharacters = [];
     for (const childItem of sortedByJustPlacedContaining) {
         const results = getItemWeight(engine, childItem);
         if (carriedWeight + results.completeWeight > capacityInWeight) {
             isOverweightAndBreaks = true;
-            breakReasonsItemsAndCharacters.push(childItem.name);
+            breakReasonsItemsAndCharacters.push(childItem);
         } else {
             carriedWeight += results.completeWeight;
         }
@@ -279,6 +286,17 @@ export function getItemExcessElements(engine, item) {
     }
 
     if (isOverweightAndBreaks) {
+        const breakList = breakReasonsItemsAndCharacters.map((i, ind) => typeof i === "string" ? i : utilItemCount(engine, null, i.owner, i.amount, i.name, false, true));
+        const listOfItems = engine.deObject?.functions.format_and(engine.deObject, null, breakList);
+        const overweightReasons = [
+            `${listOfItems} causes ${item.name} to be overweight and break`,
+            `${item.name} bursts apart from the sheer amount of ${listOfItems} stuffed inside`,
+            `${item.name} ruptures and blows open, unable to contain ${listOfItems}`,
+            `the weight of ${listOfItems} overwhelms ${item.name}, causing it to split open`,
+            `${item.name} can't hold ${listOfItems} any longer and explodes outward`,
+        ];
+        const reason = overweightReasons[Math.floor(Math.random() * overweightReasons.length)];
+
         return {
             expelledContainedCharacters: item.containingCharacters,
             expelledOntopCharacters: item.ontopCharacters,
@@ -292,7 +310,7 @@ export function getItemExcessElements(engine, item) {
             })),
             breaks: true,
             breakStyle: "overweight",
-            breakReason: `${engine.deObject?.functions.format_and(engine.deObject, null, breakReasonsItemsAndCharacters)} causes ${item.name} to be overweight and break`,
+            breakReason: reason.charAt(0).toUpperCase() + reason.slice(1),
         }
     }
 
@@ -300,7 +318,7 @@ export function getItemExcessElements(engine, item) {
         const results = getItemWeight(engine, childItem);
         if (ontopWeight + results.completeWeight > capacityOnTopWeight) {
             isOverweightAndBreaks = true;
-            breakReasonsItemsAndCharacters.push(childItem.name);
+            breakReasonsItemsAndCharacters.push(childItem);
         } else {
             ontopWeight += results.completeWeight;
         }
@@ -317,6 +335,17 @@ export function getItemExcessElements(engine, item) {
     }
 
     if (isOverweightAndBreaks) {
+        const breakList = breakReasonsItemsAndCharacters.map((i, ind) => typeof i === "string" ? i : utilItemCount(engine, null, i.owner, i.amount, i.name, false, true));
+        const listOfItems = engine.deObject?.functions.format_and(engine.deObject, null, breakList);
+        const crushedReasons = [
+            `${listOfItems} causes ${item.name} to be overloaded and it breaks under the weight`,
+            `${item.name} collapses under the crushing weight of ${listOfItems}`,
+            `the weight of ${listOfItems} proves too much and ${item.name} buckles and gives way`,
+            `${item.name} crumples as ${listOfItems} bears down too heavily on top of it`,
+            `${item.name} shatters beneath ${listOfItems}, unable to support the load`,
+        ];
+        const reason = crushedReasons[Math.floor(Math.random() * crushedReasons.length)];
+
         return {
             expelledContainedCharacters: item.containingCharacters,
             expelledOntopCharacters: item.ontopCharacters,
@@ -330,7 +359,7 @@ export function getItemExcessElements(engine, item) {
             })),
             breaks: true,
             breakStyle: "crushed",
-            breakReason: `${engine.deObject?.functions.format_and(engine.deObject, null, breakReasonsItemsAndCharacters)} causes ${item.name} to be overloaded and break`,
+            breakReason: reason.charAt(0).toUpperCase() + reason.slice(1),
         }
     }
 
@@ -559,7 +588,7 @@ const irregularPlurals = {
 
 /**
  * @param {DEngine} engine
- * @param {string} location
+ * @param {string|null} location
  * @param {string|null} owner
  * @param {number} amount 
  * @param {string} item
@@ -584,7 +613,7 @@ export function utilItemCount(engine, location, owner, amount, item, capitalize 
             toReturn = `${owner}'s ${item}`;
         }
     } else if (amount === 1) {
-        const isOneOfAKind = checkItemIsOneOfAKindAtLocation(engine, location, item);
+        const isOneOfAKind = !location ? false : checkItemIsOneOfAKindAtLocation(engine, location, item);
         if (forceThe || isOneOfAKind) {
             toReturn = `the ${item}`;
         } else if (itemTrimmedLower.startsWith("a")) {

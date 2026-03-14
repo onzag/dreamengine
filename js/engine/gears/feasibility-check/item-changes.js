@@ -2574,17 +2574,20 @@ async function cleanDirtyItemTree(
         const item = list[i];
         const currentPath = [...path, i];
 
+        // delete helper property
         // @ts-ignore
         if (item._moved_to) {
             // @ts-ignore
             delete item._moved_to;
         }
 
+        // delete items if amount is zero
         if (item.amount === 0) {
             deletedIndices.push(i);
             continue;
         }
 
+        // clean the children recursively
         for (const relation of ["containing", "ontop"]) {
             // @ts-ignore
             if (item[relation] && item[relation].length > 0) {
@@ -2593,6 +2596,8 @@ async function cleanDirtyItemTree(
             }
         }
     }
+
+    // change the list in reverse order to avoid messing up the indices
     for (let i = deletedIndices.length - 1; i >= 0; i--) {
         list.splice(deletedIndices[i], 1);
     }
@@ -2601,6 +2606,8 @@ async function cleanDirtyItemTree(
      * @type {Array<number>}
      */
     const deletedIndicesDueToMerging = [];
+
+    // Merge items that have the same properties (except amount).
     for (let i = 0; i < list.length; i++) {
         if (deletedIndicesDueToMerging.includes(i)) {
             continue;
@@ -2612,6 +2619,9 @@ async function cleanDirtyItemTree(
             if (deepEqualItem(list[i], list[j])) {
                 deletedIndicesDueToMerging.push(j);
                 list[i].amount = (list[i].amount || 1) + (list[j].amount || 1);
+
+                // just placed gets readded in case
+                // to keep the item marked for importance
                 // @ts-ignore
                 if (list[j]._just_placed) {
                     // @ts-ignore
@@ -2621,14 +2631,17 @@ async function cleanDirtyItemTree(
         }
     }
 
+    // delete again the merged items in reverse order to avoid messing up the indices
     for (let i = deletedIndicesDueToMerging.length - 1; i >= 0; i--) {
         list.splice(deletedIndicesDueToMerging[i], 1);
     }
 
+    // this is where items would fall down if they are expelled from containers or fall from on top of other items, we will add them to the slot as if they fell on the ground, we will also add a message for the story master about what fell down and why
     const expectedPathForFallenItems = path[0] === "slots" ? ["slots", path[1]] : ["slots", locationSlot];
     const resolvedFallenItems = resolvePath(engine, location, expectedPathForFallenItems);
 
     /**
+     * We use this helper function to expell items to the fallen list
      * 
      * @param {DEItem} item 
      * @param {number} amount
@@ -2646,6 +2659,7 @@ async function cleanDirtyItemTree(
     }
 
     // this is specific to items on items only, I know it is going to be verbose but more readable this way, we can optimize later if needed
+    // the path length being greater than 3 means we are on an item that is inside or on top another item
     if (path.length > 3) {
         for (const item of list) {
             const excess = getItemExcessElements(engine, item);
@@ -2676,8 +2690,22 @@ async function cleanDirtyItemTree(
                     fallsDownList.push(expelledInsideCharacter);
                 }
 
-                const totalBrokenReason = `${excess.breakReason}, this causes ${engine.deObject?.functions.format_and(engine.deObject, null, fallsDownList)} to fall down onto the ground at ${expectedPathForFallenItems[1]}.`;
-                addedMessagesForStoryMaster.push(totalBrokenReason);
+                if (fallsDownList.length <= 0) {
+                    // @ts-ignore
+                    addedMessagesForStoryMaster.push(excess.breakReason);
+                } else {
+                    const listOfItemsFallingDown = engine.deObject?.functions.format_and(engine.deObject, null, fallsDownList);
+                    const fallVariations = [
+                        `${excess.breakReason}, this causes ${listOfItemsFallingDown} to fall down onto the ground at the ${expectedPathForFallenItems[1]}.`,
+                        `${excess.breakReason}, sending ${listOfItemsFallingDown} tumbling to the ground at the ${expectedPathForFallenItems[1]}.`,
+                        `${excess.breakReason}, ${listOfItemsFallingDown} spills out onto the ground at the ${expectedPathForFallenItems[1]}.`,
+                        `${excess.breakReason}, ${listOfItemsFallingDown} crashes down onto the ground at the ${expectedPathForFallenItems[1]}.`,
+                        `${excess.breakReason}, scattering ${listOfItemsFallingDown} onto the ground at the ${expectedPathForFallenItems[1]}.`,
+                    ];
+                    const totalBrokenReason = fallVariations[Math.floor(Math.random() * fallVariations.length)];
+                    addedMessagesForStoryMaster.push(totalBrokenReason);
+                }
+                
 
                 await updateItemTitleAndDescription(
                     engine,
@@ -3722,6 +3750,11 @@ function checkDirectlyCarriedCharacters(engine, characterName, charState, addedM
 }
 
 /**
+ * Cleans an item tree by checking that everything is consistent with the rules of the game
+ * 1. None is carrying more than they can carry, either in weight or volume
+ * 2. Overfilled containers have items falling out of them until they are no longer overfilled
+ * etc...
+ * 
  * @param {DEngine} engine
  * @param {string} location
  * @param {string[]} addedMessagesForStoryMaster
@@ -3732,6 +3765,7 @@ export async function cleanAll(engine, location, addedMessagesForStoryMaster) {
     }
     const locationObj = engine.deObject.world.locations[location];
     for (const [slotName, slot] of Object.entries(locationObj.slots)) {
+        // first clean at each location, it should work with one single pass because items fall on the ground
         await cleanDirtyItemTree(engine, location, slotName, slot.items, ["slots", slotName, "items"], addedMessagesForStoryMaster, "first");
     }
 
@@ -3769,6 +3803,7 @@ export async function cleanAll(engine, location, addedMessagesForStoryMaster) {
         cleanDirtyItemTree(engine, characterState.location, characterState.locationSlot, characterState.carrying, ["characters", charName, "carrying"], addedMessagesForStoryMaster, "last");
         cleanDirtyItemTree(engine, characterState.location, characterState.locationSlot, characterState.wearing, ["characters", charName, "wearing"], addedMessagesForStoryMaster, "last");
 
+        // cleans up the temporary properties we added for the checks, and also removes items with amount 0
         cleanTemporaryProperties(engine, characterState.carrying);
         cleanTemporaryProperties(engine, characterState.wearing);
     }
@@ -3776,99 +3811,4 @@ export async function cleanAll(engine, location, addedMessagesForStoryMaster) {
     for (const [slotName, slot] of Object.entries(locationObj.slots)) {
         cleanTemporaryProperties(engine, slot.items);
     }
-}
-
-/**
- * @param {string} otherCharName
- * @param {DEItem[]} list
- * @param {Array<string | number>} pathSoFar
- * @returns {Array<string | number> | null}
- */
-const findContainingPathToOtherCharRecursive = function (otherCharName, list, pathSoFar) {
-    for (let i = 0; i < list.length; i++) {
-        const item = list[i];
-        if (item.amount === 0) {
-            continue;
-        }
-        if (item.containingCharacters && item.containingCharacters.includes(otherCharName)) {
-            return [...pathSoFar, i];
-        } else {
-            const found = findContainingPathToOtherCharRecursive(otherCharName, item.containing, [...pathSoFar, i, "containing"]);
-            if (found) {
-                return found;
-            }
-        }
-    }
-    return null;
-}
-
-/**
- * @param {string} otherCharName
- * @param {DEItem[]} list
- * @param {Array<string | number>} pathSoFar
- * @returns {Array<string | number> | null}
- */
-const findAtopPathToOtherCharRecursive = function (otherCharName, list, pathSoFar) {
-    for (let i = 0; i < list.length; i++) {
-        const item = list[i];
-        if (item.amount === 0) {
-            continue;
-        }
-        if (item.ontopCharacters && item.ontopCharacters.includes(otherCharName)) {
-            return [...pathSoFar, i];
-        } else {
-            const found = findAtopPathToOtherCharRecursive(otherCharName, item.ontop, [...pathSoFar, i, "ontop"]);
-            if (found) {
-                return found;
-            }
-        }
-    }
-    return null;
-}
-
-/**
- * @param {DEngine} engine
- * @param {string} characterName
- * @param {string} location
- * @returns {{item: DEItem, path: Array<string | number>, position: "atop" | "inside"} | null}
- */
-export function getItemWhereCharacterIsAtopOrInside(engine, characterName, location) {
-    if (!engine.deObject) {
-        throw new Error("DEngine not initialized");
-    }
-
-    const locationObj = engine.deObject.world.locations[location];
-    for (const [slotName, slot] of Object.entries(locationObj.slots)) {
-        const atopPath = findAtopPathToOtherCharRecursive(characterName, slot.items, ["slots", slotName, "items"]);
-        if (atopPath) {
-            const resolved = resolvePath(engine, location, atopPath);
-            return { item: resolved.resolved, path: atopPath, position: "atop" };
-        }
-        const containingPath = findContainingPathToOtherCharRecursive(characterName, slot.items, ["slots", slotName, "items"]);
-        if (containingPath) {
-            const resolved = resolvePath(engine, location, containingPath);
-            return { item: resolved.resolved, path: containingPath, position: "inside" };
-        }
-    }
-    const allCharactersAtLocation = [];
-    for (const charName in engine.deObject.stateFor) {
-        const charState = engine.deObject.stateFor[charName];
-        if (charState.location === location) {
-            allCharactersAtLocation.push(charName);
-        }
-    }
-    for (const charName of allCharactersAtLocation) {
-        const charState = engine.deObject.stateFor[charName];
-        const atopPath = findAtopPathToOtherCharRecursive(characterName, charState.carrying, ["characters", charName, "carrying"]);
-        if (atopPath) {
-            const resolved = resolvePath(engine, location, atopPath);
-            return { item: resolved.resolved, path: atopPath, position: "atop" };
-        }
-        const containingPath = findContainingPathToOtherCharRecursive(characterName, charState.carrying, ["characters", charName, "carrying"]);
-        if (containingPath) {
-            const resolved = resolvePath(engine, location, containingPath);
-            return { item: resolved.resolved, path: containingPath, position: "inside" };
-        }
-    }
-    return null;
 }
