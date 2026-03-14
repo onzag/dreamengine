@@ -20,6 +20,15 @@ function caseInsensitiveGrammar(word) {
     }).join(' ') + ")";
 }
 
+/**
+ * 
+ * @param {string} string 
+ * @returns {string}
+ */
+function capitalizeFirstLetter(string) {
+    return string.charAt(0).toUpperCase() + string.slice(1);
+}
+
 const nameOptionsBase = [
     "Bob",
     "Emma",
@@ -1851,8 +1860,8 @@ function calculateAllPotentialLocationsForItem(engine, charState, allCharactersA
         throw new Error("DEngine not initialized");
     }
     /**
-         * @type {string[]}
-         */
+     * @type {string[]}
+     */
     const allPotentialLocationsForItem = [];
     /**
      * @type {Array<Array<Array<string|number>>>}
@@ -1864,10 +1873,10 @@ function calculateAllPotentialLocationsForItem(engine, charState, allCharactersA
     const allItems = [];
 
     /**
-             * @param {DEItem[]} itemList 
-             * @param {string} locationDesc
-             * @param {Array<string|number>} travpath
-             */
+     * @param {DEItem[]} itemList 
+     * @param {string} locationDesc
+     * @param {Array<string|number>} travpath
+     */
     const processItemInList = (itemList, locationDesc, travpath) => {
         const listHasIt = itemList.findIndex(itemInList => {
             if (wearableOnly) {
@@ -2722,10 +2731,27 @@ async function cleanDirtyItemTree(
 
                     expellItemToFallen(expelledFromOnTopItem.item, amountExpelled);
 
+                    const elementsExpelled = utilItemCount(engine, location, expelledFromOnTopItem.item.owner, amountExpelled, expelledFromOnTopItem.item.name, false);
                     if (expelledItemVolume.singularVolume > item.maxVolumeOnTopLiters) {
-                        addedMessagesForStoryMaster.push(`${utilItemCount(engine, location, expelledFromOnTopItem.item.owner, amountExpelled, expelledFromOnTopItem.item.name, true)} ${amountExpelled === 1 ? "is" : "are"} far too large to be on top of ${item.name} and ${amountExpelled === 1 ? "falls" : "fall"} off onto the ground in ${expectedPathForFallenItems[1]}`);
+                        const tooLargeOnTopVariations = [
+                            `${elementsExpelled} ${amountExpelled === 1 ? "is" : "are"} far too large to be on top of ${item.name} and ${amountExpelled === 1 ? "falls" : "fall"} off onto the ground in the ${expectedPathForFallenItems[1]}`,
+                            `${elementsExpelled} ${amountExpelled === 1 ? "is" : "are"} way too big for the top of ${item.name} and ${amountExpelled === 1 ? "slides" : "slide"} right off onto the ground in the ${expectedPathForFallenItems[1]}`,
+                            `${item.name} can't support ${elementsExpelled} on top — far too large — and ${amountExpelled === 1 ? "it topples" : "they topple"} off onto the ground in the ${expectedPathForFallenItems[1]}`,
+                            `${elementsExpelled} ${amountExpelled === 1 ? "is" : "are"} much too bulky to stay on top of ${item.name} and ${amountExpelled === 1 ? "tumbles" : "tumble"} to the ground in the ${expectedPathForFallenItems[1]}`,
+                            `${elementsExpelled} won't fit on top of ${item.name} due to ${amountExpelled === 1 ? "its" : "their"} sheer size and ${amountExpelled === 1 ? "crashes" : "crash"} down onto the ground in the ${expectedPathForFallenItems[1]}`,
+                        ];
+                        const msg = tooLargeOnTopVariations[Math.floor(Math.random() * tooLargeOnTopVariations.length)];
+                        addedMessagesForStoryMaster.push(msg.charAt(0).toUpperCase() + msg.slice(1));
                     } else {
-                        addedMessagesForStoryMaster.push(`${utilItemCount(engine, location, expelledFromOnTopItem.item.owner, amountExpelled, expelledFromOnTopItem.item.name, true)} ${amountExpelled === 1 ? "does" : "do"} not fit on top of ${item.name} and ${amountExpelled === 1 ? "falls" : "fall"} off onto the ground in ${expectedPathForFallenItems[1]}`);
+                        const noFitOnTopVariations = [
+                            `${elementsExpelled} ${amountExpelled === 1 ? "does" : "do"} not fit on top of ${item.name} and ${amountExpelled === 1 ? "falls" : "fall"} off onto the ground in the ${expectedPathForFallenItems[1]}`,
+                            `there's no room for ${elementsExpelled} on top of ${item.name}, so ${amountExpelled === 1 ? "it falls" : "they fall"} off onto the ground in the ${expectedPathForFallenItems[1]}`,
+                            `${item.name} has no space left on top for ${elementsExpelled}, which ${amountExpelled === 1 ? "slides" : "slide"} off onto the ground in the ${expectedPathForFallenItems[1]}`,
+                            `${elementsExpelled} can't stay balanced on top of ${item.name} and ${amountExpelled === 1 ? "drops" : "drop"} to the ground in the ${expectedPathForFallenItems[1]}`,
+                            `${elementsExpelled} ${amountExpelled === 1 ? "tips" : "tip"} off the top of ${item.name} and ${amountExpelled === 1 ? "lands" : "land"} on the ground in the ${expectedPathForFallenItems[1]}`,
+                        ];
+                        const msg = noFitOnTopVariations[Math.floor(Math.random() * noFitOnTopVariations.length)];
+                        addedMessagesForStoryMaster.push(msg.charAt(0).toUpperCase() + msg.slice(1));
                     }
                 }
                 for (const expelledFromInsideItem of excess.expelledContainedItems) {
@@ -2737,10 +2763,27 @@ async function cleanDirtyItemTree(
 
                     expellItemToFallen(expelledFromInsideItem.item, amountExpelled);
 
+                    const elementsExpelled = utilItemCount(engine, location, expelledFromInsideItem.item.owner, amountExpelled, expelledFromInsideItem.item.name, false);
                     if (item.containerProperties && expelledItemVolume.singularVolume > item.containerProperties.capacityLiters) {
-                        addedMessagesForStoryMaster.push(`${utilItemCount(engine, location, expelledFromInsideItem.item.owner, amountExpelled, expelledFromInsideItem.item.name, true)} ${amountExpelled === 1 ? "is" : "are"} far too large to fit inside ${item.name} and ${amountExpelled === 1 ? "falls" : "fall"} out onto the ground in ${expectedPathForFallenItems[1]}`);
+                        const tooLargeInsideVariations = [
+                            `${elementsExpelled} ${amountExpelled === 1 ? "is" : "are"} far too large to fit inside ${item.name} and ${amountExpelled === 1 ? "falls" : "fall"} out onto the ground in the ${expectedPathForFallenItems[1]}`,
+                            `${elementsExpelled} ${amountExpelled === 1 ? "is" : "are"} way too big to be crammed inside ${item.name} and ${amountExpelled === 1 ? "tumbles" : "tumble"} out onto the ground in the ${expectedPathForFallenItems[1]}`,
+                            `there's no way ${elementsExpelled} can fit inside ${item.name} — far too large — and ${amountExpelled === 1 ? "it ends" : "they end"} up on the ground in the ${expectedPathForFallenItems[1]}`,
+                            `${elementsExpelled} ${amountExpelled === 1 ? "is" : "are"} much too bulky for the inside of ${item.name} and ${amountExpelled === 1 ? "spills" : "spill"} out onto the ground in the ${expectedPathForFallenItems[1]}`,
+                            `${item.name} can't contain ${elementsExpelled} — far too large — so ${amountExpelled === 1 ? "it drops" : "they drop"} out onto the ground in the ${expectedPathForFallenItems[1]}`,
+                        ];
+                        const msg = tooLargeInsideVariations[Math.floor(Math.random() * tooLargeInsideVariations.length)];
+                        addedMessagesForStoryMaster.push(msg.charAt(0).toUpperCase() + msg.slice(1));
                     } else {
-                        addedMessagesForStoryMaster.push(`${utilItemCount(engine, location, expelledFromInsideItem.item.owner, amountExpelled, expelledFromInsideItem.item.name, true)} ${amountExpelled === 1 ? "does" : "do"} not fit inside ${item.name} and ${amountExpelled === 1 ? "falls" : "fall"} out onto the ground in ${expectedPathForFallenItems[1]}`);
+                        const noFitInsideVariations = [
+                            `${elementsExpelled} ${amountExpelled === 1 ? "does" : "do"} not fit inside ${item.name} and ${amountExpelled === 1 ? "falls" : "fall"} out onto the ground in the ${expectedPathForFallenItems[1]}`,
+                            `${item.name} is too full for ${elementsExpelled}, which ${amountExpelled === 1 ? "falls" : "fall"} out onto the ground in the ${expectedPathForFallenItems[1]}`,
+                            `there's no room inside ${item.name} for ${elementsExpelled}, so ${amountExpelled === 1 ? "it spills" : "they spill"} out onto the ground in the ${expectedPathForFallenItems[1]}`,
+                            `${elementsExpelled} can't squeeze inside ${item.name} and ${amountExpelled === 1 ? "drops" : "drop"} out onto the ground in the ${expectedPathForFallenItems[1]}`,
+                            `${elementsExpelled} ${amountExpelled === 1 ? "gets" : "get"} pushed out of ${item.name} — no space left — and ${amountExpelled === 1 ? "lands" : "land"} on the ground in the ${expectedPathForFallenItems[1]}`,
+                        ];
+                        const msg = noFitInsideVariations[Math.floor(Math.random() * noFitInsideVariations.length)];
+                        addedMessagesForStoryMaster.push(msg.charAt(0).toUpperCase() + msg.slice(1));
                     }
                 }
                 for (const expelledOnTopCharacter of excess.expelledOntopCharacters) {
@@ -2937,26 +2980,26 @@ async function cleanDirtyItemTree(
                                 const insidePlural = carriedItemWeight.charactersOnlyDirectlyInside.length === 1;
                                 const insideVariations = willExpellInside ? (
                                     userHasFallen ? [
-                                        ` ${insideNames}, who ${insidePlural ? "was" : "were"} inside ${insideItemName}, ${insidePlural ? "is" : "are"} violently thrown out as the heavy item crashes to the ground under its own weight.`,
+                                        ` ${capitalizeFirstLetter(insideNames)}, who ${insidePlural ? "was" : "were"} inside ${insideItemName}, ${insidePlural ? "is" : "are"} violently thrown out as the heavy item crashes to the ground under its own weight.`,
                                         ` The crushing weight brings ${insideItemName} down hard, and the impact sends ${insideNames} tumbling out from inside.`,
-                                        ` ${insideNames} ${insidePlural ? "is" : "are"} flung out of ${insideItemName} as its weight drags it to the ground with brutal force.`,
+                                        ` ${capitalizeFirstLetter(insideNames)} ${insidePlural ? "is" : "are"} flung out of ${insideItemName} as its weight drags it to the ground with brutal force.`,
                                         ` As the weight of ${insideItemName} slams it into the ground, ${insideNames} ${insidePlural ? "is" : "are"} ejected from inside by the heavy impact.`,
                                     ] : [
-                                        ` ${insideNames}, who ${insidePlural ? "was" : "were"} inside ${insideItemName}, ${insidePlural ? "slides" : "slide"} out as the heavy item tips over from its weight.`,
-                                        ` ${insideNames} ${insidePlural ? "tumbles" : "tumble"} out of ${insideItemName} as it drops under its own weight, ending up on the ground.`,
+                                        ` ${capitalizeFirstLetter(insideNames)}, who ${insidePlural ? "was" : "were"} inside ${insideItemName}, ${insidePlural ? "slides" : "slide"} out as the heavy item tips over from its weight.`,
+                                        ` ${capitalizeFirstLetter(insideNames)} ${insidePlural ? "tumbles" : "tumble"} out of ${insideItemName} as it drops under its own weight, ending up on the ground.`,
                                         ` The weight of ${insideItemName} causes it to fall, and ${insideNames} ${insidePlural ? "spills" : "spill"} out from inside.`,
                                         ` As ${insideItemName} sinks to the ground from sheer weight, ${insideNames} ${insidePlural ? "is" : "are"} expelled from inside.`,
                                     ]
                                 ) : (
                                     userHasFallen ? [
-                                        ` ${insideNames}, still inside ${insideItemName}, ${insidePlural ? "is" : "are"} rattled around violently as the heavy item crashes down under its weight.`,
+                                        ` ${capitalizeFirstLetter(insideNames)}, still inside ${insideItemName}, ${insidePlural ? "is" : "are"} rattled around violently as the heavy item crashes down under its weight.`,
                                         ` The brutal weight-driven impact shakes ${insideNames} inside ${insideItemName}, though ${insidePlural ? "they remain" : "they remain"} trapped within.`,
-                                        ` ${insideNames} ${insidePlural ? "is" : "are"} jolted hard inside ${insideItemName} as its weight slams it into the ground, but ${insidePlural ? "stays" : "stay"} within.`,
+                                        ` ${capitalizeFirstLetter(insideNames)} ${insidePlural ? "is" : "are"} jolted hard inside ${insideItemName} as its weight slams it into the ground, but ${insidePlural ? "stays" : "stay"} within.`,
                                         ` Still inside ${insideItemName}, ${insideNames} ${insidePlural ? "feels" : "feel"} the full force as the item's weight brings it crashing down, though ${insidePlural ? "they don't" : "they don't"} come out.`,
                                     ] : [
                                         ` Since ${insideNames} ${insidePlural ? "is" : "are"} inside of ${insideItemName}, ${engine.getDEObject().functions.format_pronoun(engine.getDEObject(), null, carriedItemWeight.charactersOnlyDirectlyInside)} also fall${insidePlural ? "s" : ""} down while remaining inside the object as it drops from the weight.`,
-                                        ` ${insideNames}, tucked inside ${insideItemName}, ${insidePlural ? "goes" : "go"} down with it as the weight pulls it to the ground, staying inside.`,
-                                        ` ${insideNames} ${insidePlural ? "remains" : "remain"} inside ${insideItemName} as the heavy item falls to the ground.`,
+                                        ` ${capitalizeFirstLetter(insideNames)}, tucked inside ${insideItemName}, ${insidePlural ? "goes" : "go"} down with it as the weight pulls it to the ground, staying inside.`,
+                                        ` ${capitalizeFirstLetter(insideNames)} ${insidePlural ? "remains" : "remain"} inside ${insideItemName} as the heavy item falls to the ground.`,
                                         ` Still inside ${insideItemName}, ${insideNames} go${insidePlural ? "es" : ""} down with it.`,
                                     ]
                                 );
@@ -2971,26 +3014,26 @@ async function cleanDirtyItemTree(
                                 const onTopPlural = carriedItemWeight.charactersOnlyDirectlyOnTop.length === 1;
                                 const onTopVariations = willExpellOnTop ? (
                                     userHasFallen ? [
-                                        ` ${onTopNames}, who ${onTopPlural ? "was" : "were"} on top of ${onTopItemName}, ${onTopPlural ? "is" : "are"} launched off as the heavy item crashes to the ground under its weight.`,
+                                        ` ${capitalizeFirstLetter(onTopNames)}, who ${onTopPlural ? "was" : "were"} on top of ${onTopItemName}, ${onTopPlural ? "is" : "are"} launched off as the heavy item crashes to the ground under its weight.`,
                                         ` The weight of ${onTopItemName} pulls it down hard, hurling ${onTopNames} off the top and onto the ground.`,
-                                        ` ${onTopNames} ${onTopPlural ? "is" : "are"} thrown clear off ${onTopItemName} as its weight smashes it into the ground, landing roughly nearby.`,
+                                        ` ${capitalizeFirstLetter(onTopNames)} ${onTopPlural ? "is" : "are"} thrown clear off ${onTopItemName} as its weight smashes it into the ground, landing roughly nearby.`,
                                         ` As the weight of ${onTopItemName} slams it down, ${onTopNames} ${onTopPlural ? "is" : "are"} catapulted off the top and sent sprawling across the ground.`,
                                     ] : [
-                                        ` ${onTopNames}, who ${onTopPlural ? "was" : "were"} perched on top of ${onTopItemName}, ${onTopPlural ? "slides" : "slide"} off as the heavy item drops from its weight.`,
-                                        ` ${onTopNames} ${onTopPlural ? "topples" : "topple"} off ${onTopItemName} as the weight pulls it down, ending up on the ground.`,
+                                        ` ${capitalizeFirstLetter(onTopNames)}, who ${onTopPlural ? "was" : "were"} perched on top of ${onTopItemName}, ${onTopPlural ? "slides" : "slide"} off as the heavy item drops from its weight.`,
+                                        ` ${capitalizeFirstLetter(onTopNames)} ${onTopPlural ? "topples" : "topple"} off ${onTopItemName} as the weight pulls it down, ending up on the ground.`,
                                         ` The weight of ${onTopItemName} tips it over, sending ${onTopNames} sliding off the top to the ground.`,
                                         ` As ${onTopItemName} sinks under its own weight, ${onTopNames} ${onTopPlural ? "loses" : "lose"} ${onTopPlural ? "their" : "their"} balance on top and ${onTopPlural ? "falls" : "fall"} to the ground.`,
                                     ]
                                 ) : (
                                     userHasFallen ? [
-                                        ` ${onTopNames}, still on top of ${onTopItemName}, ${onTopPlural ? "is" : "are"} shaken hard as the heavy item crashes down under its weight, but ${onTopPlural ? "manages" : "manage"} to hold on.`,
+                                        ` ${capitalizeFirstLetter(onTopNames)}, still on top of ${onTopItemName}, ${onTopPlural ? "is" : "are"} shaken hard as the heavy item crashes down under its weight, but ${onTopPlural ? "manages" : "manage"} to hold on.`,
                                         ` The violent weight-driven impact rattles ${onTopNames} atop ${onTopItemName}, though ${onTopPlural ? "they cling" : "they cling"} on for dear life.`,
-                                        ` ${onTopNames} ${onTopPlural ? "is" : "are"} jarred atop ${onTopItemName} as its weight slams it down, barely staying on.`,
+                                        ` ${capitalizeFirstLetter(onTopNames)} ${onTopPlural ? "is" : "are"} jarred atop ${onTopItemName} as its weight slams it down, barely staying on.`,
                                         ` Despite the heavy crash, ${onTopNames} ${onTopPlural ? "remains" : "remain"} clinging to the top of ${onTopItemName} as its weight brings it down.`,
                                     ] : [
                                         ` Since ${onTopNames} ${onTopPlural ? "is" : "are"} on top of ${onTopItemName}, they also fall down while remaining on top as the heavy item drops.`,
-                                        ` ${onTopNames}, riding on top of ${onTopItemName}, ${onTopPlural ? "goes" : "go"} down with it as the weight pulls it to the ground, staying put on top.`,
-                                        ` ${onTopNames} ${onTopPlural ? "remains" : "remain"} on top of ${onTopItemName} as the heavy item falls to the ground.`,
+                                        ` ${capitalizeFirstLetter(onTopNames)}, riding on top of ${onTopItemName}, ${onTopPlural ? "goes" : "go"} down with it as the weight pulls it to the ground, staying put on top.`,
+                                        ` ${capitalizeFirstLetter(onTopNames)} ${onTopPlural ? "remains" : "remain"} on top of ${onTopItemName} as the heavy item falls to the ground.`,
                                         ` Still perched on ${onTopItemName}, ${onTopNames} ${onTopPlural ? "is" : "are"} brought down along with it as the weight becomes too much.`,
                                     ]
                                 );
@@ -3006,26 +3049,26 @@ async function cleanDirtyItemTree(
                                 const remainPlural = remainingCharacters.length === 1;
                                 const remainVariations = willExpellAnyRemainingCharacters ? (
                                     userHasFallen ? [
-                                        ` ${remainNames}, also caught up with ${remainItemName}, ${remainPlural ? "is" : "are"} thrown free as the heavy item's weight brings it crashing down.`,
+                                        ` ${capitalizeFirstLetter(remainNames)}, also caught up with ${remainItemName}, ${remainPlural ? "is" : "are"} thrown free as the heavy item's weight brings it crashing down.`,
                                         ` The weight-driven impact dislodges ${remainNames} from ${remainItemName}, sending them tumbling across the ground.`,
-                                        ` ${remainNames} ${remainPlural ? "is" : "are"} ripped away from ${remainItemName} as its weight slams it down, ending up scattered on the ground.`,
+                                        ` ${capitalizeFirstLetter(remainNames)} ${remainPlural ? "is" : "are"} ripped away from ${remainItemName} as its weight slams it down, ending up scattered on the ground.`,
                                         ` As the weight of ${remainItemName} crashes it to the ground, ${remainNames} ${remainPlural ? "is" : "are"} shaken loose and tossed onto the ground.`,
                                     ] : [
-                                        ` ${remainNames}, also involved with ${remainItemName}, ${remainPlural ? "is" : "are"} dislodged as the heavy item drops under its weight.`,
-                                        ` ${remainNames} ${remainPlural ? "comes" : "come"} loose from ${remainItemName} as the weight pulls it down, landing on the ground.`,
+                                        ` ${capitalizeFirstLetter(remainNames)}, also involved with ${remainItemName}, ${remainPlural ? "is" : "are"} dislodged as the heavy item drops under its weight.`,
+                                        ` ${capitalizeFirstLetter(remainNames)} ${remainPlural ? "comes" : "come"} loose from ${remainItemName} as the weight pulls it down, landing on the ground.`,
                                         ` The weight of ${remainItemName} drags it down, separating ${remainNames} from it in the process.`,
                                         ` As ${remainItemName} gives way under its own weight, ${remainNames} ${remainPlural ? "is" : "are"} shaken free and left on the ground.`,
                                     ]
                                 ) : (
                                     userHasFallen ? [
-                                        ` ${remainNames}, also involved with ${remainItemName}, ${remainPlural ? "is" : "are"} rattled by the violent weight-driven crash but ${remainPlural ? "stays" : "stay"} in place.`,
+                                        ` ${capitalizeFirstLetter(remainNames)}, also involved with ${remainItemName}, ${remainPlural ? "is" : "are"} rattled by the violent weight-driven crash but ${remainPlural ? "stays" : "stay"} in place.`,
                                         ` The heavy impact shakes ${remainNames}, still associated with ${remainItemName}, but ${remainPlural ? "they hold" : "they hold"} their position.`,
-                                        ` ${remainNames} ${remainPlural ? "is" : "are"} jolted as the weight of ${remainItemName} crashes it down, but ${remainPlural ? "manages" : "manage"} to stay where ${remainPlural ? "they are" : "they are"}.`,
+                                        ` ${capitalizeFirstLetter(remainNames)} ${remainPlural ? "is" : "are"} jolted as the weight of ${remainItemName} crashes it down, but ${remainPlural ? "manages" : "manage"} to stay where ${remainPlural ? "they are" : "they are"}.`,
                                         ` Despite the heavy item's violent fall, ${remainNames} ${remainPlural ? "remains" : "remain"} where ${remainPlural ? "they were" : "they were"} on ${remainItemName}, shaken but in place.`,
                                     ] : [
                                         ` Since ${remainNames} ${remainPlural ? "is" : "are"} also involved with ${remainItemName}, they also fall down while remaining where they are as the heavy item drops.`,
-                                        ` ${remainNames}, also associated with ${remainItemName}, ${remainPlural ? "goes" : "go"} down with it as the weight takes it to the ground, staying in place.`,
-                                        ` ${remainNames} ${remainPlural ? "remains" : "remain"} in position as the weight of ${remainItemName} brings it to the ground.`,
+                                        ` ${capitalizeFirstLetter(remainNames)}, also associated with ${remainItemName}, ${remainPlural ? "goes" : "go"} down with it as the weight takes it to the ground, staying in place.`,
+                                        ` ${capitalizeFirstLetter(remainNames)} ${remainPlural ? "remains" : "remain"} in position as the weight of ${remainItemName} brings it to the ground.`,
                                         ` Still attached to ${remainItemName}, ${remainNames} ${remainPlural ? "is" : "are"} carried down as the heavy item gives way, but ${remainPlural ? "stays" : "stay"} where ${remainPlural ? "they were" : "they were"}.`,
                                     ]
                                 );
@@ -3106,26 +3149,26 @@ async function cleanDirtyItemTree(
                                 const insidePlural = carriedItemVolume.charactersOnlyDirectlyInside.length === 1;
                                 const insideVariations = willExpellInside ? (
                                     userHasFallen ? [
-                                        ` ${insideNames}, who ${insidePlural ? "was" : "were"} inside ${insideItemName}, ${insidePlural ? "is" : "are"} violently thrown out as the item crashes to the ground.`,
+                                        ` ${capitalizeFirstLetter(insideNames)}, who ${insidePlural ? "was" : "were"} inside ${insideItemName}, ${insidePlural ? "is" : "are"} violently thrown out as the item crashes to the ground.`,
                                         ` The hard impact sends ${insideNames} tumbling out of ${insideItemName}, ejected from the inside as it slams down.`,
-                                        ` ${insideNames} ${insidePlural ? "is" : "are"} flung out of ${insideItemName} from the force of the crash, rolling onto the ground.`,
+                                        ` ${capitalizeFirstLetter(insideNames)} ${insidePlural ? "is" : "are"} flung out of ${insideItemName} from the force of the crash, rolling onto the ground.`,
                                         ` As ${insideItemName} hits the ground hard, ${insideNames} ${insidePlural ? "is" : "are"} catapulted out of it by the violent impact.`,
                                     ] : [
-                                        ` ${insideNames}, who ${insidePlural ? "was" : "were"} inside ${insideItemName}, ${insidePlural ? "slides" : "slide"} out as the item tips over.`,
-                                        ` ${insideNames} ${insidePlural ? "tumbles" : "tumble"} out of ${insideItemName} as it falls, ending up on the ground.`,
+                                        ` ${capitalizeFirstLetter(insideNames)}, who ${insidePlural ? "was" : "were"} inside ${insideItemName}, ${insidePlural ? "slides" : "slide"} out as the item tips over.`,
+                                        ` ${capitalizeFirstLetter(insideNames)} ${insidePlural ? "tumbles" : "tumble"} out of ${insideItemName} as it falls, ending up on the ground.`,
                                         ` The fall causes ${insideNames} to spill out of ${insideItemName}, landing on the ground nearby.`,
                                         ` As ${insideItemName} drops, ${insideNames} ${insidePlural ? "is" : "are"} expelled from inside, ending up on the ground.`,
                                     ]
                                 ) : (
                                     userHasFallen ? [
-                                        ` ${insideNames}, still inside ${insideItemName}, ${insidePlural ? "is" : "are"} rattled around violently as the item crashes to the ground.`,
+                                        ` ${capitalizeFirstLetter(insideNames)}, still inside ${insideItemName}, ${insidePlural ? "is" : "are"} rattled around violently as the item crashes to the ground.`,
                                         ` The brutal impact shakes ${insideNames} inside ${insideItemName}, though ${insidePlural ? "they remain" : "they remain"} trapped within.`,
-                                        ` ${insideNames} ${insidePlural ? "is" : "are"} jolted hard inside ${insideItemName} as it slams into the ground, but ${insidePlural ? "stays" : "stay"} within.`,
+                                        ` ${capitalizeFirstLetter(insideNames)} ${insidePlural ? "is" : "are"} jolted hard inside ${insideItemName} as it slams into the ground, but ${insidePlural ? "stays" : "stay"} within.`,
                                         ` Still inside ${insideItemName}, ${insideNames} ${insidePlural ? "feels" : "feel"} the full force of the crash, though ${insidePlural ? "they don't" : "they don't"} come out.`,
                                     ] : [
                                         ` Since ${insideNames} ${insidePlural ? "is" : "are"} inside of ${insideItemName}, they also fall down while remaining inside the object.`,
-                                        ` ${insideNames}, tucked inside ${insideItemName}, ${insidePlural ? "goes" : "go"} down with it, staying inside as it hits the ground.`,
-                                        ` ${insideNames} ${insidePlural ? "remains" : "remain"} inside ${insideItemName} as it falls to the ground.`,
+                                        ` ${capitalizeFirstLetter(insideNames)}, tucked inside ${insideItemName}, ${insidePlural ? "goes" : "go"} down with it, staying inside as it hits the ground.`,
+                                        ` ${capitalizeFirstLetter(insideNames)} ${insidePlural ? "remains" : "remain"} inside ${insideItemName} as it falls to the ground.`,
                                         ` Still inside ${insideItemName}, ${insideNames} ${insidePlural ? "is" : "are"} carried down with it as it drops.`,
                                     ]
                                 );
@@ -3140,26 +3183,26 @@ async function cleanDirtyItemTree(
                                 const onTopPlural = carriedItemVolume.charactersOnlyDirectlyOnTop.length === 1;
                                 const onTopVariations = willExpellOnTop ? (
                                     userHasFallen ? [
-                                        ` ${onTopNames}, who ${onTopPlural ? "was" : "were"} on top of ${onTopItemName}, ${onTopPlural ? "is" : "are"} launched off by the violent crash, hitting the ground hard.`,
+                                        ` ${capitalizeFirstLetter(onTopNames)}, who ${onTopPlural ? "was" : "were"} on top of ${onTopItemName}, ${onTopPlural ? "is" : "are"} launched off by the violent crash, hitting the ground hard.`,
                                         ` The force of the impact hurls ${onTopNames} off ${onTopItemName}, sending them crashing to the ground.`,
-                                        ` ${onTopNames} ${onTopPlural ? "is" : "are"} thrown clear off ${onTopItemName} as it smashes into the ground, landing roughly nearby.`,
+                                        ` ${capitalizeFirstLetter(onTopNames)} ${onTopPlural ? "is" : "are"} thrown clear off ${onTopItemName} as it smashes into the ground, landing roughly nearby.`,
                                         ` As ${onTopItemName} slams down, ${onTopNames} ${onTopPlural ? "is" : "are"} catapulted off the top and sent sprawling across the ground.`,
                                     ] : [
-                                        ` ${onTopNames}, who ${onTopPlural ? "was" : "were"} perched on top of ${onTopItemName}, ${onTopPlural ? "slides" : "slide"} off as it falls, landing on the ground.`,
-                                        ` ${onTopNames} ${onTopPlural ? "topples" : "topple"} off ${onTopItemName} as it goes down, ending up on the ground.`,
+                                        ` ${capitalizeFirstLetter(onTopNames)}, who ${onTopPlural ? "was" : "were"} perched on top of ${onTopItemName}, ${onTopPlural ? "slides" : "slide"} off as it falls, landing on the ground.`,
+                                        ` ${capitalizeFirstLetter(onTopNames)} ${onTopPlural ? "topples" : "topple"} off ${onTopItemName} as it goes down, ending up on the ground.`,
                                         ` The fall tips ${onTopNames} off the top of ${onTopItemName}, depositing them on the ground.`,
                                         ` As ${onTopItemName} drops, ${onTopNames} ${onTopPlural ? "loses" : "lose"} ${onTopPlural ? "their" : "their"} balance on top and ${onTopPlural ? "falls" : "fall"} to the ground.`,
                                     ]
                                 ) : (
                                     userHasFallen ? [
-                                        ` ${onTopNames}, still on top of ${onTopItemName}, ${onTopPlural ? "is" : "are"} shaken hard as the item crashes to the ground, but ${onTopPlural ? "manages" : "manage"} to hold on.`,
+                                        ` ${capitalizeFirstLetter(onTopNames)}, still on top of ${onTopItemName}, ${onTopPlural ? "is" : "are"} shaken hard as the item crashes to the ground, but ${onTopPlural ? "manages" : "manage"} to hold on.`,
                                         ` The violent impact rattles ${onTopNames} atop ${onTopItemName}, though ${onTopPlural ? "they cling" : "they cling"} on for dear life.`,
-                                        ` ${onTopNames} ${onTopPlural ? "is" : "are"} jarred atop ${onTopItemName} as it slams down, barely staying on.`,
+                                        ` ${capitalizeFirstLetter(onTopNames)} ${onTopPlural ? "is" : "are"} jarred atop ${onTopItemName} as it slams down, barely staying on.`,
                                         ` Despite the brutal crash, ${onTopNames} ${onTopPlural ? "remains" : "remain"} clinging to the top of ${onTopItemName} as it hits the ground.`,
                                     ] : [
                                         ` Since ${onTopNames} ${onTopPlural ? "is" : "are"} on top of ${onTopItemName}, they also fall down while remaining on top of the object.`,
-                                        ` ${onTopNames}, riding on top of ${onTopItemName}, ${onTopPlural ? "goes" : "go"} down with it, staying put on top.`,
-                                        ` ${onTopNames} ${onTopPlural ? "remains" : "remain"} on top of ${onTopItemName} as it falls to the ground.`,
+                                        ` ${capitalizeFirstLetter(onTopNames)}, riding on top of ${onTopItemName}, ${onTopPlural ? "goes" : "go"} down with it, staying put on top.`,
+                                        ` ${capitalizeFirstLetter(onTopNames)} ${onTopPlural ? "remains" : "remain"} on top of ${onTopItemName} as it falls to the ground.`,
                                         ` Still perched on ${onTopItemName}, ${onTopNames} ${onTopPlural ? "is" : "are"} brought down along with it.`,
                                     ]
                                 );
@@ -3175,26 +3218,26 @@ async function cleanDirtyItemTree(
                                 const remainPlural = remainingCharacters.length === 1;
                                 const remainVariations = willExpellAnyRemainingCharacters ? (
                                     userHasFallen ? [
-                                        ` ${remainNames}, also caught up with ${remainItemName}, ${remainPlural ? "is" : "are"} thrown free by the force of the crash, landing hard on the ground.`,
+                                        ` ${capitalizeFirstLetter(remainNames)}, also caught up with ${remainItemName}, ${remainPlural ? "is" : "are"} thrown free by the force of the crash, landing hard on the ground.`,
                                         ` The violent impact dislodges ${remainNames} from ${remainItemName}, sending them tumbling across the ground.`,
-                                        ` ${remainNames} ${remainPlural ? "is" : "are"} ripped away from ${remainItemName} as it crashes down, ending up scattered on the ground.`,
+                                        ` ${capitalizeFirstLetter(remainNames)} ${remainPlural ? "is" : "are"} ripped away from ${remainItemName} as it crashes down, ending up scattered on the ground.`,
                                         ` As ${remainItemName} hits the ground with force, ${remainNames} ${remainPlural ? "is" : "are"} shaken loose and tossed onto the ground.`,
                                     ] : [
-                                        ` ${remainNames}, also involved with ${remainItemName}, ${remainPlural ? "is" : "are"} dislodged as it falls, ending up on the ground.`,
-                                        ` ${remainNames} ${remainPlural ? "comes" : "come"} loose from ${remainItemName} during the fall, landing on the ground.`,
+                                        ` ${capitalizeFirstLetter(remainNames)}, also involved with ${remainItemName}, ${remainPlural ? "is" : "are"} dislodged as it falls, ending up on the ground.`,
+                                        ` ${capitalizeFirstLetter(remainNames)} ${remainPlural ? "comes" : "come"} loose from ${remainItemName} during the fall, landing on the ground.`,
                                         ` The drop separates ${remainNames} from ${remainItemName}, leaving them on the ground.`,
                                         ` As ${remainItemName} goes down, ${remainNames} ${remainPlural ? "is" : "are"} shaken free and left on the ground.`,
                                     ]
                                 ) : (
                                     userHasFallen ? [
-                                        ` ${remainNames}, also involved with ${remainItemName}, ${remainPlural ? "is" : "are"} rattled by the violent crash but ${remainPlural ? "stays" : "stay"} in place.`,
+                                        ` ${capitalizeFirstLetter(remainNames)}, also involved with ${remainItemName}, ${remainPlural ? "is" : "are"} rattled by the violent crash but ${remainPlural ? "stays" : "stay"} in place.`,
                                         ` The hard impact shakes ${remainNames}, still associated with ${remainItemName}, but ${remainPlural ? "they hold" : "they hold"} their position.`,
-                                        ` ${remainNames} ${remainPlural ? "is" : "are"} jolted as ${remainItemName} crashes down, but ${remainPlural ? "manages" : "manage"} to stay where ${remainPlural ? "they are" : "they are"}.`,
+                                        ` ${capitalizeFirstLetter(remainNames)} ${remainPlural ? "is" : "are"} jolted as ${remainItemName} crashes down, but ${remainPlural ? "manages" : "manage"} to stay where ${remainPlural ? "they are" : "they are"}.`,
                                         ` Despite the violent fall, ${remainNames} ${remainPlural ? "remains" : "remain"} where ${remainPlural ? "they were" : "they were"} on ${remainItemName}, shaken but in place.`,
                                     ] : [
                                         ` Since ${remainNames} ${remainPlural ? "is" : "are"} also involved with ${remainItemName}, they also fall down while remaining where they are.`,
-                                        ` ${remainNames}, also associated with ${remainItemName}, ${remainPlural ? "goes" : "go"} down with it, staying in place.`,
-                                        ` ${remainNames} ${remainPlural ? "remains" : "remain"} in position as ${remainItemName} falls, going down along with it.`,
+                                        ` ${capitalizeFirstLetter(remainNames)}, also associated with ${remainItemName}, ${remainPlural ? "goes" : "go"} down with it, staying in place.`,
+                                        ` ${capitalizeFirstLetter(remainNames)} ${remainPlural ? "remains" : "remain"} in position as ${remainItemName} falls, going down along with it.`,
                                         ` Still attached to ${remainItemName}, ${remainNames} ${remainPlural ? "is" : "are"} carried down but ${remainPlural ? "stays" : "stay"} where ${remainPlural ? "they were" : "they were"}.`,
                                     ]
                                 );
