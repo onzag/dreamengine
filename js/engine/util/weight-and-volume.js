@@ -756,6 +756,28 @@ export function checkItemIsOneOfAKindAtLocation(engine, location, item) {
  * @param {Array<string | number>} locationPath
  * @param {boolean} [ignoreCarrierWearer] whether to ignore the carrier/wearer in the message, this is used for example when we are trying to figure out if an item is being worn by a character, as the LLM may refer to the item in a different way than how it is named in the world state, for example it may say "hat" instead of "red hat", so we want to ignore case and also check if the item name includes the name we are looking for instead of checking for an exact match, this is just to increase the chances of finding the item and thus accepting feasible changes even if they are not perfectly formatted
  */
+export function locationPathToMessageWithoutItemName(engine, characterName, currentLocation, locationPath, ignoreCarrierWearer = false) {
+    if (!engine.deObject) {
+        throw new Error("DEngine not initialized");
+    }
+    // make a copy of the path
+    const pathCopy = [...locationPath];
+    // delete the last in the path
+    pathCopy.pop();
+    if (typeof pathCopy[pathCopy.length - 1] === "number") {
+        pathCopy.pop();
+    }
+
+    return locationPathToMessage(engine, characterName, currentLocation, pathCopy, ignoreCarrierWearer);
+}
+
+/**
+ * @param {DEngine} engine
+ * @param {string} characterName
+ * @param {string} currentLocation
+ * @param {Array<string | number>} locationPath
+ * @param {boolean} [ignoreCarrierWearer] whether to ignore the carrier/wearer in the message, this is used for example when we are trying to figure out if an item is being worn by a character, as the LLM may refer to the item in a different way than how it is named in the world state, for example it may say "hat" instead of "red hat", so we want to ignore case and also check if the item name includes the name we are looking for instead of checking for an exact match, this is just to increase the chances of finding the item and thus accepting feasible changes even if they are not perfectly formatted
+ */
 export function locationPathToMessage(engine, characterName, currentLocation, locationPath, ignoreCarrierWearer = false) {
     if (!engine.deObject) {
         throw new Error("DEngine not initialized");

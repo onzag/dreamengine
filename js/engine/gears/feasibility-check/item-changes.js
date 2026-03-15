@@ -1,6 +1,6 @@
 import { deepCopy, DEngine } from "../../index.js";
 import { getBeingCarriedByCharacter, getCharacterExactLocation } from "../../util/character-info.js";
-import { checkItemIsOneOfAKindAtLocation, getCharacterCarryingCapacity, getCharacterVolume, getCharacterWeight, getItemExcessElements, getItemVolume, getItemWeight, getWearableFitment, locationPathToMessage, resolvePath, utilItemCount } from "../../util/weight-and-volume.js";
+import { checkItemIsOneOfAKindAtLocation, getCharacterCarryingCapacity, getCharacterVolume, getCharacterWeight, getItemExcessElements, getItemVolume, getItemWeight, getWearableFitment, locationPathToMessage, locationPathToMessageWithoutItemName, resolvePath, utilItemCount } from "../../util/weight-and-volume.js";
 
 // TODO repair locations not here, but somewhere during creating the world
 // because the placement of an item does not fall in line with how they are
@@ -2234,10 +2234,10 @@ function moveItems(
             // given to a character directly or indirectly (eg. put in a bag that they are carrying or wearing)
             if (actualEndingPath[0] === "characters" && (actualEndingPath[2] === "carrying" || (actualEndingPath[2] === "wearing" && actualEndingPath.length > 4))) {
                 // A character picked up or received an item
-                const messageSoFar = `${thrownAddition}${actualEndingPath[1]}${thrown ? caughtAndIs : ""}${nowCarrying} ${utilItemCount(engine, charState.location, null, amountToTransfer, item)}${whichPreviously} ${amountToTransfer === 1 ? "was" : "were"} ${locationPathToMessage(engine, characterName, charState.location, componentFromPath.path)}`;
+                const messageSoFar = `${thrownAddition}${actualEndingPath[1]}${thrown ? caughtAndIs : ""}${nowCarrying} ${utilItemCount(engine, charState.location, null, amountToTransfer, item)}${whichPreviously} ${amountToTransfer === 1 ? "was" : "were"} ${locationPathToMessageWithoutItemName(engine, characterName, charState.location, componentFromPath.path)}`;
                 if (actualEndingPath.length > 4) {
                     // eg. ["characters", "Alice", "carrying", 0, "containing", 1] we check above 4 to avoid the index of where the item is located in the carrying list
-                    addedMessagesForStoryMaster.push(messageSoFar + `, and is now specifically ${locationPathToMessage(engine, characterName, charState.location, actualEndingPath, true)}`);
+                    addedMessagesForStoryMaster.push(messageSoFar + `, and is now specifically ${locationPathToMessageWithoutItemName(engine, characterName, charState.location, actualEndingPath, true)}`);
                 } else {
                     addedMessagesForStoryMaster.push(messageSoFar);
                 }
@@ -2245,18 +2245,18 @@ function moveItems(
                 // wearing directly on the body
             } else if (actualEndingPath[0] === "characters" && actualEndingPath[2] === "wearing" && actualEndingPath.length <= 4) {
                 // A character picked up or received an item
-                const messageSoFar = `${thrownAddition}${actualEndingPath[1]}${thrown ? caughtAndIs : ""}${nowWearing} ${utilItemCount(engine, charState.location, null, amountToTransfer, item)}${whichPreviously} ${amountToTransfer === 1 ? "was" : "were"} ${locationPathToMessage(engine, characterName, charState.location, componentFromPath.path)}`;
+                const messageSoFar = `${thrownAddition}${actualEndingPath[1]}${thrown ? caughtAndIs : ""}${nowWearing} ${utilItemCount(engine, charState.location, null, amountToTransfer, item)}${whichPreviously} ${amountToTransfer === 1 ? "was" : "were"} ${locationPathToMessageWithoutItemName(engine, characterName, charState.location, componentFromPath.path)}`;
                 addedMessagesForStoryMaster.push(messageSoFar);
             } else if (actualEndingPath[0] === "slots" && actualEndingPath[2] === "items" && actualEndingPath.length <= 4) {
                 // an item was dropped on the ground
-                const messageSoFar = `${thrownAddition}${utilItemCount(engine, charState.location, null, amountToTransfer, item, true)}${thrown ? "" : amountToTransfer === 1 ? " is" : " are"}${droppedOnTheGround} at ${actualEndingPath[1]},${whichPreviously} ${amountToTransfer === 1 ? "was" : "were"} ${locationPathToMessage(engine, characterName, charState.location, componentFromPath.path)}`;
+                const messageSoFar = `${thrownAddition}${utilItemCount(engine, charState.location, null, amountToTransfer, item, true)}${thrown ? "" : amountToTransfer === 1 ? " is" : " are"}${droppedOnTheGround} at ${actualEndingPath[1]},${whichPreviously} ${amountToTransfer === 1 ? "was" : "were"} ${locationPathToMessageWithoutItemName(engine, characterName, charState.location, componentFromPath.path)}`;
                 addedMessagesForStoryMaster.push(messageSoFar);
             } else {
                 if (thrown) {
-                    const messageSoFar = `${thrownAddition}${utilItemCount(engine, charState.location, null, amountToTransfer, item, true)} drops ${locationPathToMessage(engine, characterName, charState.location, actualEndingPath)},${whichPreviously} ${amountToTransfer === 1 ? "was" : "were"} ${locationPathToMessage(engine, characterName, charState.location, componentFromPath.path)}.`;
+                    const messageSoFar = `${thrownAddition}${utilItemCount(engine, charState.location, null, amountToTransfer, item, true)} drops ${locationPathToMessageWithoutItemName(engine, characterName, charState.location, actualEndingPath)},${whichPreviously} ${amountToTransfer === 1 ? "was" : "were"} ${locationPathToMessageWithoutItemName(engine, characterName, charState.location, componentFromPath.path)}.`;
                     addedMessagesForStoryMaster.push(messageSoFar);
                 } else {
-                    const messageSoFar = `${utilItemCount(engine, charState.location, null, amountToTransfer, item, true)}${amountToTransfer === 1 ? isMoved : areMoved} from ${locationPathToMessage(engine, characterName, charState.location, componentFromPath.path)} to be ${locationPathToMessage(engine, characterName, charState.location, actualEndingPath)}.`;
+                    const messageSoFar = `${utilItemCount(engine, charState.location, null, amountToTransfer, item, true)}${amountToTransfer === 1 ? isMoved : areMoved} from ${locationPathToMessageWithoutItemName(engine, characterName, charState.location, componentFromPath.path)} to be ${locationPathToMessageWithoutItemName(engine, characterName, charState.location, actualEndingPath)}.`;
                     addedMessagesForStoryMaster.push(messageSoFar);
                 }
             }

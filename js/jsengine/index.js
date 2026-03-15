@@ -1,5 +1,20 @@
 import { DEngine } from "../engine/index.js";
-import { sanitizeDE } from "./ensure-safe-de.js";
+
+const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
+
+/**
+ * Creates an async function with no sandboxing — runs in the current context.
+ * Easy to debug since stack traces and breakpoints work normally.
+ * 
+ * @param {string} args - Comma-separated list of argument names
+ * @param {string} body - The function body source code
+ * @param {string} [sourceURL] - Optional sourceURL for DevTools debugging
+ * @returns {Function} An async function
+ */
+function loadFunctionInsecure(args, body, sourceURL) {
+    if (sourceURL) body += `\n//# sourceURL=${sourceURL}`;
+    return new AsyncFunction(args, body);
+}
 
 export class DEJSEngine {
     /**
@@ -12,11 +27,6 @@ export class DEJSEngine {
      * @type {(namespace: string, id: string) => Promise<{src: string, srcUrl: string}>}
      */
     resolver;
-    /**
-     * A function that takes a script body and returns a function that executes the script in a sandboxed environment
-     * @type {(args: string, body: string, sourceURL?: string) => Function}
-     */
-    sandboxer;
 
     /**
      * A cache for resolved scripts to avoid resolving the same script multiple times
@@ -31,12 +41,10 @@ export class DEJSEngine {
     /**
      * @param {DEngine} engine
      * @param {(namespace: string, id: string) => Promise<{src: string, srcUrl: string}>} resolver
-     * @param {(args: string, body: string, sourceURL?: string) => Function} sandboxer
      */
-    constructor(engine, resolver, sandboxer) {
+    constructor(engine, resolver) {
         this.engine = engine;
         this.resolver = resolver;
-        this.sandboxer = sandboxer;
 
         this.importScript = this.importScript.bind(this);
 
@@ -57,9 +65,9 @@ export class DEJSEngine {
 
         const file = await this.resolver(namespace, id);
 
-        const sandboxed = this.sandboxer("importScript, engine", file.src, file.srcUrl);
+        const insecureFn = loadFunctionInsecure("importScript, engine", file.src, file.srcUrl);
         const engine = { exports: {} };
-        await sandboxed(this.importScript, engine);
+        await insecureFn(this.importScript, engine);
 
         // @ts-ignore
         this.scriptCache[key] = engine.exports;
@@ -68,12 +76,7 @@ export class DEJSEngine {
         return engine.exports;
     }
 
-    sanitizeManually() {
-        sanitizeDE(this.engine.deObject);
-    }
-
     async initialize() {
-        sanitizeDE(this.engine.deObject);
         for (const scriptKey of this.scriptOrder) {
             const script = this.scriptCache[scriptKey];
             if (script.initialize) {

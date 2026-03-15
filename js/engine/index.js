@@ -364,8 +364,6 @@ export class DEngine {
             "world",
         ];
 
-        this.jsEngine.sanitizeManually();
-
         for (const type of orderOfExecution) {
             /**
              * @type {Array<{script: DEScript, scriptKey: string}>}
