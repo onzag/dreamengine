@@ -625,8 +625,6 @@ ${states.join(", ")}
                         maxSafetyCharacters: nextQuestion.maxSafetyCharacters,
                         trail: "<answer>\n" + (nextQuestion.answerTrail || "").trim() + "\n\n",
                         grammar: nextQuestion.grammar || null,
-                        aggressiveListRepetitionBuster: nextQuestion.useAggressiveListRepetitionBuster || false,
-                        repetitionBuster: nextQuestion.useRepetitionBuster || false,
                     }
                 }));
             } else {
@@ -642,8 +640,6 @@ ${states.join(", ")}
                         maxSafetyCharacters: nextQuestion.maxSafetyCharacters,
                         trail: "# Answer:\n\n" + (nextQuestion.answerTrail || ""),
                         grammar: nextQuestion.grammar || null,
-                        aggressiveListRepetitionBuster: nextQuestion.useAggressiveListRepetitionBuster || false,
-                        repetitionBuster: nextQuestion.useRepetitionBuster || false,
                     }
                 }));
             }

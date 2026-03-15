@@ -13,8 +13,6 @@ import { DEngine } from "../index.js";
      * maxCharacters: number,
      * maxSafetyCharacters: number,
      * useQuestionCache?: boolean,
-     * useRepetitionBuster?: boolean,
-     * useAggressiveListRepetitionBuster?: boolean,
      * } | null>} QuestionAgentGeneratorResponse
      */
 
