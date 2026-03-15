@@ -6,7 +6,6 @@
  */
 
 import { DEngine } from '../index.js';
-import { parseMessageInComponentsAsText } from '../util/message-parse.js';
 import { BaseInferenceAdapter } from './base.js';
 
 function cheapRID() {
@@ -200,7 +199,7 @@ export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
                 console.log("InferenceAdapterLlamaUncensored: Received ready message from server. Context window size: " + this.contextWindowSize + ", Supports parallel requests: " + this.doSupportsParallelRequests);
 
                 if (!this.doSupportsParallelRequests) {
-                    console.warn("InferenceAdapterLlamaUncensored: The connected model does not support parallel requests, this means that only one user at a time can interact with the endpoint.");
+                    console.warn("InferenceAdapterLlamaUncensored: The connected model does not support parallel requests");
                 }
 
                 if (this.resolveInitializePromise) {
@@ -309,14 +308,14 @@ ${states.join(", ")}
     /**
      * @param {DECompleteCharacterReference} character 
      * @param {string} system 
-     * @param {(AsyncGenerator<{name: string, message: string, id: string, conversationId: string | null, debug: boolean, rejected: boolean}, void, boolean> | Array<{name: string, message: string}>)} getHistoryForCharacter
+     * @param {Array<string>} messages
      * @param {string} action
      * @returns {AsyncGenerator<string, void, boolean>}
      */
     async* inferNextMessageFor(
         character,
         system,
-        getHistoryForCharacter,
+        messages,
         action,
     ) {
         await this.ensureInitialized();
@@ -334,36 +333,8 @@ ${states.join(", ")}
             tokensExhaustedApprox += await this.countTokens(action);
         }
 
-        /**
-         * @type {Array<string>}
-         */
-        let messagesToAdd = [];
-
-        if (!Array.isArray(getHistoryForCharacter)) {
-            let generator = await getHistoryForCharacter.next(true);
-            while (!generator.done) {
-                if (!generator.value.debug && !generator.value.rejected) {
-                    const messageParsed = parseMessageInComponentsAsText(generator.value.name, generator.value.message);
-                    messagesToAdd.push(messageParsed);
-                    tokensExhaustedApprox += await this.countTokens(messageParsed) + 10; // some wiggle room
-                    if (tokensExhaustedApprox >= contextWindowSize) {
-                        await getHistoryForCharacter.return();
-                        if (tokensExhaustedApprox > contextWindowSize) {
-                            // remove the last message as it made us go over
-                            messagesToAdd.pop();
-                        }
-                        break;
-                    }
-                }
-                generator = await getHistoryForCharacter.next(true);
-            }
-
-            messagesToAdd = messagesToAdd.reverse();
-        } else {
-            messagesToAdd = getHistoryForCharacter.map(msg => parseMessageInComponentsAsText(msg.name, msg.message));
-        }
-
         // TODO fix the grammar here
+        // TODO fix this is not how it is going to be anymore
         const payload = {
             messages: [
                 {
@@ -459,8 +430,7 @@ ${states.join(", ")}
      * @param {DECompleteCharacterReference} character 
      * @param {string} system
      * @param {string|null} contextInfoBefore additional context information to provide to the agent
-     * @param {AsyncGenerator<{name: string, message: string, id: string, conversationId: string | null, debug: boolean, rejected: boolean}, void, boolean>} getHistoryForCharacter
-     * @param {"LAST_CYCLE" | "LAST_STORY_FRAGMENT" | "LAST_CYCLE_EXPANDED" | "LAST_CYCLE_EXPANDED_EXCLUDE_CHAR" | "LAST_CYCLE_EXPANDED_TWICE" | "ALL"} msgLimit what to limit the history to
+     * @param {Array<string>} messages
      * @param {string|null} contextInfoAfter additional context information to provide to the agent
      * @param {boolean} [remarkLastStoryFragmentForAnalysis] whether to mark the last message with an special token so the agent can analyze it
      * @returns {import('./base.js').QuestionAgentGeneratorResponse}
@@ -469,8 +439,7 @@ ${states.join(", ")}
         character,
         system,
         contextInfoBefore,
-        getHistoryForCharacter,
-        msgLimit,
+        messages,
         contextInfoAfter,
         remarkLastStoryFragmentForAnalysis
     ) {
@@ -490,72 +459,9 @@ ${states.join(", ")}
         tokensExhaustedApprox += await this.countTokens(system);
         tokensExhaustedApprox += await this.countTokens("messages: ");
 
-        /**
-         * @type {Array<string>}
-         */
-        let messagesToAdd = [];
-
-        if (!Array.isArray(getHistoryForCharacter)) {
-            let generator = await getHistoryForCharacter.next(true);
-            let cycleCount = 0;
-            while (!generator.done) {
-                if (!generator.value.debug && !generator.value.rejected) {
-                    let shouldAddMessage = false;
-                    let shouldStopAddingMessages = false;
-
-                    const messageParsed = parseMessageInComponentsAsText(generator.value.name, generator.value.message);
-
-                    if (msgLimit === "ALL") {
-                        tokensExhaustedApprox += await this.countTokens(messageParsed) + 10; // some wiggle room
-                        shouldStopAddingMessages = tokensExhaustedApprox >= contextWindowSize;
-                        shouldAddMessage = !shouldStopAddingMessages;
-                    } else if (msgLimit === "LAST_STORY_FRAGMENT") {
-                        shouldAddMessage = generator.value.name === character.name;
-                        shouldStopAddingMessages = shouldAddMessage;
-                    } else if (msgLimit === "LAST_CYCLE") {
-                        shouldAddMessage = cycleCount === 0;
-                    } else if (msgLimit === "LAST_CYCLE_EXPANDED") {
-                        shouldAddMessage = cycleCount === 0 || (cycleCount === 1 && generator.value.name !== character.name);
-                    } else if (msgLimit === "LAST_CYCLE_EXPANDED_EXCLUDE_CHAR") {
-                        shouldAddMessage = (cycleCount === 0 && generator.value.name !== character.name) || (cycleCount === 1 && generator.value.name !== character.name);
-                    } else if (msgLimit === "LAST_CYCLE_EXPANDED_TWICE") {
-                        shouldAddMessage = cycleCount === 0 || (cycleCount === 2 && generator.value.name !== character.name);
-                    }
-
-                    if (generator.value.name === character.name) {
-                        cycleCount++;
-                    }
-
-                    if (msgLimit === "LAST_CYCLE") {
-                        shouldStopAddingMessages = cycleCount >= 1;
-                    }
-                    if (msgLimit === "LAST_CYCLE_EXPANDED" || msgLimit === "LAST_CYCLE_EXPANDED_EXCLUDE_CHAR") {
-                        shouldStopAddingMessages = cycleCount >= 2;
-                    }
-                    if (msgLimit === "LAST_CYCLE_EXPANDED_TWICE") {
-                        shouldStopAddingMessages = cycleCount >= 3;
-                    }
-
-                    if (shouldAddMessage) {
-                        messagesToAdd.push(messageParsed);
-                    }
-
-                    if (shouldStopAddingMessages) {
-                        await getHistoryForCharacter.return();
-                        break;
-                    }
-                }
-                generator = await getHistoryForCharacter.next(true);
-            }
-
-            messagesToAdd = messagesToAdd.reverse();
-        } else {
-            messagesToAdd = getHistoryForCharacter;
-        }
-
         const rid = cheapRID();
         if (!remarkLastStoryFragmentForAnalysis) {
-            const messagesFormatted = messagesToAdd.join("\n\n");
+            const messagesFormatted = messages.join("\n\n");
 
             if (this.options.mode === "xml") {
                 const payload = {
@@ -573,8 +479,8 @@ ${states.join(", ")}
                 this.socket.send(JSON.stringify({ action: "analyze-prepare", payload, rid }));
             }
         } else {
-            const lastMessage = messagesToAdd[messagesToAdd.length - 1];
-            const restMessages = messagesToAdd.slice(0, -1);
+            const lastMessage = messages[messages.length - 1];
+            const restMessages = messages.slice(0, -1);
 
             const restMessagesFormatted = restMessages.join("\n\n");
 

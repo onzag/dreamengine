@@ -47,14 +47,14 @@ export class BaseInferenceAdapter {
      * 
      * @param {DECompleteCharacterReference} character 
      * @param {string} system 
-     * @param {(AsyncGenerator<{name: string, message: string, id: string, conversationId: string | null, debug: boolean, rejected: boolean}, void, boolean> | Array<{name: string, message: string}>)} getHistoryForCharacter
+     * @param {Array<string>} messages
      * @param {string} action
      * @returns {AsyncGenerator<string, void, boolean>}
      */
     async* inferNextMessageFor(
         character,
         system,
-        getHistoryForCharacter,
+        messages,
         action,
     ) {
         throw new Error("Method 'inferNextMessageFor()' must be implemented.");
@@ -70,8 +70,7 @@ export class BaseInferenceAdapter {
      * @param {DECompleteCharacterReference} character 
      * @param {string} system
      * @param {string|null} contextInfoBefore additional context information to provide to the agent
-     * @param {(AsyncGenerator<{name: string, message: string, id: string, conversationId: string | null, debug: boolean, rejected: boolean}, void, boolean> | Array<{name: string, message: string}>)} getHistoryForCharacter
-     * @param {"LAST_CYCLE" | "LAST_STORY_FRAGMENT" | "LAST_CYCLE_EXPANDED" | "LAST_CYCLE_EXPANDED_TWICE" | "LAST_CYCLE_EXPANDED_EXCLUDE_CHAR" | "ALL"} msgLimit what to limit the history to
+     * @param {Array<string>} messages
      * @param {string|null} contextInfoAfter additional context information to provide to the agent
      * @param {boolean} [remarkLastStoryFragmentForAnalysis] whether to mark the last message with an special token so the agent can analyze it
      * @returns {QuestionAgentGeneratorResponse}
@@ -80,8 +79,7 @@ export class BaseInferenceAdapter {
         character,
         system,
         contextInfoBefore,
-        getHistoryForCharacter,
-        msgLimit,
+        messages,
         contextInfoAfter,
         remarkLastStoryFragmentForAnalysis,
     ) {

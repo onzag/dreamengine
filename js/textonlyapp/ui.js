@@ -1,6 +1,6 @@
 import { DEngine } from "../engine/index.js";
 import readline from "readline";
-import { parseMessageInComponentsAsText } from "../engine/util/message-parse.js";
+import { getHistoryForCharacter, parseMessageInComponentsAsText } from "../engine/util/messages.js";
 
 const rl = readline.createInterface({
   input: process.stdin,
@@ -137,7 +137,8 @@ export class TextOnlyUI {
          * @type {Array<{name: string; message: string; id: string}>}
          */
         let accumulatedMessages = [];
-        const generator = this.engine.getHistoryForCharacter(
+        const generator = getHistoryForCharacter(
+            this.engine,
             obj.characters[this.username],
             {
                 // excludeFrom: [this.username],

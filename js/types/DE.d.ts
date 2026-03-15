@@ -2159,6 +2159,9 @@ declare interface DEConversationMessage {
     /**
      * Whether the message was rejected by world rules or other constraints
      * and thus not actually sent
+     * 
+     * Basically only applies to users when they have break the rules so they can see their rejected
+     * message
      */
     isRejectedMessage: boolean;
     /**
@@ -2169,9 +2172,21 @@ declare interface DEConversationMessage {
      * Whether the message is a debug message, eg. internal engine messages not meant to be seen by characters
      * or the user
      * 
-     * They can be seen if the character or user is in debug mode
+     * They can be seen if the character or user is in debug mode, they basically represent the commands
+     * eg /whocanisee etc... and other internal messages that are used for debugging purposes
      */
     isDebugMessage: boolean;
+    /**
+     * Hidden messages are messages that are basically exclusively used to be seen only by that character
+     * but not form part of the story, therefore do not account for inference ever
+     * 
+     * Hidden messages are basically used to tell user that a state has been applied to that character,
+     * eg. "you have been mind controlled" but other characters are not aware of that
+     * 
+     * This is the only way to communicate mind states to the user without other characters being aware of it,
+     * since states are by definition hidden from other characters, as they represent the character's internal monologue and private thoughts
+     */
+    isHiddenMessage: boolean;
     /**
      * The content of the message
      */
@@ -2213,7 +2228,9 @@ declare interface DEConversationMessage {
      * 
      * Summaries are available at "summaries" property on the DE object
      */
-    collectiveSummaryIds: Array<string>;
+    perspectiveSummaryIds: {
+        [characterName: string]: Array<string>;
+    }
 }
 
 /**

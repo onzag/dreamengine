@@ -3,6 +3,7 @@
  */
 
 import { DEngine, getFrozenBonds } from "../index.js";
+import { getHistoryFragmentForCharacter } from "../util/messages.js";
 
 /**
  * 
@@ -111,12 +112,15 @@ async function makeUserStoryMasterMessage(engine, message) {
         startTime: { ...engine.deObject.currentTime },
         endTime: { ...engine.deObject.currentTime },
         id: crypto.randomUUID(),
-        isCharacter: true,
+        isCharacter: false,
         isDebugMessage: false,
-        isUser: true,
+        isHiddenMessage: false,
+        isUser: false,
         isStoryMasterMessage: true,
         isRejectedMessage: false,
         canOnlyBeSeenByCharacter: engine.user.name,
+        singleSummary: null,
+        perspectiveSummaryIds: {},
     }
 
     if (!stateForUser.conversationId) {
@@ -137,8 +141,7 @@ async function makeUserStoryMasterMessage(engine, message) {
             remoteParticipants: [],
             location: stateForUser.location,
             pseudoConversation: false,
-            summary: null,
-            bondsAtStart: getFrozenBonds([engine.user.name]),
+            bondsAtStart: getFrozenBonds(engine, [engine.user.name]),
             bondsAtEnd: null,
         };
     } else {
@@ -798,52 +801,20 @@ export default async function calculateStateChange(engine, character) {
 
     // first we need to update the bonds towards the character, for that we need to get a whole extended cycle
     // gather all the other characters that talked inbetween, and update bonds for each
-    const historyGenerator = engine.getHistoryForCharacter(character, {});
+    const lastCycleMessagesInfo = await getHistoryFragmentForCharacter(engine, character, {
+        msgLimit: "LAST_CYCLE",
+        includeDebugMessages: false,
+        includeRejectedMessages: false,
+    });
 
     /**
      * @type {DECompleteCharacterReference[]}
      */
-    const allCharactersInAnalysis = [];
-
-    /**
-     * @type {Array<{name: string, message: string}>}
-     */
-    let messagesToAdd = [];
-
-    // gather messages until we reach the character's own message
-    // which we will also add
-    let generator = await historyGenerator.next(true);
-    while (!generator.done) {
-        if (!generator.value.debug && !generator.value.rejected) {
-            const shouldStopAddingMessages = generator.value.name === character.name;
-
-            messagesToAdd.push({
-                name: generator.value.name,
-                message: generator.value.message,
-            });
-
-            const characterRelevant = engine.deObject.characters[generator.value.name];
-            if (!characterRelevant) {
-                throw new Error(`Character ${generator.value.name} not found in DE object.`);
-            }
-
-            if (!allCharactersInAnalysis.find(c => c.name === characterRelevant.name)) {
-                allCharactersInAnalysis.push(characterRelevant);
-            }
-
-            if (shouldStopAddingMessages) {
-                await historyGenerator.return();
-                break;
-            }
-        }
-        generator = await historyGenerator.next(true);
-    }
-
-    // reverse to have oldest first
-    messagesToAdd = messagesToAdd.reverse();
+    const allCharactersInAnalysis = lastCycleMessagesInfo.interactedCharacters.map((c) => engine.deObject?.characters[c]).filter(c => !!c);
+    // TODO find more potential causants by hand, the ask some more
 
     // well that is weird, zero messages?
-    if (messagesToAdd.length === 0) {
+    if (lastCycleMessagesInfo.messages.length === 0) {
         console.log(`No messages from other characters to set states of ${character.name}`);
         return;
     }
@@ -853,8 +824,7 @@ export default async function calculateStateChange(engine, character) {
         character,
         engine.inferenceAdapter.buildSystemPromptForQuestioningAgent(systemPrompt, [], null),
         null,
-        messagesToAdd,
-        "ALL",
+        lastCycleMessagesInfo.messages,
         null,
     );
 
@@ -866,6 +836,7 @@ export default async function calculateStateChange(engine, character) {
     // All potential states for the character we will start to loop through
     const allPotentialStates = character.states;
     for (const [stateName, stateDescription] of Object.entries(allPotentialStates)) {
+        console.log(`Checking state ${stateName} for character ${character.name}.`);
         // check if they already have the state
         const alreadyActivatedInfo = engine.deObject.stateFor[character.name].states.find(s => s.state === stateName);
 

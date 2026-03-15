@@ -1,5 +1,6 @@
 import { deepCopy, deepCopyNoHistory, DEngine } from "../../index.js";
 import { getSurroundingCharacters } from "../../util/character-info.js";
+import { getHistoryFragmentForCharacter } from "../../util/messages.js";
 
 /**
  * @param {DEngine} engine 
@@ -55,6 +56,12 @@ export default async function testMessageFeasibilityForce(engine, character) {
         }
     ]);
 
+    const lastCycleExpanded = (await getHistoryFragmentForCharacter(engine, character, {
+        includeDebugMessages: false,
+        includeRejectedMessages: false,
+        msgLimit: "LAST_CYCLE_EXPANDED",
+    })).messages;
+
     // 1. Gather all the characters that have been succesfully forced by the user in the last story fragment
     const systemMessage = `You are an assistant and story analyst that determines if the last story fragment contains any characters that have been successfully forced to do something by ${character.name}.`
     const systemPrompt = engine.inferenceAdapter.buildSystemPromptForQuestioningAgent(systemMessage, [
@@ -63,7 +70,7 @@ export default async function testMessageFeasibilityForce(engine, character) {
         "An attempt to force does not count, only successful compliance.",
         "Consider only the last story fragment",
     ], null);
-    const generator = engine.inferenceAdapter.runQuestioningCustomAgentOn(character, systemPrompt, contextInfoSurroundingCharacters.value, engine.getHistoryForCharacter(character, {}), "LAST_CYCLE_EXPANDED", null);
+    const generator = engine.inferenceAdapter.runQuestioningCustomAgentOn(character, systemPrompt, contextInfoSurroundingCharacters.value, lastCycleExpanded, null, true);
     const ready = await generator.next();
     if (ready.value !== "ready") {
         throw new Error("Questioning agent could not be started properly.");
@@ -238,7 +245,7 @@ export default async function testMessageFeasibilityForce(engine, character) {
                 "If the answer is no, elaborate briefly on why it is not feasible.",
             ], null);
 
-            const feasibilityGenerator = engine.inferenceAdapter.runQuestioningCustomAgentOn(character, feasibilitySystemPrompt, isolatedCharacterInfo, engine.getHistoryForCharacter(character, {}), "LAST_CYCLE_EXPANDED", null);
+            const feasibilityGenerator = engine.inferenceAdapter.runQuestioningCustomAgentOn(character, feasibilitySystemPrompt, isolatedCharacterInfo, lastCycleExpanded, null, true);
             const feasibilityReady = await feasibilityGenerator.next();
             if (feasibilityReady.value !== "ready") {
                 throw new Error("Questioning agent could not be started properly for feasibility check.");

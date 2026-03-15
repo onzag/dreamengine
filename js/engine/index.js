@@ -735,10 +735,11 @@ export class DEngine {
                     isCharacter: false,
                     isDebugMessage: false,
                     isRejectedMessage: false,
+                    isHiddenMessage: false,
                     isStoryMasterMessage: true,
                     isUser: false,
                     startTime: { ...this.deObject.currentTime },
-                    collectiveSummaryIds: [],
+                    perspectiveSummaryIds: {},
                     singleSummary: null,
                 },
             ],
@@ -780,9 +781,10 @@ export class DEngine {
                 isStoryMasterMessage: true,
                 isUser: false,
                 startTime: { ...this.deObject.currentTime },
-                collectiveSummaryIds: [],
+                perspectiveSummaryIds: {},
                 singleSummary: null,
                 isRejectedMessage: false,
+                isHiddenMessage: false,
             });
         }
 
@@ -793,6 +795,7 @@ export class DEngine {
             // so that they are ready for the user's first turn, even though
             // the user has no real affecting states, they are forced upon the user
             // as information bits
+            this.informCycleState("info", "Pre-calculating initial states for your character and the world...");
             await calculateStateChange(this, this.userCharacter);
         }
     }
@@ -2369,232 +2372,8 @@ export class DEngine {
         return returnInformation;
     }
 
-    /**
-     * @param {DETimeDescription | null} time
-     * @param {boolean} includeNowLabel
-     */
-    makeTimestamp(time, includeNowLabel = true) {
-        if (!time) {
-            return "Now";
-        }
-        if (includeNowLabel && this.deObject?.currentTime.time === time.time) {
-            return "Now";
-        }
-        // We want something like; Monday, June 5th, 2023 at 3:45 PM
-        // we expect utc time in milliseconds
-        // even in the formatting
-        const date = new Date(time.time);
-        // so we want to ensure offset 0
-        return date.toLocaleString('en-US', {
-            weekday: 'long',
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-            hour: 'numeric',
-            minute: 'numeric',
-            hour12: true,
-            timeZone: 'UTC',
-        });
-    }
-
     async requestTalkingTurnFromUser() {
         this.talkingTurnRequested = true;
-    }
-
-    /**
-     * Returns the whole history for the character up to the specified depth, if the depth
-     * is 0, returns all history.
-     * 
-     * TODO something for optimizing long histories, like summarization of non-pseudo conversations
-     * when it starts to get too long, even sumarization of many conversations into a single summary message
-     * this will ensure the LLM can handle the context window properly without losing important information
-     * 
-     * @param {DECompleteCharacterReference} character
-     * @param {{ excludeFrom?: string[] | null, includeDebugMessages?: boolean | null, includeRejectedMessages?: boolean | null}} options
-     * @return {AsyncGenerator<{name: string, message: string, id: string, conversationId: string | null, debug: boolean, rejected: boolean}, void, boolean>}
-     */
-    async *getHistoryForCharacter(character, options) {
-        if (!this.deObject) {
-            throw new Error("DEngine not initialized");
-        } else if (!this.deObject.stateFor[character.name]) {
-            throw new Error(`Character state for ${character.name} not found.`);
-        } else if (!this.pseudoConversationSummaryGenerator) {
-            // TODO reenable this error once we have a proper LLM integration
-            // throw new Error("Pseudo conversation summary generator not initialized.");
-        }
-
-        const characterState = this.deObject.stateFor[character.name];
-        // newest first
-        const characterStateWithCurrent = [characterState, ...(characterState.history.reverse())];
-
-        let currentConversationId = characterState.conversationId;
-
-        let statesAccumulated = new Set();
-        /**
-         * @type {string | null}
-         */
-        let statesAccumulatedAtLocation = null;
-        /**
-         * @type {DETimeDescription | null}
-         */
-        let statesAccumulatedFromTime = null;
-        let lastStateObjectHandled = null;
-        const consumedConversationIds = new Set();
-
-        /**
-         * @param {DETimeDescription} fromTime
-         */
-        const consumeAccumulatedStatesAndLocations = (fromTime) => {
-            // because we are looping from newest to oldest, lastConversationStartTime is actually before
-            // thisConversationEndTime
-            let message = `From ${this.makeTimestamp(fromTime)} to ${this.makeTimestamp(statesAccumulatedFromTime)}, ` + character.name;
-            if (statesAccumulated.size > 0) {
-                message += ` finds ${this.deObject?.functions.format_reflexive(this.deObject, character, character.name)} in the following states: `;
-                let statesList = "";
-                statesAccumulated.forEach(s => {
-                    if (statesList.length > 0) {
-                        statesList += ", ";
-                    }
-                    statesList += s.toLowerCase();
-                });
-                message += statesList;
-                message += ` while at location: "${statesAccumulatedAtLocation || "unknown location"}".`;
-            } else {
-                message += ` is at location: "${statesAccumulatedAtLocation || "unknown location"}".`;
-            }
-
-            statesAccumulated = new Set();
-            statesAccumulatedAtLocation = null;
-            statesAccumulatedFromTime = null;
-
-            return {
-                name: "Story Master",
-                message: message,
-                id: `story-master-${fromTime.time}`,
-                conversationId: null,
-                debug: false,
-                rejected: false,
-            };
-        };
-
-        for (const state of characterStateWithCurrent) {
-            if (state.conversationId && !consumedConversationIds.has(state.conversationId)) {
-                consumedConversationIds.add(state.conversationId);
-                const currentConversationObject = this.deObject.conversations[state.conversationId];
-
-                if (!currentConversationId) {
-                    // time skipped and now we are into this conversation
-                    // calculate time skipped, and specify in which state the character was
-                    // maybe they were sleeping, eating, working, etc
-                    // who knows what happened
-                    const keepgoing = yield consumeAccumulatedStatesAndLocations(state.time);
-
-                    if (!keepgoing) {
-                        return;
-                    }
-                }
-
-                // process the conversation messages
-                const conversationMessages = currentConversationObject.messages.filter(msg => (options.includeRejectedMessages || !msg.isRejectedMessage) && (options.includeDebugMessages || !msg.isDebugMessage) &&
-                    (!msg.canOnlyBeSeenByCharacter || msg.canOnlyBeSeenByCharacter === character.name));
-
-                const conversationLocation = currentConversationObject.location || "an unknown location";
-                const conversationStartTime = currentConversationObject.startTime;
-                const firstMessageIsStoryMaster = conversationMessages.length > 0 && conversationMessages[0].sender === "Story Master";
-
-                if (currentConversationObject.pseudoConversationSummary || currentConversationObject.pseudoConversation) {
-                    if (!currentConversationObject.pseudoConversationSummary) {
-                        // generate summary, it doesn't exist yet, but we need to have a conversation for what this
-                        // character has been through and been doing
-                        // @ts-ignore
-                        currentConversationObject.pseudoConversationSummary = await this.pseudoConversationSummaryGenerator(
-                            this.deObject,
-                            // @ts-expect-error
-                            currentConversationObject.participants.map((v) => this.deObject?.characters[v]),
-                            currentConversationObject,
-                        );
-                    }
-                    const participantsExcludingCharacter = currentConversationObject.participants.filter(p => p !== character.name);
-                    const timeMark = this.makeTimestamp(conversationStartTime);
-                    const withOrAlone = participantsExcludingCharacter.length === 0 ? "on their own" : "with " + this.deObject.functions.format_and(this.deObject, null, participantsExcludingCharacter);
-
-                    const expectedId = `story-master-${state.conversationId}-summary`;
-                    const keepgoing = yield {
-                        name: "Story Master",
-                        message: (timeMark === "Now" ? "Right Now" : "At " + timeMark) + ", " + character.name + " is at " + conversationLocation + " " + withOrAlone + ". The interaction happened as follows:\n\n" + currentConversationObject.pseudoConversationSummary,
-                        id: expectedId,
-                        conversationId: state.conversationId,
-                        debug: false,
-                        rejected: false,
-                    };
-                    if (!keepgoing) {
-                        return;
-                    }
-                } else {
-                    for (const message of conversationMessages.reverse()) {
-                        if (options.excludeFrom && options.excludeFrom.includes(message.sender)) {
-                            continue;
-                        }
-                        const keepgoing = yield ({
-                            name: message.sender,
-                            message: message.content,
-                            id: message.id,
-                            conversationId: state.conversationId,
-                            debug: message.isDebugMessage,
-                            rejected: message.isRejectedMessage,
-                        });
-                        if (!keepgoing) {
-                            return;
-                        }
-                    }
-
-                    if (!firstMessageIsStoryMaster) {
-                        const participantsExcludingCharacter = currentConversationObject.participants.filter(p => p !== character.name);
-                        const timeMark = this.makeTimestamp(conversationStartTime);
-                        const timeMarkDetailed = timeMark === "Now" ? "right now" : "at " + timeMark;
-                        const withOrAlone = participantsExcludingCharacter.length === 0 ? "on their own" : "with " + this.deObject.functions.format_and(this.deObject, null, participantsExcludingCharacter);
-                        const keepgoing = yield {
-                            name: "Story Master",
-                            message: "The following interaction took place " + timeMarkDetailed + ", " + character.name + " is at " + conversationLocation + withOrAlone + ".",
-                            id: `story-master-${state.conversationId}-interaction-info`,
-                            conversationId: state.conversationId,
-                            debug: false,
-                            rejected: false,
-                        };
-                        if (!keepgoing) {
-                            return;
-                        }
-                    }
-                }
-
-                currentConversationId = state.conversationId;
-            } else if (!state.conversationId) {
-                currentConversationId = null;
-                if (statesAccumulatedAtLocation && statesAccumulatedAtLocation !== state.location) {
-                    // location changed, consume accumulated states
-                    const keepgoing = yield consumeAccumulatedStatesAndLocations(state.time);
-                    if (!keepgoing) {
-                        return;
-                    }
-                } else {
-                    statesAccumulatedAtLocation = state.location;
-                    statesAccumulatedFromTime = state.time;
-                }
-                state.states.map(s => s.state).forEach(s => {
-                    statesAccumulated.add(s);
-                })
-                // time skip until next conversation found
-            }
-            lastStateObjectHandled = state;
-        }
-
-        // consume any remaining accumulated states
-        if ((statesAccumulated.size > 0 || statesAccumulatedAtLocation) && lastStateObjectHandled) {
-            const keepgoing = yield consumeAccumulatedStatesAndLocations(lastStateObjectHandled.time);
-            if (!keepgoing) {
-                return;
-            }
-        }
     }
 
     /**
@@ -2747,11 +2526,12 @@ export class DEngine {
                     id: crypto.randomUUID(),
                     isCharacter: true,
                     isDebugMessage: false,
+                    isHiddenMessage: false,
                     isUser: true,
                     isStoryMasterMessage: false,
                     isRejectedMessage: makeRejected,
                     canOnlyBeSeenByCharacter: null,
-                    collectiveSummaryIds: [],
+                    perspectiveSummaryIds: {},
                     // @ts-ignore
                     singleSummary: userMessage.length < 50 ? userMessage : null,
                 }
@@ -2812,6 +2592,7 @@ export class DEngine {
                     id: crypto.randomUUID(),
                     isCharacter: false,
                     isDebugMessage: false,
+                    isHiddenMessage: false,
                     isUser: false,
                     isStoryMasterMessage: true,
                     // make it rejected so that characters don't pick it up when they check conversations
@@ -2952,10 +2733,13 @@ export class DEngine {
             id: crypto.randomUUID(),
             isCharacter: false,
             isDebugMessage: true,
+            isHiddenMessage: false,
             isUser: false,
             isStoryMasterMessage: true,
             isRejectedMessage: false,
             canOnlyBeSeenByCharacter: null,
+            perspectiveSummaryIds: {},
+            singleSummary: null,
         };
 
         let userConversationId = this.deObject.stateFor[this.user.name].conversationId;

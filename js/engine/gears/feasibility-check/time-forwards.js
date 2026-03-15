@@ -1,4 +1,5 @@
 import { deepCopyNoHistory, DEngine } from "../../index.js";
+import { getHistoryFragmentForCharacter } from "../../util/messages.js";
 
 /**
  * 
@@ -13,6 +14,12 @@ export default async function timeForwardsUsingLastMessage(engine, character) {
         throw new Error("Inference adapter not initialized");
     }
 
+    const lastStoryFragment = (await getHistoryFragmentForCharacter(engine, character, {
+        includeDebugMessages: false,
+        includeRejectedMessages: false,
+        msgLimit: "LAST_STORY_FRAGMENT_FROM_CHAR",
+    })).messages;
+
     const systemMessage = `You are an assistant and story analyst that helps determine how much time has passed in a story based the last story fragment.`;
     const systemPrompt = engine.inferenceAdapter.buildSystemPromptForQuestioningAgent(systemMessage, [
         "You must respond in the format, 'Time Passed: X', where X is the amount of time that has passed (e.g., '8 seconds', '5 minutes', '2 hours', '3 days', '1 week').",
@@ -20,7 +27,7 @@ export default async function timeForwardsUsingLastMessage(engine, character) {
         "Vary your estimates naturally - do not default to 1 of any unit. Consider the actual duration implied by the actions described, don't be afraid to estimate or guess if it is unclear and give variety in your responses.",
         "If the story fragment does not provide enough information to determine the time passed, give a rough estimate regardless.",
     ], null);
-    const timePassedGenerator = engine.inferenceAdapter.runQuestioningCustomAgentOn(character, systemPrompt, null, engine.getHistoryForCharacter(character, {}), "LAST_STORY_FRAGMENT", null, true);
+    const timePassedGenerator = engine.inferenceAdapter.runQuestioningCustomAgentOn(character, systemPrompt, null, lastStoryFragment, null, true);
 
     const timePassedResponse = await timePassedGenerator.next();
     if (timePassedResponse.done) {

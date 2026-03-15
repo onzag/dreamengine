@@ -1,5 +1,6 @@
 import { deepCopy, DEngine } from "../../index.js";
 import { getBeingCarriedByCharacter, getCharacterExactLocation } from "../../util/character-info.js";
+import { getHistoryForCharacter, getHistoryFragmentForCharacter } from "../../util/messages.js";
 import { checkItemIsOneOfAKindAtLocation, getCharacterCarryingCapacity, getCharacterVolume, getCharacterWeight, getItemExcessElements, getItemVolume, getItemWeight, getWearableFitment, locationPathToMessage, locationPathToMessageWithoutItemName, resolvePath, utilItemCount } from "../../util/weight-and-volume.js";
 
 // TODO repair locations not here, but somewhere during creating the world
@@ -128,7 +129,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
      */
     let itemsInteractedWith = [];
 
-    const lastMessageManual = engine.getHistoryForCharacter(character, { includeDebugMessages: false, includeRejectedMessages: false });
+    const lastMessageManual = getHistoryForCharacter(engine, character, { includeDebugMessages: false, includeRejectedMessages: false });
     const lastMessage = (await lastMessageManual.next(true)).value;
     let lastMessageLowerCase = "";
     if (lastMessage && lastMessage.message) {
@@ -152,6 +153,12 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
 
     console.log("Pre check for item interactions based on keyword matching, items potentially interacted with: ", itemsInteractedWith);
 
+    const lastCycleExpanded = (await getHistoryFragmentForCharacter(engine, character, {
+        includeDebugMessages: false,
+        includeRejectedMessages: false,
+        msgLimit: "LAST_CYCLE",
+    })).messages;
+
     if (itemsAtLocation.length) {
         // now we want to know which items were interacted with in the last 
         // message, so we will ask the questioning agent to analyze the last story fragment and answer which items were interacted with, if any, based on the definition of interaction we give them, and only considering items that are at the location of the character state that sent the last story fragment
@@ -170,7 +177,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
             character,
             systemPromptItemsInteracted,
             null,
-            engine.getHistoryForCharacter(character, {}), "LAST_CYCLE_EXPANDED",
+            lastCycleExpanded,
             null,
             true,
         );
@@ -273,7 +280,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
         character,
         systemPromptCharactersInteracted,
         null,
-        engine.getHistoryForCharacter(character, {}), "LAST_CYCLE_EXPANDED",
+        lastCycleExpanded,
         null,
         true, // remark last story fragment for analysis, so the agent can analyze it to figure out indirect mentions and descriptions
     );
@@ -341,8 +348,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
         character,
         systemPrompt,
         null,
-        engine.getHistoryForCharacter(character, {}),
-        "LAST_CYCLE_EXPANDED",
+        lastCycleExpanded,
         null,
         true, // remark last story fragment for analysis, so the agent can analyze it to figure out indirect mentions and descriptions
     );
@@ -2714,7 +2720,7 @@ async function cleanDirtyItemTree(
                     const totalBrokenReason = fallVariations[Math.floor(Math.random() * fallVariations.length)];
                     addedMessagesForStoryMaster.push(totalBrokenReason);
                 }
-                
+
 
                 await updateItemTitleAndDescription(
                     engine,

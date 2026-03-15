@@ -15,7 +15,7 @@ engine.exports = {
                 DE,
                 "{{user}} is a visitor to the Lunar Station, eager to explore this small outpost in space, yet {{format_pronoun user}} didn't expect to find someone else here, but it so happens that {{format_and (all_world_characters_but_user)}} {{format_verb_to_be (all_world_characters_but_user)}} also visiting the station at this time, now they face each other in the common area near the airlock"
             ),
-            charactersStart: true,
+            charactersStart: false,
             startingEngagedCharacters: ["Dema"],
         });
 
