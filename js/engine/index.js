@@ -785,6 +785,16 @@ export class DEngine {
                 isRejectedMessage: false,
             });
         }
+
+        if (sceneObject.charactersStart) {
+            // TODO
+        } else {
+            // otherwise the user starts, let's precalculate these states and bonds
+            // so that they are ready for the user's first turn, even though
+            // the user has no real affecting states, they are forced upon the user
+            // as information bits
+            await calculateStateChange(this, this.userCharacter);
+        }
     }
 
     /**
@@ -837,16 +847,6 @@ export class DEngine {
             }
         }
         return slots;
-    }
-
-    async prepareNextCycle() {
-        if (!this.deObject) {
-            throw new Error("DEngine not initialized");
-        } else if (!this.deObject.world.selectedScene) {
-            throw new Error("DEngine world scene not started");
-        } else if (!this.inferenceAdapter) {
-            throw new Error("Inference adapter not set");
-        }
     }
 
     async fixPotentiallyBrokenItemStates() {
@@ -2690,8 +2690,6 @@ export class DEngine {
             return;
         }
 
-        this.prepareNextCycle();
-
         if (!this.userCharacter) {
             throw new Error("DEngine has no user character defined");
         } else if (!this.deObject) {
@@ -2981,7 +2979,6 @@ export class DEngine {
                 remoteParticipants: [],
                 location: userCharacterState.location,
                 pseudoConversation: false,
-                summary: null,
                 bondsAtStart: getFrozenBonds(this, [this.user.name]),
                 bondsAtEnd: null,
             };

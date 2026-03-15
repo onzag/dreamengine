@@ -57,7 +57,7 @@ engine.exports = {
             fullyProtectingCarriedItems: [],
             partiallyProtectingCarriedItems: [],
             fullyProtectedTemplate: (DE, info) => {
-                if (info.char.properties["IS_ROBOT"]) {
+                if (info.char?.properties["IS_ROBOT"]) {
                     return `"${info.char.name}" is a robot and is inpervious to the vaccuum of space`;
                 }
                 return "";

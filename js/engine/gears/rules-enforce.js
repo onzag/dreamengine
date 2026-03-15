@@ -277,7 +277,9 @@ export default async function testWorldRulesOn(engine, character) {
 
     const otherRulesProcessed = (await Promise.all(Object.values(mergedRules).map(async (rule, index) => {
         // @ts-ignore
-        return await rule.rule.execute(engine.deObject, characterObj);
+        return typeof rule.rule === "string" ? rule.rule : await rule.rule(engine.deObject, {
+            char: character,
+        });
     }))).filter((v) => v !== null && v !== undefined && v !== "");
 
     const generator = engine.inferenceAdapter.runQuestioningCustomAgentOn(character, systemPrompt, null, engine.getHistoryForCharacter(character, {}), "LAST_STORY_FRAGMENT", null, true);

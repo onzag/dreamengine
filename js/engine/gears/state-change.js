@@ -600,8 +600,13 @@ async function determineCausants(
     if (!activationCondition.determineCausants) {
         return null;
     }
+    
     // @ts-ignore
-    const executed = (await activationCondition.determineCausants.execute(engine.deObject, character, undefined, undefined, undefined, potentialCharacterCausants)).trim();
+    const executed = typeof activationCondition.determineCausants === "string" ? activationCondition.determineCausants :
+        (await activationCondition.determineCausants(engine.deObject, {
+            char: character,
+            potentialCausants: potentialCharacterCausants,
+        })).trim();
     if (!executed) {
         return null;
     }
