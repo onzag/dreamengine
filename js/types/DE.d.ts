@@ -86,7 +86,7 @@ declare interface DEMinimalCharacterReference {
     /**
      * A power scale string that represents the overall power level of the character
      */
-    powerScale: "insect" | "critter" | "human" | "apex" | "street_level" | "block_level" | "city_level" | "country_level" | "continental" | "planetary" | "stellar" | "galactic" | "universal" | "multiversal" | "limitless";
+    tier: "insect" | "critter" | "human" | "apex" | "street_level" | "block_level" | "city_level" | "country_level" | "continental" | "planetary" | "stellar" | "galactic" | "universal" | "multiversal" | "limitless";
     /**
      * The numeric value on the power scale compared to others in the same power scale
      * A number from 0 to 100, where 0 it means barely makes it and 100 means in peak condition
@@ -100,7 +100,7 @@ declare interface DEMinimalCharacterReference {
      * 
      * TODO implement power scales in interactions
      */
-    powerScaleValue: number;
+    tierValue: number;
     /**
      * A 0 to 1 number that represents how fast the character can grow on their power scale, this is used to determine how much they grow after certain interactions or events, higher means faster growth
      * 0.25 is recommended for a standard human character
@@ -400,6 +400,11 @@ declare interface DEActionPromptInjectionWithIntensity extends DEActionPromptInj
 
 declare interface DECharacterStateDefinition {
     /**
+     * Internal utility to save memory when saving states
+     * the state must be guaranteed to be recoverable from the script
+     */
+    __nonserialize?: true,
+    /**
      * How dominant this state is compared to other states
      * used to determine which state takes precedence in case of conflicts
      */
@@ -449,6 +454,13 @@ declare interface DECharacterStateDefinition {
      */
     generalCharacterDescriptionInjection?: DEStringTemplate;
     /**
+     * Make sure it is one line only, as this gets injected into the short
+     * description of the character that represents the external perception of the character
+     * 
+     * TODO
+     */
+    generalCharacterExternalDescriptionInjection?: DEStringTemplate;
+    /**
      * Very strong, used for instructions that the character must follow
      * make sure that it is not kept every inference cycle unless intended
      * as the character will be forced to follow it no matter what
@@ -490,6 +502,13 @@ declare interface DECharacterStateDefinition {
      * get applied at system prompt level when relieving the state
      */
     relievingGeneralCharacterDescriptionInjection?: DEStringTemplate;
+    /**
+     * Make sure it is one line only, as this gets injected into the short
+     * description of the character that represents the external perception of the character when relieving the state
+     * 
+     * TODO
+     */
+    relievingGeneralCharacterExternalDescriptionInjection?: DEStringTemplate;
     /**
      * Very strong, used for instructions that the character must follow
      * make sure that it is not kept every inference cycle unless intended
@@ -1283,7 +1302,7 @@ declare interface DEStateCause {
     description: string;
 }
 
-declare interface DEStateDescription {
+declare interface DEApplyingState {
     state: string;
     /**
      * Whether the state is currently in a relieving state
@@ -1590,11 +1609,11 @@ declare interface DESeenItem {
     wornByCharacter: string | null;
 }
 
-declare interface StateForDescription {
+declare interface DEStateForCharacter {
     id: string;
     location: string;
     locationSlot: string;
-    states: Array<DEStateDescription>;
+    states: Array<DEApplyingState>;
     type: "INTERACTING" | "BACKGROUND";
     time: DETimeDescription;
     conversationId: string | null;
@@ -1652,8 +1671,8 @@ declare interface DEItemInteraction {
     appliedStatesEverySurroundingCharacter: Array<string>;
 }
 
-declare interface DEStateForDescriptionWithHistory extends StateForDescription {
-    history: Array<StateForDescription>;
+declare interface DEStateForCharacterWithHistory extends DEStateForCharacter {
+    history: Array<DEStateForCharacter>;
 }
 
 declare interface DELocationSlot {
@@ -2465,7 +2484,7 @@ declare interface DEObject {
         bonds: Record<string, DEBondDescription>;
     };
     worldNames: DENamePool;
-    stateFor: Record<string, DEStateForDescriptionWithHistory>;
+    stateFor: Record<string, DEStateForCharacterWithHistory>;
     world: DEWorld;
     /**
      * All the conversations that have happened in the world
@@ -2524,7 +2543,6 @@ declare type DE = DEObject;
 declare interface DEScript {
     type: "world" | "characters" | "world-mechanic" | "character-mechanic" | "misc";
     description?: string;
-    requires?: Array<{id: string, namespace: string}>;
     /**
      * Exposes properties that serve as configuration, these are set by the UI
      * and are meant to be used by the UI

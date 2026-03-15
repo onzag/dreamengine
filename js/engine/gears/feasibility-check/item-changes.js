@@ -1853,7 +1853,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
 /**
  * 
  * @param {DEngine} engine
- * @param {DEStateForDescriptionWithHistory} charState
+ * @param {DEStateForCharacterWithHistory} charState
  * @param {string[]} allCharactersAtLocation
  * @param {string[]} charactersToQuestion 
  * @param {DELocationDefinition} location 
@@ -1992,7 +1992,7 @@ function convertItemAmountToNumericValue(text, allPotentialItems) {
 /**
  * @param {DEngine} engine
  * @param {string} characterName
- * @param {DEStateForDescriptionWithHistory} charState
+ * @param {DEStateForCharacterWithHistory} charState
  * @param {string} item 
  * @param {Array<Array<Array<string | number>>>} fromPotentialLocationPaths 
  * @param {Array<Array<string | number>>} toPotentialLocationPaths 
@@ -2273,7 +2273,7 @@ function moveItems(
 /**
  * @param {DEngine} engine
  * @param {string} characterName
- * @param {DEStateForDescriptionWithHistory} charState
+ * @param {DEStateForCharacterWithHistory} charState
  * @param {Array<Array<string | number>>} toPotentialLocationPaths 
  * @param {"containingCharacters" | "ontopCharacters" | "carryingCharactersDirectly"} finalPath
  * @param {string[]} addedMessagesForStoryMaster
@@ -2401,7 +2401,7 @@ function moveCharacters(
 /**
  * @param {DEngine} engine
  * @param {string} characterName
- * @param {DEStateForDescriptionWithHistory} charState
+ * @param {DEStateForCharacterWithHistory} charState
  * @param {string} item 
  * @param {Array<Array<Array<string | number>>>} fromPotentialLocationPaths 
  * @param {Array<Array<Array<string | number>>>} toPotentialLocationPaths 
@@ -2450,7 +2450,7 @@ function moveItemsPickClosestToCharacter(
  * 
  * @param {DEngine} engine 
  * @param {string} characterName 
- * @param {DEStateForDescriptionWithHistory} charState 
+ * @param {DEStateForCharacterWithHistory} charState 
  * @param {Array<Array<Array<string | number>>>} toPotentialLocationPaths 
  * @param {"containingCharacters" | "ontopCharacters" | "carryingCharactersDirectly"} finalPath
  * @param {Array<string>} addedMessagesForStoryMaster 
@@ -3592,7 +3592,7 @@ async function updateItemTitleAndDescription(engine, item, reason) {
  * 
  * @param {DEngine} engine 
  * @param {string} characterName 
- * @param {DEStateForDescriptionWithHistory} charState 
+ * @param {DEStateForCharacterWithHistory} charState 
  * @param {string[]} addedMessagesForStoryMaster 
  */
 function checkDirectlyCarriedCharacters(engine, characterName, charState, addedMessagesForStoryMaster) {

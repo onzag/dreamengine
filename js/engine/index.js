@@ -23,6 +23,21 @@ const INVALID_NAMES = ["system", "assistant", "user", "everyone", "nobody",
     "everyone else", "everybody else", "anyone else", "anybody else",
     "somebody else", "somebodyelse", "nobody else", "nobody", "story master", "storymaster", "story", "master"];
 
+const ROOT_SKIP_KEYS = new Set(['utils', 'functions']);
+
+/**
+ * @param {DEObject} root
+ * @returns {(this: any, key: string, value: any) => any}
+ */
+function serializationReplacer(root) {
+    return function (key, value) {
+        if (this === root && ROOT_SKIP_KEYS.has(key)) return undefined;
+        if (typeof value === 'function') return undefined;
+        if (value !== null && typeof value === 'object' && value.__nonserialize === true) return undefined;
+        return value;
+    };
+}
+
 function setupFunctions() {
     const finalObject = {};
     for (const [signature, details, returnDesc, fn] of ALL_FUNCTIONS_WITH_SPECIALS) {
@@ -132,8 +147,8 @@ function createCharacterFromUser(user) {
         heroism: 0,
         stealth: user.stealth,
         perception: user.perception,
-        powerScale: user.powerScale,
-        powerScaleValue: user.powerScaleValue,
+        tier: user.tier,
+        tierValue: user.tierValue,
         powerGrowthRate: user.powerGrowthRate,
     }
 }
@@ -277,11 +292,7 @@ export class DEngine {
             throw new Error("DEngine not initialized");
         }
 
-        // this should work fine, because all functions will be stripped out automatically
-        // it should be possible to regenerate them on load
-        // as the script that generated them should be in the object
-        // as a string, and we use eval anyway to create the functions from that string
-        return JSON.stringify(this.deObject);
+        return JSON.stringify(this.deObject, serializationReplacer(this.deObject));
     }
     /**
      * @param {DEMinimalCharacterReference} user

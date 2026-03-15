@@ -1,3 +1,4 @@
+import { getSurroundingCharacters, getPowerLevelFromCharacter } from "../engine/util/character-info.js";
 import { generateIntSeedFromString, weightedRandomByLikelihood } from "../util/random.js";
 
 /**
@@ -57,6 +58,42 @@ export const character = [
         "Boolean indicating if the character has no sex",
         "true or false",
         (DE, character) => character.sex.toLowerCase() === "none",
+    ],
+    [
+        "char_age -> number",
+        "The age of the character in years",
+        "eg. 25",
+        (DE, character) => character.ageYears,
+    ],
+    [
+        "char_weight -> number",
+        "The weight of the character in kg",
+        "eg. 70",
+        (DE, character) => character.weightKg,
+    ],
+    [
+        "char_height -> number",
+        "The height of the character in cm",
+        "eg. 170",
+        (DE, character) => character.heightCm,
+    ],
+    [
+        "char_power_level -> number",
+        "The power level of the character, a number that can be used to compare the strength of characters in a very general way",
+        "eg. 50",
+        (DE, character) => getPowerLevelFromCharacter(character),
+    ],
+    [
+        "char_tier -> string",
+        "The tier of the character, representing their overall power level",
+        "eg. human",
+        (DE, character) => character.tier,
+    ],
+    [
+        "char_tier_value -> number",
+        "The numeric value of the character's tier, representing their power level within the tier",
+        "eg. 85",
+        (DE, character) => character.tierValue,
     ],
 ];
 
@@ -182,8 +219,9 @@ function getPronounHelper(DE, character, listOrCharacter, they, he, she, they_si
  */
 export const specials = [
     [
+        // TODO implement this
         "potential_causant -> string",
-        "Only available at potential_causant_negative_prompt and potential_causant_positive_prompt, the name of the potential causant for a possible state activation, basically all the present characters",
+        "Only available at potentialCausantNegativeDescription and potentialCausantPositiveDescription, the name of the potential causant for a possible state activation, basically all the present characters",
         "eg. Aria, Thalon, Mira",
         (DE, character, potentialCausant) => potentialCausant,
     ],
@@ -226,7 +264,7 @@ function getCausantsHelper(DE, character, stateName) {
     const characterHistoryAndCurrent = [...DE.stateFor[character.name].history, DE.stateFor[character.name]];
 
     /**
-     * @type {StateForDescription | null}
+     * @type {DEStateForCharacter | null}
      */
     let lastEntryWithActivation = null;
     // loop in reverse to find the last activation of the state
@@ -445,6 +483,33 @@ export const utils = [
         }
     ],
     [
+        "get_power_level character:string -> number",
+        "Get the power level of the specified character, a number that can be used to compare the strength of characters in a very general way",
+        "eg. 50",
+        (DE, character, characterQuestioned) => {
+            const charRef = DE.characters[characterQuestioned];
+            return getPowerLevelFromCharacter(charRef);
+        }
+    ],
+    [
+        "get_tier character:string -> string",
+        "Get the tier of the specified character, representing their overall power level",
+        "eg. human",
+        (DE, character, characterQuestioned) => {
+            const charRef = DE.characters[characterQuestioned];
+            return charRef.tier;
+        }
+    ],
+    [
+        "get_tier_value character:string -> number",
+        "Get the numeric value of the specified character's tier, representing their power level within the tier",
+        "eg. 85",
+        (DE, character, characterQuestioned) => {
+            const charRef = DE.characters[characterQuestioned];
+            return charRef.tierValue;
+        }
+    ],
+    [
         "is_dead character:string -> boolean",
         "Boolean indicating if the character is dead",
         "true or false",
@@ -641,9 +706,19 @@ export const utils = [
         "String indicating a location where another character should be at according to the character's knowledge",
         "true or false",
         (DE, character, characterQuestioned) => {
+            // @ts-ignore
+            const surroundingCharacters = getSurroundingCharacters({deObject: DE }, character.name);
+
+            if (surroundingCharacters.nonStrangers.includes(characterQuestioned)) {
+                // if the character questioned is a non stranger, we can be sure they are at the same location
+                return DE.stateFor[character.name].location;
+            }
+
             const charHistoryAndCurrent = [...DE.stateFor[character.name].history, DE.stateFor[character.name]];
             for (let i = charHistoryAndCurrent.length - 1; i >= 0; i--) {
                 const entry = charHistoryAndCurrent[i];
+                
+                // TODO fix these
                 if (entry.surroundingNonStrangers.includes(characterQuestioned)) {
                     return entry.location;
                 }
@@ -662,6 +737,8 @@ export const utils = [
             let foundAtIndex = -1;
             for (let i = charHistoryAndCurrent.length - 1; i >= 0; i--) {
                 const entry = charHistoryAndCurrent[i];
+
+                // TODO fix these
                 if (entry.surroundingNonStrangers.includes(characterQuestioned)) {
                     shouldBeAt = entry.location;
                     foundAtIndex = i;

@@ -193,7 +193,10 @@ async function onStateTriggeredOnCharacter(engine, character, stateName) {
     // if the new state triggered is from the user, make a message about it
     if (engine.user && engine.user.name === character.name) {
         // @ts-ignore
-        let stateDescriptionText = await characterStateDescription.general.execute(engine.deObject, character, undefined, characterStateInfo.causants);
+        let stateDescriptionText = typeof characterStateDescription.general === "string" ? characterStateDescription.general : await characterStateDescription.general(engine.deObject, {
+            char: character,
+            causants: characterStateInfo.causants || undefined,
+        });
         if (!stateDescriptionText.endsWith(".")) {
             stateDescriptionText += ".";
         }
@@ -216,7 +219,7 @@ async function onStateTriggeredOnCharacter(engine, character, stateName) {
                 // otherwise, activate it
 
                 /**
-                 * @type {DEStateDescription}
+                 * @type {DEApplyingState}
                  */
                 const state = {
                     causants: characterStateInfo.causants,
@@ -274,8 +277,10 @@ async function onStateTriggeredOnCharacter(engine, character, stateName) {
     }
 
     // DETERMINE if we activated any state with a dead-end trigger
-    // @ts-ignore
-    const deadEndPotential = (await characterStateDescription.triggersDeadEnd?.execute(engine.deObject, character, undefined, undefined, undefined, undefined))?.trim();
+    const deadEndPotential = !characterStateDescription.triggersDeadEnd ? "" : (typeof characterStateDescription.triggersDeadEnd === "string" ? characterStateDescription.triggersDeadEnd :
+        (await characterStateDescription.triggersDeadEnd(engine.deObject, {
+            char: character,
+        })).trim());
     if (deadEndPotential) {
         console.log(`State ${stateName} on character ${character.name} triggers dead-end, the character will now be removed from the story.`);
         engine.deObject.stateFor[character.name].deadEnded = true;
@@ -349,7 +354,7 @@ async function onStateRemovedOnCharacter(engine, character, stateName) {
                 console.log(`State ${triggeredState} already active on character ${character.name}, cannot trigger.`);
             } else {
                 /**
-                 * @type {DEStateDescription}
+                 * @type {DEApplyingState}
                  */
                 const state = {
                     causants: characterStateInfo.causants,
@@ -442,7 +447,10 @@ async function onStateRelievedOnCharacter(engine, character, stateName) {
 
         if (characterStateDescription.relieving && stateDescriptionText) {
             // @ts-ignore
-            stateDescriptionText += (await characterStateDescription.relieving.execute(engine.deObject, character, undefined, characterStateInfo.causants)).trim();
+            stateDescriptionText += typeof characterStateDescription.relieving === "string" ? characterStateDescription.relieving : (await characterStateDescription.relieving(engine.deObject, {
+                char: character,
+                causants: characterStateInfo.causants || undefined,
+            })).trim();
             if (!stateDescriptionText.endsWith(".")) {
                 stateDescriptionText += ".";
             }
@@ -465,7 +473,7 @@ async function onStateRelievedOnCharacter(engine, character, stateName) {
                 console.log(`State ${triggeredState} already active on character ${character.name}, cannot trigger.`);
             } else {
                 /**
-                 * @type {DEStateDescription}
+                 * @type {DEApplyingState}
                  */
                 const state = {
                     causants: characterStateInfo.causants,
@@ -640,8 +648,10 @@ async function determineCausants(
         }) : null;
     }
 
-    // @ts-ignore
-    const trail = ((await activationCondition.determineCausantsAnswerTrail?.execute(engine.deObject, character, undefined, undefined, undefined, potentialCharacterCausants)) || "").trim();
+    const trail = !activationCondition.determineCausantsAnswerTrail ? "" : (typeof activationCondition.determineCausantsAnswerTrail === "string" ? activationCondition.determineCausantsAnswerTrail : (await activationCondition.determineCausantsAnswerTrail(engine.deObject, {
+        char: character,
+        potentialCausants: potentialCharacterCausants,
+    })) || "").trim();
     const grammarLimitation = activationCondition.determineCausantsAnswerForceGrammarTo || "LIST_OF_ANY_CAUSANTS";
 
     let grammar = "root ::= causant (\",\" causant)* \" \" \".\";\ncausant ::= OBJECT_CAUSANT | CHARACTER_CAUSANT;\nOBJECT_CAUSANT ::= [a-zA-Z0-9 _-]+;\nCHARACTER_CAUSANT ::= [a-zA-Z0-9 _-]+;";
@@ -864,27 +874,31 @@ export default async function calculateStateChange(engine, character) {
                     }
 
                     let willExecute = false;
-                    // @ts-ignore
-                    const result = (await intensityModifier.template.execute(engine.deObject, character, undefined, alreadyActivatedInfo.causants)).trim();
+                    const result = typeof intensityModifier.template === "string" ? intensityModifier.template : (await intensityModifier.template(engine.deObject, {
+                        char: character,
+                        causants: alreadyActivatedInfo.causants || undefined,
+                    })).trim();
                     if (result.startsWith("yes") || result.startsWith("Yes")) {
                         console.log(`State intensity modifier matched immediately for state ${stateName} on character ${character.name}`);
                         willExecute = true;
                     } else if (result.endsWith("?")) {
                         console.log(`State intensity modifier for state ${stateName} on character ${character.name} returned a question, using inference to determine yes/no.`);
+                        console.log(`Asking question: ${result}`);
 
                         if (!prompter.initialized) {
                             // prime the generator
                             await prompter.generator.next();
                             prompter.initialized = true;
                         }
+                        const yesNoGrammar = `root ::= ("yes" | "no" | "Yes" | "No" | "YES" | "NO") ${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()}\n`;
                         const answer = await prompter.generator.next({
                             maxCharacters: 0,
                             maxSafetyCharacters: 250,
                             maxParagraphs: 1,
                             nextQuestion: result,
-                            stopAfter: ["yes", "no"],
+                            stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
                             stopAt: [],
-                            grammar: "root ::= (\"yes\" | \"no\") .*;",
+                            grammar: yesNoGrammar,
                             instructions: "Answer with 'yes' or 'no'",
                         });
 
@@ -1147,7 +1161,10 @@ export default async function calculateStateChange(engine, character) {
                 }
 
                 // @ts-ignore
-                const result = (await activationCondition.template.execute(engine.deObject, character, undefined, undefined, undefined, potentialCausants)).trim();
+                const result = typeof activationCondition.template === "string" ? activationCondition.template : (await activationCondition.template(engine.deObject, {
+                    char: character,
+                    potentialCausants: potentialCausants || undefined,
+                })).trim();
 
                 let executeTrigger = false;
                 if (result === "yes" || result === "Yes") {
@@ -1155,6 +1172,7 @@ export default async function calculateStateChange(engine, character) {
                     executeTrigger = true;
                 } else if (result.endsWith("?")) {
                     console.log(`State activation condition for state ${stateName} on character ${character.name} returned a question, using inference to determine yes/no.`);
+                    console.log(`Asking question: ${result}`);
 
                     if (!prompter.initialized) {
                         // prime the generator
@@ -1162,14 +1180,15 @@ export default async function calculateStateChange(engine, character) {
                         prompter.initialized = true;
                     }
 
+                    const yesNoGrammar = `root ::= ("yes" | "no" | "Yes" | "No" | "YES" | "NO") ${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()}\n`;
                     const answer = await prompter.generator.next({
                         maxCharacters: 0,
                         maxSafetyCharacters: 250,
                         maxParagraphs: 1,
                         nextQuestion: result,
-                        stopAfter: ["yes", "no"],
+                        stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
                         stopAt: [],
-                        grammar: "root ::= (\"yes\" | \"no\") .*;",
+                        grammar: yesNoGrammar,
                         instructions: "Answer with 'yes' or 'no'",
                     });
 
@@ -1261,7 +1280,7 @@ export default async function calculateStateChange(engine, character) {
 
                         if (surpassesThreshold) {
                             /**
-                             * @type {DEStateDescription}
+                             * @type {DEApplyingState}
                              */
                             const state = {
                                 state: stateName,
@@ -1300,7 +1319,7 @@ export default async function calculateStateChange(engine, character) {
                             console.log(`But state ${stateName} on character ${character.name} requires causants, skipping random spawn.`);
                         } else {
                             /**
-                             * @type {DEStateDescription}
+                             * @type {DEApplyingState}
                              */
                             const state = {
                                 state: stateName,

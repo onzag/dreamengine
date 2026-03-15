@@ -13,6 +13,7 @@ const jsEngine = new DEJSEngine(engine, localResolver);
 await jsEngine.addScripts([
     { namespace: "worlds", id: "simple-lunar-station" },
     { namespace: "characters", id: "dema-basic" },
+    { namespace: "testing", id: "states" },
 ]);
 
 const inferenceAdapter = new InferenceAdapterLlamaUncensored(engine, {
@@ -40,8 +41,8 @@ await engine.initialize({
     shortDescriptionBottomNakedAdd: "He is currently not wearing any pants or underwear",
     perception: 0.6,
     stealth: 0.5,
-    powerScale: "human",
-    powerScaleValue: 50,
+    tier: "human",
+    tierValue: 50,
     powerGrowthRate: 0.25,
 });
 

@@ -1,5 +1,6 @@
 import { DEngine } from "../index.js";
 import { getSurroundingCharacters } from "../util/character-info.js";
+import { getHistoryFragmentForCharacter } from "../util/messages.js";
 
 /**
  * Removes any punctuation from a string.
@@ -66,6 +67,13 @@ export default async function testWorldRulesOn(engine, character) {
         return { passed: true, reason: null };
     }
 
+    const lastCycleMessages = await getHistoryFragmentForCharacter(engine, character, {
+        msgLimit: "LAST_CYCLE",
+    });
+    const lastCycleMessagesExpanded = await getHistoryFragmentForCharacter(engine, character, {
+        msgLimit: "LAST_CYCLE_EXPANDED",
+    });
+
     /**
      * @type {Array<{name: string, description: string}>}
      */
@@ -114,7 +122,7 @@ export default async function testWorldRulesOn(engine, character) {
 
     const characterInteractionGenerator = engine.inferenceAdapter.runQuestioningCustomAgentOn(
         character,
-        systemPromptCharacterInteractionsIntroduction, contextInfoSurroundingCharacters.value, engine.getHistoryForCharacter(character, {}), "LAST_CYCLE_EXPANDED", null, true);
+        systemPromptCharacterInteractionsIntroduction, contextInfoSurroundingCharacters.value, lastCycleMessagesExpanded.messages, null, true);
 
     const readyCharInt = await characterInteractionGenerator.next(); // start the generator
     if (readyCharInt.done) {
@@ -161,7 +169,7 @@ export default async function testWorldRulesOn(engine, character) {
         null,
     );
 
-    const generatorSpecial = engine.inferenceAdapter.runQuestioningCustomAgentOn(character, systemPromptSpecial, null, engine.getHistoryForCharacter(character, {}), "LAST_CYCLE_EXPANDED", contextInfoSurroundingCharacters.value, true);
+    const generatorSpecial = engine.inferenceAdapter.runQuestioningCustomAgentOn(character, systemPromptSpecial, null, lastCycleMessagesExpanded.messages, contextInfoSurroundingCharacters.value, true);
     const readySpecial = await generatorSpecial.next(); // start the generator
     if (readySpecial.done) {
         throw new Error("Inference adapter questioning generator ended unexpectedly.");
@@ -282,7 +290,7 @@ export default async function testWorldRulesOn(engine, character) {
         });
     }))).filter((v) => v !== null && v !== undefined && v !== "");
 
-    const generator = engine.inferenceAdapter.runQuestioningCustomAgentOn(character, systemPrompt, null, engine.getHistoryForCharacter(character, {}), "LAST_STORY_FRAGMENT_FROM_CHARACTER", null, true);
+    const generator = engine.inferenceAdapter.runQuestioningCustomAgentOn(character, systemPrompt, null, lastCycleMessages.messages, null, true);
     const ready = await generator.next(); // start the generator
     if (ready.done) {
         throw new Error("Inference adapter questioning generator ended unexpectedly.");
@@ -401,7 +409,7 @@ export default async function testWorldRulesOn(engine, character) {
         character,
         systemPromptSpawnItems,
         availableItemsContextInfo.value,
-        engine.getHistoryForCharacter(character, {}), "LAST_STORY_FRAGMENT_FROM_CHARACTER",
+        lastCycleMessages.messages,
         null,
     );
     const readyItemsInteraction = await itemsInteractionGenerator.next(); // start the generator

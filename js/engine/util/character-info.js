@@ -379,3 +379,45 @@ export function getSurroundingCharacters(engine, characterName) {
         totalStrangers,
     };
 }
+
+/**
+ * @param {DEngine} engine 
+ * @param {string} characterName 
+ */
+export function getPowerLevel(engine, characterName) {
+    if (!engine.deObject) {
+        throw new Error("DEngine not initialized");
+    }
+    const character = engine.deObject.characters[characterName];
+    if (!character) {
+        throw new Error(`Character ${characterName} not found in engine.`);
+    }
+
+    return getPowerLevelFromCharacter(character);
+}
+
+/**
+ * @param {DECompleteCharacterReference} character
+ */
+export function getPowerLevelFromCharacter(character) {
+    const baseMultipliers = {
+        "insect": 1,
+        "critter": 2,
+        "human": 3,
+        "apex": 4,
+        "street_level": 5,
+        "block_level": 6,
+        "city_level": 7,
+        "country_level": 8,
+        "continental": 9,
+        "planetary": 10,
+        "stellar": 11,
+        "galactic": 12,
+        "universal": 13,
+        "multiversal": 14,
+        "limitless": 15
+    };
+
+    const powerLevel = (baseMultipliers[character.tier] || 1) * (character.tierValue || 1);
+    return powerLevel;
+}
