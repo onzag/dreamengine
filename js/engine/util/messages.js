@@ -365,6 +365,9 @@ export async function* getHistoryForCharacter(engine, character, options) {
  * }} options
  */
 export async function getHistoryFragmentForCharacter(engine, character, options) {
+    if (!engine.deObject) {
+        throw new Error("DEngine not initialized");
+    }
     const allHistory = getHistoryForCharacter(engine, character, options);
     let generator = await allHistory.next();
 
@@ -376,6 +379,10 @@ export async function getHistoryFragmentForCharacter(engine, character, options)
      * @type {string[]}
      */
     const interactedCharacters = [];
+    /**
+     * @type {string[]}
+     */
+    const mentionedCharacters = [];
 
     if (options.msgLimit === "ALL" && (!options.countTokens || !options.contextWindowSize)) {
         throw new Error("countTokens and contextWindowSize are required when msgLimit is ALL");
@@ -434,6 +441,18 @@ export async function getHistoryFragmentForCharacter(engine, character, options)
                 messagesToAdd.push(messageParsed);
                 if (!interactedCharacters.includes(generator.value.name) && !generator.value.storyMaster) {
                     interactedCharacters.push(generator.value.name);
+                    if (!mentionedCharacters.includes(generator.value.name)) {
+                        mentionedCharacters.push(generator.value.name);
+                    }
+                }
+                if (generator.value.storyMaster) {
+                    // we want to extract mentioned characters from the story master messages as well, because they can contain important information about the world and the interactions that took place, so we want to make sure to include them in the context of the character, even if they are not directly interacting with them, because they can be mentioned in the story master messages as part of the interactions that took place
+                    for (const charName of Object.keys(engine.deObject.characters)) {
+                        const pattern = new RegExp(`(?<![\\w])${charName}(?![\\w])`, 'i');
+                        if (pattern.test(generator.value.message) && !mentionedCharacters.includes(charName)) {
+                            mentionedCharacters.push(charName);
+                        }
+                    }
                 }
             }
 
@@ -450,6 +469,7 @@ export async function getHistoryFragmentForCharacter(engine, character, options)
     return {
         messages: messagesToAdd,
         interactedCharacters,
+        mentionedCharacters,
         tokensExhaustedApprox,
     }
 }

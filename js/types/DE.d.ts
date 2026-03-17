@@ -456,8 +456,6 @@ declare interface DECharacterStateDefinition {
     /**
      * Make sure it is one line only, as this gets injected into the short
      * description of the character that represents the external perception of the character
-     * 
-     * TODO
      */
     generalCharacterExternalDescriptionInjection?: DEStringTemplate;
     /**
@@ -505,8 +503,6 @@ declare interface DECharacterStateDefinition {
     /**
      * Make sure it is one line only, as this gets injected into the short
      * description of the character that represents the external perception of the character when relieving the state
-     * 
-     * TODO
      */
     relievingGeneralCharacterExternalDescriptionInjection?: DEStringTemplate;
     /**
@@ -555,17 +551,19 @@ declare interface DECharacterStateDefinition {
      * or to be active, for example, SLEEPING may require laying_down posture
      * if null, posture is not required
      */
-    requiresPosture: "standing" | "sitting" | "laying_down" | null;
+    requiresPosture: DEPosture | null;
     /**
      * Whether the state requires a specific posture to trigger only
      */
-    requiresPostureForTrigger?: "standing" | "sitting" | "laying_down" | null;
+    requiresPostureForTrigger?: DEPosture | null;
     /**
      * Whether the state seeks a specific posture once triggered
      * for example the TIRED state may seek laying_down posture
      * if null, posture is not sought
+     * 
+     * TODO implement
      */
-    seeksPosture: "standing" | "sitting" | "laying_down" | null;
+    seeksPosture: DEPosture | null;
     /**
      * Whether the character falls down to the ground when the state is triggered
      * for example, the UNCONSCIOUS state may cause the character to fall down
@@ -690,17 +688,25 @@ declare interface DECharacterStateDefinition {
     /**
      * INTENSITY_EXPRESSIVE:
      * For example the state SCARED may be intensity expressive, it will cause the injection on the character state of:
-     * - Susan is scared, susan is very Scared, Susan is extremely Scared, Susan is overwhelmingly Scared.
+     * - scared, very Scared, extremely Scared, overwhelmingly Scared.
      * Depending on intensity level from 1 to 4
+     * 
+     * ## Susan States:
+     * - Very Scared
      * 
      * BINARY:
      * Either an on/off state, for example SLEEPING
-     * - Susan is currently sleeping.
+     * 
+     * ## Susan States:
+     * - Sleeping.
      * 
      * HIDDEN:
      * Hidden states do not get described in the character description, they are useful for states that are only used to determine
      * actions, for example TALKING_ABOUT_THEIR_FRIEND_BOB which triggers when the character is being asked about Bob and that
      * injects a specific prompt (or actions) about this context, and the state relieves when the character is no longer talking about Bob
+     * 
+     * ## Susan States:
+     * - (nothing really gets added)
      */
     behaviourType: "INTENSITY_EXPRESSIVE" | "BINARY" | "HIDDEN";
     /**
@@ -1609,6 +1615,8 @@ declare interface DESeenItem {
     wornByCharacter: string | null;
 }
 
+declare type DEPosture = "standing" | "crawling" | "climbing" | "sitting" | "lying_down" | "crouching" | "kneeling" | "hanging" | "floating" | "flying" | "swimming";
+
 declare interface DEStateForCharacter {
     id: string;
     location: string;
@@ -1622,7 +1630,7 @@ declare interface DEStateForCharacter {
      * when this state was added
      */
     messageId: string | null;
-    posture: "standing" | "sitting" | "laying_down";
+    posture: DEPosture;
     carrying: DEItem[];
     carryingCharactersDirectly: Array<string>;
     wearing: DEItem[];
@@ -1652,6 +1660,11 @@ declare interface DEStateForCharacter {
     seenCharacters: Array<string>;
 }
 
+declare interface DEStateForCharacterWithHistoricInformation extends DEStateForCharacter {
+    surroundingNonStrangers: Array<string>;
+    surroundingStrangers: Array<string>;
+}
+
 declare interface DEItemInteraction {
     /**
      * A question template to ask about the interaction, for example "did {{char}} open the chest?" or "did {{char}} eat the apple?"
@@ -1672,7 +1685,7 @@ declare interface DEItemInteraction {
 }
 
 declare interface DEStateForCharacterWithHistory extends DEStateForCharacter {
-    history: Array<DEStateForCharacter>;
+    history: Array<DEStateForCharacterWithHistoricInformation>;
 }
 
 declare interface DELocationSlot {

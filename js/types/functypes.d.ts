@@ -45,6 +45,36 @@ char_sex_is_intersex(DE: DEObject, char: CompleteCharacterReference, ): boolean;
 */
 char_sex_is_none(DE: DEObject, char: CompleteCharacterReference, ): boolean;
 /**
+  The age of the character in years
+  @returns eg. 25
+*/
+char_age(DE: DEObject, char: CompleteCharacterReference, ): number;
+/**
+  The weight of the character in kg
+  @returns eg. 70
+*/
+char_weight(DE: DEObject, char: CompleteCharacterReference, ): number;
+/**
+  The height of the character in cm
+  @returns eg. 170
+*/
+char_height(DE: DEObject, char: CompleteCharacterReference, ): number;
+/**
+  The power level of the character, a number that can be used to compare the strength of characters in a very general way
+  @returns eg. 50
+*/
+char_power_level(DE: DEObject, char: CompleteCharacterReference, ): number;
+/**
+  The tier of the character, representing their overall power level
+  @returns eg. human
+*/
+char_tier(DE: DEObject, char: CompleteCharacterReference, ): string;
+/**
+  The numeric value of the character's tier, representing their power level within the tier
+  @returns eg. 85
+*/
+char_tier_value(DE: DEObject, char: CompleteCharacterReference, ): number;
+/**
   The list of all characters available in the world, including the user
   @returns eg. [Arya, Thalon, Mira, Dorian, Luna, Kiro]
 */
@@ -89,11 +119,6 @@ location_is_safe(DE: DEObject, char: CompleteCharacterReference, location_name:s
   @returns eg. ["Aria", "Thalon", "Player", "The Ancient Sword"]
 */
 get_last_state_causants(DE: DEObject, char: CompleteCharacterReference, state_name:string): string[];
-/**
-  The cause/reason for the last activation of the state, it requires track_cause enabled for the state to work
-  @returns eg. 'helped me with my chores', 'betrayed me in the past'
-*/
-get_last_state_cause(DE: DEObject, char: CompleteCharacterReference, state_name:string): string[];
 /**
   The name of the characters only that activated the state last, it is available everywhere but it needs track_causants enabled for the state to work
   @returns eg. ["Aria", "Thalon", "Player"]
@@ -169,6 +194,21 @@ get_weight(DE: DEObject, char: CompleteCharacterReference, character:string): nu
   @returns eg. 170
 */
 get_height(DE: DEObject, char: CompleteCharacterReference, character:string): number;
+/**
+  Get the power level of the specified character, a number that can be used to compare the strength of characters in a very general way
+  @returns eg. 50
+*/
+get_power_level(DE: DEObject, char: CompleteCharacterReference, character:string): number;
+/**
+  Get the tier of the specified character, representing their overall power level
+  @returns eg. human
+*/
+get_tier(DE: DEObject, char: CompleteCharacterReference, character:string): string;
+/**
+  Get the numeric value of the specified character's tier, representing their power level within the tier
+  @returns eg. 85
+*/
+get_tier_value(DE: DEObject, char: CompleteCharacterReference, character:string): number;
 /**
   Boolean indicating if the character is dead
   @returns true or false
@@ -255,23 +295,13 @@ is_outdoors(DE: DEObject, char: CompleteCharacterReference, character:string): b
 */
 has_item(DE: DEObject, char: CompleteCharacterReference, character:string, item_name:string): boolean;
 /**
-  Boolean indicating if the character is currently standing
-  @returns true or false
+  String indicating the current posture of the character
+  @returns "standing" | "crawling" | "climbing" | "sitting" | "lying_down" | "crouching" | "kneeling" | "hanging" | "floating" | "flying" | "swimming"
 */
-is_standing(DE: DEObject, char: CompleteCharacterReference, character:string): boolean;
-/**
-  Boolean indicating if the character is currently sitting
-  @returns true or false
-*/
-is_sitting(DE: DEObject, char: CompleteCharacterReference, character:string): boolean;
-/**
-  Boolean indicating if the character is currently laying down
-  @returns true or false
-*/
-is_laying_down(DE: DEObject, char: CompleteCharacterReference, character:string): boolean;
+get_posture(DE: DEObject, char: CompleteCharacterReference, character:string): "standing" | "crawling" | "climbing" | "sitting" | "lying_down" | "crouching" | "kneeling" | "hanging" | "floating" | "flying" | "swimming";
 /**
   String indicating a location where another character should be at according to the character's knowledge
-  @returns true or false
+  @returns eg. Eldoria, Shadowfen, or empty string if they have no idea
 */
 last_saw(DE: DEObject, char: CompleteCharacterReference, character:string): string;
 /**

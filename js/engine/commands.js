@@ -1,5 +1,6 @@
 import { DEngine } from "./index.js";
-import { getSurroundingCharacters } from "./util/character-info.js";
+import { getExternalDescriptionOfCharacter, getSurroundingCharacters } from "./util/character-info.js";
+import { makeTimestamp } from "./util/messages.js";
 
 /**
  * 
@@ -66,7 +67,7 @@ export const commands = {
                 throw new Error("DEngine not initialized");
             }
             const time = engine.deObject.currentTime;
-            return `Current world time is: ${engine.makeTimestamp(time, false)}`;
+            return `Current world time is: ${makeTimestamp(engine, time, false)}`;
         },
         help: "Displays the current world time.",
         cheat: false,
@@ -330,7 +331,7 @@ export const commands = {
                 }
                 const characterInfo = engine.deObject.characters[characterName];
                 if (characterInfo) {
-                    answer += `- ${characterName}: ${engine.getExternalDescriptionOfCharacter(characterName, true)}\n`;
+                    answer += `- ${characterName}: ${await getExternalDescriptionOfCharacter(engine, characterName, true)}\n`;
                 }
             }
             answer += `\nTotal Strangers:\n`;
@@ -340,7 +341,7 @@ export const commands = {
                 }
                 const characterInfo = engine.deObject.characters[characterName];
                 if (characterInfo) {
-                    answer += `- ${characterName}: ${engine.getExternalDescriptionOfCharacter(characterName, true)}\n`;
+                    answer += `- ${characterName}: ${await getExternalDescriptionOfCharacter(engine, characterName, true)}\n`;
                 }
             }
             return answer;
@@ -377,7 +378,7 @@ export const commands = {
                 const characterInfo = engine.deObject.characters[participantName];
                 const characterState = engine.deObject.stateFor[participantName];
                 if (characterInfo) {
-                    answer += `- ${participantName}: ${engine.getExternalDescriptionOfCharacter(participantName, true)}\n`;
+                    answer += `- ${participantName}: ${await getExternalDescriptionOfCharacter(engine, participantName, true)}\n`;
                 }
             }
             return answer;
@@ -648,7 +649,7 @@ export const commands = {
                 throw new Error(`No state found for character "${characterName}".`);
             }
 
-            const shortDescription = engine.getExternalDescriptionOfCharacter(characterName, true);
+            const shortDescription = await getExternalDescriptionOfCharacter(engine, characterName, true);
 
             // @ts-ignore
             const [general, statesDescriptions, relationships] = await engine.getInternalDescriptionOfCharacter(characterName);
@@ -718,7 +719,7 @@ export const commands = {
 
             scenario += `\n\n${await whatIsWeatherLikeForCharacter(engine, characterName)}`;
 
-            scenario += `\n\nCurrent time and date in the world: ${engine.makeTimestamp(engine.deObject.currentTime, false)}`;
+            scenario += `\n\nCurrent time and date in the world: ${await makeTimestamp(engine, engine.deObject.currentTime, false)}`;
 
             const sysprompt = engine.inferenceAdapter.buildSystemPromptForCharacter(
                 character,

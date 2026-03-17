@@ -1,5 +1,5 @@
 import { deepCopy, deepCopyNoHistory, DEngine } from "../../index.js";
-import { getSurroundingCharacters } from "../../util/character-info.js";
+import { getExternalDescriptionOfCharacter, getInternalDescriptionOfCharacter, getSurroundingCharacters } from "../../util/character-info.js";
 import { getHistoryFragmentForCharacter } from "../../util/messages.js";
 
 /**
@@ -39,13 +39,13 @@ export default async function testMessageFeasibilityForce(engine, character) {
     for (const characterName of surroundingCharactersInfo.totalStrangers) {
         const characterInfo = engine.deObject.characters[characterName];
         if (characterInfo) {
-            characters.push({ name: characterName, description: engine.getExternalDescriptionOfCharacter(characterName, true) });
+            characters.push({ name: characterName, description: await getExternalDescriptionOfCharacter(engine, characterName, true) });
         }
     }
     for (const characterName of surroundingCharactersInfo.nonStrangers) {
         const characterInfo = engine.deObject.characters[characterName];
         if (characterInfo) {
-            characters.push({ name: characterName, description: engine.getExternalDescriptionOfCharacter(characterName, true) });
+            characters.push({ name: characterName, description: await getExternalDescriptionOfCharacter(engine, characterName, true) });
         }
     }
 
@@ -70,7 +70,7 @@ export default async function testMessageFeasibilityForce(engine, character) {
         "An attempt to force does not count, only successful compliance.",
         "Consider only the last story fragment",
     ], null);
-    const generator = engine.inferenceAdapter.runQuestioningCustomAgentOn(character, systemPrompt, contextInfoSurroundingCharacters.value, lastCycleExpanded, null, true);
+    const generator = engine.inferenceAdapter.runQuestioningCustomAgentOn(systemPrompt, contextInfoSurroundingCharacters.value, lastCycleExpanded, null, true);
     const ready = await generator.next();
     if (ready.value !== "ready") {
         throw new Error("Questioning agent could not be started properly.");
@@ -155,7 +155,7 @@ export default async function testMessageFeasibilityForce(engine, character) {
 
         await generator.next(null); // finish the generator
 
-        const [internalDescription, stateInfo,] = await engine.getInternalDescriptionOfCharacter(character.name);
+        const internalDescriptionInfo = await getInternalDescriptionOfCharacter(engine, character.name);
 
         // 2. For each forced character, check if the action is feasible
         for (const forcedCharacterName of forcedCharacters) {
@@ -180,22 +180,22 @@ export default async function testMessageFeasibilityForce(engine, character) {
                 const [, , , relationshipOfOwnCharacterTowardsForcedCharacter] = await engine.getRelationshipBetweenCharacters(character.name, forcedCharacterName);
                 ownCharacterDescription = engine.inferenceAdapter.buildSystemCharacterDescription(
                     character,
-                    internalDescription,
-                    engine.getExternalDescriptionOfCharacter(character.name, true),
+                    internalDescriptionInfo.general,
+                    await getExternalDescriptionOfCharacter(engine, character.name, true),
                     [
                         relationshipOfOwnCharacterTowardsForcedCharacter,
                     ],
-                    stateInfo,
+                    internalDescriptionInfo.expressiveStates,
                     null,
                     null,
                 );
             } catch (e) {
                 ownCharacterDescription = engine.inferenceAdapter.buildSystemCharacterDescription(
                     character,
-                    internalDescription,
-                    engine.getExternalDescriptionOfCharacter(character.name, true),
+                    internalDescriptionInfo.general,
+                    await getExternalDescriptionOfCharacter(engine, character.name, true),
                     [],
-                    stateInfo,
+                    internalDescriptionInfo.expressiveStates,
                     null,
                     null,
                 );
@@ -205,26 +205,26 @@ export default async function testMessageFeasibilityForce(engine, character) {
 
             try {
                 const [, , , relationshipOfForcedCharacterTowardsOwnCharacter] = await engine.getRelationshipBetweenCharacters(forcedCharacterName, character.name);
-                const [internalDescriptionForcedCharacter, stateInfoForcedCharacter,] = await engine.getInternalDescriptionOfCharacter(forcedCharacterName);
+                const internalDescriptionInfoForcedCharacter = await getInternalDescriptionOfCharacter(engine, forcedCharacterName);
                 forcedCharacterDescription = engine.inferenceAdapter.buildSystemCharacterDescription(
                     forcedCharacter,
-                    internalDescriptionForcedCharacter,
-                    engine.getExternalDescriptionOfCharacter(forcedCharacterName, true),
+                    internalDescriptionInfoForcedCharacter.general,
+                    await getExternalDescriptionOfCharacter(engine, forcedCharacterName, true),
                     [
                         relationshipOfForcedCharacterTowardsOwnCharacter,
                     ],
-                    stateInfoForcedCharacter,
+                    internalDescriptionInfoForcedCharacter.expressiveStates,
                     null,
                     null,
                 );
             } catch (e) {
-                const [internalDescriptionForcedCharacter, stateInfoForcedCharacter,] = await engine.getInternalDescriptionOfCharacter(forcedCharacterName);
+                const internalDescriptionInfoForcedCharacter = await getInternalDescriptionOfCharacter(engine, forcedCharacterName);
                 forcedCharacterDescription = engine.inferenceAdapter.buildSystemCharacterDescription(
                     forcedCharacter,
-                    internalDescriptionForcedCharacter,
-                    engine.getExternalDescriptionOfCharacter(forcedCharacterName, true),
+                    internalDescriptionInfoForcedCharacter.general,
+                    await getExternalDescriptionOfCharacter(engine, forcedCharacterName, true),
                     [],
-                    stateInfoForcedCharacter,
+                    internalDescriptionInfoForcedCharacter.expressiveStates,
                     null,
                     null,
                 );
@@ -245,7 +245,7 @@ export default async function testMessageFeasibilityForce(engine, character) {
                 "If the answer is no, elaborate briefly on why it is not feasible.",
             ], null);
 
-            const feasibilityGenerator = engine.inferenceAdapter.runQuestioningCustomAgentOn(character, feasibilitySystemPrompt, isolatedCharacterInfo, lastCycleExpanded, null, true);
+            const feasibilityGenerator = engine.inferenceAdapter.runQuestioningCustomAgentOn(feasibilitySystemPrompt, isolatedCharacterInfo, lastCycleExpanded, null, true);
             const feasibilityReady = await feasibilityGenerator.next();
             if (feasibilityReady.value !== "ready") {
                 throw new Error("Questioning agent could not be started properly for feasibility check.");

@@ -10,9 +10,10 @@ import testWorldRulesOn from "./gears/rules-enforce.js";
 import testMessageFeasibilityForCharacter from "./gears/feasibility-check.js";
 import { getCharacterVolume, getCharacterWeight, getItemVolume, getItemWeight, getWearableFitment, locationPathToMessage } from "./util/weight-and-volume.js";
 import { cleanAll } from "./gears/feasibility-check/item-changes.js";
-import { getAllItemsCharacterIsInsideOf, getBeingCarriedByCharacter, getCharacterExactLocation, getListOfCarriedCharactersByCharacter, getSurroundingCharacters, isBottomNaked, isTopNaked } from "./util/character-info.js";
+import { getAllItemsCharacterIsInsideOf, getBeingCarriedByCharacter, getCharacterExactLocation, getExternalDescriptionOfCharacter, getListOfCarriedCharactersByCharacter, getSurroundingCharacters, isBottomNaked, isTopNaked } from "./util/character-info.js";
 import { DEJSEngine } from "../jsengine/index.js";
 import defaultNamePool from "./util/name-pool.js";
+import { getHistoryFragmentForCharacter } from "./util/messages.js";
 
 const INVALID_NAMES = ["system", "assistant", "user", "everyone", "nobody",
     "anyone", "somebody", "narrator", "observer", "admin", "moderator",
@@ -800,15 +801,28 @@ export class DEngine {
         }
 
         if (sceneObject.charactersStart) {
-            // TODO
-        } else {
-            // otherwise the user starts, let's precalculate these states and bonds
-            // so that they are ready for the user's first turn, even though
-            // the user has no real affecting states, they are forced upon the user
-            // as information bits
-            this.informCycleState("info", "Pre-calculating initial states for your character and the world...");
-            await calculateStateChange(this, this.userCharacter);
+            for (const participantName of expectedParticipants) {
+                this.informCycleState("info", "Pre-calculating initial states for " + participantName + " and the world...");
+                await calculateStateChange(this, this.deObject.characters[participantName]);
+
+                this.informCycleState("info", "Pre-calculating initial bonds for " + participantName + "...");
+                await calculateBondsChangesDueToMessages(this, this.deObject.characters[participantName]);
+
+                // TODO they talk
+            }
         }
+
+        // now the user starts, let's precalculate these states and bonds
+        // so that they are ready for the user's first turn, even though
+        // the user has no real affecting states, they are forced upon the user
+        // as information bits
+        this.informCycleState("info", "Pre-calculating initial states for your character and the world...");
+        await calculateStateChange(this, this.userCharacter);
+
+        this.informCycleState("info", "Pre-calculating initial bonds for your character...");
+        await calculateBondsChangesDueToMessages(this, this.userCharacter);
+
+        // Game on :)
     }
 
     /**
@@ -876,7 +890,16 @@ export class DEngine {
          */
         const storyMasterMessages = [];
 
-        await cleanAll(this, this.deObject.stateFor[this.userCharacter.name].location, storyMasterMessages);
+        const allMessages = await getHistoryFragmentForCharacter(this, this.userCharacter, {
+            includeDebugMessages: false,
+            includeRejectedMessages: false,
+            msgLimit: "LAST_CYCLE",
+        });
+
+        // TODO also calculate potentially broken items here, guess in a different manner
+        // should be made so that it is a standalone function that can be used in other places
+
+        await cleanAll(this, this.deObject.stateFor[this.userCharacter.name].location, allMessages.messages, storyMasterMessages);
 
         if (storyMasterMessages.length > 0) {
             const addedMessageStr = storyMasterMessages.join("\n");
@@ -1227,266 +1250,6 @@ export class DEngine {
     }
 
     /**
-     * @param {string} characterName 
-     * @returns {Promise<[string, string[], string[]]>} complete description, list of states, list of relationships
-     */
-    async getInternalDescriptionOfCharacter(characterName) {
-        if (!this.deObject) {
-            throw new Error("DEngine not initialized");
-        }
-
-        const character = this.deObject.characters[characterName];
-        if (!character) {
-            throw new Error(`Character ${characterName} not found.`);
-        }
-
-        const characterState = this.deObject.stateFor[characterName];
-        if (!characterState) {
-            throw new Error(`Character state for ${characterName} not found.`);
-        }
-
-        // @ts-ignore
-        let general = await character.general.execute(this.deObject, character);
-
-        for (const injectable of Object.values(character.generalCharacterDescriptionInjection)) {
-            // @ts-ignore
-            const injectableV = (await injectable.execute(this.deObject, character, undefined, undefined, undefined, undefined)).trim();
-            if (injectableV) {
-                if (!general.endsWith("\n\n")) {
-                    general += "\n\n";
-                }
-                // @ts-ignore
-                general += injectableV;
-            }
-        }
-
-        /**
-         * @type {string[]}
-         */
-        const statesDescriptions = [];
-        for (const state of characterState.states) {
-            const stateInfo = character.states[state.state];
-            // @ts-ignore
-            let stateDescription = state.state.split("_").map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(" ");
-            if (!state.relieving) {
-                if (state.intensity >= 1.5) {
-                    stateDescription = `Very ${stateDescription}`;
-                } else if (state.intensity >= 2.5) {
-                    stateDescription = `Extremely ${stateDescription}`;
-                } else if (state.intensity >= 3.5) {
-                    stateDescription = `Overwhelmingly ${stateDescription}`;
-                }
-
-                if (stateInfo.relievingGeneralCharacterDescriptionInjection) {
-                    // @ts-ignore
-                    const relievingInjection = (await stateInfo.relievingGeneralCharacterDescriptionInjection.execute(this.deObject, character, undefined, undefined, undefined, undefined)).trim();
-                    if (relievingInjection) {
-                        if (!general.endsWith("\n\n")) {
-                            general += "\n\n";
-                        }
-                        general += relievingInjection;
-                    }
-                }
-            } else {
-                stateDescription = `Relieving from ${stateDescription}`;
-
-                if (stateInfo.generalCharacterDescriptionInjection) {
-                    // @ts-ignore
-                    const injection = (await stateInfo.generalCharacterDescriptionInjection.execute(this.deObject, character, undefined, undefined, undefined, undefined)).trim();
-                    if (injection) {
-                        if (!general.endsWith("\n\n")) {
-                            general += "\n\n";
-                        }
-                        general += injection;
-                    }
-                }
-            }
-
-            statesDescriptions.push(stateDescription);
-        }
-
-        const bonds = this.deObject.social.bonds[characterName];
-        /**
-         * @type {string[]}
-         */
-        const relationships = [];
-
-        for (const activeBond of bonds.active) {
-            if (!character.bonds) {
-                throw new Error(`Character ${characterName} has no bonds defined.`);
-            }
-            const bondDeclaration = character.bonds.declarations.find(bondDecl => bondDecl.strangerBond === activeBond.stranger && bondDecl.minBondLevel <= activeBond.bond && activeBond.bond < (bondDecl.maxBondLevel === 100 ? 200 : bondDecl.maxBondLevel) && bondDecl.min2BondLevel <= activeBond.bond2 && activeBond.bond2 < (bondDecl.max2BondLevel === 100 ? 200 : bondDecl.max2BondLevel));
-            if (bondDeclaration) {
-                // @ts-ignore
-                let result = await bondDeclaration.description.execute(this.deObject, character, this.deObject.characters[activeBond.towards]);
-                if (bondDeclaration.bondAdditionalDescription) {
-                    if (!result.endsWith(". ")) {
-                        result += ". ";
-                    } else if (!result.endsWith(" ")) {
-                        result += " ";
-                    }
-                    // @ts-ignore
-                    result += await bondDeclaration.bondAdditionalDescription.execute(this.deObject, character, this.deObject.characters[activeBond.towards]);
-                }
-                relationships.push(result);
-
-                if (bondDeclaration.generalCharacterDescriptionInjection) {
-                    // @ts-ignore
-                    const injection = (await bondDeclaration.generalCharacterDescriptionInjection.execute(this.deObject, character, this.deObject.characters[activeBond.towards], undefined, undefined, undefined)).trim();
-                    if (injection) {
-                        if (!general.endsWith("\n\n")) {
-                            general += "\n\n";
-                        }
-                        general += injection;
-                    }
-                }
-            }
-        }
-
-        // ex bonds only inject system prompts, as they are not active relationships but ex-relationships
-        // they may be mourning or have other effects on the character's mindset so only relevant to system prompt injections
-        for (const exBond of bonds.ex) {
-            if (!character.bonds) {
-                throw new Error(`Character ${characterName} has no bonds defined.`);
-            }
-            const bondDeclaration = character.bonds.declarations.find(bondDecl => bondDecl.strangerBond === exBond.stranger && bondDecl.minBondLevel <= exBond.bond && exBond.bond < (bondDecl.maxBondLevel === 100 ? 200 : bondDecl.maxBondLevel) && bondDecl.min2BondLevel <= exBond.bond2 && exBond.bond2 < (bondDecl.max2BondLevel === 100 ? 200 : bondDecl.max2BondLevel));
-            if (bondDeclaration) {
-                if (bondDeclaration.generalCharacterDescriptionInjectionEx) {
-                    // @ts-ignore
-                    const injection = (await bondDeclaration.generalCharacterDescriptionInjectionEx.execute(this.deObject, character, this.deObject.characters[exBond.towards], undefined, undefined, undefined)).trim();
-                    if (injection) {
-                        if (!general.endsWith("\n\n")) {
-                            general += "\n\n";
-                        }
-                        general += injection;
-                    }
-                }
-            }
-        }
-
-        // make final descriptions for total strangers for the standard stranger bond
-        if (!character.bonds) {
-            throw new Error(`Character ${characterName} has no bonds defined.`);
-        }
-        const strangerBondDeclaration = character.bonds.declarations.find(bondDecl => bondDecl.strangerBond === true && bondDecl.minBondLevel <= 0 && 0 < (bondDecl.maxBondLevel === 100 ? 200 : bondDecl.maxBondLevel) && bondDecl.min2BondLevel <= 0 && 0 < (bondDecl.max2BondLevel === 100 ? 200 : bondDecl.max2BondLevel));
-        if (strangerBondDeclaration) {
-            // these do apply to all the total strangers
-            const surroundingChars = getSurroundingCharacters(this, characterName);
-            const allSurroundingTotalStrangers = surroundingChars.totalStrangers;
-            for (const strangerName of allSurroundingTotalStrangers) {
-                const strangerCharacter = this.deObject.characters[strangerName];
-                if (strangerCharacter) {
-                    // @ts-ignore
-                    let result = await strangerBondDeclaration.description.execute(this.deObject, character, strangerCharacter);
-                    if (strangerBondDeclaration.bondAdditionalDescription) {
-                        if (!result.endsWith(". ")) {
-                            result += ". ";
-                        } else if (!result.endsWith(" ")) {
-                            result += " ";
-                        }
-                        // @ts-ignore
-                        result += await strangerBondDeclaration.bondAdditionalDescription.execute(this.deObject, character, strangerCharacter);
-                    }
-                    relationships.push(result);
-                }
-
-                if (strangerBondDeclaration.generalCharacterDescriptionInjection) {
-                    // @ts-ignore
-                    const injection = (await strangerBondDeclaration.generalCharacterDescriptionInjection.execute(this.deObject, character, strangerCharacter, undefined, undefined, undefined)).trim();
-                    if (injection) {
-                        if (!general.endsWith("\n\n")) {
-                            general += "\n\n";
-                        }
-                        general += injection;
-                    }
-                }
-            }
-        }
-
-        return [
-            general.trim(),
-            statesDescriptions,
-            relationships,
-        ];
-    }
-
-    /**
-     * @param {string} characterName 
-     * @param {boolean} onlyBasics
-     * @returns {string}
-     */
-    getExternalDescriptionOfCharacter(characterName, onlyBasics = false) {
-        if (!this.deObject) {
-            throw new Error("DEngine not initialized");
-        }
-        const character = this.deObject.characters[characterName];
-        if (!character) {
-            throw new Error(`Character ${characterName} not found.`);
-        }
-        const characterState = this.deObject.stateFor[characterName];
-        if (!characterState) {
-            throw new Error(`Character state for ${characterName} not found.`);
-        }
-        let finalDescription = character.shortDescription;
-        if (!finalDescription.endsWith(".")) {
-            finalDescription += ".";
-        }
-        const topNaked = isTopNaked(this, characterName);
-        const bottomNaked = isBottomNaked(this, characterName);
-
-        const hasItemsCoveringTopNakedness = !topNaked;
-        if (!hasItemsCoveringTopNakedness && character.shortDescriptionTopNakedAdd) {
-            finalDescription += ` ${character.shortDescriptionTopNakedAdd}`;
-            if (!finalDescription.endsWith(".")) {
-                finalDescription += ".";
-            }
-        }
-        const hasItemsCoveringBottomNakedness = !bottomNaked;
-        if (!hasItemsCoveringBottomNakedness && character.shortDescriptionBottomNakedAdd) {
-            finalDescription += ` ${character.shortDescriptionBottomNakedAdd}`;
-            if (!finalDescription.endsWith(".")) {
-                finalDescription += ".";
-            }
-        }
-        if (characterState.wearing.length > 0) {
-            finalDescription += " Wearing " + this.deObject.functions.format_and(this.deObject, null, characterState.wearing.map(item => item.amount >= 2 ? item.amount + " of " + item.description + " (" + getWearableFitment(this, item, characterName).fitment + ")" : item.description + " (" + getWearableFitment(this, item, characterName).fitment + ")")) + ".";
-        } else {
-            finalDescription += " Not wearing any clothes or accessories.";
-        }
-
-        if (onlyBasics) {
-            return finalDescription;
-        }
-
-        if (characterState.carrying.length > 0) {
-            finalDescription += " Carrying " + this.deObject.functions.format_and(this.deObject, null, characterState.carrying.map(item => item.amount >= 2 ? item.amount + " of " + item.description : item.description)) + ".";
-        } else {
-            finalDescription += " Not carrying any items.";
-        }
-
-        const characterExactLocation = getCharacterExactLocation(this, characterName);
-        if (characterExactLocation.beingCarriedBy) {
-            finalDescription += ` Being carried by ${characterExactLocation.beingCarriedBy}.`;
-        }
-
-        const carriedCharacters = getListOfCarriedCharactersByCharacter(this, characterName);
-        if (carriedCharacters.length > 0) {
-            finalDescription += ` Carrying characters: ` + this.deObject.functions.format_and(this.deObject, null, carriedCharacters.map((v) => v.carriedName)) + ".";
-        }
-
-        let postureAppliedOnDescription = "currently on the ground/floor at " + characterState.locationSlot;
-        if (characterExactLocation.itemPathEnd === "ontopCharacters" && characterExactLocation.itemPath) {
-            postureAppliedOnDescription = "currently " + locationPathToMessage(this, characterName, characterState.location, [...characterExactLocation.itemPath, characterExactLocation.itemPathEnd]);
-        } else if (characterExactLocation.itemPathEnd === "containingCharacters" && characterExactLocation.itemPath) {
-            postureAppliedOnDescription = "currently " + locationPathToMessage(this, characterName, characterState.location, [...characterExactLocation.itemPath, characterExactLocation.itemPathEnd]);
-        }
-
-        finalDescription += " " + character.name + " is currently " + characterState.posture + " " + postureAppliedOnDescription + ".";
-
-        return finalDescription;
-    }
-
-    /**
      * TODO fix this function, it's iffy
      * @param {"can" | "cannot"} canOrCannot
      * @param {string} characterName 
@@ -1675,7 +1438,7 @@ export class DEngine {
      * @param {boolean} addVerboseContainmentInfo
      * @returns 
      */
-    getItemsCharacterMayCarryWithReasons(canOrCannot, characterName, locationName, includeCharacters, excludeItems, addVerboseContainmentInfo = false) {
+    async getItemsCharacterMayCarryWithReasons(canOrCannot, characterName, locationName, includeCharacters, excludeItems, addVerboseContainmentInfo = false) {
         // TODO refactor this, we should use the util weight and volume that has the standarized way to measure weight and volume of
         // characters and items, also maybe it's better to specify list of interactions...
         // 1. what can be carried
@@ -1789,7 +1552,7 @@ export class DEngine {
          * @param {DEItem} item
          * @param {string} extraMessage
          */
-        const processItemAndReason = (item, extraMessage) => {
+        const processItemAndReason = async (item, extraMessage) => {
             let reason = null;
             if (item.weightKg > character.carryingCapacityKg) {
                 reason = `item is too heavy (${item.weightKg}kg) for ${character.name}'s strength`;
@@ -1816,11 +1579,11 @@ export class DEngine {
             }
 
             for (const containedItem of item.containing) {
-                processItemAndReason(containedItem, ` (contained by ${item.name}${extraMessage})`);
+                await processItemAndReason(containedItem, ` (contained by ${item.name}${extraMessage})`);
             }
 
             for (const ontopItem of item.ontop) {
-                processItemAndReason(ontopItem, ` (on top of ${item.name}${extraMessage})`);
+                await processItemAndReason(ontopItem, ` (on top of ${item.name}${extraMessage})`);
             }
         }
 
@@ -1828,7 +1591,7 @@ export class DEngine {
             for (const locationSlotName in location.slots) {
                 const locationSlot = location.slots[locationSlotName];
                 for (const item of locationSlot.items) {
-                    processItemAndReason(item, "");
+                    await processItemAndReason(item, "");
                 }
             }
 
@@ -1838,12 +1601,12 @@ export class DEngine {
                 if (otherCharState.location === locationName) {
                     // check their wearing items
                     for (const item of otherCharState.wearing) {
-                        processItemAndReason(item, ` (worn by ${otherCharName})`);
+                        await processItemAndReason(item, ` (worn by ${otherCharName})`);
                     }
 
                     // check their carried items
                     for (const item of otherCharState.carrying) {
-                        processItemAndReason(item, ` (carried by ${otherCharName})`);
+                        await processItemAndReason(item, ` (carried by ${otherCharName})`);
                     }
                 }
             }
@@ -1872,7 +1635,7 @@ export class DEngine {
                     }
                     const otherCharacterState = this.deObject.stateFor[otherCharName];
                     const otherCharacterInfo = this.deObject.characters[otherCharName];
-                    const currentShortDesc = this.getExternalDescriptionOfCharacter(characterName, true)
+                    const currentShortDesc = await getExternalDescriptionOfCharacter(this, characterName, true);
 
                     if (reason && canOrCannot === "cannot") {
                         itemsCharacterCannotCarryWReasons.add(`Name: ${otherCharacter.name} - Description: ${currentShortDesc} - Cannot be carried because ${reason}`);
@@ -1972,10 +1735,10 @@ export class DEngine {
             throw new Error(`Character ${character.name} is the only participant in the conversation, cannot determine if they have left the conversation group.`);
         }
 
-        let groupsList = `The list of groups is as follows:\n\n${character.name}'s own group:\n - ${character.name}: ${this.getExternalDescriptionOfCharacter(character.name)}\n`;
+        let groupsList = `The list of groups is as follows:\n\n${character.name}'s own group:\n - ${character.name}: ${await getExternalDescriptionOfCharacter(this, character.name)}\n`;
 
         for (const ownGroupParticipant of currentConversation.participants) {
-            groupsList += ` - ${ownGroupParticipant}: ${this.getExternalDescriptionOfCharacter(ownGroupParticipant)}\n`;
+            groupsList += ` - ${ownGroupParticipant}: ${await getExternalDescriptionOfCharacter(this, ownGroupParticipant)}\n`;
         }
 
         const allCharactersSurrounding = getSurroundingCharacters(this, character.name)
@@ -2014,13 +1777,13 @@ export class DEngine {
             }
         }
 
-        groups.forEach((group, index) => {
+        for (const [index, group] of groups.entries()) {
             const strongestCharacterBond = this.getCharacterWithClosestBondToCharacter(character, group);
             groupsList += `\n\n${strongestCharacterBond}'s group:\n`;
             for (const member of group) {
-                groupsList += ` - ${member}: ${this.getExternalDescriptionOfCharacter(member)}\n`;
+                groupsList += ` - ${member}: ${await getExternalDescriptionOfCharacter(this, member)}\n`;
             }
-        });
+        };
 
         groupsList += `\n\nNow take into account the last message from ${character.name} and determine if they have merged into another conversation group together with all the members of their current conversation group. ` +
             `If they have approach a new group, say the new people that conform the new group that ${character.name} has joined, including any characters from the previous conversation that have joined as well. ` +
@@ -2452,22 +2215,6 @@ export class DEngine {
         }
         this.deObject.gameOver = true;
         await this.informDEObjectUpdated();
-    }
-
-    /**
-     * @param {DECompleteCharacterReference} character 
-     * @param {DESingleBondDescription} bond 
-     */
-    getBondDeclarationFromBondDescription(character, bond) {
-        if (!this.deObject) {
-            throw new Error("DEngine not initialized");
-        }
-        if (!character.bonds || !character.bonds.declarations) {
-            throw new Error(`Character ${character.name} has no bonds declarations, but trying to get bond declaration for a bond.`);
-        }
-        const bondDeclaration =
-            character.bonds.declarations.find(bondDecl => bondDecl.strangerBond === bond.stranger && bondDecl.minBondLevel <= bond.bond && bond.bond < (bondDecl.maxBondLevel === 100 ? 200 : bondDecl.maxBondLevel) && bondDecl.min2BondLevel <= bond.bond2 && bond.bond2 < (bondDecl.max2BondLevel === 100 ? 200 : bondDecl.max2BondLevel));
-        return bondDeclaration;
     }
 
     /**

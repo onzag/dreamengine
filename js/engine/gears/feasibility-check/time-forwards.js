@@ -27,7 +27,7 @@ export default async function timeForwardsUsingLastMessage(engine, character) {
         "Vary your estimates naturally - do not default to 1 of any unit. Consider the actual duration implied by the actions described, don't be afraid to estimate or guess if it is unclear and give variety in your responses.",
         "If the story fragment does not provide enough information to determine the time passed, give a rough estimate regardless.",
     ], null);
-    const timePassedGenerator = engine.inferenceAdapter.runQuestioningCustomAgentOn(character, systemPrompt, null, lastStoryFragment, null, true);
+    const timePassedGenerator = engine.inferenceAdapter.runQuestioningCustomAgentOn(systemPrompt, null, lastStoryFragment, null, true);
 
     const timePassedResponse = await timePassedGenerator.next();
     if (timePassedResponse.done) {

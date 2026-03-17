@@ -42,6 +42,7 @@ engine.exports = {
             heroism: 1,
             properties: {
                 IS_ROBOT: true,
+                USE_SFW_SIMPLE_BOND_SYSTEM: true,
                 BOND_STRANGER_GOOD: "{{char}} has just met {{other}} for the first time as they arrive at the lunar station. Despite being a robot, {{char}} is intrigued by their presence and eager to learn more about them and be of assistance, {{char}} does not feel threatened but doesn't fully trust them yet.",
                 BOND_STRANGER_NEUTRAL: "{{char}} has just met {{other}} for the first time as they arrive at the lunar station. {{char}} feels neutral about their presence, neither particularly welcoming nor wary, and is open to getting to know them better.",
                 BOND_STRANGER_BAD: "{{char}} has just met {{other}} for the first time as they arrive at the lunar station. {{char}} feels uneasy about their presence, unsure of their intentions towards them as a robot.",

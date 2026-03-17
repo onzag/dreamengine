@@ -1,5 +1,5 @@
 import { deepCopy, DEngine } from "../../index.js";
-import { getBeingCarriedByCharacter, getCharacterExactLocation } from "../../util/character-info.js";
+import { getBeingCarriedByCharacter, getCharacterExactLocation, getExternalDescriptionOfCharacter } from "../../util/character-info.js";
 import { getHistoryForCharacter, getHistoryFragmentForCharacter } from "../../util/messages.js";
 import { checkItemIsOneOfAKindAtLocation, getCharacterCarryingCapacity, getCharacterVolume, getCharacterWeight, getItemExcessElements, getItemVolume, getItemWeight, getWearableFitment, locationPathToMessage, locationPathToMessageWithoutItemName, resolvePath, utilItemCount } from "../../util/weight-and-volume.js";
 
@@ -156,6 +156,12 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
     const lastCycleExpanded = (await getHistoryFragmentForCharacter(engine, character, {
         includeDebugMessages: false,
         includeRejectedMessages: false,
+        msgLimit: "LAST_CYCLE_EXPANDED",
+    })).messages;
+
+    const lastCycleMessages = (await getHistoryFragmentForCharacter(engine, character, {
+        includeDebugMessages: false,
+        includeRejectedMessages: false,
         msgLimit: "LAST_CYCLE",
     })).messages;
 
@@ -174,7 +180,6 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
             ].filter((v) => v !== null), null);
 
         const itemsInteractionGenerator = engine.inferenceAdapter.runQuestioningCustomAgentOn(
-            character,
             systemPromptItemsInteracted,
             null,
             lastCycleExpanded,
@@ -277,7 +282,6 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
     let charactersToQuestion = [character.name];//charState.conversationId ? engine.deObject.conversations[charState.conversationId].participants : [];
 
     const charactersInteractionGenerator = engine.inferenceAdapter.runQuestioningCustomAgentOn(
-        character,
         systemPromptCharactersInteracted,
         null,
         lastCycleExpanded,
@@ -298,7 +302,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
         const nextQuestion = `In the last story fragment, was the character "${charName}" mentioned or interacted with in any way (talked to, looked at, thought about, mentioned, described, etc.)? Answer yes if "${charName}" was mentioned or interacted with, or no if they were not.`;
         console.log("Asking question, " + nextQuestion);
 
-        const charDescription = engine.getExternalDescriptionOfCharacter(charName);
+        const charDescription = await getExternalDescriptionOfCharacter(engine,charName);
         const charDescriptionContextInfo = engine.inferenceAdapter.buildContextInfoCharacterDescription(
             engine.deObject.characters[charName],
             charDescription,
@@ -345,7 +349,6 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
     );
 
     const interactionGenerator = engine.inferenceAdapter.runQuestioningCustomAgentOn(
-        character,
         systemPrompt,
         null,
         lastCycleExpanded,
@@ -1844,10 +1847,14 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
 
     // TODO determine items broken or transformed
 
-    await cleanAll(engine, charState.location, addedMessagesForStoryMaster);
+    await interactionGenerator.next(null); // finish the generator
+
+    await cleanAll(engine, charState.location, lastCycleMessages, addedMessagesForStoryMaster);
 
     console.log(addedMessagesForStoryMaster);
     process.exit(0);
+
+    return addedMessagesForStoryMaster;
 }
 
 /**
@@ -2016,9 +2023,6 @@ function moveItems(
     if (amountToMove <= 0) {
         return;
     }
-    // TODO remove
-    console.log("FROM", fromPotentialLocationPaths);
-    console.log("TO", toPotentialLocationPaths);
 
     if (!engine.deObject) {
         throw new Error("DEngine not initialized");
@@ -2286,9 +2290,6 @@ function moveCharacters(
     finalPath,
     addedMessagesForStoryMaster,
 ) {
-    // TODO remove
-    console.log("CHARTO", toPotentialLocationPaths);
-
     if (!engine.deObject) {
         throw new Error("DEngine not initialized");
     }
@@ -2570,6 +2571,7 @@ function deepEqualItem(a, b, firstLayer = true) {
  * @param {Array<string | number>} path
  * @param {Array<string>} addedMessagesForStoryMaster
  * @param {"first" | "mid" | "last"} cycle
+ * @param {Array<string>} lastCycleMessages
  * @returns {Promise<void>}
  */
 async function cleanDirtyItemTree(
@@ -2580,10 +2582,12 @@ async function cleanDirtyItemTree(
     path,
     addedMessagesForStoryMaster,
     cycle,
+    lastCycleMessages,
 ) {
     if (!engine.deObject) {
         throw new Error("DEngine not initialized");
     }
+    
     const deletedIndices = [];
     for (let i = 0; i < list.length; i++) {
         const item = list[i];
@@ -2721,11 +2725,12 @@ async function cleanDirtyItemTree(
                     addedMessagesForStoryMaster.push(totalBrokenReason);
                 }
 
-
-                await updateItemTitleAndDescription(
+                await updateItemAfterHappenance(
                     engine,
                     item,
                     excess.breakStyle === "overweight" ? "this item got loaded with a lot of heavy stuff which caused it to break from the inside" : "this item got a massive weight on top which caused it to be crushed",
+                    lastCycleMessages,
+                    addedMessagesForStoryMaster,
                 );
             } else {
                 for (const expelledFromOnTopItem of excess.expelledOntopItems) {
@@ -3296,10 +3301,12 @@ async function cleanDirtyItemTree(
                     copy.ontopCharacters = [];
                     copy.containingCharacters = [];
                     resolvedFallenItems.resolved.items.push(copy);
-                    await updateItemTitleAndDescription(
+                    await updateItemAfterHappenance(
                         engine,
                         copy,
-                        "this item got worn by a large character and that caused it to expand and break",
+                        "This item got worn by a large character and that caused it to expand and break",
+                        lastCycleMessages,
+                        addedMessagesForStoryMaster,
                     );
                     // TODO be careful there can still be items inside the broken item, they do not necessarily need to be expelled, but characters always are
                     // TODO merge in case somehow by sheer luck the copy got updated with a similar name and properties as another item already on the ground
@@ -3579,13 +3586,39 @@ function deepCopyItem(item) {
  * Updates the title and description of an item based on a given reason.
  * @param {DEngine} engine 
  * @param {DEItem} item 
- * @param {string} reason 
+ * @param {string} reason
+ * @param {string[]} lastCycleMessages,
+ * @param {string[]} addedMessagesForStoryMaster
  */
-async function updateItemTitleAndDescription(engine, item, reason) {
+async function updateItemAfterHappenance(
+    engine,
+    item,
+    reason,
+    lastCycleMessages,
+    addedMessagesForStoryMaster,
+) {
     if (!engine.deObject) {
         throw new Error("DEngine not initialized");
+    } else if (!engine.inferenceAdapter) {
+        throw new Error("Inference adapter not initialized");
     }
-    // TODO
+
+    const systemPromptItemsInteracted = engine.inferenceAdapter.buildSystemPromptForQuestioningAgent(
+        `You are an asistant and story analyst that checks for interactions with items in an story\n` +
+        "You will be questioned to mention any of the items that were mentioned as being interacted in the last story fragment of a interactive story, and the interaction type (lifting, carrying, moving, using, manipulating, grabbing, etc.)\n",
+        [
+            `An interaction with an item is defined as lifting, carrying, moving, using, or manipulating the item in any way, giving, carrying, dropping, stealing, wearing, taking off, putting on, or any other form of direct physical interaction with the item. Just mentioning or describing the item without any of these interactions does not count as an interaction.`,
+            "If an item is only mentioned or described but not interacted with, answer No, since no interaction happened",
+            "People and other characters are not items, do not consider them for this question"
+        ].filter((v) => v !== null), null);
+
+    const itemsInteractionGenerator = engine.inferenceAdapter.runQuestioningCustomAgentOn(
+        systemPromptItemsInteracted,
+        null,
+        lastCycleMessages,
+        null,
+        true,
+    );
 }
 
 /**
@@ -3806,16 +3839,17 @@ function checkDirectlyCarriedCharacters(engine, characterName, charState, addedM
  * 
  * @param {DEngine} engine
  * @param {string} location
+ * @param {string[]} lastCycleMessages
  * @param {string[]} addedMessagesForStoryMaster
  */
-export async function cleanAll(engine, location, addedMessagesForStoryMaster) {
+export async function cleanAll(engine, location, lastCycleMessages, addedMessagesForStoryMaster) {
     if (!engine.deObject) {
         throw new Error("DEngine not initialized");
     }
     const locationObj = engine.deObject.world.locations[location];
     for (const [slotName, slot] of Object.entries(locationObj.slots)) {
         // first clean at each location, it should work with one single pass because items fall on the ground
-        await cleanDirtyItemTree(engine, location, slotName, slot.items, ["slots", slotName, "items"], addedMessagesForStoryMaster, "first");
+        await cleanDirtyItemTree(engine, location, slotName, slot.items, ["slots", slotName, "items"], addedMessagesForStoryMaster, "first", lastCycleMessages);
     }
 
     const allCharactersAtLocation = [];
@@ -3838,8 +3872,8 @@ export async function cleanAll(engine, location, addedMessagesForStoryMaster) {
             // one of those while checking
             const currStoryMasterMessages = addedMessagesForStoryMaster.length;
             checkDirectlyCarriedCharacters(engine, charName, characterState, addedMessagesForStoryMaster);
-            await cleanDirtyItemTree(engine, characterState.location, characterState.locationSlot, characterState.carrying, ["characters", charName, "carrying"], addedMessagesForStoryMaster, cycleN === 0 ? "first" : "mid");
-            await cleanDirtyItemTree(engine, characterState.location, characterState.locationSlot, characterState.wearing, ["characters", charName, "wearing"], addedMessagesForStoryMaster, cycleN === 0 ? "first" : "mid");
+            await cleanDirtyItemTree(engine, characterState.location, characterState.locationSlot, characterState.carrying, ["characters", charName, "carrying"], addedMessagesForStoryMaster, cycleN === 0 ? "first" : "mid", lastCycleMessages);
+            await cleanDirtyItemTree(engine, characterState.location, characterState.locationSlot, characterState.wearing, ["characters", charName, "wearing"], addedMessagesForStoryMaster, cycleN === 0 ? "first" : "mid", lastCycleMessages);
 
             // congrats no more dropped items, you can move on to the next character
             if (currStoryMasterMessages === addedMessagesForStoryMaster.length) {
@@ -3849,8 +3883,8 @@ export async function cleanAll(engine, location, addedMessagesForStoryMaster) {
         }
 
         // one last time, inefficient yes I know
-        cleanDirtyItemTree(engine, characterState.location, characterState.locationSlot, characterState.carrying, ["characters", charName, "carrying"], addedMessagesForStoryMaster, "last");
-        cleanDirtyItemTree(engine, characterState.location, characterState.locationSlot, characterState.wearing, ["characters", charName, "wearing"], addedMessagesForStoryMaster, "last");
+        await cleanDirtyItemTree(engine, characterState.location, characterState.locationSlot, characterState.carrying, ["characters", charName, "carrying"], addedMessagesForStoryMaster, "last", lastCycleMessages);
+        await cleanDirtyItemTree(engine, characterState.location, characterState.locationSlot, characterState.wearing, ["characters", charName, "wearing"], addedMessagesForStoryMaster, "last", lastCycleMessages);
 
         // cleans up the temporary properties we added for the checks, and also removes items with amount 0
         cleanTemporaryProperties(engine, characterState.carrying);

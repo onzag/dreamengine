@@ -1,6 +1,6 @@
 import { DEngine } from '../engine/index.js';
 import { TextOnlyUI } from '../textonlyapp/ui.js';
-import { InferenceAdapterLlamaUncensored } from "../engine/inference/adapter-llama-uncensored.js";
+import { InferenceAdapterLlamaUncensored } from "../engine/inference/adapter-de-server-uncensored.js";
 import { DEJSEngine } from '../jsengine/index.js';
 import { localResolver } from '../jsengine/local-resolver.js';
 

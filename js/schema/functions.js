@@ -219,7 +219,6 @@ function getPronounHelper(DE, character, listOrCharacter, they, he, she, they_si
  */
 export const specials = [
     [
-        // TODO implement this
         "potential_causant -> string",
         "Only available at potentialCausantNegativeDescription and potentialCausantPositiveDescription, the name of the potential causant for a possible state activation, basically all the present characters",
         "eg. Aria, Thalon, Mira",
@@ -675,36 +674,18 @@ export const utils = [
         },
     ],
     [
-        "is_standing character:string -> boolean",
-        "Boolean indicating if the character is currently standing",
-        "true or false",
+        'get_posture character:string -> "standing" | "crawling" | "climbing" | "sitting" | "lying_down" | "crouching" | "kneeling" | "hanging" | "floating" | "flying" | "swimming"',
+        "String indicating the current posture of the character",
+        '"standing" | "crawling" | "climbing" | "sitting" | "lying_down" | "crouching" | "kneeling" | "hanging" | "floating" | "flying" | "swimming"',
         (DE, character, characterQuestioned) => {
             const stateForChar = DE.stateFor[characterQuestioned];
-            return stateForChar.posture === "standing";
-        }
-    ],
-    [
-        "is_sitting character:string -> boolean",
-        "Boolean indicating if the character is currently sitting",
-        "true or false",
-        (DE, character, characterQuestioned) => {
-            const stateForChar = DE.stateFor[characterQuestioned];
-            return stateForChar.posture === "sitting";
-        }
-    ],
-    [
-        "is_laying_down character:string -> boolean",
-        "Boolean indicating if the character is currently laying down",
-        "true or false",
-        (DE, character, characterQuestioned) => {
-            const stateForChar = DE.stateFor[characterQuestioned];
-            return stateForChar.posture === "laying_down";
+            return stateForChar.posture;
         }
     ],
     [
         "last_saw character:string -> string",
         "String indicating a location where another character should be at according to the character's knowledge",
-        "true or false",
+        "eg. Eldoria, Shadowfen, or empty string if they have no idea",
         (DE, character, characterQuestioned) => {
             // @ts-ignore
             const surroundingCharacters = getSurroundingCharacters({deObject: DE }, character.name);
@@ -714,11 +695,10 @@ export const utils = [
                 return DE.stateFor[character.name].location;
             }
 
-            const charHistoryAndCurrent = [...DE.stateFor[character.name].history, DE.stateFor[character.name]];
-            for (let i = charHistoryAndCurrent.length - 1; i >= 0; i--) {
-                const entry = charHistoryAndCurrent[i];
+            const charHistory = DE.stateFor[character.name].history
+            for (let i = charHistory.length - 1; i >= 0; i--) {
+                const entry = charHistory[i];
                 
-                // TODO fix these
                 if (entry.surroundingNonStrangers.includes(characterQuestioned)) {
                     return entry.location;
                 }
@@ -732,11 +712,19 @@ export const utils = [
         "Boolean indicating if the character is a member that got lost after being left behind (known to this member)",
         "true or false",
         (DE, character, characterQuestioned) => {
+            // @ts-ignore
+            const surroundingCharacters = getSurroundingCharacters({deObject: DE }, character.name);
+
+            if (surroundingCharacters.nonStrangers.includes(characterQuestioned)) {
+                // if the character questioned is a non stranger, we can be sure they are at the same location, so they cannot be lost
+                return false;
+            }
+
             let shouldBeAt = null;
-            const charHistoryAndCurrent = [...DE.stateFor[character.name].history, DE.stateFor[character.name]];
+            const charHistory = DE.stateFor[character.name].history;
             let foundAtIndex = -1;
-            for (let i = charHistoryAndCurrent.length - 1; i >= 0; i--) {
-                const entry = charHistoryAndCurrent[i];
+            for (let i = charHistory.length - 1; i >= 0; i--) {
+                const entry = charHistory[i];
 
                 // TODO fix these
                 if (entry.surroundingNonStrangers.includes(characterQuestioned)) {
@@ -753,8 +741,12 @@ export const utils = [
             };
 
             // check if there is a history entry more recent for that location
-            for (let j = foundAtIndex + 1; j < charHistoryAndCurrent.length; j++) {
-                const entry = charHistoryAndCurrent[j];
+            if (DE.stateFor[character.name].location === shouldBeAt) {
+                // character is currently at the location they last saw the questioned character, they must have lost them
+                return true;
+            }
+            for (let j = foundAtIndex + 1; j < charHistory.length; j++) {
+                const entry = charHistory[j];
                 if (entry.location === shouldBeAt) {
                     // character has been at the location more recently, and the character questioned was not with them, they must have lost them
                     return true;

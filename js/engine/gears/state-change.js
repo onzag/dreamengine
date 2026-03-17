@@ -185,7 +185,7 @@ async function onStateTriggeredOnCharacter(engine, character, stateName) {
     // if we have fallsDown property, set the character posture to laying down
     if (characterStateDescription.fallsDown) {
         console.log(`Character ${character.name} has fallen down due to state ${stateName}.`);
-        characterState.posture = "laying_down";
+        characterState.posture = "lying_down";
 
         // TODO somewhere else the character must use the seekPosture state stuff
     }
@@ -831,7 +831,6 @@ export default async function calculateStateChange(engine, character) {
 
     const systemPrompt = `You are an assistant and social dynamics analyst that helps analyze interactions involving ${character.name}`;
     const questioningAgent = engine.inferenceAdapter.runQuestioningCustomAgentOn(
-        character,
         engine.inferenceAdapter.buildSystemPromptForQuestioningAgent(systemPrompt, [], null),
         null,
         lastCycleMessagesInfo.messages,
@@ -878,7 +877,7 @@ export default async function calculateStateChange(engine, character) {
                         char: character,
                         causants: alreadyActivatedInfo.causants || undefined,
                     })).trim();
-                    if (result.startsWith("yes") || result.startsWith("Yes")) {
+                    if (result === "yes" || result === "Yes" || result === "YES") {
                         console.log(`State intensity modifier matched immediately for state ${stateName} on character ${character.name}`);
                         willExecute = true;
                     } else if (result.endsWith("?")) {
@@ -906,6 +905,7 @@ export default async function calculateStateChange(engine, character) {
                             throw new Error("State intensity modifier prompt generator finished unexpectedly.");
                         }
                         const trimmedAnswer = answer.value.trim().toLowerCase();
+                        console.log("Received answer: " + trimmedAnswer);
                         if (trimmedAnswer === "yes") {
                             console.log(`State intensity modifier matched for state ${stateName} on character ${character.name} via inference`);
                             willExecute = true;
@@ -1167,7 +1167,7 @@ export default async function calculateStateChange(engine, character) {
                 })).trim();
 
                 let executeTrigger = false;
-                if (result === "yes" || result === "Yes") {
+                if (result === "yes" || result === "Yes" || result === "YES") {
                     console.log(`State activation condition matched immediately for state ${stateName} on character ${character.name}`);
                     executeTrigger = true;
                 } else if (result.endsWith("?")) {
@@ -1197,6 +1197,7 @@ export default async function calculateStateChange(engine, character) {
                     }
 
                     const trimmedAnswer = answer.value.trim().toLowerCase();
+                    console.log("Received answer: " + trimmedAnswer);
                     if (trimmedAnswer === "yes") {
                         console.log(`State activation condition matched for state ${stateName} on character ${character.name} via inference`);
                         executeTrigger = true;

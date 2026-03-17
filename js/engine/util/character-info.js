@@ -1,4 +1,5 @@
 import { DEngine } from "../index.js";
+import { getWearableFitment, locationPathToMessage } from "./weight-and-volume.js";
 
 /**
  * @param {DEngine} engine 
@@ -420,4 +421,393 @@ export function getPowerLevelFromCharacter(character) {
 
     const powerLevel = (baseMultipliers[character.tier] || 1) * (character.tierValue || 1);
     return powerLevel;
+}
+
+/**
+ * @param {DEngine} engine
+ * @param {string} characterName 
+ * @param {boolean} onlyBasics
+ * @returns {Promise<string>}
+ */
+export async function getExternalDescriptionOfCharacter(engine, characterName, onlyBasics = false) {
+    if (!engine.deObject) {
+        throw new Error("DEngine not initialized");
+    }
+    const character = engine.deObject.characters[characterName];
+    if (!character) {
+        throw new Error(`Character ${characterName} not found.`);
+    }
+    const characterState = engine.deObject.stateFor[characterName];
+    if (!characterState) {
+        throw new Error(`Character state for ${characterName} not found.`);
+    }
+    let finalDescription = character.shortDescription;
+    if (!finalDescription.endsWith(".")) {
+        finalDescription += ".";
+    }
+
+    for (const state of characterState.states) {
+        const stateInfo = character.states[state.state];
+        let toAdd = "";
+        if (stateInfo.relieving) {
+            if (stateInfo.relievingGeneralCharacterExternalDescriptionInjection) {
+                if (typeof stateInfo.relievingGeneralCharacterExternalDescriptionInjection === "string") {
+                    toAdd = stateInfo.relievingGeneralCharacterExternalDescriptionInjection;
+                } else {
+                    toAdd = await stateInfo.relievingGeneralCharacterExternalDescriptionInjection(engine.deObject, {
+                        char: character,
+                        causants: state.causants || undefined,
+                    });
+                }
+            }
+        } else {
+            if (stateInfo.generalCharacterExternalDescriptionInjection) {
+                if (typeof stateInfo.generalCharacterExternalDescriptionInjection === "string") {
+                    toAdd = stateInfo.generalCharacterExternalDescriptionInjection;
+                } else {
+                    toAdd = await stateInfo.generalCharacterExternalDescriptionInjection(engine.deObject, {
+                        char: character,
+                        causants: state.causants || undefined,
+                    });
+                }
+            }
+        }
+
+
+        toAdd = toAdd.trim();
+        if (toAdd) {
+            if (!toAdd.endsWith(".")) {
+                toAdd += ".";
+            }
+            finalDescription += " " + toAdd;
+        }
+    }
+
+    const topNaked = isTopNaked(engine, characterName);
+    const bottomNaked = isBottomNaked(engine, characterName);
+
+    const hasItemsCoveringTopNakedness = !topNaked;
+    if (!hasItemsCoveringTopNakedness && character.shortDescriptionTopNakedAdd) {
+        finalDescription += ` ${character.shortDescriptionTopNakedAdd}`;
+        if (!finalDescription.endsWith(".")) {
+            finalDescription += ".";
+        }
+    }
+    const hasItemsCoveringBottomNakedness = !bottomNaked;
+    if (!hasItemsCoveringBottomNakedness && character.shortDescriptionBottomNakedAdd) {
+        finalDescription += ` ${character.shortDescriptionBottomNakedAdd}`;
+        if (!finalDescription.endsWith(".")) {
+            finalDescription += ".";
+        }
+    }
+    if (characterState.wearing.length > 0) {
+        finalDescription += " Wearing " + engine.deObject.functions.format_and(engine.deObject, null, characterState.wearing.map(item => item.amount >= 2 ? item.amount + " of " + item.description + " (" + getWearableFitment(engine, item, characterName).fitment + ")" : item.description + " (" + getWearableFitment(engine, item, characterName).fitment + ")")) + ".";
+    } else {
+        finalDescription += " Not wearing any clothes or accessories.";
+    }
+
+    const characterExactLocation = getCharacterExactLocation(engine, characterName);
+
+    if (!onlyBasics) {
+        if (characterState.carrying.length > 0) {
+            finalDescription += " Carrying " + engine.deObject.functions.format_and(engine.deObject, null, characterState.carrying.map(item => item.amount >= 2 ? item.amount + " of " + item.description : item.description)) + ".";
+        } else {
+            finalDescription += " Not carrying any items.";
+        }
+
+        if (characterExactLocation.beingCarriedBy) {
+            finalDescription += ` Being carried by ${characterExactLocation.beingCarriedBy}.`;
+        }
+
+        const carriedCharacters = getListOfCarriedCharactersByCharacter(engine, characterName);
+        if (carriedCharacters.length > 0) {
+            finalDescription += ` Carrying characters: ` + engine.deObject.functions.format_and(engine.deObject, null, carriedCharacters.map((v) => v.carriedName)) + ".";
+        }
+    }
+
+    const posturesThatDoNotSpecifyGround = [
+        "standing",
+        "flying",
+        "floating",
+        "swimming",
+    ]
+
+    let postureAppliedOnDescription = (posturesThatDoNotSpecifyGround.includes(characterState.posture)) ? "at the " + characterState.locationSlot : "on the ground at the " + characterState.locationSlot;
+    if (characterExactLocation.itemPathEnd === "ontopCharacters" && characterExactLocation.itemPath) {
+        postureAppliedOnDescription = locationPathToMessage(engine, characterName, characterState.location, [...characterExactLocation.itemPath, characterExactLocation.itemPathEnd]);
+    } else if (characterExactLocation.itemPathEnd === "containingCharacters" && characterExactLocation.itemPath) {
+        postureAppliedOnDescription = locationPathToMessage(engine, characterName, characterState.location, [...characterExactLocation.itemPath, characterExactLocation.itemPathEnd]);
+    }
+
+    finalDescription += " " + character.name + " is currently " + characterState.posture.replace("_", " ") + " " + postureAppliedOnDescription + ".";
+
+    return finalDescription;
+}
+
+/**
+ * @param {DEngine} engine
+ * @param {string} characterName 
+ * @returns {Promise<{
+ *   general: string,
+ *   expressiveStates: string[],
+ *   relationships: string[],
+ *   stateDominance: number,
+ *   applyingStates: DEApplyingState[],
+ *   rejectedStates: DEApplyingState[],
+ * }>} complete description, list of states, list of relationships
+ */
+export async function getInternalDescriptionOfCharacter(engine, characterName) {
+    if (!engine.deObject) {
+        throw new Error("DEngine not initialized");
+    }
+
+    const character = engine.deObject.characters[characterName];
+    if (!character) {
+        throw new Error(`Character ${characterName} not found.`);
+    }
+
+    const characterState = engine.deObject.stateFor[characterName];
+    if (!characterState) {
+        throw new Error(`Character state for ${characterName} not found.`);
+    }
+
+    let general = typeof character.general === "string" ? character.general : await character.general(engine.deObject, {
+        char: character,
+    });
+
+    for (const injectable of Object.values(character.generalCharacterDescriptionInjection)) {
+        const injectableV = typeof injectable === "string" ? injectable : await injectable(engine.deObject, {
+            char: character,
+        });
+        if (injectableV) {
+            if (!general.endsWith("\n\n")) {
+                general += "\n\n";
+            }
+            general += injectableV;
+        }
+    }
+
+    const applyingStates = [];
+    const rejectedStates = [];
+
+    let maxStateDominance = 0;
+    for (const state of characterState.states) {
+        const stateInfo = character.states[state.state];
+        let dominanceOfThisState = stateInfo.dominance;
+        if (state.relieving && typeof stateInfo.dominanceAfterRelief === "number") {
+            dominanceOfThisState = stateInfo.dominanceAfterRelief;
+        }
+        if (dominanceOfThisState > maxStateDominance) {
+            maxStateDominance = dominanceOfThisState;
+        }
+    }
+
+    /**
+     * @type {string[]}
+     */
+    const statesDescriptions = [];
+    for (const state of characterState.states) {
+        const stateInfo = character.states[state.state];
+
+        let dominanceOfThisState = stateInfo.dominance;
+        if (state.relieving && typeof stateInfo.dominanceAfterRelief === "number") {
+            dominanceOfThisState = stateInfo.dominanceAfterRelief;
+        }
+
+        if (dominanceOfThisState < maxStateDominance) {
+            rejectedStates.push(state);
+            continue;
+        }
+
+        applyingStates.push(state);
+
+        let stateDescription = stateInfo.behaviourType !== "HIDDEN" ? state.state.split("_").map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(" ") : null;
+        if (!state.relieving) {
+            if (stateInfo.behaviourType === "INTENSITY_EXPRESSIVE") {
+                if (state.intensity >= 1.5) {
+                    stateDescription = `Very ${stateDescription}`;
+                } else if (state.intensity >= 2.5) {
+                    stateDescription = `Extremely ${stateDescription}`;
+                } else if (state.intensity >= 3.5) {
+                    stateDescription = `Overwhelmingly ${stateDescription}`;
+                }
+            }
+
+            if (stateInfo.relievingGeneralCharacterDescriptionInjection) {
+                const relievingInjection = typeof stateInfo.relievingGeneralCharacterDescriptionInjection === "string" ? stateInfo.relievingGeneralCharacterDescriptionInjection : (await stateInfo.relievingGeneralCharacterDescriptionInjection(engine.deObject, {
+                    char: character,
+                })).trim();
+                if (relievingInjection) {
+                    if (!general.endsWith("\n\n")) {
+                        general += "\n\n";
+                    }
+                    general += relievingInjection;
+                }
+            }
+        } else {
+            if (stateInfo.behaviourType !== "HIDDEN") {
+                if (state.intensity >= 1.5) {
+                    stateDescription = `Relieving from being ${stateDescription}, nonetheless still ${stateDescription}`;
+                } else if (state.intensity >= 2.5) {
+                    stateDescription = `Relieving from being ${stateDescription}, nonetheless still Very ${stateDescription}`;
+                } else if (state.intensity >= 3.5) {
+                    stateDescription = `Relieving from being ${stateDescription}, nonetheless still Extremely ${stateDescription}`;
+                }
+            }
+
+            if (stateInfo.generalCharacterDescriptionInjection) {
+                const injection = typeof stateInfo.generalCharacterDescriptionInjection === "string" ? stateInfo.generalCharacterDescriptionInjection : (await stateInfo.generalCharacterDescriptionInjection(engine.deObject, {
+                    char: character,
+                })).trim();
+                if (injection) {
+                    if (!general.endsWith("\n\n")) {
+                        general += "\n\n";
+                    }
+                    general += injection;
+                }
+            }
+        }
+
+        if (stateDescription) {
+            statesDescriptions.push(stateDescription);
+        }
+    }
+
+    const bonds = engine.deObject.social.bonds[characterName];
+    /**
+     * @type {string[]}
+     */
+    const relationships = [];
+
+    for (const activeBond of bonds.active) {
+        if (!character.bonds) {
+            throw new Error(`Character ${characterName} has no bonds defined.`);
+        }
+        const bondDeclaration = character.bonds.declarations.find(bondDecl => bondDecl.strangerBond === activeBond.stranger && bondDecl.minBondLevel <= activeBond.bond && activeBond.bond < (bondDecl.maxBondLevel === 100 ? 200 : bondDecl.maxBondLevel) && bondDecl.min2BondLevel <= activeBond.bond2 && activeBond.bond2 < (bondDecl.max2BondLevel === 100 ? 200 : bondDecl.max2BondLevel));
+        if (bondDeclaration) {
+            let result = typeof bondDeclaration.description === "string" ? bondDeclaration.description : (await bondDeclaration.description(engine.deObject, {
+                char: character,
+                other: engine.deObject.characters[activeBond.towards],
+            })).trim();
+            if (bondDeclaration.bondAdditionalDescription) {
+                if (!result.endsWith(". ")) {
+                    result += ". ";
+                } else if (!result.endsWith(" ")) {
+                    result += " ";
+                }
+                result += typeof bondDeclaration.bondAdditionalDescription === "string" ? bondDeclaration.bondAdditionalDescription : (await bondDeclaration.bondAdditionalDescription(engine.deObject, {
+                    char: character,
+                    other: engine.deObject.characters[activeBond.towards],
+                })).trim();
+            }
+            relationships.push(result);
+
+            if (bondDeclaration.generalCharacterDescriptionInjection) {
+                const injection = typeof bondDeclaration.generalCharacterDescriptionInjection === "string" ? bondDeclaration.generalCharacterDescriptionInjection : (await bondDeclaration.generalCharacterDescriptionInjection(engine.deObject, {
+                    char: character,
+                    other: engine.deObject.characters[activeBond.towards],
+                })).trim();
+                if (injection) {
+                    if (!general.endsWith("\n\n")) {
+                        general += "\n\n";
+                    }
+                    general += injection;
+                }
+            }
+        }
+    }
+
+    // ex bonds only inject system prompts, as they are not active relationships but ex-relationships
+    // they may be mourning or have other effects on the character's mindset so only relevant to system prompt injections
+    for (const exBond of bonds.ex) {
+        if (!character.bonds) {
+            throw new Error(`Character ${characterName} has no bonds defined.`);
+        }
+        const bondDeclaration = character.bonds.declarations.find(bondDecl => bondDecl.strangerBond === exBond.stranger && bondDecl.minBondLevel <= exBond.bond && exBond.bond < (bondDecl.maxBondLevel === 100 ? 200 : bondDecl.maxBondLevel) && bondDecl.min2BondLevel <= exBond.bond2 && exBond.bond2 < (bondDecl.max2BondLevel === 100 ? 200 : bondDecl.max2BondLevel));
+        if (bondDeclaration) {
+            if (bondDeclaration.generalCharacterDescriptionInjectionEx) {
+                const injection = typeof bondDeclaration.generalCharacterDescriptionInjectionEx === "string" ? bondDeclaration.generalCharacterDescriptionInjectionEx : (await bondDeclaration.generalCharacterDescriptionInjectionEx(engine.deObject, {
+                    char: character,
+                    other: engine.deObject.characters[exBond.towards],
+                })).trim();
+                if (injection) {
+                    if (!general.endsWith("\n\n")) {
+                        general += "\n\n";
+                    }
+                    general += injection;
+                }
+            }
+        }
+    }
+
+    // make final descriptions for total strangers for the standard stranger bond
+    if (!character.bonds) {
+        throw new Error(`Character ${characterName} has no bonds defined.`);
+    }
+    const strangerBondDeclaration = character.bonds.declarations.find(bondDecl => bondDecl.strangerBond === true && bondDecl.minBondLevel <= 0 && 0 < (bondDecl.maxBondLevel === 100 ? 200 : bondDecl.maxBondLevel) && bondDecl.min2BondLevel <= 0 && 0 < (bondDecl.max2BondLevel === 100 ? 200 : bondDecl.max2BondLevel));
+    if (strangerBondDeclaration) {
+        // these do apply to all the total strangers
+        const surroundingChars = getSurroundingCharacters(engine, characterName);
+        const allSurroundingTotalStrangers = surroundingChars.totalStrangers;
+        for (const strangerName of allSurroundingTotalStrangers) {
+            const strangerCharacter = engine.deObject.characters[strangerName];
+            if (strangerCharacter) {
+                let result = typeof strangerBondDeclaration.description === "string" ? strangerBondDeclaration.description : (await strangerBondDeclaration.description(engine.deObject, {
+                    char: character,
+                    other: strangerCharacter,
+                })).trim();
+                if (strangerBondDeclaration.bondAdditionalDescription) {
+                    if (!result.endsWith(". ")) {
+                        result += ". ";
+                    } else if (!result.endsWith(" ")) {
+                        result += " ";
+                    }
+                    result += typeof strangerBondDeclaration.bondAdditionalDescription === "string" ? strangerBondDeclaration.bondAdditionalDescription : (await strangerBondDeclaration.bondAdditionalDescription(engine.deObject, {
+                        char: character,
+                        other: strangerCharacter,
+                    })).trim();
+                }
+                relationships.push(result);
+            }
+
+            if (strangerBondDeclaration.generalCharacterDescriptionInjection) {
+                const injection = typeof strangerBondDeclaration.generalCharacterDescriptionInjection === "string" ? strangerBondDeclaration.generalCharacterDescriptionInjection : (await strangerBondDeclaration.generalCharacterDescriptionInjection(engine.deObject, {
+                    char: character,
+                    other: strangerCharacter,
+                })).trim();
+                if (injection) {
+                    if (!general.endsWith("\n\n")) {
+                        general += "\n\n";
+                    }
+                    general += injection;
+                }
+            }
+        }
+    }
+
+    return {
+        general: general.trim(),
+        expressiveStates: statesDescriptions,
+        relationships,
+        stateDominance: maxStateDominance,
+        applyingStates,
+        rejectedStates,
+    };
+}
+
+/**
+ * @param {DECompleteCharacterReference} character 
+ * @param {DESingleBondDescription} bond 
+ */
+export function getBondDeclarationFromBondDescription(character, bond) {
+    if (!character.bonds || !character.bonds.declarations) {
+        return null;
+    }
+    const bondDeclaration =
+        character.bonds.declarations.find(bondDecl => bondDecl.strangerBond === bond.stranger && bondDecl.minBondLevel <= bond.bond && bond.bond < (bondDecl.maxBondLevel === 100 ? 200 : bondDecl.maxBondLevel) && bondDecl.min2BondLevel <= bond.bond2 && bond.bond2 < (bondDecl.max2BondLevel === 100 ? 200 : bondDecl.max2BondLevel));
+
+    if (!bondDeclaration) {
+        return null;
+    }
+    return bondDeclaration;
 }

@@ -427,7 +427,6 @@ ${states.join(", ")}
     }
 
     /**
-     * @param {DECompleteCharacterReference} character 
      * @param {string} system
      * @param {string|null} contextInfoBefore additional context information to provide to the agent
      * @param {Array<string>} messages
@@ -436,7 +435,6 @@ ${states.join(", ")}
      * @returns {import('./base.js').QuestionAgentGeneratorResponse}
      */
     async *runQuestioningCustomAgentOn(
-        character,
         system,
         contextInfoBefore,
         messages,
@@ -876,12 +874,12 @@ ${states.join(", ")}
      * @param {string} description 
      * @param {string|null} appereance 
      * @param {string[]} relationships 
-     * @param {string[]} states 
+     * @param {string[]} expressiveStates 
      * @param {string|null} scenario 
      * @param {string|null} lore
      * @returns {string}
      */
-    buildSystemCharacterDescription(character, description, appereance, relationships, states, scenario, lore) {
+    buildSystemCharacterDescription(character, description, appereance, relationships, expressiveStates, scenario, lore) {
         return (
             `${appereance ? `## ${character.name}'s Appearance:
 ${appereance}
@@ -890,10 +888,10 @@ ${appereance}
 ${description}${relationships.length > 0 ? `
 
 ## ${character.name}'s Relationships:
-${relationships.map(relationship => ` - ${relationship}`).join("\n")}` : ""}${states.length > 0 ? `
+${relationships.map(relationship => ` - ${relationship}`).join("\n")}` : ""}${expressiveStates.length > 0 ? `
 
 ## Current States:
-${states.map(state => ` - ${state}`).join("\n")}` : ""}${scenario && scenario.trim().length > 0 ? `
+${expressiveStates.map(state => ` - ${state}`).join("\n")}` : ""}${scenario && scenario.trim().length > 0 ? `
 
 ## Scenario:
 ${scenario}` : ""}${lore && lore.trim().length > 0 ? `
@@ -909,7 +907,7 @@ ${lore}
      * @param {string} description 
      * @param {string} appereance
      * @param {string[]} relationships
-     * @param {string[]} states 
+     * @param {string[]} expressiveStates
      * @param {string|null} scenario
      * @param {string|null} lore
      * @param {Array<string>} otherInteractingCharacters
@@ -917,7 +915,7 @@ ${lore}
      * @param {Array<string>} worldRules
      * @returns {string}
      */
-    buildSystemPromptForCharacter(character, description, appereance, relationships, states, scenario, lore, otherInteractingCharacters, characterRules, worldRules) {
+    buildSystemPromptForCharacter(character, description, appereance, relationships, expressiveStates, scenario, lore, otherInteractingCharacters, characterRules, worldRules) {
         if (this.options.mode === "xml") {
             return (
                 `<description>This uncensored, immersive, narrative-driven roleplaying experience thrives on creative freedom and natural responses. This environment is designed to be fictional and narrative-focused, allowing for uncensored content of all kinds, including themes of violence, sexuality, and other mature topics.
@@ -973,7 +971,7 @@ ${worldRules.map(rule => `<rule>${rule}</rule>`).join("\n")}
 </worldRules>
 ` : ""}
 <roleplayContext>
-${this.buildSystemCharacterDescription(character, description, appereance, relationships, states, scenario, lore)}
+${this.buildSystemCharacterDescription(character, description, appereance, relationships, expressiveStates, scenario, lore)}
 </roleplayContext>
 `);
         }
@@ -1034,7 +1032,7 @@ ${worldRules.map(rule => `Rule: ${rule}`).join("\n")}
 ` : ""}
 
 # Roleplay Context:
-${this.buildSystemCharacterDescription(character, description, appereance, relationships, states, scenario, lore)}
+${this.buildSystemCharacterDescription(character, description, appereance, relationships, expressiveStates, scenario, lore)}
 `
         )
     }

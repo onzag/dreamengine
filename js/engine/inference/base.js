@@ -67,7 +67,6 @@ export class BaseInferenceAdapter {
      * When the generator is called it will yield "entire answers" as they are generated, not token by token; giving it a next
      * question will make it keep ongoing, passing null will make it stop after the current answer and the generator will finish.
      * 
-     * @param {DECompleteCharacterReference} character 
      * @param {string} system
      * @param {string|null} contextInfoBefore additional context information to provide to the agent
      * @param {Array<string>} messages
@@ -76,7 +75,6 @@ export class BaseInferenceAdapter {
      * @returns {QuestionAgentGeneratorResponse}
      */
     async *runQuestioningCustomAgentOn(
-        character,
         system,
         contextInfoBefore,
         messages,
@@ -91,7 +89,7 @@ export class BaseInferenceAdapter {
      * @param {string} description the description of the character, general
      * @param {string} appereance the appereance description of the character
      * @param {string[]} relationships the relationships description of the character
-     * @param {string[]} states the current applying states of the character, most dominant ones, short summary do not explain everything
+     * @param {string[]} expressiveStates the current applying expressive states of the character, most dominant ones, short summary do not explain everything
      * @param {string} scenario the basic description of the current location
      * @param {string|null} lore the lore related to the character or scenario
      * @param {Array<string>} otherInteractingCharacters the other characters interacting with this character
@@ -99,7 +97,7 @@ export class BaseInferenceAdapter {
      * @param {Array<string>} worldRules the rules that apply to the world or scenario
      * @returns {string} the system prompt
      */
-    buildSystemPromptForCharacter(character, description, appereance, relationships, states, scenario, lore, otherInteractingCharacters, characterRules, worldRules) {
+    buildSystemPromptForCharacter(character, description, appereance, relationships, expressiveStates, scenario, lore, otherInteractingCharacters, characterRules, worldRules) {
         throw new Error("Method 'buildSystemPromptForCharacter()' must be implemented.");
     }
 
@@ -108,12 +106,12 @@ export class BaseInferenceAdapter {
      * @param {string} description the description of the character, general
      * @param {string|null} appereance the appereance description of the character
      * @param {string[]} relationships the relationships description of the character
-     * @param {string[]} states the current applying states of the character, most dominant ones, short or long summary
+     * @param {string[]} expressiveStates the current applying expressive states of the character, most dominant ones, short or long summary
      * @param {string|null} scenario the basic description of the current location
      * @param {string|null} lore the lore related to the character or scenario
      * @returns {string} the system prompt
      */
-    buildSystemCharacterDescription(character, description, appereance, relationships, states, scenario, lore) {
+    buildSystemCharacterDescription(character, description, appereance, relationships, expressiveStates, scenario, lore) {
         throw new Error("Method 'buildSystemCharacterDescription()' must be implemented.");
     }
 

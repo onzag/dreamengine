@@ -17,10 +17,13 @@ export const deEngineUtils = {
             };
             Object.keys(DE.functions).forEach((key) => {
                 // @ts-ignore
-                obj[key] = (...args) => {
+                if (!obj[key]) {
                     // @ts-ignore
-                    return DE.functions[key](DE, info.char, ...args);
-                };
+                    obj[key] = (...args) => {
+                        // @ts-ignore
+                        return DE.functions[key](DE, info.char, ...args);
+                    };
+                }
             });
             return compiled(obj);
         }
