@@ -19,31 +19,34 @@ The strength of a bond with a character causes them to build relationships, that
 ### The User is a Character
 From the Engine Perspective, the user is also a character; they are not trated any specially than the others, the user is not the main character and does not dictate the rules.
 
-### The Story Master dictates the rules
-The Story master is a heuristic based creature wedged in the story, that dictates the rules on how the story can progress; a sci-fi world does not allow magic, you are not strong enough to carry an item, you cannot beat the dragon, etc... think of them as the DM.
+### Story Rules
+A sci-fi world does not allow magic, you are not strong enough to carry an item, you cannot beat the dragon, etc... these are all rules that can be set up in the story, and the characters will abide by them, they will not do things that are not allowed in the story, and they will not do things that they are not strong enough to do.
 
 ### Characters have traits, states and triggers
 Characters are a complex dynamic of traits, hidden mental and emotional states and triggers (reactions to the environment); that cause them to behave a certain way, since a script can also define these, a character can be constructed of many imported traits, states and triggers; or otherwise fully customized.
 
 The level of customization of the behaviour of a character is virtually endless, and because it doesn't consume attention in the final execution; a character can be absurdly complex, even, and it will not affect quality of the output.
 
+### Characters experience the world individually
+Each character experiences the world in their own way, they have their own perspective and knowledge and even remember events differently.
+
 ### No omnicience
 Character do not have omnicience, that includes you, the user. Things that happen when a character is not present are simply unknowable by such character.
 
 ### Virtually Endless Context Size
-The context is manually resized as the story flows, DreamEngine uses a Dynamic context that keeps the story fresh and limits repetition by itself.
+The context is automatically resized as the story flows, DreamEngine uses a Dynamic exponential resizing context that keeps the story fresh and limits repetition by itself.
 
 ### Power Scaling
 Builtin base and extendable power scaling system means you cannot just solo a universe by default, not even if you believe in yourself.
 
 ### Works with any underlying model
-So as long as it is compatible with the inner infrastructure, it should be large enough to work well nevertheless.
+So as long as it is compatible with the inner infrastructure, Llama, Mistral, GLM, etc...
 
 ### NSFW Capable
 Capable of being explicit, capable of being conditionally explicit too; you may need to build bonds and relationships first or otherwise you will destroy your relationship, the conditional nature means characters can respond very negatively to unproper advances, highly realistic, the 2nd axis of the bond system is often used for romantic/sexual advances with characters and determines what is and isn't possible.
 
 ### And More
-The engine behaviour is fully customizable via scripting, after all; entire verses can be coded. The engine only shines then, on a 1-to-1 conversation it misses a lot of the potential.
+The engine behaviour is fully customizable via scripting, after all; entire verses can be coded. The engine only shines then, it is meant as a world simulator not as a simple roleplay engine.
 
 ## Key Considerations
 
