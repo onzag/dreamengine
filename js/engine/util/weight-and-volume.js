@@ -451,6 +451,7 @@ export function getItemExcessElements(engine, item) {
  *       fitment: string,
  *       shouldFallDown: boolean,
  *       shouldBreak: boolean,
+ *       breakReason: string|null,
  *    }}
  */
 export function getWearableFitment(engine, item, character, isNotBeingCurrentlyWorn = false) {
@@ -487,6 +488,7 @@ export function getWearableFitment(engine, item, character, isNotBeingCurrentlyW
                 fitment: engine.deObject.functions.format_and(engine.deObject, null, ["fits perfectly", ...extraAddedExtraTraitsAtTheEnd]),
                 shouldFallDown: false,
                 shouldBreak: false,
+                breakReason: null,
             }
         } else if (fitTooSmall) {
             for (const trait of item.wearableProperties.otherFitmentTraitsSnug || []) {
@@ -505,6 +507,13 @@ export function getWearableFitment(engine, item, character, isNotBeingCurrentlyW
                 fitment: engine.deObject.functions.format_and(engine.deObject, null, [fitmentDescription, ...extraAddedExtraTraitsAtTheEnd]),
                 shouldFallDown: false,
                 shouldBreak: totalBodyVolume > largestSizeItCanFit,
+                breakReason: totalBodyVolume > largestSizeItCanFit ? [
+                    `${item.name} got worn so tightly that it broke`,
+                    `${item.name} was stretched beyond its limit and tore apart`,
+                    `${item.name} split at the seams from being forced on too tightly`,
+                    `${item.name} burst open, unable to contain the wearer's body`,
+                    `${item.name} ripped apart from the extreme tightness`,
+                ][Math.floor(Math.random() * 5)] : null,
             }
         } else {
             for (const trait of item.wearableProperties.otherFitmentTraitsLoose || []) {
@@ -523,6 +532,7 @@ export function getWearableFitment(engine, item, character, isNotBeingCurrentlyW
                 fitment: engine.deObject.functions.format_and(engine.deObject, null, [fitmentDescription, ...extraAddedExtraTraitsAtTheEnd]),
                 shouldFallDown: totalBodyVolume < smallestSizeItCanFit,
                 shouldBreak: false,
+                breakReason: null,
             }
         }
     } else {
@@ -530,6 +540,7 @@ export function getWearableFitment(engine, item, character, isNotBeingCurrentlyW
             fitment: "does not fit",
             shouldFallDown: true,
             shouldBreak: false,
+            breakReason: null,
         };
     }
 }

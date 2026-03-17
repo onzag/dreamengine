@@ -229,7 +229,7 @@ Get-Content -Path '${this.storyFilePath}' -Wait -Encoding UTF8`);
         accumulatedMessages = accumulatedMessages.reverse();
 
         const coloredBuffer = accumulatedMessages.map(m => {
-            return colorFor(m) + parseMessageInComponentsAsText(m.name, m.message);
+            return colorFor(m) + (m.debug ? m.message : parseMessageInComponentsAsText(m.name, m.message));
         }).join("\n\n");
 
         if (coloredBuffer.length > 0) {

@@ -714,7 +714,7 @@ export class DEngine {
 
         // TODO add startup script for the scene?
 
-        const expectedParticipants = sceneObject.startingEngagedCharacters || [];
+        const expectedParticipants = sceneObject.startingEngagedCharacters ? [...sceneObject.startingEngagedCharacters] : [];
         expectedParticipants.push(this.userCharacter.name);
 
         // ensure these are at the given location, if not, teleport them there
@@ -2238,6 +2238,7 @@ export class DEngine {
             throw new Error("DEngine is already executing a cycle, cannot execute another one concurrently.");
         } else if (!this.pseudoConversationSummaryGenerator) {
             // TODO reenable this error once we have a proper LLM integration
+            // TODO maybe instead of this summary generator, we can just do it on the fly
             // throw new Error("DEngine has no pseudo conversation summary generator defined, cannot execute cycle.");
         }
 

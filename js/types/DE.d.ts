@@ -1576,14 +1576,6 @@ declare interface DEItem {
      */
     maxVolumeOnTopLiters: number;
     /**
-     * The items that this item is made of, for example a wooden table
-     * may be made of planks and nails
-     * 
-     * This is currently not used natively by the engine but it may be useful
-     * by scripts or external systems that want to do crafting or similar mechanics
-     */
-    madeOf?: Array<DEItem>;
-    /**
      * The amount of this item in the stack
      */
     amount: number;

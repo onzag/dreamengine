@@ -3,10 +3,6 @@ import { getBeingCarriedByCharacter, getCharacterExactLocation, getExternalDescr
 import { getHistoryForCharacter, getHistoryFragmentForCharacter } from "../../util/messages.js";
 import { checkItemIsOneOfAKindAtLocation, getCharacterCarryingCapacity, getCharacterVolume, getCharacterWeight, getItemExcessElements, getItemVolume, getItemWeight, getWearableFitment, locationPathToMessage, locationPathToMessageWithoutItemName, resolvePath, utilItemCount } from "../../util/weight-and-volume.js";
 
-// TODO repair locations not here, but somewhere during creating the world
-// because the placement of an item does not fall in line with how they are
-// meant by the engine
-
 /**
  * 
  * @param {string} word 
@@ -302,7 +298,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
         const nextQuestion = `In the last story fragment, was the character "${charName}" mentioned or interacted with in any way (talked to, looked at, thought about, mentioned, described, etc.)? Answer yes if "${charName}" was mentioned or interacted with, or no if they were not.`;
         console.log("Asking question, " + nextQuestion);
 
-        const charDescription = await getExternalDescriptionOfCharacter(engine,charName);
+        const charDescription = await getExternalDescriptionOfCharacter(engine, charName);
         const charDescriptionContextInfo = engine.inferenceAdapter.buildContextInfoCharacterDescription(
             engine.deObject.characters[charName],
             charDescription,
@@ -1846,6 +1842,7 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
     }
 
     // TODO determine items broken or transformed
+    // TODO determine items consumed
 
     await interactionGenerator.next(null); // finish the generator
 
@@ -2587,7 +2584,7 @@ async function cleanDirtyItemTree(
     if (!engine.deObject) {
         throw new Error("DEngine not initialized");
     }
-    
+
     const deletedIndices = [];
     for (let i = 0; i < list.length; i++) {
         const item = list[i];
@@ -2728,8 +2725,11 @@ async function cleanDirtyItemTree(
                 await updateItemAfterHappenance(
                     engine,
                     item,
-                    excess.breakStyle === "overweight" ? "this item got loaded with a lot of heavy stuff which caused it to break from the inside" : "this item got a massive weight on top which caused it to be crushed",
+                    excess.breakStyle === "overweight" ? "got loaded with a lot of heavy stuff which caused it to break from the inside" : "got a massive weight on top which caused it to be crushed",
                     lastCycleMessages,
+                    "DESTROYED_ITEM",
+                    excess.breakReason,
+                    false,
                     addedMessagesForStoryMaster,
                 );
             } else {
@@ -2894,7 +2894,8 @@ async function cleanDirtyItemTree(
     } else if (path.length === 3 && path[0] === "slots") {
         // now for items that are directly on the ground, we are going to check if the slot is overfilled and has
         // zero capacity, so the items will begin to pile up in other slots instead
-        // TODO
+        // Actually this is not necessary, they were already there, so, no mass or volume was added to the slot
+        // it's just changing location, it must fit
     } else if (path.length === 3 && path[0] === "characters") {
         // now for items on characters
         const carryingCapacity = getCharacterCarryingCapacity(
@@ -3300,16 +3301,42 @@ async function cleanDirtyItemTree(
                     const copy = deepCopyItem(wornItem);
                     copy.ontopCharacters = [];
                     copy.containingCharacters = [];
-                    resolvedFallenItems.resolved.items.push(copy);
                     await updateItemAfterHappenance(
                         engine,
                         copy,
-                        "This item got worn by a large character and that caused it to expand and break",
+                        "got worn by a large character and that caused it to expand and break",
                         lastCycleMessages,
+                        "EXPLODED_CLOTHING",
+                        wearableFitment.breakReason,
+                        true,
                         addedMessagesForStoryMaster,
                     );
-                    // TODO be careful there can still be items inside the broken item, they do not necessarily need to be expelled, but characters always are
-                    // TODO merge in case somehow by sheer luck the copy got updated with a similar name and properties as another item already on the ground
+                    
+                    // Expelling contained and ontop items
+                    for (const itemContained of copy.containing) {
+                        expellItemToFallen(itemContained, itemContained.amount || 1);
+                        itemContained.amount = 0;
+                    }
+                    for (const ontopItem of copy.ontop) {
+                        expellItemToFallen(ontopItem, ontopItem.amount || 1);
+                        ontopItem.amount = 0;
+                    }
+
+                    // Extremely unlikely
+                    let foundAlready = false;
+                    for (const item of resolvedFallenItems.resolved.items) {
+                        if (deepEqualItem(item, copy)) {
+                            item.amount += copy.amount || 1;
+                            foundAlready = true;
+                            break;
+                        }
+                    }
+                    if (!foundAlready) {
+                        resolvedFallenItems.resolved.items.push(copy);
+                    }
+
+                    // TODO these messages must be wack, because the updateItemAfterHappenance already does something akin
+
                     wornItem.amount = 0;
                     const itemDesc = utilItemCount(engine, charState.location, wornItem.owner, wornItem.amount || 1, wornItem.name, true, true);
                     const singular = wornItem.amount === 1;
@@ -3539,8 +3566,6 @@ function ensurePathOfOne(engine, currentLocation, pathResolved) {
             next.amount > 1 &&
             Array.isArray(current)
         ) {
-            // TODO remove this log
-            console.log("SPLIT: Splitting item stack because we are placing on top / inside of it and it has amount", next.amount, "item:", next.name);
             // make a deep copy of the item
             const nextDeepCopy = deepCopyItem(next);
             // that copy will contain the remaining items, while the original will be left with one item, and we will place the copy next to it
@@ -3588,6 +3613,9 @@ function deepCopyItem(item) {
  * @param {DEItem} item 
  * @param {string} reason
  * @param {string[]} lastCycleMessages,
+ * @param {"EXPLODED_CLOTHING" | "DESTROYED_ITEM" | "NONE"} destroyed
+ * @param {string|null} destroyedReason
+ * @param {boolean} includeFallenItemsInStoryMasterMessage
  * @param {string[]} addedMessagesForStoryMaster
  */
 async function updateItemAfterHappenance(
@@ -3595,6 +3623,9 @@ async function updateItemAfterHappenance(
     item,
     reason,
     lastCycleMessages,
+    destroyed,
+    destroyedReason,
+    includeFallenItemsInStoryMasterMessage,
     addedMessagesForStoryMaster,
 ) {
     if (!engine.deObject) {
@@ -3604,21 +3635,231 @@ async function updateItemAfterHappenance(
     }
 
     const systemPromptItemsInteracted = engine.inferenceAdapter.buildSystemPromptForQuestioningAgent(
-        `You are an asistant and story analyst that checks for interactions with items in an story\n` +
-        "You will be questioned to mention any of the items that were mentioned as being interacted in the last story fragment of a interactive story, and the interaction type (lifting, carrying, moving, using, manipulating, grabbing, etc.)\n",
-        [
-            `An interaction with an item is defined as lifting, carrying, moving, using, or manipulating the item in any way, giving, carrying, dropping, stealing, wearing, taking off, putting on, or any other form of direct physical interaction with the item. Just mentioning or describing the item without any of these interactions does not count as an interaction.`,
-            "If an item is only mentioned or described but not interacted with, answer No, since no interaction happened",
-            "People and other characters are not items, do not consider them for this question"
-        ].filter((v) => v !== null), null);
+        `You are an assistant and story analyst that helps update the item named ${item.name} in an interactive story`,
+        ([
+            `When generating a description for ${item.name}, you should take into account the reason provided for the update, and reflect it in the description. For example, if the reason is that the item got wet, you can add some details about how it got wet, how it looks now that it's wet, how it smells, etc.`,
+            `The new description should be a one line description that is short and concise`,
+            destroyed !== "NONE" ? `The destruction of ${item.name} should make it so that the new name implies it cannot be destroyed any further, the parts should be able to withstand any damage` : null,
+        ]).filter(v => v !== null), null);
 
     const itemsInteractionGenerator = engine.inferenceAdapter.runQuestioningCustomAgentOn(
         systemPromptItemsInteracted,
         null,
         lastCycleMessages,
-        null,
+        engine.inferenceAdapter.buildContextInfoInstructions(
+            "It was determined that during the story provided, the item named " + item.name + " " + reason + ".\n\nThe item is currently described as: " + item.description,
+        ),
         true,
     );
+
+    if (destroyed === "EXPLODED_CLOTHING") {
+        delete item.wearableProperties;
+        delete item.communicator;
+        delete item.consumableProperties;
+        item.owner = null;
+        item.maxWeightOnTopKg = 0;
+        item.maxVolumeOnTopLiters = 0;
+    } else if (destroyed === "DESTROYED_ITEM") {
+        delete item.containerProperties;
+        delete item.wearableProperties;
+        delete item.communicator;
+        item.maxWeightOnTopKg = 0;
+        item.owner = null;
+        item.maxVolumeOnTopLiters = 0;
+    }
+
+    const ready = await itemsInteractionGenerator.next();
+    if (ready.done) {
+        throw new Error("Questioning agent could not be started properly for item changes check.");
+    }
+
+    const yesNoGrammar = `root ::= ("yes" | "no" | "Yes" | "No" | "YES" | "NO") ${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()}\n`;
+
+    let brokeInPieces = false;
+    let brokeInPiecesCount = 0;
+    if (destroyed !== "NONE") {
+        const questionBrokenMultipleName = "Given the damage received, did the item named " + item.name + " broke in multiple pieces that are now separate items?";
+        console.log("Asking question: " + questionBrokenMultipleName);
+
+        const answerBrokenMultiple = await itemsInteractionGenerator.next({
+            maxCharacters: 5,
+            maxParagraphs: 1,
+            maxSafetyCharacters: 10,
+            nextQuestion: questionBrokenMultipleName,
+            stopAfter: [],
+            stopAt: ["\n"],
+            grammar: yesNoGrammar,
+            answerTrail: "Answer:\n\n",
+            contextInfo: engine.inferenceAdapter.buildContextInfoInstructions(
+                "Answer 'Yes' if the item is now in multiple pieces, Answer 'No' if the item is sturdy or flexible enough that it would just rip or crumble but still be one item",
+            ),
+        });
+
+        if (answerBrokenMultiple.done) {
+            throw new Error("Questioning agent finished before providing an answer for the item broken in multiple pieces question.");
+        }
+
+        const answerBrokenMultipleText = answerBrokenMultiple.value.trim().toLowerCase();
+        const isBrokenInMultiplePieces = answerBrokenMultipleText === "yes";
+        brokeInPieces = isBrokenInMultiplePieces;
+
+        if (isBrokenInMultiplePieces) {
+            const questionPiecesCount = "How many pieces is the item named " + item.name + " now broken into?";
+            console.log("Asking question: " + questionPiecesCount);
+            const answerPiecesCount = await itemsInteractionGenerator.next({
+                maxCharacters: 5,
+                maxParagraphs: 1,
+                maxSafetyCharacters: 10,
+                nextQuestion: questionPiecesCount,
+                stopAfter: [],
+                stopAt: ["\n"],
+                grammar: `root ::= [0-9]+ ${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()}\n`,
+                answerTrail: "Answer:\n\n",
+                contextInfo: engine.inferenceAdapter.buildContextInfoInstructions(
+                    "It was determined that the item named " + item.name + " is now broken in multiple pieces after the damage it received\n\n" +
+                    "Provide only a number for how many pieces the item is now broken into, if the story doesn't hint a number or is ambiguous, provide your best guess based on the type of item and the damage it received",
+                ),
+            });
+
+            if (answerPiecesCount.done) {
+                throw new Error("Questioning agent finished before providing an answer for the item pieces count question.");
+            }
+
+            const answerPiecesCountText = answerPiecesCount.value.trim();
+            const piecesCount = parseInt(answerPiecesCountText);
+            if (isNaN(piecesCount) || piecesCount < 1) {
+                throw new Error("Invalid answer for the item pieces count question: " + answerPiecesCountText);
+            }
+
+            brokeInPiecesCount = piecesCount;
+            if (brokeInPiecesCount === 1) {
+                brokeInPieces = false;
+                console.warn("The questioning agent determined that the item broke in multiple pieces, but then said it is only 1 piece, so we will consider that it didn't broke in multiple pieces.");
+            }
+        }
+    }
+
+    const questionName = "What is the new name for the item named " + item.name + "?";
+
+    const pureTextGrammar = `root ::= [a-zA-Z0-9 _/-]+ ${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()}\n`;
+
+    console.log("Asking question: " + questionName);
+
+    const answerName = await itemsInteractionGenerator.next({
+        maxCharacters: 100,
+        maxParagraphs: 1,
+        maxSafetyCharacters: 200,
+        nextQuestion: questionName,
+        stopAfter: [],
+        stopAt: ["\n", "."],
+        grammar: pureTextGrammar,
+        answerTrail: "The new name for the item is:\n\n",
+        contextInfo: engine.inferenceAdapter.buildContextInfoInstructions(
+            "Provide a new name for " + item.name + " consider that it " + reason + ".\n\nThe new name should reflect what happened to the item." + (brokeInPieces ? " Since the item broke in " + brokeInPiecesCount + " pieces, the new name should be that for a single piece ONLY." : ""),
+        ),
+    });
+
+    if (answerName.done) {
+        throw new Error("Questioning agent finished before providing an answer for the item name change.");
+    }
+
+    const answerText = answerName.value;
+    console.log("Received answer: " + answerText);
+
+    const originalName = item.name;
+
+    item.name = answerText.trim();
+
+    const questionDescription = "What is the new description for the item named " + originalName + "?";
+
+    console.log("Asking question: " + questionDescription);
+
+    const answerDescription = await itemsInteractionGenerator.next({
+        maxCharacters: 200,
+        maxParagraphs: 1,
+        maxSafetyCharacters: 400,
+        nextQuestion: questionDescription,
+        stopAfter: [],
+        stopAt: ["\n"],
+        grammar: pureTextGrammar,
+        answerTrail: "The new description for the item is:\n\n",
+        contextInfo: engine.inferenceAdapter.buildContextInfoInstructions(
+            "The new name for \"" + originalName + "\" was established to be \"" + item.name + "\" after the following change happened to it: " + reason + ".\n\n" +
+            "Provide a new short one line description for \"" + item.name + "\"." + (brokeInPieces ? " Since the item broke in " + brokeInPiecesCount + " pieces, the description should describe a single piece ONLY" : ""),
+        ),
+    });
+
+    if (answerDescription.done) {
+        throw new Error("Questioning agent finished before providing an answer for the item description change.");
+    }
+
+    const answerDescriptionText = answerDescription.value;
+    console.log("Received answer: " + answerDescriptionText);
+
+    item.description = answerDescriptionText.trim();
+
+    const originalAmount = item.amount || 1;
+    item.amount *= brokeInPieces ? brokeInPiecesCount : 1;
+
+    const originalThing = utilItemCount(engine, null, item.owner, originalAmount, originalName, true, true);
+    // no owner to say more clearly eg. it is now a broken phone
+    const newThing = utilItemCount(engine, null, null, item.amount || 1, item.name, true, false);
+
+    const droppedContentInside = engine.deObject.functions.format_and(engine.deObject, null, item.containing.map((containedItem) => {
+        const containedItemName = utilItemCount(engine, null, containedItem.owner, containedItem.amount || 1, containedItem.name, true, true);
+        return containedItemName;
+    }));
+    const droppedContentOnTop = engine.deObject.functions.format_and(engine.deObject, null, item.ontop.map((onTopItem) => {
+        const containedItemName = utilItemCount(engine, null, onTopItem.owner, onTopItem.amount || 1, onTopItem.name, true, true);
+        return containedItemName;
+    }));
+
+    const hasContentInside = item.containing.length > 0;
+    const hasContentOnTop = item.ontop.length > 0;
+
+    let messageForStoryMaster = "";
+    if (destroyedReason) {
+        const destroyedVariations = [
+            `${destroyedReason}, therefore now it is ${newThing}.`,
+            `${destroyedReason}, and what remains is ${newThing}.`,
+            `${destroyedReason}, leaving behind ${newThing}.`,
+        ];
+        messageForStoryMaster = destroyedVariations[Math.floor(Math.random() * destroyedVariations.length)];
+    } else {
+        const transformedVariations = [
+            `${originalThing} has been turned into ${newThing} after ${reason}.`,
+            `After ${reason}, ${originalThing} is now ${newThing}.`,
+            `${originalThing} has become ${newThing} as a result of ${reason}.`,
+        ];
+        messageForStoryMaster = transformedVariations[Math.floor(Math.random() * transformedVariations.length)];
+    }
+
+    if (includeFallenItemsInStoryMasterMessage) {
+        if (hasContentInside && hasContentOnTop) {
+            const bothVariations = [
+                ` With ${originalName} ruined, ${droppedContentInside} that had been stored inside tumbles out and scatters, while ${droppedContentOnTop} that had been resting on top slides off and clatters to the ground.`,
+                ` As ${originalName} gives way, ${droppedContentInside} from within spills out across the ground, and ${droppedContentOnTop} that sat on top topples over beside it.`,
+                ` The remains of ${originalName} can no longer hold anything — ${droppedContentInside} pours out from inside, and ${droppedContentOnTop} that was perched on top crashes down alongside.`,
+            ];
+            messageForStoryMaster += bothVariations[Math.floor(Math.random() * bothVariations.length)];
+        } else if (hasContentInside) {
+            const insideVariations = [
+                ` With ${originalName} no longer intact, ${droppedContentInside} that had been stored inside tumbles out and scatters across the ground.`,
+                ` As ${originalName} gives way, ${droppedContentInside} from within spills out onto the ground.`,
+                ` The contents of ${originalName} are released — ${droppedContentInside} pours out from inside and lands on the ground.`,
+            ];
+            messageForStoryMaster += insideVariations[Math.floor(Math.random() * insideVariations.length)];
+        } else if (hasContentOnTop) {
+            const onTopVariations = [
+                ` ${droppedContentOnTop} that had been resting on top of ${originalName} slides off and clatters to the ground.`,
+                ` As ${originalName} gives way, ${droppedContentOnTop} that sat on top topples over and hits the ground.`,
+                ` With nothing left to support it, ${droppedContentOnTop} that was perched on top of ${originalName} tumbles down to the ground.`,
+            ];
+            messageForStoryMaster += onTopVariations[Math.floor(Math.random() * onTopVariations.length)];
+        }
+    }
+
+    addedMessagesForStoryMaster.push(messageForStoryMaster);
 }
 
 /**

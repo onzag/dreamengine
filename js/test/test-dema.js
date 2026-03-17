@@ -92,7 +92,7 @@ engine.getDEObject().stateFor["Onza"].wearing = [
 
 const MASSIVE_DUMBELL_TEST = false;
 const STICKS_TEST = false;
-const WEIRD_BOX_TEST = false;
+const WEIRD_BOX_TEST = true;
 
 /**
  * @type {DEItem}

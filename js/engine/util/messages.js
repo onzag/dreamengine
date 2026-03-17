@@ -400,7 +400,7 @@ export async function getHistoryFragmentForCharacter(engine, character, options)
             let shouldAddMessage = false;
             let shouldStopAddingMessages = false;
 
-            const messageParsed = parseMessageInComponentsAsText(generator.value.name, generator.value.message);
+            const messageParsed = generator.value.debug ? generator.value.message : parseMessageInComponentsAsText(generator.value.name, generator.value.message);
 
             if (options.msgLimit === "ALL") {
                 // @ts-ignore
