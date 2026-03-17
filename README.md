@@ -73,3 +73,7 @@ On the other hand, the behaviour characters can display with DreamEngine scripti
 Character can be made to age, mature, change depending on circumstances, etc... the sky is the limit.
 
 Because the system is not attention based, it doesn't consume tokens.
+
+## Local Servers
+
+For local servers check out [DreamServer](https://github.com/onzag/de-server), a local server implementation for the DreamEngine protocol, that can be used to run the engine on your own hardware, and connect to it via this client, either in NodeJS or the Electron app client.
