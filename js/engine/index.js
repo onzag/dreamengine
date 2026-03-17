@@ -801,7 +801,8 @@ export class DEngine {
         }
 
         if (sceneObject.charactersStart) {
-            for (const participantName of expectedParticipants) {
+            const randomizedList = ([...sceneObject.startingEngagedCharacters]).sort(() => Math.random() - 0.5);
+            for (const participantName of randomizedList) {
                 this.informCycleState("info", "Pre-calculating initial states for " + participantName + " and the world...");
                 await calculateStateChange(this, this.deObject.characters[participantName]);
 

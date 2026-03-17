@@ -573,10 +573,10 @@ ${states.join(", ")}
     /**
      * @param {string} description
      * @param {string[]} rules
-     * @param {string|null} characterDescription
+     * @param {string[]|string|null} characterDescriptions
      * @returns string
      */
-    buildSystemPromptForQuestioningAgent(description, rules, characterDescription) {
+    buildSystemPromptForQuestioningAgent(description, rules, characterDescriptions) {
         if (this.options.mode === "xml") {
             let value = (
                 `<description>` + description + `</description>`
@@ -586,23 +586,34 @@ ${states.join(", ")}
                 value += `\n<rule>` + rule + `</rule>`;
             }
 
-            if (characterDescription) {
-                value += `\n<characterDescription>` + characterDescription + `</characterDescription>`;
+            if (characterDescriptions) {
+                if (Array.isArray(characterDescriptions)) {
+                    value += `\n<characterDescriptions>` + characterDescriptions.join("\n") + `</characterDescriptions>`;
+                } else {
+                    value += `\n<characterDescription>` + characterDescriptions + `</characterDescription>`;
+                }
             }
 
             return value;
         }
 
         let value = (
-            `Description:\n` + description
+            description
         );
 
+        if (rules.length > 0) {
+            value += `\n\n# Rules:\n`;
+        }
         for (const rule of rules) {
             value += `\nRule: ` + rule;
         }
 
-        if (characterDescription) {
-            value += `\nCharacter Description:\n` + characterDescription;
+        if (characterDescriptions) {
+            if (Array.isArray(characterDescriptions)) {
+                value += `\n\n# Character Descriptions:\n\n` + characterDescriptions.join("\n\n");
+            } else {
+                value += `\n\n# Character Description:\n\n` + characterDescriptions;
+            }
         }
 
         return value;

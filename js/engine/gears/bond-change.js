@@ -57,6 +57,9 @@ export default async function calculateBondsChangesDueToMessages(engine, charact
         includeRejectedMessages: false,
     });
 
+    /**
+     * @type {Set<string>} all characters that talked to the character in the last cycle, and that we need to update bonds towards
+     */
     const allCharactersToUpdateBondsTowards = new Set();
     lastCycle.mentionedCharacters.forEach(charName => {
         if (charName !== character.name) {
@@ -72,24 +75,35 @@ export default async function calculateBondsChangesDueToMessages(engine, charact
         engine.informCycleState("info", `Updating bonds for ${character.name} towards: ${Array.from(allCharactersToUpdateBondsTowards).join(", ")}`);
     }
 
-    for (const characterNameToUpdate of allCharactersToUpdateBondsTowards) {
-        engine.informCycleState("info", `Updating bonds for ${character.name} towards ${characterNameToUpdate}`);
-        const characterState = engine.deObject.stateFor[characterNameToUpdate];
-        if (characterState.deadEnded) {
-            engine.informCycleState("info", `Character ${characterNameToUpdate} is dead-ended, skipping bond updates, sending them to ex`);
-            const currentBondExists = engine.deObject.social.bonds[character.name].active.find(bond => bond.towards === characterNameToUpdate);
+    const thisCharacterDescription = (await getInternalDescriptionOfCharacter(engine, character.name)).general;
+    const thisCharacterDescriptionConverted = engine.inferenceAdapter.buildSystemCharacterDescription(
+        character,
+        thisCharacterDescription,
+        null,
+        [],
+        [],
+        null,
+        null,
+    );
+
+    for (const characterNameToGetBondTowards of allCharactersToUpdateBondsTowards) {
+        engine.informCycleState("info", `Updating bonds for ${character.name} towards ${characterNameToGetBondTowards}`);
+        const characterStateToUpdate = engine.deObject.stateFor[characterNameToGetBondTowards];
+        if (characterStateToUpdate.deadEnded) {
+            engine.informCycleState("info", `Character ${characterNameToGetBondTowards} is dead-ended, skipping bond updates, sending them to ex`);
+            const currentBondExists = engine.deObject.social.bonds[character.name].active.find(bond => bond.towards === characterNameToGetBondTowards);
             if (currentBondExists) {
-                engine.deObject.social.bonds[character.name].active = engine.deObject.social.bonds[character.name].active.filter(bond => bond.towards !== characterNameToUpdate);
+                engine.deObject.social.bonds[character.name].active = engine.deObject.social.bonds[character.name].active.filter(bond => bond.towards !== characterNameToGetBondTowards);
                 engine.deObject.social.bonds[character.name].ex.push(currentBondExists);
                 await engine.informDEObjectUpdated();
             }
             continue;
         }
-        let currentBond = engine.deObject.social.bonds[character.name].active.find(bond => bond.towards === characterNameToUpdate);
+        let currentBond = engine.deObject.social.bonds[character.name].active.find(bond => bond.towards === characterNameToGetBondTowards);
         if (!currentBond) {
-            engine.informCycleState("info", `Character ${character.name} has no bond towards ${characterNameToUpdate}, creating a stranger bond`);
+            engine.informCycleState("info", `Character ${character.name} has no bond towards ${characterNameToGetBondTowards}, creating a stranger bond`);
             currentBond = {
-                towards: characterNameToUpdate,
+                towards: characterNameToGetBondTowards,
                 bond: 0,
                 bond2: 0,
                 stranger: true,
@@ -107,22 +121,25 @@ export default async function calculateBondsChangesDueToMessages(engine, charact
                 engine.informCycleState("error", `Bond declaration not found for bond: stranger ${currentBond.stranger}, bond ${currentBond.bond}, bond2 ${currentBond.bond2}, for character ${character.name}.`);
             }
         } else {
-            const systemPrompt = `You are an assistant and social dynamics analyst that helps analyze interactions between ${character.name} and ${characterNameToUpdate}`;
+            const systemPrompt = `You are an assistant and social dynamics analyst that helps analyze interactions between ${character.name} and ${characterNameToGetBondTowards}`;
             const systemPromptBuilt = engine.inferenceAdapter.buildSystemPromptForQuestioningAgent(
                 systemPrompt,
                 [
                     "You must answer with either 'yes' or 'No' depending on the question asked",
                 ],
-                // we will add a very basic description of the character in case to give some context
-                engine.inferenceAdapter.buildSystemCharacterDescription(
-                    character,
-                    (await getInternalDescriptionOfCharacter(engine, character.name)).general,
-                    null,
-                    [],
-                    [],
-                    null,
-                    null,
-                ),
+                [
+                    thisCharacterDescriptionConverted,
+                    // Do not think we need the description of the other, since this is unknowable by the character
+                    // engine.inferenceAdapter.buildSystemCharacterDescription(
+                    //     engine.deObject.characters[characterNameToGetBondTowards],
+                    //     (await getInternalDescriptionOfCharacter(engine, characterNameToGetBondTowards)).general,
+                    //     null,
+                    //     [],
+                    //     [],
+                    //     null,
+                    //     null,
+                    // ),
+                ]
             );
 
             const questioningAgent = engine.inferenceAdapter.runQuestioningCustomAgentOn(systemPromptBuilt, null, lastCycle.messages, null);
@@ -153,17 +170,17 @@ export default async function calculateBondsChangesDueToMessages(engine, charact
 
                 // asking this would be pointless as it would not change anything, so we skip it and save the questioning agent usage for other conditions that might actually change the bond
                 if (!wouldModifyPrimaryBond && !wouldModifySecondaryBond) {
-                    engine.informCycleState("info", `Bond condition with template ${JSON.stringify(condition.template)} for bond from ${character.name} towards ${characterNameToUpdate} would not modify any bond, skipping`);
+                    engine.informCycleState("info", `Bond condition with template ${JSON.stringify(condition.template)} for bond from ${character.name} towards ${characterNameToGetBondTowards} would not modify any bond, skipping`);
                     continue;
                 }
 
                 const result = typeof condition.template === "string" ? condition.template :
                     (await condition.template(engine.deObject, {
                         char: character,
-                        other: engine.deObject.characters[characterNameToUpdate],
+                        other: engine.deObject.characters[characterNameToGetBondTowards],
                     })).trim();
                 if (result === "yes" || result === "Yes" || result === "YES") {
-                    console.log(`Bond condition is a statement which matched for bond from ${character.name} towards ${characterNameToUpdate}, applying bond changes: bond ${conditionYesValue}, on ${condition.affectsBonds}`);
+                    console.log(`Bond condition is a statement which matched for bond from ${character.name} towards ${characterNameToGetBondTowards}, applying bond changes: bond ${conditionYesValue}, on ${condition.affectsBonds}`);
                     if (condition.affectsBonds === "primary" || condition.affectsBonds === "both") {
                         currentBond.bond += conditionYesValue;
                         if (currentBond.bond < 0) {
@@ -187,7 +204,7 @@ export default async function calculateBondsChangesDueToMessages(engine, charact
                         // initialize the questioning agent
                         const generatedResult = await questioningAgent.next();
                         if (generatedResult.done) {
-                            throw new Error(`Questioning agent terminated unexpectedly while processing bond condition for bond from ${character.name} towards ${characterNameToUpdate}`);
+                            throw new Error(`Questioning agent terminated unexpectedly while processing bond condition for bond from ${character.name} towards ${characterNameToGetBondTowards}`);
                         }
                         isQuestioningAgentInitialized = true;
                     }
@@ -205,7 +222,7 @@ export default async function calculateBondsChangesDueToMessages(engine, charact
                     });
 
                     if (questioningAgentResult.done) {
-                        throw new Error(`Questioning agent terminated unexpectedly while processing bond condition for bond from ${character.name} towards ${characterNameToUpdate}`);
+                        throw new Error(`Questioning agent terminated unexpectedly while processing bond condition for bond from ${character.name} towards ${characterNameToGetBondTowards}`);
                     }
 
                     const trimmed = questioningAgentResult.value.trim();
@@ -215,7 +232,7 @@ export default async function calculateBondsChangesDueToMessages(engine, charact
                     const answer = trimmed === "yes" || trimmed === "Yes" || trimmed === "YES";
 
                     if (answer) {
-                        console.log(`Bond condition matched for bond from ${character.name} towards ${characterNameToUpdate} via questioning agent on question ${JSON.stringify(result)}, applying bond changes: bond ${conditionYesValue}, on ${condition.affectsBonds}`);
+                        console.log(`Bond condition matched for bond from ${character.name} towards ${characterNameToGetBondTowards} via questioning agent on question ${JSON.stringify(result)}, applying bond changes: bond ${conditionYesValue}, on ${condition.affectsBonds}`);
                         if (condition.affectsBonds === "primary" || condition.affectsBonds === "both") {
                             currentBond.bond += conditionYesValue;
                             if (currentBond.bond < 0) {

@@ -114,7 +114,7 @@ async function makeUserStoryMasterMessage(engine, message) {
         id: crypto.randomUUID(),
         isCharacter: false,
         isDebugMessage: false,
-        isHiddenMessage: false,
+        isHiddenMessage: true,
         isUser: false,
         isStoryMasterMessage: true,
         isRejectedMessage: false,

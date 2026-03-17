@@ -403,7 +403,7 @@ declare interface DECharacterStateDefinition {
      * Internal utility to save memory when saving states
      * the state must be guaranteed to be recoverable from the script
      */
-    __nonserialize?: true,
+    __nonserialize?: boolean;
     /**
      * How dominant this state is compared to other states
      * used to determine which state takes precedence in case of conflicts

@@ -18,7 +18,7 @@ import { DEngine } from "../index.js";
  * this can later be passed onto parseMessageInComponentsAsText to get
  * 
  * *Alice Looks Around Worried*
- * [Alice]: Hello Jonh how are you doing?
+ * Alice: Hello Jonh how are you doing?
  * 
  * or it can be used to create more complex UI
  * 
@@ -28,9 +28,9 @@ import { DEngine } from "../index.js";
  * When the author is Alice and the message is:
  * 
  * *Alice looks around worried*
- * [Bob]: Hello Jonh how are you doing?
+ * Bob: Hello Jonh how are you doing?
  * *Alice looks at Bob and smiles*
- * [Alice]: I'm doing great Bob, thanks for asking!
+ * Alice: I'm doing great Bob, thanks for asking!
  * 
  * Would just cause all messages to be attributed to Alice because she is the author
  * 
@@ -55,11 +55,11 @@ export function parseMessageInComponents(author, message) {
     const splittedLines = message.split("\n");
     for (const line of splittedLines) {
         const trimmedLine = line.trim();
-        if (trimmedLine.startsWith("[" + author + "]:")) {
+        if (trimmedLine.startsWith(author + ":")) {
             finalMessages.push({
                 author: author,
                 origin: author,
-                content: trimmedLine.substring(author.length + 3).trim(),
+                content: trimmedLine.substring(author.length + 2).trim(),
             });
         }
         let inContext = false;
@@ -103,7 +103,7 @@ export function parseMessageInComponentsAsText(author, message) {
     let finalText = "";
     for (const component of components) {
         if (component.author) {
-            finalText += `[${component.author}]: ${component.content}\n`;
+            finalText += `${component.author}: ${component.content}\n`;
         } else {
             finalText += `*${component.content}*\n`;
         }

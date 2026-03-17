@@ -120,10 +120,10 @@ export class BaseInferenceAdapter {
      * 
      * @param {string} description
      * @param {string[]} rules
-     * @param {string|null} characterDescription
+     * @param {string[]|string|null} characterDescriptions
      * @returns {string}
      */
-    buildSystemPromptForQuestioningAgent(description, rules, characterDescription) {
+    buildSystemPromptForQuestioningAgent(description, rules, characterDescriptions) {
         throw new Error("Method 'buildSystemPromptForQuestioningAgent()' must be implemented.");
     }
 
