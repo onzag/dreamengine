@@ -1569,12 +1569,12 @@ declare interface DEItem {
      * The maximum weight in kilograms that can be on top of this item, for example a table may have a max weight on top of 100kg, while a fragile vase may have a max weight on top of 1kg
      * if something heavier than the max weight on top is placed, the item will break
      */
-    maxWeightOnTopKg: number;
+    maxWeightOnTopKg: number | null;
     /**
      * The maximum volume in liters that can be on top of this item, if something greater than this volume is placed on top, the item placed will fall down into
      * the ground
      */
-    maxVolumeOnTopLiters: number;
+    maxVolumeOnTopLiters: number | null;
     /**
      * The amount of this item in the stack
      */

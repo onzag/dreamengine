@@ -1,7 +1,7 @@
 import { deepCopy, DEngine } from "../../index.js";
 import { getBeingCarriedByCharacter, getCharacterExactLocation, getExternalDescriptionOfCharacter } from "../../util/character-info.js";
 import { getHistoryForCharacter, getHistoryFragmentForCharacter } from "../../util/messages.js";
-import { checkItemIsOneOfAKindAtLocation, getCharacterCarryingCapacity, getCharacterVolume, getCharacterWeight, getItemExcessElements, getItemVolume, getItemWeight, getWearableFitment, locationPathToMessage, locationPathToMessageWithoutItemName, resolvePath, utilItemCount } from "../../util/weight-and-volume.js";
+import { checkItemIsOneOfAKindAtLocation, getCharacterCarryingCapacity, getCharacterVolume, getCharacterWeight, getItemExcessElements, getItemVolume, getItemWeight, getWearableFitment, isAlreadyPlural, isSingularOfPlural, locationPathToMessage, locationPathToMessageWithoutItemName, resolvePath, utilItemCount } from "../../util/weight-and-volume.js";
 
 /**
  * 
@@ -2727,8 +2727,15 @@ async function cleanDirtyItemTree(
                     item,
                     excess.breakStyle === "overweight" ? "got loaded with a lot of heavy stuff which caused it to break from the inside" : "got a massive weight on top which caused it to be crushed",
                     lastCycleMessages,
-                    "DESTROYED_ITEM",
-                    excess.breakReason,
+                    {
+                        breakerCharName: null,
+                        breaks: "DESTROYED_ITEM",
+                        // @ts-ignore
+                        reason: excess.breakReason,
+                        location: location,
+                        // @ts-ignore
+                        locationSlotFalls: expectedPathForFallenItems[expectedPathForFallenItems.length - 1],
+                    },
                     false,
                     addedMessagesForStoryMaster,
                 );
@@ -2743,7 +2750,7 @@ async function cleanDirtyItemTree(
                     expellItemToFallen(expelledFromOnTopItem.item, amountExpelled);
 
                     const elementsExpelled = utilItemCount(engine, location, expelledFromOnTopItem.item.owner, amountExpelled, expelledFromOnTopItem.item.name, false);
-                    if (expelledItemVolume.singularVolume > item.maxVolumeOnTopLiters) {
+                    if (item.maxVolumeOnTopLiters !== null && expelledItemVolume.singularVolume > item.maxVolumeOnTopLiters) {
                         const tooLargeOnTopVariations = [
                             `${elementsExpelled} ${amountExpelled === 1 ? "is" : "are"} far too large to be on top of ${item.name} and ${amountExpelled === 1 ? "falls" : "fall"} off onto the ground in the ${expectedPathForFallenItems[1]}`,
                             `${elementsExpelled} ${amountExpelled === 1 ? "is" : "are"} way too big for the top of ${item.name} and ${amountExpelled === 1 ? "slides" : "slide"} right off onto the ground in the ${expectedPathForFallenItems[1]}`,
@@ -2806,7 +2813,7 @@ async function cleanDirtyItemTree(
                     if (path[0] === "characters") {
                         const characterCarryingOrWearingTheItem = path[1];
 
-                        if (charVolume.volume > item.maxVolumeOnTopLiters) {
+                        if (item.maxVolumeOnTopLiters !== null && charVolume.volume > item.maxVolumeOnTopLiters) {
                             const tooLargeCarriedVariations = [
                                 `${expelledOnTopCharacter} is too large to fit on top of the ${item.name} and falls down from it, the ${item.name} is being carried by ${characterCarryingOrWearingTheItem}, and ${expelledOnTopCharacter} is now on the ground at the ${expectedPathForFallenItems[1]}.`,
                                 `${expelledOnTopCharacter} can't stay on top of the ${item.name} — far too large — and tumbles off while ${characterCarryingOrWearingTheItem} is carrying it, ending up on the ground at the ${expectedPathForFallenItems[1]}.`,
@@ -2824,7 +2831,7 @@ async function cleanDirtyItemTree(
                             addedMessagesForStoryMaster.push(doesntFitCarriedVariations[Math.floor(Math.random() * doesntFitCarriedVariations.length)]);
                         }
                     } else {
-                        if (charVolume.volume > item.maxVolumeOnTopLiters) {
+                        if (item.maxVolumeOnTopLiters !== null && charVolume.volume > item.maxVolumeOnTopLiters) {
                             const tooLargeVariations = [
                                 `${expelledOnTopCharacter} is too large to fit on top of the ${item.name} and falls down from it, and is now on the ground at the ${expectedPathForFallenItems[1]}.`,
                                 `${expelledOnTopCharacter} can't stay on top of the ${item.name} — far too large — and tumbles off, ending up on the ground at the ${expectedPathForFallenItems[1]}.`,
@@ -3301,17 +3308,26 @@ async function cleanDirtyItemTree(
                     const copy = deepCopyItem(wornItem);
                     copy.ontopCharacters = [];
                     copy.containingCharacters = [];
+
                     await updateItemAfterHappenance(
                         engine,
                         copy,
                         "got worn by a large character and that caused it to expand and break",
                         lastCycleMessages,
-                        "EXPLODED_CLOTHING",
-                        wearableFitment.breakReason,
+                        {
+                            breaks: "EXPLODED_CLOTHING",
+                            location: charState.location,
+                            // @ts-ignore
+                            locationSlotFalls: expectedPathForFallenItems[1],
+                            // @ts-ignore
+                            breakerCharName: path[1],
+                            // @ts-ignore
+                            reason: wearableFitment.breakReason,
+                        },
                         true,
                         addedMessagesForStoryMaster,
                     );
-                    
+
                     // Expelling contained and ontop items
                     for (const itemContained of copy.containing) {
                         expellItemToFallen(itemContained, itemContained.amount || 1);
@@ -3335,18 +3351,7 @@ async function cleanDirtyItemTree(
                         resolvedFallenItems.resolved.items.push(copy);
                     }
 
-                    // TODO these messages must be wack, because the updateItemAfterHappenance already does something akin
-
                     wornItem.amount = 0;
-                    const itemDesc = utilItemCount(engine, charState.location, wornItem.owner, wornItem.amount || 1, wornItem.name, true, true);
-                    const singular = wornItem.amount === 1;
-                    const tooTightVariations = [
-                        `${itemDesc} ${singular ? "is" : "are"} too tight to be worn by ${path[1]} and ${singular ? "breaks" : "break"}, so ${singular ? "it" : "they"} ${singular ? "falls" : "fall"} on the ground at the ${expectedPathForFallenItems[1]}.`,
-                        `${path[1]} tries to wear ${itemDesc}, but ${singular ? "it's" : "they're"} far too tight and ${singular ? "snaps" : "snap"} apart, falling to the ground at the ${expectedPathForFallenItems[1]}.`,
-                        `${itemDesc} ${singular ? "can't" : "can't"} stretch around ${path[1]} and ${singular ? "tears" : "tear"} from the strain, dropping to the ground at the ${expectedPathForFallenItems[1]}.`,
-                        `The fit is hopeless — ${itemDesc} ${singular ? "is" : "are"} way too tight on ${path[1]} and ${singular ? "breaks" : "break"} apart, ending up on the ground at the ${expectedPathForFallenItems[1]}.`,
-                    ];
-                    addedMessagesForStoryMaster.push(tooTightVariations[Math.floor(Math.random() * tooTightVariations.length)]);
                 } else if (wearableFitment.shouldFallDown) {
                     expellItemToFallen(wornItem, wornItem.amount || 1);
                     wornItem.amount = 0;
@@ -3517,8 +3522,6 @@ async function cleanDirtyItemTree(
             }
         }
     }
-
-
 }
 
 /**
@@ -3536,6 +3539,9 @@ function cleanTemporaryProperties(engine, list) {
         if (item.amount === 0) {
             list.splice(i, 1);
         }
+
+        cleanTemporaryProperties(engine, item.containing);
+        cleanTemporaryProperties(engine, item.ontop);
     }
 }
 
@@ -3613,8 +3619,13 @@ function deepCopyItem(item) {
  * @param {DEItem} item 
  * @param {string} reason
  * @param {string[]} lastCycleMessages,
- * @param {"EXPLODED_CLOTHING" | "DESTROYED_ITEM" | "NONE"} destroyed
- * @param {string|null} destroyedReason
+ * @param {{
+ *  breaks: "EXPLODED_CLOTHING" | "DESTROYED_ITEM",
+ *  reason: string,
+ *  location: string,
+ *  locationSlotFalls: string | null,
+ *  breakerCharName: string | null,
+ * }|null} destroyedInfo
  * @param {boolean} includeFallenItemsInStoryMasterMessage
  * @param {string[]} addedMessagesForStoryMaster
  */
@@ -3623,8 +3634,7 @@ async function updateItemAfterHappenance(
     item,
     reason,
     lastCycleMessages,
-    destroyed,
-    destroyedReason,
+    destroyedInfo,
     includeFallenItemsInStoryMasterMessage,
     addedMessagesForStoryMaster,
 ) {
@@ -3639,7 +3649,8 @@ async function updateItemAfterHappenance(
         ([
             `When generating a description for ${item.name}, you should take into account the reason provided for the update, and reflect it in the description. For example, if the reason is that the item got wet, you can add some details about how it got wet, how it looks now that it's wet, how it smells, etc.`,
             `The new description should be a one line description that is short and concise`,
-            destroyed !== "NONE" ? `The destruction of ${item.name} should make it so that the new name implies it cannot be destroyed any further, the parts should be able to withstand any damage` : null,
+            "An item name should not start with `a` or `an`, it should be more like a title or a label for the item, and the description is where you can describe it in more detail",
+            destroyedInfo ? `The destruction of ${item.name} should make it so that the new name implies it cannot be destroyed any further, the parts should be able to withstand any damage` : null,
         ]).filter(v => v !== null), null);
 
     const itemsInteractionGenerator = engine.inferenceAdapter.runQuestioningCustomAgentOn(
@@ -3652,20 +3663,20 @@ async function updateItemAfterHappenance(
         true,
     );
 
-    if (destroyed === "EXPLODED_CLOTHING") {
+    if (destroyedInfo?.breaks === "EXPLODED_CLOTHING") {
         delete item.wearableProperties;
         delete item.communicator;
         delete item.consumableProperties;
         item.owner = null;
-        item.maxWeightOnTopKg = 0;
-        item.maxVolumeOnTopLiters = 0;
-    } else if (destroyed === "DESTROYED_ITEM") {
+        item.maxWeightOnTopKg = null;
+        item.maxVolumeOnTopLiters = null;
+    } else if (destroyedInfo?.breaks === "DESTROYED_ITEM") {
         delete item.containerProperties;
         delete item.wearableProperties;
         delete item.communicator;
-        item.maxWeightOnTopKg = 0;
+        item.maxWeightOnTopKg = null;
         item.owner = null;
-        item.maxVolumeOnTopLiters = 0;
+        item.maxVolumeOnTopLiters = null;
     }
 
     const ready = await itemsInteractionGenerator.next();
@@ -3677,7 +3688,7 @@ async function updateItemAfterHappenance(
 
     let brokeInPieces = false;
     let brokeInPiecesCount = 0;
-    if (destroyed !== "NONE") {
+    if (destroyedInfo) {
         const questionBrokenMultipleName = "Given the damage received, did the item named " + item.name + " broke in multiple pieces that are now separate items?";
         console.log("Asking question: " + questionBrokenMultipleName);
 
@@ -3755,7 +3766,7 @@ async function updateItemAfterHappenance(
         grammar: pureTextGrammar,
         answerTrail: "The new name for the item is:\n\n",
         contextInfo: engine.inferenceAdapter.buildContextInfoInstructions(
-            "Provide a new name for " + item.name + " consider that it " + reason + ".\n\nThe new name should reflect what happened to the item." + (brokeInPieces ? " Since the item broke in " + brokeInPiecesCount + " pieces, the new name should be that for a single piece ONLY." : ""),
+            "Provide a new name for " + item.name + " consider that it " + reason + ".\n\nThe new name should reflect what happened to the item." + (brokeInPieces ? " Since the item broke in " + brokeInPiecesCount + " pieces, the new name should be that for a single piece ONLY." : " Since the item is still one piece, the new name should be SINGULAR."),
         ),
     });
 
@@ -3801,7 +3812,7 @@ async function updateItemAfterHappenance(
     const originalAmount = item.amount || 1;
     item.amount *= brokeInPieces ? brokeInPiecesCount : 1;
 
-    const originalThing = utilItemCount(engine, null, item.owner, originalAmount, originalName, true, true);
+    const originalThing = utilItemCount(engine, null, item.owner, originalAmount, originalName, false, true);
     // no owner to say more clearly eg. it is now a broken phone
     const newThing = utilItemCount(engine, null, null, item.amount || 1, item.name, true, false);
 
@@ -3818,42 +3829,70 @@ async function updateItemAfterHappenance(
     const hasContentOnTop = item.ontop.length > 0;
 
     let messageForStoryMaster = "";
-    if (destroyedReason) {
+    // Special case for exploded clothing
+    if (destroyedInfo?.reason) {
+        const reasonReplaced = destroyedInfo.reason.replace("{{char}}", destroyedInfo?.breakerCharName || "someone");
+        // capitalize the first letter of the reason
+        const reasonReplacedCapitalized = reasonReplaced.charAt(0).toUpperCase() + reasonReplaced.slice(1);
         const destroyedVariations = [
-            `${destroyedReason}, therefore now it is ${newThing}.`,
-            `${destroyedReason}, and what remains is ${newThing}.`,
-            `${destroyedReason}, leaving behind ${newThing}.`,
+            `${reasonReplacedCapitalized}, therefore now it is ${newThing}`,
+            `${reasonReplacedCapitalized}, and what remains is ${newThing}`,
+            `${reasonReplacedCapitalized}, leaving behind ${newThing}`,
         ];
         messageForStoryMaster = destroyedVariations[Math.floor(Math.random() * destroyedVariations.length)];
     } else {
+        const hasOrHave = originalAmount === 1 ? (
+            isAlreadyPlural(originalName.toLowerCase()) && !isSingularOfPlural(originalName.toLowerCase()) ? "have" : "has"
+        ) : "have";
         const transformedVariations = [
-            `${originalThing} has been turned into ${newThing} after ${reason}.`,
-            `After ${reason}, ${originalThing} is now ${newThing}.`,
-            `${originalThing} has become ${newThing} as a result of ${reason}.`,
+            `${originalThing} ${hasOrHave} been turned into ${newThing} after ${reason}`,
+            `After ${reason}, ${originalThing} ${hasOrHave} now ${newThing}`,
+            `${originalThing} ${hasOrHave} become ${newThing} as a result of ${reason}`,
         ];
-        messageForStoryMaster = transformedVariations[Math.floor(Math.random() * transformedVariations.length)];
+        messageForStoryMaster = capitalizeFirstLetter(transformedVariations[Math.floor(Math.random() * transformedVariations.length)]);
+    }
+
+    if (destroyedInfo?.locationSlotFalls) {
+        const subject = item.amount === 1 ? "it" : "they";
+        const verb = item.amount === 1 ? "falls" : "fall";
+        const lands = item.amount === 1 ? "lands" : "land";
+        const settles = item.amount === 1 ? "settles" : "settle";
+        const crashes = item.amount === 1 ? "crashes" : "crash";
+        const tumbles = item.amount === 1 ? "tumbles" : "tumble";
+        const fallingLocation = "the " + destroyedInfo.locationSlotFalls;
+        const fallingVariations = [
+            `, and ${subject} ${verb} down to the ground at ${fallingLocation}.`,
+            `, and ${subject} ${lands} on the ground at ${fallingLocation}.`,
+            `. And ${subject} ${settles} onto the ground at ${fallingLocation}.`,
+            `, and ${subject} ${crashes} down onto the ground at ${fallingLocation}.`,
+            `, and ${subject} ${tumbles} to the ground at ${fallingLocation}.`,
+            `, with what's left falling onto the ground at ${fallingLocation}.`,
+        ];
+        messageForStoryMaster += fallingVariations[Math.floor(Math.random() * fallingVariations.length)];
+    } else {
+        messageForStoryMaster += ".";
     }
 
     if (includeFallenItemsInStoryMasterMessage) {
         if (hasContentInside && hasContentOnTop) {
             const bothVariations = [
-                ` With ${originalName} ruined, ${droppedContentInside} that had been stored inside tumbles out and scatters, while ${droppedContentOnTop} that had been resting on top slides off and clatters to the ground.`,
-                ` As ${originalName} gives way, ${droppedContentInside} from within spills out across the ground, and ${droppedContentOnTop} that sat on top topples over beside it.`,
-                ` The remains of ${originalName} can no longer hold anything — ${droppedContentInside} pours out from inside, and ${droppedContentOnTop} that was perched on top crashes down alongside.`,
+                ` With ${originalThing} ruined, ${droppedContentInside} that had been stored inside tumbles out and scatters, while ${droppedContentOnTop} that had been resting on top slides off and clatters to the ground.`,
+                ` As ${originalThing} gives way, ${droppedContentInside} from within spills out across the ground, and ${droppedContentOnTop} that sat on top topples over beside it.`,
+                ` The remains of ${originalThing} can no longer hold anything — ${droppedContentInside} pours out from inside, and ${droppedContentOnTop} that was perched on top crashes down alongside.`,
             ];
             messageForStoryMaster += bothVariations[Math.floor(Math.random() * bothVariations.length)];
         } else if (hasContentInside) {
             const insideVariations = [
-                ` With ${originalName} no longer intact, ${droppedContentInside} that had been stored inside tumbles out and scatters across the ground.`,
-                ` As ${originalName} gives way, ${droppedContentInside} from within spills out onto the ground.`,
-                ` The contents of ${originalName} are released — ${droppedContentInside} pours out from inside and lands on the ground.`,
+                ` With ${originalThing} no longer intact, ${droppedContentInside} that had been stored inside tumbles out and scatters across the ground.`,
+                ` As ${originalThing} gives way, ${droppedContentInside} from within spills out onto the ground.`,
+                ` The contents of ${originalThing} are released — ${droppedContentInside} pours out from inside and lands on the ground.`,
             ];
             messageForStoryMaster += insideVariations[Math.floor(Math.random() * insideVariations.length)];
         } else if (hasContentOnTop) {
             const onTopVariations = [
-                ` ${droppedContentOnTop} that had been resting on top of ${originalName} slides off and clatters to the ground.`,
-                ` As ${originalName} gives way, ${droppedContentOnTop} that sat on top topples over and hits the ground.`,
-                ` With nothing left to support it, ${droppedContentOnTop} that was perched on top of ${originalName} tumbles down to the ground.`,
+                ` ${capitalizeFirstLetter(`${droppedContentOnTop} that had been resting on top of ${originalThing} slides off and clatters to the ground.`)}`,
+                ` As ${originalThing} gives way, ${droppedContentOnTop} that sat on top topples over and hits the ground.`,
+                ` With nothing left to support it, ${droppedContentOnTop} that was perched on top of ${originalThing} tumbles down to the ground.`,
             ];
             messageForStoryMaster += onTopVariations[Math.floor(Math.random() * onTopVariations.length)];
         }

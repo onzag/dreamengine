@@ -238,8 +238,8 @@ export function getItemExcessElements(engine, item) {
     const capacityInVolume = item.containerProperties ? item.containerProperties.capacityKg : 0;
     const capacityInWeight = item.containerProperties ? item.containerProperties.capacityLiters : 0;
 
-    const capacityOnTopWeight = item.maxWeightOnTopKg ? item.maxWeightOnTopKg : 0;
-    const capacityOnTopVolume = item.maxVolumeOnTopLiters ? item.maxVolumeOnTopLiters : 0;
+    const capacityOnTopWeight = item.maxWeightOnTopKg;
+    const capacityOnTopVolume = item.maxVolumeOnTopLiters;
     // first we do weight, which would cause the item to break, so everything falls off
 
     const sortedByJustPlacedContaining = item.containing.slice().sort((a, b) => {
@@ -285,15 +285,17 @@ export function getItemExcessElements(engine, item) {
         }
     }
 
+    const itemNameForText = utilItemCount(engine, null, item.owner, item.amount, item.name, false, true);
+
     if (isOverweightAndBreaks) {
         const breakList = breakReasonsItemsAndCharacters.map((i, ind) => typeof i === "string" ? i : utilItemCount(engine, null, i.owner, i.amount, i.name, false, true));
         const listOfItems = engine.deObject?.functions.format_and(engine.deObject, null, breakList);
         const overweightReasons = [
-            `${listOfItems} causes ${item.name} to be overweight and break`,
-            `${item.name} bursts apart from the sheer amount of ${listOfItems} stuffed inside`,
-            `${item.name} ruptures and blows open, unable to contain ${listOfItems}`,
-            `the weight of ${listOfItems} overwhelms ${item.name}, causing it to split open`,
-            `${item.name} can't hold ${listOfItems} any longer and explodes outward`,
+            `${listOfItems} causes ${itemNameForText} to be overweight and break`,
+            `${itemNameForText} bursts apart from the sheer amount of ${listOfItems} stuffed inside`,
+            `${itemNameForText} ruptures and blows open, unable to contain ${listOfItems}`,
+            `the weight of ${listOfItems} overwhelms ${itemNameForText}, causing it to split open`,
+            `${itemNameForText} can't hold ${listOfItems} any longer and explodes outward`,
         ];
         const reason = overweightReasons[Math.floor(Math.random() * overweightReasons.length)];
 
@@ -316,7 +318,7 @@ export function getItemExcessElements(engine, item) {
 
     for (const childItem of sortedByJustPlacedOntop) {
         const results = getItemWeight(engine, childItem);
-        if (ontopWeight + results.completeWeight > capacityOnTopWeight) {
+        if (capacityOnTopWeight !== null && ontopWeight + results.completeWeight > capacityOnTopWeight) {
             isOverweightAndBreaks = true;
             breakReasonsItemsAndCharacters.push(childItem);
         } else {
@@ -326,7 +328,7 @@ export function getItemExcessElements(engine, item) {
 
     for (const childCharacter of item.ontopCharacters) {
         const results = getCharacterWeight(engine, childCharacter);
-        if (ontopWeight + results.weight > capacityOnTopWeight) {
+        if (capacityOnTopWeight !== null && ontopWeight + results.weight > capacityOnTopWeight) {
             isOverweightAndBreaks = true;
             breakReasonsItemsAndCharacters.push(childCharacter);
         } else {
@@ -338,11 +340,11 @@ export function getItemExcessElements(engine, item) {
         const breakList = breakReasonsItemsAndCharacters.map((i, ind) => typeof i === "string" ? i : utilItemCount(engine, null, i.owner, i.amount, i.name, false, true));
         const listOfItems = engine.deObject?.functions.format_and(engine.deObject, null, breakList);
         const crushedReasons = [
-            `${listOfItems} causes ${item.name} to be overloaded and it breaks under the weight`,
-            `${item.name} collapses under the crushing weight of ${listOfItems}`,
-            `the weight of ${listOfItems} proves too much and ${item.name} buckles and gives way`,
-            `${item.name} crumples as ${listOfItems} bears down too heavily on top of it`,
-            `${item.name} shatters beneath ${listOfItems}, unable to support the load`,
+            `${listOfItems} causes ${itemNameForText} to be overloaded and it breaks under the weight`,
+            `${itemNameForText} collapses under the crushing weight of ${listOfItems}`,
+            `the weight of ${listOfItems} proves too much and ${itemNameForText} buckles and gives way`,
+            `${itemNameForText} crumples as ${listOfItems} bears down too heavily on top of it`,
+            `${itemNameForText} shatters beneath ${listOfItems}, unable to support the load`,
         ];
         const reason = crushedReasons[Math.floor(Math.random() * crushedReasons.length)];
 
@@ -404,7 +406,7 @@ export function getItemExcessElements(engine, item) {
 
     for (const childItem of sortedByJustPlacedOntop) {
         const results = getItemVolume(engine, childItem);
-        const remainingCapacity = capacityOnTopVolume - ontopVolume;
+        const remainingCapacity = capacityOnTopVolume !== null ? capacityOnTopVolume - ontopVolume : Infinity;
         const howManyCanFit = Math.floor(remainingCapacity / (results.completeVolume / (results.amount || 1)));
         if (howManyCanFit <= 0) {
             expelledOntopItems.push({
@@ -424,7 +426,7 @@ export function getItemExcessElements(engine, item) {
 
     for (const childCharacter of item.ontopCharacters) {
         const results = getCharacterVolume(engine, childCharacter);
-        if (ontopVolume + results.volume > capacityOnTopVolume) {
+        if (capacityOnTopVolume !== null && ontopVolume + results.volume > capacityOnTopVolume) {
             expelledOntopCharacters.push(childCharacter);
         } else {
             ontopVolume += results.volume;
@@ -503,16 +505,17 @@ export function getWearableFitment(engine, item, character, isNotBeingCurrentlyW
                 fitmentDescription = "fits extremely tightly";
             }
 
+            const itemNameForText = utilItemCount(engine, null, item.owner, item.amount, item.name, false, true);
+
             return {
                 fitment: engine.deObject.functions.format_and(engine.deObject, null, [fitmentDescription, ...extraAddedExtraTraitsAtTheEnd]),
                 shouldFallDown: false,
                 shouldBreak: totalBodyVolume > largestSizeItCanFit,
                 breakReason: totalBodyVolume > largestSizeItCanFit ? [
-                    `${item.name} got worn so tightly that it broke`,
-                    `${item.name} was stretched beyond its limit and tore apart`,
-                    `${item.name} split at the seams from being forced on too tightly`,
-                    `${item.name} burst open, unable to contain the wearer's body`,
-                    `${item.name} ripped apart from the extreme tightness`,
+                    `${itemNameForText} got worn by {{char}} so tightly that it broke`,
+                    `${itemNameForText} was stretched beyond its limit by {{char}}'s body and tore apart`,
+                    `${itemNameForText} split at the seams from being forced on too tightly on {{char}}'s body`,
+                    `${itemNameForText} burst open, unable to contain {{char}}'s body`,
                 ][Math.floor(Math.random() * 5)] : null,
             }
         } else {
@@ -543,6 +546,50 @@ export function getWearableFitment(engine, item, character, isNotBeingCurrentlyW
             breakReason: null,
         };
     }
+}
+
+// Words that are inherently plural (pluralia tantum) - they don't change form for plural
+const alreadyPluralNouns = new Set([
+    "glasses", "sunglasses", "eyeglasses", "scissors", "pants", "trousers", "shorts",
+    "jeans", "pliers", "tongs", "tweezers", "binoculars", "goggles", "shears",
+    "leggings", "stockings", "tights", "clippers", "forceps", "bellows",
+    "remains", "ruins", "ashes", "embers", "debris", "dregs", "suds",
+    "clothes", "riches", "goods", "belongings", "surroundings", "stairs",
+    "handcuffs", "shackles", "knickers", "briefs", "boxers", "pajamas",
+    "overalls", "dungarees", "chaps", "suspenders", "braces", "fragments",
+]);
+
+// Patterns that indicate the name is a singular expression wrapping a plural noun
+// e.g. "a pair of glasses", "a dozen eggs", "a set of keys"
+const singularOfPluralPrefixes = [
+    "pair of ", "set of ", "bunch of ", "pack of ", "bundle of ",
+    "dozen ", "dozen of ", "handful of ", "stack of ", "pile of ",
+    "box of ", "bag of ", "crate of ", "barrel of ", "basket of ",
+    "collection of ", "group of ", "batch of ", "cluster of ",
+    "roll of ", "spool of ", "jar of ", "can of ", "bottle of ",
+    "tube of ", "piece of ", "slab of ", "chunk of ", "strip of ",
+    "sheet of ", "bolt of ", "length of ", "string of ", "strand of ",
+];
+
+/**
+ * Checks if the last word of an item name is already a plural noun (pluralia tantum).
+ * e.g. "reading glasses" -> true, "red scissors" -> true, "sword" -> false
+ * @param {string} itemNameLower - lowercased item name
+ * @returns {boolean}
+ */
+export function isAlreadyPlural(itemNameLower) {
+    const lastWord = itemNameLower.split(" ").slice(-1)[0];
+    return alreadyPluralNouns.has(lastWord);
+}
+
+/**
+ * Checks if an item name is a singular expression wrapping a plural noun.
+ * e.g. "a pair of glasses" -> true, "a dozen eggs" -> true, "sword" -> false
+ * @param {string} itemNameLower - lowercased item name
+ * @returns {boolean}
+ */
+export function isSingularOfPlural(itemNameLower) {
+    return singularOfPluralPrefixes.some(prefix => itemNameLower.startsWith(prefix));
 }
 
 const irregularPlurals = {
@@ -612,7 +659,8 @@ export function utilItemCount(engine, location, owner, amount, item, capitalize 
     }
 
     const itemTrimmedLower = item.trim().toLowerCase();
-    // List of common irregular plurals
+    const itemIsAlreadyPlural = isAlreadyPlural(itemTrimmedLower);
+    const itemIsSingularOfPlural = isSingularOfPlural(itemTrimmedLower);
 
     let toReturn = "";
     if (amount === 1 && itemTrimmedLower.startsWith("the ") && !owner) {
@@ -624,62 +672,108 @@ export function utilItemCount(engine, location, owner, amount, item, capitalize 
             toReturn = `${owner}'s ${item}`;
         }
     } else if (amount === 1) {
-        const isOneOfAKind = !location ? false : checkItemIsOneOfAKindAtLocation(engine, location, item);
-        if (forceThe || isOneOfAKind) {
+        if (itemIsSingularOfPlural) {
+            // "pair of glasses" -> "the pair of glasses" or "a pair of glasses"
+            const isOneOfAKind = !location ? false : checkItemIsOneOfAKindAtLocation(engine, location, item);
+            if (forceThe || isOneOfAKind) {
+                toReturn = `the ${item}`;
+            } else {
+                toReturn = `a ${item}`;
+            }
+        } else if (itemIsAlreadyPlural) {
+            // "glasses" -> "the glasses" (can't say "a glasses")
             toReturn = `the ${item}`;
-        } else if (itemTrimmedLower.startsWith("a")) {
-            toReturn = `an ${item}`;
         } else {
-            toReturn = `a ${item}`;
+            const isOneOfAKind = !location ? false : checkItemIsOneOfAKindAtLocation(engine, location, item);
+            if (forceThe || isOneOfAKind) {
+                toReturn = `the ${item}`;
+            } else if (itemTrimmedLower.startsWith("a")) {
+                toReturn = `an ${item}`;
+            } else {
+                toReturn = `a ${item}`;
+            }
         }
     } else {
-        // Try to pluralize using irregulars first
-        const lastWord = itemTrimmedLower.split(" ").slice(-1)[0];
-        if (!owner) {
-            // @ts-ignore
-            if (irregularPlurals[lastWord]) {
-                // Replace only the last word with its irregular plural
-                const words = item.split(" ");
-                // @ts-ignore
-                words[words.length - 1] = irregularPlurals[lastWord];
-                toReturn = `${forceThe ? "the " : ""}${amount} ${words.join(" ")}`;
-            } else if (lastWord.endsWith("s") || lastWord.endsWith("x") || lastWord.endsWith("z") || lastWord.endsWith("ch") || lastWord.endsWith("sh")) {
-                toReturn = `${forceThe ? "the " : ""}${amount} ${item}es`;
-            } else if (lastWord.endsWith("y") && !["a", "e", "i", "o", "u"].includes(lastWord.slice(-2, -1))) {
-                toReturn = `${forceThe ? "the " : ""}${amount} ${item.slice(0, -1)}ies`;
+        if (itemIsAlreadyPlural) {
+            // Already plural, don't add suffix: "2 glasses" not "2 glasseses"
+            if (!owner) {
+                toReturn = `${forceThe ? "the " : ""}${amount} ${item}`;
+            } else if (forceThe) {
+                toReturn = `the ${amount} ${item} of ${owner}`;
             } else {
-                toReturn = `${forceThe ? "the " : ""}${amount} ${item}s`;
+                toReturn = `${owner}'s ${amount} ${item}`;
+            }
+        } else if (itemIsSingularOfPlural) {
+            // "pair of glasses" -> "2 pairs of glasses"
+            const spaceIdx = item.indexOf(' ');
+            const unitWord = spaceIdx !== -1 ? item.slice(0, spaceIdx) : item;
+            const rest = spaceIdx !== -1 ? item.slice(spaceIdx) : '';
+            const unitWordLower = unitWord.toLowerCase();
+            let pluralUnit;
+            if (unitWordLower.endsWith("ch") || unitWordLower.endsWith("sh") || unitWordLower.endsWith("x") || unitWordLower.endsWith("z") || unitWordLower.endsWith("s")) {
+                pluralUnit = unitWord + "es";
+            } else if (unitWordLower.endsWith("y") && !["a", "e", "i", "o", "u"].includes(unitWordLower.slice(-2, -1))) {
+                pluralUnit = unitWord.slice(0, -1) + "ies";
+            } else {
+                pluralUnit = unitWord + "s";
+            }
+            const pluralized = pluralUnit + rest;
+            if (!owner) {
+                toReturn = `${forceThe ? "the " : ""}${amount} ${pluralized}`;
+            } else if (forceThe) {
+                toReturn = `the ${amount} ${pluralized} of ${owner}`;
+            } else {
+                toReturn = `${owner}'s ${amount} ${pluralized}`;
             }
         } else {
-            if (forceThe) {
+            // Try to pluralize using irregulars first
+            const lastWord = itemTrimmedLower.split(" ").slice(-1)[0];
+            if (!owner) {
                 // @ts-ignore
                 if (irregularPlurals[lastWord]) {
                     // Replace only the last word with its irregular plural
                     const words = item.split(" ");
                     // @ts-ignore
                     words[words.length - 1] = irregularPlurals[lastWord];
-                    toReturn = `the ${amount} ${words.join(" ")} of ${owner}`;
+                    toReturn = `${forceThe ? "the " : ""}${amount} ${words.join(" ")}`;
                 } else if (lastWord.endsWith("s") || lastWord.endsWith("x") || lastWord.endsWith("z") || lastWord.endsWith("ch") || lastWord.endsWith("sh")) {
-                    toReturn = `the ${amount} ${item}es of ${owner}`;
+                    toReturn = `${forceThe ? "the " : ""}${amount} ${item}es`;
                 } else if (lastWord.endsWith("y") && !["a", "e", "i", "o", "u"].includes(lastWord.slice(-2, -1))) {
-                    toReturn = `the ${amount} ${item.slice(0, -1)}ies of ${owner}`;
+                    toReturn = `${forceThe ? "the " : ""}${amount} ${item.slice(0, -1)}ies`;
                 } else {
-                    toReturn = `the ${amount} ${item}s of ${owner}`;
+                    toReturn = `${forceThe ? "the " : ""}${amount} ${item}s`;
                 }
             } else {
-                // @ts-ignore
-                if (irregularPlurals[lastWord]) {
-                    // Replace only the last word with its irregular plural
-                    const words = item.split(" ");
+                if (forceThe) {
                     // @ts-ignore
-                    words[words.length - 1] = irregularPlurals[lastWord];
-                    toReturn = `${owner}'s ${amount} ${words.join(" ")}`;
-                } else if (lastWord.endsWith("s") || lastWord.endsWith("x") || lastWord.endsWith("z") || lastWord.endsWith("ch") || lastWord.endsWith("sh")) {
-                    toReturn = `${owner}'s ${amount} ${item}es`;
-                } else if (lastWord.endsWith("y") && !["a", "e", "i", "o", "u"].includes(lastWord.slice(-2, -1))) {
-                    toReturn = `${owner}'s ${amount} ${item.slice(0, -1)}ies`;
+                    if (irregularPlurals[lastWord]) {
+                        // Replace only the last word with its irregular plural
+                        const words = item.split(" ");
+                        // @ts-ignore
+                        words[words.length - 1] = irregularPlurals[lastWord];
+                        toReturn = `the ${amount} ${words.join(" ")} of ${owner}`;
+                    } else if (lastWord.endsWith("s") || lastWord.endsWith("x") || lastWord.endsWith("z") || lastWord.endsWith("ch") || lastWord.endsWith("sh")) {
+                        toReturn = `the ${amount} ${item}es of ${owner}`;
+                    } else if (lastWord.endsWith("y") && !["a", "e", "i", "o", "u"].includes(lastWord.slice(-2, -1))) {
+                        toReturn = `the ${amount} ${item.slice(0, -1)}ies of ${owner}`;
+                    } else {
+                        toReturn = `the ${amount} ${item}s of ${owner}`;
+                    }
                 } else {
-                    toReturn = `${owner}'s ${amount} ${item}s`;
+                    // @ts-ignore
+                    if (irregularPlurals[lastWord]) {
+                        // Replace only the last word with its irregular plural
+                        const words = item.split(" ");
+                        // @ts-ignore
+                        words[words.length - 1] = irregularPlurals[lastWord];
+                        toReturn = `${owner}'s ${amount} ${words.join(" ")}`;
+                    } else if (lastWord.endsWith("s") || lastWord.endsWith("x") || lastWord.endsWith("z") || lastWord.endsWith("ch") || lastWord.endsWith("sh")) {
+                        toReturn = `${owner}'s ${amount} ${item}es`;
+                    } else if (lastWord.endsWith("y") && !["a", "e", "i", "o", "u"].includes(lastWord.slice(-2, -1))) {
+                        toReturn = `${owner}'s ${amount} ${item.slice(0, -1)}ies`;
+                    } else {
+                        toReturn = `${owner}'s ${amount} ${item}s`;
+                    }
                 }
             }
         }

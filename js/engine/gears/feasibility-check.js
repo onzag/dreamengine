@@ -617,6 +617,7 @@ export default async function testMessageFeasibilityForCharacter(engine, charact
         }
     }
 
+    // TODO handle these storymaster messages
     // this message is only relevant if we stay at the same location and don't happen to move while that is the case
     const storyMasterMessagesToAddFromTimeForwards = await timeForwardsUsingLastMessage(engine, character);
 

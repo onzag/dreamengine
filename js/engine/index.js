@@ -903,7 +903,7 @@ export class DEngine {
         await cleanAll(this, this.deObject.stateFor[this.userCharacter.name].location, allMessages.messages, storyMasterMessages);
 
         if (storyMasterMessages.length > 0) {
-            const addedMessageStr = storyMasterMessages.join("\n");
+            const addedMessageStr = storyMasterMessages.join("\n\n");
             return addedMessageStr;
         }
 
@@ -1070,7 +1070,7 @@ export class DEngine {
          * @param {DEItem} item
          */
         const listItems = (space, item) => {
-            message += `${space}- ${item.owner ? item.owner + "'s " : ""}${item.name}${item.amount >= 2 ? " x" + item.amount : ""}\n`;
+            message += `${space}- ${item.owner ? item.owner + "'s " : ""}${item.name}${item.amount >= 2 || item.amount === 0 ? " x" + item.amount : ""}\n`;
             if (item.containing.length !== 0) {
                 message += `${space}  Containing:\n`;
             }

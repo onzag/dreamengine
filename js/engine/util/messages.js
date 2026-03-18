@@ -45,11 +45,16 @@ export function parseMessageInComponents(author, message) {
 
     if (author === "Story Master") {
         // for story master messages we will not do any parsing, we will just return the whole message as a single component
-        return [{
-            author: null,
-            origin: author,
-            content: message,
-        }];
+        const lines = message.split("\n").map(line => line.trim()).filter(line => !!line);
+        const results = [];
+        for (const line of lines) {
+            results.push({
+                author: null,
+                origin: author,
+                content: line,
+            });
+        }
+        return results;
     }
 
     const splittedLines = message.split("\n");
@@ -103,9 +108,9 @@ export function parseMessageInComponentsAsText(author, message) {
     let finalText = "";
     for (const component of components) {
         if (component.author) {
-            finalText += `${component.author}: ${component.content}\n`;
+            finalText += `${component.author}: ${component.content}\n\n`;
         } else {
-            finalText += `*${component.content}*\n`;
+            finalText += `*${component.content}*\n\n`;
         }
     }
     return finalText.trim();

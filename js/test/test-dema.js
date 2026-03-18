@@ -56,7 +56,27 @@ const clothes = {
     amount: 1,
     description: "A single set of space clothing",
     consumableProperties: null,
-    containing: [],
+    containing: [
+        {
+            amount: 1,
+            name: "Bubble gum stick",
+            properties: {},
+            volumeLiters: 0.01,
+            weightKg: 0.01,
+            containing: [],
+            ontop: [],
+            containingCharacters: [],
+            maxVolumeOnTopLiters: 0,
+            maxWeightOnTopKg: 0,
+            ontopCharacters: [],
+            wearableProperties: null,
+            containerProperties: null,
+            description: "A brand new stick of bubble gum. It looks delicious.",
+            isConsumable: true,
+            isSeeThrough: false,
+            owner: null,
+        }
+    ],
     ontop: [],
     containingCharacters: [],
     maxVolumeOnTopLiters: 10,
@@ -83,7 +103,6 @@ const clothes = {
     volumeLiters: 1,
     weightKg: 2,
     communicator: null,
-    madeOf: [],
 }
 
 engine.getDEObject().stateFor["Onza"].wearing = [
@@ -93,6 +112,7 @@ engine.getDEObject().stateFor["Onza"].wearing = [
 const MASSIVE_DUMBELL_TEST = false;
 const STICKS_TEST = false;
 const WEIRD_BOX_TEST = true;
+const TIGHT_CLOTHING_TEST = true;
 
 /**
  * @type {DEItem}
@@ -116,7 +136,6 @@ const massiveDumbell = {
     volumeLiters: 100,
     weightKg: 150,
     communicator: null,
-    madeOf: [],
 }
 
 const sticks = {
@@ -138,7 +157,6 @@ const sticks = {
     volumeLiters: 10,
     weightKg: 1.5,
     communicator: null,
-    madeOf: [],
 }
 
 const weirdBox = {
@@ -162,7 +180,6 @@ const weirdBox = {
     volumeLiters: 50,
     weightKg: 50,
     communicator: null,
-    madeOf: [],
 }
 
 // debug speedups
@@ -181,6 +198,13 @@ if (STICKS_TEST) {
 if (MASSIVE_DUMBELL_TEST) {
     // @ts-expect-error
     engine.deObject.stateFor["Dema"].carrying.push(massiveDumbell);
+}
+
+if (TIGHT_CLOTHING_TEST) {
+    // @ts-ignore
+    clothes.wearableProperties.volumeRangeMaxLiters = 30;
+    // @ts-ignore
+    clothes.wearableProperties.volumeRangeMinLiters = 30;
 }
 
 const ui = new TextOnlyUI(engine, "Onza");
