@@ -377,7 +377,7 @@ export async function getHistoryFragmentForCharacter(engine, character, options)
     let generator = await allHistory.next();
 
     /**
-     * @type {string[]}
+     * @type {Array<{message: string, author: string, storyMaster: boolean}>}
      */
     let messagesToAdd = [];
     /**
@@ -443,7 +443,11 @@ export async function getHistoryFragmentForCharacter(engine, character, options)
             }
 
             if (shouldAddMessage) {
-                messagesToAdd.push(messageParsed);
+                messagesToAdd.push({
+                    message: messageParsed,
+                    author: generator.value.name,
+                    storyMaster: generator.value.storyMaster,
+                });
                 if (!interactedCharacters.includes(generator.value.name) && !generator.value.storyMaster) {
                     interactedCharacters.push(generator.value.name);
                     if (!mentionedCharacters.includes(generator.value.name)) {

@@ -427,9 +427,10 @@ export function getPowerLevelFromCharacter(character) {
  * @param {DEngine} engine
  * @param {string} characterName 
  * @param {boolean} onlyBasics
+ * @param {boolean} hideCurrentPosture
  * @returns {Promise<string>}
  */
-export async function getExternalDescriptionOfCharacter(engine, characterName, onlyBasics = false) {
+export async function getExternalDescriptionOfCharacter(engine, characterName, onlyBasics = false, hideCurrentPosture = false) {
     if (!engine.deObject) {
         throw new Error("DEngine not initialized");
     }
@@ -539,9 +540,60 @@ export async function getExternalDescriptionOfCharacter(engine, characterName, o
         postureAppliedOnDescription = locationPathToMessage(engine, characterName, characterState.location, [...characterExactLocation.itemPath, characterExactLocation.itemPathEnd]);
     }
 
-    finalDescription += " " + character.name + " is currently " + characterState.posture.replace("_", " ") + " " + postureAppliedOnDescription + ".";
+    if (!hideCurrentPosture) {
+        finalDescription += " " + character.name + " is currently " + postureToText(characterState.posture) + " " + postureAppliedOnDescription + ".";
+    } else {
+        finalDescription += " " + character.name + " is currently " + postureAppliedOnDescription + ".";
+    }
 
     return finalDescription;
+}
+
+/**
+ * 
+ * @param {DEPosture} posture 
+ */
+export function postureToText(posture) {
+    switch (posture) {
+        case "lying_down":
+            return "lying down";
+        case "lying_down+belly_down":
+            return "lying down on the belly";
+        case "lying_down+belly_up":
+            return "lying down on the back";
+        case "on_all_fours":
+            return "on all fours";
+        default:
+            return posture;
+    }
+}
+
+const allPostures = [
+    "standing",
+    "crawling",
+    "climbing",
+    "sitting",
+    "lying_down",
+    "lying_down+belly_up",
+    "lying_down+belly_down",
+    "on_all_fours",
+    "crouching",
+    "kneeling",
+    "hanging",
+    "floating",
+    "flying",
+    "swimming",
+]
+
+export function getBasicPostures() {
+    return allPostures.filter(posture => !posture.includes("+"));
+}
+
+/**
+ * @param {DEPosture} posture 
+ */
+export function getExtendedPosturesOf(posture) {
+    return allPostures.filter(p => p.startsWith(posture + "+"));
 }
 
 /**

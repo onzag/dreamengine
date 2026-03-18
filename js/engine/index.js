@@ -14,6 +14,7 @@ import { getAllItemsCharacterIsInsideOf, getBeingCarriedByCharacter, getCharacte
 import { DEJSEngine } from "../jsengine/index.js";
 import defaultNamePool from "./util/name-pool.js";
 import { getHistoryFragmentForCharacter } from "./util/messages.js";
+import calculatePostureChange from "./gears/posture-change.js";
 
 const INVALID_NAMES = ["system", "assistant", "user", "everyone", "nobody",
     "anyone", "somebody", "narrator", "observer", "admin", "moderator",
@@ -382,7 +383,7 @@ export class DEngine {
              */
             const scripts =
                 // @ts-ignore typescript bugs
-                this.jsEngine.scriptOrder.map(scriptKey => ({script: this.jsEngine.scriptCache[scriptKey], scriptKey})).filter(script => script.script.type === type);
+                this.jsEngine.scriptOrder.map(scriptKey => ({ script: this.jsEngine.scriptCache[scriptKey], scriptKey })).filter(script => script.script.type === type);
 
             if (needsAtLeastOne.includes(type) && scripts.length === 0) {
                 throw new Error(`At least one script of type ${type} is required.`);
@@ -800,6 +801,9 @@ export class DEngine {
             });
         }
 
+        this.informCycleState("info", "Pre-calculating posture for " + this.userCharacter.name + "...");
+        await calculatePostureChange(this, this.deObject.characters[this.userCharacter.name]);
+
         if (sceneObject.charactersStart) {
             const randomizedList = ([...sceneObject.startingEngagedCharacters]).sort(() => Math.random() - 0.5);
             for (const participantName of randomizedList) {
@@ -808,6 +812,14 @@ export class DEngine {
 
                 this.informCycleState("info", "Pre-calculating initial bonds for " + participantName + "...");
                 await calculateBondsChangesDueToMessages(this, this.deObject.characters[participantName]);
+
+                for (const participantName of expectedParticipants) {
+                    this.informCycleState("info", "Pre-calculating posture for " + participantName + "...");
+                    await calculatePostureChange(this, this.deObject.characters[participantName]);
+                }
+
+                this.informCycleState("info", "Pre-calculating posture for " + this.userCharacter.name + "...");
+                await calculatePostureChange(this, this.deObject.characters[this.userCharacter.name]);
 
                 // TODO they talk
             }
@@ -822,6 +834,14 @@ export class DEngine {
 
         this.informCycleState("info", "Pre-calculating initial bonds for your character...");
         await calculateBondsChangesDueToMessages(this, this.userCharacter);
+
+        for (const participantName of expectedParticipants) {
+            this.informCycleState("info", "Pre-calculating posture for " + participantName + "...");
+            await calculatePostureChange(this, this.deObject.characters[participantName]);
+        }
+
+        this.informCycleState("info", "Pre-calculating posture for " + this.userCharacter.name + "...");
+        await calculatePostureChange(this, this.deObject.characters[this.userCharacter.name]);
 
         // Game on :)
     }

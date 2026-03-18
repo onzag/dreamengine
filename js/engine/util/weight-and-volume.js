@@ -511,12 +511,15 @@ export function getWearableFitment(engine, item, character, isNotBeingCurrentlyW
                 fitment: engine.deObject.functions.format_and(engine.deObject, null, [fitmentDescription, ...extraAddedExtraTraitsAtTheEnd]),
                 shouldFallDown: false,
                 shouldBreak: totalBodyVolume > largestSizeItCanFit,
-                breakReason: totalBodyVolume > largestSizeItCanFit ? [
-                    `${itemNameForText} got worn by {{char}} so tightly that it broke`,
-                    `${itemNameForText} was stretched beyond its limit by {{char}}'s body and tore apart`,
-                    `${itemNameForText} split at the seams from being forced on too tightly on {{char}}'s body`,
-                    `${itemNameForText} burst open, unable to contain {{char}}'s body`,
-                ][Math.floor(Math.random() * 5)] : null,
+                breakReason: totalBodyVolume > largestSizeItCanFit ? (() => {
+                    const _breakReasons = [
+                        `${itemNameForText} got worn by {{char}} so tightly that it broke`,
+                        `${itemNameForText} was stretched beyond its limit by {{char}}'s body and tore apart`,
+                        `${itemNameForText} split at the seams from being forced on too tightly on {{char}}'s body`,
+                        `${itemNameForText} burst open, unable to contain {{char}}'s body`,
+                    ];
+                    return _breakReasons[Math.floor(Math.random() * _breakReasons.length)];
+                })() : null,
             }
         } else {
             for (const trait of item.wearableProperties.otherFitmentTraitsLoose || []) {

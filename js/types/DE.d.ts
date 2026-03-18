@@ -1607,7 +1607,21 @@ declare interface DESeenItem {
     wornByCharacter: string | null;
 }
 
-declare type DEPosture = "standing" | "crawling" | "climbing" | "sitting" | "lying_down" | "crouching" | "kneeling" | "hanging" | "floating" | "flying" | "swimming";
+declare type DEPosture =
+    "standing" |
+    "crawling" |
+    "climbing" |
+    "sitting" |
+    "lying_down" |
+    "lying_down+belly_up" |
+    "lying_down+belly_down" |
+    "on_all_fours" |
+    "crouching" |
+    "kneeling" |
+    "hanging" |
+    "floating" |
+    "flying" |
+    "swimming";
 
 declare interface DEStateForCharacter {
     id: string;

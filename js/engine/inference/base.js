@@ -69,7 +69,7 @@ export class BaseInferenceAdapter {
      * 
      * @param {string} system
      * @param {string|null} contextInfoBefore additional context information to provide to the agent
-     * @param {Array<string>} messages
+     * @param {Array<{message: string, author: string, storyMaster: boolean}>} messages
      * @param {string|null} contextInfoAfter additional context information to provide to the agent
      * @param {boolean} [remarkLastStoryFragmentForAnalysis] whether to mark the last message with an special token so the agent can analyze it
      * @returns {QuestionAgentGeneratorResponse}

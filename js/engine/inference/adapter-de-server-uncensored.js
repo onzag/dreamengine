@@ -429,7 +429,7 @@ ${states.join(", ")}
     /**
      * @param {string} system
      * @param {string|null} contextInfoBefore additional context information to provide to the agent
-     * @param {Array<string>} messages
+     * @param {Array<{message: string, author: string, storyMaster: boolean}>} messages
      * @param {string|null} contextInfoAfter additional context information to provide to the agent
      * @param {boolean} [remarkLastStoryFragmentForAnalysis] whether to mark the last message with an special token so the agent can analyze it
      * @returns {import('./base.js').QuestionAgentGeneratorResponse}
@@ -442,7 +442,7 @@ ${states.join(", ")}
         remarkLastStoryFragmentForAnalysis
     ) {
         await this.ensureInitialized();
-        
+
         if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
             throw new Error("WebSocket is not open");
         }
@@ -477,25 +477,50 @@ ${states.join(", ")}
                 this.socket.send(JSON.stringify({ action: "analyze-prepare", payload, rid }));
             }
         } else {
-            const lastMessage = messages[messages.length - 1];
-            const restMessages = messages.slice(0, -1);
+            // we need to find the last message that was authored by a character, and not the story master, and split there
+            // everything added by the story master will be included
+            let lastCurrentMessageIndex = messages.length - 1;
+            while (lastCurrentMessageIndex >= 0 && messages[lastCurrentMessageIndex].storyMaster) {
+                lastCurrentMessageIndex--;
+            }
+            const lastMessage = messages.slice(lastCurrentMessageIndex, messages.length);
+            const restMessages = messages.slice(0, lastCurrentMessageIndex);
 
-            const restMessagesFormatted = restMessages.join("\n\n");
+            const restMessagesFormatted = restMessages.map(m => m.message).join("\n\n");
+            const lastMessageFormatted = lastMessage.map(m => m.message).join("\n\n");
 
-            if (this.options.mode === "xml") {
-                const payload = {
-                    system: system,
-                    userTrail: (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "") + "<previousStory>\n" + restMessagesFormatted + "\n</previousStory><analyze><lastStoryFragment>" + lastMessage + "</lastStoryFragment></analyze>" + (contextInfoAfter ? "\n" + contextInfoAfter : ""),
-                };
+            if (restMessages.length > 0) {
+                if (this.options.mode === "xml") {
+                    const payload = {
+                        system: system,
+                        userTrail: (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "") + "<previousStory>\n" + restMessagesFormatted + "\n</previousStory><analyze><lastStoryFragment>" + lastMessageFormatted + "</lastStoryFragment></analyze>" + (contextInfoAfter ? "\n" + contextInfoAfter : ""),
+                    };
 
-                this.socket.send(JSON.stringify({ action: "analyze-prepare", payload, rid }));
+                    this.socket.send(JSON.stringify({ action: "analyze-prepare", payload, rid }));
+                } else {
+                    const payload = {
+                        system: system,
+                        userTrail: (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "") + "# Previous Story:\n" + restMessagesFormatted + "\n\n# Last Story Fragment to Analyze:\n" + lastMessageFormatted + (contextInfoAfter ? "\n" + contextInfoAfter : ""),
+                    };
+
+                    this.socket.send(JSON.stringify({ action: "analyze-prepare", payload, rid }));
+                }
             } else {
-                const payload = {
-                    system: system,
-                    userTrail: (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "") + "# Previous Story:\n" + restMessagesFormatted + "\n\n# Last Story Fragment to Analyze:\n" + lastMessage + (contextInfoAfter ? "\n" + contextInfoAfter : ""),
-                };
+                if (this.options.mode === "xml") {
+                    const payload = {
+                        system: system,
+                        userTrail: (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "") + "<analyze><lastStoryFragment>" + lastMessageFormatted + "</lastStoryFragment></analyze>" + (contextInfoAfter ? "\n" + contextInfoAfter : ""),
+                    };
 
-                this.socket.send(JSON.stringify({ action: "analyze-prepare", payload, rid }));
+                    this.socket.send(JSON.stringify({ action: "analyze-prepare", payload, rid }));
+                } else {
+                    const payload = {
+                        system: system,
+                        userTrail: (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "") + "# Last Story Fragment to Analyze:\n" + lastMessageFormatted + (contextInfoAfter ? "\n" + contextInfoAfter : ""),
+                    };
+
+                    this.socket.send(JSON.stringify({ action: "analyze-prepare", payload, rid }));
+                }
             }
         }
 
