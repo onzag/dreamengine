@@ -111,8 +111,8 @@ engine.getDEObject().stateFor["Onza"].wearing = [
 
 const MASSIVE_DUMBELL_TEST = false;
 const STICKS_TEST = false;
-const WEIRD_BOX_TEST = true;
-const TIGHT_CLOTHING_TEST = true;
+const GIANT_BOX_TEST = true;
+const TIGHT_CLOTHING_TEST = false;
 
 /**
  * @type {DEItem}
@@ -159,12 +159,12 @@ const sticks = {
     communicator: null,
 }
 
-const weirdBox = {
+const giantBox = {
     amount: 1,
-    description: "A weird box that can be used for various purposes.",
+    description: "A giant box that can be used for various purposes.",
     isConsumable: false,
     isSeeThrough: false,
-    name: "Weird Box",
+    name: "Giant Box",
     consumableProperties: null,
     containing: [],
     ontop: [],
@@ -185,9 +185,9 @@ const weirdBox = {
 // debug speedups
 // engine.setWorldRulesDisabled(true);
 
-if (WEIRD_BOX_TEST) {
+if (GIANT_BOX_TEST) {
     // @ts-expect-error
-    engine.deObject.stateFor["Dema"].carrying.push(weirdBox);
+    engine.deObject.stateFor["Dema"].carrying.push(giantBox);
 }
 
 if (STICKS_TEST) {

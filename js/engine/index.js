@@ -16,6 +16,7 @@ import { getHistoryFragmentForCharacter } from "./util/messages.js";
 import calculatePostureChange from "./gears/posture-change.js";
 import calculateItemChanges from "./gears/item-changes.js";
 import timeForwardsUsingLastMessage from "./gears/time-forwards.js";
+import { talk } from "./gears/talk.js";
 
 const INVALID_NAMES = ["system", "assistant", "user", "everyone", "nobody",
     "anyone", "somebody", "narrator", "observer", "admin", "moderator",
@@ -844,7 +845,12 @@ export class DEngine {
             await this.informDEObjectUpdated();
         }
 
-        // TODO post scene started script?
+        scene.sceneStarted && await scene.sceneStarted(this.deObject, scene);
+
+        // TODO remove this hack made for debugging
+        await talk(this, this.deObject.characters["Dema"], {
+            doNotMove: true,
+        });
 
         this.informCycleState("info", "Pre-calculating item changes and effects...");
         let lastItemChangesInfo = await calculateItemChanges(this, this.userCharacter);
@@ -911,6 +917,8 @@ export class DEngine {
         if (postureChangeMessagesAccum.length > 0) {
             await addMessageForStoryMaster(postureChangeMessagesAccum);
         }
+
+        scene.sceneReady && await scene.sceneReady(this.deObject, scene);
 
         // Game on :)
     }
@@ -1890,318 +1898,6 @@ export class DEngine {
             merged: true,
             newGroupMembers: newPeopleOfTheGroup,
         }
-    }
-
-    /**
-     * Retruns the weather system for a given location and weather name,
-     * taking into account location hierarchy (parent locations).
-     * @param {string} locationName 
-     * @param {string} weatherName 
-     * @returns {DEWeatherSystem}
-     */
-    getWeatherSystemForLocationAndWeather(locationName, weatherName) {
-        if (!this.deObject) {
-            throw new Error("DEngine not initialized");
-        }
-        const locationInfo = this.deObject.world.locations[locationName];
-        if (!locationInfo) {
-            throw new Error(`Location ${locationName} not found in world.`);
-        }
-        const weatherSystem = locationInfo.ownWeatherSystem?.find(ws => ws.name === weatherName);
-        if (!weatherSystem && locationInfo.parent) {
-            return this.getWeatherSystemForLocationAndWeather(locationInfo.parent, weatherName);
-        } else if (!weatherSystem) {
-            throw new Error(`Weather system ${weatherName} not found in location ${locationName} or its parents.`);
-        }
-        return weatherSystem;
-    }
-
-    /**
-     * Determines if a character is fully or partially sheltered from a certain weather condition
-     * by their current location or surroundings, or by an item they are carrying or wearing.
-     * @param {string} characterName 
-     * @param {string} weatherName
-     * @param {string} locationName
-     * @param {string} slotName
-     */
-    async isCharacterShelteredFromWeather(characterName, weatherName, locationName, slotName) {
-        if (!this.deObject) {
-            throw new Error("DEngine not initialized");
-        }
-        const returnInformation = {
-            fullySheltered: false,
-            partiallySheltered: false,
-            negativelyExposed: false,
-            reason: `${characterName} is fully exposed to the weather condition "${weatherName}"`,
-        }
-
-        const weatherSystem = this.getWeatherSystemForLocationAndWeather(locationName, weatherName);
-
-        const character = this.deObject.characters[characterName];
-        if (!character) {
-            throw new Error(`Character ${characterName} not found in world.`);
-        }
-
-        const locationInfo = this.deObject.world.locations[locationName];
-        if (!locationInfo) {
-            throw new Error(`Location ${locationName} not found in world.`);
-        }
-
-        const slotInfo = locationInfo.slots[slotName];
-        if (!slotInfo) {
-            throw new Error(`Slot ${slotName} not found in location ${locationName}.`);
-        }
-
-        const characterState = this.deObject.stateFor[characterName];
-        if (!characterState) {
-            throw new Error(`Character state for ${characterName} not found.`);
-        }
-
-        /**
-         * @type {DEItem[]}
-         */
-        const potentiallyProtectingItemsCharacterIsInsideOf = getAllItemsCharacterIsInsideOf(this, characterName);
-
-        // FULLY PROTECTED CHECKS
-        // check for location based sheltering
-        if ((slotInfo.slotFullyBlocksWeather || locationInfo.locationFullyBlocksWeather).includes(weatherName)) {
-            returnInformation.fullySheltered = true;
-            returnInformation.reason = `The location "${locationName}" fully blocks the weather condition "${weatherName}"`;
-            return returnInformation;
-        }
-
-        // check if an item the character is carrying or wearing provides full sheltering
-        for (const item of characterState.wearing) {
-            if (item.wearableProperties?.fullyProtectsFromWeathers?.includes(weatherName)) {
-                returnInformation.fullySheltered = true;
-                returnInformation.reason = `The item "${item.name}" worn by "${characterName}" fully protects from the weather condition "${weatherName}"`;
-                return returnInformation;
-            }
-        }
-        for (const item of characterState.carrying) {
-            if (item.carriableProperties?.fullyProtectsFromWeathers?.includes(weatherName)) {
-                returnInformation.fullySheltered = true;
-                returnInformation.reason = `The item "${item.name}" carried by "${characterName}" fully protects from the weather condition "${weatherName}"`;
-                return returnInformation;
-            }
-        }
-
-        if (weatherSystem.fullyProtectedNaked) {
-            returnInformation.fullySheltered = true;
-            returnInformation.reason = `Because ${characterName} is naked ${characterName} is immune to the weather condition "${weatherName}"`;
-            return returnInformation;
-        }
-        if (weatherSystem.fullyProtectingWornItems.length > 0) {
-            for (const item of characterState.wearing) {
-                if (weatherSystem.fullyProtectingWornItems.includes(item.name)) {
-                    returnInformation.fullySheltered = true;
-                    returnInformation.reason = `The item "${item.name}" worn by "${characterName}" fully protects from the weather condition "${weatherName}"`;
-                    return returnInformation;
-                }
-            }
-        }
-        if (weatherSystem.fullyProtectingCarriedItems.length > 0) {
-            for (const item of characterState.carrying) {
-                if (weatherSystem.fullyProtectingCarriedItems.includes(item.name)) {
-                    returnInformation.fullySheltered = true;
-                    returnInformation.reason = `The item "${item.name}" carried by "${characterName}" fully protects from the weather condition "${weatherName}"`;
-                    return returnInformation;
-                }
-            }
-        }
-        for (const potentialProtectingItem of potentiallyProtectingItemsCharacterIsInsideOf || []) {
-            if (potentialProtectingItem.containerProperties?.fullyProtectsFromWeathers?.includes(weatherName)) {
-                returnInformation.fullySheltered = true;
-                returnInformation.reason = `The item "${potentialProtectingItem.name}" that "${characterName}" is inside of fully protects from the weather condition "${weatherName}"`;
-                return returnInformation;
-            }
-        }
-
-        if (weatherSystem.fullyProtectingStates.length > 0) {
-            for (const state of characterState.states) {
-                if (weatherSystem.fullyProtectingStates.includes(state.state)) {
-                    returnInformation.fullySheltered = true;
-                    // TODO improve this description of the state
-                    returnInformation.reason = `Because "${characterName}" is in a state of "${state.state}", ${characterName} is immune to the weather condition "${weatherName}"`;
-                    return returnInformation;
-                }
-            }
-        }
-        if (weatherSystem.fullyProtectedTemplate) {
-            // @ts-expect-error
-            const hasFullProtect = await weatherSystem.fullyProtectedTemplate.execute(this.deObject, character);
-            if (hasFullProtect) {
-                returnInformation.fullySheltered = true;
-                returnInformation.reason = `Because ${hasFullProtect}, ${characterName} is immune to the weather condition "${weatherName}"`;
-                return returnInformation;
-            }
-        }
-
-        // PARTIALLY PROTECTED CHECKS
-        // check for location based sheltering
-        if ((slotInfo.slotPartiallyBlocksWeather || locationInfo.locationPartiallyBlocksWeather).includes(weatherName)) {
-            returnInformation.partiallySheltered = true;
-            returnInformation.reason = `The location "${locationName}" partially blocks the weather condition "${weatherName}"`;
-            return returnInformation;
-        }
-
-        //check if an item the character is carrying or wearing provides partial sheltering
-        for (const item of characterState.wearing) {
-            if (item.wearableProperties?.partiallyProtectsFromWeathers?.includes(weatherName)) {
-                returnInformation.partiallySheltered = true;
-                returnInformation.reason = `The item "${item.name}" worn by "${characterName}" partially protects from the weather condition "${weatherName}"`;
-                return returnInformation;
-            }
-        }
-        for (const item of characterState.carrying) {
-            if (item.carriableProperties?.partiallyProtectsFromWeathers?.includes(weatherName)) {
-                returnInformation.partiallySheltered = true;
-                returnInformation.reason = `The item "${item.name}" carried by "${characterName}" partially protects from the weather condition "${weatherName}"`;
-                return returnInformation;
-            }
-        }
-        if (weatherSystem.partiallyProtectedNaked) {
-            const isNaked = characterState.wearing.filter(item => item.wearableProperties?.coversTopNakedness || item.wearableProperties?.coversBottomNakedness).length === 0;
-            if (isNaked) {
-                returnInformation.partiallySheltered = true;
-                returnInformation.reason = `Because ${characterName} is partially/totally naked, ${characterName} is partially immune to the weather condition "${weatherName}"`;
-                return returnInformation;
-            }
-        }
-
-        if (weatherSystem.partiallyProtectingWornItems.length > 0) {
-            for (const item of characterState.wearing) {
-                if (weatherSystem.partiallyProtectingWornItems.includes(item.name)) {
-                    returnInformation.partiallySheltered = true;
-                    returnInformation.reason = `The item "${item.name}" worn by "${characterName}" partially protects from the weather condition "${weatherName}"`;
-                    return returnInformation;
-                }
-            }
-        }
-
-        if (weatherSystem.partiallyProtectingCarriedItems.length > 0) {
-            for (const item of characterState.carrying) {
-                if (weatherSystem.partiallyProtectingCarriedItems.includes(item.name)) {
-                    returnInformation.partiallySheltered = true;
-                    returnInformation.reason = `The item "${item.name}" carried by "${characterName}" partially protects from the weather condition "${weatherName}"`;
-                    return returnInformation;
-                }
-            }
-        }
-
-        for (const potentialProtectingItem of potentiallyProtectingItemsCharacterIsInsideOf || []) {
-            if (potentialProtectingItem.containerProperties?.partiallyProtectsFromWeathers?.includes(weatherName)) {
-                returnInformation.partiallySheltered = true;
-                returnInformation.reason = `The item "${potentialProtectingItem.name}" that "${characterName}" is inside of partially protects from the weather condition "${weatherName}"`;
-                return returnInformation;
-            }
-        }
-
-        if (weatherSystem.partiallyProtectingStates.length > 0) {
-            for (const state of characterState.states) {
-                if (weatherSystem.partiallyProtectingStates.includes(state.state)) {
-                    returnInformation.partiallySheltered = true;
-                    // TODO improve this description of the state
-                    returnInformation.reason = `Because "${characterName}" is in a state of "${state.state}", ${characterName} is partially protected from the weather condition "${weatherName}".`;
-                    return returnInformation;
-                }
-            }
-        }
-
-        if (weatherSystem.partiallyProtectedTemplate) {
-            // @ts-expect-error
-            const hasPartialEffect = await weatherSystem.partiallyProtectedTemplate.execute(this.deObject, character);
-            if (hasPartialEffect) {
-                returnInformation.partiallySheltered = true;
-                returnInformation.reason = `Because ${hasPartialEffect}, ${characterName} is partially protected from the weather condition "${weatherName}".`;
-                return returnInformation;
-            }
-        }
-
-        // NEGATIVELY EXPOSED CHECKS
-        // check for location based negative exposure
-        if ((slotInfo.slotNegativelyExposesCharactersToWeather || locationInfo.locationNegativelyExposesCharactersToWeather).includes(weatherName)) {
-            returnInformation.negativelyExposed = true;
-            returnInformation.reason = `The location "${locationName}" negatively exposes to the weather condition "${weatherName}".`;
-            return returnInformation;
-        }
-
-        // check if an item the character is carrying or wearing provides negative exposure
-        for (const item of characterState.wearing) {
-            if (item.wearableProperties?.negativelyExposesToWeathers?.includes(weatherName)) {
-                returnInformation.negativelyExposed = true;
-                returnInformation.reason = `The item "${item.name}" worn by "${characterName}" negatively exposes to the weather condition "${weatherName}"`;
-                return returnInformation;
-            }
-        }
-
-        for (const item of characterState.carrying) {
-            if (item.carriableProperties?.negativelyExposesToWeathers?.includes(weatherName)) {
-                returnInformation.negativelyExposed = true;
-                returnInformation.reason = `The item "${item.name}" carried by "${characterName}" negatively exposes to the weather condition "${weatherName}"`;
-                return returnInformation;
-            }
-        }
-
-        if (weatherSystem.negativelyAffectedNaked) {
-            const isNaked = characterState.wearing.filter(item => item.wearableProperties?.coversTopNakedness || item.wearableProperties?.coversBottomNakedness).length === 0;
-            if (isNaked) {
-                returnInformation.negativelyExposed = true;
-                returnInformation.reason = `Because ${characterName} is partially/totally naked, ${characterName} is negatively exposed to the weather condition "${weatherName}"`;
-                return returnInformation;
-            }
-        }
-
-        if (weatherSystem.negativelyAffectingWornItems.length > 0) {
-            for (const item of characterState.wearing) {
-                if (weatherSystem.negativelyAffectingWornItems.includes(item.name)) {
-                    returnInformation.negativelyExposed = true;
-                    returnInformation.reason = `The item "${item.name}" worn by "${characterName}" negatively exposes to the weather condition "${weatherName}"`;
-                    return returnInformation;
-                }
-            }
-        }
-
-        if (weatherSystem.negativelyAffectingCarriedItems.length > 0) {
-            for (const item of characterState.carrying) {
-                if (weatherSystem.negativelyAffectingCarriedItems.includes(item.name)) {
-                    returnInformation.negativelyExposed = true;
-                    returnInformation.reason = `The item "${item.name}" carried by "${characterName}" negatively exposes to the weather condition "${weatherName}"`;
-                    return returnInformation;
-                }
-            }
-        }
-
-        for (const potentialProtectingItem of potentiallyProtectingItemsCharacterIsInsideOf || []) {
-            if (potentialProtectingItem.containerProperties?.negativelyExposesToWeathers?.includes(weatherName)) {
-                returnInformation.negativelyExposed = true;
-                returnInformation.reason = `The item "${potentialProtectingItem.name}" that "${characterName}" is inside of negatively exposes ${characterName} to the weather condition "${weatherName}"`;
-                return returnInformation;
-            }
-        }
-
-        if (weatherSystem.negativelyAffectingStates.length > 0) {
-            for (const state of characterState.states) {
-                if (weatherSystem.negativelyAffectingStates.includes(state.state)) {
-                    returnInformation.negativelyExposed = true;
-                    // TODO improve this description of the state
-                    returnInformation.reason = `Because "${characterName}" is in a state of "${state.state}", ${characterName} is negatively exposed to the weather condition "${weatherName}"`;
-                    return returnInformation;
-                }
-            }
-        }
-
-        if (weatherSystem.negativelyAffectedTemplate) {
-            // @ts-expect-error
-            const hasNegativeEffect = await weatherSystem.negativelyAffectedTemplate.execute(this.deObject, character);
-            if (hasNegativeEffect) {
-                returnInformation.negativelyExposed = true;
-                returnInformation.reason = `Because ${hasNegativeEffect}, ${characterName} is negatively exposed to the weather condition "${weatherName}"`;
-                return returnInformation;
-            }
-        }
-
-        return returnInformation;
     }
 
     async requestTalkingTurnFromUser() {

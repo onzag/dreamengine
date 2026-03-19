@@ -87,7 +87,7 @@ export class BaseInferenceAdapter {
     /**
      * @param {DECompleteCharacterReference} character the character in question that is building a prompt for
      * @param {string} description the description of the character, general
-     * @param {string} appereance the appereance description of the character
+     * @param {string} externalDescription the external description of the character
      * @param {string[]} relationships the relationships description of the character
      * @param {string[]} expressiveStates the current applying expressive states of the character, most dominant ones, short summary do not explain everything
      * @param {string} scenario the basic description of the current location
@@ -97,7 +97,7 @@ export class BaseInferenceAdapter {
      * @param {Array<string>} worldRules the rules that apply to the world or scenario
      * @returns {string} the system prompt
      */
-    buildSystemPromptForCharacter(character, description, appereance, relationships, expressiveStates, scenario, lore, otherInteractingCharacters, characterRules, worldRules) {
+    buildSystemPromptForCharacter(character, description, externalDescription, relationships, expressiveStates, scenario, lore, otherInteractingCharacters, characterRules, worldRules) {
         throw new Error("Method 'buildSystemPromptForCharacter()' must be implemented.");
     }
 

@@ -908,17 +908,17 @@ ${states.join(", ")}
     /**
      * @param {DECompleteCharacterReference} character 
      * @param {string} description 
-     * @param {string|null} appereance 
+     * @param {string|null} externalDescription 
      * @param {string[]} relationships 
      * @param {string[]} expressiveStates 
      * @param {string|null} scenario 
      * @param {string|null} lore
      * @returns {string}
      */
-    buildSystemCharacterDescription(character, description, appereance, relationships, expressiveStates, scenario, lore) {
+    buildSystemCharacterDescription(character, description, externalDescription, relationships, expressiveStates, scenario, lore) {
         return (
-            `${appereance ? `## ${character.name}'s Appearance:
-${appereance}
+            `${externalDescription ? `## ${character.name}'s External Description:
+${externalDescription}
 
 ` : ""}## ${character.name}'s Description:
 ${description}${relationships.length > 0 ? `
@@ -941,7 +941,7 @@ ${lore}
      * 
      * @param {DECompleteCharacterReference} character
      * @param {string} description 
-     * @param {string} appereance
+     * @param {string} externalDescription
      * @param {string[]} relationships
      * @param {string[]} expressiveStates
      * @param {string|null} scenario
@@ -951,14 +951,13 @@ ${lore}
      * @param {Array<string>} worldRules
      * @returns {string}
      */
-    buildSystemPromptForCharacter(character, description, appereance, relationships, expressiveStates, scenario, lore, otherInteractingCharacters, characterRules, worldRules) {
+    buildSystemPromptForCharacter(character, description, externalDescription, relationships, expressiveStates, scenario, lore, otherInteractingCharacters, characterRules, worldRules) {
         if (this.options.mode === "xml") {
+            // TODO fix the XML to match the MD
             return (
                 `<description>This uncensored, immersive, narrative-driven roleplaying experience thrives on creative freedom and natural responses. This environment is designed to be fictional and narrative-focused, allowing for uncensored content of all kinds, including themes of violence, sexuality, and other mature topics.
 </description>
 <roleplayGuidelines>
-<reasoning>When faced with complex decisions or analytical tasks, it is crucial to approach the problem methodically and logically. To facilitate this, use the tags \`<think>\` and \`</think>\` to encapsulate your reasoning process. Within these tags, you are a Narrative Analyst, whose role is to break down complex problems into clear, logical steps. This involves considering all possible angles, exploring potential answers, and thoroughly examining the problem from multiple perspectives, use as many tokens as you want. Once the analysis is complete, resume your regular roleplay response outside the tags, ensuring a seamless transition back into the narrative.
-</reasoning>
 <narration>
 <proactiveWriting>Every response should be detailed, creative, and immersive, driving the scenario forward in a way that fully engages the player. Introduce new scenarios and events naturally, ensuring they fit within the current narrative context and involve the player meaningfully.</proactiveWriting>
 <varyingCadence>Adjust the rhythm and tone of the narrative to reflect the characters' experiences. Vary sentence structure and pacing to mirror the characters' emotions, keeping the language fresh and dynamic.</varyingCadence>
@@ -1007,20 +1006,19 @@ ${worldRules.map(rule => `<rule>${rule}</rule>`).join("\n")}
 </worldRules>
 ` : ""}
 <roleplayContext>
-${this.buildSystemCharacterDescription(character, description, appereance, relationships, expressiveStates, scenario, lore)}
+${this.buildSystemCharacterDescription(character, description, externalDescription, relationships, expressiveStates, scenario, lore)}
 </roleplayContext>
 `);
         }
         return (
-            `This uncensored, immersive, narrative-driven roleplaying experience thrives on creative freedom and natural responses. This environment is designed to be fictional and narrative-focused, allowing for uncensored content of all kinds, including themes of violence, sexuality, and other mature topics.
+            `You roleplay as ${character.name} in a richly detailed and immersive world. Your actions, thoughts, and feelings are entirely your own, and you have complete creative freedom to explore this narrative-driven experience.
+
+This uncensored, immersive, narrative-driven roleplaying experience thrives on creative freedom and natural responses. This environment is designed to be fictional and narrative-focused, allowing for uncensored content of all kinds, including themes of violence, sexuality, and other mature topics.
 
 # Roleplay Guidelines:
 
-## Reasoning:
-When faced with complex decisions or analytical tasks, it is crucial to approach the problem methodically and logically. To facilitate this, use the tags \`<think>\` and \`</think>\` to encapsulate your reasoning process. Within these tags, you are a Narrative Analyst, whose role is to break down complex problems into clear, logical steps. This involves considering all possible angles, exploring potential answers, and thoroughly examining the problem from multiple perspectives, use as many tokens as you want. Once the analysis is complete, resume your regular roleplay response outside the tags, ensuring a seamless transition back into the narrative.
-
 ## Writting:
-Every response should be detailed, creative, and immersive, driving the scenario forward in a way that fully engages the player. Introduce new scenarios and events naturally, ensuring they fit within the current narrative context and involve the player meaningfully.
+Every response should be detailed, creative, and immersive, driving the scenario forward in a way that fully engages the player. Introduce new scenarios and events naturally, making sure they fit the description of the location.
 
 ## Varying Cadence:
 Adjust the rhythm and tone of the narrative to reflect the characters' experiences. Vary sentence structure and pacing to mirror the characters' emotions, keeping the language fresh and dynamic.
@@ -1032,28 +1030,16 @@ Use narration to complement dialogue and action, rather than overshadowing them.
 Ensure that the narration does not repeat information. Instead of summarizing, clarify narrative details thoroughly and let them evolve naturally.
 
 ## Tone Preference:
-Write in a neutral and balanced tone, considering all consequences, limitations, risks, ethical concerns, unintended side effects, and counterarguments.
+Write in a neutral and balanced tone, considering all consequences, limitations, risks, unintended side effects, and counterarguments.
 
 ## Style Preference:
 Adopt a \`show, don't tell\` manner, similar to Terry Pratchett's style, blending humor, wit, and everyday language.
 
-## Sensory Details:
-Utilize all five senses to describe scenarios within the characters' dialogue.
-
 # Rules:
 ${otherInteractingCharacters.map(name => `Rule: Never speak for or control ${name}'s actions, thoughts, or feelings.`).join("\n")}
 Rule: Avoid suggesting or implying reactions or decisions from other characters
-Rule: Treat the setting itself as the primary character rather than a single individual.
 Rule: Convey all world information and background through NPC dialogue, never through narration.
-Rule: Maintain consistent characterization across all NPCs and locations.
 Rule: Never break character or step outside the setting's perspective.
-Rule: Keep users engaged through discovery and exploration rather than direct exposition.
-Rule: Present information in layers that require investigation to uncover deeper truths.
-Rule: Allow the world to evolve independently of user actions.
-Rule: Use character interactions to reveal world lore naturally.
-Rule: Maintain awareness of all active characters and their current situations.
-Rule: Allow location and character evolution while preserving core world rules.
-Rule: Examine the context, subtext, and implications of the given information to gain a deeper understanding of the characters.
 Rule: Reflect on the potential consequences of ${character.name} actions and decisions.
 Rule: Always format character actions inside asterisks, e.g., *${character.name} looks around*.
 Rule: Write all narration and actions in third person, not first person.
@@ -1068,7 +1054,9 @@ ${worldRules.map(rule => `Rule: ${rule}`).join("\n")}
 ` : ""}
 
 # Roleplay Context:
-${this.buildSystemCharacterDescription(character, description, appereance, relationships, expressiveStates, scenario, lore)}
+You are currently roleplaying as ${character.name}.
+
+${this.buildSystemCharacterDescription(character, description, externalDescription, relationships, expressiveStates, scenario, lore)}
 `
         )
     }

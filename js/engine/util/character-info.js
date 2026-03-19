@@ -1,5 +1,7 @@
 import { DEngine } from "../index.js";
+import { makeTimestamp } from "./messages.js";
 import { getWearableFitment, locationPathToMessage } from "./weight-and-volume.js";
+import { getWeatherSystemForLocationAndWeather } from "./world.js";
 
 /**
  * @param {DEngine} engine 
@@ -385,6 +387,35 @@ export function getSurroundingCharacters(engine, characterName) {
  * @param {DEngine} engine 
  * @param {string} characterName 
  */
+export function getCurrentlyInteractingCharacters(engine, characterName) {
+    if (!engine.deObject) {
+        throw new Error("DEngine not initialized");
+    }
+    // find the current conversation the character is engaging at
+    const charState = engine.deObject.stateFor[characterName];
+
+    if (!charState) {
+        throw new Error(`Character ${characterName} not found in engine state.`);
+    }
+
+    const convId = charState.conversationId;
+
+    if (!convId) {
+        return [];
+    }
+
+    const conversation = engine.deObject.conversations[convId];
+    if (!conversation) {
+        return [];
+    }
+
+    return conversation.participants.filter(participant => participant !== characterName);
+}
+
+/**
+ * @param {DEngine} engine 
+ * @param {string} characterName 
+ */
 export function getPowerLevel(engine, characterName) {
     if (!engine.deObject) {
         throw new Error("DEngine not initialized");
@@ -447,8 +478,30 @@ export async function getExternalDescriptionOfCharacter(engine, characterName, o
         finalDescription += ".";
     }
 
+    let maxStateDominance = 0;
     for (const state of characterState.states) {
         const stateInfo = character.states[state.state];
+        let dominanceOfThisState = stateInfo.dominance;
+        if (state.relieving && typeof stateInfo.dominanceAfterRelief === "number") {
+            dominanceOfThisState = stateInfo.dominanceAfterRelief;
+        }
+        if (dominanceOfThisState > maxStateDominance) {
+            maxStateDominance = dominanceOfThisState;
+        }
+    }
+
+    for (const state of characterState.states) {
+        const stateInfo = character.states[state.state];
+
+        let dominanceOfThisState = stateInfo.dominance;
+        if (state.relieving && typeof stateInfo.dominanceAfterRelief === "number") {
+            dominanceOfThisState = stateInfo.dominanceAfterRelief;
+        }
+
+        if (dominanceOfThisState < maxStateDominance && stateInfo.doNotIgnoreDominanceWhenInjectingExternalDescription) {
+            continue;
+        }
+
         let toAdd = "";
         if (stateInfo.relieving) {
             if (stateInfo.relievingGeneralCharacterExternalDescriptionInjection) {
@@ -647,14 +700,6 @@ export function humanReadablePostureToPosture(humanReadable) {
 /**
  * @param {DEngine} engine
  * @param {string} characterName 
- * @returns {Promise<{
- *   general: string,
- *   expressiveStates: string[],
- *   relationships: string[],
- *   stateDominance: number,
- *   applyingStates: DEApplyingState[],
- *   rejectedStates: DEApplyingState[],
- * }>} complete description, list of states, list of relationships
  */
 export async function getInternalDescriptionOfCharacter(engine, characterName) {
     if (!engine.deObject) {
@@ -687,9 +732,6 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
         }
     }
 
-    const applyingStates = [];
-    const rejectedStates = [];
-
     let maxStateDominance = 0;
     for (const state of characterState.states) {
         const stateInfo = character.states[state.state];
@@ -706,6 +748,21 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
      * @type {string[]}
      */
     const statesDescriptions = [];
+    /**
+     * @type {Array<{
+     *   applyingState: DEApplyingState | null,
+     *   action: DEActionPromptInjectionWithIntensity | DEActionPromptInjection,
+     *   stateInfo: DECharacterStateDefinition | null,
+     * }>}
+     */
+    const actions = [];
+    for (const injectable of Object.values(character.actionPromptInjection)) {
+        actions.push({
+            applyingState: null,
+            action: injectable,
+            stateInfo: null,
+        });
+    }
     for (const state of characterState.states) {
         const stateInfo = character.states[state.state];
 
@@ -714,12 +771,23 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
             dominanceOfThisState = stateInfo.dominanceAfterRelief;
         }
 
-        if (dominanceOfThisState < maxStateDominance) {
-            rejectedStates.push(state);
-            continue;
+        if (dominanceOfThisState >= maxStateDominance || stateInfo.ignoreDominanceForActionPromptInjection) {
+            const origin = state.relieving ? stateInfo.relievingActionPromptInjection : stateInfo.actionPromptInjection;
+            if (origin) {
+                for (const actionPromptInjectableKey in origin) {
+                    const actionPromptInjectable = origin[actionPromptInjectableKey];
+                    actions.push({
+                        applyingState: state,
+                        action: actionPromptInjectable,
+                        stateInfo,
+                    });
+                }
+            }
         }
 
-        applyingStates.push(state);
+        if (dominanceOfThisState < maxStateDominance && !stateInfo.ignoreDominanceWhenInjectedGeneralCharacterDescription) {
+            continue;
+        }
 
         let stateDescription = stateInfo.behaviourType !== "HIDDEN" ? state.state.split("_").map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(" ") : null;
         if (!state.relieving) {
@@ -774,6 +842,7 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
     }
 
     const bonds = engine.deObject.social.bonds[characterName];
+
     /**
      * @type {string[]}
      */
@@ -890,8 +959,7 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
         expressiveStates: statesDescriptions,
         relationships,
         stateDominance: maxStateDominance,
-        applyingStates,
-        rejectedStates,
+        actions,
     };
 }
 
@@ -910,4 +978,449 @@ export function getBondDeclarationFromBondDescription(character, bond) {
         return null;
     }
     return bondDeclaration;
+}
+
+/**
+ * 
+ * @param {DEngine} engine 
+ * @param {string} characterName 
+ */
+export async function getSysPromptForCharacter(engine, characterName) {
+    if (!engine.deObject) {
+        throw new Error("DEngine not initialized");
+    }
+    if (!engine.inferenceAdapter) {
+        throw new Error("DEngine has no inference adapter defined");
+    }
+    const character = engine.deObject.characters[characterName];
+    if (!character) {
+        throw new Error(`Character ${characterName} not found.`);
+    }
+
+    const characterState = engine.deObject.stateFor[characterName];
+    if (!characterState) {
+        throw new Error(`No state found for character "${characterName}".`);
+    }
+
+    const externalDescription = await getExternalDescriptionOfCharacter(engine, characterName, true);
+    const internalDescription = await getInternalDescriptionOfCharacter(engine, characterName);
+
+    /**
+     * @type {string|null}
+     */
+    let lore = null;
+
+    if (engine.deObject.world.lore) {
+        // @ts-ignore
+        lore = typeof engine.deObject.world.lore === "string" ? engine.deObject.world.lore : await engine.deObject.world.lore(engine.deObject, {
+            char: character,
+        });
+        if (lore.trim().length === 0) {
+            lore = null;
+        }
+    }
+
+    /**
+     * @type {Array<string>}
+     */
+    const interactingCharacters = [];
+    const potentialConversationId = engine.deObject.stateFor[characterName].conversationId;
+    if (potentialConversationId) {
+        const conversation = engine.deObject.conversations[potentialConversationId];
+        interactingCharacters.push(...conversation.participants.filter(name => name !== characterName));
+    }
+
+    /**
+     * @type {Array<string>}
+     */
+    const worldRules = [];
+    if (engine.deObject.worldRules) {
+        for (const rule of Object.values(engine.deObject.worldRules)) {
+            const ruleText = typeof rule.rule === "string" ? rule.rule : (await rule.rule(engine.deObject, {
+                char: character,
+            })).trim();
+            if (ruleText.length > 0) {
+                worldRules.push(ruleText);
+            }
+        }
+    }
+
+    /**
+     * @type {Array<string>}
+     */
+    const characterRules = [];
+    if (character.characterRules) {
+        for (const rule of Object.values(character.characterRules)) {
+            // @ts-ignore
+            const ruleText = typeof rule.rule === "string" ? rule.rule : (await rule.rule(engine.deObject, {
+                char: character,
+            })).trim();
+            if (ruleText.length > 0) {
+                characterRules.push(ruleText);
+            }
+        }
+    }
+
+    let scenario = "";
+    const currentLocation = engine.deObject.world.locations[engine.deObject.stateFor[characterName].location];
+    if (currentLocation) {
+        scenario = `## Location\n\n${engine.deObject.stateFor[characterName].location}, ` + (typeof currentLocation.description === "string" ? currentLocation.description : await currentLocation.description(engine.deObject, {
+            char: character,
+        }));
+    }
+    const currentLocationSlot = currentLocation.slots[engine.deObject.stateFor[characterName].locationSlot];
+    if (currentLocationSlot) {
+        scenario += `\nSpecifically at: ${engine.deObject.stateFor[characterName].locationSlot}, ` + (typeof currentLocationSlot.description === "string" ? currentLocationSlot.description : await currentLocationSlot.description(engine.deObject, {
+            char: character,
+        }));
+    }
+
+    scenario += `\n\n${await whatIsWeatherLikeForCharacter(engine, characterName)}`;
+
+    scenario += `\n\nCurrent time and date in the world: ${await makeTimestamp(engine, engine.deObject.currentTime, false)}`;
+    
+
+    const sysprompt = engine.inferenceAdapter.buildSystemPromptForCharacter(
+        character,
+        internalDescription.general,
+        externalDescription,
+        internalDescription.relationships,
+        internalDescription.expressiveStates,
+        scenario,
+        lore,
+        interactingCharacters,
+        characterRules,
+        worldRules,
+    );
+
+    return {
+        sysprompt,
+        internalDescription,
+        externalDescription,
+        scenario,
+        lore,
+        interactingCharacters,
+        characterRules,
+        worldRules,
+    };
+}
+
+/**
+ * @param {DEngine} engine 
+ * @param {string} characterName 
+ * @returns 
+ */
+async function whatIsWeatherLikeForCharacter(engine, characterName) {
+    if (!engine.deObject) {
+        throw new Error("DEngine not initialized");
+    }
+    if (!engine.deObject.stateFor[characterName]) {
+        throw new Error(`No state found for character "${characterName}".`);
+    }
+    const character = engine.deObject.characters[characterName];
+    const characterState = engine.deObject.stateFor[characterName];
+    const characterLocation = characterState.location;
+    const characterLocationSlot = characterState.locationSlot;
+    const location = engine.deObject.world.locations[characterLocation];
+    const weatherThere = location.currentWeather;
+    const isSheltered = await isCharacterShelteredFromWeather(engine, characterName, weatherThere, characterLocation, characterLocationSlot);
+    if (isSheltered.fullySheltered) {
+        const noEffectDescription = typeof location.currentWeatherNoEffectDescription === "string" ? location.currentWeatherNoEffectDescription : await location.currentWeatherNoEffectDescription(engine.deObject, { char: character });
+        return `The current weather where "${characterName}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}". However, "${characterName}" is fully sheltered from its effects. ${isSheltered.reason || ""}, therefore ${noEffectDescription || "no weather effects apply to them."}`;
+    } else if (isSheltered.partiallySheltered) {
+        const partialEffectDescription = typeof location.currentWeatherPartialEffectDescription === "string" ? location.currentWeatherPartialEffectDescription : await location.currentWeatherPartialEffectDescription(engine.deObject, { char: character });
+        return `The current weather where "${characterName}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}". "${characterName}" is partially sheltered from its effects. ${isSheltered.reason || ""}, therefore ${partialEffectDescription || "some weather effects may apply to them."}`;
+    } else if (isSheltered.negativelyExposed) {
+        const negativeEffectsDescription = typeof location.currentWeatherNegativelyExposedDescription === "string" ? location.currentWeatherNegativelyExposedDescription : await location.currentWeatherNegativelyExposedDescription(engine.deObject, { char: character });
+        return `The current weather where "${characterName}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}". "${characterName}" is negatively exposed to its effects. ${isSheltered.reason || ""}, therefore ${negativeEffectsDescription || "strongly negative weather effects apply to them."}`;
+    } else {
+        const effectDescription = typeof location.currentWeatherFullEffectDescription === "string" ? location.currentWeatherFullEffectDescription : await location.currentWeatherFullEffectDescription(engine.deObject, { char: character });
+        return `The current weather where "${characterName}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}". ${isSheltered.reason || ""}, therefore ${effectDescription || "all weather effects apply to them."}`;
+    }
+}
+
+/**
+ * Determines if a character is fully or partially sheltered from a certain weather condition
+ * by their current location or surroundings, or by an item they are carrying or wearing.
+ * @param {DEngine} engine
+ * @param {string} characterName 
+ * @param {string} weatherName
+ * @param {string} locationName
+ * @param {string} slotName
+ */
+export async function isCharacterShelteredFromWeather(engine, characterName, weatherName, locationName, slotName) {
+    if (!engine.deObject) {
+        throw new Error("DEngine not initialized");
+    }
+    const returnInformation = {
+        fullySheltered: false,
+        partiallySheltered: false,
+        negativelyExposed: false,
+        reason: `${characterName} is fully exposed to the weather condition "${weatherName}"`,
+    }
+
+    const weatherSystem = getWeatherSystemForLocationAndWeather(engine, locationName, weatherName);
+
+    const character = engine.deObject.characters[characterName];
+    if (!character) {
+        throw new Error(`Character ${characterName} not found in world.`);
+    }
+
+    const locationInfo = engine.deObject.world.locations[locationName];
+    if (!locationInfo) {
+        throw new Error(`Location ${locationName} not found in world.`);
+    }
+
+    const slotInfo = locationInfo.slots[slotName];
+    if (!slotInfo) {
+        throw new Error(`Slot ${slotName} not found in location ${locationName}.`);
+    }
+
+    const characterState = engine.deObject.stateFor[characterName];
+    if (!characterState) {
+        throw new Error(`Character state for ${characterName} not found.`);
+    }
+
+    /**
+     * @type {DEItem[]}
+     */
+    const potentiallyProtectingItemsCharacterIsInsideOf = getAllItemsCharacterIsInsideOf(engine, characterName);
+
+    // FULLY PROTECTED CHECKS
+    // check for location based sheltering
+    if ((slotInfo.slotFullyBlocksWeather || locationInfo.locationFullyBlocksWeather).includes(weatherName)) {
+        returnInformation.fullySheltered = true;
+        returnInformation.reason = `The location "${locationName}" fully blocks the weather condition "${weatherName}"`;
+        return returnInformation;
+    }
+
+    // check if an item the character is carrying or wearing provides full sheltering
+    for (const item of characterState.wearing) {
+        if (item.wearableProperties?.fullyProtectsFromWeathers?.includes(weatherName)) {
+            returnInformation.fullySheltered = true;
+            returnInformation.reason = `The item "${item.name}" worn by "${characterName}" fully protects from the weather condition "${weatherName}"`;
+            return returnInformation;
+        }
+    }
+    for (const item of characterState.carrying) {
+        if (item.carriableProperties?.fullyProtectsFromWeathers?.includes(weatherName)) {
+            returnInformation.fullySheltered = true;
+            returnInformation.reason = `The item "${item.name}" carried by "${characterName}" fully protects from the weather condition "${weatherName}"`;
+            return returnInformation;
+        }
+    }
+
+    if (weatherSystem.fullyProtectedNaked) {
+        returnInformation.fullySheltered = true;
+        returnInformation.reason = `Because ${characterName} is naked ${characterName} is immune to the weather condition "${weatherName}"`;
+        return returnInformation;
+    }
+    if (weatherSystem.fullyProtectingWornItems.length > 0) {
+        for (const item of characterState.wearing) {
+            if (weatherSystem.fullyProtectingWornItems.includes(item.name)) {
+                returnInformation.fullySheltered = true;
+                returnInformation.reason = `The item "${item.name}" worn by "${characterName}" fully protects from the weather condition "${weatherName}"`;
+                return returnInformation;
+            }
+        }
+    }
+    if (weatherSystem.fullyProtectingCarriedItems.length > 0) {
+        for (const item of characterState.carrying) {
+            if (weatherSystem.fullyProtectingCarriedItems.includes(item.name)) {
+                returnInformation.fullySheltered = true;
+                returnInformation.reason = `The item "${item.name}" carried by "${characterName}" fully protects from the weather condition "${weatherName}"`;
+                return returnInformation;
+            }
+        }
+    }
+    for (const potentialProtectingItem of potentiallyProtectingItemsCharacterIsInsideOf || []) {
+        if (potentialProtectingItem.containerProperties?.fullyProtectsFromWeathers?.includes(weatherName)) {
+            returnInformation.fullySheltered = true;
+            returnInformation.reason = `The item "${potentialProtectingItem.name}" that "${characterName}" is inside of fully protects from the weather condition "${weatherName}"`;
+            return returnInformation;
+        }
+    }
+
+    if (weatherSystem.fullyProtectingStates.length > 0) {
+        for (const state of characterState.states) {
+            if (weatherSystem.fullyProtectingStates.includes(state.state)) {
+                returnInformation.fullySheltered = true;
+                // TODO improve this description of the state
+                returnInformation.reason = `Because "${characterName}" is in a state of "${state.state}", ${characterName} is immune to the weather condition "${weatherName}"`;
+                return returnInformation;
+            }
+        }
+    }
+    if (weatherSystem.fullyProtectedTemplate) {
+        const hasFullProtect = typeof weatherSystem.fullyProtectedTemplate === "string" ? weatherSystem.fullyProtectedTemplate : await weatherSystem.fullyProtectedTemplate(engine.deObject, { char: character });
+        if (hasFullProtect) {
+            returnInformation.fullySheltered = true;
+            returnInformation.reason = `Because ${hasFullProtect}, ${characterName} is immune to the weather condition "${weatherName}"`;
+            return returnInformation;
+        }
+    }
+
+    // PARTIALLY PROTECTED CHECKS
+    // check for location based sheltering
+    if ((slotInfo.slotPartiallyBlocksWeather || locationInfo.locationPartiallyBlocksWeather).includes(weatherName)) {
+        returnInformation.partiallySheltered = true;
+        returnInformation.reason = `The location "${locationName}" partially blocks the weather condition "${weatherName}"`;
+        return returnInformation;
+    }
+
+    //check if an item the character is carrying or wearing provides partial sheltering
+    for (const item of characterState.wearing) {
+        if (item.wearableProperties?.partiallyProtectsFromWeathers?.includes(weatherName)) {
+            returnInformation.partiallySheltered = true;
+            returnInformation.reason = `The item "${item.name}" worn by "${characterName}" partially protects from the weather condition "${weatherName}"`;
+            return returnInformation;
+        }
+    }
+    for (const item of characterState.carrying) {
+        if (item.carriableProperties?.partiallyProtectsFromWeathers?.includes(weatherName)) {
+            returnInformation.partiallySheltered = true;
+            returnInformation.reason = `The item "${item.name}" carried by "${characterName}" partially protects from the weather condition "${weatherName}"`;
+            return returnInformation;
+        }
+    }
+    if (weatherSystem.partiallyProtectedNaked) {
+        const isNaked = characterState.wearing.filter(item => item.wearableProperties?.coversTopNakedness || item.wearableProperties?.coversBottomNakedness).length === 0;
+        if (isNaked) {
+            returnInformation.partiallySheltered = true;
+            returnInformation.reason = `Because ${characterName} is partially/totally naked, ${characterName} is partially immune to the weather condition "${weatherName}"`;
+            return returnInformation;
+        }
+    }
+
+    if (weatherSystem.partiallyProtectingWornItems.length > 0) {
+        for (const item of characterState.wearing) {
+            if (weatherSystem.partiallyProtectingWornItems.includes(item.name)) {
+                returnInformation.partiallySheltered = true;
+                returnInformation.reason = `The item "${item.name}" worn by "${characterName}" partially protects from the weather condition "${weatherName}"`;
+                return returnInformation;
+            }
+        }
+    }
+
+    if (weatherSystem.partiallyProtectingCarriedItems.length > 0) {
+        for (const item of characterState.carrying) {
+            if (weatherSystem.partiallyProtectingCarriedItems.includes(item.name)) {
+                returnInformation.partiallySheltered = true;
+                returnInformation.reason = `The item "${item.name}" carried by "${characterName}" partially protects from the weather condition "${weatherName}"`;
+                return returnInformation;
+            }
+        }
+    }
+
+    for (const potentialProtectingItem of potentiallyProtectingItemsCharacterIsInsideOf || []) {
+        if (potentialProtectingItem.containerProperties?.partiallyProtectsFromWeathers?.includes(weatherName)) {
+            returnInformation.partiallySheltered = true;
+            returnInformation.reason = `The item "${potentialProtectingItem.name}" that "${characterName}" is inside of partially protects from the weather condition "${weatherName}"`;
+            return returnInformation;
+        }
+    }
+
+    if (weatherSystem.partiallyProtectingStates.length > 0) {
+        for (const state of characterState.states) {
+            if (weatherSystem.partiallyProtectingStates.includes(state.state)) {
+                returnInformation.partiallySheltered = true;
+                // TODO improve this description of the state
+                returnInformation.reason = `Because "${characterName}" is in a state of "${state.state}", ${characterName} is partially protected from the weather condition "${weatherName}".`;
+                return returnInformation;
+            }
+        }
+    }
+
+    if (weatherSystem.partiallyProtectedTemplate) {
+        const hasPartialEffect = typeof weatherSystem.partiallyProtectedTemplate === "string" ? weatherSystem.partiallyProtectedTemplate : await weatherSystem.partiallyProtectedTemplate(engine.deObject, { char: character });
+        if (hasPartialEffect) {
+            returnInformation.partiallySheltered = true;
+            returnInformation.reason = `Because ${hasPartialEffect}, ${characterName} is partially protected from the weather condition "${weatherName}".`;
+            return returnInformation;
+        }
+    }
+
+    // NEGATIVELY EXPOSED CHECKS
+    // check for location based negative exposure
+    if ((slotInfo.slotNegativelyExposesCharactersToWeather || locationInfo.locationNegativelyExposesCharactersToWeather).includes(weatherName)) {
+        returnInformation.negativelyExposed = true;
+        returnInformation.reason = `The location "${locationName}" negatively exposes to the weather condition "${weatherName}".`;
+        return returnInformation;
+    }
+
+    // check if an item the character is carrying or wearing provides negative exposure
+    for (const item of characterState.wearing) {
+        if (item.wearableProperties?.negativelyExposesToWeathers?.includes(weatherName)) {
+            returnInformation.negativelyExposed = true;
+            returnInformation.reason = `The item "${item.name}" worn by "${characterName}" negatively exposes to the weather condition "${weatherName}"`;
+            return returnInformation;
+        }
+    }
+
+    for (const item of characterState.carrying) {
+        if (item.carriableProperties?.negativelyExposesToWeathers?.includes(weatherName)) {
+            returnInformation.negativelyExposed = true;
+            returnInformation.reason = `The item "${item.name}" carried by "${characterName}" negatively exposes to the weather condition "${weatherName}"`;
+            return returnInformation;
+        }
+    }
+
+    if (weatherSystem.negativelyAffectedNaked) {
+        const isNaked = characterState.wearing.filter(item => item.wearableProperties?.coversTopNakedness || item.wearableProperties?.coversBottomNakedness).length === 0;
+        if (isNaked) {
+            returnInformation.negativelyExposed = true;
+            returnInformation.reason = `Because ${characterName} is partially/totally naked, ${characterName} is negatively exposed to the weather condition "${weatherName}"`;
+            return returnInformation;
+        }
+    }
+
+    if (weatherSystem.negativelyAffectingWornItems.length > 0) {
+        for (const item of characterState.wearing) {
+            if (weatherSystem.negativelyAffectingWornItems.includes(item.name)) {
+                returnInformation.negativelyExposed = true;
+                returnInformation.reason = `The item "${item.name}" worn by "${characterName}" negatively exposes to the weather condition "${weatherName}"`;
+                return returnInformation;
+            }
+        }
+    }
+
+    if (weatherSystem.negativelyAffectingCarriedItems.length > 0) {
+        for (const item of characterState.carrying) {
+            if (weatherSystem.negativelyAffectingCarriedItems.includes(item.name)) {
+                returnInformation.negativelyExposed = true;
+                returnInformation.reason = `The item "${item.name}" carried by "${characterName}" negatively exposes to the weather condition "${weatherName}"`;
+                return returnInformation;
+            }
+        }
+    }
+
+    for (const potentialProtectingItem of potentiallyProtectingItemsCharacterIsInsideOf || []) {
+        if (potentialProtectingItem.containerProperties?.negativelyExposesToWeathers?.includes(weatherName)) {
+            returnInformation.negativelyExposed = true;
+            returnInformation.reason = `The item "${potentialProtectingItem.name}" that "${characterName}" is inside of negatively exposes ${characterName} to the weather condition "${weatherName}"`;
+            return returnInformation;
+        }
+    }
+
+    if (weatherSystem.negativelyAffectingStates.length > 0) {
+        for (const state of characterState.states) {
+            if (weatherSystem.negativelyAffectingStates.includes(state.state)) {
+                returnInformation.negativelyExposed = true;
+                // TODO improve this description of the state
+                returnInformation.reason = `Because "${characterName}" is in a state of "${state.state}", ${characterName} is negatively exposed to the weather condition "${weatherName}"`;
+                return returnInformation;
+            }
+        }
+    }
+
+    if (weatherSystem.negativelyAffectedTemplate) {
+        const hasNegativeEffect = typeof weatherSystem.negativelyAffectedTemplate === "string" ? weatherSystem.negativelyAffectedTemplate : await weatherSystem.negativelyAffectedTemplate(engine.deObject, { char: character });
+        if (hasNegativeEffect) {
+            returnInformation.negativelyExposed = true;
+            returnInformation.reason = `Because ${hasNegativeEffect}, ${characterName} is negatively exposed to the weather condition "${weatherName}"`;
+            return returnInformation;
+        }
+    }
+
+    return returnInformation;
 }

@@ -1,45 +1,6 @@
 import { DEngine } from "./index.js";
-import { getExternalDescriptionOfCharacter, getSurroundingCharacters } from "./util/character-info.js";
+import { getExternalDescriptionOfCharacter, getSurroundingCharacters, getSysPromptForCharacter } from "./util/character-info.js";
 import { makeTimestamp } from "./util/messages.js";
-
-/**
- * 
- * @param {DEngine} engine 
- * @param {string} characterName 
- * @returns 
- */
-async function whatIsWeatherLikeForCharacter(engine, characterName) {
-    if (!engine.deObject) {
-        throw new Error("DEngine not initialized");
-    }
-    if (!engine.deObject.stateFor[characterName]) {
-        throw new Error(`No state found for character "${characterName}".`);
-    }
-    const character = engine.deObject.characters[characterName];
-    const characterState = engine.deObject.stateFor[characterName];
-    const characterLocation = characterState.location;
-    const characterLocationSlot = characterState.locationSlot;
-    const location = engine.deObject.world.locations[characterLocation];
-    const weatherThere = location.currentWeather;
-    const isSheltered = await engine.isCharacterShelteredFromWeather(characterName, weatherThere, characterLocation, characterLocationSlot);
-    if (isSheltered.fullySheltered) {
-        // @ts-ignore
-        const noEffectDescription = await location.currentWeatherNoEffectDescription.execute(engine.deObject, character);
-        return `The current weather where "${characterName}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}". However, "${characterName}" is fully sheltered from its effects. ${isSheltered.reason || ""}, therefore ${noEffectDescription || "no weather effects apply to them."}`;
-    } else if (isSheltered.partiallySheltered) {
-        // @ts-ignore
-        const partialEffectDescription = await location.currentWeatherPartialEffectDescription.execute(engine.deObject, character);
-        return `The current weather where "${characterName}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}". "${characterName}" is partially sheltered from its effects. ${isSheltered.reason || ""}, therefore ${partialEffectDescription || "some weather effects may apply to them."}`;
-    } else if (isSheltered.negativelyExposed) {
-        // @ts-ignore
-        const negativeEffectsDescription = await location.currentWeatherNegativelyExposedDescription.execute(engine.deObject, character);
-        return `The current weather where "${characterName}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}". "${characterName}" is negatively exposed to its effects. ${isSheltered.reason || ""}, therefore ${negativeEffectsDescription || "strongly negative weather effects apply to them."}`;
-    } else {
-        // @ts-ignore
-        const effectDescription = await location.currentWeatherFullEffectDescription.execute(engine.deObject, character);
-        return `The current weather where "${characterName}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}". ${isSheltered.reason || ""}, therefore ${effectDescription || "all weather effects apply to them."}`;
-    }
-}
 
 /**
  * @type {Object.<string, {run: (engine: DEngine, args: string[]) => Promise<string>, help: string, cheat?: boolean, args: string[]}>}
@@ -635,106 +596,9 @@ export const commands = {
             if (args.length === 0) {
                 return "Usage: syspromptfor <character name>";
             }
-            if (!engine.inferenceAdapter) {
-                throw new Error("DEngine has no inference adapter defined");
-            }
             const characterName = args.join(" ");
-            const character = engine.deObject.characters[characterName];
-            if (!character) {
-                return `Character "${characterName}" not found.`;
-            }
-
-            const characterState = engine.deObject.stateFor[characterName];
-            if (!characterState) {
-                throw new Error(`No state found for character "${characterName}".`);
-            }
-
-            const shortDescription = await getExternalDescriptionOfCharacter(engine, characterName, true);
-
-            // @ts-ignore
-            const [general, statesDescriptions, relationships] = await engine.getInternalDescriptionOfCharacter(characterName);
-
-            /**
-             * @type {string|null}
-             */
-            let lore = null;
-
-            if (engine.deObject.world.lore) {
-                // @ts-ignore
-                lore = await engine.deObject.world.lore?.execute(engine.deObject, character);
-                if (lore.trim().length === 0) {
-                    lore = null;
-                }
-            }
-
-            /**
-             * @type {Array<string>}
-             */
-            const interactingCharacters = [];
-            const potentialConversationId = engine.deObject.stateFor[characterName].conversationId;
-            if (potentialConversationId) {
-                const conversation = engine.deObject.conversations[potentialConversationId];
-                interactingCharacters.push(...conversation.participants.filter(name => name !== characterName));
-            }
-
-            /**
-             * @type {Array<string>}
-             */
-            const worldRules = [];
-            if (engine.deObject.worldRules) {
-                for (const rule of Object.values(engine.deObject.worldRules)) {
-                    // @ts-ignore
-                    const ruleText = (await rule.rule.execute(engine.deObject, character, undefined, undefined, undefined, undefined)).trim();
-                    if (ruleText.length > 0) {
-                        worldRules.push(ruleText);
-                    }
-                }
-            }
-
-            /**
-             * @type {Array<string>}
-             */
-            const characterRules = [];
-            if (character.characterRules) {
-                for (const rule of Object.values(character.characterRules)) {
-                    // @ts-ignore
-                    const ruleText = (await rule.rule.execute(engine.deObject, character, undefined, undefined, undefined, undefined)).trim();
-                    if (ruleText.length > 0) {
-                        characterRules.push(ruleText);
-                    }
-                }
-            }
-
-            let scenario = "";
-            const currentLocation = engine.deObject.world.locations[engine.deObject.stateFor[characterName].location];
-            if (currentLocation && currentLocation.description) {
-                // @ts-ignore
-                scenario = `Location: ${engine.deObject.stateFor[characterName].location}, ` + await currentLocation.description.execute(engine.deObject, character);
-            }
-            const currentLocationSlot = currentLocation.slots[engine.deObject.stateFor[characterName].locationSlot];
-            if (currentLocationSlot && currentLocationSlot.description) {
-                // @ts-ignore
-                scenario += `\n\nSpecifically at: ${engine.deObject.stateFor[characterName].locationSlot}, ` + await currentLocationSlot.description.execute(engine.deObject, character);
-            }
-
-            scenario += `\n\n${await whatIsWeatherLikeForCharacter(engine, characterName)}`;
-
-            scenario += `\n\nCurrent time and date in the world: ${await makeTimestamp(engine, engine.deObject.currentTime, false)}`;
-
-            const sysprompt = engine.inferenceAdapter.buildSystemPromptForCharacter(
-                character,
-                general,
-                shortDescription,
-                relationships,
-                statesDescriptions,
-                scenario,
-                lore,
-                interactingCharacters,
-                characterRules,
-                worldRules,
-            );
-
-            return sysprompt;
+            
+            return (await getSysPromptForCharacter(engine, characterName)).sysprompt;
         },
         help: "Displays the current system prompt for a given character, for general inference purposes.",
         cheat: true,

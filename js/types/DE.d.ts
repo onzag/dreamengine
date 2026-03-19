@@ -414,6 +414,21 @@ declare interface DECharacterStateDefinition {
      */
     dominanceAfterRelief?: number;
     /**
+     * By default when injecting a external description via relievingGeneralCharacterExternalDescriptionInjection or
+     * generalCharacterExternalDescriptionInjection, dominance is ignored for injecting these traits
+     * since they do not affect behaviour and they may stack nicely
+     */
+    doNotIgnoreDominanceWhenInjectingExternalDescription?: boolean;
+    /**
+     * By default when injecting a general character description via relievingGeneralCharacterDescriptionInjection or
+     * generalCharacterDescriptionInjection, dominance is used to decide whether to inject the descriptions or not, but in some cases you may want to ignore dominance for these descriptions as they are just for flavour and do not affect behaviour, and it would be nice to have them all injected even if the state is not the most dominant one
+     */
+    ignoreDominanceWhenInjectedGeneralCharacterDescription?: boolean;
+    /**
+     * By default when injecting an action prompt injection via actionPromptInjection or relievingActionPromptInjection, dominance is used to decide whether to inject the descriptions or not, but in some cases you may want to ignore dominance for these descriptions as they are just for flavour and do not affect behaviour, and it would be nice to have them all injected even if the state is not the most dominant one
+     */
+    ignoreDominanceForActionPromptInjection?: boolean;
+    /**
      * Description of the state, used for reasoning about the state
      * 
      * You may want to use get_state_intensity function to describe different
@@ -2462,7 +2477,7 @@ declare interface DEScene {
      * 
      * @param DE 
      */
-    sceneStarted?(DE: DEObject): Promise<void>;
+    sceneStarted?(DE: DEObject, scene: DEScene): Promise<void>;
     /**
      * After the scene has started and is ready for user input
      * 
@@ -2476,7 +2491,7 @@ declare interface DEScene {
      * 
      * @param DE 
      */
-    sceneReady?(DE: DEObject): Promise<void>;
+    sceneReady?(DE: DEObject, scene: DEScene): Promise<void>;
 }
 
 declare interface DEWorld {
