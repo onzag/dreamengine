@@ -73,6 +73,9 @@ export class TextOnlyUI {
         this.seenMessageIds = new Set();
 
         this.storyFilePath = path.join(os.tmpdir(), 'rstory-story-view.txt');
+
+        console.log(`Story will be written to ${this.storyFilePath}`);
+
         /** @type {import('child_process').ChildProcess|null} */
         this.viewerProcess = null;
         
@@ -97,7 +100,21 @@ export class TextOnlyUI {
             const viewerScript = path.join(os.tmpdir(), 'rstory-viewer.ps1');
             fs.writeFileSync(viewerScript,
 `$host.UI.RawUI.WindowTitle = 'Story View'
-Get-Content -Path '${this.storyFilePath}' -Wait -Encoding UTF8`);
+$pos = 0
+while ($true) {
+    $len = (Get-Item '${this.storyFilePath}').Length
+    if ($len -gt $pos) {
+        $stream = [System.IO.File]::Open('${this.storyFilePath}', 'Open', 'Read', 'ReadWrite')
+        $stream.Position = $pos
+        $reader = New-Object System.IO.StreamReader($stream, [System.Text.Encoding]::UTF8)
+        $text = $reader.ReadToEnd()
+        $reader.Close()
+        $stream.Close()
+        [Console]::Write($text)
+        $pos = $len
+    }
+    Start-Sleep -Milliseconds 100
+}`);
             this.viewerProcess = exec(`start "" powershell -ExecutionPolicy Bypass -File "${viewerScript}"`);
         } else if (process.platform === 'darwin') {
             this.viewerProcess = exec(`osascript -e 'tell app "Terminal" to do script "tail -f '${this.storyFilePath}'"'`);

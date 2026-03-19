@@ -862,12 +862,19 @@ export class DEngine {
                 this.informCycleState("info", "Pre-calculating initial bonds for " + participantName + "...");
                 await calculateBondsChangesDueToMessages(this, this.deObject.characters[participantName]);
 
-                this.informCycleState("info", "Pre-calculating posture for " + this.userCharacter.name + "...");
-                await calculatePostureChange(this, this.deObject.characters[this.userCharacter.name], lastItemChangesInfo.charactersThatMoved);
+                /**
+                 * @type {string[]}
+                 */
+                const postureChangeMessagesAccum = [];
 
                 for (const participantName of expectedParticipants) {
                     this.informCycleState("info", "Pre-calculating posture for " + participantName + "...");
-                    await calculatePostureChange(this, this.deObject.characters[participantName], lastItemChangesInfo.charactersThatMoved);
+                    const messages = await calculatePostureChange(this, this.deObject.characters[participantName], lastItemChangesInfo.charactersThatMoved);
+                    postureChangeMessagesAccum.push(...messages);
+                }
+
+                if (postureChangeMessagesAccum.length > 0) {
+                    await addMessageForStoryMaster(postureChangeMessagesAccum);
                 }
 
                 // TODO they talk, talk in a way location change is forbidden... because it's scene setup
@@ -890,13 +897,20 @@ export class DEngine {
         this.informCycleState("info", "Pre-calculating initial bonds for your character...");
         await calculateBondsChangesDueToMessages(this, this.userCharacter);
 
+        /**
+         * @type {string[]}
+         */
+        const postureChangeMessagesAccum = [];
+
         for (const participantName of expectedParticipants) {
             this.informCycleState("info", "Pre-calculating posture for " + participantName + "...");
-            await calculatePostureChange(this, this.deObject.characters[participantName], lastItemChangesInfo.charactersThatMoved);
+            const messages = await calculatePostureChange(this, this.deObject.characters[participantName], lastItemChangesInfo.charactersThatMoved);
+            postureChangeMessagesAccum.push(...messages);
         }
 
-        this.informCycleState("info", "Pre-calculating posture for " + this.userCharacter.name + "...");
-        await calculatePostureChange(this, this.deObject.characters[this.userCharacter.name], lastItemChangesInfo.charactersThatMoved);
+        if (postureChangeMessagesAccum.length > 0) {
+            await addMessageForStoryMaster(postureChangeMessagesAccum);
+        }
 
         // Game on :)
     }

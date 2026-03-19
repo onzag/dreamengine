@@ -1586,6 +1586,7 @@ export default async function calculateItemChanges(engine, character) {
             if (alreadyBeingCarriedBy) {
                 // do not ask again, maybe they are inside an item now, eg. in their backpack
                 // so we dont want to move it to a general grab
+                console.log(`Not asking if ${charName} is on top of ${otherCharName} since we already know that ${charName} is being carried by ${otherCharName}.`);
                 continue;
             }
 
@@ -1598,6 +1599,7 @@ export default async function calculateItemChanges(engine, character) {
                 // Dema is on top of Onza, and we establish that it is true.
                 // then once the algorithm thinks about checking if Onza is on top of Dema, it will see that Dema is being carried by Onza, so Onza cannot be on top of Dema
                 // hence asking doesn't make sense
+                console.log(`Not asking if ${charName} is on top of ${otherCharName} since we already know that ${otherCharName} is being carried by ${charName} in an established manner.`);
                 continue;
             }
 

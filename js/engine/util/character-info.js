@@ -526,12 +526,39 @@ export async function getExternalDescriptionOfCharacter(engine, characterName, o
         }
     }
 
+    finalDescription += " " + getExternalDescriptionOfCharacterPostureOnly(engine, characterName, hideCurrentPosture);
+
+    return finalDescription;
+}
+
+/**
+ * @param {DEngine} engine
+ * @param {string} characterName 
+ * @param {boolean} hideCurrentPosture
+ * @returns {string}
+ */
+export function getExternalDescriptionOfCharacterPostureOnly(engine, characterName, hideCurrentPosture = false) {
+    if (!engine.deObject) {
+        throw new Error("DEngine not initialized");
+    }
+
+    const character = engine.deObject.characters[characterName];
+    if (!character) {
+        throw new Error(`Character ${characterName} not found.`);
+    }
+    const characterState = engine.deObject.stateFor[characterName];
+    if (!characterState) {
+        throw new Error(`Character state for ${characterName} not found.`);
+    }
+
     const posturesThatDoNotSpecifyGround = [
         "standing",
         "flying",
         "floating",
         "swimming",
     ]
+
+    const characterExactLocation = getCharacterExactLocation(engine, characterName);
 
     let postureAppliedOnDescription = (posturesThatDoNotSpecifyGround.includes(characterState.posture)) ? "at the " + characterState.locationSlot : "on the ground at the " + characterState.locationSlot;
     if (characterExactLocation.itemPathEnd === "ontopCharacters" && characterExactLocation.itemPath) {
@@ -541,12 +568,10 @@ export async function getExternalDescriptionOfCharacter(engine, characterName, o
     }
 
     if (!hideCurrentPosture) {
-        finalDescription += " " + character.name + " is currently " + postureToText(characterState.posture) + " " + postureAppliedOnDescription + ".";
+        return character.name + " is currently " + postureToText(characterState.posture) + " " + postureAppliedOnDescription + ".";
     } else {
-        finalDescription += " " + character.name + " is currently " + postureAppliedOnDescription + ".";
+        return character.name + " is currently " + postureAppliedOnDescription + ".";
     }
-
-    return finalDescription;
 }
 
 /**

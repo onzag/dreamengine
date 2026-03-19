@@ -1,5 +1,5 @@
 import { DEngine } from "../index.js";
-import { getBasicPostures, getExtendedPosturesOf, getExternalDescriptionOfCharacter, humanReadablePostureToPosture, POSTURE_MAP, postureToText } from "../util/character-info.js";
+import { getBasicPostures, getExtendedPosturesOf, getExternalDescriptionOfCharacter, getExternalDescriptionOfCharacterPostureOnly, humanReadablePostureToPosture, POSTURE_MAP, postureToText } from "../util/character-info.js";
 import { createGrammarFromList, yesNoGrammar } from "../util/grammar.js";
 import { getHistoryFragmentForCharacter } from "../util/messages.js";
 
@@ -7,7 +7,7 @@ import { getHistoryFragmentForCharacter } from "../util/messages.js";
  * @param {DEngine} engine
  * @param {DECompleteCharacterReference} character
  * @param {{ [charName: string]: { reason: string; }}} knownCharactersThatMoved - a map of character names to reasons for why they moved, this is used to help determine if a character's posture might have changed due to them moving
- * @returns {Promise<void>}
+ * @returns {Promise<string[]>} - an array of messages for storymaster
  */
 export default async function calculatePostureChange(engine, character, knownCharactersThatMoved) {
     if (!engine.deObject) {
@@ -97,9 +97,9 @@ export default async function calculatePostureChange(engine, character, knownCha
                 const answerText = answer.value.trim().toLowerCase();
                 console.log("Received answer: " + answerText);
                 if (answerText === "yes") {
-                    console.log("Posture change detected for posture " + posture);
+                    console.log("Posture change detected for posture " + extendedPosture);
                     // @ts-ignore
-                    characterState.posture = posture;
+                    characterState.posture = extendedPosture;
                     foundAPostureChange = true;
                     break;
                 }
@@ -166,9 +166,9 @@ export default async function calculatePostureChange(engine, character, knownCha
                 const answerText = answer.value.trim().toLowerCase();
                 console.log("Received answer: " + answerText);
                 if (answerText === "yes") {
-                    console.log("Posture change detected for posture " + posture);
+                    console.log("Posture change detected for posture " + extendedPosture);
                     // @ts-ignore
-                    characterState.posture = posture;
+                    characterState.posture = extendedPosture;
                     foundAPostureChange = true;
                     break;
                 }
@@ -187,7 +187,7 @@ export default async function calculatePostureChange(engine, character, knownCha
             const allPosturesAndExtended = Object.values(POSTURE_MAP);
 
             const systemPrompt = engine.inferenceAdapter.buildSystemPromptForQuestioningAgent(
-                "You are an assistant that figures out the most likely posture of " + character.name + " in a story, you will be asked questions about the most likely posture and youw will answer with one",
+                "You are an assistant that figures out the most likely posture of " + character.name + " in a story, you will be asked questions about the most likely posture and you will answer with one",
                 [
                     "The list of potential postures are " + allPosturesAndExtended.map(p => JSON.stringify(p)).join(", ") + ".",
                 ],
@@ -242,4 +242,12 @@ export default async function calculatePostureChange(engine, character, knownCha
             }
         }
     }
+
+    if (foundAPostureChange) {
+        return [
+            getExternalDescriptionOfCharacterPostureOnly(engine, character.name, false),
+        ]
+    };
+
+    return [];
 }

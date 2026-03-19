@@ -1,5 +1,5 @@
-import { deepCopyNoHistory, DEngine } from "../../index.js";
-import { getHistoryFragmentForCharacter } from "../../util/messages.js";
+import { deepCopyNoHistory, DEngine } from "../index.js";
+import { getHistoryFragmentForCharacter } from "../util/messages.js";
 
 /**
  * 
