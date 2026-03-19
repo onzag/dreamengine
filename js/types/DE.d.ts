@@ -2402,15 +2402,15 @@ declare interface DEWanderHeuristic {
     wanderOutsideConfinementActivatesState: string | null;
 }
 
-declare interface DEInitialScene {
+declare interface DEScene {
     /**
      * The starting location ID for the initial scene
      */
-    startingLocation: string;
+    location: string;
     /**
      * The starting location slot within the starting location
      */
-    startingLocationSlot: string;
+    locationSlot: string;
     /**
      * The narration that sets up the initial scene
      */
@@ -2421,7 +2421,7 @@ declare interface DEInitialScene {
      * make sure that the characters are spawned in the location with the user
      * otherwise they won't be able to interact
      */
-    startingEngagedCharacters: Array<string>;
+    engagedCharacters: Array<string>;
     /**
      * Whether the characters will interact first in the cycle, rather than the user
      * this is useful for scenes where the characters start by talking rather than
@@ -2430,8 +2430,9 @@ declare interface DEInitialScene {
     charactersStart: boolean;
     /**
      * The initial time when the scene starts
+     * it must be a date in the future, otherwise it will be ignored
      */
-    initialTime: DETimeDescription | null;
+    time?: DETimeDescription | null;
 }
 
 declare interface DEWorld {
@@ -2461,9 +2462,13 @@ declare interface DEWorld {
      */
     connections: Record<string, DEConnection>;
     /**
-     * Initial scenes that set up the world at the beginning of the simulation
+     * Scenes that set up the world, specially at the start of the simulation
      */
-    initialScenes: Record<string, DEInitialScene>;
+    scenes: Record<string, DEInitialScene>;
+    /**
+     * The initial scenes that can be selected at the start of the simulation, id only
+     */
+    initialScenes: string[];
     /**
      * This is a template that describes the overall world lore and setting
      * it gets injected into various prompts to help ground the world simulation

@@ -148,10 +148,11 @@ Get-Content -Path '${this.storyFilePath}' -Wait -Encoding UTF8`);
              */
             const sceneToIndex = {};
             let index = 0;
-            for (const [sceneId, value] of Object.entries(this.engine.deObject.world.initialScenes)) {
+            for (const sceneName of this.engine.deObject.world.initialScenes) {
                 index++;
-                sceneToIndex[index] = sceneId;
-                const narrationMessage = typeof value.narration === "string" ? value.narration : await value.narration(this.engine.deObject, {});
+                sceneToIndex[index] = sceneName;
+                const scene = this.engine.deObject.world.scenes[sceneName];
+                const narrationMessage = typeof scene.narration === "string" ? scene.narration : await scene.narration(this.engine.deObject, {});
                 // @ts-ignore
                 console.log(`${index}: ${narrationMessage}`);
             }

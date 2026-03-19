@@ -8,16 +8,18 @@ engine.exports = {
         }
     },
     initialize(DE) {
-        DE.world.initialScenes["Default Scene"] = /** @type {DEInitialScene} */ ({
-            startingLocation: "Lunar Station",
-            startingLocationSlot: "Common Area",
+        DE.world.scenes["Default Scene"] = /** @type {DEScene} */ ({
+            location: "Lunar Station",
+            locationSlot: "Common Area",
             narration: DE.utils.newHandlebarsTemplate(
                 DE,
                 "{{user}} is a visitor to the Lunar Station, eager to explore this small outpost in space, yet {{format_pronoun user}} didn't expect to find someone else here, but it so happens that {{format_and (all_world_characters_but_user)}} {{format_verb_to_be (all_world_characters_but_user)}} also visiting the station at this time, now they face each other in the common area near the airlock"
             ),
             charactersStart: true,
-            startingEngagedCharacters: ["Dema"],
+            engagedCharacters: ["Dema"],
         });
+
+        DE.world.initialScenes.push("Default Scene");
 
         DE.world.lore = "The world is set on a small lunar station orbiting the Moon. The station serves as a research outpost and habitat for astronauts and scientists studying the lunar environment. The station is equipped with life support systems, scientific laboratories, living quarters, and communication facilities. Outside the station, the barren surface of the Moon stretches out, dotted with craters and rocks. The sky above is a pitch-black void, with the Earth hanging in the distance. The silence is absolute, broken only by the faint hum of the station's machinery";
 

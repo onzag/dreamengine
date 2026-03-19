@@ -1,7 +1,7 @@
-import { deepCopy, DEngine } from "../../index.js";
-import { getBeingCarriedByCharacter, getCharacterExactLocation, getExternalDescriptionOfCharacter } from "../../util/character-info.js";
-import { getHistoryForCharacter, getHistoryFragmentForCharacter } from "../../util/messages.js";
-import { checkItemIsOneOfAKindAtLocation, getCharacterCarryingCapacity, getCharacterVolume, getCharacterWeight, getItemExcessElements, getItemVolume, getItemWeight, getWearableFitment, isAlreadyPlural, isSingularOfPlural, locationPathToMessage, locationPathToMessageWithoutItemName, resolvePath, utilItemCount } from "../../util/weight-and-volume.js";
+import { deepCopy, DEngine } from "../index.js";
+import { getBeingCarriedByCharacter, getCharacterExactLocation, getExternalDescriptionOfCharacter } from "../util/character-info.js";
+import { getHistoryForCharacter, getHistoryFragmentForCharacter } from "../util/messages.js";
+import { checkItemIsOneOfAKindAtLocation, getCharacterCarryingCapacity, getCharacterVolume, getCharacterWeight, getItemExcessElements, getItemVolume, getItemWeight, getWearableFitment, isAlreadyPlural, isSingularOfPlural, locationPathToMessage, locationPathToMessageWithoutItemName, resolvePath, utilItemCount } from "../util/weight-and-volume.js";
 
 /**
  * 
@@ -95,9 +95,13 @@ function isYes(answer) {
 
 /**
  * @param {DEngine} engine 
- * @param {DECompleteCharacterReference} character 
+ * @param {DECompleteCharacterReference} character
+ * @return {Promise<{
+ *    storyMasterMessages: string[];
+ *    charactersThatMoved: { [charName: string]: { reason: string; }}
+ * }>}
  */
-export default async function testMessageFeasibilityItemChanges(engine, character) {
+export default async function calculateItemChanges(engine, character) {
     if (!engine.deObject) {
         throw new Error("DEngine not initialized");
     } else if (!engine.inferenceAdapter) {
@@ -121,33 +125,14 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
     const yesNoGrammar = `root ::= ("yes" | "no" | "Yes" | "No" | "YES" | "NO") ${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()}\n`;
 
     /**
+     * @type {{ [charName: string]: { reason: string; } }}
+     */
+    const charactersThatMoved = {};
+
+    /**
      * @type {string[]}
      */
     let itemsInteractedWith = [];
-
-    const lastMessageManual = getHistoryForCharacter(engine, character, { includeDebugMessages: false, includeRejectedMessages: false });
-    const lastMessage = (await lastMessageManual.next(true)).value;
-    let lastMessageLowerCase = "";
-    if (lastMessage && lastMessage.message) {
-        lastMessageLowerCase = lastMessage.message.toLowerCase();
-    }
-
-    // return the generator
-    lastMessageManual.return();
-
-    // collect matched items with their first occurrence index so we can sort by mention order
-    const matchedItems = [];
-    for (const item of itemsAtLocation) {
-        const itemLowerCase = item.toLowerCase();
-        const idx = lastMessageLowerCase.indexOf(itemLowerCase);
-        if (idx !== -1) {
-            matchedItems.push({ name: itemLowerCase, index: idx });
-        }
-    }
-    matchedItems.sort((a, b) => a.index - b.index);
-    itemsInteractedWith = matchedItems.map((m) => m.name);
-
-    console.log("Pre check for item interactions based on keyword matching, items potentially interacted with: ", itemsInteractedWith);
 
     const lastCycleExpanded = (await getHistoryFragmentForCharacter(engine, character, {
         includeDebugMessages: false,
@@ -160,6 +145,21 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
         includeRejectedMessages: false,
         msgLimit: "LAST_CYCLE",
     })).messages;
+
+    // collect matched items with their first occurrence index so we can sort by mention order
+    const lastCycleMessagesCombinedLowerCase = lastCycleMessages.map(m => m.message).join("\n\n").toLowerCase();
+    const matchedItems = [];
+    for (const item of itemsAtLocation) {
+        const itemLowerCase = item.toLowerCase();
+        const idx = lastCycleMessagesCombinedLowerCase.indexOf(itemLowerCase);
+        if (idx !== -1) {
+            matchedItems.push({ name: itemLowerCase, index: idx });
+        }
+    }
+    matchedItems.sort((a, b) => a.index - b.index);
+    itemsInteractedWith = matchedItems.map((m) => m.name);
+
+    console.log("Pre check for item interactions based on keyword matching, items potentially interacted with: ", itemsInteractedWith);
 
     if (itemsAtLocation.length) {
         // now we want to know which items were interacted with in the last 
@@ -1846,12 +1846,12 @@ export default async function testMessageFeasibilityItemChanges(engine, characte
 
     await interactionGenerator.next(null); // finish the generator
 
-    await cleanAll(engine, charState.location, lastCycleMessages, addedMessagesForStoryMaster);
+    await cleanAll(engine, charState.location, lastCycleMessages, addedMessagesForStoryMaster, charactersThatMoved);
 
-    console.log(addedMessagesForStoryMaster);
-    process.exit(0);
-
-    return addedMessagesForStoryMaster;
+    return {
+        storyMasterMessages: addedMessagesForStoryMaster,
+        charactersThatMoved: charactersThatMoved,
+    };
 }
 
 /**
@@ -2568,7 +2568,8 @@ function deepEqualItem(a, b, firstLayer = true) {
  * @param {Array<string | number>} path
  * @param {Array<string>} addedMessagesForStoryMaster
  * @param {"first" | "mid" | "last"} cycle
- * @param {Array<string>} lastCycleMessages
+ * @param {Array<{message: string; author: string; storyMaster: boolean}>} lastCycleMessages
+ * @param {{ [charName: string]: { reason: string; }}} charactersThatMoved
  * @returns {Promise<void>}
  */
 async function cleanDirtyItemTree(
@@ -2580,6 +2581,7 @@ async function cleanDirtyItemTree(
     addedMessagesForStoryMaster,
     cycle,
     lastCycleMessages,
+    charactersThatMoved,
 ) {
     if (!engine.deObject) {
         throw new Error("DEngine not initialized");
@@ -2608,7 +2610,7 @@ async function cleanDirtyItemTree(
             // @ts-ignore
             if (item[relation] && item[relation].length > 0) {
                 // @ts-ignore
-                await cleanDirtyItemTree(engine, location, locationSlot, item[relation], [...currentPath, relation], addedMessagesForStoryMaster, relation, item);
+                await cleanDirtyItemTree(engine, location, locationSlot, item[relation], [...currentPath, relation], addedMessagesForStoryMaster, relation, item, charactersThatMoved);
             }
         }
     }
@@ -3618,7 +3620,7 @@ function deepCopyItem(item) {
  * @param {DEngine} engine 
  * @param {DEItem} item 
  * @param {string} reason
- * @param {string[]} lastCycleMessages,
+ * @param {Array<{message: string; author: string; storyMaster: boolean}>} lastCycleMessages
  * @param {{
  *  breaks: "EXPLODED_CLOTHING" | "DESTROYED_ITEM",
  *  reason: string,
@@ -4119,17 +4121,18 @@ function checkDirectlyCarriedCharacters(engine, characterName, charState, addedM
  * 
  * @param {DEngine} engine
  * @param {string} location
- * @param {string[]} lastCycleMessages
+ * @param {Array<{message: string; author: string; storyMaster: boolean}>} lastCycleMessages
  * @param {string[]} addedMessagesForStoryMaster
+ * @param {{ [charName: string]: { reason: string; }}} charactersThatMoved
  */
-export async function cleanAll(engine, location, lastCycleMessages, addedMessagesForStoryMaster) {
+async function cleanAll(engine, location, lastCycleMessages, addedMessagesForStoryMaster, charactersThatMoved) {
     if (!engine.deObject) {
         throw new Error("DEngine not initialized");
     }
     const locationObj = engine.deObject.world.locations[location];
     for (const [slotName, slot] of Object.entries(locationObj.slots)) {
         // first clean at each location, it should work with one single pass because items fall on the ground
-        await cleanDirtyItemTree(engine, location, slotName, slot.items, ["slots", slotName, "items"], addedMessagesForStoryMaster, "first", lastCycleMessages);
+        await cleanDirtyItemTree(engine, location, slotName, slot.items, ["slots", slotName, "items"], addedMessagesForStoryMaster, "first", lastCycleMessages, charactersThatMoved);
     }
 
     const allCharactersAtLocation = [];
@@ -4152,8 +4155,8 @@ export async function cleanAll(engine, location, lastCycleMessages, addedMessage
             // one of those while checking
             const currStoryMasterMessages = addedMessagesForStoryMaster.length;
             checkDirectlyCarriedCharacters(engine, charName, characterState, addedMessagesForStoryMaster);
-            await cleanDirtyItemTree(engine, characterState.location, characterState.locationSlot, characterState.carrying, ["characters", charName, "carrying"], addedMessagesForStoryMaster, cycleN === 0 ? "first" : "mid", lastCycleMessages);
-            await cleanDirtyItemTree(engine, characterState.location, characterState.locationSlot, characterState.wearing, ["characters", charName, "wearing"], addedMessagesForStoryMaster, cycleN === 0 ? "first" : "mid", lastCycleMessages);
+            await cleanDirtyItemTree(engine, characterState.location, characterState.locationSlot, characterState.carrying, ["characters", charName, "carrying"], addedMessagesForStoryMaster, cycleN === 0 ? "first" : "mid", lastCycleMessages, charactersThatMoved);
+            await cleanDirtyItemTree(engine, characterState.location, characterState.locationSlot, characterState.wearing, ["characters", charName, "wearing"], addedMessagesForStoryMaster, cycleN === 0 ? "first" : "mid", lastCycleMessages, charactersThatMoved);
 
             // congrats no more dropped items, you can move on to the next character
             if (currStoryMasterMessages === addedMessagesForStoryMaster.length) {
@@ -4163,8 +4166,8 @@ export async function cleanAll(engine, location, lastCycleMessages, addedMessage
         }
 
         // one last time, inefficient yes I know
-        await cleanDirtyItemTree(engine, characterState.location, characterState.locationSlot, characterState.carrying, ["characters", charName, "carrying"], addedMessagesForStoryMaster, "last", lastCycleMessages);
-        await cleanDirtyItemTree(engine, characterState.location, characterState.locationSlot, characterState.wearing, ["characters", charName, "wearing"], addedMessagesForStoryMaster, "last", lastCycleMessages);
+        await cleanDirtyItemTree(engine, characterState.location, characterState.locationSlot, characterState.carrying, ["characters", charName, "carrying"], addedMessagesForStoryMaster, "last", lastCycleMessages, charactersThatMoved);
+        await cleanDirtyItemTree(engine, characterState.location, characterState.locationSlot, characterState.wearing, ["characters", charName, "wearing"], addedMessagesForStoryMaster, "last", lastCycleMessages, charactersThatMoved);
 
         // cleans up the temporary properties we added for the checks, and also removes items with amount 0
         cleanTemporaryProperties(engine, characterState.carrying);

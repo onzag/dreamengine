@@ -9,12 +9,12 @@ import calculateBondsChangesDueToMessages from "./gears/bond-change.js";
 import testWorldRulesOn from "./gears/rules-enforce.js";
 import testMessageFeasibilityForCharacter from "./gears/feasibility-check.js";
 import { getCharacterVolume, getCharacterWeight, getItemVolume, getItemWeight, getWearableFitment, locationPathToMessage } from "./util/weight-and-volume.js";
-import { cleanAll } from "./gears/feasibility-check/item-changes.js";
 import { getAllItemsCharacterIsInsideOf, getBeingCarriedByCharacter, getCharacterExactLocation, getExternalDescriptionOfCharacter, getListOfCarriedCharactersByCharacter, getSurroundingCharacters, isBottomNaked, isTopNaked } from "./util/character-info.js";
 import { DEJSEngine } from "../jsengine/index.js";
 import defaultNamePool from "./util/name-pool.js";
 import { getHistoryFragmentForCharacter } from "./util/messages.js";
 import calculatePostureChange from "./gears/posture-change.js";
+import calculateItemChanges from "./gears/item-changes.js";
 
 const INVALID_NAMES = ["system", "assistant", "user", "everyone", "nobody",
     "anyone", "somebody", "narrator", "observer", "admin", "moderator",
@@ -321,7 +321,8 @@ export class DEngine {
                 currentLocation: null,
                 // @ts-ignore
                 currentLocationSlot: null,
-                initialScenes: {},
+                scenes: {},
+                initialScenes: [],
                 locations: {},
                 lore: "",
                 properties: {},
@@ -695,27 +696,30 @@ export class DEngine {
             console.warn("Inference adapter failed to initialize, continuing anyway. Error:", error);
         }
 
-        const initialScene = this.deObject.world.initialScenes[optionName];
-        if (!initialScene) {
-            throw new Error(`Initial scene with option name ${optionName} not found.`);
+        /**
+         * @type {DEScene}
+         */
+        const scene = this.deObject.world.scenes[optionName];
+        if (!scene) {
+            throw new Error(`Scene with option name ${optionName} not found.`);
         }
-        const sceneObject = initialScene;
-        if (sceneObject.initialTime) {
-            this.deObject.currentTime = { ...sceneObject.initialTime };
-            this.deObject.initialTime = { ...sceneObject.initialTime };
+        const sceneObject = scene;
+        if (sceneObject.time) {
+            this.deObject.currentTime = { ...sceneObject.time };
+            this.deObject.initialTime = { ...sceneObject.time };
             for (const charName in this.deObject.stateFor) {
-                this.deObject.stateFor[charName].time = { ...sceneObject.initialTime };
+                this.deObject.stateFor[charName].time = { ...sceneObject.time };
             }
         }
 
-        this.deObject.stateFor[this.userCharacter.name].location = sceneObject.startingLocation;
-        this.deObject.stateFor[this.userCharacter.name].locationSlot = sceneObject.startingLocationSlot;
-        this.deObject.world.currentLocation = sceneObject.startingLocation;
-        this.deObject.world.currentLocationSlot = sceneObject.startingLocationSlot;
+        this.deObject.stateFor[this.userCharacter.name].location = sceneObject.location;
+        this.deObject.stateFor[this.userCharacter.name].locationSlot = sceneObject.locationSlot;
+        this.deObject.world.currentLocation = sceneObject.location;
+        this.deObject.world.currentLocationSlot = sceneObject.locationSlot;
 
         // TODO add startup script for the scene?
 
-        const expectedParticipants = sceneObject.startingEngagedCharacters ? [...sceneObject.startingEngagedCharacters] : [];
+        const expectedParticipants = sceneObject.engagedCharacters ? [...sceneObject.engagedCharacters] : [];
         expectedParticipants.push(this.userCharacter.name);
 
         // ensure these are at the given location, if not, teleport them there
@@ -723,8 +727,8 @@ export class DEngine {
             if (!this.deObject.characters[participantName]) {
                 throw new Error(`Participant character ${participantName} not found in DEObject characters.`);
             }
-            this.deObject.stateFor[participantName].location = sceneObject.startingLocation;
-            this.deObject.stateFor[participantName].locationSlot = sceneObject.startingLocationSlot;
+            this.deObject.stateFor[participantName].location = sceneObject.location;
+            this.deObject.stateFor[participantName].locationSlot = sceneObject.locationSlot;
             this.deObject.stateFor[participantName].conversationId = "INITIAL_SCENE_NARRATION";
             this.deObject.stateFor[participantName].type = "INTERACTING";
         }
@@ -760,7 +764,7 @@ export class DEngine {
             // TODO what do we do with bonds at end here?
             bondsAtEnd: {},
             startTime: { ...this.deObject.currentTime },
-            location: sceneObject.startingLocation,
+            location: sceneObject.location,
             participants: expectedParticipants,
             previousConversationIdsPerParticipant: {},
             pseudoConversation: false,
@@ -772,40 +776,42 @@ export class DEngine {
 
         this.rerollWorldWeather();
         this.deObject.world.selectedScene = optionName;
-        this.deObject.world.initialScenes = {}; // we can remove the initial scenes from the world object to save memory, we don't need them anymore
 
         // TODO post scene started script?
 
-        const extraMessage = await this.fixPotentiallyBrokenItemStates();
-        if (extraMessage) {
-            this.deObject.conversations["INITIAL_SCENE_NARRATION"].messages.push({
-                id: "INITIAL_SCENE_ITEM_FIXTURE_MESSAGE",
-                canOnlyBeSeenByCharacter: null,
-                content: extraMessage,
-                sender: "Story Master",
-                duration: {
-                    inDays: 0,
-                    inHours: 0,
-                    inMinutes: 0,
-                },
-                endTime: { ...this.deObject.currentTime },
-                isCharacter: false,
-                isDebugMessage: false,
-                isStoryMasterMessage: true,
-                isUser: false,
-                startTime: { ...this.deObject.currentTime },
-                perspectiveSummaryIds: {},
-                singleSummary: null,
-                isRejectedMessage: false,
-                isHiddenMessage: false,
-            });
-        }
+        // const extraMessage = await this.fixPotentiallyBrokenItemStates();
+        // if (extraMessage) {
+        //     this.deObject.conversations["INITIAL_SCENE_NARRATION"].messages.push({
+        //         id: "INITIAL_SCENE_ITEM_FIXTURE_MESSAGE",
+        //         canOnlyBeSeenByCharacter: null,
+        //         content: extraMessage,
+        //         sender: "Story Master",
+        //         duration: {
+        //             inDays: 0,
+        //             inHours: 0,
+        //             inMinutes: 0,
+        //         },
+        //         endTime: { ...this.deObject.currentTime },
+        //         isCharacter: false,
+        //         isDebugMessage: false,
+        //         isStoryMasterMessage: true,
+        //         isUser: false,
+        //         startTime: { ...this.deObject.currentTime },
+        //         perspectiveSummaryIds: {},
+        //         singleSummary: null,
+        //         isRejectedMessage: false,
+        //         isHiddenMessage: false,
+        //     });
+        // }
 
         this.informCycleState("info", "Pre-calculating posture for " + this.userCharacter.name + "...");
         await calculatePostureChange(this, this.deObject.characters[this.userCharacter.name]);
 
+        this.informCycleState("info", "Pre-calculating item changes and effects...");
+        await calculateItemChanges(this, this.userCharacter);
+
         if (sceneObject.charactersStart) {
-            const randomizedList = ([...sceneObject.startingEngagedCharacters]).sort(() => Math.random() - 0.5);
+            const randomizedList = ([...sceneObject.engagedCharacters]).sort(() => Math.random() - 0.5);
             for (const participantName of randomizedList) {
                 this.informCycleState("info", "Pre-calculating initial states for " + participantName + " and the world...");
                 await calculateStateChange(this, this.deObject.characters[participantName]);
@@ -896,38 +902,6 @@ export class DEngine {
             }
         }
         return slots;
-    }
-
-    async fixPotentiallyBrokenItemStates() {
-        if (!this.deObject) {
-            throw new Error("DEngine not initialized");
-        } else if (!this.deObject.world.selectedScene) {
-            throw new Error("DEngine world scene not started");
-        } else if (!this.userCharacter) {
-            throw new Error("User character not set");
-        }
-        /**
-         * @type {string[]}
-         */
-        const storyMasterMessages = [];
-
-        const allMessages = await getHistoryFragmentForCharacter(this, this.userCharacter, {
-            includeDebugMessages: false,
-            includeRejectedMessages: false,
-            msgLimit: "LAST_CYCLE",
-        });
-
-        // TODO also calculate potentially broken items here, guess in a different manner
-        // should be made so that it is a standalone function that can be used in other places
-
-        await cleanAll(this, this.deObject.stateFor[this.userCharacter.name].location, allMessages.messages, storyMasterMessages);
-
-        if (storyMasterMessages.length > 0) {
-            const addedMessageStr = storyMasterMessages.join("\n\n");
-            return addedMessageStr;
-        }
-
-        return null;
     }
 
     /**
