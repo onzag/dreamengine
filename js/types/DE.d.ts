@@ -2433,6 +2433,50 @@ declare interface DEScene {
      * it must be a date in the future, otherwise it will be ignored
      */
     time?: DETimeDescription | null;
+    /**
+     * Prepare the scene, modify any attributes as necessary
+     * 
+     * [prepareScene]
+     * (characters are moved to the location, and the line of interaction prepared)
+     * (first story master message about the scene)
+     * [sceneStarted]
+     * (items, states, bond, etc... updated)
+     * (characters interact)
+     * [sceneReady]
+     * 
+     * @param DE The DEObject representing the current state of the world
+     * @param scene The DEScene object representing the scene being prepared, you can modify this object to change the scene setup as needed
+     * @returns A promise that resolves to a DEScene object with the prepared scene, this allows for dynamic scene preparation based on the current state of the world
+     */
+    prepareScene?(DE: DEObject, scene: DEScene): Promise<DEScene | void | null>;
+    /**
+     * Called when the scene has started, allowing for any additional setup or actions to be performed right after the scene starts
+     * 
+     * [prepareScene]
+     * (characters are moved to the location, and the line of interaction prepared)
+     * (first story master message about the scene)
+     * [sceneStarted]
+     * (items, states, bond, etc... updated)
+     * (characters interact)
+     * [sceneReady]
+     * 
+     * @param DE 
+     */
+    sceneStarted?(DE: DEObject): Promise<void>;
+    /**
+     * After the scene has started and is ready for user input
+     * 
+     * [prepareScene]
+     * (characters are moved to the location, and the line of interaction prepared)
+     * (first story master message about the scene)
+     * [sceneStarted]
+     * (items, states, bond, etc... updated)
+     * (characters interact)
+     * [sceneReady]
+     * 
+     * @param DE 
+     */
+    sceneReady?(DE: DEObject): Promise<void>;
 }
 
 declare interface DEWorld {
@@ -2464,7 +2508,7 @@ declare interface DEWorld {
     /**
      * Scenes that set up the world, specially at the start of the simulation
      */
-    scenes: Record<string, DEInitialScene>;
+    scenes: Record<string, DEScene>;
     /**
      * The initial scenes that can be selected at the start of the simulation, id only
      */

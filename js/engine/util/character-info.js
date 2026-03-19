@@ -597,6 +597,29 @@ export function getExtendedPosturesOf(posture) {
 }
 
 /**
+ * @type {Record<string, string>}
+ */
+export const POSTURE_MAP = {};
+/**
+ * @type {Record<string, string>}
+ */
+export const REVERSE_POSTURE_MAP = {};
+for (const posture of allPostures) {
+    // @ts-ignore
+    POSTURE_MAP[posture] = postureToText(posture);
+    // @ts-ignore
+    REVERSE_POSTURE_MAP[postureToText(posture).toLowerCase().replace(/\s+/g, "_")] = posture;
+}
+
+/**
+ * @param {string} humanReadable 
+ */
+export function humanReadablePostureToPosture(humanReadable) {
+    const normalized = humanReadable.toLowerCase().replace(/\s+/g, "_");
+    return REVERSE_POSTURE_MAP[normalized] || null;
+}
+
+/**
  * @param {DEngine} engine
  * @param {string} characterName 
  * @returns {Promise<{

@@ -4,6 +4,7 @@
 
 import { DEngine } from "../index.js";
 import { getBondDeclarationFromBondDescription, getInternalDescriptionOfCharacter } from "../util/character-info.js";
+import { isYes, yesNoGrammar } from "../util/grammar.js";
 import { getHistoryFragmentForCharacter } from "../util/messages.js";
 
 /**
@@ -47,7 +48,7 @@ export default async function calculateBondsChangesDueToMessages(engine, charact
         throw new Error(`Character ${character.name} has no bonds defined.`);
     }
 
-    const yesNoGrammar = `root ::= ("yes" | "no" | "Yes" | "No" | "YES" | "NO") ${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()}\n`;
+    const yesNoGrammarObject = yesNoGrammar(engine);
 
     // first we need to update the bonds towards the character, for that we need to get a whole extended cycle
     // gather all the other characters that talked inbetween, and update bonds for each
@@ -215,9 +216,9 @@ export default async function calculateBondsChangesDueToMessages(engine, charact
                         maxCharacters: 100,
                         maxParagraphs: 1,
                         nextQuestion: result,
-                        stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
+                        stopAfter: yesNoGrammarObject.stopAfter,
                         stopAt: [],
-                        grammar: yesNoGrammar,
+                        grammar: yesNoGrammarObject.grammar,
                         maxSafetyCharacters: 0,
                     });
 
@@ -229,7 +230,7 @@ export default async function calculateBondsChangesDueToMessages(engine, charact
 
                     console.log("Received answer: " + trimmed);
 
-                    const answer = trimmed === "yes" || trimmed === "Yes" || trimmed === "YES";
+                    const answer = isYes(trimmed);
 
                     if (answer) {
                         console.log(`Bond condition matched for bond from ${character.name} towards ${characterNameToGetBondTowards} via questioning agent on question ${JSON.stringify(result)}, applying bond changes: bond ${conditionYesValue}, on ${condition.affectsBonds}`);

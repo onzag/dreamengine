@@ -1,21 +1,8 @@
-import { deepCopy, DEngine } from "../index.js";
+import { DEngine } from "../index.js";
 import { getBeingCarriedByCharacter, getCharacterExactLocation, getExternalDescriptionOfCharacter } from "../util/character-info.js";
-import { getHistoryForCharacter, getHistoryFragmentForCharacter } from "../util/messages.js";
-import { checkItemIsOneOfAKindAtLocation, getCharacterCarryingCapacity, getCharacterVolume, getCharacterWeight, getItemExcessElements, getItemVolume, getItemWeight, getWearableFitment, isAlreadyPlural, isSingularOfPlural, locationPathToMessage, locationPathToMessageWithoutItemName, resolvePath, utilItemCount } from "../util/weight-and-volume.js";
-
-/**
- * 
- * @param {string} word 
- * @returns {string}
- */
-function caseInsensitiveGrammar(word) {
-    return "(" + word.split('').map(c => {
-        if (c.match(/[a-zA-Z]/)) {
-            return `[${c.toUpperCase()}${c.toLowerCase()}]`;
-        }
-        return JSON.stringify(c);
-    }).join(' ') + ")";
-}
+import { getHistoryFragmentForCharacter } from "../util/messages.js";
+import { getCharacterCarryingCapacity, getCharacterVolume, getCharacterWeight, getItemExcessElements, getItemVolume, getItemWeight, getWearableFitment, isAlreadyPlural, isSingularOfPlural, locationPathToMessage, locationPathToMessageWithoutItemName, resolvePath, utilItemCount } from "../util/weight-and-volume.js";
+import { yesNoGrammar, isYes } from "../util/grammar.js";
 
 /**
  * 
@@ -30,7 +17,6 @@ const nameOptionsBase = [
     "Bob",
     "Emma",
     "Joe",
-    "${getCharacterNameForExample([charName], 0)}",
 ]
 
 const nameOptionsExtras = [
@@ -77,23 +63,6 @@ function getCharacterNameForExample(involvedNames, index) {
 }
 
 /**
- * 
- * @param {Array<any>} array 
- * @returns 
- */
-function removeRepeatsInArray(array) {
-    return [...new Set(array)];
-}
-
-/**
- * @param {string} answer
- * @return {boolean}
- */
-function isYes(answer) {
-    return answer.toLowerCase().includes("yes");
-}
-
-/**
  * @param {DEngine} engine 
  * @param {DECompleteCharacterReference} character
  * @return {Promise<{
@@ -122,12 +91,12 @@ export default async function calculateItemChanges(engine, character) {
     // we also get the location name for the character state location, since we will need it for the questioning agent context
     const location = engine.deObject.world.locations[charState.location];
 
-    const yesNoGrammar = `root ::= ("yes" | "no" | "Yes" | "No" | "YES" | "NO") ${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()}\n`;
-
     /**
      * @type {{ [charName: string]: { reason: string; } }}
      */
     const charactersThatMoved = {};
+
+    const yesNoGrammarObject = yesNoGrammar(engine);
 
     /**
      * @type {string[]}
@@ -233,9 +202,9 @@ export default async function calculateItemChanges(engine, character) {
                 maxParagraphs: 1,
                 nextQuestion: nextQuestion,
                 contextInfo: engine.inferenceAdapter.buildContextInfoItemDescription(item, item + " is described as following", foundDescriptions).value,
-                stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
+                stopAfter: yesNoGrammarObject.stopAfter,
                 stopAt: [],
-                grammar: yesNoGrammar,
+                grammar: yesNoGrammarObject.grammar,
                 answerTrail: `Regarding specifically the item ${item} being interacted with in the last story fragment, the answer is:\n\n`,
             });
             if (answer.done) {
@@ -310,10 +279,10 @@ export default async function calculateItemChanges(engine, character) {
             maxParagraphs: 1,
             nextQuestion: nextQuestion,
             contextInfo: charDescriptionContextInfo.value,
-            stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
+            stopAfter: yesNoGrammarObject.stopAfter,
             stopAt: [],
             answerTrail: `Regarding specifically the character ${charName} being mentioned or interacted with in the last story fragment, the answer is:\n\n`,
-            grammar: yesNoGrammar,
+            grammar: yesNoGrammarObject.grammar,
             instructions: "Use the character description at: " + charDescriptionContextInfo.characterDescriptionAt + " to figure out if the character was indirectly interacted with by a description",
         });
         console.log("Received answer, " + answer.value);
@@ -425,10 +394,10 @@ export default async function calculateItemChanges(engine, character) {
                 maxCharacters: 0, maxSafetyCharacters: 100,
                 maxParagraphs: 1,
                 nextQuestion: wasItMovedNextQuestion,
-                stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
+                stopAfter: yesNoGrammarObject.stopAfter,
                 stopAt: [],
                 answerTrail: `regarding specifically the item ${item} being moved, picked up, carried, or relocated; the answer is:\n\n`,
-                grammar: yesNoGrammar,
+                grammar: yesNoGrammarObject.grammar,
                 contextInfo: engine.inferenceAdapter.buildContextInfoExample(
                     `Example: "Alice picked up ${item} and put it in her backpack" -> Answer: YES, because ${item} itself was picked up and moved.`,
                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
@@ -465,9 +434,9 @@ export default async function calculateItemChanges(engine, character) {
                     maxCharacters: 0, maxSafetyCharacters: 100,
                     maxParagraphs: 1,
                     nextQuestion: wasItMovedConfirmationQuestion,
-                    stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
+                    stopAfter: yesNoGrammarObject.stopAfter,
                     stopAt: [],
-                    grammar: yesNoGrammar,
+                    grammar: yesNoGrammarObject.grammar,
                 });
                 if (wasItMovedConfirmation.done) {
                     throw new Error("Questioning agent finished without providing an answer for item movement confirmation check.");
@@ -485,10 +454,10 @@ export default async function calculateItemChanges(engine, character) {
                     maxCharacters: 0, maxSafetyCharacters: 100,
                     maxParagraphs: 1,
                     nextQuestion: wasItMovedNextQuestion,
-                    stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
+                    stopAfter: yesNoGrammarObject.stopAfter,
                     stopAt: [],
                     answerTrail: `regarding specifically the item ${item} being moved, picked up, carried, or relocated; the answer is:\n\n`,
-                    grammar: yesNoGrammar,
+                    grammar: yesNoGrammarObject.grammar,
                     contextInfo: engine.inferenceAdapter.buildContextInfoExample(
                         `Example: "Alice picked up ${item} and put it in her backpack" -> Answer: YES, because ${item} itself was picked up and moved.`,
                     ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
@@ -547,9 +516,9 @@ export default async function calculateItemChanges(engine, character) {
                             maxCharacters: 0, maxSafetyCharacters: 100,
                             maxParagraphs: 1,
                             nextQuestion: nextQuestion,
-                            stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
+                            stopAfter: yesNoGrammarObject.stopAfter,
                             stopAt: [],
-                            grammar: yesNoGrammar,
+                            grammar: yesNoGrammarObject.grammar,
                             contextInfo: engine.inferenceAdapter.buildContextInfoExample(
                                 `Example: If the last story fragment reads that "Alice picked up ${item} from ${answerAlt}", the answer would be "no", since it was originally ${answerAlt}, not ${allPotentialLocationsForItem[i]}.`,
                             ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
@@ -686,9 +655,9 @@ export default async function calculateItemChanges(engine, character) {
                             maxParagraphs: 1,
                             nextQuestion: nextQuestion,
                             useQuestionCache: true,
-                            stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
+                            stopAfter: yesNoGrammarObject.stopAfter,
                             stopAt: [],
-                            grammar: yesNoGrammar,
+                            grammar: yesNoGrammarObject.grammar,
                             contextInfo: engine.inferenceAdapter.buildContextInfoExample(
                                 `Example: If the last story fragment reads that "${item} was placed inside ${otherItem}", the answer would be "yes", since by the end of the message, ${item} is now inside ${otherItem}.`,
                             ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
@@ -716,9 +685,9 @@ export default async function calculateItemChanges(engine, character) {
                         maxCharacters: 0, maxSafetyCharacters: 100,
                         maxParagraphs: 1,
                         nextQuestion: nextQuestion2,
-                        stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
+                        stopAfter: yesNoGrammarObject.stopAfter,
                         stopAt: [],
-                        grammar: yesNoGrammar,
+                        grammar: yesNoGrammarObject.grammar,
                         contextInfo: engine.inferenceAdapter.buildContextInfoExample(
                             `Example: If the last story fragment reads that "${item} was placed on top of ${otherItem}", the answer would be "yes", since by the end of the message, ${item} is now on top of ${otherItem}.`,
                         ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
@@ -752,9 +721,9 @@ export default async function calculateItemChanges(engine, character) {
                                 maxCharacters: 0, maxSafetyCharacters: 100,
                                 maxParagraphs: 1,
                                 nextQuestion: confirmQuestionAtop,
-                                stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
+                                stopAfter: yesNoGrammarObject.stopAfter,
                                 stopAt: [],
-                                grammar: yesNoGrammar,
+                                grammar: yesNoGrammarObject.grammar,
                             });
 
                             if (ambiguousPlacement2.done) {
@@ -773,9 +742,9 @@ export default async function calculateItemChanges(engine, character) {
                                 maxCharacters: 0, maxSafetyCharacters: 100,
                                 maxParagraphs: 1,
                                 nextQuestion: confirmQuestionContained,
-                                stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
+                                stopAfter: yesNoGrammarObject.stopAfter,
                                 stopAt: [],
-                                grammar: yesNoGrammar,
+                                grammar: yesNoGrammarObject.grammar,
                             });
 
                             if (ambiguousPlacementContained.done) {
@@ -1023,9 +992,9 @@ export default async function calculateItemChanges(engine, character) {
                             maxCharacters: 0, maxSafetyCharacters: 100,
                             maxParagraphs: 1,
                             nextQuestion: nextQuestion,
-                            stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
+                            stopAfter: yesNoGrammarObject.stopAfter,
                             stopAt: [],
-                            grammar: yesNoGrammar,
+                            grammar: yesNoGrammarObject.grammar,
                             contextInfo: engine.inferenceAdapter.buildContextInfoExample(
                                 `Example: If the last story fragment reads that "${anotherChar} gave ${item} to ${charName}", the answer would be "yes", since by the end of the message, ${charName} has the item in their possession.`,
                             ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
@@ -1057,9 +1026,9 @@ export default async function calculateItemChanges(engine, character) {
                                 maxCharacters: 0, maxSafetyCharacters: 100,
                                 maxParagraphs: 1,
                                 nextQuestion: nextQuestion,
-                                stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
+                                stopAfter: yesNoGrammarObject.stopAfter,
                                 stopAt: [],
-                                grammar: yesNoGrammar,
+                                grammar: yesNoGrammarObject.grammar,
                             });
                             if (thrownQuestion.done) {
                                 throw new Error("Questioning agent finished without providing an answer for item thrown towards character check.");
@@ -1111,9 +1080,9 @@ export default async function calculateItemChanges(engine, character) {
                                     maxCharacters: 0, maxSafetyCharacters: 100,
                                     maxParagraphs: 1,
                                     nextQuestion: nextQuestion,
-                                    stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
+                                    stopAfter: yesNoGrammarObject.stopAfter,
                                     stopAt: [],
-                                    grammar: yesNoGrammar,
+                                    grammar: yesNoGrammarObject.grammar,
                                     contextInfo: engine.inferenceAdapter.buildContextInfoExample(
                                         `Example: If the last story fragment reads that "${charName} put on ${item}", the answer would be "yes", since by the end of the message, ${charName} is wearing the item.`,
                                     ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
@@ -1178,9 +1147,9 @@ export default async function calculateItemChanges(engine, character) {
                             maxCharacters: 0, maxSafetyCharacters: 100,
                             maxParagraphs: 1,
                             nextQuestion: nextQuestion,
-                            stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
+                            stopAfter: yesNoGrammarObject.stopAfter,
                             stopAt: [],
-                            grammar: yesNoGrammar,
+                            grammar: yesNoGrammarObject.grammar,
                             contextInfo: engine.inferenceAdapter.buildContextInfoExample(
                                 `Example: If the last story fragment reads that "${charName} drops ${item} on the ground", the answer would be "yes", since by the end of the message, the item is on the ground and not inside or atop another item.`,
                             ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
@@ -1222,9 +1191,9 @@ export default async function calculateItemChanges(engine, character) {
                                 const wasThrown = await interactionGenerator.next({
                                     maxCharacters: 0, maxSafetyCharacters: 100,
                                     maxParagraphs: 1,
-                                    stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
+                                    stopAfter: yesNoGrammarObject.stopAfter,
                                     stopAt: [],
-                                    grammar: yesNoGrammar,
+                                    grammar: yesNoGrammarObject.grammar,
                                     nextQuestion: `By the end of the last story fragment, was the item "${item}" thrown/launched? Answer "yes" ONLY if the item was thrown or launched. If the item was dropped without being thrown or launched, answer "no".`,
                                 });
 
@@ -1246,9 +1215,9 @@ export default async function calculateItemChanges(engine, character) {
                                         maxCharacters: 0, maxSafetyCharacters: 100,
                                         maxParagraphs: 1,
                                         nextQuestion: nextQuestion,
-                                        stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
+                                        stopAfter: yesNoGrammarObject.stopAfter,
                                         stopAt: [],
-                                        grammar: yesNoGrammar,
+                                        grammar: yesNoGrammarObject.grammar,
                                     });
 
                                     if (slotQuestion.done) {
@@ -1311,9 +1280,9 @@ export default async function calculateItemChanges(engine, character) {
                         maxCharacters: 0, maxSafetyCharacters: 100,
                         maxParagraphs: 1,
                         nextQuestion: nextQuestionSteal,
-                        stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
+                        stopAfter: yesNoGrammarObject.stopAfter,
                         stopAt: [],
-                        grammar: yesNoGrammar,
+                        grammar: yesNoGrammarObject.grammar,
                         contextInfo: engine.inferenceAdapter.buildContextInfoExample(
                             `Example: If the last story fragment reads that "Alice took ${item} from Bob without asking", the answer would be "yes", since by the end of the message, Alice has stolen the item from Bob.`,
                         ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
@@ -1478,9 +1447,9 @@ export default async function calculateItemChanges(engine, character) {
                             maxCharacters: 0, maxSafetyCharacters: 100,
                             maxParagraphs: 1,
                             nextQuestion: nextQuestion,
-                            stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
+                            stopAfter: yesNoGrammarObject.stopAfter,
                             stopAt: [],
-                            grammar: yesNoGrammar,
+                            grammar: yesNoGrammarObject.grammar,
                             contextInfo: engine.inferenceAdapter.buildContextInfoExample(
                                 `Example: If the last story fragment reads that "${charName} got ${interactionType} ${item} from ${answerAlt}", the answer would be "no", since it was originally ${answerAlt}, not ${allPotentialLocationsForItem[i]}.`,
                             ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
@@ -1523,9 +1492,9 @@ export default async function calculateItemChanges(engine, character) {
                     maxCharacters: 0, maxSafetyCharacters: 100,
                     maxParagraphs: 1,
                     nextQuestion: nextQuestion,
-                    stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
+                    stopAfter: yesNoGrammarObject.stopAfter,
                     stopAt: [],
-                    grammar: yesNoGrammar,
+                    grammar: yesNoGrammarObject.grammar,
                     contextInfo: engine.inferenceAdapter.buildContextInfoExample(
                         `Example: If the last story fragment reads that "${charName} climbed into ${item}", the answer would be "yes", since by the end of the message, ${charName} is inside ${item}.`,
                     ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
@@ -1555,9 +1524,9 @@ export default async function calculateItemChanges(engine, character) {
                     maxCharacters: 0, maxSafetyCharacters: 100,
                     maxParagraphs: 1,
                     nextQuestion: nextQuestion,
-                    stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
+                    stopAfter: yesNoGrammarObject.stopAfter,
                     stopAt: [],
-                    grammar: yesNoGrammar,
+                    grammar: yesNoGrammarObject.grammar,
                     contextInfo: engine.inferenceAdapter.buildContextInfoExample(
                         `Example: If the last story fragment reads that "${charName} is sitting on top of ${item}", the answer would be "yes", since by the end of the message, ${charName} is on top of ${item}.`,
                     ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
@@ -1591,6 +1560,8 @@ export default async function calculateItemChanges(engine, character) {
                     isInsideItem ? "containingCharacters" : "ontopCharacters",
                     addedMessagesForStoryMaster,
                 );
+
+                charactersThatMoved[charName] = { reason: isInsideItem ? `got inside ${item}` : `got on top of ${item}` };
 
                 // we don't wanna ask questions about where this character may be anymore later
                 charactersWithAEstablishedPositionSoFar.push(charName);
@@ -1636,9 +1607,9 @@ export default async function calculateItemChanges(engine, character) {
                 maxCharacters: 0, maxSafetyCharacters: 100,
                 maxParagraphs: 1,
                 nextQuestion: nextQuestion,
-                stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
+                stopAfter: yesNoGrammarObject.stopAfter,
                 stopAt: [],
-                grammar: yesNoGrammar,
+                grammar: yesNoGrammarObject.grammar,
                 contextInfo: engine.inferenceAdapter.buildContextInfoExample(
                     `Example: If the last story fragment reads that "${charName} is sitting on top of ${otherCharName}", the answer would be "yes", since by the end of the message, ${charName} is on top of ${otherCharName}.`,
                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
@@ -1669,6 +1640,7 @@ export default async function calculateItemChanges(engine, character) {
                     "carryingCharactersDirectly",
                     addedMessagesForStoryMaster,
                 );
+                charactersThatMoved[charName] = { reason: `got on top of ${otherCharName}` };
                 charactersWithAEstablishedPositionSoFar.push(charName);
                 break;
             }
@@ -1679,9 +1651,9 @@ export default async function calculateItemChanges(engine, character) {
                 maxCharacters: 0, maxSafetyCharacters: 100,
                 maxParagraphs: 1,
                 nextQuestion: nextQuestionGrabbedOrPickedUp,
-                stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
+                stopAfter: yesNoGrammarObject.stopAfter,
                 stopAt: [],
-                grammar: yesNoGrammar,
+                grammar: yesNoGrammarObject.grammar,
                 contextInfo: engine.inferenceAdapter.buildContextInfoExample(
                     `Example: If the last story fragment reads that "${otherCharName} picked up ${charName} and is now carrying them", the answer would be "yes", since by the end of the message, ${otherCharName} is carrying ${charName}.`,
                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
@@ -1710,6 +1682,7 @@ export default async function calculateItemChanges(engine, character) {
                     "ontopCharacters",
                     addedMessagesForStoryMaster,
                 );
+                charactersThatMoved[charName] = { reason: `picked up by ${otherCharName}` };
                 charactersWithAEstablishedPositionSoFar.push(charName);
                 break;
             }
@@ -1728,9 +1701,9 @@ export default async function calculateItemChanges(engine, character) {
                 maxCharacters: 0, maxSafetyCharacters: 100,
                 maxParagraphs: 1,
                 nextQuestion: nextQuestion,
-                stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
+                stopAfter: yesNoGrammarObject.stopAfter,
                 stopAt: [],
-                grammar: yesNoGrammar,
+                grammar: yesNoGrammarObject.grammar,
                 contextInfo: engine.inferenceAdapter.buildContextInfoExample(
                     `Example: If the last story fragment reads that "${charName} climbed out of ${charExactLocation.item?.name}", the answer would be "yes", since by the end of the message, ${charName} is no longer inside ${charExactLocation.item?.name}.`,
                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
@@ -1758,6 +1731,7 @@ export default async function calculateItemChanges(engine, character) {
                     "ontopCharacters",
                     addedMessagesForStoryMaster,
                 )
+                charactersThatMoved[charName] = { reason: `got out of ${charExactLocation.item?.name}` };
             }
         } else if (charExactLocation.itemPathEnd === "ontopCharacters") {
             const nextQuestion = `By the end of the last story fragment, did ${charName} get out from being on top of ${charExactLocation.item?.name} (the item they were laying/sitting/standing on)? Answer "yes" ONLY if ${charName} got out from ${charExactLocation.item?.name} by exiting it, climbing out of it, or being taken out of it. If ${charName} is still on top of ${charExactLocation.item?.name}, or if it's not clear if they got out of it, answer "no".`;
@@ -1766,9 +1740,9 @@ export default async function calculateItemChanges(engine, character) {
                 maxCharacters: 0, maxSafetyCharacters: 100,
                 maxParagraphs: 1,
                 nextQuestion: nextQuestion,
-                stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
+                stopAfter: yesNoGrammarObject.stopAfter,
                 stopAt: [],
-                grammar: yesNoGrammar,
+                grammar: yesNoGrammarObject.grammar,
                 contextInfo: engine.inferenceAdapter.buildContextInfoExample(
                     `Example: If the last story fragment reads that "${charName} climbed out of ${charExactLocation.item?.name}", the answer would be "yes", since by the end of the message, ${charName} is no longer on top of ${charExactLocation.item?.name}.`,
                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
@@ -1796,6 +1770,7 @@ export default async function calculateItemChanges(engine, character) {
                     "ontopCharacters",
                     addedMessagesForStoryMaster,
                 )
+                charactersThatMoved[charName] = { reason: `got off ${charExactLocation.item?.name}` };
             }
         } else if (charExactLocation.beingCarriedBy) {
             const nextQuestion = `By the end of the last story fragment, did ${charName} is no longer being carried by ${charExactLocation.beingCarriedBy}? Answer "yes" ONLY if ${charName} got put down from being carried by ${charExactLocation.beingCarriedBy} by being set down on the ground or on a surface, or being given to someone else. If ${charName} is still being carried by ${charExactLocation.beingCarriedBy}, or if it's not clear if they got put down, answer "no".`;
@@ -1804,9 +1779,9 @@ export default async function calculateItemChanges(engine, character) {
                 maxCharacters: 0, maxSafetyCharacters: 100,
                 maxParagraphs: 1,
                 nextQuestion: nextQuestion,
-                stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
+                stopAfter: yesNoGrammarObject.stopAfter,
                 stopAt: [],
-                grammar: yesNoGrammar,
+                grammar: yesNoGrammarObject.grammar,
                 contextInfo: engine.inferenceAdapter.buildContextInfoExample(
                     `Example: If the last story fragment reads that "${charName} was put down by ${charExactLocation.beingCarriedBy} on the ground", the answer would be "yes", since by the end of the message, ${charName} is no longer being carried by ${charExactLocation.beingCarriedBy}.`,
                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
@@ -1834,6 +1809,7 @@ export default async function calculateItemChanges(engine, character) {
                     "ontopCharacters",
                     addedMessagesForStoryMaster,
                 )
+                charactersThatMoved[charName] = { reason: `put down by ${charExactLocation.beingCarriedBy} on the ground` };
             }
         }
 
@@ -3686,7 +3662,7 @@ async function updateItemAfterHappenance(
         throw new Error("Questioning agent could not be started properly for item changes check.");
     }
 
-    const yesNoGrammar = `root ::= ("yes" | "no" | "Yes" | "No" | "YES" | "NO") ${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()}\n`;
+    const yesNoGrammarObject = yesNoGrammar(engine);
 
     let brokeInPieces = false;
     let brokeInPiecesCount = 0;
@@ -3699,9 +3675,9 @@ async function updateItemAfterHappenance(
             maxParagraphs: 1,
             maxSafetyCharacters: 10,
             nextQuestion: questionBrokenMultipleName,
-            stopAfter: [],
+            stopAfter: yesNoGrammarObject.stopAfter,
             stopAt: ["\n"],
-            grammar: yesNoGrammar,
+            grammar: yesNoGrammarObject.grammar,
             answerTrail: "Answer:\n\n",
             contextInfo: engine.inferenceAdapter.buildContextInfoInstructions(
                 "Answer 'Yes' if the item is now in multiple pieces, Answer 'No' if the item is sturdy or flexible enough that it would just rip or crumble but still be one item",
