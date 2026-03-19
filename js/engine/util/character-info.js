@@ -749,6 +749,10 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
      */
     const statesDescriptions = [];
     /**
+     * @type {string[]}
+     */
+    const stateInjections = [];
+    /**
      * @type {Array<{
      *   applyingState: DEApplyingState | null,
      *   action: DEActionPromptInjectionWithIntensity | DEActionPromptInjection,
@@ -785,20 +789,73 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
             }
         }
 
+        const stateNameForDescriptions = state.state.split("_").map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(" ");
+
+        if (dominanceOfThisState >= maxStateDominance || stateInfo.ignoreDominanceForStateInjection) {
+            let stateDescriptionForInjection = "";
+            if (!state.relieving) {
+                if (stateInfo.behaviourType === "INTENSITY_EXPRESSIVE") {
+                    if (state.intensity >= 1.5) {
+                        stateDescriptionForInjection = `${character.name} is currently very ${stateNameForDescriptions}\n\n`;
+                    } else if (state.intensity >= 2.5) {
+                        stateDescriptionForInjection = `${character.name} is currently extremely ${stateNameForDescriptions}\n\n`;
+                    } else if (state.intensity >= 3.5) {
+                        stateDescriptionForInjection = `${character.name} is currently overwhelmingly ${stateNameForDescriptions}\n\n`;
+                    } else {
+                        stateDescriptionForInjection = `${character.name} is currently ${stateNameForDescriptions}\n\n`;
+                    }
+                } else if (stateInfo.behaviourType === "BINARY") {
+                    stateDescriptionForInjection = `${character.name} is currently ${stateNameForDescriptions}\n\n`;
+                }
+            } else {
+                if (stateInfo.behaviourType === "INTENSITY_EXPRESSIVE") {
+                    if (state.intensity >= 2.5) {
+                        stateDescriptionForInjection = `${character.name} is currently relieving from being ${stateNameForDescriptions}, nonetheless still very ${stateNameForDescriptions}\n\n`;
+                    } else if (state.intensity >= 3.5) {
+                        stateDescriptionForInjection = `${character.name} is currently relieving from being ${stateNameForDescriptions}, nonetheless still extremely ${stateNameForDescriptions}\n\n`;
+                    } else {
+                        stateDescriptionForInjection = `${character.name} is currently relieving from being ${stateNameForDescriptions}, nonetheless still ${stateNameForDescriptions}\n\n`;
+                    }
+                } else if (stateInfo.behaviourType === "BINARY") {
+                    stateDescriptionForInjection = `${character.name} is currently relieving from being ${stateNameForDescriptions}, nonetheless still ${stateNameForDescriptions}\n\n`;
+                }
+            }
+
+            const generalDescriptionOrigin = !state.relieving ? stateInfo.general : stateInfo.generalAfterRelief;
+            if (generalDescriptionOrigin) {
+                const generalDescription = typeof generalDescriptionOrigin === "string" ? generalDescriptionOrigin : await generalDescriptionOrigin(engine.deObject, {
+                    char: character,
+                    causants: state.causants || undefined,
+                });
+                const trimmed = generalDescription.trim();
+                if (trimmed) {
+                    stateDescriptionForInjection += trimmed;
+                }
+            }
+
+            if (stateDescriptionForInjection) {
+                stateInjections.push(stateDescriptionForInjection.trimEnd());
+            }
+        }
+
         if (dominanceOfThisState < maxStateDominance && !stateInfo.ignoreDominanceWhenInjectedGeneralCharacterDescription) {
             continue;
         }
 
-        let stateDescription = stateInfo.behaviourType !== "HIDDEN" ? state.state.split("_").map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(" ") : null;
+        let stateDescription = null;
         if (!state.relieving) {
             if (stateInfo.behaviourType === "INTENSITY_EXPRESSIVE") {
                 if (state.intensity >= 1.5) {
-                    stateDescription = `Very ${stateDescription}`;
+                    stateDescription = `Very ${stateNameForDescriptions}`;
                 } else if (state.intensity >= 2.5) {
-                    stateDescription = `Extremely ${stateDescription}`;
+                    stateDescription = `Extremely ${stateNameForDescriptions}`;
                 } else if (state.intensity >= 3.5) {
-                    stateDescription = `Overwhelmingly ${stateDescription}`;
+                    stateDescription = `Overwhelmingly ${stateNameForDescriptions}`;
+                } else {
+                    stateDescription = `${stateNameForDescriptions}`;
                 }
+            } else if (stateInfo.behaviourType === "BINARY") {
+                stateDescription = `${stateNameForDescriptions}`;
             }
 
             if (stateInfo.relievingGeneralCharacterDescriptionInjection) {
@@ -813,14 +870,16 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
                 }
             }
         } else {
-            if (stateInfo.behaviourType !== "HIDDEN") {
-                if (state.intensity >= 1.5) {
-                    stateDescription = `Relieving from being ${stateDescription}, nonetheless still ${stateDescription}`;
-                } else if (state.intensity >= 2.5) {
-                    stateDescription = `Relieving from being ${stateDescription}, nonetheless still Very ${stateDescription}`;
+            if (stateInfo.behaviourType === "INTENSITY_EXPRESSIVE") {
+                if (state.intensity >= 2.5) {
+                    stateDescription = `Relieving from being ${stateNameForDescriptions}, nonetheless still Very ${stateNameForDescriptions}`;
                 } else if (state.intensity >= 3.5) {
-                    stateDescription = `Relieving from being ${stateDescription}, nonetheless still Extremely ${stateDescription}`;
+                    stateDescription = `Relieving from being ${stateNameForDescriptions}, nonetheless still Extremely ${stateNameForDescriptions}`;
+                } else {
+                    stateDescription = `Relieving from being ${stateNameForDescriptions}, nonetheless still ${stateNameForDescriptions}`;
                 }
+            } else if (stateInfo.behaviourType === "BINARY") {
+                stateDescription = `Relieving from being ${stateNameForDescriptions}, nonetheless still ${stateNameForDescriptions}`;
             }
 
             if (stateInfo.generalCharacterDescriptionInjection) {
@@ -960,6 +1019,7 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
         relationships,
         stateDominance: maxStateDominance,
         actions,
+        stateInjections,
     };
 }
 
@@ -1064,20 +1124,20 @@ export async function getSysPromptForCharacter(engine, characterName) {
     let scenario = "";
     const currentLocation = engine.deObject.world.locations[engine.deObject.stateFor[characterName].location];
     if (currentLocation) {
-        scenario = `## Location\n\n${engine.deObject.stateFor[characterName].location}, ` + (typeof currentLocation.description === "string" ? currentLocation.description : await currentLocation.description(engine.deObject, {
+        scenario = `## Location:\n\n${engine.deObject.stateFor[characterName].location}, ` + (typeof currentLocation.description === "string" ? currentLocation.description : await currentLocation.description(engine.deObject, {
             char: character,
         }));
     }
     const currentLocationSlot = currentLocation.slots[engine.deObject.stateFor[characterName].locationSlot];
     if (currentLocationSlot) {
-        scenario += `\nSpecifically at: ${engine.deObject.stateFor[characterName].locationSlot}, ` + (typeof currentLocationSlot.description === "string" ? currentLocationSlot.description : await currentLocationSlot.description(engine.deObject, {
+        scenario += `\n\nSpecifically at the ${engine.deObject.stateFor[characterName].locationSlot} of ${engine.deObject.stateFor[characterName].location}, ` + (typeof currentLocationSlot.description === "string" ? currentLocationSlot.description : await currentLocationSlot.description(engine.deObject, {
             char: character,
         }));
     }
 
-    scenario += `\n\n${await whatIsWeatherLikeForCharacter(engine, characterName)}`;
+    scenario += `\n\n## Weather:\n\n${await whatIsWeatherLikeForCharacter(engine, characterName)}`;
 
-    scenario += `\n\nCurrent time and date in the world: ${await makeTimestamp(engine, engine.deObject.currentTime, false)}`;
+    scenario += `\n\n## Current time and date in the world:\n\n${makeTimestamp(engine, engine.deObject.currentTime, false)}`;
     
 
     const sysprompt = engine.inferenceAdapter.buildSystemPromptForCharacter(

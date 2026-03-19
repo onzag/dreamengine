@@ -13,7 +13,7 @@ const jsEngine = new DEJSEngine(engine, localResolver);
 await jsEngine.addScripts([
     { namespace: "worlds", id: "simple-lunar-station" },
     { namespace: "characters", id: "dema-basic" },
-    //{ namespace: "testing", id: "states" },
+    { namespace: "testing", id: "states" },
 ]);
 
 const inferenceAdapter = new InferenceAdapterLlamaUncensored(engine, {

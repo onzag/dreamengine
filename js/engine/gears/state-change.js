@@ -599,6 +599,9 @@ async function determineCausants(
     allCharactersInAnalysis,
     prompter,
 ) {
+    // TODO redo this function asking character one by one about actual causants,
+    // we should probably get fed with interacted characters to reduce the amount of questions
+    // from the item change which happens first
     if (!engine.deObject) {
         throw new Error("DEngine not initialized");
     }

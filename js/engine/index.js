@@ -848,6 +848,7 @@ export class DEngine {
         scene.sceneStarted && await scene.sceneStarted(this.deObject, scene);
 
         // TODO remove this hack made for debugging
+        await calculateStateChange(this, this.deObject.characters["Dema"]);
         await talk(this, this.deObject.characters["Dema"], {
             doNotMove: true,
         });

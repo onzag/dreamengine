@@ -18,7 +18,9 @@ export async function talk(engine, character, options) {
     }
 
     const characterSystemPrompt = await getSysPromptForCharacter(engine, character.name);
-    console.log(characterSystemPrompt);
+    console.log(characterSystemPrompt.sysprompt);
+    console.log("##############");
+    console.log(characterSystemPrompt.internalDescription.stateInjections);
     // TODO
     process.exit(1);
 }

@@ -429,6 +429,11 @@ declare interface DECharacterStateDefinition {
      */
     ignoreDominanceForActionPromptInjection?: boolean;
     /**
+     * Ignores the dominance to inject into the reasoning of the character about the state they are currently in
+     * this is useful if it is always considered, like if it's an important state
+     */
+    ignoreDominanceForStateInjection?: boolean;
+    /**
      * Description of the state, used for reasoning about the state
      * 
      * You may want to use get_state_intensity function to describe different

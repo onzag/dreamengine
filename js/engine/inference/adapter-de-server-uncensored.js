@@ -459,7 +459,7 @@ ${states.join(", ")}
 
         const rid = cheapRID();
         if (!remarkLastStoryFragmentForAnalysis) {
-            const messagesFormatted = messages.join("\n\n");
+            const messagesFormatted = messages.map(m => m.message).join("\n\n");
 
             if (this.options.mode === "xml") {
                 const payload = {
@@ -917,22 +917,28 @@ ${states.join(", ")}
      */
     buildSystemCharacterDescription(character, description, externalDescription, relationships, expressiveStates, scenario, lore) {
         return (
-            `${externalDescription ? `## ${character.name}'s External Description:
+            `${externalDescription ? `# ${character.name}'s External Description:
+            
 ${externalDescription}
 
-` : ""}## ${character.name}'s Description:
+` : ""}# ${character.name}'s Description:
+
 ${description}${relationships.length > 0 ? `
 
-## ${character.name}'s Relationships:
+# ${character.name}'s Relationships:
+
 ${relationships.map(relationship => ` - ${relationship}`).join("\n")}` : ""}${expressiveStates.length > 0 ? `
 
-## Current States:
+# Current States:
+
 ${expressiveStates.map(state => ` - ${state}`).join("\n")}` : ""}${scenario && scenario.trim().length > 0 ? `
 
-## Scenario:
+# Scenario:
+
 ${scenario}` : ""}${lore && lore.trim().length > 0 ? `
 
-## Lore:
+# Lore:
+
 ${lore}
 ` : ""}`);
     }
@@ -1043,12 +1049,12 @@ Rule: Never break character or step outside the setting's perspective.
 Rule: Reflect on the potential consequences of ${character.name} actions and decisions.
 Rule: Always format character actions inside asterisks, e.g., *${character.name} looks around*.
 Rule: Write all narration and actions in third person, not first person.
-Rule: Spoken dialogue should be done in first person.
+Rule: Spoken dialogue should be done in first person.${characterRules.length ? `
 
-${characterRules.length ? `
 # Character Rules:
 ${characterRules.map(rule => `Rule: ${rule}`).join("\n")}
 ` : ""}${worldRules.length ? `
+
 # World Rules:
 ${worldRules.map(rule => `Rule: ${rule}`).join("\n")}
 ` : ""}
