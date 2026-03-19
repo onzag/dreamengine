@@ -108,18 +108,20 @@ export default async function calculateBondsChangesDueToMessages(engine, charact
                 bond: 0,
                 bond2: 0,
                 stranger: true,
+                knowsName: false,
                 createdAt: { ...engine.deObject.currentTime },
             };
             engine.deObject.social.bonds[character.name].active.push(currentBond);
             await engine.informDEObjectUpdated();
         }
+
         const currentBondDescription = getBondDeclarationFromBondDescription(character, currentBond);
         if (!currentBondDescription) {
             // must be the user or some oddball character that cannot develop bonds
             if (character.name !== engine.userCharacter?.name) {
                 // give an error if it's not the user, otherwise just ignore it as the user bonds are not managed
                 // since those are managed by the user themselves and not by the engine, so it would be normal to not have a bond declaration for the user character
-                engine.informCycleState("error", `Bond declaration not found for bond: stranger ${currentBond.stranger}, bond ${currentBond.bond}, bond2 ${currentBond.bond2}, for character ${character.name}.`);
+                engine.informCycleState("error", `Bond declaration not found for bond: stranger ${currentBond.stranger}, bond ${currentBond.bond}, bond2 ${currentBond.bond2}, for character ${character.name}, towards ${characterNameToGetBondTowards}`);
             }
         } else {
             const systemPrompt = `You are an assistant and social dynamics analyst that helps analyze interactions between ${character.name} and ${characterNameToGetBondTowards}`;
@@ -145,6 +147,34 @@ export default async function calculateBondsChangesDueToMessages(engine, charact
 
             const questioningAgent = engine.inferenceAdapter.runQuestioningCustomAgentOn(systemPromptBuilt, null, lastCycle.messages, null);
             let isQuestioningAgentInitialized = false;
+
+            if (!currentBond.knowsName) {
+                const question = `In the story provided, has ${character.name} been made aware of ${characterNameToGetBondTowards}'s name? If it is explicitly stated or very heavily implied that they have learned the name, answer yes, otherwise answer no.`;
+                console.log("Asking question: " + question)
+                const questioningAgentResult = await questioningAgent.next({
+                    maxCharacters: 100,
+                    maxParagraphs: 1,
+                    nextQuestion: question,
+                    stopAfter: yesNoGrammarObject.stopAfter,
+                    stopAt: [],
+                    grammar: yesNoGrammarObject.grammar,
+                    maxSafetyCharacters: 0,
+                });
+                if (questioningAgentResult.done) {
+                    throw new Error(`Questioning agent terminated unexpectedly while processing bond condition for bond from ${character.name} towards ${characterNameToGetBondTowards} on question about knowing the name`);
+                }
+                const trimmed = questioningAgentResult.value.trim();
+
+                console.log("Received answer: " + trimmed);
+                const answer = isYes(trimmed);
+                if (answer) {
+                    console.log(`Updating bond for ${character.name} towards ${characterNameToGetBondTowards} to know the name based on question about knowing the name, answer was yes`);
+                    currentBond.knowsName = true;
+                    await engine.informDEObjectUpdated();
+                } else {
+                    console.log(`Not updating bond for ${character.name} towards ${characterNameToGetBondTowards} to know the name based on question about knowing the name, answer was no`);
+                }
+            }
 
             // now we can process the messages to update the bond
             for (const condition of currentBondDescription.bondConditions) {

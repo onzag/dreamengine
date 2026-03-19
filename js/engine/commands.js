@@ -1,5 +1,5 @@
 import { DEngine } from "./index.js";
-import { getExternalDescriptionOfCharacter, getSurroundingCharacters, getSysPromptForCharacter } from "./util/character-info.js";
+import { getCharacterCanSee, getExternalDescriptionOfCharacter, getSurroundingCharacters, getSysPromptForCharacter, isCharacterShelteredFromWeather, whatIsWeatherLikeForCharacter } from "./util/character-info.js";
 import { makeTimestamp } from "./util/messages.js";
 
 /**
@@ -44,7 +44,7 @@ export const commands = {
             }
             const currentLocation = engine.deObject.world.locations[engine.deObject.world.currentLocation];
             const currentWeather = currentLocation.currentWeather;
-            const isSheltered = await engine.isCharacterShelteredFromWeather(engine.userCharacter.name, currentWeather, engine.deObject.world.currentLocation, engine.deObject.world.currentLocationSlot);
+            const isSheltered = await isCharacterShelteredFromWeather(engine, engine.userCharacter.name, currentWeather, engine.deObject.world.currentLocation, engine.deObject.world.currentLocationSlot);
             if (isSheltered.fullySheltered) {
                 // @ts-ignore
                 const noEffectDescription = await currentLocation.currentWeatherNoEffectDescription.execute(engine.deObject, engine.userCharacter);
@@ -120,7 +120,7 @@ export const commands = {
                 return `Location slot "${locationSlotId}" not found in location "${locationId}", options are: ${Object.keys(location.slots).join(", ")}`;
             }
             const weatherThere = location.currentWeather;
-            const isSheltered = await engine.isCharacterShelteredFromWeather(characterName, weatherThere, locationId, locationSlotId);
+            const isSheltered = await isCharacterShelteredFromWeather(engine, characterName, weatherThere, locationId, locationSlotId);
             if (isSheltered.fullySheltered) {
                 // @ts-ignore
                 const noEffectDescription = await location.currentWeatherNoEffectDescription.execute(engine.deObject, character);
@@ -174,140 +174,10 @@ export const commands = {
             if (!engine.userCharacter) {
                 throw new Error("DEngine has no user character defined");
             }
-            const info = engine.describeItemsAvailableToCharacterForInference(engine.userCharacter.name);
-            return info.complete;
+            const info = await getCharacterCanSee(engine, engine.userCharacter.name);
+            return info.everything;
         },
         help: "Lists the objects you can see in your current location.",
-        cheat: false,
-        args: [],
-    },
-    "whatcanticarry": {
-        run: async (engine, args) => {
-            if (!engine.deObject) {
-                throw new Error("DEngine not initialized");
-            }
-            if (!engine.userCharacter) {
-                throw new Error("DEngine has no user character defined");
-            }
-            const info = engine.getItemsCharacterMayCarryWithReasons("cannot", engine.userCharacter.name, engine.deObject.world.currentLocation, false, false);
-            return info.join("\n") || "You can carry all items in this location.";
-        },
-        help: "Lists the objects you cannot carry in your current location, along with reasons.",
-        cheat: false,
-        args: [],
-    },
-    "whatcanicarry": {
-        run: async (engine, args) => {
-            if (!engine.deObject) {
-                throw new Error("DEngine not initialized");
-            }
-            if (!engine.userCharacter) {
-                throw new Error("DEngine has no user character defined");
-            }
-            const info = engine.getItemsCharacterMayCarryWithReasons("can", engine.userCharacter.name, engine.deObject.world.currentLocation, false, false);
-            return info.join("\n") || "You cannot carry any items in this location.";
-        },
-        help: "Lists the objects you can carry in your current location, along with reasons.",
-        cheat: false,
-        args: [],
-    },
-    "whatcaniwear": {
-        run: async (engine, args) => {
-            if (!engine.deObject) {
-                throw new Error("DEngine not initialized");
-            }
-            if (!engine.userCharacter) {
-                throw new Error("DEngine has no user character defined");
-            }
-            const info = engine.getItemsCharacterMayWearWithReasons("can", engine.userCharacter.name, engine.deObject.world.currentLocation);
-            return info.join("\n") || "You cannot wear anything in this location.";
-        },
-        help: "Lists the wearable items you can wear, along with reasons.",
-        cheat: false,
-        args: [],
-    },
-    "whatcantiwear": {
-        run: async (engine, args) => {
-            if (!engine.deObject) {
-                throw new Error("DEngine not initialized");
-            }
-            if (!engine.userCharacter) {
-                throw new Error("DEngine has no user character defined");
-            }
-            const info = engine.getItemsCharacterMayWearWithReasons("cannot", engine.userCharacter.name, engine.deObject.world.currentLocation);
-            return info.join("\n") || "You can wear all wearable items you have.";
-        },
-        help: "Lists the wearable items you cannot wear, along with reasons.",
-        cheat: false,
-        args: [],
-    },
-    "whocanticarry": {
-        run: async (engine, args) => {
-            if (!engine.deObject) {
-                throw new Error("DEngine not initialized");
-            }
-            if (!engine.userCharacter) {
-                throw new Error("DEngine has no user character defined");
-            }
-            const info = engine.getItemsCharacterMayCarryWithReasons("cannot", engine.userCharacter.name, engine.deObject.world.currentLocation, true, true);
-            return info.join("\n") || "You can carry everyone in this location.";
-        },
-        help: "Lists the characters that you cannot carry in your current location",
-        cheat: false,
-        args: [],
-    },
-    "whocanicarry": {
-        run: async (engine, args) => {
-            if (!engine.deObject) {
-                throw new Error("DEngine not initialized");
-            }
-            if (!engine.userCharacter) {
-                throw new Error("DEngine has no user character defined");
-            }
-            const info = engine.getItemsCharacterMayCarryWithReasons("can", engine.userCharacter.name, engine.deObject.world.currentLocation, true, true);
-            return info.join("\n") || "You cannot carry anyone in this location.";
-        },
-        help: "Lists the characters that you can carry in your current location",
-        cheat: false,
-        args: [],
-    },
-    "whocanisee": {
-        run: async (engine, args) => {
-            if (!engine.deObject) {
-                throw new Error("DEngine not initialized");
-            }
-            if (!engine.userCharacter) {
-                throw new Error("DEngine has no user character defined");
-            }
-            const userState = engine.deObject.stateFor[engine.userCharacter.name];
-            if (!userState) {
-                throw new Error(`No state found for character "${engine.userCharacter.name}".`);
-            }
-
-            let answer = `You can see the following characters in your current location:\n\nPeople you know:\n`;
-            const surroundingCharacters = getSurroundingCharacters(engine, engine.userCharacter.name);
-            for (const characterName of surroundingCharacters.nonStrangers) {
-                if (characterName === engine.userCharacter.name) {
-                    continue;
-                }
-                const characterInfo = engine.deObject.characters[characterName];
-                if (characterInfo) {
-                    answer += `- ${characterName}: ${await getExternalDescriptionOfCharacter(engine, characterName, true)}\n`;
-                }
-            }
-            answer += `\nTotal Strangers:\n`;
-            for (const characterName of surroundingCharacters.totalStrangers) {
-                if (characterName === engine.userCharacter.name) {
-                    continue;
-                }
-                const characterInfo = engine.deObject.characters[characterName];
-                if (characterInfo) {
-                    answer += `- ${characterName}: ${await getExternalDescriptionOfCharacter(engine, characterName, true)}\n`;
-                }
-            }
-            return answer;
-        },
-        help: "Lists the characters that you can see in your current location",
         cheat: false,
         args: [],
     },
@@ -361,199 +231,6 @@ export const commands = {
         help: "Lists the locations you can go to from your current location",
         cheat: false,
         args: [],
-    },
-    "innerstate": {
-        run: async (engine, args) => {
-            if (!engine.deObject) {
-                throw new Error("DEngine not initialized");
-            }
-            if (!engine.userCharacter) {
-                throw new Error("DEngine has no user character defined");
-            }
-            const characterName = args.length > 0 ? args.join(" ") : engine.userCharacter.name;
-            const character = engine.deObject.characters[characterName];
-            if (!character) {
-                return `Character "${characterName}" not found.`;
-            }
-            const characterState = engine.deObject.stateFor[characterName];
-            if (!characterState) {
-                return `No state found for character "${characterName}".`;
-            }
-
-            let reasoningInstructions = "Character special reasoning criteria:";
-            let actionAnalysis = "Character forced action:";
-
-            // @ts-ignore
-            let currentSystemInstructions = await character.general.execute(engine.deObject, character);
-
-            currentSystemInstructions = currentSystemInstructions.trim();
-
-            /**
-             * @type {Array<{action: string, dominance: number, forceDominant: boolean, deadEnd: boolean, deadEndIsDeath?: boolean, affectsState: string | null, affectsStateIntensity: number | null}>}
-             */
-            const allActionsProvidedByForce = [];
-
-            for (const injectable of Object.values(character.generalCharacterDescriptionInjection)) {
-                // @ts-ignore
-                currentSystemInstructions += "\n\n" + (await injectable.execute(engine.deObject, character, undefined, undefined, undefined, undefined)).trim();
-            }
-
-            const characterBonds = engine.deObject.social.bonds[characterName];
-            if (characterBonds) {
-                // sort by bond strength highest absolute value go last
-                const sortedActive = characterBonds.active.slice().sort((a, b) => {
-                    return Math.abs(a.bond) - Math.abs(b.bond);
-                });
-                const sortedEx = characterBonds.ex.slice().sort((a, b) => {
-                    return Math.abs(a.bond) - Math.abs(b.bond);
-                });
-                for (const activeBond of sortedActive) {
-                    const bondDeclaration = character.bonds.declarations.find(bondDecl => bondDecl.strangerBond === activeBond.stranger && bondDecl.minBondLevel <= activeBond.bond && activeBond.bond < (bondDecl.maxBondLevel === 100 ? 200 : bondDecl.maxBondLevel) && bondDecl.min2BondLevel <= activeBond.bond2 && activeBond.bond2 < (bondDecl.max2BondLevel === 100 ? 200 : bondDecl.max2BondLevel));
-                    if (bondDeclaration && bondDeclaration.generalCharacterDescriptionInjection) {
-                        // @ts-ignore
-                        const injectedValue = (await bondDeclaration.generalCharacterDescriptionInjection.execute(engine.deObject, character, engine.deObject.characters[activeBond.towards], undefined, undefined, undefined)).trim();
-                        if (injectedValue) {
-                            currentSystemInstructions += `\n\n${injectedValue}`;
-                        }
-                    }
-                }
-                for (const exBond of sortedEx) {
-                    const bondDeclaration = character.bonds.declarations.find(bondDecl => bondDecl.strangerBond === exBond.stranger && bondDecl.minBondLevel <= exBond.bond && exBond.bond < (bondDecl.maxBondLevel === 100 ? 200 : bondDecl.maxBondLevel) && bondDecl.min2BondLevel <= exBond.bond2 && exBond.bond2 < (bondDecl.max2BondLevel === 100 ? 200 : bondDecl.max2BondLevel));
-                    if (bondDeclaration && bondDeclaration.generalCharacterDescriptionInjection) {
-                        // @ts-ignore
-                        const injectedValue = (await bondDeclaration.generalCharacterDescriptionInjection.execute(engine.deObject, character, engine.deObject.characters[exBond.towards], undefined, undefined, undefined)).trim();
-                        if (injectedValue) {
-                            currentSystemInstructions += `\n\n${injectedValue}`;
-                        }
-                    }
-                }
-            }
-
-            for (const action of Object.values(character.actionPromptInjection)) {
-                // @ts-ignore
-                const actionValue = (await action.execute(engine.deObject, character, undefined, undefined, undefined, undefined)).trim();
-                if (actionValue) {
-                    allActionsProvidedByForce.push({
-                        action: actionValue,
-                        dominance: 0,
-                        forceDominant: action.forceDominant || false,
-                        deadEnd: action.isDeadEndScenario || false,
-                        deadEndIsDeath: action.deadEndIsDeath || false,
-                        affectsState: null,
-                        affectsStateIntensity: null,
-                    });
-                }
-            }
-
-            let currentMaxDominace = -1;
-            let infoAllStates = (await Promise.all(characterState.states.map(async (state) => {
-                const stateInfo = character.states[state.state];
-
-                const dominance = state.relieving ? (stateInfo.dominanceAfterRelief || 0) : (stateInfo.dominance || 0);
-
-                if (stateInfo.actionPromptInjection) {
-                    for (const action of Object.values(stateInfo.actionPromptInjection)) {
-                        // @ts-ignore
-                        const actionValue = (await action.template.execute(engine.deObject, character, undefined, undefined, undefined, undefined)).trim();
-                        if (actionValue) {
-                            allActionsProvidedByForce.push({
-                                action: actionValue,
-                                dominance,
-                                forceDominant: action.forceDominant || false,
-                                deadEnd: action.isDeadEndScenario || false,
-                                deadEndIsDeath: action.deadEndIsDeath || false,
-                                affectsState: state.state,
-                                affectsStateIntensity: action.intensityModification,
-                            });
-                        }
-                    }
-                }
-
-                if (dominance > currentMaxDominace) {
-                    currentMaxDominace = dominance;
-                }
-
-                return {
-                    name: state.state,
-                    intensity: state.intensity,
-                    dominance,
-                    description: async () => state.relieving ? (
-                        // @ts-ignore
-                        stateInfo.generalAfterRelief ?
-                            // @ts-ignore
-                            await stateInfo.generalAfterRelief.execute(engine.deObject, character, undefined, undefined, undefined, undefined) :
-                            // @ts-ignore
-                            await stateInfo.general.execute(engine.deObject, character, undefined, undefined, undefined, undefined)
-                    ) : (
-                        // @ts-ignore
-                        await stateInfo.general.execute(engine.deObject, character, undefined, undefined, undefined, undefined)
-                    ),
-                    systemInstructions: async () => (state.relieving ? (
-                        // @ts-ignore
-                        stateInfo.relievingGeneralCharacterDescriptionInjection ?
-                            // @ts-ignore
-                            await stateInfo.relievingGeneralCharacterDescriptionInjection.execute(engine.deObject, character, undefined, undefined, undefined, undefined) :
-                            // @ts-ignore
-                            await stateInfo.generalCharacterDescriptionInjection?.execute(engine.deObject, character, undefined, undefined, undefined, undefined)
-                    ) : (
-                        // @ts-ignore
-                        await stateInfo.generalCharacterDescriptionInjection?.execute(engine.deObject, character, undefined, undefined, undefined, undefined)
-                    )) || "",
-                }
-            })));
-
-            // filter only actions that are of the highest dominance or forced dominant
-            let filteredActions;
-            const isThereAForcedDominantAction = allActionsProvidedByForce.find(action => action.forceDominant);
-            if (isThereAForcedDominantAction) {
-                // filter only forced dominant actions
-                filteredActions = allActionsProvidedByForce.filter(action => action.forceDominant);
-            } else {
-                // filter only actions that are of the highest dominance or forced dominant
-                filteredActions = allActionsProvidedByForce.filter(action => action.dominance === currentMaxDominace);
-            }
-
-            // check if any of these filtered actions has a dead end
-            const deadEndAction = filteredActions.find(action => action.deadEnd);
-            if (deadEndAction) {
-                // filter by only dead end actions
-                filteredActions = filteredActions.filter(action => action.deadEnd);
-            }
-
-            // now inform the action analysis
-            let addedNothing = true;
-            for (const action of filteredActions) {
-                addedNothing = false;
-                actionAnalysis += `\n\nThe character will perform next: ${action.action}\n` +
-                    `- Dominance: ${action.dominance}\n` +
-                    `- Forced Dominant: ${action.forceDominant}\n` +
-                    `- Dead End Scenario: ${action.deadEnd} ${action.deadEndIsDeath ? "(This dead end is death)" : ""}\n` +
-                    (action.affectsState ? `- Affects State: ${action.affectsState} (Intensity Modification: ${action.affectsStateIntensity})\n` : "");
-            }
-
-            if (addedNothing) {
-                actionAnalysis += "\n\nNo forced actions detected.";
-            }
-
-            // now filter infoAllStates by max dominance
-            infoAllStates = infoAllStates.filter(stateInfo => stateInfo.dominance === currentMaxDominace);
-
-            let addedNothingToStates = true;
-            for (const stateInfo of infoAllStates) {
-                addedNothingToStates = false;
-                const descriptionText = await stateInfo.description();
-                reasoningInstructions += `\n\nState ${stateInfo.name} (Dominance: ${stateInfo.dominance}, Intensity: ${stateInfo.intensity}): ${descriptionText}`;
-            }
-
-            if (addedNothingToStates) {
-                reasoningInstructions += "\n\nNo applicable states detected.";
-            }
-
-            return currentSystemInstructions + "\n\n" + reasoningInstructions + "\n\n" + actionAnalysis;
-        },
-        help: "Displays the inner state of any character, their inner identity, and how they feel and reason at this moment",
-        cheat: true,
-        args: ["<character name>"],
     },
     "howismyrelationshipwith": {
         run: async (engine, args) => {

@@ -1311,6 +1311,7 @@ declare interface DESingleBondDescription {
     stranger: boolean;
     bond: number;
     bond2: number;
+    knowsName: boolean;
     createdAt: DETimeDescription;
 }
 
@@ -1460,7 +1461,7 @@ declare interface DEItem {
     volumeLiters: number;
     weightKg: number;
     description: string;
-    isSeeThrough: boolean;
+    canSeeContentsFromOutside: boolean;
     properties: Record<string, any>;
     isConsumable: boolean;
     consumableProperties?: {

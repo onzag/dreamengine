@@ -17,7 +17,6 @@ export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
      * @param {DEngine} parent 
      * @param {{
      *    host?: string;
-     *    mode?: "xml" | "md";
      *    thinkTag?: boolean;
      *    apiKey?: string;
      *    secret?: string;
@@ -245,36 +244,6 @@ export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
      * @param {string} narrativeEffect
      */
     buildActionPromptForCharacter(character, action, primaryEmotion, emotionalRange, states, narrativeEffect) {
-        if (this.options.mode === "xml") {
-            return (
-                `<instructions>
-<rule>Always format narration inside asterisks and in third person eg. \`*${character.name} ...*\`</rule>
-<rule>Spoken dialogue should be done in first person.</rule>
-<action>
-${character.name} is about to take an action described as follows:
-
-## Action Description:
-${action}
-
-## Narrative Effect:
-${narrativeEffect}
-
-## Primary Emotion:
-${primaryEmotion}
-${emotionalRange.length > 0 ? `
-
-## Emotional Range:
-${emotionalRange.join(", ")}
-` : ""}
-${states.length > 0 ? `
-
-## Character States:
-${states.join(", ")}
-` : ""}
-</action>
-</instructions>`
-            )
-        }
         return (
             `
 **INSTRUCTIONS**
@@ -461,21 +430,12 @@ ${states.join(", ")}
         if (!remarkLastStoryFragmentForAnalysis) {
             const messagesFormatted = messages.map(m => m.message).join("\n\n");
 
-            if (this.options.mode === "xml") {
-                const payload = {
-                    system: system,
-                    userTrail: (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "") + "<story>\n" + messagesFormatted + "\n</story>" + (contextInfoAfter ? "\n" + contextInfoAfter : ""),
-                };
+            const payload = {
+                system: system,
+                userTrail: (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "") + "# Story:\n" + messagesFormatted + "\n\n" + (contextInfoAfter ? "\n" + contextInfoAfter : ""),
+            };
 
-                this.socket.send(JSON.stringify({ action: "analyze-prepare", payload, rid }));
-            } else {
-                const payload = {
-                    system: system,
-                    userTrail: (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "") + "# Story:\n" + messagesFormatted + "\n\n" + (contextInfoAfter ? "\n" + contextInfoAfter : ""),
-                };
-
-                this.socket.send(JSON.stringify({ action: "analyze-prepare", payload, rid }));
-            }
+            this.socket.send(JSON.stringify({ action: "analyze-prepare", payload, rid }));
         } else {
             // we need to find the last message that was authored by a character, and not the story master, and split there
             // everything added by the story master will be included
@@ -490,37 +450,19 @@ ${states.join(", ")}
             const lastMessageFormatted = lastMessage.map(m => m.message).join("\n\n");
 
             if (restMessages.length > 0) {
-                if (this.options.mode === "xml") {
-                    const payload = {
-                        system: system,
-                        userTrail: (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "") + "<previousStory>\n" + restMessagesFormatted + "\n</previousStory><analyze><lastStoryFragment>" + lastMessageFormatted + "</lastStoryFragment></analyze>" + (contextInfoAfter ? "\n" + contextInfoAfter : ""),
-                    };
+                const payload = {
+                    system: system,
+                    userTrail: (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "") + "# Previous Story:\n" + restMessagesFormatted + "\n\n# Last Story Fragment to Analyze:\n" + lastMessageFormatted + (contextInfoAfter ? "\n" + contextInfoAfter : ""),
+                };
 
-                    this.socket.send(JSON.stringify({ action: "analyze-prepare", payload, rid }));
-                } else {
-                    const payload = {
-                        system: system,
-                        userTrail: (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "") + "# Previous Story:\n" + restMessagesFormatted + "\n\n# Last Story Fragment to Analyze:\n" + lastMessageFormatted + (contextInfoAfter ? "\n" + contextInfoAfter : ""),
-                    };
-
-                    this.socket.send(JSON.stringify({ action: "analyze-prepare", payload, rid }));
-                }
+                this.socket.send(JSON.stringify({ action: "analyze-prepare", payload, rid }));
             } else {
-                if (this.options.mode === "xml") {
-                    const payload = {
-                        system: system,
-                        userTrail: (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "") + "<analyze><lastStoryFragment>" + lastMessageFormatted + "</lastStoryFragment></analyze>" + (contextInfoAfter ? "\n" + contextInfoAfter : ""),
-                    };
+                const payload = {
+                    system: system,
+                    userTrail: (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "") + "# Last Story Fragment to Analyze:\n" + lastMessageFormatted + (contextInfoAfter ? "\n" + contextInfoAfter : ""),
+                };
 
-                    this.socket.send(JSON.stringify({ action: "analyze-prepare", payload, rid }));
-                } else {
-                    const payload = {
-                        system: system,
-                        userTrail: (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "") + "# Last Story Fragment to Analyze:\n" + lastMessageFormatted + (contextInfoAfter ? "\n" + contextInfoAfter : ""),
-                    };
-
-                    this.socket.send(JSON.stringify({ action: "analyze-prepare", payload, rid }));
-                }
+                this.socket.send(JSON.stringify({ action: "analyze-prepare", payload, rid }));
             }
         }
 
@@ -541,37 +483,20 @@ ${states.join(", ")}
             }
             const rid = cheapRID();
             // send the next question
-            if (this.options.mode === "xml") {
-                this.socket.send(JSON.stringify({
-                    action: "analyze-question",
-                    rid,
-                    payload: {
-                        question: (nextQuestion.contextInfo ? nextQuestion.contextInfo + "\n" : "") + "<question>" + nextQuestion.nextQuestion + "</question>" + (nextQuestion.instructions ? ("\n<instructions>" + nextQuestion.instructions + "</instructions>") : ""),
-                        stopAt: ["</answer>"].concat(nextQuestion.stopAt),
-                        stopAfter: nextQuestion.stopAfter,
-                        maxParagraphs: nextQuestion.maxParagraphs,
-                        maxCharacters: nextQuestion.maxCharacters,
-                        maxSafetyCharacters: nextQuestion.maxSafetyCharacters,
-                        trail: "<answer>\n" + (nextQuestion.answerTrail || "").trim() + "\n\n",
-                        grammar: nextQuestion.grammar || null,
-                    }
-                }));
-            } else {
-                this.socket.send(JSON.stringify({
-                    action: "analyze-question",
-                    rid,
-                    payload: {
-                        question: (nextQuestion.contextInfo ? nextQuestion.contextInfo + "\n\n" : "") + "# Question:\n\n" + nextQuestion.nextQuestion + (nextQuestion.instructions ? ("\n\n# Instructions:\n\n" + nextQuestion.instructions) : ""),
-                        stopAt: ["\n\n"].concat(nextQuestion.stopAt),
-                        stopAfter: nextQuestion.stopAfter,
-                        maxParagraphs: nextQuestion.maxParagraphs,
-                        maxCharacters: nextQuestion.maxCharacters,
-                        maxSafetyCharacters: nextQuestion.maxSafetyCharacters,
-                        trail: "# Answer:\n\n" + (nextQuestion.answerTrail || ""),
-                        grammar: nextQuestion.grammar || null,
-                    }
-                }));
-            }
+            this.socket.send(JSON.stringify({
+                action: "analyze-question",
+                rid,
+                payload: {
+                    question: (nextQuestion.contextInfo ? nextQuestion.contextInfo + "\n\n" : "") + "# Question:\n\n" + nextQuestion.nextQuestion + (nextQuestion.instructions ? ("\n\n# Instructions:\n\n" + nextQuestion.instructions) : ""),
+                    stopAt: ["\n\n"].concat(nextQuestion.stopAt),
+                    stopAfter: nextQuestion.stopAfter,
+                    maxParagraphs: nextQuestion.maxParagraphs,
+                    maxCharacters: nextQuestion.maxCharacters,
+                    maxSafetyCharacters: nextQuestion.maxSafetyCharacters,
+                    trail: "# Answer:\n\n" + (nextQuestion.answerTrail || ""),
+                    grammar: nextQuestion.grammar || null,
+                }
+            }));
 
             const data = await new Promise((resolve, reject) => {
                 this.listener[rid] = [resolve, (err) => {
@@ -602,26 +527,6 @@ ${states.join(", ")}
      * @returns string
      */
     buildSystemPromptForQuestioningAgent(description, rules, characterDescriptions) {
-        if (this.options.mode === "xml") {
-            let value = (
-                `<description>` + description + `</description>`
-            );
-
-            for (const rule of rules) {
-                value += `\n<rule>` + rule + `</rule>`;
-            }
-
-            if (characterDescriptions) {
-                if (Array.isArray(characterDescriptions)) {
-                    value += `\n<characterDescriptions>` + characterDescriptions.join("\n") + `</characterDescriptions>`;
-                } else {
-                    value += `\n<characterDescription>` + characterDescriptions + `</characterDescription>`;
-                }
-            }
-
-            return value;
-        }
-
         let value = (
             description
         );
@@ -651,53 +556,6 @@ ${states.join(", ")}
      * @returns {{availableCharactersAt: string, characterInfoAt: string, value: string}}
      */
     buildContextInfoForAvailableCharacters(groups, asSocialGroups = false) {
-        if (this.options.mode === "xml") {
-            if (asSocialGroups) {
-                let value = `<socialGroups>\n`;
-                let index = 0;
-                for (const group of groups) {
-                    if (index > 0) {
-                        value += `\n`;
-                    }
-                    if (group.groupDescription) {
-                        value += group.groupDescription + "\n";
-                    }
-                    for (const character of group.characters) {
-                        value += `<character>` + character.name + ` - ` + character.description + `</character>\n`;
-                    }
-                    index++;
-                }
-                value += `</socialGroups>`;
-
-                return {
-                    availableCharactersAt: "`<socialGroups>` and `</socialGroups>` tags",
-                    characterInfoAt: "`<character>` and `</character>` tags",
-                    value,
-                };
-            } else {
-                let value = `<availableCharacters>\n`;
-                let index = 0;
-                for (const group of groups) {
-                    if (index > 0) {
-                        value += `\n`;
-                    }
-                    if (group.groupDescription) {
-                        value += group.groupDescription + "\n";
-                    }
-                    for (const character of group.characters) {
-                        value += `<character>` + character.name + ` - ` + character.description + `</character>\n`;
-                    }
-                    index++;
-                }
-                value += `</availableCharacters>`;
-
-                return {
-                    availableCharactersAt: "`<availableCharacters>` and `</availableCharacters>` tags",
-                    characterInfoAt: "`<character>` and `</character>` tags",
-                    value,
-                };
-            }
-        }
         if (asSocialGroups) {
             let value = `# Social Groups:\n`;
             let index = 0;
@@ -749,19 +607,6 @@ ${states.join(", ")}
      * @returns {{availableItemsAt: string, itemInfoAt: string, value: string}}
      */
     buildContextInfoForAvailableItems(items) {
-        if (this.options.mode === "xml") {
-            let value = `<availableItems>\n`;
-            for (const item of items) {
-                value += `<item>` + item + `</item>\n`;
-            }
-            value += `</availableItems>`;
-
-            return {
-                availableItemsAt: "`<availableItems>` and `</availableItems>` tags",
-                itemInfoAt: "`<item>` and `</item>` tags",
-                value,
-            };
-        }
         let value = `# Available Items:\n`;
         for (const item of items) {
             value += `- ` + item + `\n`;
@@ -778,9 +623,6 @@ ${states.join(", ")}
      * @param {string} instructions
      */
     buildContextInfoInstructions(instructions) {
-        if (this.options.mode === "xml") {
-            return ("<instructions>\n" + instructions + "\n</instructions>");
-        }
         return ("# Instructions:\n" + instructions);
     }
 
@@ -789,62 +631,7 @@ ${states.join(", ")}
      * @returns {string}
      */
     buildContextInfoRule(rule) {
-        if (this.options.mode === "xml") {
-            return ("<rule>\n" + rule + "\n</rule>");
-        }
         return ("Rule:\n" + rule);
-    }
-
-    /**
-     * @param {string} description
-     * @return {{locationDescriptionAt: string, value: string}}
-     */
-    buildContextInfoCurrentLocationDescription(description) {
-        if (this.options.mode === "xml") {
-            return {
-                value: "<currentLocationDescription>\n" + description + "\n</currentLocationDescription>",
-                locationDescriptionAt: "`<currentLocationDescription>` and `</currentLocationDescription>` tags",
-            };
-        }
-        return {
-            value: "# Current Location Description:\n" + description,
-            locationDescriptionAt: "Current Location Description section",
-        };
-    }
-
-    /**
-     * @param {string[]} items
-     * @param {"characters" | "items"} type
-     * @return {{cannotCarryDescriptionAt: string, value: string}}
-     */
-    buildContextInfoItemsCannotCarry(items, type) {
-        if (this.options.mode === "xml") {
-            let value = `<cannotCarry${type.charAt(0).toUpperCase() + type.slice(1)}>\n`;
-            for (const item of items) {
-                value += `<item>` + item + `</item>\n`;
-            }
-            value += `</cannotCarry${type.charAt(0).toUpperCase() + type.slice(1)}>`;
-            return {
-                value,
-                cannotCarryDescriptionAt: "`<cannotCarry" + type.charAt(0).toUpperCase() + type.slice(1) + ">` and `</cannotCarry" + type.charAt(0).toUpperCase() + type.slice(1) + ">` tags",
-            };
-        }
-        let value = "";
-        if (type === "characters") {
-            value = `# Cannot Carry Characters:\n`;
-            for (const item of items) {
-                value += `- ` + item + `\n`;
-            }
-        } else {
-            value = `# Cannot Carry Items:\n`;
-            for (const item of items) {
-                value += `- ` + item + `\n`;
-            }
-        }
-        return {
-            value,
-            cannotCarryDescriptionAt: type === "characters" ? "Cannot Carry Characters section" : "Cannot Carry Items section",
-        };
     }
 
     /**
@@ -852,9 +639,6 @@ ${states.join(", ")}
      * @returns {string}
      */
     buildContextInfoExample(example) {
-        if (this.options.mode === "xml") {
-            return ("<example>\n" + example + "\n</example>");
-        }
         return ("# Example:\n" + example);
     }
 
@@ -864,12 +648,6 @@ ${states.join(", ")}
      * @returns {{characterDescriptionAt: string, value: string}}
      */
     buildContextInfoCharacterDescription(character, info) {
-        if (this.options.mode === "xml") {
-            return {
-                characterDescriptionAt: "`<characterDescription>` and `</characterDescription>` tags for " + character.name,
-                value: ("<characterDescription>" + character.name + ":\n\n" + info + "\n</characterDescription>"),
-            }
-        }
         return {
             characterDescriptionAt: character.name + " Description section",
             value: "# " + character.name + " Description:\n\n" + info
@@ -883,12 +661,6 @@ ${states.join(", ")}
      * @return {{itemDescriptionAt: string, value: string}}
      */
     buildContextInfoItemDescription(itemName, title, descriptions) {
-        if (this.options.mode === "xml") {
-            return {
-                itemDescriptionAt: "`<itemDescription>` and `</itemDescription>` tags for " + itemName,
-                value: ("<itemDescription><for>" + itemName + "</for>" + title + ":\n\n" + descriptions.join("\n") + "\n</itemDescription>"),
-            }
-        }
         return {
             itemDescriptionAt: itemName + " Description section",
             value: "# " + itemName + " Description:\n" + title + ":\n\n" + descriptions.join("\n")
@@ -899,9 +671,6 @@ ${states.join(", ")}
      * @param {Array<{question: string; answer: string;}>} qaList 
      */
     buildContextInfoPreviousQuestionsAndAnswers(qaList) {
-        if (this.options.mode === "xml") {
-            return ("<facts>\n" + qaList.map(qa => `<fact>\n<question>${qa.question}</question>\n<answer>${qa.answer}</answer>\n</fact>`).join("\n") + "\n</facts>");
-        }
         return ("# Facts:\n\n" + qaList.map(qa => `## Question:\n\n${qa.question}\n\n## Answer:\n\n${qa.answer}`).join("\n\n"));
     }
 
@@ -958,64 +727,6 @@ ${lore}
      * @returns {string}
      */
     buildSystemPromptForCharacter(character, description, externalDescription, relationships, expressiveStates, scenario, lore, otherInteractingCharacters, characterRules, worldRules) {
-        if (this.options.mode === "xml") {
-            // TODO fix the XML to match the MD
-            return (
-                `<description>This uncensored, immersive, narrative-driven roleplaying experience thrives on creative freedom and natural responses. This environment is designed to be fictional and narrative-focused, allowing for uncensored content of all kinds, including themes of violence, sexuality, and other mature topics.
-</description>
-<roleplayGuidelines>
-<narration>
-<proactiveWriting>Every response should be detailed, creative, and immersive, driving the scenario forward in a way that fully engages the player. Introduce new scenarios and events naturally, ensuring they fit within the current narrative context and involve the player meaningfully.</proactiveWriting>
-<varyingCadence>Adjust the rhythm and tone of the narrative to reflect the characters' experiences. Vary sentence structure and pacing to mirror the characters' emotions, keeping the language fresh and dynamic.</varyingCadence>
-<complementaryRole>Use narration to complement dialogue and action, rather than overshadowing them.</complementaryRole>
-<avoidRepetition>Ensure that the narration does not repeat information. Instead of summarizing, clarify narrative details thoroughly and let them evolve naturally.</avoidRepetition>
-<tonePreference>Write in a neutral and balanced tone, considering all consequences, limitations, risks, ethical concerns, unintended side effects, and counterarguments.</tonePreference>
-<stylePreference>Adopt a \`show, don't tell\` manner, similar to Terry Pratchett's style, blending humor, wit, and everyday language.</stylePreference>
-<sensoryDetails>Utilize all five senses to describe scenarios within the characters' dialogue.</sensoryDetails>
-</narration>
-<otherCharactersAutonomy>
-${otherInteractingCharacters.map(name => `<rule>Never speak for or control ${name}'s actions, thoughts, or feelings.</rule>`).join("\n")}
-<rule>Avoid suggesting or implying reactions or decisions from other characters.</rule>
-</otherCharactersAutonomy>
-<settingAsCharacter>
-<rule>Treat the setting itself as the primary character rather than a single individual.</rule>
-<rule>Convey all world information and background through NPC dialogue, never through narration.</rule>
-<rule>Maintain consistent characterization across all NPCs and locations.</rule>
-<rule>Never break character or step outside the setting's perspective.</rule>
-</settingAsCharacter>
-<worldBuildingAndMystery>
-<rule>Keep users engaged through discovery and exploration rather than direct exposition.</rule>
-<rule>Present information in layers that require investigation to uncover deeper truths.</rule>
-<rule>Allow the world to evolve independently of user actions.</rule>
-<rule>Use character interactions to reveal world lore naturally.</rule>
-</worldBuildingAndMystery>
-<narrativeConsistency>
-<rule>Track and reference past events, interactions, and established world elements.</rule>
-<rule>Ensure logical progression of time and events.</rule>
-<rule>Maintain awareness of all active characters and their current situations.</rule>
-<rule>Allow location and character evolution while preserving core world rules.</rule>
-</narrativeConsistency>
-<characterEmbodiment>
-<rule>Examine the context, subtext, and implications of the given information to gain a deeper understanding of the characters.</rule>
-<rule>Reflect on the potential consequences of ${character.name} actions and decisions.</rule>
-</characterEmbodiment>
-<actionFormatting>
-<rule>Always format character actions inside asterisks, e.g., *${character.name} looks around*.</rule>
-<rule>Write all narration and actions in third person, not first person.</rule>
-<rule>Spoken dialogue should be done in first person.</rule>
-</actionFormatting>${characterRules.length ? `
-<characterRules>
-${characterRules.map(rule => `<rule>${rule}</rule>`).join("\n")}
-</characterRules>` : ""}${worldRules.length ? `
-<worldRules>
-${worldRules.map(rule => `<rule>${rule}</rule>`).join("\n")}
-</worldRules>
-` : ""}
-<roleplayContext>
-${this.buildSystemCharacterDescription(character, description, externalDescription, relationships, expressiveStates, scenario, lore)}
-</roleplayContext>
-`);
-        }
         return (
             `You roleplay as ${character.name} in a richly detailed and immersive world. Your actions, thoughts, and feelings are entirely your own, and you have complete creative freedom to explore this narrative-driven experience.
 
@@ -1068,9 +779,6 @@ ${this.buildSystemCharacterDescription(character, description, externalDescripti
     }
 
     getRequiredRootGrammarForQuestionGeneration() {
-        if (this.options.mode === "xml") {
-            return "\"</answer>\"";
-        }
         return JSON.stringify("\n\n");
     }
 

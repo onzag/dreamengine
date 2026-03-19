@@ -169,23 +169,6 @@ export class BaseInferenceAdapter {
     }
 
     /**
-     * @param {string} description
-     * @return {{locationDescriptionAt: string, value: string}}
-     */
-    buildContextInfoCurrentLocationDescription(description) {
-        throw new Error("Method 'buildContextInfoCurrentLocationDescription()' must be implemented.");
-    }
-
-    /**
-     * @param {string[]} items
-     * @param {"characters" | "items"} type
-     * @return {{cannotCarryDescriptionAt: string, value: string}}
-     */
-    buildContextInfoItemsCannotCarry(items, type) {
-        throw new Error("Method 'buildContextInfoItemsCannotCarry()' must be implemented.");
-    }
-
-    /**
      * @param {string} example
      * @returns {string}
      */

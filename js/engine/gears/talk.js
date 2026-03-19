@@ -1,5 +1,5 @@
 import { DEngine } from "../index.js";
-import { getSysPromptForCharacter } from "../util/character-info.js";
+import { getCharacterCanSee, getSysPromptForCharacter } from "../util/character-info.js";
 
 /**
  * @param {DEngine} engine 
@@ -18,9 +18,14 @@ export async function talk(engine, character, options) {
     }
 
     const characterSystemPrompt = await getSysPromptForCharacter(engine, character.name);
+    const characterCanSee = await getCharacterCanSee(engine, character.name);
+
     console.log(characterSystemPrompt.sysprompt);
     console.log("##############");
     console.log(characterSystemPrompt.internalDescription.stateInjections);
+    console.log("##############");
+    console.log(characterCanSee.everything);
+
     // TODO
     process.exit(1);
 }

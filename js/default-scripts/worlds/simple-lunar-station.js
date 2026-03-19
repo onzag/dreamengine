@@ -125,7 +125,7 @@ engine.exports = {
                 partiallyProtectsFromWeathers: [],
             },
             isConsumable: false,
-            isSeeThrough: false,
+            canSeeContentsFromOutside: false,
             owner: null,
             communicator: null,
         }
@@ -153,7 +153,7 @@ engine.exports = {
             maxWeightOnTopKg: 100,
             ontopCharacters: [],
             isConsumable: false,
-            isSeeThrough: false,
+            canSeeContentsFromOutside: false,
             owner: null,
             communicator: null,
         };
@@ -181,7 +181,7 @@ engine.exports = {
             maxVolumeOnTopLiters: 100,
             maxWeightOnTopKg: 100,
             isConsumable: false,
-            isSeeThrough: false,
+            canSeeContentsFromOutside: false,
             owner: null,
             communicator: null,
         };
@@ -204,7 +204,7 @@ engine.exports = {
             maxWeightOnTopKg: 10,
             ontopCharacters: [],
             isConsumable: false,
-            isSeeThrough: false,
+            canSeeContentsFromOutside: false,
             owner: null,
             communicator: null,
         };
@@ -232,7 +232,7 @@ engine.exports = {
             maxWeightOnTopKg: 10,
             ontopCharacters: [],
             isConsumable: false,
-            isSeeThrough: false,
+            canSeeContentsFromOutside: false,
             owner: null,
             communicator: null,
         };
@@ -260,7 +260,7 @@ engine.exports = {
             maxWeightOnTopKg: 0,
             ontopCharacters: [],
             isConsumable: false,
-            isSeeThrough: false,
+            canSeeContentsFromOutside: false,
             owner: null,
             communicator: null,
         };
@@ -288,7 +288,7 @@ engine.exports = {
             maxWeightOnTopKg: 0,
             ontopCharacters: [],
             isConsumable: false,
-            isSeeThrough: false,
+            canSeeContentsFromOutside: false,
             owner: null,
             communicator: null,
         };
@@ -316,7 +316,7 @@ engine.exports = {
             maxWeightOnTopKg: 0,
             ontopCharacters: [],
             isConsumable: false,
-            isSeeThrough: false,
+            canSeeContentsFromOutside: false,
             owner: null,
             communicator: null,
         };
@@ -344,7 +344,7 @@ engine.exports = {
             consumableProperties: null,
             containing: [cabinetDrawerKitchenware, cabinetDrawerBowls],
             isConsumable: false,
-            isSeeThrough: false,
+            canSeeContentsFromOutside: false,
             owner: null,
             communicator: null,
         };
@@ -375,7 +375,7 @@ engine.exports = {
             maxWeightOnTopKg: 0,
             ontopCharacters: [],
             isConsumable: true,
-            isSeeThrough: false,
+            canSeeContentsFromOutside: false,
             owner: null,
             communicator: null,
         };
@@ -403,7 +403,7 @@ engine.exports = {
             maxWeightOnTopKg: 100,
             ontopCharacters: [],
             isConsumable: false,
-            isSeeThrough: false,
+            canSeeContentsFromOutside: false,
             owner: null,
             communicator: null,
         };
@@ -431,7 +431,7 @@ engine.exports = {
             maxWeightOnTopKg: 300,
             ontopCharacters: [],
             isConsumable: false,
-            isSeeThrough: false,
+            canSeeContentsFromOutside: false,
             owner: null,
             communicator: null,
         };
@@ -477,7 +477,7 @@ engine.exports = {
                             maxWeightOnTopKg: 1000,
                             ontopCharacters: [],
                             isConsumable: false,
-                            isSeeThrough: false,
+                            canSeeContentsFromOutside: false,
                             owner: null,
                             communicator: null,
                         }
@@ -614,7 +614,7 @@ engine.exports = {
                                 maxWeightOnTopKg: 400,
                                 ontopCharacters: [],
                                 isConsumable: false,
-                                isSeeThrough: false,
+                                canSeeContentsFromOutside: false,
                                 owner: null,
                                 communicator: null,
                             }
