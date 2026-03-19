@@ -218,11 +218,6 @@ engine.exports = {
             weightKg: 0.1,
             volumeLiters: 0.05,
             properties: {},
-            containerProperties: {
-                capacityKg: 0,
-                capacityLiters: 0,
-                structure: "rigid",
-            },
             amount: 10,
             consumableProperties: null,
             containing: [],
@@ -358,11 +353,6 @@ engine.exports = {
             weightKg: 0.5,
             volumeLiters: 0.3,
             properties: {},
-            containerProperties: {
-                capacityKg: 0,
-                capacityLiters: 0,
-                structure: "rigid",
-            },
             amount: 10000,
             consumableProperties: {
                 calories: 2500,

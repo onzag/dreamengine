@@ -581,7 +581,7 @@ const powerLevelBaseMultipliers = {
  * @param {DECompleteCharacterReference} character
  */
 export function getPowerLevelFromCharacter(character) {
-    const powerLevel = (powerLevelBaseMultipliers[character.tier] || 1) * (10 ** (character.tierValue || 1));
+    const powerLevel = (character.tierValue || 1) * (10 ** (powerLevelBaseMultipliers[character.tier] || 1));
     return powerLevel;
 }
 
@@ -892,23 +892,23 @@ export async function getCharacterCanSee(engine, characterName) {
         if (item.containerProperties) {
             tags.push("container");
         }
-        if (item.carriableProperties?.fullyProtectsFromWeathers) {
-            tags.push(`carry protects weather (full): ${item.carriableProperties.fullyProtectsFromWeathers.join(", ")}`);
+        if (item.carriableProperties?.fullyProtectsFromWeathers?.length) {
+            tags.push(`carrying this protects from weather (full): ${item.carriableProperties.fullyProtectsFromWeathers.join(", ")}`);
         }
-        if (item.carriableProperties?.partiallyProtectsFromWeathers) {
-            tags.push(`carry protects weather (partial): ${item.carriableProperties.partiallyProtectsFromWeathers.join(", ")}`);
+        if (item.carriableProperties?.partiallyProtectsFromWeathers?.length) {
+            tags.push(`carrying this protects from weather (partial): ${item.carriableProperties.partiallyProtectsFromWeathers.join(", ")}`);
         }
-        if (item.carriableProperties?.negativelyExposesToWeathers) {
-            tags.push(`carry exposes weather: ${item.carriableProperties.negativelyExposesToWeathers.join(", ")}`);
+        if (item.carriableProperties?.negativelyExposesToWeathers?.length) {
+            tags.push(`carrying this exposes to weather: ${item.carriableProperties.negativelyExposesToWeathers.join(", ")}`);
         }
-        if (item.wearableProperties?.fullyProtectsFromWeathers) {
-            tags.push(`wear protects weather (full): ${item.wearableProperties.fullyProtectsFromWeathers.join(", ")}`);
+        if (item.wearableProperties?.fullyProtectsFromWeathers?.length) {
+            tags.push(`wearing this protects from weather (full): ${item.wearableProperties.fullyProtectsFromWeathers.join(", ")}`);
         }
-        if (item.wearableProperties?.partiallyProtectsFromWeathers) {
-            tags.push(`wear protects weather (partial): ${item.wearableProperties.partiallyProtectsFromWeathers.join(", ")}`);
+        if (item.wearableProperties?.partiallyProtectsFromWeathers?.length) {
+            tags.push(`wearing this protects from weather (partial): ${item.wearableProperties.partiallyProtectsFromWeathers.join(", ")}`);
         }
-        if (item.wearableProperties?.negativelyExposesToWeathers) {
-            tags.push(`wear exposes weather: ${item.wearableProperties.negativelyExposesToWeathers.join(", ")}`);
+        if (item.wearableProperties?.negativelyExposesToWeathers?.length) {
+            tags.push(`wearing this exposes to weather: ${item.wearableProperties.negativelyExposesToWeathers.join(", ")}`);
         }
 
         const realItemWeight = getItemWeight(engine, item);
@@ -916,7 +916,7 @@ export async function getCharacterCanSee(engine, characterName) {
         if (character.carryingCapacityKg < item.weightKg) {
             tags.push(`too heavy for ${character.name}`);
         } else if (character.carryingCapacityLiters < item.volumeLiters) {
-            tags.push(`too big for ${character.name}`);
+            tags.push(`too big for ${character.name} to carry`);
         } else if (character.carryingCapacityKg < realItemWeight.singularWeight) {
             if (realItemWeight.allCharactersInvolved.length) {
                 tags.push(`too heavy for ${character.name} (contents include ${engine.deObject.functions.format_and(engine.deObject, null, realItemWeight.allCharactersInvolved)})`);
@@ -925,23 +925,25 @@ export async function getCharacterCanSee(engine, characterName) {
             }
         } else if (character.carryingCapacityLiters < realItemVolume.singularVolume) {
             if (realItemVolume.allCharactersInvolved.length) {
-                tags.push(`too big for ${character.name} (contents include ${engine.deObject.functions.format_and(engine.deObject, null, realItemVolume.allCharactersInvolved)})`);
+                tags.push(`too big for ${character.name} to carry (contents include ${engine.deObject.functions.format_and(engine.deObject, null, realItemVolume.allCharactersInvolved)})`);
             } else {
-                tags.push(`too big for ${character.name} (due to contents)`);
+                tags.push(`too big for ${character.name} to carry (due to contents)`);
             }
         } else if (carryingCapacity.carryingCapacityKg < item.weightKg || carryingCapacity.carryingCapacityKg < realItemWeight.singularWeight) {
             tags.push(`too heavy for ${character.name} (with current load)`);
         } else if (carryingCapacity.carryingCapacityLiters < item.volumeLiters || carryingCapacity.carryingCapacityLiters < realItemVolume.singularVolume) {
-            tags.push(`too big for ${character.name} (with current load)`);
+            tags.push(`too big for ${character.name} to carry (with current load)`);
         } else {
             if (realItemWeight.singularWeight >= character.carryingCapacityKg * 0.75) {
-                tags.push(`heavy for ${character.name}`);
+                tags.push(`heavy for ${character.name} but can still carry`);
             } else if (realItemVolume.singularVolume >= character.carryingCapacityLiters * 0.75) {
-                tags.push(`bulky for ${character.name}`);
+                tags.push(`bulky for ${character.name} but can still carry`);
             } else if (realItemWeight.singularWeight >= character.carryingCapacityKg * 0.5) {
-                tags.push(`somewhat heavy for ${character.name}`);
+                tags.push(`somewhat heavy for ${character.name} but can still carry`);
             } else if (realItemVolume.singularVolume >= character.carryingCapacityLiters * 0.5) {
-                tags.push(`somewhat bulky for ${character.name}`);
+                tags.push(`somewhat bulky for ${character.name} but can still carry`);
+            } else {
+                tags.push(`easy for ${character.name} to carry`);
             }
         }
 
@@ -952,7 +954,7 @@ export async function getCharacterCanSee(engine, characterName) {
             } else if (fitment.shouldFallDown) {
                 tags.push(`too loose for ${character.name}`);
             } else {
-                tags.push(`fits ${character.name} ${fitment.fitment}`);
+                tags.push(`would fit ${character.name} ${fitment.fitment.replace("fits ", "").replace(/,\s/g, " ")}`);
             }
         }
 
@@ -1043,6 +1045,7 @@ export async function getCharacterCanSee(engine, characterName) {
             for (const item of slot.items) {
                 listItems("", true, item, null);
             }
+            finalDescription += "\n";
         }
     }
 
@@ -1057,7 +1060,7 @@ export async function getCharacterCanSee(engine, characterName) {
             if (!bondToOtherChar) {
                 finalDescription += `${otherCharName} is a complete stranger to ${characterName}, ${characterName} does not know their name or any details about them.\n\n`;
             } else if (!bondToOtherChar.knowsName && bondToOtherChar.stranger) {
-                finalDescription += `${otherCharName} is a stranger to ${characterName}, ${characterName} does not know their name but knows some details about them.\n\n`;
+                finalDescription += `${otherCharName} is a stranger to ${characterName}, ${characterName} does not know their name.\n\n`;
             } else if (!bondToOtherChar.knowsName) {
                 finalDescription += `${otherCharName} is an acquaintance to ${characterName}, but ${characterName} does not know their name!\n\n`;
             } else if (bondToOtherChar.stranger) {
@@ -1203,6 +1206,7 @@ export async function getCharacterCanSee(engine, characterName) {
                 for (const item of otherCharState.wearing) {
                     listItems("", true, item, otherCharName);
                 }
+                finalDescription += `\n`;
             }
             const carriedChars = getListOfCarriedCharactersByCharacter(engine, otherCharName);
             if (carriedChars.length > 0) {
@@ -1224,6 +1228,7 @@ export async function getCharacterCanSee(engine, characterName) {
                 for (const item of otherCharState.carrying) {
                     listItems("", true, item, otherCharName);
                 }
+                finalDescription += `\n`;
             }
 
             const exactLocation = getCharacterExactLocation(engine, otherCharName);
@@ -1252,6 +1257,7 @@ export async function getCharacterCanSee(engine, characterName) {
         for (const item of characterState.wearing) {
             listItems("", true, item, characterName);
         }
+        finalDescription += `\n`;
     }
 
     const carriedChars = getListOfCarriedCharactersByCharacter(engine, characterName);
@@ -1275,6 +1281,7 @@ export async function getCharacterCanSee(engine, characterName) {
         for (const item of characterState.carrying) {
             listItems("", true, item, characterName);
         }
+        finalDescription += `\n`;
     }
 
     const exactLocation = getCharacterExactLocation(engine, characterName);
@@ -1297,6 +1304,7 @@ export async function getCharacterCanSee(engine, characterName) {
 
     finalDescription += `# ${characterName} Power Level Interactions:\n\n`;
 
+    const characterTier = character.tier.replace("_", " ") + " tier";
     for (const otherCharName in engine.deObject.stateFor) {
         if (otherCharName === characterName) continue;
         const otherCharState = engine.deObject.stateFor[otherCharName];
@@ -1305,8 +1313,7 @@ export async function getCharacterCanSee(engine, characterName) {
             const otherCharacterPowerLevel = getPowerLevel(engine, otherCharName);
             const powerLevelRatio = characterPowerLevel / otherCharacterPowerLevel;
             const reversePowerLevelRatio = otherCharacterPowerLevel / characterPowerLevel;
-            const characterTier = character.tier.replace("_", " ");
-            const otherCharacterTier = engine.deObject.characters[otherCharName].tier.replace("_", " ");
+            const otherCharacterTier = engine.deObject.characters[otherCharName].tier.replace("_", " ") + " tier";
             if (powerLevelRatio >= 100) {
                 finalDescription += `- ${characterName} (${characterTier}) is overwhelmingly more powerful than ${otherCharName} (${otherCharacterTier}), who is a complete non-threat.\n`;
             } else if (powerLevelRatio >= 10) {
@@ -1339,19 +1346,34 @@ export async function getCharacterCanSee(engine, characterName) {
 
             const whatCanTheySolo = getWhatCanSolo(otherChar.tier, otherChar.tierValue);
             if (otherChar.tierValue <= 10) {
-                finalDescription += `- ${otherCharName} is a very low tier '${otherCharacterTier}' and has seen better days, ${whatCanTheySolo}\n\n`;
+                finalDescription += `- ${otherCharName} is a very low '${otherCharacterTier}' and has seen better days, ${whatCanTheySolo}\n`;
             } else if (otherChar.tierValue <= 20) {
-                finalDescription += `- ${otherCharName} is a low tier '${otherCharacterTier}' and has seen better days, ${whatCanTheySolo}\n\n`;
+                finalDescription += `- ${otherCharName} is a low '${otherCharacterTier}' and has seen better days, ${whatCanTheySolo}\n`;
             } else if (otherChar.tierValue <= 50) {
-                finalDescription += `- ${otherCharName} is a mid tier '${otherCharacterTier}' and is doing okay, ${whatCanTheySolo}\n\n`;
+                finalDescription += `- ${otherCharName} is a mid '${otherCharacterTier}', ${whatCanTheySolo}\n`;
             } else if (otherChar.tierValue <= 70) {
-                finalDescription += `- ${otherCharName} is a high tier '${otherCharacterTier}' and is doing well, ${whatCanTheySolo}\n\n`;
+                finalDescription += `- ${otherCharName} is a high '${otherCharacterTier}', ${whatCanTheySolo}\n`;
             } else if (otherChar.tierValue <= 90) {
-                finalDescription += `- ${otherCharName} is a top tier '${otherCharacterTier}' and is doing well, ${whatCanTheySolo}\n\n`;
+                finalDescription += `- ${otherCharName} is a top '${otherCharacterTier}', ${whatCanTheySolo}\n`;
             } else {
-                finalDescription += `- ${otherCharName} embodies the perfection of their tier '${otherCharacterTier}' and is doing great, ${whatCanTheySolo}\n\n`;
+                finalDescription += `- ${otherCharName} embodies the perfection of '${otherCharacterTier}', ${whatCanTheySolo}\n`;
             }
         }
+    }
+
+    const whatCanTheySolo = getWhatCanSolo(character.tier, character.tierValue);
+    if (character.tierValue <= 10) {
+        finalDescription += `- ${characterName} is a very low '${characterTier}' and has seen better days, ${whatCanTheySolo}`;
+    } else if (character.tierValue <= 20) {
+        finalDescription += `- ${characterName} is a low '${characterTier}' and has seen better days, ${whatCanTheySolo}`;
+    } else if (character.tierValue <= 50) {
+        finalDescription += `- ${characterName} is a mid '${characterTier}', ${whatCanTheySolo}`;
+    } else if (character.tierValue <= 70) {
+        finalDescription += `- ${characterName} is a high '${characterTier}', ${whatCanTheySolo}`;
+    } else if (character.tierValue <= 90) {
+        finalDescription += `- ${characterName} is a top '${characterTier}', ${whatCanTheySolo}`;
+    } else {
+        finalDescription += `- ${characterName} embodies the perfection of '${characterTier}', ${whatCanTheySolo}`;
     }
 
     return {
@@ -1591,6 +1613,17 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
                     other: engine.deObject.characters[activeBond.towards],
                 })).trim();
             }
+            
+            if (!activeBond.knowsName && activeBond.stranger) {
+                result += ` ${activeBond.towards} is a stranger to ${characterName}, ${characterName} does not know their name.`;
+            } else if (!activeBond.knowsName) {
+                result += ` ${activeBond.towards} is an acquaintance to ${characterName}, but ${characterName} does not know their name!`;
+            } else if (activeBond.stranger) {
+                result += ` ${activeBond.towards} is a stranger to ${characterName}, but ${characterName} knows their name and some details about them.`;
+            } else {
+                result += ` ${activeBond.towards} is known to ${characterName}, ${characterName} knows their name and many details about them.`;
+            }
+
             relationships.push(result);
 
             if (bondDeclaration.generalCharacterDescriptionInjection) {
@@ -1658,6 +1691,7 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
                         other: strangerCharacter,
                     })).trim();
                 }
+                result += ` ${strangerName} is a total stranger to ${characterName} and ${characterName} does not know their name.`;
                 relationships.push(result);
             }
 
