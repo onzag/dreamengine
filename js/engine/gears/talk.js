@@ -1,7 +1,7 @@
 import { DEngine } from "../index.js";
 import { getCharacterCanSee, getSysPromptForCharacter } from "../util/character-info.js";
 import { emotions } from "../util/emotions.js";
-import { createGrammarFromList, parseListFromGrammarResponse } from "../util/grammar.js";
+import { createGrammarFromList, generateGrammarForVocabulary, parseListFromGrammarResponse } from "../util/grammar.js";
 import { getHistoryFragmentForCharacter } from "../util/messages.js";
 import { mergeVocabularyLimits } from "../util/vocabulary.js";
 import { applyStateChange, checkAllActiveStatesConsistency } from "./state-change.js";
@@ -94,6 +94,12 @@ export async function talk(engine, character, options) {
     let baseVocabularyLimit = engine.deObject.characters[character.name].vocabularyLimit;
     let vocabularyLimitDominance = 0;
 
+    /**
+     * @type {string[]}
+     */
+    const narrativeEffects = [];
+    let narrativeEffectsDominance = 0;
+
     for (const state of characterSystemPrompt.internalDescription.activeStates) {
         let stateDominance = state.stateInfo.dominance;
         if (state.stateInfo.relieving && typeof state.stateInfo.dominanceAfterRelief === "number") {
@@ -163,6 +169,19 @@ export async function talk(engine, character, options) {
             } else if (action.action.action.vocabularyLimit && vocabularyLimitDominance === stateDominance && baseVocabularyLimit) {
                 mergeVocabularyLimits(baseVocabularyLimit, action.action.action.vocabularyLimit);
             }
+
+            if (action.action.action.narrativeEffect && narrativeEffectsDominance < stateDominance) {
+                narrativeEffects.push(typeof action.action.action.narrativeEffect === "string" ? action.action.action.narrativeEffect : await action.action.action.narrativeEffect(engine.deObject, {
+                    char: character,
+                    causants: action.action.applyingState?.causants || undefined,
+                }));
+                narrativeEffectsDominance = stateDominance;
+            } else if (action.action.action.narrativeEffect && narrativeEffectsDominance === stateDominance) {
+                narrativeEffects.push(typeof action.action.action.narrativeEffect === "string" ? action.action.action.narrativeEffect : await action.action.action.narrativeEffect(engine.deObject, {
+                    char: character,
+                    causants: action.action.applyingState?.causants || undefined,
+                }));
+            }
         }
 
         if (action.action.action.emotionalRange) {
@@ -182,10 +201,11 @@ export async function talk(engine, character, options) {
             [
                 "You must answer with a list of emotions that is comma separated, and the first emotion in the list will be the primary emotion that the character is feeling. The rest of the emotions in the list are also part of the emotional range of the character, but are not as strongly felt as the primary emotion.",
             ],
-            [
+            ([
+                "## " + character.name + "'s Description:\n\n" +
                 characterSystemPrompt.externalDescription,
                 characterSystemPrompt.internalDescription.general,
-            ],
+            ]).join("\n\n"),
         );
 
         const lastCycleExtended = await getHistoryFragmentForCharacter(engine, character, {
@@ -197,6 +217,7 @@ export async function talk(engine, character, options) {
         const emotionsList = "## Possible emotions:\n\n" + emotions.map((emotion) => `- ${emotion}`).join("\n") + "\n\n";
 
         const generator = engine.inferenceAdapter.runQuestioningCustomAgentOn("talk", systemPromptForEmotion, null, lastCycleExtended.messages, ([
+            emotionsList,
             ...characterSystemPrompt.internalDescription.stateInjections,
             actionsAsText,
         ]).join("\n\n"), false);
@@ -244,12 +265,33 @@ export async function talk(engine, character, options) {
     console.log("Determined primary emotion: " + primaryEmotion);
     console.log("Determined emotional range: " + emotionalRange.join(", "));
 
-    // TODO implement limited vocabulary
-
     const emotionalProfile = "# Next Story Fragment Rules:\n\n" +
         (primaryEmotion ? `- Have ${character.name} primarily feeling ${primaryEmotion}.\n` : "") +
         (emotionalRange.length > 0 ? `- Include emotions in the range of ${emotionalRange.join(", ")} for ${character.name}.\n` : "") +
-        (options.doNotMove ? `- ${character.name} must not change location from their current location.\n` : "");
+        (options.doNotMove ? `- ${character.name} must not move from their location at the ${charState.locationSlot}.\n` : "");
+
+    let narrativeEffectsAsText = "";
+    if (baseVocabularyLimit?.mute) {
+        narrativeEffects.push(`'${character.name}' is currently mute`);
+    } else {
+        if (baseVocabularyLimit?.vocabulary) {
+            narrativeEffects.push(`'${character.name}' currently has a limited vocabulary`);
+        }
+        if (baseVocabularyLimit?.elongateWordsEffect) {
+            narrativeEffects.push(`'${character.name}' may elongate their words in dialogue`);
+        }
+        if (baseVocabularyLimit?.stutterEffect) {
+            narrativeEffects.push(`'${character.name}' may stutter in dialogue, eg. saying "I... I don't know" instead of "I don't know" or "b-b-but I want to go" instead of "but I want to go"`);
+        }
+        if (baseVocabularyLimit?.intensityEffect === "CAPITALIZE_SCREAM") {
+            narrativeEffects.push(`'${character.name}' is currently screaming and their dialogue should be in all caps to reflect that`);
+        }
+    }
+    if (narrativeEffects.length > 0) {
+        narrativeEffectsAsText = "# When narrating ensure that:\n\n" + narrativeEffects.map((effect) => `- ${effect}`).join("\n") + "\n\n";
+    }
+
+    const grammar = generateGrammarForVocabulary(engine, baseVocabularyLimit, character.name);
 
     console.log(characterSystemPrompt.sysprompt);
     console.log("##############");
@@ -259,7 +301,13 @@ export async function talk(engine, character, options) {
     console.log("##############");
     console.log(actionsAsText);
     console.log("##############");
+    console.log(narrativeEffectsAsText);
+    console.log("##############");
     console.log(emotionalProfile);
+    console.log("##############");
+    console.log(grammar);
+
+    // TODO important instructions about [GENERATION COMPLETED] but on inference engine side, not here
 
     process.exit(1);
 

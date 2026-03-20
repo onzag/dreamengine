@@ -770,8 +770,8 @@ declare interface DECharacterStateDefinition {
 }
 
 declare interface DEVocabularyToken {
-    type: "WORD" | "GRAMMAR" | "PLACEHOLDER" | "PHRASE";
-    value?: string | string[];
+    type: "WORD" | "GRAMMAR";
+    value: string;
 }
 
 declare interface DEVocabularyLimit {
@@ -785,13 +785,17 @@ declare interface DEVocabularyLimit {
      */
     includeBaseVocabulary?: boolean;
     /**
+     * Includes surrounding character names and themselves
+     */
+    includeCharacterNames?: boolean;
+    /**
      * The maximum number of words that can be used in a message when this vocabulary limit is active, if null, no limit is applied
      */
     maxWordsPerMessage?: number;
     /**
      * Exact words that can be used
      */
-    vocabulary: DEVocabularyToken[];
+    vocabulary?: DEVocabularyToken[];
     /**
      * CAPITALIZE_SCREAM will make the character scream the words in uppercase, NONE will just limit vocabulary without modifying it
      * only affects words and phrases, not grammar tokens or placeholders, as those are not modified in any case, just limited

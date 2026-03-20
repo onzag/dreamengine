@@ -193,6 +193,21 @@ export class BaseInferenceAdapter {
     }
 
     /**
+     * When generating custom grammar these are the required grammar rules to be included at the root level
+     * 
+     * When defining a custom grammar for story generation this function should return the required root level grammar rules
+     * 
+     * eg. root ::= answer | {getRequiredRootGrammarForStoryGeneration()}
+     * answer ::= word+
+     * word ::= "a" | "b" | "c"
+     * 
+     * @returns {string}
+     */
+    getRequiredRootGrammarForStoryGeneration() {
+        throw new Error("Method 'getRequiredRootGrammarForStoryGeneration()' must be implemented.");
+    }
+
+    /**
      * @param {DECompleteCharacterReference} character
      * @param {string} info
      * @returns {{characterDescriptionAt: string, value: string}}

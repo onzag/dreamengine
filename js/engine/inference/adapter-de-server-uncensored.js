@@ -785,6 +785,10 @@ ${this.buildSystemCharacterDescription(character, description, externalDescripti
         return JSON.stringify("\n\n");
     }
 
+    getRequiredRootGrammarForStoryGeneration() {
+        return JSON.stringify("[GENERATION COMPLETED]");
+    }
+
     supportsGrammar() {
         return true;
     }
