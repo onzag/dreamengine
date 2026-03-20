@@ -307,6 +307,28 @@ export async function talk(engine, character, options) {
     console.log("##############");
     console.log(grammar);
 
+    // TODO schizophrenia voices and whatnot
+
+    const messages = (await getHistoryFragmentForCharacter(engine, character, {
+        includeDebugMessages: false,
+        includeRejectedMessages: false,
+        msgLimit: "ALL",
+        useExponentialShrinkingSelectiveContextWindowStrategy: true,
+    })).messages;
+
+    const generator = engine.inferenceAdapter.inferNextStoryFragmentFor(
+        character,
+        messages,
+        characterSystemPrompt.sysprompt,
+        characterSystemPrompt.internalDescription.stateInjections,
+        characterCanSee.everything,
+        actions.map((action) => action.text),
+        narrativeEffects,
+        primaryEmotion,
+        emotionalRange,
+        grammar,
+    );
+
     // TODO important instructions about [GENERATION COMPLETED] but on inference engine side, not here
 
     process.exit(1);

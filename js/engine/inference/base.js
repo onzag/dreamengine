@@ -44,19 +44,31 @@ export class BaseInferenceAdapter {
     /**
      * Infers the next message for a character narrative purposes
      * 
-     * @param {DECompleteCharacterReference} character 
+     * @param {DECompleteCharacterReference} character
+     * @param {string[]} messages
      * @param {string} system 
-     * @param {Array<string>} messages
-     * @param {string} action
+     * @param {string[]} stateInjections
+     * @param {string} visibleEnviroment
+     * @param {string[]} actions
+     * @param {string[]} narrativeEffects
+     * @param {string} primaryEmotion
+     * @param {string[]} emotionalRange
+     * @param {string} grammar
      * @returns {AsyncGenerator<string, void, boolean>}
      */
-    async* inferNextMessageFor(
+    async* inferNextStoryFragmentFor(
         character,
-        system,
         messages,
-        action,
+        system,
+        stateInjections,
+        visibleEnviroment,
+        actions,
+        narrativeEffects,
+        primaryEmotion,
+        emotionalRange,
+        grammar,
     ) {
-        throw new Error("Method 'inferNextMessageFor()' must be implemented.");
+        throw new Error("Method 'inferNextStoryFragmentFor()' must be implemented.");
     }
 
     /**

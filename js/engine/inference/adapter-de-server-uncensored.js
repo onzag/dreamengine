@@ -275,17 +275,31 @@ ${states.join(", ")}
     }
 
     /**
-     * @param {DECompleteCharacterReference} character 
+     * Infers the next message for a character narrative purposes
+     * 
+     * @param {DECompleteCharacterReference} character
+     * @param {string[]} messages
      * @param {string} system 
-     * @param {Array<string>} messages
-     * @param {string} action
+     * @param {string[]} stateInjections
+     * @param {string} visibleEnviroment
+     * @param {string[]} actions
+     * @param {string[]} narrativeEffects
+     * @param {string} primaryEmotion
+     * @param {string[]} emotionalRange
+     * @param {string} grammar
      * @returns {AsyncGenerator<string, void, boolean>}
      */
-    async* inferNextMessageFor(
+    async* inferNextStoryFragmentFor(
         character,
-        system,
         messages,
-        action,
+        system,
+        stateInjections,
+        visibleEnviroment,
+        actions,
+        narrativeEffects,
+        primaryEmotion,
+        emotionalRange,
+        grammar,
     ) {
         await this.ensureInitialized();
 
