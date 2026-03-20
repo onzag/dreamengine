@@ -46,6 +46,9 @@ function isYes(answer) {
      * @return {Promise<{passed: boolean, reason: string | null}>}
      */
 export default async function testWorldRulesOn(engine, character) {
+    // TODO it will be very different for user than a random character
+    // 1. if a character picks a random item that isn't real, we catch that and because the story is already told, we will say that they are hallucinating and the likes and interact with schizophrenia
+    // 2. same for characters that aren't there
     if (!engine.deObject) {
         throw new Error("DEngine not initialized");
     }
@@ -390,6 +393,7 @@ export default async function testWorldRulesOn(engine, character) {
     }
 
     const itemsAtLocation = engine.getFullItemListAtLocation(charState.location);
+    // TODO we messed this up, the new function is different
     const itemsDescribedAtLocation = engine.describeItemsAvailableToCharacterForInference(character.name);
     const availableItemsContextInfo = engine.inferenceAdapter.buildContextInfoForAvailableItems(itemsDescribedAtLocation.cheapList);
     const systemPromptSpawnItems = engine.inferenceAdapter.buildSystemPromptForQuestioningAgent(
