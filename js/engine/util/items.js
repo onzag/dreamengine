@@ -71,7 +71,8 @@ export function describeItemsAvailableToCharacterForInference(engine, characterN
         if (otherCharName === characterName) continue;
         const otherCharState = engine.deObject.stateFor[otherCharName];
         if (otherCharState.location === locationName) {
-            message += `\n## Items worn by ${otherCharName}:\n`;
+            const deceasedAddition = otherCharState.dead ? " (Deceased)" : "";
+            message += `\n## Items worn by ${otherCharName}${deceasedAddition}:\n`;
             if (otherCharState.wearing.length === 0) {
                 message += `${otherCharName} Is currently naked.\n`;
             } else {
@@ -80,9 +81,9 @@ export function describeItemsAvailableToCharacterForInference(engine, characterN
                 }
             }
             
-            message += `\n## Items carried by ${otherCharName}:\n`;
+            message += `\n## Items carried by ${otherCharName}${deceasedAddition}:\n`;
             if (otherCharState.carrying.length === 0) {
-                message += `No items carried by ${otherCharName}.\n`;
+                message += `No items carried by ${otherCharName}${deceasedAddition}.\n`;
             } else {
                 for (const item of otherCharState.carrying) {
                     listItems("", item);
@@ -92,7 +93,8 @@ export function describeItemsAvailableToCharacterForInference(engine, characterN
     }
 
     // now let's do our own character
-    message += `\n## Items worn by ${characterName}:\n`;
+    const deceasedAddition = characterState.dead ? " (Deceased)" : "";
+    message += `\n## Items worn by ${characterName}${deceasedAddition}:\n`;
     if (characterState.wearing.length === 0) {
         message += `${characterName} Is currently naked.\n`;
     } else {
@@ -101,7 +103,7 @@ export function describeItemsAvailableToCharacterForInference(engine, characterN
         }
     }
 
-    message += `\n## Items carried by ${characterName}:\n`;
+    message += `\n## Items carried by ${characterName}${deceasedAddition}:\n`;
     if (characterState.carrying.length === 0) {
         message += `No items or characters carried by ${characterName}.\n`;
     } else {

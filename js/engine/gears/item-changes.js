@@ -69,6 +69,7 @@ function getCharacterNameForExample(involvedNames, index) {
  * @return {Promise<{
  *    storyMasterMessages: string[];
  *    charactersThatMoved: { [charName: string]: { reason: string; }}
+ *    interactedCharacters: string[];
  * }>}
  */
 export default async function calculateItemChanges(engine, character) {
@@ -1830,6 +1831,7 @@ export default async function calculateItemChanges(engine, character) {
     return {
         storyMasterMessages: addedMessagesForStoryMaster,
         charactersThatMoved: charactersThatMoved,
+        interactedCharacters: charactersToQuestion,
     };
 }
 

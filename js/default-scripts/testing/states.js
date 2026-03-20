@@ -26,7 +26,6 @@ engine.exports = {
             requiresCharacterCausants: false,
             requiresObjectCausants: false,
             requiresPosture: null,
-            seeksPosture: null,
             triggers: [
                 {
                     intensity: 1,
@@ -58,7 +57,6 @@ engine.exports = {
             requiresCharacterCausants: false,
             requiresObjectCausants: false,
             requiresPosture: null,
-            seeksPosture: null,
             triggers: [
                 {
                     intensity: 1,

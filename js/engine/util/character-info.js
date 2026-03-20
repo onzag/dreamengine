@@ -26,7 +26,7 @@ export function getBeingCarriedByCharacter(engine, characterName) {
     }
     for (const otherCharName in engine.deObject.stateFor) {
         const otherCharState = engine.deObject.stateFor[otherCharName];
-        if (otherCharName === characterName || charState.location !== otherCharState.location) {
+        if (otherCharName === characterName || charState.location !== otherCharState.location || otherCharState.deadEnded) {
             continue;
         }
 
@@ -348,6 +348,8 @@ export function isBottomNaked(engine, characterName) {
  *   location: string,
  *   nonStrangers: string[],
  *   totalStrangers: string[],
+ *   deadNonStrangers: string[],
+ *   deadTotalStrangers: string[],
  * }}
  */
 export function getSurroundingCharacters(engine, characterName) {
@@ -364,15 +366,25 @@ export function getSurroundingCharacters(engine, characterName) {
     const locationState = engine.deObject.world.locations[location];
     const nonStrangers = [];
     const totalStrangers = [];
+    const deadNonStrangers = [];
+    const deadTotalStrangers = [];
     for (const charToCheck in engine.deObject.stateFor) {
         const charStateToCheck = engine.deObject.stateFor[charToCheck];
         if (charStateToCheck.location !== location || charToCheck === characterName) {
             continue;
         }
         if (engine.deObject.social.bonds[characterName].active.find(b => b.towards === charToCheck) || engine.deObject.social.bonds[characterName].ex.find(b => b.towards === charToCheck)) {
-            nonStrangers.push(charToCheck);
+            if (charStateToCheck.dead) {
+                deadNonStrangers.push(charToCheck);
+            } else {
+                nonStrangers.push(charToCheck);
+            }
         } else {
-            totalStrangers.push(charToCheck);
+            if (charStateToCheck.dead) {
+                deadTotalStrangers.push(charToCheck);
+            } else {
+                totalStrangers.push(charToCheck);
+            }
         }
     }
 
@@ -380,6 +392,8 @@ export function getSurroundingCharacters(engine, characterName) {
         location,
         nonStrangers,
         totalStrangers,
+        deadTotalStrangers,
+        deadNonStrangers,
     };
 }
 
@@ -1053,6 +1067,7 @@ export async function getCharacterCanSee(engine, characterName) {
     for (const otherCharName in engine.deObject.stateFor) {
         if (otherCharName === characterName) continue;
         const otherCharState = engine.deObject.stateFor[otherCharName];
+        if (otherCharState.deadEnded) continue;
         if (otherCharState.location === characterState.location) {
             finalDescription += `# Character: ${otherCharName}:\n\n`;
 
@@ -1308,6 +1323,9 @@ export async function getCharacterCanSee(engine, characterName) {
     for (const otherCharName in engine.deObject.stateFor) {
         if (otherCharName === characterName) continue;
         const otherCharState = engine.deObject.stateFor[otherCharName];
+        if (otherCharState.deadEnded) {
+            continue;
+        }
         const otherChar = engine.deObject.characters[otherCharName];
         if (otherCharState.location === characterState.location) {
             const otherCharacterPowerLevel = getPowerLevel(engine, otherCharName);
@@ -1374,6 +1392,16 @@ export async function getCharacterCanSee(engine, characterName) {
         finalDescription += `- ${characterName} is a top '${characterTier}', ${whatCanTheySolo}`;
     } else {
         finalDescription += `- ${characterName} embodies the perfection of '${characterTier}', ${whatCanTheySolo}`;
+    }
+
+    const surroundingChars = getSurroundingCharacters(engine, characterName);
+    const deadBodies = [surroundingChars.deadNonStrangers, surroundingChars.deadTotalStrangers].flat();
+    if (deadBodies.length > 0) {
+        finalDescription += `\n\n# Dead bodies at the location:\n\n`;
+        for (const deadBody of deadBodies) {
+            const externalDescription = await getExternalDescriptionOfCharacter(engine, deadBody, true, false);
+            finalDescription += `- ${deadBody} (Deceased): ${externalDescription}\n`;
+        }
     }
 
     return {
@@ -1668,10 +1696,11 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
     if (!character.bonds) {
         throw new Error(`Character ${characterName} has no bonds defined.`);
     }
+
+    const surroundingChars = getSurroundingCharacters(engine, characterName);
     const strangerBondDeclaration = character.bonds.declarations.find(bondDecl => bondDecl.strangerBond === true && bondDecl.minBondLevel <= 0 && 0 < (bondDecl.maxBondLevel === 100 ? 200 : bondDecl.maxBondLevel) && bondDecl.min2BondLevel <= 0 && 0 < (bondDecl.max2BondLevel === 100 ? 200 : bondDecl.max2BondLevel));
     if (strangerBondDeclaration) {
         // these do apply to all the total strangers
-        const surroundingChars = getSurroundingCharacters(engine, characterName);
         const allSurroundingTotalStrangers = surroundingChars.totalStrangers;
         for (const strangerName of allSurroundingTotalStrangers) {
             const strangerCharacter = engine.deObject.characters[strangerName];

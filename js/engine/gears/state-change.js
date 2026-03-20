@@ -121,6 +121,8 @@ async function makeUserStoryMasterMessage(engine, message) {
         canOnlyBeSeenByCharacter: engine.user.name,
         singleSummary: null,
         perspectiveSummaryIds: {},
+        emotion: null,
+        emotionalRange: null,
     }
 
     if (!stateForUser.conversationId) {
@@ -186,8 +188,6 @@ async function onStateTriggeredOnCharacter(engine, character, stateName) {
     if (characterStateDescription.fallsDown) {
         console.log(`Character ${character.name} has fallen down due to state ${stateName}.`);
         characterState.posture = "lying_down";
-
-        // TODO somewhere else the character must use the seekPosture state stuff
     }
 
     // if the new state triggered is from the user, make a message about it
@@ -252,6 +252,9 @@ async function onStateTriggeredOnCharacter(engine, character, stateName) {
 
                 // modify intensity
                 alreadyActivatedInfo.intensity += withIntensity;
+                if (alreadyActivatedInfo.intensity > 4) {
+                    alreadyActivatedInfo.intensity = 4;
+                }
 
                 // check for relief dynamics
                 if (stateDescriptionSpecific && stateDescriptionSpecific.usesReliefDynamic && withIntensity < 0) {
@@ -386,6 +389,9 @@ async function onStateRemovedOnCharacter(engine, character, stateName) {
                 const stateDescriptionSpecific = character.states[toModifyState];
 
                 alreadyActivatedInfo.intensity += withIntensity;
+                if (alreadyActivatedInfo.intensity > 4) {
+                    alreadyActivatedInfo.intensity = 4;
+                }
 
                 if (stateDescriptionSpecific && stateDescriptionSpecific.usesReliefDynamic && withIntensity < 0) {
                     alreadyActivatedInfo.relieving = true;
@@ -503,6 +509,9 @@ async function onStateRelievedOnCharacter(engine, character, stateName) {
                 const stateDescriptionSpecific = character.states[toModifyState];
 
                 alreadyActivatedInfo.intensity += withIntensity;
+                if (alreadyActivatedInfo.intensity > 4) {
+                    alreadyActivatedInfo.intensity = 4;
+                }
 
                 if (stateDescriptionSpecific && stateDescriptionSpecific.usesReliefDynamic && withIntensity < 0) {
                     alreadyActivatedInfo.relieving = true;
@@ -614,8 +623,7 @@ async function determineCausants(
     if (!activationCondition.determineCausants) {
         return null;
     }
-    
-    // @ts-ignore
+
     const executed = typeof activationCondition.determineCausants === "string" ? activationCondition.determineCausants :
         (await activationCondition.determineCausants(engine.deObject, {
             char: character,
@@ -661,27 +669,27 @@ async function determineCausants(
     let instructions = "Provide a comma separated list of causants only, these causants can be objects or characters related to the question, use their exact names as in the story";
 
     if (grammarLimitation === "LIST_OF_OBJECT_CAUSANTS") {
-        grammar = "root ::= causant (\",\" causant)* \" \" \".\";\ncausant ::= OBJECT_CAUSANT;\nOBJECT_CAUSANT ::= [a-zA-Z0-9 _-]+;";
+        grammar = "root ::= causant (\",\" causant)* \" \" \".\"\ncausant ::= OBJECT_CAUSANT;\nOBJECT_CAUSANT ::= [a-zA-Z0-9 _-]+";
         instructions = "Provide a comma separated list of object causants only, these causants must be objects related to the question, use their exact names as in the story";
     } else if (grammarLimitation === "LIST_OF_CHARACTER_CAUSANTS") {
-        grammar = "root ::= causant (\",\" causant)* \" \" \".\";\ncausant ::= CHARACTER_CAUSANT;\nCHARACTER_CAUSANT ::= [a-zA-Z0-9 _-]+;";
+        grammar = "root ::= causant (\",\" causant)* \" \" \".\"\ncausant ::= CHARACTER_CAUSANT;\nCHARACTER_CAUSANT ::= [a-zA-Z0-9 _-]+";
         instructions = "Provide a comma separated list of character causants only, these causants must be characters related to the question, use their exact names as in the story";
     } else if (grammarLimitation === "SINGLE_OBJECT_CAUSANT") {
-        grammar = "root ::= OBJECT_CAUSANT \" \" \".\";\nOBJECT_CAUSANT ::= [a-zA-Z0-9 _-]+;";
+        grammar = "root ::= OBJECT_CAUSANT \" \" \".\"\nOBJECT_CAUSANT ::= [a-zA-Z0-9 _-]+";
         instructions = "Provide a single object causant only, this causant must be an object related to the question, use its exact name as in the story";
     } else if (grammarLimitation === "SINGLE_CHARACTER_CAUSANT") {
-        grammar = "root ::= CHARACTER_CAUSANT \" \" \".\";\nCHARACTER_CAUSANT ::= [a-zA-Z0-9 _-]+;";
+        grammar = "root ::= CHARACTER_CAUSANT \" \" \".\"\nCHARACTER_CAUSANT ::= [a-zA-Z0-9 _-]+";
         instructions = "Provide a single character causant only, this causant must be a character related to the question, use its exact name as in the story";
     } else if (grammarLimitation === "SINGLE_ANY_CAUSANT") {
-        grammar = "root ::= causant \" \" \".\";\ncausant ::= OBJECT_CAUSANT | CHARACTER_CAUSANT;\nOBJECT_CAUSANT ::= [a-zA-Z0-9 _-]+;\nCHARACTER_CAUSANT ::= [a-zA-Z0-9 _-]+;";
+        grammar = "root ::= causant \" \" \".\"\ncausant ::= OBJECT_CAUSANT | CHARACTER_CAUSANT\nOBJECT_CAUSANT ::= [a-zA-Z0-9 _-]+;\nCHARACTER_CAUSANT ::= [a-zA-Z0-9 _-]+;";
         instructions = "Provide a single causant only, this causant can be an object or character related to the question, use its exact name as in the story";
     } else if (grammarLimitation === "SINGLE_CHARACTER_POTENTIAL_CAUSANT") {
         const potentialCausantsOptions = potentialCharacterCausants.map(c => JSON.stringify(c.name)).join(" | ");
-        grammar = `root ::= CHARACTER_CAUSANT \" \" \".\";\nCHARACTER_CAUSANT ::= ${potentialCausantsOptions};`;
+        grammar = `root ::= CHARACTER_CAUSANT \" \" \".\"\nCHARACTER_CAUSANT ::= ${potentialCausantsOptions}`;
         instructions = `Provide a single character causant only, this causant must be one of the following characters: ${potentialCharacterCausants.map(c => c.name).join(", ")}`;
     } else if (grammarLimitation === "LIST_OF_CHARACTER_POTENTIAL_CAUSANTS") {
         const potentialCausantsOptions = potentialCharacterCausants.map(c => JSON.stringify(c.name)).join(" | ");
-        grammar = `root ::= CHARACTER_CAUSANT (\",\" CHARACTER_CAUSANT)* \" \" \".\";\nCHARACTER_CAUSANT ::= ${potentialCausantsOptions};`;
+        grammar = `root ::= CHARACTER_CAUSANT (\",\" CHARACTER_CAUSANT)* \" \" \".\"\nCHARACTER_CAUSANT ::= ${potentialCausantsOptions};`;
         instructions = `Provide a comma separated list of character causants only, these causants must be from the following characters: ${potentialCharacterCausants.map(c => c.name).join(", ")}`;
     }
 
@@ -803,9 +811,75 @@ async function checkActiveStateConsistency(engine, character, stateName, stateDe
 /**
  * @param {DEngine} engine
  * @param {DECompleteCharacterReference} character
+ * @param {string} stateName
+ * @param {number} intensityChange
+ */
+export async function applyStateChange(engine, character, stateName, intensityChange) {
+    if (!engine.deObject) {
+        throw new Error("DEngine not initialized");
+    }
+    const characterState = engine.deObject.stateFor[character.name];
+    if (!characterState) {
+        throw new Error(`Character state for ${character.name} not found.`);
+    }
+    const characterStateDescription = character.states[stateName];
+    if (!characterStateDescription) {
+        throw new Error(`Character ${character.name} does not have state description for ${stateName}.`);
+    }
+    const alreadyActivatedInfo = engine.deObject.stateFor[character.name].states.find(s => s.state === stateName);
+    if (!alreadyActivatedInfo) {
+        return;
+    }
+
+    alreadyActivatedInfo.intensity += intensityChange;
+    if (alreadyActivatedInfo.intensity > 4) {
+        alreadyActivatedInfo.intensity = 4;
+    }
+    if (characterStateDescription.usesReliefDynamic && intensityChange < 0) {
+        alreadyActivatedInfo.relieving = true;
+    }
+
+    if (alreadyActivatedInfo.intensity <= 0) {
+        // remove the state
+        engine.deObject.stateFor[character.name].states = engine.deObject.stateFor[character.name].states.filter(s => s.state !== stateName);
+        console.log(`State ${stateName} intensity modified on character ${character.name} by external change, now removed.`);
+        await onStateRemovedOnCharacter(engine, character, stateName);
+    } else {
+        console.log(`State ${stateName} intensity modified on character ${character.name} by external change, now ${alreadyActivatedInfo.intensity}.`);
+        await checkActiveStateConsistency(engine, character, stateName, characterStateDescription);
+    }
+}
+
+/**
+ * @param {DEngine} engine
+ * @param {DECompleteCharacterReference} character
+ */
+export async function checkAllActiveStatesConsistency(engine, character) {
+    if (!engine.deObject) {
+        throw new Error("DEngine not initialized");
+    }
+    const characterState = engine.deObject.stateFor[character.name];
+    if (!characterState) {
+        throw new Error(`Character state for ${character.name} not found.`);
+    }
+    const activeStates = characterState.states;
+    for (const activeStateInfo of activeStates) {
+        const stateDescription = character.states[activeStateInfo.state];
+        if (!stateDescription) {
+            console.warn(`State description for active state ${activeStateInfo.state} on character ${character.name} not found, skipping consistency check for this state.`);
+            continue;
+        }
+        await checkActiveStateConsistency(engine, character, activeStateInfo.state, stateDescription);
+    }
+}
+
+/**
+ * @param {DEngine} engine
+ * @param {DECompleteCharacterReference} character
+ * @param {string[]} interactedCharactersAccordingToItemChange
  * @returns {Promise<void>}
  */
-export default async function calculateStateChange(engine, character) {
+export default async function calculateStateChange(engine, character, interactedCharactersAccordingToItemChange) {
     if (!engine.deObject) {
         throw new Error("DEngine not initialized");
     } else if (!engine.inferenceAdapter) {
@@ -824,7 +898,17 @@ export default async function calculateStateChange(engine, character) {
      * @type {DECompleteCharacterReference[]}
      */
     const allCharactersInAnalysis = lastCycleMessagesInfo.interactedCharacters.map((c) => engine.deObject?.characters[c]).filter(c => !!c);
-    // TODO find more potential causants by hand, the ask some more
+    // add the ones given by our item change
+    for (const otherCharacter of interactedCharactersAccordingToItemChange) {
+        if (!allCharactersInAnalysis.find(c => c.name === otherCharacter)) {
+            const charRef = engine.deObject?.characters[otherCharacter];
+            if (charRef) {
+                allCharactersInAnalysis.push(charRef);
+            }
+        }
+    }
+    // This should be enough... honestly, this may miss some characters
+    // but this should have all the relevant ones
 
     // well that is weird, zero messages?
     if (lastCycleMessagesInfo.messages.length === 0) {
@@ -869,9 +953,18 @@ export default async function calculateStateChange(engine, character) {
             const randomRollForIntensityTrigger = Math.random();
             if (intensityModifiers) {
                 for (const intensityModifier of intensityModifiers) {
-
                     if (typeof intensityModifier.intensity === "number" && intensityModifier.intensity === 0) {
                         console.log(`Skipping state intensity modifier for state ${stateName} on character ${character.name} because intensity change is zero.`);
+                        continue;
+                    }
+                    if (
+                        typeof intensityModifier.intensity === "number" &&
+                        intensityModifier.intensity > 0 &&
+                        alreadyActivatedInfo.intensity >= 4 &&
+                        !intensityModifier.useActionAccumulator &&
+                        !intensityModifier.determineCausants
+                    ) {
+                        console.log(`Skipping state intensity modifier for state ${stateName} on character ${character.name} because it would increase intensity above 4 and it does not use action accumulator or determine causants.`);
                         continue;
                     }
 
@@ -1019,6 +1112,9 @@ export default async function calculateStateChange(engine, character) {
                                 } else {
                                     console.log(`State intensity modifier matched for state ${stateName} on character ${character.name}, applying intensity change: ${intensityModifier.intensity}`);
                                     alreadyActivatedInfo.intensity += intensityModifier.intensity;
+                                    if (alreadyActivatedInfo.intensity > 4) {
+                                        alreadyActivatedInfo.intensity = 4;
+                                    }
                                     if (stateDescription.usesReliefDynamic && intensityModifier.intensity < 0) {
                                         console.log(`State ${stateName} on character ${character.name} is now relieving due to intensity modifier.`);
                                         alreadyActivatedInfo.relieving = true;
@@ -1042,7 +1138,7 @@ export default async function calculateStateChange(engine, character) {
                         }
                     } else {
                         if (intensityModifier.useActionAccumulator && intensityModifier.useActionAccumulator.resetIfNo) {
-                            await resetAccumulator(engine, character,intensityModifier);
+                            await resetAccumulator(engine, character, intensityModifier);
                         }
                     }
                 }
@@ -1053,6 +1149,9 @@ export default async function calculateStateChange(engine, character) {
                 if (intensityChangeRatePerInferenceCycle && intensityChangeRatePerInferenceCycle > 0) {
                     console.log(`No intensity modifiers matched for state ${stateName} on character ${character.name}, applying decay of ${intensityChangeRatePerInferenceCycle}`);
                     alreadyActivatedInfo.intensity += intensityChangeRatePerInferenceCycle;
+                    if (alreadyActivatedInfo.intensity > 4) {
+                        alreadyActivatedInfo.intensity = 4;
+                    }
                     if (stateDescription.usesReliefDynamic && intensityChangeRatePerInferenceCycle < 0) {
                         console.log(`State ${stateName} on character ${character.name} is now relieving due to decay.`);
                         alreadyActivatedInfo.relieving = true;
@@ -1307,7 +1406,7 @@ export default async function calculateStateChange(engine, character) {
                     }
                 } else {
                     if (activationCondition.useActionAccumulator && activationCondition.useActionAccumulator.resetIfNo) {
-                        await resetAccumulator(engine, character,activationCondition);
+                        await resetAccumulator(engine, character, activationCondition);
                     }
                 }
             }

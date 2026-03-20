@@ -363,13 +363,6 @@ declare interface DEActionPromptInjection {
      */
     deadEndIsDeath: boolean;
     /**
-     * Whether this prompt injection should override any other
-     * prompt injections from other states regardless of dominance, so
-     * even a less dominant state can force its prompt injection
-     * over more dominant states
-     */
-    forceDominant: boolean;
-    /**
      * The primary emotion this action will cause provided
      */
     primaryEmotion: DEEmotionNames;
@@ -576,14 +569,6 @@ declare interface DECharacterStateDefinition {
      * Whether the state requires a specific posture to trigger only
      */
     requiresPostureForTrigger?: DEPosture | null;
-    /**
-     * Whether the state seeks a specific posture once triggered
-     * for example the TIRED state may seek laying_down posture
-     * if null, posture is not sought
-     * 
-     * TODO implement
-     */
-    seeksPosture: DEPosture | null;
     /**
      * Whether the character falls down to the ground when the state is triggered
      * for example, the UNCONSCIOUS state may cause the character to fall down
@@ -2289,7 +2274,17 @@ declare interface DEConversationMessage {
      */
     perspectiveSummaryIds: {
         [characterName: string]: Array<string>;
-    }
+    };
+
+    /**
+     * The emotion of the message, this is used to add more nuance to the message and help the LLM understand the tone of the message
+     */
+    emotion: DEEmotionNames | null;
+
+    /**
+     * The emotional range of the message
+     */
+    emotionalRange: DEEmotionNames[] | null;
 }
 
 /**

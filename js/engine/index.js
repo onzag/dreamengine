@@ -800,6 +800,8 @@ export class DEngine {
                     startTime: { ...this.deObject.currentTime },
                     perspectiveSummaryIds: {},
                     singleSummary: null,
+                    emotion: null,
+                    emotionalRange: null,
                 },
             ],
             bondsAtStart: getFrozenBonds(this, expectedParticipants),
@@ -857,6 +859,8 @@ export class DEngine {
                 singleSummary: null,
                 isRejectedMessage: false,
                 isHiddenMessage: false,
+                emotion: null,
+                emotionalRange: null,
             });
 
             await this.informDEObjectUpdated();
@@ -864,9 +868,6 @@ export class DEngine {
 
         scene.sceneStarted && await scene.sceneStarted(this.deObject, scene);
 
-        // TODO remove this hack made for debugging
-        await calculateStateChange(this, this.deObject.characters["Dema"]);
-        
 
         this.informCycleState("info", "Pre-calculating item changes and effects...");
         let lastItemChangesInfo = await calculateItemChanges(this, this.userCharacter);
@@ -879,7 +880,7 @@ export class DEngine {
             const randomizedList = ([...sceneObject.engagedCharacters]).sort(() => Math.random() - 0.5);
             for (const participantName of randomizedList) {
                 this.informCycleState("info", "Pre-calculating initial states for " + participantName + " and the world...");
-                await calculateStateChange(this, this.deObject.characters[participantName]);
+                await calculateStateChange(this, this.deObject.characters[participantName], lastItemChangesInfo.interactedCharacters);
 
                 this.informCycleState("info", "Pre-calculating initial bonds for " + participantName + "...");
                 await calculateBondsChangesDueToMessages(this, this.deObject.characters[participantName]);
@@ -899,16 +900,19 @@ export class DEngine {
                     await addMessageForStoryMaster(postureChangeMessagesAccum);
                 }
 
-                await talk(this, this.deObject.characters[participantName], {
+                const talkResult = await talk(this, this.deObject.characters[participantName], {
                     doNotMove: true,
                 });
 
-                const worldRulesResult = await testWorldRulesOn(this, this.deObject.characters[participantName]);
-                await addMessageForStoryMaster(worldRulesResult.addedMessagesForStoryMaster);
+                await addMessageForStoryMaster(talkResult.addedMessagesForStoryMaster);
 
-                // TODO test world rules for character
+                if (!talkResult.hasDeadEnded) {
+                    const worldRulesResult = await testWorldRulesOn(this, this.deObject.characters[participantName]);
+                    await addMessageForStoryMaster(worldRulesResult.addedMessagesForStoryMaster);
 
-                // TODO item changes again after they talked
+                    this.informCycleState("info", "Pre-calculating item changes and effects...");
+                    lastItemChangesInfo = await calculateItemChanges(this, this.deObject.characters[participantName]);
+                }
 
                 // TODO post any inference call
             }
@@ -1635,6 +1639,9 @@ export class DEngine {
                     perspectiveSummaryIds: {},
                     // @ts-ignore
                     singleSummary: userMessage.length < 50 ? userMessage : null,
+
+                    emotion: null,
+                    emotionalRange: null,
                 }
                 if (!userCharacterState.conversationId) {
                     // need to make a new conversation
@@ -1841,6 +1848,8 @@ export class DEngine {
             canOnlyBeSeenByCharacter: null,
             perspectiveSummaryIds: {},
             singleSummary: null,
+            emotion: null,
+            emotionalRange: null,
         };
 
         let userConversationId = this.deObject.stateFor[this.user.name].conversationId;

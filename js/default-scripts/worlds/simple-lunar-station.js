@@ -639,7 +639,6 @@ engine.exports = {
                 requiresCharacterCausants: false,
                 requiresObjectCausants: false,
                 requiresPosture: null,
-                seeksPosture: "lying_down",
                 injuryAndDeath: true,
                 intensityModifiers: [
                     {
@@ -671,7 +670,6 @@ engine.exports = {
                             DE,
                             "{{char}} has an urgent need to return to the airlock and into the lunar station to avoid asphyxiation"
                         ),
-                        forceDominant: true,
                         intensityModification: 0,
                         isDeadEndScenario: false,
                         deadEndIsDeath: false,
@@ -705,7 +703,6 @@ engine.exports = {
                 requiresCharacterCausants: false,
                 requiresObjectCausants: false,
                 requiresPosture: null,
-                seeksPosture: null,
                 injuryAndDeath: true,
                 intensityModifiers: [
                     {

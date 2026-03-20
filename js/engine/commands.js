@@ -1,5 +1,5 @@
 import { DEngine } from "./index.js";
-import { getCharacterCanSee, getExternalDescriptionOfCharacter, getSurroundingCharacters, getSysPromptForCharacter, isCharacterShelteredFromWeather, whatIsWeatherLikeForCharacter } from "./util/character-info.js";
+import { getCharacterCanSee, getExternalDescriptionOfCharacter, getSysPromptForCharacter, isCharacterShelteredFromWeather, whatIsWeatherLikeForCharacter } from "./util/character-info.js";
 import { makeTimestamp } from "./util/messages.js";
 
 /**
