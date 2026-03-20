@@ -766,9 +766,9 @@ export function getExternalDescriptionOfCharacterPostureOnly(engine, characterNa
     }
 
     if (!hideCurrentPosture) {
-        return character.name + " is currently " + postureToText(characterState.posture) + " " + postureAppliedOnDescription + ".";
+        return character.name + " is " + postureToText(characterState.posture) + " " + postureAppliedOnDescription + ".";
     } else {
-        return character.name + " is currently " + postureAppliedOnDescription + ".";
+        return character.name + " is " + postureAppliedOnDescription + ".";
     }
 }
 
@@ -1473,6 +1473,13 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
      * }>}
      */
     const actions = [];
+     /**
+     * @type {Array<{
+     *   applyingState: DEApplyingState,
+     *   stateInfo: DECharacterStateDefinition,
+     * }>}
+     */
+    const activeStates = [];
     for (const injectable of Object.values(character.actionPromptInjection)) {
         actions.push({
             applyingState: null,
@@ -1549,6 +1556,11 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
             if (stateDescriptionForInjection) {
                 stateInjections.push(stateDescriptionForInjection.trimEnd());
             }
+
+            activeStates.push({
+                applyingState: state,
+                stateInfo,
+            })
         }
 
         if (dominanceOfThisState < maxStateDominance && !stateInfo.ignoreDominanceWhenInjectedGeneralCharacterDescription) {
@@ -1742,6 +1754,7 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
     return {
         general: general.trim(),
         expressiveStates: statesDescriptions,
+        activeStates,
         relationships,
         stateDominance: maxStateDominance,
         actions,

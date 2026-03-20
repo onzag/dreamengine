@@ -46,6 +46,7 @@ export default async function calculatePostureChange(engine, character, knownCha
     });
 
     const agent = engine.inferenceAdapter.runQuestioningCustomAgentOn(
+        "posture-change",
         systemPrompt,
         null,
         lastCycle.messages,
@@ -195,6 +196,7 @@ export default async function calculatePostureChange(engine, character, knownCha
             );
 
             const agent = engine.inferenceAdapter.runQuestioningCustomAgentOn(
+                "posture-change",
                 systemPrompt,
                 null,
                 lastCycle.messages,

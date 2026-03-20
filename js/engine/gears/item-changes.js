@@ -147,6 +147,7 @@ export default async function calculateItemChanges(engine, character) {
             ].filter((v) => v !== null), null);
 
         const itemsInteractionGenerator = engine.inferenceAdapter.runQuestioningCustomAgentOn(
+            "item-changes",
             systemPromptItemsInteracted,
             null,
             lastCycleExpanded,
@@ -249,6 +250,7 @@ export default async function calculateItemChanges(engine, character) {
     let charactersToQuestion = [character.name];//charState.conversationId ? engine.deObject.conversations[charState.conversationId].participants : [];
 
     const charactersInteractionGenerator = engine.inferenceAdapter.runQuestioningCustomAgentOn(
+        "item-changes",
         systemPromptCharactersInteracted,
         null,
         lastCycleExpanded,
@@ -316,6 +318,7 @@ export default async function calculateItemChanges(engine, character) {
     );
 
     const interactionGenerator = engine.inferenceAdapter.runQuestioningCustomAgentOn(
+        "item-changes",
         systemPrompt,
         null,
         lastCycleExpanded,
@@ -3635,6 +3638,7 @@ async function updateItemAfterHappenance(
         ]).filter(v => v !== null), null);
 
     const itemsInteractionGenerator = engine.inferenceAdapter.runQuestioningCustomAgentOn(
+        "item-changes",
         systemPromptItemsInteracted,
         null,
         lastCycleMessages,

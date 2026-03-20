@@ -66,6 +66,7 @@ export class BaseInferenceAdapter {
      * When the generator is called it will yield "entire answers" as they are generated, not token by token; giving it a next
      * question will make it keep ongoing, passing null will make it stop after the current answer and the generator will finish.
      * 
+     * @param {string} gear the gear that is running this questioning agent
      * @param {string} system
      * @param {string|null} contextInfoBefore additional context information to provide to the agent
      * @param {Array<{message: string, author: string, storyMaster: boolean}>} messages
@@ -74,6 +75,7 @@ export class BaseInferenceAdapter {
      * @returns {QuestionAgentGeneratorResponse}
      */
     async *runQuestioningCustomAgentOn(
+        gear,
         system,
         contextInfoBefore,
         messages,

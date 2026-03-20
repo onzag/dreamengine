@@ -1,5 +1,9 @@
 import { DEngine } from "../index.js";
 import { getCharacterCanSee, getSysPromptForCharacter } from "../util/character-info.js";
+import { emotions } from "../util/emotions.js";
+import { createGrammarFromList, parseListFromGrammarResponse } from "../util/grammar.js";
+import { getHistoryFragmentForCharacter } from "../util/messages.js";
+import { mergeVocabularyLimits } from "../util/vocabulary.js";
 import { applyStateChange, checkAllActiveStatesConsistency } from "./state-change.js";
 
 /**
@@ -87,6 +91,41 @@ export async function talk(engine, character, options) {
      */
     let emotionalRange = [];
 
+    let baseVocabularyLimit = engine.deObject.characters[character.name].vocabularyLimit;
+    let vocabularyLimitDominance = 0;
+
+    for (const state of characterSystemPrompt.internalDescription.activeStates) {
+        let stateDominance = state.stateInfo.dominance;
+        if (state.stateInfo.relieving && typeof state.stateInfo.dominanceAfterRelief === "number") {
+            stateDominance = state.stateInfo.dominanceAfterRelief;
+        }
+
+        if (state.stateInfo.vocabularyLimit && (stateDominance > vocabularyLimitDominance || !baseVocabularyLimit)) {
+            baseVocabularyLimit = state.stateInfo.vocabularyLimit;
+            vocabularyLimitDominance = stateDominance;
+        } else if (state.stateInfo.vocabularyLimit && stateDominance == vocabularyLimitDominance && baseVocabularyLimit) {
+            mergeVocabularyLimits(baseVocabularyLimit, state.stateInfo.vocabularyLimit);
+        }
+
+        if (state.stateInfo.primaryEmotion) {
+            if (stateDominance > primaryEmotionDominance) {
+                primaryEmotion = state.stateInfo.primaryEmotion;
+                primaryEmotionDominance = stateDominance;
+                emotionalRange = [];
+            } else if (stateDominance === primaryEmotionDominance) {
+                emotionalRange.push(state.stateInfo.primaryEmotion);
+            }
+        }
+
+        if (state.stateInfo.emotionalRange) {
+            if (stateDominance > primaryEmotionDominance) {
+                emotionalRange = [...state.stateInfo.emotionalRange];
+            } else if (stateDominance === primaryEmotionDominance) {
+                emotionalRange = emotionalRange.concat(state.stateInfo.emotionalRange.filter((emotion) => !emotionalRange.includes(emotion)));
+            }
+        }
+    }
+
     for (const action of actions) {
         if (action.action.action.primaryEmotion) {
             let stateDominance = 0;
@@ -100,12 +139,29 @@ export async function talk(engine, character, options) {
                 stateDominance = 50;
             }
 
-            if (primaryEmotionDominance <= stateDominance) {
-                primaryEmotion = action.action.action.primaryEmotion;
-                if (!emotionalRange.includes(action.action.action.primaryEmotion)) {
+            if (action.action.action.primaryEmotion) {
+                if (stateDominance > primaryEmotionDominance) {
+                    primaryEmotion = action.action.action.primaryEmotion;
+                    primaryEmotionDominance = stateDominance;
+                    emotionalRange = [];
+                } else if (stateDominance === primaryEmotionDominance) {
                     emotionalRange.push(action.action.action.primaryEmotion);
                 }
-                primaryEmotionDominance = stateDominance;
+            }
+
+            if (action.action.action.emotionalRange) {
+                if (stateDominance > primaryEmotionDominance) {
+                    emotionalRange = [...action.action.action.emotionalRange];
+                } else if (stateDominance === primaryEmotionDominance) {
+                    emotionalRange = emotionalRange.concat(action.action.action.emotionalRange.filter((emotion) => !emotionalRange.includes(emotion)));
+                }
+            }
+
+            if (action.action.action.vocabularyLimit && (vocabularyLimitDominance < stateDominance || !baseVocabularyLimit)) {
+                baseVocabularyLimit = action.action.action.vocabularyLimit;
+                vocabularyLimitDominance = stateDominance;
+            } else if (action.action.action.vocabularyLimit && vocabularyLimitDominance === stateDominance && baseVocabularyLimit) {
+                mergeVocabularyLimits(baseVocabularyLimit, action.action.action.vocabularyLimit);
             }
         }
 
@@ -114,9 +170,86 @@ export async function talk(engine, character, options) {
         }
     }
 
-    if (!primaryEmotion) {
-        // TODO come up with one ask agent?
+    if (!primaryEmotion && emotionalRange.length > 0) {
+        // pick one emotion at random
+        primaryEmotion = emotionalRange[Math.floor(Math.random() * emotionalRange.length)];
     }
+
+    if (!primaryEmotion) {
+        const systemPromptForEmotion = engine.inferenceAdapter.buildSystemPromptForQuestioningAgent(
+            `You are an assistant that analyzes the emotional state of a character named ${character.name} based on their current situation, active states, and the actions they are about to take.\n` +
+            "You must decide which emotions from the list of potential emotions is the character about to primarily feel",
+            [
+                "You must answer with a list of emotions that is comma separated, and the first emotion in the list will be the primary emotion that the character is feeling. The rest of the emotions in the list are also part of the emotional range of the character, but are not as strongly felt as the primary emotion.",
+            ],
+            [
+                characterSystemPrompt.externalDescription,
+                characterSystemPrompt.internalDescription.general,
+            ],
+        );
+
+        const lastCycleExtended = await getHistoryFragmentForCharacter(engine, character, {
+            includeDebugMessages: false,
+            includeRejectedMessages: false,
+            msgLimit: "LAST_CYCLE_EXPANDED",
+        });
+
+        const emotionsList = "## Possible emotions:\n\n" + emotions.map((emotion) => `- ${emotion}`).join("\n") + "\n\n";
+
+        const generator = engine.inferenceAdapter.runQuestioningCustomAgentOn("talk", systemPromptForEmotion, null, lastCycleExtended.messages, ([
+            ...characterSystemPrompt.internalDescription.stateInjections,
+            actionsAsText,
+        ]).join("\n\n"), false);
+
+        const ready = await generator.next();
+        if (ready.done) {
+            throw new Error("Inference adapter questioning generator ended unexpectedly while trying to determine primary emotion.");
+        }
+
+        const nextQuestion = `Based on the character's situation, active states, and upcoming actions, which emotions from the list of possible emotions is ${character.name} primarily feeling? Please provide a comma separated list with the primary emotion first.`;
+
+        const emotionResponse = await generator.next({
+            maxCharacters: 100,
+            maxParagraphs: 1,
+            maxSafetyCharacters: 100,
+            nextQuestion: nextQuestion,
+            stopAt: ["\n"],
+            stopAfter: [],
+            grammar: createGrammarFromList(engine, emotions).grammar,
+            answerTrail: "Emotions:\n\n",
+        });
+
+        if (emotionResponse.done || !emotionResponse.value) {
+            throw new Error("Inference adapter questioning generator ended unexpectedly while trying to determine primary emotion.");
+        }
+
+        const emotionResponseText = emotionResponse.value.trim();
+        console.log("Received emotion response: " + emotionResponseText);
+
+        await generator.next(null); // close the generator
+
+        const resultEmotions = parseListFromGrammarResponse(emotionResponseText);
+        if (resultEmotions.length > 0) {
+            // @ts-ignore
+            primaryEmotion = resultEmotions[0].toLowerCase();
+            // @ts-ignore
+            emotionalRange = resultEmotions.slice(1).map((emotion) => emotion.toLowerCase());
+        } else {
+            console.warn("No valid emotions were parsed from the response, defaulting to no emotions.");
+            primaryEmotion = "neutral";
+            emotionalRange = [];
+        }
+    }
+
+    console.log("Determined primary emotion: " + primaryEmotion);
+    console.log("Determined emotional range: " + emotionalRange.join(", "));
+
+    // TODO implement limited vocabulary
+
+    const emotionalProfile = "# Next Story Fragment Rules:\n\n" +
+        (primaryEmotion ? `- Have ${character.name} primarily feeling ${primaryEmotion}.\n` : "") +
+        (emotionalRange.length > 0 ? `- Include emotions in the range of ${emotionalRange.join(", ")} for ${character.name}.\n` : "") +
+        (options.doNotMove ? `- ${character.name} must not change location from their current location.\n` : "");
 
     console.log(characterSystemPrompt.sysprompt);
     console.log("##############");
@@ -124,6 +257,11 @@ export async function talk(engine, character, options) {
     console.log("##############");
     console.log(characterCanSee.everything);
     console.log("##############");
+    console.log(actionsAsText);
+    console.log("##############");
+    console.log(emotionalProfile);
+
+    process.exit(1);
 
     if (deadEndAction) {
         console.log(`Finalizing dead end action for character ${character.name}: ${deadEndAction.text}`);

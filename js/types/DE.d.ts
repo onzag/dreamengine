@@ -378,7 +378,7 @@ declare interface DEActionPromptInjection {
      * 
      * Do not specify this if you do not want to limit vocabulary
      */
-    vocabularyLimit?: string[];
+    vocabularyLimit?: DEVocabularyLimit;
 }
 
 declare interface DEActionPromptInjectionWithIntensity extends DEActionPromptInjection {
@@ -758,7 +758,55 @@ declare interface DECharacterStateDefinition {
      * 
      * This is state level and will apply if this state is active to all character messages
      */
-    vocabularyLimit?: string[];
+    vocabularyLimit?: DEVocabularyLimit;
+    /**
+     * The primary emotion this state will cause
+     */
+    primaryEmotion?: DEEmotionNames;
+    /**
+     * The emotional range this state will cause
+     */
+    emotionalRange?: DEEmotionNames[];
+}
+
+declare interface DEVocabularyToken {
+    type: "WORD" | "GRAMMAR" | "PLACEHOLDER" | "PHRASE";
+    value?: string | string[];
+}
+
+declare interface DEVocabularyLimit {
+    /**
+     * This makes the character mute
+     */
+    mute: boolean;
+    /**
+     * Includes, basic subject pronouns, object pronouns, possessive pronouns, reflexive pronouns, common verbs like "to be", "to have", "to do", etc...
+     * and things used for base conjugation and basic grammar
+     */
+    includeBaseVocabulary?: boolean;
+    /**
+     * The maximum number of words that can be used in a message when this vocabulary limit is active, if null, no limit is applied
+     */
+    maxWordsPerMessage?: number;
+    /**
+     * Exact words that can be used
+     */
+    vocabulary: DEVocabularyToken[];
+    /**
+     * CAPITALIZE_SCREAM will make the character scream the words in uppercase, NONE will just limit vocabulary without modifying it
+     * only affects words and phrases, not grammar tokens or placeholders, as those are not modified in any case, just limited
+     */
+    intensityEffect?: "CAPITALIZE_SCREAM" | "NONE";
+    /**
+     * eg. "b-but", this is useful for states that cause the character to stutter or elongate their words
+     * only affects words and phrases, not grammar tokens or placeholders, as those are not modified in any case, just limited
+     */
+    stutterEffect?: boolean;
+    /**
+     * eg. but, buuuut, butttt, etc... this is useful for states that cause the character to stutter or elongate their words
+     * only affects words and phrases, not grammar tokens or placeholders, as those are not modified in any case, just limited
+     */
+    elongateWordsEffect?: boolean;
 }
 
 declare interface DEBondIncreaseDecreaseQuestion {
@@ -892,7 +940,9 @@ type DEEmotionNames =
     // pain
     "hurting" | "aching" | "sore" | "agonizing" | "suffering" | "distressed" |
     // determination
-    "determined" | "serious" | "resolute" | "steadfast" | "persistent" | "confident" | "proud"
+    "determined" | "serious" | "resolute" | "steadfast" | "persistent" | "confident" | "proud" |
+    // cold
+    "cold" | "indifferent" | "detached"
 
 // confronted 
 
@@ -1273,7 +1323,7 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
      * only specific words of phrases (eg. a parrot that can only say "hello" and "goodbye" by setting this)
      * or something like groot that can only say "I am Groot" in different inflections
      */
-    vocabularyLimit?: string[];
+    vocabularyLimit?: DEVocabularyLimit;
 
     /**
      * A number from 0 to 1 that represents how heroic the character is, higher means more likely to perform heroic actions and behaviours

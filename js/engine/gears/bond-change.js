@@ -145,7 +145,7 @@ export default async function calculateBondsChangesDueToMessages(engine, charact
                 ]
             );
 
-            const questioningAgent = engine.inferenceAdapter.runQuestioningCustomAgentOn(systemPromptBuilt, null, lastCycle.messages, null);
+            const questioningAgent = engine.inferenceAdapter.runQuestioningCustomAgentOn("bonds-change", systemPromptBuilt, null, lastCycle.messages, null);
             let isQuestioningAgentInitialized = false;
 
             if (!currentBond.knowsName) {

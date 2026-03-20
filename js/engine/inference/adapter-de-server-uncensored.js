@@ -396,6 +396,7 @@ ${states.join(", ")}
     }
 
     /**
+     * @param {string} gear the gear that is running this questioning agent
      * @param {string} system
      * @param {string|null} contextInfoBefore additional context information to provide to the agent
      * @param {Array<{message: string, author: string, storyMaster: boolean}>} messages
@@ -404,6 +405,7 @@ ${states.join(", ")}
      * @returns {import('./base.js').QuestionAgentGeneratorResponse}
      */
     async *runQuestioningCustomAgentOn(
+        gear,
         system,
         contextInfoBefore,
         messages,
@@ -433,6 +435,7 @@ ${states.join(", ")}
             const payload = {
                 system: system,
                 userTrail: (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "") + "# Story:\n" + messagesFormatted + "\n\n" + (contextInfoAfter ? "\n" + contextInfoAfter : ""),
+                gear: gear,
             };
 
             this.socket.send(JSON.stringify({ action: "analyze-prepare", payload, rid }));
@@ -453,6 +456,7 @@ ${states.join(", ")}
                 const payload = {
                     system: system,
                     userTrail: (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "") + "# Previous Story:\n" + restMessagesFormatted + "\n\n# Last Story Fragment to Analyze:\n" + lastMessageFormatted + (contextInfoAfter ? "\n" + contextInfoAfter : ""),
+                    gear: gear,
                 };
 
                 this.socket.send(JSON.stringify({ action: "analyze-prepare", payload, rid }));
@@ -460,6 +464,7 @@ ${states.join(", ")}
                 const payload = {
                     system: system,
                     userTrail: (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "") + "# Last Story Fragment to Analyze:\n" + lastMessageFormatted + (contextInfoAfter ? "\n" + contextInfoAfter : ""),
+                    gear: gear,
                 };
 
                 this.socket.send(JSON.stringify({ action: "analyze-prepare", payload, rid }));
