@@ -54,6 +54,8 @@ The world is physical, therefore items have weight and volume, characters have s
 ### And More
 The engine behaviour is fully customizable via scripting, after all; entire verses can be coded. The engine only shines then, it is meant as a world simulator not as a simple roleplay engine.
 
+You can have missions, events, quests, etc... the world is your oyster.
+
 ## Key Considerations
 
 ### Extra Inference
