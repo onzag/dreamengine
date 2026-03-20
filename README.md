@@ -45,6 +45,12 @@ So as long as it is compatible with the inner infrastructure, Llama, Mistral, GL
 ### NSFW Capable
 Capable of being explicit, capable of being conditionally explicit too; you may need to build bonds and relationships first or otherwise you will destroy your relationship, the conditional nature means characters can respond very negatively to unproper advances, highly realistic, the 2nd axis of the bond system is often used for romantic/sexual advances with characters and determines what is and isn't possible.
 
+### Enforced World Layout
+The world is defined granulary, every item, every location, every character position, place, posture, etc... is determined, and the characters will abide by it.
+
+### Volume and Weight
+The world is physical, therefore items have weight and volume, characters have strength and carrying capacity, and the world behaves accordingly.
+
 ### And More
 The engine behaviour is fully customizable via scripting, after all; entire verses can be coded. The engine only shines then, it is meant as a world simulator not as a simple roleplay engine.
 
