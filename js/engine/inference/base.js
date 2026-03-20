@@ -12,7 +12,6 @@ import { DEngine } from "../index.js";
      * maxParagraphs: number,
      * maxCharacters: number,
      * maxSafetyCharacters: number,
-     * useQuestionCache?: boolean,
      * } | null>} QuestionAgentGeneratorResponse
      */
 

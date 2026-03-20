@@ -474,13 +474,14 @@ ${states.join(", ")}
         });
         delete this.listener[rid];
 
-        let questionCache = new Map();
         let nextQuestion = yield "ready";
         while (nextQuestion !== null) {
-            if (nextQuestion.useQuestionCache && questionCache.has(nextQuestion.nextQuestion)) {
-                nextQuestion = yield questionCache.get(nextQuestion.nextQuestion);
+            if (typeof nextQuestion === "undefined") {
+                console.error("Questioning agent received undefined, treating an invalid ready signal");
+                yield "ready";
                 continue;
             }
+
             const rid = cheapRID();
             // send the next question
             this.socket.send(JSON.stringify({
@@ -510,9 +511,6 @@ ${states.join(", ")}
                 throw new Error(data.message);
             } else if (data.type === "answer") {
                 const answer = data.text;
-                if (nextQuestion.useQuestionCache) {
-                    questionCache.set(nextQuestion.nextQuestion, answer);
-                }
                 nextQuestion = yield answer;
             } else {
                 throw new Error("Unexpected message type during questioning: " + data.type);

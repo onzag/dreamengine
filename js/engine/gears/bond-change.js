@@ -149,6 +149,14 @@ export default async function calculateBondsChangesDueToMessages(engine, charact
             let isQuestioningAgentInitialized = false;
 
             if (!currentBond.knowsName) {
+                if (!isQuestioningAgentInitialized) {
+                    // initialize the questioning agent
+                    const generatedResult = await questioningAgent.next();
+                    if (generatedResult.done) {
+                        throw new Error(`Questioning agent terminated unexpectedly while processing bond condition for bond from ${character.name} towards ${characterNameToGetBondTowards} on question about knowing the name`);
+                    }
+                    isQuestioningAgentInitialized = true;
+                }
                 const question = `In the story provided, has ${character.name} been made aware of ${characterNameToGetBondTowards}'s name? If it is explicitly stated or very heavily implied that they have learned the name, answer yes, otherwise answer no.`;
                 console.log("Asking question: " + question)
                 const questioningAgentResult = await questioningAgent.next({

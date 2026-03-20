@@ -656,7 +656,6 @@ export default async function calculateItemChanges(engine, character) {
                             maxCharacters: 0, maxSafetyCharacters: 100,
                             maxParagraphs: 1,
                             nextQuestion: nextQuestion,
-                            useQuestionCache: true,
                             stopAfter: yesNoGrammarObject.stopAfter,
                             stopAt: [],
                             grammar: yesNoGrammarObject.grammar,
@@ -855,7 +854,6 @@ export default async function calculateItemChanges(engine, character) {
                                     maxCharacters: 0, maxSafetyCharacters: 100,
                                     maxParagraphs: 1,
                                     nextQuestion: nextQuestion,
-                                    useQuestionCache: true,
                                     stopAfter: [],
                                     stopAt: [],
                                     contextInfo: engine.inferenceAdapter.buildContextInfoExample(

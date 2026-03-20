@@ -868,7 +868,6 @@ export class DEngine {
 
         scene.sceneStarted && await scene.sceneStarted(this.deObject, scene);
 
-
         this.informCycleState("info", "Pre-calculating item changes and effects...");
         let lastItemChangesInfo = await calculateItemChanges(this, this.userCharacter);
 
