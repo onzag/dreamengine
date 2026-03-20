@@ -230,6 +230,18 @@ export class DEngine {
     }
 
     /**
+     * Makes the user character schizophrenic which changes the behaviour
+     * of the testing of world rules, so the character is free to hallucinate
+     * instead of being constrained by reality
+     */
+    enableSchizophreniaModeForUser() {
+        if (!this.userCharacter) {
+            throw new Error("DEngine not initialized");
+        }
+        this.userCharacter.schizophrenia = 1;
+    }
+
+    /**
      * @param {BaseInferenceAdapter} adapter
      */
     setInferenceAdapter(adapter) {
@@ -817,6 +829,11 @@ export class DEngine {
             if (!this.deObject) {
                 throw new Error("DEngine not initialized");
             }
+
+            if (messages.length === 0) {
+                return;
+            }
+
             index++;
 
             const messageCombined = messages.join("\n\n");
@@ -849,9 +866,7 @@ export class DEngine {
 
         // TODO remove this hack made for debugging
         await calculateStateChange(this, this.deObject.characters["Dema"]);
-        await talk(this, this.deObject.characters["Dema"], {
-            doNotMove: true,
-        });
+        
 
         this.informCycleState("info", "Pre-calculating item changes and effects...");
         let lastItemChangesInfo = await calculateItemChanges(this, this.userCharacter);
@@ -884,7 +899,14 @@ export class DEngine {
                     await addMessageForStoryMaster(postureChangeMessagesAccum);
                 }
 
-                // TODO they talk, talk in a way location change is forbidden... because it's scene setup
+                await talk(this, this.deObject.characters[participantName], {
+                    doNotMove: true,
+                });
+
+                const worldRulesResult = await testWorldRulesOn(this, this.deObject.characters[participantName]);
+                await addMessageForStoryMaster(worldRulesResult.addedMessagesForStoryMaster);
+
+                // TODO test world rules for character
 
                 // TODO item changes again after they talked
 
@@ -1289,270 +1311,6 @@ export class DEngine {
         return Array.from(itemsCharacterCannotWearWReasons);
     }
 
-    /**
-     * @param {string} locationName 
-     * @returns 
-     */
-    getFullItemListAtLocation(locationName) {
-        if (!this.deObject) {
-            throw new Error("DEngine not initialized");
-        }
-        const location = this.deObject.world.locations[locationName];
-        if (!location) {
-            throw new Error(`Location ${locationName} not found.`);
-        }
-        /**
-         * @type {string[]}
-         */
-        const items = [];
-        /**
-         * 
-         * @param {DEItem[]} itemList 
-         */
-        const processItemList = (itemList) => {
-            for (const item of itemList) {
-                if (!items.includes(item.name)) {
-                    items.push(item.name);
-                }
-                processItemList(item.containing);
-                processItemList(item.ontop);
-            }
-        }
-        for (const locationSlotName in location.slots) {
-            const locationSlot = location.slots[locationSlotName];
-            processItemList(locationSlot.items);
-        }
-        // @ts-ignore
-        const charactersAtLocation = Object.keys(this.deObject.stateFor).filter(charName => this.deObject.stateFor[charName].location === locationName);
-        for (const charName of charactersAtLocation) {
-            const charState = this.deObject.stateFor[charName];
-            processItemList(charState.wearing);
-            processItemList(charState.carrying);
-        }
-        return items;
-    }
-
-    /**
-     * @param {"can" | "cannot"} canOrCannot
-     * @param {string} characterName 
-     * @param {string} locationName 
-     * @param {boolean} includeCharacters
-     * @param {boolean} excludeItems
-     * @param {boolean} addVerboseContainmentInfo
-     * @returns 
-     */
-    async getItemsCharacterMayCarryWithReasons(canOrCannot, characterName, locationName, includeCharacters, excludeItems, addVerboseContainmentInfo = false) {
-        // TODO refactor this, we should use the util weight and volume that has the standarized way to measure weight and volume of
-        // characters and items, also maybe it's better to specify list of interactions...
-        // 1. what can be carried
-        // 2. what cannot be carried with reasons
-        // 3. what can be worn
-        // 4. what cannot be worn with reasons
-        // 5. What items and characters can get atop
-        // 6. What items and characters cannot get atop with reasons (eg. will break, will crush)
-        if (!this.deObject) {
-            throw new Error("DEngine not initialized");
-        }
-        const character = this.deObject.characters[characterName];
-        if (!character) {
-            throw new Error(`Character ${characterName} not found.`);
-        }
-        const location = this.deObject.world.locations[locationName];
-        if (!location) {
-            throw new Error(`Location ${locationName} not found.`);
-        }
-        const characterState = this.deObject.stateFor[characterName];
-        if (!characterState) {
-            throw new Error(`Character state for ${characterName} not found.`);
-        }
-
-        /**
-         * @type {Set<string>}
-         */
-        const itemsCharacterCannotCarryWReasons = new Set();
-
-        let remainingCarryingCapacity = character.carryingCapacityKg;
-        let remainingCarryingVolume = character.carryingCapacityLiters;
-
-        /**
-             * @param {DEItem[]} itemList 
-             * @param {boolean} isOurOwnCharacterWearing
-             * @param {boolean} isOtherCharacterWearing
-             */
-        const processItemList = (itemList, isOurOwnCharacterWearing = false, isOtherCharacterWearing = false) => {
-            let takenVolume = 0;
-            let addedVolume = 0;
-            for (const carriedItem of itemList) {
-                remainingCarryingCapacity -= carriedItem.weightKg * carriedItem.amount;
-                if (carriedItem.containerProperties?.capacityLiters) {
-                    addedVolume += carriedItem.containerProperties.capacityLiters * carriedItem.amount;
-                }
-                takenVolume += carriedItem.volumeLiters * carriedItem.amount;
-
-                if (isOurOwnCharacterWearing && carriedItem.wearableProperties) {
-                    // wearing an item does not take volume, but it can add volume capacity
-                    if (carriedItem.wearableProperties.addedCarryingCapacityLiters) {
-                        addedVolume += carriedItem.wearableProperties.addedCarryingCapacityLiters * carriedItem.amount;
-                    }
-                    if (carriedItem.wearableProperties.addedCarryingCapacityKg) {
-                        remainingCarryingCapacity += carriedItem.wearableProperties.addedCarryingCapacityKg * carriedItem.amount;
-                    }
-                }
-                if (isOtherCharacterWearing && carriedItem.wearableProperties) {
-                    // wearing an item does not take volume, but it can add volume capacity
-                    if (carriedItem.wearableProperties.extraBodyVolumeWhenWornLiters) {
-                        takenVolume += carriedItem.wearableProperties.extraBodyVolumeWhenWornLiters * carriedItem.amount;
-                    }
-                }
-
-                // the added and taken volume are irrelevant because
-                // these are already inside another container
-                processItemList(carriedItem.containing);
-                processItemList(carriedItem.ontop);
-            }
-
-            return { takenVolume, addedVolume }
-        }
-        /**
-         * @param {string[]} characterList
-         */
-        const processCharacterList = (characterList) => {
-            let takenVolume = 0;
-            let addedVolume = 0;
-            for (const carriedCharacterName of characterList) {
-                const carriedCharacterState = this.deObject?.stateFor[carriedCharacterName];
-                if (carriedCharacterState === undefined) {
-                    continue;
-                }
-                const characterWeight = this.deObject?.characters[carriedCharacterName]?.weightKg || 0;
-                remainingCarryingCapacity -= characterWeight;
-                // assume a character is mostly water, so the volume is weight
-                // in liters is weight in kg divided by 1 (density of water)
-                // so just use the weight as volume for simplicity
-                takenVolume += characterWeight;
-                // carrying a character does not add volume capacity but it takes volume
-                const characterVolumes = processItemList(carriedCharacterState.carrying);
-                takenVolume += characterVolumes.takenVolume;
-                // now consider the clothes they are wearing
-                const characterVolumesWearing = processItemList(carriedCharacterState.wearing, false, true);
-                takenVolume += characterVolumesWearing.takenVolume;
-                // the same is true for the characters they are carrying
-                const characterCharactersVolumes = processCharacterList(carriedCharacterState.carryingCharactersDirectly);
-                takenVolume += characterCharactersVolumes.takenVolume;
-            }
-
-            return { takenVolume, addedVolume }
-        }
-        const characterCharactersVolumes = processCharacterList(characterState.carryingCharactersDirectly);
-        const carryingVolumes = processItemList(characterState.carrying);
-        remainingCarryingVolume -= (carryingVolumes.takenVolume - carryingVolumes.addedVolume);
-        remainingCarryingVolume -= characterCharactersVolumes.takenVolume;
-        const volumeClothes = processItemList(characterState.wearing, true);
-        remainingCarryingVolume += volumeClothes.addedVolume; // clothes don't count towards carrying volume, becuase they are worn
-        // so we only consider the extra volume they add, not the volume they take
-
-        /**
-         * @param {DEItem} item
-         * @param {string} extraMessage
-         */
-        const processItemAndReason = async (item, extraMessage) => {
-            let reason = null;
-            if (item.weightKg > character.carryingCapacityKg) {
-                reason = `item is too heavy (${item.weightKg}kg) for ${character.name}'s strength`;
-            } else if (item.volumeLiters > character.carryingCapacityLiters) {
-                reason = `item is too large (${item.volumeLiters}L) for ${character.name}'s carrying capacity`;
-            } else if (item.weightKg > remainingCarryingCapacity) {
-                reason = `${character.name} is already carrying too much weight to lift this item, weights ${item.weightKg}kg, remaining capacity is ${remainingCarryingCapacity}kg`;
-            } else if (item.volumeLiters > remainingCarryingVolume) {
-                reason = `${character.name} is already carrying too much volume to fit this item, volume is ${item.volumeLiters}L, remaining capacity is ${remainingCarryingVolume}L`;
-            }
-
-            if (reason && canOrCannot === "cannot") {
-                if (item.amount >= 2) {
-                    itemsCharacterCannotCarryWReasons.add(`Name: 1 of ${item.name}${addVerboseContainmentInfo ? " - " + extraMessage : ""} - Cannot be carried/picked because ${reason}`);
-                } else {
-                    itemsCharacterCannotCarryWReasons.add(`Name: ${item.name}${addVerboseContainmentInfo ? " - " + extraMessage : ""} - Cannot be carried/picked because ${reason}`);
-                }
-            } else if (!reason && canOrCannot === "can") {
-                if (item.amount >= 2) {
-                    itemsCharacterCannotCarryWReasons.add(`Name: 1 of ${item.name}${addVerboseContainmentInfo ? " - " + extraMessage : ""} - can be carried/picked`);
-                } else {
-                    itemsCharacterCannotCarryWReasons.add(`Name: ${item.name}${addVerboseContainmentInfo ? " - " + extraMessage : ""} - can be carried/picked`);
-                }
-            }
-
-            for (const containedItem of item.containing) {
-                await processItemAndReason(containedItem, ` (contained by ${item.name}${extraMessage})`);
-            }
-
-            for (const ontopItem of item.ontop) {
-                await processItemAndReason(ontopItem, ` (on top of ${item.name}${extraMessage})`);
-            }
-        }
-
-        if (!excludeItems) {
-            for (const locationSlotName in location.slots) {
-                const locationSlot = location.slots[locationSlotName];
-                for (const item of locationSlot.items) {
-                    await processItemAndReason(item, "");
-                }
-            }
-
-            for (const otherCharName in this.deObject.stateFor) {
-                if (otherCharName === characterName) continue;
-                const otherCharState = this.deObject.stateFor[otherCharName];
-                if (otherCharState.location === locationName) {
-                    // check their wearing items
-                    for (const item of otherCharState.wearing) {
-                        await processItemAndReason(item, ` (worn by ${otherCharName})`);
-                    }
-
-                    // check their carried items
-                    for (const item of otherCharState.carrying) {
-                        await processItemAndReason(item, ` (carried by ${otherCharName})`);
-                    }
-                }
-            }
-        }
-
-        if (includeCharacters) {
-            for (const otherCharName in this.deObject.stateFor) {
-                if (otherCharName === characterName) continue;
-                const otherCharState = this.deObject.stateFor[otherCharName];
-                if (otherCharState.location === locationName) {
-                    let reason = null;
-                    const otherCharacter = this.deObject.characters[otherCharName];
-                    if (!otherCharacter) {
-                        continue;
-                    }
-                    if (otherCharacter.weightKg > character.carryingCapacityKg) {
-                        reason = `${otherCharacter.name} is too heavy (${otherCharacter.weightKg}kg) for ${character.name}'s strength`;
-                    } else if (otherCharacter.weightKg > character.carryingCapacityLiters) {
-                        reason = `${otherCharacter.name} is too large (${otherCharacter.weightKg}L) for ${character.name}'s carrying capacity`;
-                    } else if (otherCharacter.weightKg > remainingCarryingCapacity) {
-                        reason = `${character.name} is already carrying too much weight to lift ${otherCharacter.name}`;
-
-                        // assume the character's volume is equal to their weight in liters
-                    } else if (otherCharacter.weightKg > remainingCarryingVolume) {
-                        reason = `${character.name} is already carrying too much volume to carry ${otherCharacter.name}`;
-                    }
-                    const otherCharacterState = this.deObject.stateFor[otherCharName];
-                    const otherCharacterInfo = this.deObject.characters[otherCharName];
-                    const currentShortDesc = await getExternalDescriptionOfCharacter(this, characterName, true);
-
-                    if (reason && canOrCannot === "cannot") {
-                        itemsCharacterCannotCarryWReasons.add(`Name: ${otherCharacter.name} - Description: ${currentShortDesc} - Cannot be carried because ${reason}`);
-                    } else if (!reason && canOrCannot === "can") {
-                        itemsCharacterCannotCarryWReasons.add(`Name: ${otherCharacter.name} - Description: ${currentShortDesc} - Can be carried`);
-                    }
-                }
-
-            }
-        }
-
-        return Array.from(itemsCharacterCannotCarryWReasons);
-    }
-
     async informDEObjectUpdated() {
         await Promise.all(this.listeners.map(async (listener) => {
             try {
@@ -1576,13 +1334,6 @@ export class DEngine {
                 console.error("Error in cycle state listener:", e);
             }
         }
-    }
-
-    /**
-     * @param {string} characterName 
-     */
-    informCharacterInferenceStart(characterName) {
-
     }
 
     /**

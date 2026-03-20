@@ -3,6 +3,7 @@ import { getBeingCarriedByCharacter, getCharacterExactLocation, getExternalDescr
 import { getHistoryFragmentForCharacter } from "../util/messages.js";
 import { getCharacterCarryingCapacity, getCharacterVolume, getCharacterWeight, getItemExcessElements, getItemVolume, getItemWeight, getWearableFitment, isAlreadyPlural, isSingularOfPlural, locationPathToMessage, locationPathToMessageWithoutItemName, resolvePath, utilItemCount } from "../util/weight-and-volume.js";
 import { yesNoGrammar, isYes } from "../util/grammar.js";
+import { getFullItemListAtLocation } from "../util/items.js";
 
 /**
  * 
@@ -86,7 +87,7 @@ export default async function calculateItemChanges(engine, character) {
     }
 
     // get the item list at the location, if there are no items, skip the check since there can't be any item changes
-    const itemsAtLocation = engine.getFullItemListAtLocation(charState.location);
+    const itemsAtLocation = getFullItemListAtLocation(engine, charState.location);
 
     // we also get the location name for the character state location, since we will need it for the questioning agent context
     const location = engine.deObject.world.locations[charState.location];
