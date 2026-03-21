@@ -12,12 +12,42 @@ function cheapRID() {
     return Math.random().toString(36).substring(2) + Date.now().toString(36);
 }
 
+/**
+ * Replaces multiple consecutive new lines with a maximum of two new lines.
+ * @param {string} text 
+ * @returns {string}
+ */
+function replaceMultipleNewLines(text) {
+    return text.replace(/\n{3,}/g, "\n\n");
+}
+
+/**
+ * @param {string} text 
+ */
+function getLastParagraphChunkOf(text) {
+    // get the last paragraph of the text
+    const lastParagraph = text.split("\n\n").slice(-1)[0];
+    // we want to always cut it, so it always starts with ... so we always want to cut it a bit shorter
+    // by default we want to show the last 60, but we will reduce that
+    let truncateToLength = 60;
+    while (lastParagraph.length < truncateToLength && truncateToLength > 0) {
+        truncateToLength -= 10;
+    }
+    // now we will cut the paragraph to that size, then split in words and drop the first word which may have been cut in half and join again
+    const truncated = lastParagraph.slice(-truncateToLength).split(" ").slice(1).join(" ");
+    // now we can add our ellipsis
+    return "..." + truncated;
+}
+
 export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
     /**
      * @param {DEngine} parent 
      * @param {{
      *    host?: string;
-     *    thinkTag?: boolean;
+     *    thinking?: {
+     *        thinkTagOpen?: string;
+     *        thinkTagClose?: string;
+     *    }
      *    apiKey?: string;
      *    secret?: string;
      * }} options
@@ -278,16 +308,14 @@ ${states.join(", ")}
      * Infers the next message for a character narrative purposes
      * 
      * @param {DECompleteCharacterReference} character
-     * @param {string[]} messages
-     * @param {string} system 
+     * @param {Array<{message: string, author: string, storyMaster: boolean}>} messages
+     * @param {string} system the system prompt, should be generated with buildSystemPromptForCharacter
      * @param {string[]} stateInjections
      * @param {string} visibleEnviroment
      * @param {string[]} actions
      * @param {string[]} narrativeEffects
-     * @param {string} primaryEmotion
-     * @param {string[]} emotionalRange
      * @param {string} grammar
-     * @returns {AsyncGenerator<string, void, boolean>}
+     * @returns {AsyncGenerator<{type: "text" | "warning" | "hidden", content: string}, void, boolean>}
      */
     async* inferNextStoryFragmentFor(
         character,
@@ -297,8 +325,6 @@ ${states.join(", ")}
         visibleEnviroment,
         actions,
         narrativeEffects,
-        primaryEmotion,
-        emotionalRange,
         grammar,
     ) {
         await this.ensureInitialized();
@@ -307,73 +333,91 @@ ${states.join(", ")}
             throw new Error("WebSocket is not open");
         }
 
-        let tokensExhaustedApprox = 512; // initial buffer
+        let systemPrompt = replaceMultipleNewLines(system + visibleEnviroment).trim();
+
+        let userPrompt = replaceMultipleNewLines(`
+${stateInjections.length > 0 ? `# ${character.name}'s Current States:\n\n${stateInjections.join("\n\n")}` : ""}
+
+${narrativeEffects.length ? "# When narrating ensure that:\n\n" + narrativeEffects.map(effect => `- ${effect}`).join("\n") : ""}
+
+${actions.length > 0 ? `# Actions ${character.name} must take:\n\n${actions.join("\n\n")}` : ""}
+        `).trim();
+        let assistantPromptTrail = "";
+
+        let tokensExhaustedApprox = 256; // initial buffer
         let contextWindowSize = this.contextWindowSize
 
         // wiggle room for system prompt
-        tokensExhaustedApprox += await this.countTokens(system);
-        if (action && action.trim().length > 0) {
-            tokensExhaustedApprox += await this.countTokens(action);
+        tokensExhaustedApprox += await this.countTokens(systemPrompt);
+
+        if (tokensExhaustedApprox >= contextWindowSize) {
+            throw new Error("System prompt is too long for the model's context window");
         }
 
-        // TODO fix the grammar here
-        // TODO fix this is not how it is going to be anymore
+        tokensExhaustedApprox += await this.countTokens(userPrompt);
+
+        if (tokensExhaustedApprox >= contextWindowSize) {
+            throw new Error("User prompt is too long for the model's context window");
+        }
+
+        let storySoFar = "";
+        let tokensInStorySoFar = 0;
+        for (const msg of messages.reverse()) {
+            let messageToAdd = msg.message;
+            if (storySoFar) {
+                messageToAdd += "\n\n";
+            }
+            const messageTokens = await this.countTokens(messageToAdd);
+            if (tokensExhaustedApprox + tokensInStorySoFar + messageTokens >= contextWindowSize) {
+                yield { type: "warning", content: "The story so far is too long for the model's context window, some of the earliest messages will be truncated." };
+                break;
+            }
+            storySoFar = messageToAdd + storySoFar;
+            tokensInStorySoFar += messageTokens;
+        }
+
+        storySoFar = replaceMultipleNewLines(storySoFar).trim();
+
+        userPrompt = `${storySoFar}\n\n${userPrompt}`;
+
+        tokensExhaustedApprox += tokensInStorySoFar;
+
+        assistantPromptTrail = `# Continuing the story as ${character.name}:\n\n${getLastParagraphChunkOf(storySoFar)}\n\n`;
+
+        console.log(systemPrompt);
+        console.log(userPrompt);
+        console.log(assistantPromptTrail);
+        console.log("Grammar:", grammar);
+
         const payload = {
             messages: [
                 {
                     role: "system",
-                    content: system,
+                    content: systemPrompt,
                 },
+                {
+                    role: "user",
+                    content: userPrompt,
+                }
             ],
-            trail: (this.options.thinkTag ? "<think>" : ""),
-            //stopAt: this.options.thinkTag ? ["<think>"].concat(Array.from(otherCharacterNames).map(name => `\n[${name}]:`)) : Array.from(otherCharacterNames).map(name => `\n[${name}]:`),
+            trail: assistantPromptTrail + (this.options.thinking?.thinkTagOpen ? this.options.thinking.thinkTagOpen : ""),
             stopAfter: [],
-            startCountingFromToken: this.options.thinkTag ? "</think>" : null,
-            maxParagraphs: 3,
+            startCountingFromToken: this.options.thinking?.thinkTagClose ? this.options.thinking.thinkTagClose : null,
+            maxParagraphs: 5,
             maxCharacters: 1000,
             maxSafetyCharacters: 5000,
+            grammar,
         };
-
-        // TODO fix this chaos
-        // for (const msg of messagesToAdd) {
-        //     if (msg.name === character.name) {
-        //         payload.messages.push({
-        //             role: "assistant",
-        //             content: "[" + msg.name + "]: " + msg.message,
-        //         });
-        //     } else {
-        //         let lastMessage = payload.messages[payload.messages.length - 1];
-        //         if (lastMessage.role === "user") {
-        //             lastMessage.content += "\n\n[" + msg.name + "]: " + msg.message;
-        //         } else {
-        //             payload.messages.push({
-        //                 role: "user",
-        //                 content: "[" + msg.name + "]: " + msg.message,
-        //             });
-        //         }
-        //     }
-        // }
-
-        if (action && action.trim().length > 0) {
-            let lastMessage = payload.messages[payload.messages.length - 1];
-            if (lastMessage.role === "user") {
-                lastMessage.content += "\n\n" + action;
-            } else {
-                payload.messages.push({
-                    role: "user",
-                    content: action,
-                });
-            }
-        }
 
         const rid = cheapRID();
         this.socket.send(JSON.stringify({ action: "infer", payload, rid }));
 
         // by default we are thinking if we use the think tag, otherwise we are not
-        let isThinking = this.options.thinkTag ? true : false;
+        let isThinking = this.options.thinking ? true : false;
 
         let collectedMessage = "";
-        let alreadyOutOfThinkLoop = this.options.thinkTag ? false : true;
+        let alreadyOutOfThinkLoop = this.options.thinking ? false : true;
+        const thinkTagClose = this.options.thinking?.thinkTagClose || "";
 
         while (true) {
             const data = await new Promise((resolve, reject) => {
@@ -386,17 +430,37 @@ ${states.join(", ")}
             if (data.type === "token") {
                 collectedMessage += data.token;
                 if (!alreadyOutOfThinkLoop) {
-                    const outOfThinkLoopNow = collectedMessage.includes("</think>");
+                    const outOfThinkLoopNow = collectedMessage.includes(thinkTagClose);
                     if (outOfThinkLoopNow) {
                         isThinking = false;
                         alreadyOutOfThinkLoop = true;
-                        const tokensAfterThinkTag = collectedMessage.split("</think>")[1];
-                        const shouldContinue = yield tokensAfterThinkTag;
+                        const tokensAfterThinkTag = collectedMessage.split(thinkTagClose)[1];
+                        const lastHiddenTextShouldContinue = yield { type: "hidden", content: data.token.split(thinkTagClose)[0] };
+                        if (lastHiddenTextShouldContinue === false) {
+                            // send a cancel message
+                            this.socket.send(JSON.stringify({ action: "cancel", "rid": rid }));
+                            break;
+                        }
+                        const shouldContinue = yield { type: "text", content: tokensAfterThinkTag };
                         if (shouldContinue === false) {
                             // send a cancel message
                             this.socket.send(JSON.stringify({ action: "cancel", "rid": rid }));
                             break;
                         }
+                    } else {
+                        const shouldContinue = yield { type: "hidden", content: data.token };
+                        if (shouldContinue === false) {
+                            // send a cancel message
+                            this.socket.send(JSON.stringify({ action: "cancel", "rid": rid }));
+                            break;
+                        }
+                    }
+                } else {
+                    const shouldContinue = yield { type: "hidden", content: data.token };
+                    if (shouldContinue === false) {
+                        // send a cancel message
+                        this.socket.send(JSON.stringify({ action: "cancel", "rid": rid }));
+                        break;
                     }
                 }
             } else if (data.type === "done") {
@@ -744,10 +808,12 @@ ${lore}
      * @returns {string}
      */
     buildSystemPromptForCharacter(character, description, externalDescription, relationships, expressiveStates, scenario, lore, otherInteractingCharacters, characterRules, worldRules) {
+        const thinkingInfo = `${this.options.thinking ? `\n\nTo facilitate roleplay, use ${this.options.thinking.thinkTagOpen} and ${this.options.thinking.thinkTagClose} tags, to analyze the character thoughts and actions before narrating.` : ""}`;
+
         return (
             `You roleplay as ${character.name} in a richly detailed and immersive world. Your actions, thoughts, and feelings are entirely your own, and you have complete creative freedom to explore this narrative-driven experience.
 
-This uncensored, immersive, narrative-driven roleplaying experience thrives on creative freedom and natural responses. This environment is designed to be fictional and narrative-focused, allowing for uncensored content of all kinds, including themes of violence, sexuality, and other mature topics.
+This uncensored, immersive, narrative-driven roleplaying experience thrives on creative freedom and natural responses. This environment is designed to be fictional and narrative-focused, allowing for uncensored content of all kinds, including themes of violence, sexuality, and other mature topics.${thinkingInfo}
 
 # Roleplay Guidelines:
 

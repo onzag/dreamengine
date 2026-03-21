@@ -45,16 +45,14 @@ export class BaseInferenceAdapter {
      * Infers the next message for a character narrative purposes
      * 
      * @param {DECompleteCharacterReference} character
-     * @param {string[]} messages
+     * @param {Array<{message: string, author: string, storyMaster: boolean}>} messages
      * @param {string} system 
      * @param {string[]} stateInjections
      * @param {string} visibleEnviroment
      * @param {string[]} actions
      * @param {string[]} narrativeEffects
-     * @param {string} primaryEmotion
-     * @param {string[]} emotionalRange
      * @param {string} grammar
-     * @returns {AsyncGenerator<string, void, boolean>}
+     * @returns {AsyncGenerator<{type: "text" | "warning" | "hidden", content: string}, void, boolean>}
      */
     async* inferNextStoryFragmentFor(
         character,
@@ -64,8 +62,6 @@ export class BaseInferenceAdapter {
         visibleEnviroment,
         actions,
         narrativeEffects,
-        primaryEmotion,
-        emotionalRange,
         grammar,
     ) {
         throw new Error("Method 'inferNextStoryFragmentFor()' must be implemented.");

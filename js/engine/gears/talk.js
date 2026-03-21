@@ -22,6 +22,8 @@ export async function talk(engine, character, options) {
         throw new Error(`Character ${character.name} not found in the engine`);
     }
 
+    // TODO implement narrative effects posts and pre
+
     const charState = engine.deObject.stateFor[character.name];
 
     if (charState.dead) {
@@ -263,14 +265,21 @@ export async function talk(engine, character, options) {
     }
 
     console.log("Determined primary emotion: " + primaryEmotion);
+
     console.log("Determined emotional range: " + emotionalRange.join(", "));
 
-    const emotionalProfile = "# Next Story Fragment Rules:\n\n" +
-        (primaryEmotion ? `- Have ${character.name} primarily feeling ${primaryEmotion}.\n` : "") +
-        (emotionalRange.length > 0 ? `- Include emotions in the range of ${emotionalRange.join(", ")} for ${character.name}.\n` : "") +
-        (options.doNotMove ? `- ${character.name} must not move from their location at the ${charState.locationSlot}.\n` : "");
+    if (primaryEmotion) {
+        narrativeEffects.push(`'${character.name}' is primarily feeling ${primaryEmotion}`);
+    }
 
-    let narrativeEffectsAsText = "";
+    if (emotionalRange.length > 0) {
+        narrativeEffects.push(`'${character.name}' response emotions should also include ${emotionalRange.join(", ")}`);
+    }
+
+    if (options.doNotMove) {
+        narrativeEffects.push(`${character.name} must not move from their location at the ${charState.locationSlot}`);
+    }
+
     if (baseVocabularyLimit?.mute) {
         narrativeEffects.push(`'${character.name}' is currently mute`);
     } else {
@@ -287,27 +296,8 @@ export async function talk(engine, character, options) {
             narrativeEffects.push(`'${character.name}' is currently screaming and their dialogue should be in all caps to reflect that`);
         }
     }
-    if (narrativeEffects.length > 0) {
-        narrativeEffectsAsText = "# When narrating ensure that:\n\n" + narrativeEffects.map((effect) => `- ${effect}`).join("\n") + "\n\n";
-    }
 
     const grammar = generateGrammarForVocabulary(engine, baseVocabularyLimit, character.name);
-
-    console.log(characterSystemPrompt.sysprompt);
-    console.log("##############");
-    console.log(characterSystemPrompt.internalDescription.stateInjections);
-    console.log("##############");
-    console.log(characterCanSee.everything);
-    console.log("##############");
-    console.log(actionsAsText);
-    console.log("##############");
-    console.log(narrativeEffectsAsText);
-    console.log("##############");
-    console.log(emotionalProfile);
-    console.log("##############");
-    console.log(grammar);
-
-    // TODO schizophrenia voices and whatnot
 
     const messages = (await getHistoryFragmentForCharacter(engine, character, {
         includeDebugMessages: false,
@@ -324,8 +314,6 @@ export async function talk(engine, character, options) {
         characterCanSee.everything,
         actions.map((action) => action.text),
         narrativeEffects,
-        primaryEmotion,
-        emotionalRange,
         grammar,
     );
 

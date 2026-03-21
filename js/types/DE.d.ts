@@ -72,7 +72,7 @@ declare interface DEMinimalCharacterReference {
      * the character, the engine uses their stealth score to see if they noticed the robbery or not, higher stealth means less likely to notice
      */
     stealth: number;
-    
+
     /**
      * A number from 0 to 1 that represents how likely the character is to perform perceptive actions or behaviours
      * higher means more likely to perform perceptive actions, this is useful for characters that are observant or like to pay attention to details
@@ -329,12 +329,6 @@ declare interface DEActionPromptInjection {
      * action, but the narrative effect will still apply
      */
     narrativeEffect?: DEStringTemplate;
-    /**
-     * Whether the narrative effect should always apply even if the action is not performed
-     * Or if no action is specified, in which case the narrative effect will always apply
-     * even if another action is performed by the character
-     */
-    alwaysApplyNarrativeEffect?: boolean;
     /**
      * The probability (0 to 1) that the action will be even checked for execution, if say
      * the probability is only 0.5 then the action will only be considered for execution half the time
@@ -767,7 +761,37 @@ declare interface DECharacterStateDefinition {
      * The emotional range this state will cause
      */
     emotionalRange?: DEEmotionNames[];
+    /**
+     * TODO implement this also affects the user
+     * 
+     * An optional instruction for the narrator (story master) to narrate when this state is active before
+     * the talking turn of the character
+     * 
+     * For example the state is FIGHTING and it has the causants Bob and Alice, the preNarration could be:
+     * 
+     * "The fight between {{format_and causants}} is intense and brutal, describe in detail how it is going and the injuries they are causing to each other"
+     * 
+     * A pre narration is an extra inference step that happens before the character turn, while it is also possible to put this in
+     * the state description as general, preNarration also affects the user, so if it is user that has the preNarration
+     * it will also act upon the user
+     */
+    preNarration?: DENarrationInstruction;
+    /**
+     * TODO implement
+     * 
+     * Similar to preNarration but it happens after the character turn, this is useful for narrating the consequences of the character actions
+     * 
+     * check preNarration for more details, it is basically the same but it happens after the character turn
+     */
+    postNarration?: DENarrationInstruction;
 }
+
+declare interface DENarrationInstruction {
+    narration?: DEStringTemplate;
+    afterRelief?: DEStringTemplate;
+    onlyOnce?: boolean;
+    likelihood?: number;
+};
 
 declare interface DEVocabularyToken {
     type: "WORD" | "GRAMMAR";
@@ -1650,7 +1674,7 @@ declare interface DEItem {
      * otherwise null or not specified
      */
     communicator?: DEItemCommunicationDeviceProperties | null;
-    
+
     /**
      * Interactions that can happen with this item that
      * have a narrative effect or action
