@@ -1473,12 +1473,12 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
      * }>}
      */
     const actions = [];
-     /**
-     * @type {Array<{
-     *   applyingState: DEApplyingState,
-     *   stateInfo: DECharacterStateDefinition,
-     * }>}
-     */
+    /**
+    * @type {Array<{
+    *   applyingState: DEApplyingState,
+    *   stateInfo: DECharacterStateDefinition,
+    * }>}
+    */
     const activeStates = [];
     for (const injectable of Object.values(character.actionPromptInjection)) {
         actions.push({
@@ -1653,7 +1653,7 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
                     other: engine.deObject.characters[activeBond.towards],
                 })).trim();
             }
-            
+
             if (!activeBond.knowsName && activeBond.stranger) {
                 result += ` ${activeBond.towards} is a stranger to ${characterName}, ${characterName} does not know their name.`;
             } else if (!activeBond.knowsName) {
@@ -2223,4 +2223,61 @@ export async function isCharacterShelteredFromWeather(engine, characterName, wea
     }
 
     return returnInformation;
+}
+
+
+/**
+ * @param {DEngine} engine
+ * @param {string} characterName 
+ * @param {string} towards
+ * @returns {Promise<[boolean, DESingleBondDescription, DEBondDeclaration, string]>} bond description and bond info
+ */
+export async function getRelationshipBetweenCharacters(engine, characterName, towards) {
+    if (!engine.deObject) {
+        throw new Error("DEngine not initialized");
+    }
+    const character = engine.deObject.characters[characterName];
+    if (!character) {
+        throw new Error(`Character ${characterName} not found.`);
+    }
+    const towardsCharacter = engine.deObject.characters[towards];
+    if (!towardsCharacter) {
+        throw new Error(`Character ${towards} not found.`);
+    }
+    // @ts-ignore
+    let bond = engine.deObject.social.bonds[characterName].active.find(bond => bond.towards === towards);
+    let bondInfo = "";
+    let pseudoBond = false;
+    if (!bond) {
+        // make a pseudo bond for stranger
+        bond = {
+            bond: 0,
+            bond2: 0,
+            stranger: true,
+            towards: towards,
+            createdAt: engine.deObject.currentTime,
+            knowsName: false,
+        }
+        pseudoBond = true;
+    }
+
+    if (!character.bonds) {
+        throw new Error(`Character ${characterName} has no bonds defined.`);
+    }
+
+    const bondDecl = character.bonds.declarations.find((b => b.strangerBond === bond.stranger && b.minBondLevel <= bond.bond && bond.bond < (b.maxBondLevel === 100 ? 200 : b.maxBondLevel) && b.min2BondLevel <= bond.bond2 && bond.bond2 < (b.max2BondLevel === 100 ? 200 : b.max2BondLevel)));
+    if (!bondDecl) {
+        throw new Error(`No bond description found for bond level ${bond.bond} and secondary bond level ${bond.bond2} from character "${characterName}" towards character "${towards}".`);
+    }
+
+    // @ts-ignore
+    bondInfo += await bondDecl.description.execute(engine.deObject, character, towardsCharacter);
+
+    if (character.bonds.descriptionGeneralInjection) {
+        // @ts-ignore
+        const value = await character.bonds.descriptionGeneralInjection.execute(engine.deObject, character, towardsCharacter);
+        bondInfo += `\n\n${value}`;
+    }
+
+    return [pseudoBond, bond, bondDecl, bondInfo];
 }

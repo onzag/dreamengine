@@ -1434,6 +1434,7 @@ declare interface DETimeDurationDescription {
     inMinutes: number;
     inHours: number;
     inDays: number;
+    inSeconds: number;
 }
 
 /**
@@ -2366,6 +2367,10 @@ declare interface DEConversationMessage {
      * The emotional range of the message
      */
     emotionalRange: DEEmotionNames[] | null;
+    /**
+     * The characters that are known to be interacting in the message
+     */
+    interactingCharacters: Array<string>;
 }
 
 /**
@@ -2621,11 +2626,6 @@ declare interface DEWorld {
      * Properties of the world that can be used for various purposes, eg. "world_age": 1000, "technology_level": "medieval", "has_magic": true, etc...
      */
     properties: Record<string, any>;
-    
-    /**
-     * The narration style of the world
-     */
-    narrationStyle: DENarrationStyle;
 }
 
 declare interface DENarrationStyle {
@@ -2697,6 +2697,10 @@ declare interface DEObject {
      * The current time in the world
      */
     currentTime: DETimeDescription;
+    /**
+     * The narration style of the world
+     */
+    narrationStyle: DENarrationStyle;
     /**
      * The rules that govern the world simulation
      * these are used to guide the world simulation LLM reasoning

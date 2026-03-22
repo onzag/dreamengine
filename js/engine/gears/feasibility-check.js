@@ -3,7 +3,7 @@
  */
 
 import { DEngine } from "../index.js";
-import { getExternalDescriptionOfCharacter, getInternalDescriptionOfCharacter, getSurroundingCharacters } from "../util/character-info.js";
+import { getExternalDescriptionOfCharacter, getInternalDescriptionOfCharacter, getRelationshipBetweenCharacters, getSurroundingCharacters } from "../util/character-info.js";
 import { getHistoryFragmentForCharacter } from "../util/messages.js";
 
 /**
@@ -761,7 +761,7 @@ async function testMessageFeasibilityForce(engine, character) {
 
             let ownCharacterDescription = "";
             try {
-                const [, , , relationshipOfOwnCharacterTowardsForcedCharacter] = await engine.getRelationshipBetweenCharacters(character.name, forcedCharacterName);
+                const [, , , relationshipOfOwnCharacterTowardsForcedCharacter] = await getRelationshipBetweenCharacters(engine, character.name, forcedCharacterName);
                 ownCharacterDescription = engine.inferenceAdapter.buildSystemCharacterDescription(
                     character,
                     internalDescriptionInfo.general,
@@ -788,7 +788,7 @@ async function testMessageFeasibilityForce(engine, character) {
             let forcedCharacterDescription = "";
 
             try {
-                const [, , , relationshipOfForcedCharacterTowardsOwnCharacter] = await engine.getRelationshipBetweenCharacters(forcedCharacterName, character.name);
+                const [, , , relationshipOfForcedCharacterTowardsOwnCharacter] = await getRelationshipBetweenCharacters(engine, forcedCharacterName, character.name);
                 const internalDescriptionInfoForcedCharacter = await getInternalDescriptionOfCharacter(engine, forcedCharacterName);
                 forcedCharacterDescription = engine.inferenceAdapter.buildSystemCharacterDescription(
                     forcedCharacter,

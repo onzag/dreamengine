@@ -17,6 +17,7 @@ import calculatePostureChange from "./gears/posture-change.js";
 import calculateItemChanges from "./gears/item-changes.js";
 import timeForwardsUsingLastMessage from "./gears/time-forwards.js";
 import { talk } from "./gears/talk.js";
+import { millisecondsToTime } from "./util/time.js";
 
 const INVALID_NAMES = ["system", "assistant", "user", "everyone", "nobody",
     "anyone", "somebody", "narrator", "observer", "admin", "moderator",
@@ -314,19 +315,10 @@ export class DEngine {
      * @param {DEMinimalCharacterReference} user
      */
     async initialize(user) {
-        const defaultTime = new Date();
         /**
          * @type {DETimeDescription}
          */
-        const defaultTimeDEFormat = {
-            dayOfMonth: defaultTime.getUTCDate(),
-            monthOfYear: defaultTime.getUTCMonth() + 1,
-            year: defaultTime.getUTCFullYear(),
-            hourOfDay: defaultTime.getUTCHours(),
-            minuteOfHour: defaultTime.getUTCMinutes(),
-            time: defaultTime.getTime(),
-            dayOfWeek: defaultTime.getUTCDay(),
-        }
+        const defaultTimeDEFormat = millisecondsToTime((new Date()).getTime());
         this.deObject = {
             user: user,
             world: {
@@ -794,6 +786,7 @@ export class DEngine {
                         inDays: 0,
                         inHours: 0,
                         inMinutes: 0,
+                        inSeconds: 0,
                     },
                     endTime: { ...this.deObject.currentTime },
                     isCharacter: false,
@@ -807,6 +800,7 @@ export class DEngine {
                     singleSummary: null,
                     emotion: null,
                     emotionalRange: null,
+                    interactingCharacters: [],
                 },
             ],
             bondsAtStart: getFrozenBonds(this, expectedParticipants),
@@ -823,7 +817,6 @@ export class DEngine {
             this.deObject.conversations[sceneId].previousConversationIdsPerParticipant[participantName] = null;
         }
 
-        this.rerollWorldWeather();
         this.deObject.world.selectedScene = optionName;
 
         await this.informDEObjectUpdated();
@@ -853,6 +846,7 @@ export class DEngine {
                     inDays: 0,
                     inHours: 0,
                     inMinutes: 0,
+                    inSeconds: 0,
                 },
                 endTime: { ...this.deObject.currentTime },
                 isCharacter: false,
@@ -866,6 +860,7 @@ export class DEngine {
                 isHiddenMessage: false,
                 emotion: null,
                 emotionalRange: null,
+                interactingCharacters: [],
             });
 
             await this.informDEObjectUpdated();
@@ -1004,319 +999,6 @@ export class DEngine {
             }
         }
         return slots;
-    }
-
-    /**
-     * @param {string} locationName
-     * @param {DEStatefulLocationDefinition} location 
-     * @param {DEStatefulLocationDefinition | null} parentLocation
-     * @param {boolean} cascade
-     */
-    rerollLocationWeather(locationName, location, parentLocation, cascade = true) {
-        if (!this.deObject) {
-            throw new Error("DEngine not initialized");
-        }
-
-        if (!location.ownWeatherSystem || location.ownWeatherSystem.length === 0) {
-            if (parentLocation) {
-                location.currentWeather = parentLocation.currentWeather;
-                location.currentWeatherHasBeenOngoingFor = parentLocation.currentWeatherHasBeenOngoingFor;
-                location.currentWeatherNoEffectDescription = parentLocation.currentWeatherNoEffectDescription;
-                location.currentWeatherPartialEffectDescription = parentLocation.currentWeatherPartialEffectDescription;
-                location.currentWeatherFullEffectDescription = parentLocation.currentWeatherFullEffectDescription;
-                location.currentWeatherNegativelyExposedDescription = parentLocation.currentWeatherNegativelyExposedDescription;
-
-                // find every children locations and reroll their weather
-                if (cascade) {
-                    for (const potentialChildLocationKey in this.deObject.world.locations) {
-                        const potentialChildLocation = this.deObject.world.locations[potentialChildLocationKey];
-                        if (potentialChildLocation.parent === locationName) {
-                            this.rerollLocationWeather(potentialChildLocationKey, potentialChildLocation, location, true);
-                        }
-                    }
-                }
-            } else {
-                throw new Error("Location has no own weather system and no parent location to inherit weather from.");
-            }
-        } else {
-            let shouldHaveNewWeather = false;
-            const currentWeather = location.currentWeather;
-            if (!currentWeather) {
-                shouldHaveNewWeather = true;
-            } else {
-                const weatherDuration = location.currentWeatherHasBeenOngoingFor.inHours;
-                const weatherSystemInfo = location.ownWeatherSystem.find(ws => ws.name === currentWeather);
-                if (!weatherSystemInfo) {
-                    throw new Error(`Weather system info for current weather ${currentWeather} not found.`);
-                }
-                if (weatherDuration >= weatherSystemInfo.maxDurationInHours) {
-                    shouldHaveNewWeather = true;
-                } else if (weatherDuration >= weatherSystemInfo.minDurationInHours) {
-                    const chanceToChange = (weatherDuration - weatherSystemInfo.minDurationInHours) / (weatherSystemInfo.maxDurationInHours - weatherSystemInfo.minDurationInHours);
-                    if (Math.random() < chanceToChange) {
-                        shouldHaveNewWeather = true;
-                    }
-                }
-            }
-
-            if (shouldHaveNewWeather) {
-                // pick new weather
-                const newWeatherSystem = weightedRandomByLikelihood(location.ownWeatherSystem);
-                if (!newWeatherSystem) {
-                    throw new Error("Failed to pick new weather system. Are there any weather systems defined?");
-                }
-                location.currentWeather = newWeatherSystem.name;
-                location.currentWeatherHasBeenOngoingFor = {
-                    inMinutes: 0,
-                    inHours: 0,
-                    inDays: 0,
-                };
-                location.currentWeatherNoEffectDescription = newWeatherSystem.noEffectDescription;
-                location.currentWeatherPartialEffectDescription = newWeatherSystem.partialEffectDescription;
-                location.currentWeatherFullEffectDescription = newWeatherSystem.fullEffectDescription;
-                location.currentWeatherNegativelyExposedDescription = newWeatherSystem.negativelyExposedDescription;
-
-                // find every children locations and reroll their weather
-                if (cascade) {
-                    for (const potentialChildLocationKey in this.deObject.world.locations) {
-                        const potentialChildLocation = this.deObject.world.locations[potentialChildLocationKey];
-                        if (potentialChildLocation.parent === locationName) {
-                            this.rerollLocationWeather(potentialChildLocationKey, potentialChildLocation, location, true);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    rerollWorldWeather() {
-        if (!this.deObject) {
-            throw new Error("DEngine not initialized");
-        }
-
-        console.log("Rerolling world weather...");
-
-        // find every top level location and reroll their weather
-        for (const locationKey in this.deObject.world.locations) {
-            const location = this.deObject.world.locations[locationKey];
-            if (!location.parent) {
-                this.rerollLocationWeather(locationKey, location, null, true);
-            }
-        }
-    }
-
-    /**
-     * This function provides the reasoning message that reasons what
-     * should be in the character's mind at the moment and what the
-     * AI should base its next response on, all previous conversation history
-     * will be in user space
-     * 
-     * Standard reasoning message
-     * 
-     * @param {string} characterName 
-     */
-    getReasoningMessageForCharacter(characterName) {
-        if (!this.deObject) {
-            throw new Error("DEngine not initialized");
-        }
-
-        return {
-            "system": "",
-            "user": "",
-            "assistant": "",
-        }
-    }
-
-    /**
-     * 
-     * @param {string} characterName 
-     * @param {string} towards
-     * @returns {Promise<[boolean, DESingleBondDescription, DEBondDeclaration, string]>} bond description and bond info
-     */
-    async getRelationshipBetweenCharacters(characterName, towards) {
-        if (!this.deObject) {
-            throw new Error("DEngine not initialized");
-        }
-        const character = this.deObject.characters[characterName];
-        if (!character) {
-            throw new Error(`Character ${characterName} not found.`);
-        }
-        const towardsCharacter = this.deObject.characters[towards];
-        if (!towardsCharacter) {
-            throw new Error(`Character ${towards} not found.`);
-        }
-        // @ts-ignore
-        let bond = this.deObject.social.bonds[characterName].active.find(bond => bond.towards === towards);
-        let bondInfo = "";
-        let pseudoBond = false;
-        if (!bond) {
-            // make a pseudo bond for stranger
-            bond = {
-                bond: 0,
-                bond2: 0,
-                stranger: true,
-                towards: towards,
-                createdAt: this.deObject.currentTime,
-            }
-            pseudoBond = true;
-        }
-
-        if (!character.bonds) {
-            throw new Error(`Character ${characterName} has no bonds defined.`);
-        }
-
-        const bondDecl = character.bonds.declarations.find((b => b.strangerBond === bond.stranger && b.minBondLevel <= bond.bond && bond.bond < (b.maxBondLevel === 100 ? 200 : b.maxBondLevel) && b.min2BondLevel <= bond.bond2 && bond.bond2 < (b.max2BondLevel === 100 ? 200 : b.max2BondLevel)));
-        if (!bondDecl) {
-            throw new Error(`No bond description found for bond level ${bond.bond} and secondary bond level ${bond.bond2} from character "${characterName}" towards character "${towards}".`);
-        }
-
-        // @ts-ignore
-        bondInfo += await bondDecl.description.execute(this.deObject, character, towardsCharacter);
-
-        if (character.bonds.descriptionGeneralInjection) {
-            // @ts-ignore
-            const value = await character.bonds.descriptionGeneralInjection.execute(this.deObject, character, towardsCharacter);
-            bondInfo += `\n\n${value}`;
-        }
-
-        return [pseudoBond, bond, bondDecl, bondInfo];
-    }
-
-    /**
-     * TODO fix this function, it's iffy
-     * @param {"can" | "cannot"} canOrCannot
-     * @param {string} characterName 
-     * @param {string} locationName 
-     * @returns 
-     */
-    getItemsCharacterMayWearWithReasons(canOrCannot, characterName, locationName) {
-        if (!this.deObject) {
-            throw new Error("DEngine not initialized");
-        }
-        const character = this.deObject.characters[characterName];
-        if (!character) {
-            throw new Error(`Character ${characterName} not found.`);
-        }
-        const location = this.deObject.world.locations[locationName];
-        if (!location) {
-            throw new Error(`Location ${locationName} not found.`);
-        }
-        const characterState = this.deObject.stateFor[characterName];
-        if (!characterState) {
-            throw new Error(`Character state for ${characterName} not found.`);
-        }
-
-        /**
-         * @type {Set<string>}
-         */
-        const itemsCharacterCannotWearWReasons = new Set();
-
-        let remainingCarryingCapacity = character.carryingCapacityKg;
-
-        /**
-             * @param {DEItem[]} itemList 
-             */
-        const processItemList = (itemList) => {
-            for (const carriedItem of itemList) {
-                remainingCarryingCapacity -= carriedItem.weightKg * carriedItem.amount;
-
-                // the added and taken volume are irrelevant because
-                // these are already inside another container
-                processItemList(carriedItem.containing);
-                processItemList(carriedItem.ontop);
-            }
-        }
-        /**
-         * @param {string[]} characterList
-         */
-        const processCharacterList = (characterList) => {
-            for (const carriedCharacterName of characterList) {
-                const carriedCharacterState = this.deObject?.stateFor[carriedCharacterName];
-                if (carriedCharacterState === undefined) {
-                    continue;
-                }
-                const characterWeight = this.deObject?.characters[carriedCharacterName]?.weightKg || 0;
-                remainingCarryingCapacity -= characterWeight;
-                processItemList(carriedCharacterState.carrying);
-                processItemList(carriedCharacterState.wearing);
-                processCharacterList(carriedCharacterState.carryingCharactersDirectly);
-            }
-        }
-        processCharacterList(characterState.carryingCharactersDirectly);
-        processItemList(characterState.carrying);
-        processItemList(characterState.wearing);
-
-        let characterCurrentVolumeApprox = character.weightKg;
-        for (const wornItem of characterState.wearing) {
-            if (!wornItem.wearableProperties) continue;
-            characterCurrentVolumeApprox += wornItem.wearableProperties.extraBodyVolumeWhenWornLiters * wornItem.amount;
-        }
-
-        /**
-         * @param {DEItem} item
-         * @param {string} extraMessage
-         */
-        const processItemAndReason = (item, extraMessage) => {
-            let reason = null;
-            if (!item.wearableProperties) {
-                reason = `item is not wearable`;
-            } else if (item.weightKg > character.carryingCapacityKg) {
-                reason = `item is too heavy (${item.weightKg}kg) for ${character.name}'s strength`;
-            } else if (item.weightKg - item.wearableProperties.addedCarryingCapacityKg > remainingCarryingCapacity) {
-                reason = `${character.name} is already carrying too much weight to wear this item, needs to wear ${item.weightKg - item.wearableProperties.addedCarryingCapacityKg}kg, remaining capacity is ${remainingCarryingCapacity}kg`;
-            } else if (item.wearableProperties.volumeRangeMinLiters > characterCurrentVolumeApprox) {
-                reason = `${character.name} is too big to wear this item, minimum volume is ${item.wearableProperties.volumeRangeMinLiters}L, character current volume with is approximated at ${characterCurrentVolumeApprox}L`;
-            } else if (characterCurrentVolumeApprox > item.wearableProperties.volumeRangeMaxLiters) {
-                reason = `${character.name} is too small to wear this item, maximum volume is ${item.wearableProperties.volumeRangeMaxLiters}L, character current volume is approximated at ${characterCurrentVolumeApprox}L`;
-            }
-
-            if (reason && canOrCannot === "cannot") {
-                if (item.amount >= 2) {
-                    itemsCharacterCannotWearWReasons.add(`1 of ${item.name}: ${reason}`);
-                } else {
-                    itemsCharacterCannotWearWReasons.add(`${item.name}: ${reason}`);
-                }
-            } else if (!reason && canOrCannot === "can") {
-                if (item.amount >= 2) {
-                    itemsCharacterCannotWearWReasons.add(`1 of ${item.name}: can be worn`);
-                } else {
-                    itemsCharacterCannotWearWReasons.add(`${item.name}: can be worn`);
-                }
-            }
-
-            for (const containedItem of item.containing) {
-                processItemAndReason(containedItem, ` (contained by ${item.name}${extraMessage})`);
-            }
-
-            for (const ontopItem of item.ontop) {
-                processItemAndReason(ontopItem, ` (on top of ${item.name}${extraMessage})`);
-            }
-        }
-
-        for (const locationSlotName in location.slots) {
-            const locationSlot = location.slots[locationSlotName];
-            for (const item of locationSlot.items) {
-                processItemAndReason(item, "");
-            }
-        }
-
-        for (const otherCharName in this.deObject.stateFor) {
-            if (otherCharName === characterName) continue;
-            const otherCharState = this.deObject.stateFor[otherCharName];
-            if (otherCharState.location === locationName) {
-                // check their wearing items
-                for (const item of otherCharState.wearing) {
-                    processItemAndReason(item, ` (worn by ${otherCharName})`);
-                }
-
-                // check their carried items
-                for (const item of otherCharState.carrying) {
-                    processItemAndReason(item, ` (carried by ${otherCharName})`);
-                }
-            }
-        }
-
-        return Array.from(itemsCharacterCannotWearWReasons);
     }
 
     async informDEObjectUpdated() {
@@ -1627,7 +1309,7 @@ export class DEngine {
                 const messageToAdd = {
                     sender: user.name,
                     content: userMessage,
-                    duration: { inMinutes: 0, inHours: 0, inDays: 0 },
+                    duration: { inMinutes: 0, inHours: 0, inDays: 0, inSeconds: 0 },
                     // @ts-expect-error typescript issue as usual
                     startTime: { ...this.deObject.currentTime },
                     // @ts-expect-error typescript issue as usual
@@ -1854,6 +1536,7 @@ export class DEngine {
             singleSummary: null,
             emotion: null,
             emotionalRange: null,
+            interactingCharacters: [],
         };
 
         let userConversationId = this.deObject.stateFor[this.user.name].conversationId;

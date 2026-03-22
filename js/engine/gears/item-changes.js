@@ -1829,6 +1829,23 @@ export default async function calculateItemChanges(engine, character) {
 
     await cleanAll(engine, charState.location, lastCycleMessages, addedMessagesForStoryMaster, charactersThatMoved);
 
+    // Update interacting characters
+    for (const message of lastCycleMessages) {
+        if (!message.storyMaster) {
+            const id = message.id;
+            const conversationId = message.conversationId;
+            const author = message.author;
+
+            if (id && conversationId && author) {
+                const conversation = engine.deObject.conversations[conversationId];
+                const messageObj = conversation.messages.find(m => m.id === id);
+                if (messageObj) {
+                    messageObj.interactingCharacters = charactersToQuestion;
+                }
+            }
+        }
+    }
+
     return {
         storyMasterMessages: addedMessagesForStoryMaster,
         charactersThatMoved: charactersThatMoved,

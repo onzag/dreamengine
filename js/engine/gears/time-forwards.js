@@ -1,5 +1,139 @@
+import { weightedRandomByLikelihood } from "../../util/random.js";
 import { deepCopyNoHistory, DEngine } from "../index.js";
 import { getHistoryFragmentForCharacter } from "../util/messages.js";
+import { millisecondsToDuration, millisecondsToTime } from "../util/time.js";
+
+/**
+ * @param {DEngine} engine
+ * @param {string} locationName
+ * @param {DEStatefulLocationDefinition} location 
+ * @param {DEStatefulLocationDefinition | null} parentLocation
+ * @param {boolean} cascade
+ */
+export function rerollLocationWeather(engine, locationName, location, parentLocation, cascade = true) {
+    if (!engine.deObject) {
+        throw new Error("DEngine not initialized");
+    }
+
+    if (!location.ownWeatherSystem || location.ownWeatherSystem.length === 0) {
+        if (parentLocation) {
+            location.currentWeather = parentLocation.currentWeather;
+            location.currentWeatherHasBeenOngoingFor = parentLocation.currentWeatherHasBeenOngoingFor;
+            location.currentWeatherNoEffectDescription = parentLocation.currentWeatherNoEffectDescription;
+            location.currentWeatherPartialEffectDescription = parentLocation.currentWeatherPartialEffectDescription;
+            location.currentWeatherFullEffectDescription = parentLocation.currentWeatherFullEffectDescription;
+            location.currentWeatherNegativelyExposedDescription = parentLocation.currentWeatherNegativelyExposedDescription;
+
+            // find every children locations and reroll their weather
+            if (cascade) {
+                for (const potentialChildLocationKey in engine.deObject.world.locations) {
+                    const potentialChildLocation = engine.deObject.world.locations[potentialChildLocationKey];
+                    if (potentialChildLocation.parent === locationName) {
+                        rerollLocationWeather(engine, potentialChildLocationKey, potentialChildLocation, location, true);
+                    }
+                }
+            }
+        } else {
+            throw new Error("Location has no own weather system and no parent location to inherit weather from.");
+        }
+    } else {
+        let shouldHaveNewWeather = false;
+        const currentWeather = location.currentWeather;
+        if (!currentWeather) {
+            shouldHaveNewWeather = true;
+        } else {
+            const weatherDuration = location.currentWeatherHasBeenOngoingFor.inHours;
+            const weatherSystemInfo = location.ownWeatherSystem.find(ws => ws.name === currentWeather);
+            if (!weatherSystemInfo) {
+                throw new Error(`Weather system info for current weather ${currentWeather} not found.`);
+            }
+            if (weatherDuration >= weatherSystemInfo.maxDurationInHours) {
+                shouldHaveNewWeather = true;
+            } else if (weatherDuration >= weatherSystemInfo.minDurationInHours) {
+                const chanceToChange = (weatherDuration - weatherSystemInfo.minDurationInHours) / (weatherSystemInfo.maxDurationInHours - weatherSystemInfo.minDurationInHours);
+                if (Math.random() < chanceToChange) {
+                    shouldHaveNewWeather = true;
+                }
+            }
+        }
+
+        if (shouldHaveNewWeather) {
+            // pick new weather
+            const newWeatherSystem = weightedRandomByLikelihood(location.ownWeatherSystem);
+            if (!newWeatherSystem) {
+                throw new Error("Failed to pick new weather system. Are there any weather systems defined?");
+            }
+            location.currentWeather = newWeatherSystem.name;
+            // TODO this needs to update when we reroll weather
+            location.currentWeatherHasBeenOngoingFor = {
+                inMinutes: 0,
+                inHours: 0,
+                inDays: 0,
+                inSeconds: 0,
+            };
+            location.currentWeatherNoEffectDescription = newWeatherSystem.noEffectDescription;
+            location.currentWeatherPartialEffectDescription = newWeatherSystem.partialEffectDescription;
+            location.currentWeatherFullEffectDescription = newWeatherSystem.fullEffectDescription;
+            location.currentWeatherNegativelyExposedDescription = newWeatherSystem.negativelyExposedDescription;
+
+            // find every children locations and reroll their weather
+            if (cascade) {
+                for (const potentialChildLocationKey in engine.deObject.world.locations) {
+                    const potentialChildLocation = engine.deObject.world.locations[potentialChildLocationKey];
+                    if (potentialChildLocation.parent === locationName) {
+                        rerollLocationWeather(engine, potentialChildLocationKey, potentialChildLocation, location, true);
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * @param {DEngine} engine 
+ */
+function rerollWorldWeather(engine) {
+    if (!engine.deObject) {
+        throw new Error("DEngine not initialized");
+    }
+
+    console.log("Rerolling world weather...");
+
+    // find every top level location and reroll their weather
+    for (const locationKey in engine.deObject.world.locations) {
+        const location = engine.deObject.world.locations[locationKey];
+        if (!location.parent) {
+            rerollLocationWeather(engine, locationKey, location, null, true);
+        }
+    }
+}
+
+/**
+ * @param {DEngine} engine 
+ * @param {DETimeDurationDescription} timeForwards 
+ */
+function updateAllWeatherDurations(engine, timeForwards) {
+    if (!engine.deObject) {
+        throw new Error("DEngine not initialized");
+    }
+
+    /**
+     * @param {DEStatefulLocationDefinition} location 
+     */
+    const updateWeatherForLocation = (location) => {
+        if (location.currentWeatherHasBeenOngoingFor) {
+            location.currentWeatherHasBeenOngoingFor.inMinutes += timeForwards.inMinutes;
+            location.currentWeatherHasBeenOngoingFor.inHours += timeForwards.inHours;
+            location.currentWeatherHasBeenOngoingFor.inDays += timeForwards.inDays;
+            location.currentWeatherHasBeenOngoingFor.inSeconds += timeForwards.inSeconds;
+        }
+    }
+
+    for (const locationKey in engine.deObject.world.locations) {
+        const location = engine.deObject.world.locations[locationKey];
+        updateWeatherForLocation(location);
+    }
+}
 
 /**
  * 
@@ -17,7 +151,7 @@ export default async function timeForwardsUsingLastMessage(engine, character) {
     const lastStoryFragment = (await getHistoryFragmentForCharacter(engine, character, {
         includeDebugMessages: false,
         includeRejectedMessages: false,
-        msgLimit: "LAST_STORY_FRAGMENT_FROM_CHAR",
+        msgLimit: "LAST_CYCLE",
     })).messages;
 
     const systemMessage = `You are an assistant and story analyst that helps determine how much time has passed in a story based the last story fragment.`;
@@ -115,11 +249,30 @@ export default async function timeForwardsUsingLastMessage(engine, character) {
     // reroll world weather
     const characterState = engine.deObject.stateFor[character.name];
     const currentWeatherAtLocation = engine.deObject.world.locations[characterState.location].currentWeather;
-    engine.rerollWorldWeather();
+
+    const duration = millisecondsToDuration(totalMilliseconds);
+    const timeNow = millisecondsToTime(currentTime.time);
+    engine.deObject.currentTime = timeNow;
+
+    updateAllWeatherDurations(engine, duration)
+    rerollWorldWeather(engine);
+
     const newWeatherAtLocation = engine.deObject.world.locations[characterState.location].currentWeather;
     if (currentWeatherAtLocation !== newWeatherAtLocation) {
         console.log(`Time-Forwards: Weather at ${characterState.location} changed from ${currentWeatherAtLocation} to ${newWeatherAtLocation} after time advanced.`);
         storyMasterMessagesToAdd.push(`The weather at ${characterState.location} has changed from ${currentWeatherAtLocation} to ${newWeatherAtLocation}.`);
+    }
+
+    for (const message of lastStoryFragment) {
+        if (!message.storyMaster) {
+            if (message.conversationId && message.id) {
+                const messageObj = engine.deObject.conversations[message.conversationId].messages.find(m => m.id === message.id);
+                if (messageObj) {
+                    messageObj.duration = duration;
+                    messageObj.endTime = timeNow;
+                }
+            }
+        }
     }
 
     return storyMasterMessagesToAdd;

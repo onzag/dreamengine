@@ -108,7 +108,7 @@ async function makeUserStoryMasterMessage(engine, message) {
     const messageToAdd = {
         sender: "Story Master",
         content: message,
-        duration: { inMinutes: 0, inHours: 0, inDays: 0 },
+        duration: { inMinutes: 0, inHours: 0, inDays: 0, inSeconds: 0 },
         startTime: { ...engine.deObject.currentTime },
         endTime: { ...engine.deObject.currentTime },
         id: crypto.randomUUID(),
@@ -123,6 +123,7 @@ async function makeUserStoryMasterMessage(engine, message) {
         perspectiveSummaryIds: {},
         emotion: null,
         emotionalRange: null,
+        interactingCharacters: [],
     }
 
     if (!stateForUser.conversationId) {
@@ -897,7 +898,7 @@ export default async function calculateStateChange(engine, character, interacted
     /**
      * @type {DECompleteCharacterReference[]}
      */
-    const allCharactersInAnalysis = lastCycleMessagesInfo.interactedCharacters.map((c) => engine.deObject?.characters[c]).filter(c => !!c);
+    const allCharactersInAnalysis = lastCycleMessagesInfo.mentionedCharacters.map((c) => engine.deObject?.characters[c]).filter(c => !!c);
     // add the ones given by our item change
     for (const otherCharacter of interactedCharactersAccordingToItemChange) {
         if (!allCharactersInAnalysis.find(c => c.name === otherCharacter)) {
@@ -907,8 +908,6 @@ export default async function calculateStateChange(engine, character, interacted
             }
         }
     }
-    // This should be enough... honestly, this may miss some characters
-    // but this should have all the relevant ones
 
     // well that is weird, zero messages?
     if (lastCycleMessagesInfo.messages.length === 0) {

@@ -156,7 +156,7 @@ export function makeTimestamp(engine, time, includeNowLabel = true) {
  * @param {DEngine} engine
  * @param {DECompleteCharacterReference} character
  * @param {{ excludeFrom?: string[] | null, includeDebugMessages?: boolean | null, includeRejectedMessages?: boolean | null, includeHiddenMessages?: boolean | null}} options
- * @return {AsyncGenerator<{name: string, message: string, id: string, conversationId: string | null, debug: boolean, rejected: boolean, hidden: boolean, storyMaster: boolean}, void, boolean>}
+ * @return {AsyncGenerator<{name: string, message: string, conversationId: string | null, id: string | null, conversationId: string | null, debug: boolean, rejected: boolean, hidden: boolean, storyMaster: boolean, interactingCharacters: string[]}, void, boolean>}
  */
 export async function* getHistoryForCharacter(engine, character, options) {
     if (!engine.deObject) {
@@ -215,12 +215,15 @@ export async function* getHistoryForCharacter(engine, character, options) {
         return {
             name: "Story Master",
             message: message,
-            id: `story-master-${fromTime.time}`,
+            id: null,
             conversationId: null,
             debug: false,
             rejected: false,
             storyMaster: true,
             hidden: false,
+            interactingCharacters: [
+                character.name,
+            ],
         };
     };
 
@@ -274,6 +277,7 @@ export async function* getHistoryForCharacter(engine, character, options) {
                     rejected: false,
                     storyMaster: true,
                     hidden: false,
+                    interactingCharacters: currentConversationObject.participants,
                 };
                 if (!keepgoing) {
                     return;
@@ -292,6 +296,7 @@ export async function* getHistoryForCharacter(engine, character, options) {
                         rejected: message.isRejectedMessage,
                         storyMaster: message.isStoryMasterMessage,
                         hidden: message.isHiddenMessage,
+                        interactingCharacters: message.interactingCharacters || [],
                     });
                     if (!keepgoing) {
                         return;
@@ -312,6 +317,7 @@ export async function* getHistoryForCharacter(engine, character, options) {
                         rejected: false,
                         storyMaster: true,
                         hidden: false,
+                        interactingCharacters: currentConversationObject.participants,
                     };
                     if (!keepgoing) {
                         return;
@@ -375,13 +381,13 @@ export async function getHistoryFragmentForCharacter(engine, character, options)
     let generator = await allHistory.next();
 
     /**
-     * @type {Array<{message: string, author: string, storyMaster: boolean}>}
+     * @type {Array<{message: string, author: string, storyMaster: boolean, id: string | null, conversationId: string | null}>}
      */
     let messagesToAdd = [];
     /**
      * @type {string[]}
      */
-    const interactedCharacters = [];
+    const conversingCharacters = [];
     /**
      * @type {string[]}
      */
@@ -431,11 +437,18 @@ export async function getHistoryFragmentForCharacter(engine, character, options)
                     message: messageParsed,
                     author: generator.value.name,
                     storyMaster: generator.value.storyMaster,
+                    id: generator.value.id,
+                    conversationId: generator.value.conversationId,
                 });
-                if (!interactedCharacters.includes(generator.value.name) && !generator.value.storyMaster) {
-                    interactedCharacters.push(generator.value.name);
+                if (!conversingCharacters.includes(generator.value.name) && !generator.value.storyMaster) {
+                    conversingCharacters.push(generator.value.name);
                     if (!mentionedCharacters.includes(generator.value.name)) {
                         mentionedCharacters.push(generator.value.name);
+                    }
+                }
+                for (const charName of generator.value.interactingCharacters) {
+                    if (!mentionedCharacters.includes(charName)) {
+                        mentionedCharacters.push(charName);
                     }
                 }
                 if (generator.value.storyMaster) {
@@ -461,7 +474,7 @@ export async function getHistoryFragmentForCharacter(engine, character, options)
 
     return {
         messages: messagesToAdd,
-        interactedCharacters,
+        conversingCharacters,
         mentionedCharacters,
     }
 }

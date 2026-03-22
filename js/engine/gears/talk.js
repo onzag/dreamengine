@@ -299,7 +299,7 @@ export async function talk(engine, character, options) {
 
     const grammar = generateGrammarForVocabulary(engine, baseVocabularyLimit, character.name);
 
-    let narrationStyle = engine.deObject.world.narrationStyle;
+    let narrationStyle = engine.deObject.narrationStyle;
     if (baseVocabularyLimit?.narrationStyle) {
         narrationStyle = baseVocabularyLimit.narrationStyle;
     }
@@ -378,6 +378,39 @@ export async function talk(engine, character, options) {
             type: nextType,
             action: toConsume ? toConsume.text : null,
         };
+    }
+
+    /**
+     * @type {DEConversationMessage}
+     */
+    const nextMessage = {
+        canOnlyBeSeenByCharacter: null,
+        content: "",
+        // This gets set later by time-forwards.js
+        duration: {
+            inDays: 0,
+            inHours: 0,
+            inMinutes: 0,
+            inSeconds: 0,
+        },
+        endTime: engine.deObject.currentTime,
+        startTime: engine.deObject.currentTime,
+        // This is set later by item-change.js
+        interactingCharacters: [],
+        emotion: primaryEmotion,
+        emotionalRange: emotionalRange,
+        id: "message-" + Math.random().toString(36).substring(2, 15),
+        isCharacter: true,
+        isDebugMessage: false,
+        isHiddenMessage: false,
+        isRejectedMessage: false,
+        isStoryMasterMessage: false,
+        isUser: false,
+        perspectiveSummaryIds: {},
+        sender: character.name,
+
+        // TODO
+        singleSummary: null,
     }
 
     // TODO pre narrative effects
