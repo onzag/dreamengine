@@ -323,10 +323,9 @@ declare interface DEActionPromptInjection {
      * The narrative effect can be
      * When narrating describe {{char}} tantrum in detail and how the tears flow down their face
      * 
-     * It's possible to have an action that only has a narrative effect and vice-versa
+     * A narrative effect gets applied to the whole narration of the character
      * 
-     * When only the narrative effect is provided, the character will not be forced to perform the given
-     * action, but the narrative effect will still apply
+     * While an action, gets applied towards a single paragraph of the story (or all of them if not contenders)
      */
     narrativeEffect?: DEStringTemplate;
     /**
@@ -835,6 +834,10 @@ declare interface DEVocabularyLimit {
      * only affects words and phrases, not grammar tokens or placeholders, as those are not modified in any case, just limited
      */
     elongateWordsEffect?: boolean;
+    /**
+     * An override for the narration style provided that the vocabulary limit is active
+     */
+    narrationStyle?: DENarrationStyle;
 }
 
 declare interface DEBondIncreaseDecreaseQuestion {
@@ -2618,6 +2621,35 @@ declare interface DEWorld {
      * Properties of the world that can be used for various purposes, eg. "world_age": 1000, "technology_level": "medieval", "has_magic": true, etc...
      */
     properties: Record<string, any>;
+    
+    /**
+     * The narration style of the world
+     */
+    narrationStyle: DENarrationStyle;
+}
+
+declare interface DENarrationStyle {
+    /**
+     * A number from 0 to 1 that represents how often the world will narrate only instead
+     * of making the character talk, this is a random
+     * Default 0.2
+     * 
+     * This mostly affects narration as after dialogue narration always comes
+     * 
+     * A dialogue is guaranteed to appear unless the character has a mute vocabulary
+     * this bias is not a perfect random roll
+     * 
+     * Keep it low, it actually causes a lot of narration
+     */
+    narrativeBias: number;
+    /**
+     * The minimum number of paragraphs to generate when narrating, either dialogue or narration
+     */
+    minParagraphs: number;
+    /**
+     * The maximum number of paragraphs to generate when narrating, either dialogue or narration
+     */
+    maxParagraphs: number;
 }
 
 declare interface DEUtils {

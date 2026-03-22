@@ -277,7 +277,7 @@ export async function talk(engine, character, options) {
     }
 
     if (options.doNotMove) {
-        narrativeEffects.push(`${character.name} must not move from their location at the ${charState.locationSlot}`);
+        narrativeEffects.push(`${character.name} must not walk away or go to another location`);
     }
 
     if (baseVocabularyLimit?.mute) {
@@ -299,6 +299,16 @@ export async function talk(engine, character, options) {
 
     const grammar = generateGrammarForVocabulary(engine, baseVocabularyLimit, character.name);
 
+    let narrationStyle = engine.deObject.world.narrationStyle;
+    if (baseVocabularyLimit?.narrationStyle) {
+        narrationStyle = baseVocabularyLimit.narrationStyle;
+    }
+
+    /**
+     * @type string[]
+     */
+    const trailingMessages = [];
+
     const messages = (await getHistoryFragmentForCharacter(engine, character, {
         includeDebugMessages: false,
         includeRejectedMessages: false,
@@ -306,18 +316,116 @@ export async function talk(engine, character, options) {
         useExponentialShrinkingSelectiveContextWindowStrategy: true,
     })).messages;
 
-    const generator = engine.inferenceAdapter.inferNextStoryFragmentFor(
-        character,
-        messages,
-        characterSystemPrompt.sysprompt,
-        characterSystemPrompt.internalDescription.stateInjections,
-        characterCanSee.everything,
-        actions.map((action) => action.text),
-        narrativeEffects,
-        grammar,
-    );
+    let totalToGenerate = narrationStyle.minParagraphs + Math.floor(Math.random() * (narrationStyle.maxParagraphs - narrationStyle.minParagraphs + 1));
+    /**
+     * @type {Array<*>}
+     */
+    const actionsLeftToConsume = actions;
+    /**
+     * @type {*}
+     */
+    let lastActionConsumed = null;
 
-    // TODO important instructions about [GENERATION COMPLETED] but on inference engine side, not here
+    /**
+     * @type {Array<"narration" | "dialogue">}
+     */
+    const generatedElements = [];
+
+    /**
+     * @type {() => ({
+     *    type: "narration" | "dialogue",
+     *    action: string,
+     * } | null)}
+     */
+    const getNextToGenerate = () => {
+        let toConsume = actionsLeftToConsume.shift();
+        if (!toConsume) {
+            toConsume = lastActionConsumed;
+        }
+        lastActionConsumed = toConsume;
+
+        if (generatedElements.length >= totalToGenerate) {
+            if (!generatedElements.includes("dialogue") && !baseVocabularyLimit?.mute) {
+                generatedElements.push("dialogue");
+                return {
+                    type: "dialogue",
+                    action: toConsume ? toConsume.text : null,
+                }
+            } else if (actionsLeftToConsume.length > 0) {
+                generatedElements.push("narration");
+                return {
+                    type: "narration",
+                    action: toConsume ? toConsume.text : null,
+                }
+            }
+            return null;
+        }
+
+        const lastGenerated = generatedElements[generatedElements.length - 1];
+        if (lastGenerated && lastGenerated === "dialogue") {
+            generatedElements.push("narration");
+            return {
+                type: "narration",
+                action: toConsume ? toConsume.text : null,
+            }
+        }
+
+        const isMute = baseVocabularyLimit?.mute || false;
+        const areLastTwoElementsNarration = generatedElements.length >= 2 && generatedElements[generatedElements.length - 1] === "narration" && generatedElements[generatedElements.length - 2] === "narration";
+        const nextType = isMute ? "narration" : (areLastTwoElementsNarration ? "dialogue" : (Math.random() < narrationStyle.narrativeBias ? "narration" : "dialogue"));
+        generatedElements.push(nextType);
+        return {
+            type: nextType,
+            action: toConsume ? toConsume.text : null,
+        };
+    }
+
+    // TODO pre narrative effects
+
+    let nextToGenerate = getNextToGenerate();
+    while (nextToGenerate) {
+        let generatedMessage = "";
+        console.log("Generating next " + nextToGenerate.type + (nextToGenerate.action ? ` with action: ${nextToGenerate.action}` : ""));
+        const generator = engine.inferenceAdapter.inferNextStoryFragmentFor(
+            character,
+            messages,
+            trailingMessages,
+            characterSystemPrompt.sysprompt,
+            characterSystemPrompt.internalDescription.stateInjections,
+            characterCanSee.everything,
+            actions.map((action) => action.text),
+            narrativeEffects,
+            nextToGenerate.type === "dialogue" ? grammar.dialogue : grammar.narrative,
+        );
+
+        let next = await generator.next(true);
+        while (!next.done || next.value) {
+            const info = next.value;
+            if (info) {
+                if (info.type === "warning") {
+                    engine.informCycleState("warning", info.content);
+                } else if (info.type === "hidden") {
+                    // TODO
+                } else if (info.type === "text") {
+                    process.stdout.write(info.content);
+                    generatedMessage += info.content;
+                }
+            }
+            if (!next.done) {
+                next = await generator.next(true);
+            }
+        }
+
+        console.log("\nFinished receiving text chunk from inference adapter.");
+        trailingMessages.push(generatedMessage);
+
+        nextToGenerate = getNextToGenerate();
+    }
+
+    const totalGeneratedThusFar = trailingMessages.join("\n\n");
+    console.log("Final generated narration/dialogue: " + totalGeneratedThusFar);
+
+    // TODO post narrative effects
 
     process.exit(1);
 

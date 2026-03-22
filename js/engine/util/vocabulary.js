@@ -66,6 +66,18 @@ export function mergeVocabularyLimits(a, b) {
     if (newMaxWords === Infinity) {
         newMaxWords = undefined;
     }
+
+    let newNarrationStyle = a.narrationStyle || b.narrationStyle;
+    if (a.narrationStyle && b.narrationStyle && newNarrationStyle) {
+        if (b.narrationStyle.maxParagraphs > a.narrationStyle.maxParagraphs) {
+            newNarrationStyle.maxParagraphs = b.narrationStyle.maxParagraphs;
+        }
+        if (b.narrationStyle.minParagraphs < a.narrationStyle.minParagraphs) {
+            newNarrationStyle.minParagraphs = b.narrationStyle.minParagraphs;
+        }
+        newNarrationStyle.narrativeBias = (a.narrationStyle.narrativeBias + b.narrationStyle.narrativeBias) / 2;
+    }
+    
     /**
      * @type {DEVocabularyLimit}
      */

@@ -171,22 +171,21 @@ export function isYes(answer) {
  * @param {DEngine} engine 
  * @param {DEVocabularyLimit | null | undefined} vocabulary 
  * @param {string} charName
- * @returns {string}
+ * @returns {{narrative: string; dialogue: string | null}}
  */
 export function generateGrammarForVocabulary(engine, vocabulary, charName) {
     if (!engine.inferenceAdapter) {
         throw new Error("Inference adapter is required to create grammar");
     }
 
-    const defaultEverythingGoes = `[a-zA-Z0-9 ,.'";:!?%$#&€£¥¢₩₹()\\-~_=^@/\u00C0-\u024F\u0370-\u03FF\u0400-\u04FF]+`;
+    const defaultEverythingGoes = `[^*:\n—]+`;
     let dialogueVocabulary = defaultEverythingGoes;
 
     if (vocabulary?.mute) {
-        return `root ::= LINE_OF_STORY+ ${engine.inferenceAdapter.getRequiredRootGrammarForStoryGeneration()}
-LINE_OF_STORY ::= NARRATION
-NARRATION_BASE ::= "*" ${defaultEverythingGoes} "*"
-NARRATION ::= NARRATION_BASE "\n\n"
-    `;
+        return {
+            narrative: `root ::= "*" ${defaultEverythingGoes} "*"`,
+            dialogue: null,
+        };
     }
     
 
@@ -260,11 +259,8 @@ NARRATION ::= NARRATION_BASE "\n\n"
         }
     }
 
-    return `root ::= LINE_OF_STORY+ ${engine.inferenceAdapter.getRequiredRootGrammarForStoryGeneration()}
-LINE_OF_STORY ::= NARRATION | DIALOGUE
-NARRATION_BASE ::= "*" ${defaultEverythingGoes} "*"
-DIALOGUE_BASE ::= ${dialogueVocabulary}
-NARRATION ::= NARRATION_BASE "\\n\\n"
-DIALOGUE ::= ${JSON.stringify(charName + ": ")} DIALOGUE_BASE ( (" " NARRATION_BASE) | (" " DIALOGUE_BASE) )* "\\n\\n"
-    `;
+    return {
+        narrative: `root ::= "*" ${defaultEverythingGoes} "*"`,
+        dialogue: `root ::= ${JSON.stringify(charName + ": ")} ${dialogueVocabulary} ( (" — *" ${defaultEverythingGoes} "*") | (" — " ${dialogueVocabulary}) )*`,
+    };
 }

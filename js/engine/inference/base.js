@@ -46,17 +46,19 @@ export class BaseInferenceAdapter {
      * 
      * @param {DECompleteCharacterReference} character
      * @param {Array<{message: string, author: string, storyMaster: boolean}>} messages
+     * @param {Array<string>} messagesTrail extra messages to always add as trail
      * @param {string} system 
      * @param {string[]} stateInjections
      * @param {string} visibleEnviroment
      * @param {string[]} actions
      * @param {string[]} narrativeEffects
-     * @param {string} grammar
+     * @param {string|null} grammar
      * @returns {AsyncGenerator<{type: "text" | "warning" | "hidden", content: string}, void, boolean>}
      */
     async* inferNextStoryFragmentFor(
         character,
         messages,
+        messagesTrail,
         system,
         stateInjections,
         visibleEnviroment,
@@ -136,22 +138,6 @@ export class BaseInferenceAdapter {
         throw new Error("Method 'buildSystemPromptForQuestioningAgent()' must be implemented.");
     }
 
-    /**
-     * Once retrieved this information this builds a reasoning prompt for what the character will do next and that will be
-     * fed into the inference reasoning
-     * 
-     * @param {DECompleteCharacterReference} character 
-     * @param {string} action 
-     * @param {string} primaryEmotion
-     * @param {string[]} emotionalRange
-     * @param {string[]} states
-     * @param {string} narrativeEffect
-     * @returns {string}
-     */
-    buildActionPromptForCharacter(character, action, primaryEmotion, emotionalRange, states, narrativeEffect) {
-        throw new Error("Method 'buildActionPromptForCharacter()' must be implemented.");
-    }
-
      /**
      * @param {Array<{groupDescription: string, characters: Array<{name: string, description: string}>}>} groups
      * @param {boolean} asSocialGroups
@@ -198,21 +184,6 @@ export class BaseInferenceAdapter {
      */
     getRequiredRootGrammarForQuestionGeneration() {
         throw new Error("Method 'getRequiredRootGrammarForQuestionGeneration()' must be implemented.");
-    }
-
-    /**
-     * When generating custom grammar these are the required grammar rules to be included at the root level
-     * 
-     * When defining a custom grammar for story generation this function should return the required root level grammar rules
-     * 
-     * eg. root ::= answer | {getRequiredRootGrammarForStoryGeneration()}
-     * answer ::= word+
-     * word ::= "a" | "b" | "c"
-     * 
-     * @returns {string}
-     */
-    getRequiredRootGrammarForStoryGeneration() {
-        throw new Error("Method 'getRequiredRootGrammarForStoryGeneration()' must be implemented.");
     }
 
     /**

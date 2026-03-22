@@ -2658,6 +2658,24 @@ async function cleanDirtyItemTree(
         }
     }
 
+    /**
+     * @param {string} charName 
+     * @param {DEItem} item
+     */
+    const expellCharacter = (charName, item) => {
+        item.ontopCharacters = item.ontopCharacters.filter((v) => v !== charName);
+        item.containingCharacters = item.containingCharacters.filter((v) => v !== charName);
+        for (const relation of ["containing", "ontop"]) {
+            // @ts-ignore
+            if (item[relation] && item[relation].length > 0) {
+                // @ts-ignore
+                for (const childItem of item[relation]) {
+                    expellCharacter(charName, childItem);
+                }
+            }
+        }
+    }
+
     // this is specific to items on items only, I know it is going to be verbose but more readable this way, we can optimize later if needed
     // the path length being greater than 3 means we are on an item that is inside or on top another item
     if (path.length > 3) {
@@ -3246,6 +3264,10 @@ async function cleanDirtyItemTree(
                                 );
                                 storyMasterMessageSoFar += remainVariations[Math.floor(Math.random() * remainVariations.length)];
                             }
+
+                            for (const expelledChar of expelledCharacters) {
+                                expellCharacter(expelledChar, carriedItem);
+                            }
                         }
 
                         addedMessagesForStoryMaster.push(storyMasterMessageSoFar);
@@ -3451,6 +3473,10 @@ async function cleanDirtyItemTree(
                                 ];
                                 addedMessagesForStoryMaster.push(remainVariations[Math.floor(Math.random() * remainVariations.length)]);
                             }
+                        }
+
+                        for (const expelledChar of expelledCharacters) {
+                            expellCharacter(expelledChar, wornItem);
                         }
                     }
                 }

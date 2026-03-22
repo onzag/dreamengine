@@ -364,8 +364,6 @@ export async function* getHistoryForCharacter(engine, character, options) {
  *   includeRejectedMessages?: boolean | null,
  *   includeHiddenMessages?: boolean | null,
  *   msgLimit: "LAST_CYCLE" | "LAST_CYCLE_EXCLUDE_CHAR" | "LAST_STORY_FRAGMENT_FROM_CHAR" | "LAST_CYCLE_EXPANDED" | "LAST_CYCLE_EXPANDED_EXCLUDE_CHAR" | "ALL",
- *   countTokens?: (text: string) => Promise<number>,
- *   contextWindowSize?: number,
  *   useExponentialShrinkingSelectiveContextWindowStrategy?: boolean,
  * }} options
  */
@@ -389,15 +387,9 @@ export async function getHistoryFragmentForCharacter(engine, character, options)
      */
     const mentionedCharacters = [];
 
-    if (options.msgLimit === "ALL" && (!options.countTokens || !options.contextWindowSize)) {
-        throw new Error("countTokens and contextWindowSize are required when msgLimit is ALL");
-    }
-
     if (options.useExponentialShrinkingSelectiveContextWindowStrategy && (options.includeDebugMessages || options.includeRejectedMessages || options.includeHiddenMessages)) {
         throw new Error("useExponentialShrinkingSelectiveContextWindowStrategy cannot be used with includeDebugMessages, includeRejectedMessages, or includeHiddenMessages");
     }
-
-    let tokensExhaustedApprox = 512; // initial buffer
 
     let cycleCount = 0;
     while (!generator.done) {
@@ -408,16 +400,8 @@ export async function getHistoryFragmentForCharacter(engine, character, options)
             const messageParsed = generator.value.debug ? generator.value.message : parseMessageInComponentsAsText(generator.value.name, generator.value.message);
 
             if (options.msgLimit === "ALL") {
-                // @ts-ignore
-                const messageTokens = await options.countTokens(messageParsed);
-                tokensExhaustedApprox += messageTokens + 10; // some wiggle room
-                // @ts-ignore
-                shouldStopAddingMessages = tokensExhaustedApprox >= options.contextWindowSize;
-                shouldAddMessage = !shouldStopAddingMessages;
-                if (shouldStopAddingMessages) {
-                    // this will stop restore it back to before adding the message that caused the overflow, so we are sure to not exceed the context window size
-                    tokensExhaustedApprox -= messageTokens + 10; // remove wiggle room if we are not adding the message
-                }
+                shouldStopAddingMessages = false;
+                shouldAddMessage = true;
             } else if (options.msgLimit === "LAST_STORY_FRAGMENT_FROM_CHAR") {
                 shouldAddMessage = generator.value.name === character.name;
                 shouldStopAddingMessages = shouldAddMessage;
@@ -479,6 +463,5 @@ export async function getHistoryFragmentForCharacter(engine, character, options)
         messages: messagesToAdd,
         interactedCharacters,
         mentionedCharacters,
-        tokensExhaustedApprox,
     }
 }

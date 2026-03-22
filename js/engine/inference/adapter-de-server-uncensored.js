@@ -224,6 +224,7 @@ export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
             if (data.type == "ready") {
                 this.contextWindowSize = data.context_window_size;
                 this.doSupportsParallelRequests = data.supports_parallel_requests;
+                this.endToken = data.end_token || null;
 
                 console.log("InferenceAdapterLlamaUncensored: Received ready message from server. Context window size: " + this.contextWindowSize + ", Supports parallel requests: " + this.doSupportsParallelRequests);
 
@@ -263,63 +264,23 @@ export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
     }
 
     /**
-     * Once retrieved this information this builds a reasoning prompt for what the character will do next and that will be
-     * fed into the inference reasoning
-     * 
-     * @param {DECompleteCharacterReference} character 
-     * @param {string} action 
-     * @param {string} primaryEmotion
-     * @param {string[]} emotionalRange
-     * @param {string[]} states
-     * @param {string} narrativeEffect
-     */
-    buildActionPromptForCharacter(character, action, primaryEmotion, emotionalRange, states, narrativeEffect) {
-        return (
-            `
-**INSTRUCTIONS**
-
-Rule: Always format narration inside asterisks and in third person eg. \`*${character.name} ...*\`
-Rule: Spoken dialogue should be done in first person.
-
-${character.name} is about to take an action described as follows:
-
-## Action Description:
-${action}
-
-## Narrative Effect:
-${narrativeEffect}
-
-## Primary Emotion:
-${primaryEmotion}
-${emotionalRange.length > 0 ? `
-
-## Emotional Range:
-${emotionalRange.join(", ")}
-` : ""}
-${states.length > 0 ? `
-
-## Character States:
-${states.join(", ")}
-` : ""}`
-        )
-    }
-
-    /**
      * Infers the next message for a character narrative purposes
      * 
      * @param {DECompleteCharacterReference} character
      * @param {Array<{message: string, author: string, storyMaster: boolean}>} messages
+     * @param {Array<string>} messagesTrail
      * @param {string} system the system prompt, should be generated with buildSystemPromptForCharacter
      * @param {string[]} stateInjections
      * @param {string} visibleEnviroment
      * @param {string[]} actions
      * @param {string[]} narrativeEffects
-     * @param {string} grammar
+     * @param {string|null} grammar
      * @returns {AsyncGenerator<{type: "text" | "warning" | "hidden", content: string}, void, boolean>}
      */
     async* inferNextStoryFragmentFor(
         character,
         messages,
+        messagesTrail,
         system,
         stateInjections,
         visibleEnviroment,
@@ -341,10 +302,14 @@ ${stateInjections.length > 0 ? `# ${character.name}'s Current States:\n\n${state
 ${narrativeEffects.length ? "# When narrating ensure that:\n\n" + narrativeEffects.map(effect => `- ${effect}`).join("\n") : ""}
 
 ${actions.length > 0 ? `# Actions ${character.name} must take:\n\n${actions.join("\n\n")}` : ""}
+
+RULE: Always format narration inside asterisks and in third person eg. \`*As ${character.name} hears this...*\`
+RULE: Keep *narration* messages short and sweet, only 3 to 4 sentences at most, and avoid long descriptions.
+RULE: Spoken dialogue should be done in first person, and start with the character name followed by a colon eg. \`${character.name}: This is spoken dialogue.\`
         `).trim();
         let assistantPromptTrail = "";
 
-        let tokensExhaustedApprox = 256; // initial buffer
+        let tokensExhaustedApprox = 512; // initial buffer
         let contextWindowSize = this.contextWindowSize
 
         // wiggle room for system prompt
@@ -378,17 +343,21 @@ ${actions.length > 0 ? `# Actions ${character.name} must take:\n\n${actions.join
 
         storySoFar = replaceMultipleNewLines(storySoFar).trim();
 
-        userPrompt = `${storySoFar}\n\n${userPrompt}`;
+        if (!storySoFar) {
+            throw new Error("There is no story so far to provide as context, at least one message must be provided");
+        }
+
+        userPrompt = `# Story to continue:\n\n${storySoFar}\n\n${userPrompt}`;
 
         tokensExhaustedApprox += tokensInStorySoFar;
 
         assistantPromptTrail = `# Continuing the story as ${character.name}:\n\n${getLastParagraphChunkOf(storySoFar)}\n\n`;
 
-        console.log(systemPrompt);
-        console.log(userPrompt);
-        console.log(assistantPromptTrail);
-        console.log("Grammar:", grammar);
+        if (messagesTrail.length > 0) {
+            assistantPromptTrail += messagesTrail.join("\n\n") + "\n\n";
+        }
 
+        // TODO fix thinking, because with paragraphs and stuff this is not very good
         const payload = {
             messages: [
                 {
@@ -401,12 +370,13 @@ ${actions.length > 0 ? `# Actions ${character.name} must take:\n\n${actions.join
                 }
             ],
             trail: assistantPromptTrail + (this.options.thinking?.thinkTagOpen ? this.options.thinking.thinkTagOpen : ""),
-            stopAfter: [],
             startCountingFromToken: this.options.thinking?.thinkTagClose ? this.options.thinking.thinkTagClose : null,
             maxParagraphs: 5,
             maxCharacters: 1000,
             maxSafetyCharacters: 5000,
-            grammar,
+            stopAt: [],
+            stopAfter: [],
+            grammar: grammar || null,
         };
 
         const rid = cheapRID();
@@ -428,19 +398,20 @@ ${actions.length > 0 ? `# Actions ${character.name} must take:\n\n${actions.join
             });
             delete this.listener[rid];
             if (data.type === "token") {
-                collectedMessage += data.token;
+                collectedMessage += data.text;
                 if (!alreadyOutOfThinkLoop) {
                     const outOfThinkLoopNow = collectedMessage.includes(thinkTagClose);
                     if (outOfThinkLoopNow) {
                         isThinking = false;
                         alreadyOutOfThinkLoop = true;
                         const tokensAfterThinkTag = collectedMessage.split(thinkTagClose)[1];
-                        const lastHiddenTextShouldContinue = yield { type: "hidden", content: data.token.split(thinkTagClose)[0] };
+                        const lastHiddenTextShouldContinue = yield { type: "hidden", content: data.text.split(thinkTagClose)[0] };
                         if (lastHiddenTextShouldContinue === false) {
-                            // send a cancel message
+                            // send a cancel message1
                             this.socket.send(JSON.stringify({ action: "cancel", "rid": rid }));
                             break;
                         }
+
                         const shouldContinue = yield { type: "text", content: tokensAfterThinkTag };
                         if (shouldContinue === false) {
                             // send a cancel message
@@ -448,7 +419,7 @@ ${actions.length > 0 ? `# Actions ${character.name} must take:\n\n${actions.join
                             break;
                         }
                     } else {
-                        const shouldContinue = yield { type: "hidden", content: data.token };
+                        const shouldContinue = yield { type: "hidden", content: data.text };
                         if (shouldContinue === false) {
                             // send a cancel message
                             this.socket.send(JSON.stringify({ action: "cancel", "rid": rid }));
@@ -456,7 +427,7 @@ ${actions.length > 0 ? `# Actions ${character.name} must take:\n\n${actions.join
                         }
                     }
                 } else {
-                    const shouldContinue = yield { type: "hidden", content: data.token };
+                    const shouldContinue = yield { type: "text", content: data.text };
                     if (shouldContinue === false) {
                         // send a cancel message
                         this.socket.send(JSON.stringify({ action: "cancel", "rid": rid }));
@@ -838,8 +809,6 @@ Adopt a \`show, don't tell\` manner, similar to Terry Pratchett's style, blendin
 # Rules:
 ${otherInteractingCharacters.map(name => `Rule: Never speak for or control ${name}'s actions, thoughts, or feelings.`).join("\n")}
 Rule: Avoid suggesting or implying reactions or decisions from other characters
-Rule: Convey all world information and background through NPC dialogue, never through narration.
-Rule: Never break character or step outside the setting's perspective.
 Rule: Reflect on the potential consequences of ${character.name} actions and decisions.
 Rule: Always format character actions inside asterisks, e.g., *${character.name} looks around*.
 Rule: Write all narration and actions in third person, not first person.
@@ -863,10 +832,6 @@ ${this.buildSystemCharacterDescription(character, description, externalDescripti
 
     getRequiredRootGrammarForQuestionGeneration() {
         return JSON.stringify("\n\n");
-    }
-
-    getRequiredRootGrammarForStoryGeneration() {
-        return JSON.stringify("[GENERATION COMPLETED]");
     }
 
     supportsGrammar() {

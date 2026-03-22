@@ -341,6 +341,11 @@ export class DEngine {
                 lore: "",
                 properties: {},
                 selectedScene: null,
+                narrationStyle: {
+                    maxParagraphs: 5,
+                    minParagraphs: 2,
+                    narrativeBias: 0.2,
+                },
             },
             characters: {},
             worldNames: {
