@@ -92,7 +92,7 @@ export function rerollLocationWeather(engine, locationName, location, parentLoca
 /**
  * @param {DEngine} engine 
  */
-function rerollWorldWeather(engine) {
+export function rerollWorldWeather(engine) {
     if (!engine.deObject) {
         throw new Error("DEngine not initialized");
     }
@@ -132,6 +132,32 @@ function updateAllWeatherDurations(engine, timeForwards) {
     for (const locationKey in engine.deObject.world.locations) {
         const location = engine.deObject.world.locations[locationKey];
         updateWeatherForLocation(location);
+    }
+}
+
+/**
+ * 
+ * @param {DEngine} engine 
+ * @param {DETimeDescription} time 
+ */
+export function timeForwardsToNewTime(engine, time) {
+    if (!engine.deObject) {
+        throw new Error("DEngine not initialized");
+    }
+
+    const currentTime = engine.deObject.currentTime;
+    const msDiff = Math.abs(time.time - currentTime.time);
+
+    engine.deObject.currentTime = time;
+
+    const duration = millisecondsToDuration(msDiff);
+    updateAllWeatherDurations(engine, duration);
+    rerollWorldWeather(engine);
+
+    for (const [charKey, charState] of Object.entries(engine.deObject.stateFor)) {
+        const currentState = deepCopyNoHistory(charState);
+        charState.time = { ...time };
+        charState.history.push(currentState);
     }
 }
 

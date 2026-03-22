@@ -15,7 +15,7 @@ import defaultNamePool from "./util/name-pool.js";
 import { getHistoryFragmentForCharacter } from "./util/messages.js";
 import calculatePostureChange from "./gears/posture-change.js";
 import calculateItemChanges from "./gears/item-changes.js";
-import timeForwardsUsingLastMessage from "./gears/time-forwards.js";
+import timeForwardsUsingLastMessage, { rerollWorldWeather, timeForwardsToNewTime } from "./gears/time-forwards.js";
 import { talk } from "./gears/talk.js";
 import { millisecondsToTime } from "./util/time.js";
 
@@ -193,7 +193,7 @@ export class DEngine {
          */
         this.informListeners = [];
         /**
-         * @type {((obj: DEObject, conversationId: string, messageId: string, text: string) => void)[]}
+         * @type {((obj: DEObject, data: {conversationId: string, messageId: string, text: string, hidden: boolean}) => void)[]}
          */
         this.startsToInferOverConversationMessageListeners = [];
 
@@ -333,11 +333,6 @@ export class DEngine {
                 lore: "",
                 properties: {},
                 selectedScene: null,
-                narrationStyle: {
-                    maxParagraphs: 5,
-                    minParagraphs: 2,
-                    narrativeBias: 0.2,
-                },
             },
             characters: {},
             worldNames: {
@@ -359,6 +354,11 @@ export class DEngine {
             worldRules: {},
             actionAccumulators: {},
             internal: {},
+            narrationStyle: {
+                maxParagraphs: 5,
+                minParagraphs: 2,
+                narrativeBias: 0.2,
+            },
         }
 
         this.user = user;
@@ -739,14 +739,21 @@ export class DEngine {
                 this.informCycleState("warning", `Scene time ${sceneObject.time.time} is in the past compared to current time ${this.deObject.currentTime.time}. This may cause unexpected behavior.`);
                 await moveTimeForwards();
             } else {
-                this.deObject.currentTime = { ...sceneObject.time };
-                this.deObject.initialTime = { ...sceneObject.time };
-                for (const charName in this.deObject.stateFor) {
-                    this.deObject.stateFor[charName].time = { ...sceneObject.time };
+                if (!this.deObject.world.selectedScene) {
+                    this.deObject.initialTime = { ...sceneObject.time };
+                    this.deObject.currentTime = { ...sceneObject.time };
+                    for (const charName in this.deObject.stateFor) {
+                        this.deObject.stateFor[charName].time = { ...sceneObject.time };
+                    }
+                    rerollWorldWeather(this);
+                } else {
+                    timeForwardsToNewTime(this, sceneObject.time)
                 }
             }
         } else if (this.deObject.world.selectedScene) {
             await moveTimeForwards();
+        } else {
+            rerollWorldWeather(this);
         }
 
         this.deObject.stateFor[this.userCharacter.name].location = sceneObject.location;
@@ -1378,7 +1385,7 @@ export class DEngine {
                 this.deObject.conversations[conversationIdUsed].messages.push({
                     sender: "Story Master",
                     content: `Message rejected, ${reason}`,
-                    duration: { inMinutes: 0, inHours: 0, inDays: 0 },
+                    duration: { inMinutes: 0, inHours: 0, inDays: 0, inSeconds: 0 },
                     // @ts-ignore
                     startTime: { ...this.deObject.currentTime },
                     // @ts-ignore
@@ -1477,10 +1484,24 @@ export class DEngine {
     }
 
     /**
-     * @param {(obj: DEObject, conversationId: string, messageId: string, text: string) => void} listener 
+     * @param {(obj: DEObject, data: {conversationId: string, messageId: string, text: string, hidden: boolean}) => void} listener 
      */
     addInferringOverConversationMessageListener(listener) {
         this.startsToInferOverConversationMessageListeners.push(listener);
+    }
+
+    /**
+     * @param {DEObject} deObject 
+     * @param {{conversationId: string, messageId: string, text: string, hidden: boolean}} data
+     */
+    triggerInferingOverConversationMessage(deObject, data) {
+        for (const listener of this.startsToInferOverConversationMessageListeners) {
+            try {
+                listener(deObject, data);
+            } catch (e) {
+                console.error("Error in inferring over conversation message listener:", e);
+            }
+        }
     }
 
     /**

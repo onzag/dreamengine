@@ -2318,6 +2318,10 @@ declare interface DEConversationMessage {
      */
     content: string;
     /**
+     * Hidden content, metadata, etc...
+     */
+    hiddenContent?: string;
+    /**
      * The time when the message was sent
      */
     startTime: DETimeDescription;

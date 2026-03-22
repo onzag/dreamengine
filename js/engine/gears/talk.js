@@ -30,6 +30,8 @@ export async function talk(engine, character, options) {
         throw new Error(`Character ${character.name} is dead and cannot talk.`);
     } else if (charState.deadEnded) {
         throw new Error(`Character ${character.name} is in a dead end scenario and cannot talk.`);
+    } else if (!charState.conversationId) {
+        throw new Error(`Character ${character.name} is not currently in a conversation and cannot talk.`);
     }
 
     const addedMessagesForStoryMaster = [];
@@ -413,11 +415,21 @@ export async function talk(engine, character, options) {
         singleSummary: null,
     }
 
+    const conversationObject = engine.deObject.conversations[charState.conversationId];
+    conversationObject.messages.push(nextMessage);
+
+    await engine.informDEObjectUpdated();
+
     // TODO pre narrative effects
 
     let nextToGenerate = getNextToGenerate();
+    let hasHiddenContent = false;
+    let hasStandardContent = false;
     while (nextToGenerate) {
         let generatedMessage = "";
+        let hasYieldDoubleLineHidden = false;
+        let hasYieldDoubleLineStandard = false;
+
         console.log("Generating next " + nextToGenerate.type + (nextToGenerate.action ? ` with action: ${nextToGenerate.action}` : ""));
         const generator = engine.inferenceAdapter.inferNextStoryFragmentFor(
             character,
@@ -438,10 +450,33 @@ export async function talk(engine, character, options) {
                 if (info.type === "warning") {
                     engine.informCycleState("warning", info.content);
                 } else if (info.type === "hidden") {
-                    // TODO
+                    const contentToSend = hasStandardContent && !hasYieldDoubleLineHidden ? "\n\n" + info.content : info.content;
+                    engine.triggerInferingOverConversationMessage(engine.deObject, {
+                        conversationId: charState.conversationId,
+                        messageId: nextMessage.id,
+                        text: contentToSend,
+                        hidden: true,
+                    });
+                    if (!nextMessage.hiddenContent) {
+                        nextMessage.hiddenContent = contentToSend;
+                    } else {
+                        nextMessage.hiddenContent += contentToSend;
+                    }
+                    hasYieldDoubleLineHidden = true;
+                    hasHiddenContent = true;
                 } else if (info.type === "text") {
-                    process.stdout.write(info.content);
                     generatedMessage += info.content;
+                    nextMessage.content += info.content;
+                    const contentToSend = hasStandardContent && !hasYieldDoubleLineStandard ? "\n\n" + info.content : info.content;
+                    engine.triggerInferingOverConversationMessage(engine.deObject, {
+                        conversationId: charState.conversationId,
+                        messageId: nextMessage.id,
+                        text: contentToSend,
+                        hidden: false,
+                    });
+                    nextMessage.content += contentToSend;
+                    hasYieldDoubleLineStandard = true;
+                    hasStandardContent = true;
                 }
             }
             if (!next.done) {
@@ -526,6 +561,8 @@ export async function talk(engine, character, options) {
 
         await checkAllActiveStatesConsistency(engine, character);
     }
+
+    await engine.informDEObjectUpdated();
 
     return {
         addedMessagesForStoryMaster,

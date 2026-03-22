@@ -57,6 +57,10 @@ export function parseMessageInComponents(author, message) {
         return results;
     }
 
+    if (message.trim().length === 0) {
+        return [];
+    }
+
     const splittedLines = message.split("\n");
     for (const line of splittedLines) {
         const trimmedLine = line.trim();
@@ -66,20 +70,21 @@ export function parseMessageInComponents(author, message) {
                 origin: author,
                 content: trimmedLine.substring(author.length + 2).trim(),
             });
+            continue;
         }
-        let inContext = false;
+        let inNarration = false;
         let accumulatedContext = "";
         for (const char of line) {
             if (char === "*") {
                 if (accumulatedContext.trim().length > 0) {
                     finalMessages.push({
-                        author: inContext ? null : author,
+                        author: inNarration ? null : author,
                         origin: author,
                         content: accumulatedContext.trim(),
                     });
                 }
 
-                inContext = !inContext;
+                inNarration = !inNarration;
                 accumulatedContext = "";
             } else {
                 accumulatedContext += char;
@@ -88,7 +93,7 @@ export function parseMessageInComponents(author, message) {
 
         if (accumulatedContext.trim().length > 0) {
             finalMessages.push({
-                author: inContext ? null : author,
+                author: inNarration ? null : author,
                 origin: author,
                 content: accumulatedContext.trim(),
             });
@@ -156,7 +161,7 @@ export function makeTimestamp(engine, time, includeNowLabel = true) {
  * @param {DEngine} engine
  * @param {DECompleteCharacterReference} character
  * @param {{ excludeFrom?: string[] | null, includeDebugMessages?: boolean | null, includeRejectedMessages?: boolean | null, includeHiddenMessages?: boolean | null}} options
- * @return {AsyncGenerator<{name: string, message: string, conversationId: string | null, id: string | null, conversationId: string | null, debug: boolean, rejected: boolean, hidden: boolean, storyMaster: boolean, interactingCharacters: string[]}, void, boolean>}
+ * @return {AsyncGenerator<{name: string, message: string, conversationId: string | null, id: string | null, conversationId: string | null, debug: boolean, rejected: boolean, hidden: boolean, storyMaster: boolean, interactingCharacters: string[], gid: string}, void, boolean>}
  */
 export async function* getHistoryForCharacter(engine, character, options) {
     if (!engine.deObject) {
@@ -216,6 +221,7 @@ export async function* getHistoryForCharacter(engine, character, options) {
             name: "Story Master",
             message: message,
             id: null,
+            gid: `story-master-states-${character.name}-${fromTime.time}`,
             conversationId: null,
             debug: false,
             rejected: false,
@@ -271,13 +277,14 @@ export async function* getHistoryForCharacter(engine, character, options) {
                 const keepgoing = yield {
                     name: "Story Master",
                     message: (timeMark === "Now" ? "Right Now" : "At " + timeMark) + ", " + character.name + " is at " + conversationLocation + " " + withOrAlone + ". The interaction happened as follows:\n\n" + currentConversationObject.pseudoConversationSummary,
-                    id: expectedId,
+                    id: null,
                     conversationId: state.conversationId,
                     debug: false,
                     rejected: false,
                     storyMaster: true,
                     hidden: false,
                     interactingCharacters: currentConversationObject.participants,
+                    gid: expectedId,
                 };
                 if (!keepgoing) {
                     return;
@@ -297,6 +304,7 @@ export async function* getHistoryForCharacter(engine, character, options) {
                         storyMaster: message.isStoryMasterMessage,
                         hidden: message.isHiddenMessage,
                         interactingCharacters: message.interactingCharacters || [],
+                        gid: message.id,
                     });
                     if (!keepgoing) {
                         return;
@@ -311,13 +319,14 @@ export async function* getHistoryForCharacter(engine, character, options) {
                     const keepgoing = yield {
                         name: "Story Master",
                         message: "The following interaction took place " + timeMarkDetailed + ", " + character.name + " is at " + conversationLocation + withOrAlone + ".",
-                        id: `story-master-${state.conversationId}-interaction-info`,
+                        id: null,
                         conversationId: state.conversationId,
                         debug: false,
                         rejected: false,
                         storyMaster: true,
                         hidden: false,
                         interactingCharacters: currentConversationObject.participants,
+                        gid: `story-master-${state.conversationId}-interaction-info`,
                     };
                     if (!keepgoing) {
                         return;

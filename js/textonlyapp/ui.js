@@ -205,15 +205,13 @@ while ($true) {
     /**
      * 
      * @param {DEObject} obj 
-     * @param {string} conversationId 
-     * @param {string} messageId 
-     * @param {string} text 
+     * @param {{conversationId: string, messageId: string, text: string, hidden: boolean}} data
      */
-    addToTextBuffer(obj, conversationId, messageId, text) {
-        if (this.lastMessageId === messageId) {
+    addToTextBuffer(obj, data) {
+        if (this.lastMessageId === data.messageId && !data.hidden) {
             // log the text without a newline
-            process.stdout.write(this.lastMessageColor + text + COLORS.default);
-            fs.appendFileSync(this.storyFilePath, this.lastMessageColor + text + COLORS.default);
+            process.stdout.write(this.lastMessageColor + data.text + COLORS.default);
+            fs.appendFileSync(this.storyFilePath, this.lastMessageColor + data.text + COLORS.default);
         }
     }
 
@@ -222,7 +220,7 @@ while ($true) {
      */
     async processUpdate(obj) {
         /**
-         * @type {Array<{name: string; message: string; id: string; hidden: boolean; storyMaster: boolean; rejected: boolean; debug: boolean}>}
+         * @type {Array<{name: string; message: string; hidden: boolean; storyMaster: boolean; rejected: boolean; debug: boolean; gid: string;}>}
          */
         let accumulatedMessages = [];
         const generator = getHistoryForCharacter(
@@ -237,7 +235,7 @@ while ($true) {
         );
         let next = await generator.next(true);
         while (!next.done) {
-            if (next.value.id === this.lastMessageId || this.seenMessageIds.has(next.value.id)) {
+            if (next.value.id === this.lastMessageId || this.seenMessageIds.has(next.value.gid)) {
                 await generator.return();
                 break;
             }
@@ -258,10 +256,10 @@ while ($true) {
 
         const lastMessage = accumulatedMessages[accumulatedMessages.length - 1];
         if (lastMessage) {
-            this.lastMessageId = lastMessage.id;
+            this.lastMessageId = lastMessage.gid;
         }
         accumulatedMessages.forEach(m =>
-            this.seenMessageIds.add(m.id)
+            this.seenMessageIds.add(m.gid)
         );
     }
 }
