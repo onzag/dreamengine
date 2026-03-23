@@ -374,4 +374,214 @@ export const commands = {
         cheat: true,
         args: ["<character name>", "<towards character name>"],
     },
+    "setfirstbondvaluefor": {
+        run: async (engine, args) => {
+            if (!engine.deObject) {
+                throw new Error("DEngine not initialized");
+            }
+            if (args.length < 3) {
+                return "Usage: /setfirstbondvaluefor <character name> <towards character name> <bond value [-100,100]>";
+            }
+            const characterName = args[0];
+            const otherCharacterName = args[1];
+            const bondValue = parseInt(args[2]);
+            if (isNaN(bondValue) || bondValue < -100 || bondValue > 100) {
+                return `Invalid bond value "${args[2]}". Bond value must be an integer between -100 and 100.`;
+            }
+            const character = engine.deObject.characters[characterName];
+            const otherCharacter = engine.deObject.characters[otherCharacterName];
+            if (!character) {
+                return `Character "${characterName}" not found.`;
+            }
+            if (!otherCharacter) {
+                return `Character "${otherCharacterName}" not found.`;
+            }
+            const foundBond = engine.getDEObject().social.bonds[characterName].active.find(bond => bond.towards === otherCharacterName);
+            if (!foundBond) {
+                engine.deObject.social.bonds[characterName].active.push({
+                    towards: otherCharacterName,
+                    bond: bondValue,
+                    bond2: 0,
+                    stranger: true,
+                    createdAt: engine.deObject.currentTime,
+                    knowsName: false,
+                });
+                return `No active bond found from "${characterName}" towards "${otherCharacterName}". A new bond has been created with the specified bond value.`;
+            }
+
+            foundBond.bond = bondValue;
+            return `The bond value from "${characterName}" towards "${otherCharacterName}" has been updated to ${bondValue}.`;
+        },
+        help: "Sets the first bond value between two characters. This is the value on the axis of friendship vs enmity, where -100 is an extreme enemy, 0 is neutral, and 100 is an extreme friend.",
+        cheat: true,
+        args: ["<character name>", "<towards character name>", "<bond value [-100,100]>"],
+    },
+    "setsecondbondvaluefor": {
+        run: async (engine, args) => {
+            if (!engine.deObject) {
+                throw new Error("DEngine not initialized");
+            }
+            if (args.length < 3) {
+                return "Usage: /setsecondbondvaluefor <character name> <towards character name> <bond2 value [0,100]>";
+            }
+            const characterName = args[0];
+            const otherCharacterName = args[1];
+            const bondValue = parseInt(args[2]);
+            if (isNaN(bondValue) || bondValue < 0 || bondValue > 100) {
+                return `Invalid bond2 value "${args[2]}". Bond2 value must be an integer between 0 and 100.`;
+            }
+            const character = engine.deObject.characters[characterName];
+            const otherCharacter = engine.deObject.characters[otherCharacterName];
+            if (!character) {
+                return `Character "${characterName}" not found.`;
+            }
+            if (!otherCharacter) {
+                return `Character "${otherCharacterName}" not found.`;
+            }
+            const foundBond = engine.getDEObject().social.bonds[characterName].active.find(bond => bond.towards === otherCharacterName);
+            if (!foundBond) {
+                engine.deObject.social.bonds[characterName].active.push({
+                    towards: otherCharacterName,
+                    bond: 0,
+                    bond2: bondValue,
+                    stranger: true,
+                    createdAt: engine.deObject.currentTime,
+                    knowsName: false,
+                });
+                return `No active bond found from "${characterName}" towards "${otherCharacterName}". A new bond has been created with the specified bond2 value.`;
+            }
+            foundBond.bond2 = bondValue;
+            return `The bond2 value from "${characterName}" towards "${otherCharacterName}" has been updated to ${bondValue}.`;
+        },
+        help: "Sets the second bond value between two characters. This is the romance/intimacy axis, where 0 is none and 100 is maximum.",
+        cheat: true,
+        args: ["<character name>", "<towards character name>", "<bond2 value [0,100]>"],
+    },
+    "setstrangervaluefor": {
+        run: async (engine, args) => {
+            if (!engine.deObject) {
+                throw new Error("DEngine not initialized");
+            }
+            if (args.length < 3) {
+                return "Usage: /setstrangervaluefor <character name> <towards character name> <true|false>";
+            }
+            const characterName = args[0];
+            const otherCharacterName = args[1];
+            const strangerRaw = args[2].toLowerCase();
+            if (strangerRaw !== "true" && strangerRaw !== "false") {
+                return `Invalid stranger value "${args[2]}". Must be "true" or "false".`;
+            }
+            const strangerValue = strangerRaw === "true";
+            const character = engine.deObject.characters[characterName];
+            const otherCharacter = engine.deObject.characters[otherCharacterName];
+            if (!character) {
+                return `Character "${characterName}" not found.`;
+            }
+            if (!otherCharacter) {
+                return `Character "${otherCharacterName}" not found.`;
+            }
+            const foundBond = engine.getDEObject().social.bonds[characterName].active.find(bond => bond.towards === otherCharacterName);
+            if (!foundBond) {
+                engine.deObject.social.bonds[characterName].active.push({
+                    towards: otherCharacterName,
+                    bond: 0,
+                    bond2: 0,
+                    stranger: strangerValue,
+                    createdAt: engine.deObject.currentTime,
+                    knowsName: false,
+                });
+                return `No active bond found from "${characterName}" towards "${otherCharacterName}". A new bond has been created with the specified stranger value.`;
+            }
+            foundBond.stranger = strangerValue;
+            return `The stranger value from "${characterName}" towards "${otherCharacterName}" has been updated to ${strangerValue}.`;
+        },
+        help: "Sets the stranger flag on a bond between two characters. When true, the character treats the other as a stranger; when false, they are considered known.",
+        cheat: true,
+        args: ["<character name>", "<towards character name>", "<true|false>"],
+    },
+    "setknowsnamefor": {
+        run: async (engine, args) => {
+            if (!engine.deObject) {
+                throw new Error("DEngine not initialized");
+            }
+            if (args.length < 3) {
+                return "Usage: /setknowsnamefor <character name> <towards character name> <true|false>";
+            }
+            const characterName = args[0];
+            const otherCharacterName = args[1];
+            const knowsNameRaw = args[2].toLowerCase();
+            if (knowsNameRaw !== "true" && knowsNameRaw !== "false") {
+                return `Invalid knowsName value "${args[2]}". Must be "true" or "false".`;
+            }
+            const knowsNameValue = knowsNameRaw === "true";
+            const character = engine.deObject.characters[characterName];
+            const otherCharacter = engine.deObject.characters[otherCharacterName];
+            if (!character) {
+                return `Character "${characterName}" not found.`;
+            }
+            if (!otherCharacter) {
+                return `Character "${otherCharacterName}" not found.`;
+            }
+            const foundBond = engine.getDEObject().social.bonds[characterName].active.find(bond => bond.towards === otherCharacterName);
+            if (!foundBond) {
+                engine.deObject.social.bonds[characterName].active.push({
+                    towards: otherCharacterName,
+                    bond: 0,
+                    bond2: 0,
+                    stranger: true,
+                    createdAt: engine.deObject.currentTime,
+                    knowsName: knowsNameValue,
+                });
+                return `No active bond found from "${characterName}" towards "${otherCharacterName}". A new bond has been created with the specified knowsName value.`;
+            }
+            foundBond.knowsName = knowsNameValue;
+            return `The knowsName value from "${characterName}" towards "${otherCharacterName}" has been updated to ${knowsNameValue}.`;
+        },
+        help: "Sets whether a character knows the name of another character in their bond.",
+        cheat: true,
+        args: ["<character name>", "<towards character name>", "<true|false>"],
+    },
+    "setfamilyrelationshipfor": {
+        run: async (engine, args) => {
+            if (!engine.deObject) {
+                throw new Error("DEngine not initialized");
+            }
+            const validRelations = ["parent", "sibling", "child", "spouse", "cousin", "uncle", "aunt", "grandparent", "grandchild", "niece", "nephew", "other"];
+            if (args.length < 3) {
+                return `Usage: /setfamilyrelationshipfor <character name> <towards character name> <relation|none>\nValid relations: ${validRelations.join(", ")}, or "none" to remove the tie.`;
+            }
+            const characterName = args[0];
+            const otherCharacterName = args[1];
+            const relation = args[2].toLowerCase();
+            if (relation !== "none" && !validRelations.includes(relation)) {
+                return `Invalid relation "${args[2]}". Valid relations are: ${validRelations.join(", ")}, or "none" to remove the tie.`;
+            }
+            const character = engine.deObject.characters[characterName];
+            const otherCharacter = engine.deObject.characters[otherCharacterName];
+            if (!character) {
+                return `Character "${characterName}" not found.`;
+            }
+            if (!otherCharacter) {
+                return `Character "${otherCharacterName}" not found.`;
+            }
+            const familyTies = character.socialSimulation.familyTies;
+            const existingIndex = familyTies.findIndex(tie => tie.character === otherCharacterName);
+            if (relation === "none") {
+                if (existingIndex === -1) {
+                    return `No family tie found from "${characterName}" towards "${otherCharacterName}".`;
+                }
+                familyTies.splice(existingIndex, 1);
+                return `The family tie from "${characterName}" towards "${otherCharacterName}" has been removed.`;
+            }
+            if (existingIndex !== -1) {
+                familyTies[existingIndex].relation = /** @type {any} */ (relation);
+                return `The family relationship from "${characterName}" towards "${otherCharacterName}" has been updated to "${relation}".`;
+            }
+            familyTies.push({ character: otherCharacterName, relation: /** @type {any} */ (relation) });
+            return `A new family tie from "${characterName}" towards "${otherCharacterName}" has been created with relation "${relation}".`;
+        },
+        help: "Sets the family relationship from one character towards another. Use \"none\" to remove it. Valid relations: parent, sibling, child, spouse, cousin, uncle, aunt, grandparent, grandchild, niece, nephew, other.",
+        cheat: true,
+        args: ["<character name>", "<towards character name>", "<relation|none>"],
+    },
 }
