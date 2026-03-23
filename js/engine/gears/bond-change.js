@@ -217,6 +217,7 @@ export default async function calculateBondsChangesDueToMessages(engine, charact
                     (await condition.template(engine.deObject, {
                         char: character,
                         other: engine.deObject.characters[characterNameToGetBondTowards],
+                        // TODO bond relationship
                     })).trim();
                 if (result === "yes" || result === "Yes" || result === "YES") {
                     console.log(`Bond condition is a statement which matched for bond from ${character.name} towards ${characterNameToGetBondTowards}, applying bond changes: bond ${conditionYesValue}, on ${condition.affectsBonds}`);

@@ -186,6 +186,7 @@ engine.exports = {
                     description: DE.utils.newHandlebarsTemplate(DE, char.properties["BOND_STRANGER_NEUTRAL"]),
                     bondConditions: basicBondConditions,
                     strangerBond: true,
+                    familyBond: false,
                 });
 
                 char.bonds.declarations.push({
@@ -197,6 +198,7 @@ engine.exports = {
                     description: DE.utils.newHandlebarsTemplate(DE, char.properties["BOND_STRANGER_GOOD"]),
                     bondConditions: basicBondConditions,
                     strangerBond: true,
+                    familyBond: false,
                 });
 
                 char.bonds.declarations.push({
@@ -208,6 +210,7 @@ engine.exports = {
                     description: DE.utils.newHandlebarsTemplate(DE, char.properties["BOND_STRANGER_BAD"]),
                     bondConditions: basicBondConditions,
                     strangerBond: true,
+                    familyBond: false,
                 });
 
                 char.bonds.declarations.push({
@@ -219,6 +222,7 @@ engine.exports = {
                     description: DE.utils.newHandlebarsTemplate(DE, char.properties["BOND_-100_-50"]),
                     bondConditions: basicBondConditions,
                     strangerBond: false,
+                    familyBond: false,
                 });
 
                 char.bonds.declarations.push({
@@ -230,6 +234,7 @@ engine.exports = {
                     description: DE.utils.newHandlebarsTemplate(DE, char.properties["BOND_-50_-35"]),
                     bondConditions: basicBondConditions,
                     strangerBond: false,
+                    familyBond: false,
                 });
 
                 char.bonds.declarations.push({
@@ -241,6 +246,7 @@ engine.exports = {
                     description: DE.utils.newHandlebarsTemplate(DE, char.properties["BOND_-35_-20"]),
                     bondConditions: basicBondConditions,
                     strangerBond: false,
+                    familyBond: false,
                 });
 
                 char.bonds.declarations.push({
@@ -252,6 +258,7 @@ engine.exports = {
                     description: DE.utils.newHandlebarsTemplate(DE, char.properties["BOND_-20_-10"]),
                     bondConditions: basicBondConditions,
                     strangerBond: false,
+                    familyBond: false,
                 });
 
                 char.bonds.declarations.push({
@@ -263,6 +270,7 @@ engine.exports = {
                     description: DE.utils.newHandlebarsTemplate(DE, char.properties["BOND_-10_0"]),
                     bondConditions: basicBondConditions,
                     strangerBond: false,
+                    familyBond: false,
                 });
 
                 char.bonds.declarations.push({
@@ -274,6 +282,7 @@ engine.exports = {
                     description: DE.utils.newHandlebarsTemplate(DE, char.properties["BOND_0_10"]),
                     bondConditions: basicBondConditions,
                     strangerBond: false,
+                    familyBond: false,
                 });
 
                 char.bonds.declarations.push({
@@ -285,6 +294,7 @@ engine.exports = {
                     description: DE.utils.newHandlebarsTemplate(DE, char.properties["BOND_10_20"]),
                     bondConditions: basicBondConditions,
                     strangerBond: false,
+                    familyBond: false,
                 });
 
                 char.bonds.declarations.push({
@@ -296,6 +306,7 @@ engine.exports = {
                     description: DE.utils.newHandlebarsTemplate(DE, char.properties["BOND_20_35"]),
                     bondConditions: basicBondConditions,
                     strangerBond: false,
+                    familyBond: false,
                 });
 
                 char.bonds.declarations.push({
@@ -307,6 +318,7 @@ engine.exports = {
                     description: DE.utils.newHandlebarsTemplate(DE, char.properties["BOND_35_50"]),
                     bondConditions: basicBondConditions,
                     strangerBond: false,
+                    familyBond: false,
                 });
 
                 char.bonds.declarations.push({
@@ -318,6 +330,7 @@ engine.exports = {
                     description: DE.utils.newHandlebarsTemplate(DE, char.properties["BOND_50_100"]),
                     bondConditions: basicBondConditions,
                     strangerBond: false,
+                    familyBond: false,
                 });
             }
         }

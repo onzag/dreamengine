@@ -50,7 +50,6 @@ export class BaseInferenceAdapter {
      * @param {string} system 
      * @param {string[]} stateInjections
      * @param {string} visibleEnviroment
-     * @param {string[]} actions
      * @param {string[]} narrativeEffects
      * @param {string|null} grammar
      * @returns {AsyncGenerator<{type: "text" | "warning" | "hidden", content: string}, void, boolean>}
@@ -62,7 +61,6 @@ export class BaseInferenceAdapter {
         system,
         stateInjections,
         visibleEnviroment,
-        actions,
         narrativeEffects,
         grammar,
     ) {

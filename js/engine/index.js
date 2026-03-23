@@ -18,6 +18,7 @@ import calculateItemChanges from "./gears/item-changes.js";
 import timeForwardsUsingLastMessage, { rerollWorldWeather, timeForwardsToNewTime } from "./gears/time-forwards.js";
 import { talk } from "./gears/talk.js";
 import { millisecondsToTime } from "./util/time.js";
+import { regenerateDEFromSavedDE } from "./util/save-de.js";
 
 const INVALID_NAMES = ["system", "assistant", "user", "everyone", "nobody",
     "anyone", "somebody", "narrator", "observer", "admin", "moderator",
@@ -35,10 +36,12 @@ const ROOT_SKIP_KEYS = new Set(['utils', 'functions']);
  * @returns {(this: any, key: string, value: any) => any}
  */
 function serializationReplacer(root) {
+    // TODO improve this, there are a lot of things that we don't even need
+    // like eg. most things should only really leave the properties behind,
+    // we also should add the world script id or something or all scripts or whatever
     return function (key, value) {
         if (this === root && ROOT_SKIP_KEYS.has(key)) return undefined;
         if (typeof value === 'function') return undefined;
-        if (value !== null && typeof value === 'object' && value.__nonserialize === true) return undefined;
         return value;
     };
 }
@@ -155,6 +158,16 @@ function createCharacterFromUser(user) {
         tier: user.tier,
         tierValue: user.tierValue,
         powerGrowthRate: user.powerGrowthRate,
+        socialSimulation: {
+            attractions: [],
+            dislikes: [],
+            likes: [],
+            species: "unknown",
+            attractiveness: 1,
+            dislikesSpecies: [],
+            familyTies: [],
+            gossipTendency: 1,
+        }
     }
 }
 
@@ -283,12 +296,10 @@ export class DEngine {
             throw new Error("JS Engine not set, cannot import scripts");
         }
 
-        // @ts-ignore
-        this.deObject.functions = this.allInternalFunctions;
-        this.deObject.utils = deEngineUtils;
+        this.deObject = regenerateDEFromSavedDE(this, this.deObject);
         this.user = this.deObject.user;
         this.userCharacter = this.deObject.characters[this.user.name];
-
+        
         /**
          * @type {DEScript[]}
          */
@@ -808,6 +819,7 @@ export class DEngine {
                     emotion: null,
                     emotionalRange: null,
                     interactingCharacters: [],
+                    rumors: [],
                 },
             ],
             bondsAtStart: getFrozenBonds(this, expectedParticipants),
@@ -868,6 +880,7 @@ export class DEngine {
                 emotion: null,
                 emotionalRange: null,
                 interactingCharacters: [],
+                rumors: [],
             });
 
             await this.informDEObjectUpdated();

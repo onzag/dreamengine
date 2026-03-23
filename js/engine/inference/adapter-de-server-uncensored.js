@@ -272,7 +272,6 @@ export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
      * @param {string} system the system prompt, should be generated with buildSystemPromptForCharacter
      * @param {string[]} stateInjections
      * @param {string} visibleEnviroment
-     * @param {string[]} actions
      * @param {string[]} narrativeEffects
      * @param {string|null} grammar
      * @returns {AsyncGenerator<{type: "text" | "warning" | "hidden", content: string}, void, boolean>}
@@ -284,7 +283,6 @@ export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
         system,
         stateInjections,
         visibleEnviroment,
-        actions,
         narrativeEffects,
         grammar,
     ) {
@@ -300,8 +298,6 @@ export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
 ${stateInjections.length > 0 ? `# ${character.name}'s Current States:\n\n${stateInjections.join("\n\n")}` : ""}
 
 ${narrativeEffects.length ? "# When narrating ensure that:\n\n" + narrativeEffects.map(effect => `- ${effect}`).join("\n") : ""}
-
-${actions.length > 0 ? `# Actions ${character.name} must take:\n\n${actions.join("\n\n")}` : ""}
 
 RULE: Always format narration inside asterisks and in third person eg. \`*As ${character.name} hears this...*\`
 RULE: Keep *narration* messages short and sweet, only 3 to 4 sentences at most, and avoid long descriptions.

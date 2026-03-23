@@ -225,10 +225,28 @@ export const specials = [
         (DE, character, potentialCausant) => potentialCausant,
     ],
     [
+        "potential_causants -> string[]",
+        "Only available at potentialCausantNegativeDescription and potentialCausantPositiveDescription, the names of the potential causants for a possible state activation, basically all the present characters",
+        "eg. [\"Aria\", \"Thalon\", \"Mira\"]",
+        (DE, character, potentialCausants) => potentialCausants,
+    ],
+    [
         "other -> string",
         "Only available at bonds and relationships, the name of the other character in the bond or relationship",
         "eg. Aria, Thalon, Mira",
         (DE, character, otherCharacter) => otherCharacter,
+    ],
+    [
+        "other_relationship -> string",
+        "Only available at bonds and relationships, the relationship that the bond description has, usually this is for family only as it otherwise defaults to \"friend\" for positive bond or \"foe\" for negative",
+        "eg. mother, father, sister, brother, cousin, aunt, uncle",
+        (DE, character, otherRelationship) => otherRelationship,
+    ],
+    [
+        "chars -> string[]",
+        "Only available in likes and dislikes description templates, the names of all characters involved",
+        "eg. [\"Aria\", \"Thalon\", \"Mira\"]",
+        (DE, character, chars) => chars,
     ],
     [
         "causant -> string",

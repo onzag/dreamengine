@@ -23,18 +23,21 @@ engine.exports = {
 
         DE.world.lore = "The world is set on a small lunar station orbiting the Moon. The station serves as a research outpost and habitat for astronauts and scientists studying the lunar environment. The station is equipped with life support systems, scientific laboratories, living quarters, and communication facilities. Outside the station, the barren surface of the Moon stretches out, dotted with craters and rocks. The sky above is a pitch-black void, with the Earth hanging in the distance. The silence is absolute, broken only by the faint hum of the station's machinery";
 
-        const vaccuumWeatherSystem = DE.utils.newWeatherSystem(DE, {
+        /**
+         * @type {DEWeatherSystem}
+         */
+        const vaccuumWeatherSystem = {
             name: "Vaccuum",
             likelihood: 1.0,
             fullyProtectingStates: [],
             partiallyProtectingStates: [],
             applyingStatesDuringNegativeEffect: [
                 {
-                    stateName: "ASPHYXIATING_VACCUUM",
+                    stateName: "Asphyxiating in the Vaccuum",
                     intensity: 4,
                 },
                 {
-                    stateName: "FREEZING_VACCUUM",
+                    stateName: "Freezing in the Vaccuum",
                     intensity: 4,
                 },
             ],
@@ -77,21 +80,21 @@ engine.exports = {
 
             applyingStatesDuringFullEffect: [
                 {
-                    stateName: "ASPHYXIATING_VACCUUM",
+                    stateName: "Asphyxiating in the Vaccuum",
                     intensity: 4,
                 },
                 {
-                    stateName: "FREEZING_VACCUUM",
+                    stateName: "Freezing in the Vaccuum",
                     intensity: 4,
                 },
             ],
             applyingStatesDuringPartialEffect: [
                 {
-                    stateName: "ASPHYXIATING_VACCUUM",
+                    stateName: "Asphyxiating in the Vaccuum",
                     intensity: 2,
                 }
             ],
-        })
+        };
 
         /**
          * @type {DEItem}
@@ -426,7 +429,7 @@ engine.exports = {
             communicator: null,
         };
 
-        DE.world.locations["Surface of the Moon"] = DE.utils.newLocationFromStaticDefinition(DE, {
+        DE.utils.newLocation(DE, "Surface of the Moon", {
             description: "The barren, grey surface of the Moon stretches out in all directions, dotted with craters and rocks. The sky above is a pitch-black void, with the Earth hanging in the distance. The silence is absolute, broken only by the faint hum of distant machinery from the lunar station nearby",
             entrances: [],
             isIndoors: false,
@@ -446,6 +449,7 @@ engine.exports = {
                     description: "The open expanse of the lunar surface, with its grey dust and scattered rocks",
                     maxVolumeLiters: 0,
                     maxWeightKg: 0,
+                    properties: {},
                     items: [
                         {
                             name: "Lunar rock",
@@ -476,7 +480,7 @@ engine.exports = {
             },
         });
 
-        DE.world.locations["Lunar Station"] = DE.utils.newLocationFromStaticDefinition(DE, {
+        DE.utils.newLocation(DE, "Lunar Station", {
             description: "A small lunar station orbiting the Moon. The station serves as a research outpost and habitat for astronauts and scientists studying the lunar environment. The station is equipped with life support systems, scientific laboratories, living quarters, and communication facilities",
             entrances: [
                 {
@@ -519,6 +523,7 @@ engine.exports = {
                     ],
                     maxVolumeLiters: 2000,
                     maxWeightKg: 2000,
+                    properties: {},
                 },
                 "Cooking Area": {
                     description: "A small kitchenette area with a compact stove, a sink, and storage cabinets. There are a few packaged food items and utensils stored here for the crew to use",
@@ -530,11 +535,12 @@ engine.exports = {
                     ],
                     maxVolumeLiters: 2000,
                     maxWeightKg: 2000,
+                    properties: {},
                 },
             },
         });
 
-        DE.world.connections["LUNAR_STATION_TO_MOON_SURFACE"] = {
+        DE.utils.newConnection(DE, {
             from: "Lunar Station",
             to: "Surface of the Moon",
             bidirectional: true,
@@ -545,11 +551,12 @@ engine.exports = {
             onlyVehicles: false,
             otherPassageConditions: {},
             vehicleTypes: [],
-        };
+            properties: {},
+        });
 
         for (let i = 0; i < 2; i++) {
             const letter = String.fromCharCode(65 + i);
-            DE.world.locations["Lunar Station Bedroom " + letter] = DE.utils.newLocationFromStaticDefinition(DE, {
+            DE.utils.newLocation(DE, "Lunar Station Bedroom " + letter, {
                 description: "A small, utilitarian bedroom within the lunar station. The room is sparsely furnished with a bunk bed, a small desk, and a locker for personal belongings. A porthole window offers a view of the lunar surface below",
                 entrances: [
                     {
@@ -588,6 +595,7 @@ engine.exports = {
                         description: "The bedroom area of the lunar station, featuring a bunk bed, a small desk, and a locker for personal belongings",
                         maxVolumeLiters: 2000,
                         maxWeightKg: 2000,
+                        properties: {},
                         items: [
                             {
                                 name: "Bunk Bed",
@@ -613,7 +621,7 @@ engine.exports = {
                 },
             });
 
-            DE.world.connections["LUNAR_STATION_BEDROOM_" + letter + "_TO_LUNAR_STATION"] = {
+            DE.utils.newConnection(DE, {
                 from: "Lunar Station Bedroom " + letter,
                 to: "Lunar Station",
                 bidirectional: true,
@@ -623,151 +631,149 @@ engine.exports = {
                 maxWeightKg: 0,
                 onlyVehicles: false,
                 otherPassageConditions: {},
+                properties: {},
                 vehicleTypes: [],
-            };
+            });
         }
     },
 
     postSpawnAllCharacters(DE) {
-        for (const char of Object.values(DE.characters)) {
-            // give all characters the ASPHYXIATING_VACCUUM and FREEZING_VACCUUM states
-            char.states["ASPHYXIATING_VACCUUM"] = {
-                randomSpawnRate: 0,
-                permanent: false,
-                modifiesStatesIntensitiesOnTrigger: {},
-                requiredStates: [],
-                requiresCharacterCausants: false,
-                requiresObjectCausants: false,
-                requiresPosture: null,
-                injuryAndDeath: true,
-                intensityModifiers: [
-                    {
-                        determineCausants: null,
-                        intensity: -4,
-                        template: DE.utils.newHandlebarsTemplate(
-                            DE,
-                            "has {{char}} returned to a pressurized environment successfully?"
-                        ),
-                    },
-                    {
-                        determineCausants: null,
-                        intensity: -4,
-                        template: DE.utils.newHandlebarsTemplate(
-                            DE,
-                            "has {{char}} put on a space suit?"
-                        ),
-                    }
-                ],
-                // need no triggers, the weather system will apply the state
-                triggers: [],
-                triggersStates: {},
-
-                // No reasoning required, obviously should get out of the vaccuum
-                // what else could it be?
-                actionPromptInjection: {
-                    "RETURN_TO_AIRLOCK": {
-                        action: DE.utils.newHandlebarsTemplate(
-                            DE,
-                            "{{char}} has an urgent need to return to the airlock and into the lunar station to avoid asphyxiation"
-                        ),
-                        intensityModification: 0,
-                        isDeadEndScenario: false,
-                        deadEndIsDeath: false,
-                        primaryEmotion: "fearful",
-                        emotionalRange: [],
-                    },
+        DE.utils.createStateInAllCharacters(DE, "Asphyxiating in the Vaccuum", {
+            randomSpawnRate: 0,
+            permanent: false,
+            modifiesStatesIntensitiesOnTrigger: {},
+            requiredStates: [],
+            requiresCharacterCausants: false,
+            requiresObjectCausants: false,
+            requiresPosture: null,
+            injuryAndDeath: true,
+            intensityModifiers: [
+                {
+                    determineCausants: null,
+                    intensity: -4,
+                    template: DE.utils.newHandlebarsTemplate(
+                        DE,
+                        "has {{char}} returned to a pressurized environment successfully?"
+                    ),
                 },
-                behaviourType: "BINARY",
-                conflictStates: [],
-                deadEndIsDeath: true,
-                // 30 seconds to death by asphyxiation
-                deadEndByTimeInMinutes: 0.5,
-                triggersDeadEnd: DE.utils.newHandlebarsTemplate(
-                    DE,
-                    "{{char}} has run out of air and has asphyxiated in the vacuum of space"
-                ),
-                intensityChangeRatePerInferenceCycle: 0,
-                dominance: 10,
-                fallsDown: false,
-                general: DE.utils.newHandlebarsTemplate(
-                    DE,
-                    "{{char}} is struggling to breathe in the vacuum of space"
-                ),
-            };
+                {
+                    determineCausants: null,
+                    intensity: -4,
+                    template: DE.utils.newHandlebarsTemplate(
+                        DE,
+                        "has {{char}} put on a space suit?"
+                    ),
+                }
+            ],
+            // need no triggers, the weather system will apply the state
+            triggers: [],
+            triggersStates: {},
 
-            char.states["FREEZING_VACCUUM"] = {
-                randomSpawnRate: 0,
-                permanent: false,
-                modifiesStatesIntensitiesOnTrigger: {},
-                requiredStates: [],
-                requiresCharacterCausants: false,
-                requiresObjectCausants: false,
-                requiresPosture: null,
-                injuryAndDeath: true,
-                intensityModifiers: [
-                    {
-                        determineCausants: null,
-                        intensity: -1,
-                        template: DE.utils.newHandlebarsTemplate(
-                            DE,
-                            "has {{char}} returned to a pressurized environment successfully?"
-                        ),
-                    },
-                    {
-                        determineCausants: null,
-                        intensity: -1,
-                        template: DE.utils.newHandlebarsTemplate(
-                            DE,
-                            "has {{char}} put on a space suit?"
-                        ),
-                    },
-                ],
-                usesReliefDynamic: true,
-                relieving: DE.utils.newHandlebarsTemplate(
-                    DE,
-                    "{{char}} is recovering from the severe freezing effects of the vacuum of space and should look for warmth"
-                ),
-                intensityChangeRatePerInferenceCycleAfterRelief: -0.1,
-                intensityModifiersDuringRelief: [
-                    {
-                        determineCausants: null,
-                        intensity: -1,
-                        template: DE.utils.newHandlebarsTemplate(
-                            DE,
-                            "has {{char}} put on a blanket, warm clothes or similar?"
-                        ),
-                    },
-                    {
-                        determineCausants: null,
-                        intensity: -2,
-                        template: DE.utils.newHandlebarsTemplate(
-                            DE,
-                            "has {{char}} taken a hot shower?"
-                        ),
-                    },
-                ],
-                // need no triggers, the weather system will apply the state
-                triggers: [],
-                triggersStates: {},
-                actionPromptInjection: {},
-                behaviourType: "BINARY",
-                conflictStates: [],
-                deadEndIsDeath: true,
-                // 5 minutes to death by freezing
-                deadEndByTimeInMinutes: 5,
-                triggersDeadEnd: DE.utils.newHandlebarsTemplate(
-                    DE,
-                    "{{char}} has succumbed to the extreme cold of the vacuum of space"
-                ),
-                intensityChangeRatePerInferenceCycle: 0,
-                dominance: 10,
-                dominanceAfterRelief: 1,
-                fallsDown: false,
-                general: DE.utils.newHandlebarsTemplate(
-                    DE,
-                    "{{char}} is freezing in the vacuum of space"
-                ),
-            };
-        }
+            // No reasoning required, obviously should get out of the vaccuum
+            // what else could it be?
+            actionPromptInjection: {
+                "RETURN_TO_AIRLOCK": {
+                    action: DE.utils.newHandlebarsTemplate(
+                        DE,
+                        "{{char}} has an urgent need to return to the airlock and into the lunar station to avoid asphyxiation"
+                    ),
+                    intensityModification: 0,
+                    isDeadEndScenario: false,
+                    deadEndIsDeath: false,
+                    primaryEmotion: "fearful",
+                    emotionalRange: [],
+                },
+            },
+            behaviourType: "BINARY",
+            conflictStates: [],
+            deadEndIsDeath: true,
+            // 30 seconds to death by asphyxiation
+            deadEndByTimeInMinutes: 0.5,
+            triggersDeadEnd: DE.utils.newHandlebarsTemplate(
+                DE,
+                "{{char}} has run out of air and has asphyxiated in the vacuum of space"
+            ),
+            intensityChangeRatePerInferenceCycle: 0,
+            dominance: 10,
+            fallsDown: false,
+            general: DE.utils.newHandlebarsTemplate(
+                DE,
+                "{{char}} is struggling to breathe in the vacuum of space"
+            ),
+        });
+
+        DE.utils.createStateInAllCharacters(DE, "Freezing in the Vaccuum", {
+            randomSpawnRate: 0,
+            permanent: false,
+            modifiesStatesIntensitiesOnTrigger: {},
+            requiredStates: [],
+            requiresCharacterCausants: false,
+            requiresObjectCausants: false,
+            requiresPosture: null,
+            injuryAndDeath: true,
+            intensityModifiers: [
+                {
+                    determineCausants: null,
+                    intensity: -1,
+                    template: DE.utils.newHandlebarsTemplate(
+                        DE,
+                        "has {{char}} returned to a pressurized environment successfully?"
+                    ),
+                },
+                {
+                    determineCausants: null,
+                    intensity: -1,
+                    template: DE.utils.newHandlebarsTemplate(
+                        DE,
+                        "has {{char}} put on a space suit?"
+                    ),
+                },
+            ],
+            usesReliefDynamic: true,
+            relieving: DE.utils.newHandlebarsTemplate(
+                DE,
+                "{{char}} is recovering from the severe freezing effects of the vacuum of space and should look for warmth"
+            ),
+            intensityChangeRatePerInferenceCycleAfterRelief: -0.1,
+            intensityModifiersDuringRelief: [
+                {
+                    determineCausants: null,
+                    intensity: -1,
+                    template: DE.utils.newHandlebarsTemplate(
+                        DE,
+                        "has {{char}} put on a blanket, warm clothes or similar?"
+                    ),
+                },
+                {
+                    determineCausants: null,
+                    intensity: -2,
+                    template: DE.utils.newHandlebarsTemplate(
+                        DE,
+                        "has {{char}} taken a hot shower?"
+                    ),
+                },
+            ],
+            // need no triggers, the weather system will apply the state
+            triggers: [],
+            triggersStates: {},
+            actionPromptInjection: {},
+            behaviourType: "BINARY",
+            conflictStates: [],
+            deadEndIsDeath: true,
+            // 5 minutes to death by freezing
+            deadEndByTimeInMinutes: 5,
+            triggersDeadEnd: DE.utils.newHandlebarsTemplate(
+                DE,
+                "{{char}} has succumbed to the extreme cold of the vacuum of space"
+            ),
+            intensityChangeRatePerInferenceCycle: 0,
+            dominance: 10,
+            dominanceAfterRelief: 1,
+            fallsDown: false,
+            general: DE.utils.newHandlebarsTemplate(
+                DE,
+                "{{char}} is freezing in the vacuum of space"
+            ),
+        });
     }
 }

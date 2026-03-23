@@ -386,11 +386,6 @@ declare interface DEActionPromptInjectionWithIntensity extends DEActionPromptInj
 
 declare interface DECharacterStateDefinition {
     /**
-     * Internal utility to save memory when saving states
-     * the state must be guaranteed to be recoverable from the script
-     */
-    __nonserialize?: boolean;
-    /**
      * How dominant this state is compared to other states
      * used to determine which state takes precedence in case of conflicts
      */
@@ -873,6 +868,12 @@ declare interface DEBondDeclaration {
      * when characters have just met and have no prior relationship
      */
     strangerBond: boolean;
+    /**
+     * Whether it is a family bond or not, family bonds are used when characters are related by blood
+     * 
+     * TODO implement special handling for family bonds
+     */
+    familyBond: boolean;
     /**
      * The min primary bond level for this bond declaration, it should be a value
      * between -100 and 100 to specify the fragment of the bond spectrum this bond declaration covers
@@ -1364,6 +1365,153 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
      * - When a character witnesses a robbery, the engine uses their heroism score to determine how likely they are to intervene and try to stop the robbery, higher heroism means more likely to intervene and try to stop the robbery
      */
     heroism: number;
+
+    /**
+     * Mostly relevant for the non-LLM powered social simulation system
+     * which uses more basic rules and mechanics to simulate social interactions and relationships between characters in a more deterministic way, without relying on LLM reasoning for every single interaction
+     * 
+     * It may also inject extra information into the character's general description to help the LLM reason about their social preferences and attractions
+     * when using LLM mode
+     */
+    socialSimulation: {
+        /**
+         * list of ids for likes, must be available in preferences object
+         */
+        likes: string[];
+        /**
+         * list of ids for dislikes, must be available in preferences object
+         */
+        dislikes: string[];
+        /**
+         * A number from 0 to 1 that represents how attractive the character is, higher means more attractive and more likely to be approached by other characters and have romantic interactions, this is useful for characters that are meant to be charming or have a strong romantic appeal, it can also affect how other characters perceive them and interact with them in social situations
+         */
+        attractiveness: number;
+        /**
+         * List of things this character is attracted to
+         */
+        attractions: DEAttraction[];
+        /**
+         * Species of the character, used for social simulation to determine interactions and preferences based on species, for example, a human character may have different preferences and interactions with other human characters compared to non-human characters, this can also be used to create interesting dynamics and relationships between characters of different species
+         */
+        species: string;
+        /**
+         * List of species that this character dislikes
+         */
+        dislikesSpecies?: string[];
+        /**
+         * The race of the character, used for social simulation to determine interactions and preferences based on race
+         */
+        race?: string;
+        /**
+         * List of races that this character dislikes,
+         * yes you can make the character racist
+         */
+        dislikesRaces?: string[];
+        /**
+         * List of groups or social categories that this characters belongs to
+         */
+        groupBelonging?: string[];
+        /**
+         * List of groups or social categories that this character dislikes
+         */
+        dislikesGroups?: string[];
+        /**
+         * Allows characters to have sex with each other once they reach a certain bond 2 level
+         */
+        sexUnlocksAtBond2?: number;
+        /**
+         * Family ties with other characters
+         * keeps those characters together and prevents them from building romantic or sexual bonds
+         * 
+         * Make sure to create a bond for this
+         */
+        familyTies: DEFamilyTie[];
+        /**
+         * A number from 0 to 1 that represents how much the character likes to gossip and talk about other characters, higher means more likely to gossip and talk about others, this is useful for characters that are nosy or enjoy social interactions that involve talking about others, it can also affect how they interact with other characters and how they perceive them based on the gossip they hear and spread
+         */
+        gossipTendency: number;
+    };
+}
+
+declare interface DEFamilyTie {
+    character: string;
+    relation: string;
+}
+
+declare interface DECharacterPreferenceImportantEventGenerator {
+    /**
+     * The probability for this event to trigger, from 0 to 1, provided the characters were engaging on it
+     */
+    probability: number;
+    /**
+     * The magnitude of the important event or rumor, this is an arbitrary number that represents how big or impactful the event is, it can be used to determine how likely it is to spread, how much it affects characters' beliefs, etc...
+     */
+    magnitude: number;
+    /**
+     * The description of the event or rumor
+     */
+    description: DEStringTemplate;
+    /**
+     * A fuzzy description of the important event or rumor that applies
+     * to characters too many layers away to know the full details
+     */
+    fuzzyDescription: DEStringTemplate;
+    /**
+     * The time when the event happened, this is used to determine how recent the event is, how likely it is to be forgotten, etc...
+     */
+    eventTime: DETimeDescription;
+}
+
+declare interface DECharacterPreference {
+    /**
+     * An unique id for this preference, useful to identify it
+     * eg. "football", "politics", "sports", "cooking", "cleaning", "dancing", etc...
+     * try to keep it lowercase
+     */
+    id: string;
+    /**
+     * A simple description that should be preceeded by the character name likes to
+     * eg. "character likes to..."
+     * eg. "talk about sports", "talk about politics", "doing sports", "doing chores", etc...
+     */
+    simple: string;
+    /**
+     * A string where the task is specified as being done with other characters, using {{others}} to refer to them
+     * eg. "{{chars}} are playing sports together", "{{chars}} are talking about politics together"
+     */
+    template: DEStringTemplate;
+    /**
+     * The species that this peference applies to
+     */
+    species?: string | null;
+    /**
+     * The race that this peference applies to
+     */
+    race?: string | null;
+    /**
+     * The group or social category that this preference applies to, for example, a character may like to talk about sports with other athletes, so the group could be "athletes", or a character may like to do chores with their family members, so the group could be "family", etc...
+     */
+    group?: string | null;
+}
+
+declare interface DEAttraction {
+    towards: "male" | "female" | "ambiguous";
+    /**
+     * The race that this attraction applies to
+     */
+    race?: string | null;
+    /**
+     * The group or social category that this attraction applies to, for example, a character may like to talk about sports with other athletes, so the group could be "athletes", or a character may like to do chores with their family members, so the group could be "family", etc...
+     */
+    group?: string | null;
+    /**
+     * The species that this attraction applies to, null or unspecified means own species
+     */
+    species?: string | null;
+    /**
+     * The age range that this attraction applies to
+     */
+    ageRange: [number, number];
 }
 
 declare interface DENamePool {
@@ -1819,7 +1967,14 @@ declare interface DELocationSlot {
      * will override location-based negative effects if specified
      */
     slotNegativelyExposesCharactersToWeather?: Array<string>;
+    /**
+     * Items at this slot
+     */
     items: Array<DEItem>;
+    /**
+     * Arbitrary properties at this slot
+     */
+    properties: Record<string, any>;
 }
 
 declare interface WeatherSystemApplyingStateWithIntensity {
@@ -2232,9 +2387,18 @@ declare interface DEConnection {
      * eg. "{{char}} must be capable of flying or be carried by a flying character to pass through this connection"
      */
     otherPassageConditions: Record<string, DEStringTemplate>;
+    /**
+     * Arbitrary properties of the connection that can be used for various purposes
+     */
+    properties: Record<string, any>;
 }
 
 declare interface DEStatefulLocationDefinition extends DELocationDefinition {
+
+    /**
+     * Arbitrary properties of the location that can be used for various purposes
+     */
+    properties: Record<string, any>;
 
     // STATEFUL PROPERTIES
     /**
@@ -2375,6 +2539,57 @@ declare interface DEConversationMessage {
      * The characters that are known to be interacting in the message
      */
     interactingCharacters: Array<string>;
+    /**
+     * Rumors the character learned in the conversation
+     * TODO
+     */
+    rumors: Array<DERumor>;
+}
+
+// TODO
+declare interface DEImportantEvent {
+    /**
+     * The id of the important event, should be totally unique
+     */
+    id: string;
+    /**
+     * The magnitude of the important event or rumor, this is an arbitrary number that represents how big or impactful the event is, it can be used to determine how likely it is to spread, how much it affects characters' beliefs, etc...
+     */
+    magnitude: number;
+    /**
+     * The description of the event or rumor
+     */
+    description: string;
+    /**
+     * A fuzzy description of the important event or rumor that applies
+     * to characters too many layers away to know the full details
+     */
+    fuzzyDescription: string;
+    /**
+     * The time when the event happened, this is used to determine how recent the event is, how likely it is to be forgotten, etc...
+     */
+    eventTime: DETimeDescription;
+    /**
+     * The characters that are known to be involved in the important event
+     */
+    participants: Array<string>;
+}
+
+// TODO
+declare interface DERumor {
+    /**
+     * The id of the important event that the rumor is about
+     */
+    eventId: string;
+    /**
+     * How many layers of separation the character is from the source of the rumor, this is an arbitrary number that represents how many degrees of separation there are between the character and the source of the rumor, it can be used to determine how reliable the rumor is, for example, a rumor that is only one layer away from the character is more likely to be true than a rumor that is three layers away
+     */
+    layers: number;
+    /**
+     * Who this character got the rumor from, this can be used to determine the reliability of the rumor
+     * if no character specified the rumor was obtained firsthand
+     */
+    source: string | null;
 }
 
 /**
@@ -2463,9 +2678,18 @@ declare type DEStringTemplate = string | ((
          */
         char?: DECompleteCharacterReference,
         /**
+         * Only available in likes and dislikes description templates
+         */
+        chars?: DECompleteCharacterReference[],
+        /**
          * Only available in bond description templates
          */
         other?: DECompleteCharacterReference,
+        /**
+         * The relationship that the bond description has, usually this is for family only
+         * as it otherwise defaults to "friend" for positive bond or "foe" for negative
+         */
+        otherRelationship?: string,
         /**
          * Only available in state action/effect templates
          */
@@ -2658,8 +2882,11 @@ declare interface DENarrationStyle {
 
 declare interface DEUtils {
     newHandlebarsTemplate(DE: DEObject, source: string): DEStringTemplate;
-    newLocationFromStaticDefinition(DE: DEObject, definition: DELocationDefinition): DEStatefulLocationDefinition;
-    newWeatherSystem(DE: DEObject, definition: DEWeatherSystem): DEWeatherSystem;
+    newLocation(DE: DEObject, name: string, definition: DELocationDefinition): void;
+    newCharacter(DE: DEObject, definition: DECompleteCharacterReference): void;
+    newConnection(DE: DEObject, definition: DEConnection): void;
+    createStateInAllCharacters(DE: DEObject, stateName: string, stateDefinition: DECharacterStateDefinition): void;
+    createStateInCharacter(DE: DEObject, characterName: string, stateName: string, stateDefinition: DECharacterStateDefinition): void;
 }
 
 declare interface DEWorldRule {
@@ -2689,6 +2916,12 @@ declare interface DEObject {
      * real or pseudo-conversations
      */
     conversations: Record<string, DEConversation>;
+    /**
+     * A list of important events that have happened in the world
+     * subject to rumors, depending who got to be aware of it
+     * // TODO
+     */
+    importantEvents: Record<string, DEImportantEvent>;
     /**
      * Function utilities available to scripts and other code parts
      */
@@ -2732,15 +2965,10 @@ declare interface DEObject {
      * used internally by scripts and other code parts, not meant to be used by the UI, but can be used by the world and characters to store internal state and other information
      */
     internal: Record<string, any>;
+    preferences: Record<string, DECharacterPreference>;
 }
 
 declare type DE = DEObject;
-// declare var DE: DEObject;
-// declare var char: DECompleteCharacterReference;
-// declare var other: DECompleteCharacterReference;
-// declare var causant: DECompleteCharacterReference;
-// declare var potentialCausant: DECompleteCharacterReference;
-// declare var potentialCausants: DECompleteCharacterReference[];
 
 declare interface DEScript {
     type: "world" | "characters" | "world-mechanic" | "character-mechanic" | "misc";

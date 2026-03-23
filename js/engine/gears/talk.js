@@ -40,6 +40,7 @@ export async function talk(engine, character, options) {
     const characterSystemPrompt = await getSysPromptForCharacter(engine, character.name);
     const characterCanSee = await getCharacterCanSee(engine, character.name);
 
+    // TODO attempt direct story injection instead using ooc messages
     let actions = (await Promise.all(characterSystemPrompt.internalDescription.actions.map(async (action) => {
         if (action.action.action) {
             if (typeof action.action.probability === "number" && Math.random() > action.action.probability) {
@@ -310,6 +311,10 @@ export async function talk(engine, character, options) {
      * @type string[]
      */
     const trailingMessages = [];
+    /**
+     * @type string[]
+     */
+    const finalMessages = [];
 
     const messages = (await getHistoryFragmentForCharacter(engine, character, {
         includeDebugMessages: false,
@@ -410,6 +415,7 @@ export async function talk(engine, character, options) {
         isUser: false,
         perspectiveSummaryIds: {},
         sender: character.name,
+        rumors: [],
 
         // TODO
         singleSummary: null,
@@ -430,6 +436,10 @@ export async function talk(engine, character, options) {
         let hasYieldDoubleLineHidden = false;
         let hasYieldDoubleLineStandard = false;
 
+        if (nextToGenerate.action) {
+            trailingMessages.push(`OOC, '${character.name} must take the following action next: ${nextToGenerate.action}`);
+        }
+
         console.log("Generating next " + nextToGenerate.type + (nextToGenerate.action ? ` with action: ${nextToGenerate.action}` : ""));
         const generator = engine.inferenceAdapter.inferNextStoryFragmentFor(
             character,
@@ -438,7 +448,6 @@ export async function talk(engine, character, options) {
             characterSystemPrompt.sysprompt,
             characterSystemPrompt.internalDescription.stateInjections,
             characterCanSee.everything,
-            actions.map((action) => action.text),
             narrativeEffects,
             nextToGenerate.type === "dialogue" ? grammar.dialogue : grammar.narrative,
         );
@@ -486,22 +495,20 @@ export async function talk(engine, character, options) {
 
         console.log("\nFinished receiving text chunk from inference adapter.");
         trailingMessages.push(generatedMessage);
+        finalMessages.push(generatedMessage);
 
         nextToGenerate = getNextToGenerate();
     }
 
-    const totalGeneratedThusFar = trailingMessages.join("\n\n");
+    const totalGeneratedThusFar = finalMessages.join("\n\n");
     console.log("Final generated narration/dialogue: " + totalGeneratedThusFar);
 
-    // TODO post narrative effects
-
-    process.exit(1);
 
     if (deadEndAction) {
         console.log(`Finalizing dead end action for character ${character.name}: ${deadEndAction.text}`);
         if (deadEndAction.action.action.deadEndIsDeath) {
             console.log(`Character ${character.name} has died.`);
-            addedMessagesForStoryMaster.push(`Character ${character.name} has died.`);
+            addedMessagesForStoryMaster.push(`${character.name} has died.`);
             charState.dead = true;
         }
         charState.deadEnded = true;

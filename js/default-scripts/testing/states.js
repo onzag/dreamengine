@@ -33,8 +33,6 @@ engine.exports = {
                 }
             ],
             triggersStates: {},
-
-            __nonserialize: true,
         };
 
         /**
@@ -64,8 +62,6 @@ engine.exports = {
                 }
             ],
             triggersStates: {},
-
-            __nonserialize: true,
         };
 
         for (const characterName in DE.characters) {

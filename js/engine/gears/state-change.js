@@ -124,6 +124,7 @@ async function makeUserStoryMasterMessage(engine, message) {
         emotion: null,
         emotionalRange: null,
         interactingCharacters: [],
+        rumors: [],
     }
 
     if (!stateForUser.conversationId) {

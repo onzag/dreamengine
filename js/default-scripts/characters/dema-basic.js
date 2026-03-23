@@ -4,7 +4,7 @@ engine.exports = {
     type: "characters",
     description: "A friendly robot for testing purposes.",
     initialize(DE) {
-        DE.characters["Dema"] = {
+        DE.utils.newCharacter(DE, {
             name: "Dema",
             shortDescription: "A human sized anthropomorphic robot with a blue and white color scheme and a reflective visor.",
             shortDescriptionTopNakedAdd: "Without a shirt showing its sleek robotic body.",
@@ -63,6 +63,15 @@ engine.exports = {
                 BOND_DECREASE_QUESTION_2: "Has {{other}} neglected {{char}}'s needs or ignored its feelings?",
                 BOND_DECREASE_QUESTION_3: "Has {{other}} caused harm or distress to {{char}}, either intentionally or unintentionally?"
             },
-        }
+            socialSimulation: {
+                attractions: [],
+                attractiveness: 0.5,
+                gossipTendency: 0.5,
+                familyTies: [],
+                dislikes: [],
+                likes: [],
+                species: "robot",
+            },
+        });
     }
 }

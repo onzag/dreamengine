@@ -1641,6 +1641,7 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
             let result = typeof bondDeclaration.description === "string" ? bondDeclaration.description : (await bondDeclaration.description(engine.deObject, {
                 char: character,
                 other: engine.deObject.characters[activeBond.towards],
+                // TODO bond relationship
             })).trim();
             if (bondDeclaration.bondAdditionalDescription) {
                 if (!result.endsWith(". ")) {
@@ -1651,6 +1652,7 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
                 result += typeof bondDeclaration.bondAdditionalDescription === "string" ? bondDeclaration.bondAdditionalDescription : (await bondDeclaration.bondAdditionalDescription(engine.deObject, {
                     char: character,
                     other: engine.deObject.characters[activeBond.towards],
+                    // TODO bond relationship
                 })).trim();
             }
 
@@ -1670,6 +1672,7 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
                 const injection = typeof bondDeclaration.generalCharacterDescriptionInjection === "string" ? bondDeclaration.generalCharacterDescriptionInjection : (await bondDeclaration.generalCharacterDescriptionInjection(engine.deObject, {
                     char: character,
                     other: engine.deObject.characters[activeBond.towards],
+                    // TODO bond relationship
                 })).trim();
                 if (injection) {
                     if (!general.endsWith("\n\n")) {
@@ -1693,6 +1696,7 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
                 const injection = typeof bondDeclaration.generalCharacterDescriptionInjectionEx === "string" ? bondDeclaration.generalCharacterDescriptionInjectionEx : (await bondDeclaration.generalCharacterDescriptionInjectionEx(engine.deObject, {
                     char: character,
                     other: engine.deObject.characters[exBond.towards],
+                    // TODO bond relationship
                 })).trim();
                 if (injection) {
                     if (!general.endsWith("\n\n")) {
@@ -1720,6 +1724,7 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
                 let result = typeof strangerBondDeclaration.description === "string" ? strangerBondDeclaration.description : (await strangerBondDeclaration.description(engine.deObject, {
                     char: character,
                     other: strangerCharacter,
+                    // TODO bond relationship
                 })).trim();
                 if (strangerBondDeclaration.bondAdditionalDescription) {
                     if (!result.endsWith(". ")) {
@@ -1730,6 +1735,7 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
                     result += typeof strangerBondDeclaration.bondAdditionalDescription === "string" ? strangerBondDeclaration.bondAdditionalDescription : (await strangerBondDeclaration.bondAdditionalDescription(engine.deObject, {
                         char: character,
                         other: strangerCharacter,
+                        // TODO bond relationship
                     })).trim();
                 }
                 result += ` ${strangerName} is a total stranger to ${characterName} and ${characterName} does not know their name.`;
@@ -1740,6 +1746,7 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
                 const injection = typeof strangerBondDeclaration.generalCharacterDescriptionInjection === "string" ? strangerBondDeclaration.generalCharacterDescriptionInjection : (await strangerBondDeclaration.generalCharacterDescriptionInjection(engine.deObject, {
                     char: character,
                     other: strangerCharacter,
+                    // TODO bond relationship
                 })).trim();
                 if (injection) {
                     if (!general.endsWith("\n\n")) {
