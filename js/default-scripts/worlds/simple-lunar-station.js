@@ -637,7 +637,7 @@ engine.exports = {
         }
     },
 
-    postSpawnAllCharacters(DE) {
+    onWorldInitialized(DE) {
         DE.utils.createStateInAllCharacters(DE, "Asphyxiating in the Vaccuum", {
             randomSpawnRate: 0,
             permanent: false,

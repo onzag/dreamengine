@@ -237,10 +237,10 @@ export const specials = [
         (DE, character, otherCharacter) => otherCharacter,
     ],
     [
-        "other_relationship -> string",
+        "other_family_relation -> string",
         "Only available at bonds and relationships, the relationship that the bond description has, usually this is for family only as it otherwise defaults to \"friend\" for positive bond or \"foe\" for negative",
         "eg. mother, father, sister, brother, cousin, aunt, uncle",
-        (DE, character, otherRelationship) => otherRelationship,
+        (DE, character, otherFamilyRelation) => otherFamilyRelation,
     ],
     [
         "chars -> string[]",

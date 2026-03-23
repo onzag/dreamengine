@@ -90,13 +90,13 @@ export class DEJSEngine {
     /**
      * @param {string} characterName 
      */
-    async postAnyInference(characterName) {
+    async onInferenceExecuted(characterName) {
         for (const scriptKey of this.scriptOrder) {
             const script = this.scriptCache[scriptKey];
-            if (script.postAnyInference) {
-                console.log(`Running postAnyInference for script ${scriptKey}...`);
+            if (script.onInferenceExecuted) {
+                console.log(`Running onInferenceExecuted for script ${scriptKey}...`);
                 // @ts-ignore
-                await script.postAnyInference(this.engine.deObject, characterName);
+                await script.onInferenceExecuted(this.engine.deObject, characterName);
             }
         }
     }

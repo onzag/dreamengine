@@ -3,7 +3,7 @@
  */
 
 import { DEngine } from "../index.js";
-import { getBondDeclarationFromBondDescription, getInternalDescriptionOfCharacter } from "../util/character-info.js";
+import { getBondDeclarationFromBondDescription, getFamilyBondRelation, getInternalDescriptionOfCharacter } from "../util/character-info.js";
 import { isYes, yesNoGrammar } from "../util/grammar.js";
 import { getHistoryFragmentForCharacter } from "../util/messages.js";
 
@@ -115,7 +115,8 @@ export default async function calculateBondsChangesDueToMessages(engine, charact
             await engine.informDEObjectUpdated();
         }
 
-        const currentBondDescription = getBondDeclarationFromBondDescription(character, currentBond);
+        const currentBondDescription = getBondDeclarationFromBondDescription(engine, character, currentBond);
+        const isFamilyWithRelation = getFamilyBondRelation(character, engine.deObject.characters[characterNameToGetBondTowards]);
         if (!currentBondDescription) {
             // must be the user or some oddball character that cannot develop bonds
             if (character.name !== engine.userCharacter?.name) {
@@ -186,7 +187,7 @@ export default async function calculateBondsChangesDueToMessages(engine, charact
 
             // now we can process the messages to update the bond
             for (const condition of currentBondDescription.bondConditions) {
-                const conditionMultiplier = (currentBond.stranger ? (condition.weight < 0 ? character.bonds.strangerNegativeMultiplier : character.bonds.strangerPositiveMultiplier) : (condition.weight < 0 ? character.bonds.bondChangeNegativityBias : character.bonds.bondChangeFineTune));
+                let conditionMultiplier = (currentBond.stranger ? (condition.weight < 0 ? character.bonds.strangerNegativeMultiplier : character.bonds.strangerPositiveMultiplier) : (condition.weight < 0 ? character.bonds.bondChangeNegativityBias : character.bonds.bondChangeFineTune));
                 const conditionYesValue = condition.weight * conditionMultiplier;
 
                 // let's check if it will be pointless to ask, eg maxed out bond or zeroed or so forth
@@ -213,11 +214,24 @@ export default async function calculateBondsChangesDueToMessages(engine, charact
                     continue;
                 }
 
+                if (condition.familyInteractions && isFamilyWithRelation) {
+                    if (condition.familyInteractions.boostFamilyMembersWeight) {
+                        conditionMultiplier *= condition.familyInteractions.boostFamilyMembersWeight;
+                    }
+                    if (typeof condition.familyInteractions.excludeFamilyMembers === "boolean" && condition.familyInteractions.excludeFamilyMembers) {
+                        console.log(`Bond condition with template ${JSON.stringify(condition.template)} for bond from ${character.name} towards ${characterNameToGetBondTowards} is excluded for family members, and they are family, skipping`);
+                        continue;
+                    } else if (condition.familyInteractions.excludeFamilyMembers && Array.isArray(condition.familyInteractions.excludeFamilyMembers) && isFamilyWithRelation && condition.familyInteractions.excludeFamilyMembers.includes(isFamilyWithRelation)) {
+                        console.log(`Bond condition with template ${JSON.stringify(condition.template)} for bond from ${character.name} towards ${characterNameToGetBondTowards} is excluded for family members with relation ${isFamilyWithRelation}, and they are family with that relation, skipping`);
+                        continue;
+                    }
+                }
+
                 const result = typeof condition.template === "string" ? condition.template :
                     (await condition.template(engine.deObject, {
                         char: character,
                         other: engine.deObject.characters[characterNameToGetBondTowards],
-                        // TODO bond relationship
+                        otherFamilyRelation: isFamilyWithRelation || undefined,
                     })).trim();
                 if (result === "yes" || result === "Yes" || result === "YES") {
                     console.log(`Bond condition is a statement which matched for bond from ${character.name} towards ${characterNameToGetBondTowards}, applying bond changes: bond ${conditionYesValue}, on ${condition.affectsBonds}`);

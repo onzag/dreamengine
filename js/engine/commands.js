@@ -1,5 +1,5 @@
 import { DEngine } from "./index.js";
-import { getCharacterCanSee, getExternalDescriptionOfCharacter, getSysPromptForCharacter, isCharacterShelteredFromWeather, whatIsWeatherLikeForCharacter } from "./util/character-info.js";
+import { getCharacterCanSee, getExternalDescriptionOfCharacter, getFamilyBondRelation, getInternalDescriptionOfCharacter, getSysPromptForCharacter, isCharacterShelteredFromWeather, whatIsWeatherLikeForCharacter } from "./util/character-info.js";
 import { makeTimestamp } from "./util/messages.js";
 
 /**
@@ -73,7 +73,7 @@ export const commands = {
                 throw new Error("DEngine not initialized");
             }
             if (args.length === 0) {
-                return "Usage: whatistheweatherlikefor <character name>";
+                return "Usage: /whatistheweatherlikefor <character name>";
             }
             const characterName = args.join(" ");
             const character = engine.deObject.characters[characterName];
@@ -102,7 +102,7 @@ export const commands = {
             const locationId = args[1];
 
             if (args.length < 3) {
-                return `Usage: whatwouldtheweatherbelikefor <character name> <location id> <location slot id>, options for location slots in location "${locationId}" are: ` + Object.keys(engine.deObject.world.locations[locationId]?.slots || {}).join(", ");
+                return `Usage: /whatwouldtheweatherbelikefor <character name> <location id> <location slot id>, options for location slots in location "${locationId}" are: ` + Object.keys(engine.deObject.world.locations[locationId]?.slots || {}).join(", ");
             }
 
             const locationSlotId = args[2];
@@ -149,7 +149,7 @@ export const commands = {
                 throw new Error("DEngine not initialized");
             }
             if (args.length === 0) {
-                return "Usage: whereis <character name>";
+                return "Usage: /whereis <character name>";
             }
             const characterName = args.join(" ");
             const character = engine.deObject.characters[characterName];
@@ -232,56 +232,87 @@ export const commands = {
         cheat: false,
         args: [],
     },
-    "howismyrelationshipwith": {
-        run: async (engine, args) => {
-            if (!engine.deObject) {
-                throw new Error("DEngine not initialized");
-            }
-            if (!engine.userCharacter) {
-                throw new Error("DEngine has no user character defined");
-            }
-            if (args.length === 0) {
-                return "Usage: howismyrelationshipwith <character name>";
-            }
-            const characterName = args.join(" ");
-            const character = engine.deObject.characters[characterName];
-            if (!character) {
-                return `Character "${characterName}" not found`;
-            }
-            
-            let [_, bond, bondDecl, bondInfo] = await engine.getRelationshipBetweenCharacters(engine.userCharacter.name, characterName);
-
-            bondInfo += `\n\nBond Level: ${bond.bond} (${bondDecl.name})\nSecondary Bond Level: ${bond.bond2}\nStranger Bond: ${bond.stranger ? "Yes" : "No"}\n\nBond Conditions:\n`;
-
-            for (const condition of bondDecl.bondConditions) {
-                // @ts-ignore
-                const question = await condition.template.execute(engine.deObject, character, engine.userCharacter)
-                bondInfo += `- ${question}\nAffects ${condition.affectsBonds} bond by ${condition.weight}\n`;
-            }
-
-            return bondInfo;
-        },
-        help: "Displays the nature of your relationship with a specified character",
-        cheat: true,
-        args: ["<character name>"],
-    },
     "syspromptfor": {
         run: async (engine, args) => {
             if (!engine.deObject) {
                 throw new Error("DEngine not initialized");
             }
             if (args.length === 0) {
-                return "Usage: syspromptfor <character name>";
+                return "Usage: /syspromptfor <character name>";
             }
             const characterName = args.join(" ");
-            
+
             return (await getSysPromptForCharacter(engine, characterName)).sysprompt;
         },
         help: "Displays the current system prompt for a given character, for general inference purposes.",
         cheat: true,
         args: ["<character name>"],
     },
-    "rawstatefor":{
+    "externaldescriptionfor": {
+        run: async (engine, args) => {
+            if (!engine.deObject) {
+                throw new Error("DEngine not initialized");
+            }
+            if (args.length === 0) {
+                return "Usage: /externaldescriptionfor <character name>";
+            }
+            const characterName = args.join(" ");
+
+            return await getExternalDescriptionOfCharacter(engine, characterName, true);
+        },
+        help: "Displays the current external description for a given character, which is the description that other characters would see of them.",
+        cheat: true,
+        args: ["<character name>"],
+    },
+    "internaldescriptionfor": {
+        run: async (engine, args) => {
+            if (!engine.deObject) {
+                throw new Error("DEngine not initialized");
+            }
+            if (args.length === 0) {
+                return "Usage: /internaldescriptionfor <character name>";
+            }
+            const characterName = args.join(" ");
+
+            return (await getInternalDescriptionOfCharacter(engine, characterName)).general;
+        },
+        help: "Displays the current internal description for a given character, which is the description that they themselves would have of themself.",
+        cheat: true,
+        args: ["<character name>"],
+    },
+    "expressivestatesfor": {
+        run: async (engine, args) => {
+            if (!engine.deObject) {
+                throw new Error("DEngine not initialized");
+            }
+            if (args.length === 0) {
+                return "Usage: /expressivestatesfor <character name>";
+            }
+            const characterName = args.join(" ");
+            const result = (await getInternalDescriptionOfCharacter(engine, characterName)).expressiveStates.join("\n\n");
+            return result || `No expressive states found for character "${characterName}".`;
+        },
+        help: "Displays the current expressive states for a given character, which are the states that they themselves would have of themself that are relevant to how they express themselves to others.",
+        cheat: true,
+        args: ["<character name>"],
+    },
+    "relationshipsfor": {
+        run: async (engine, args) => {
+            if (!engine.deObject) {
+                throw new Error("DEngine not initialized");
+            }
+            if (args.length === 0) {
+                return "Usage: /relationshipsfor <character name>";
+            }
+            const characterName = args.join(" ");
+            const result = (await getInternalDescriptionOfCharacter(engine, characterName)).relationships.join("\n\n");
+            return result || `No relationships found for character "${characterName}".`;
+        },
+        help: "Displays the current relationships for a given character, which are the relationships that they themselves would have of themself that are relevant to how they interact with others.",
+        cheat: true,
+        args: ["<character name>"],
+    },
+    "rawstatefor": {
         run: async (engine, args) => {
             if (!engine.deObject) {
                 throw new Error("DEngine not initialized");
@@ -298,7 +329,7 @@ export const commands = {
             if (!characterState) {
                 return `No state found for character "${characterName}".`;
             }
-            const charStateShallowCopy = {...characterState};
+            const charStateShallowCopy = { ...characterState };
             // @ts-ignore
             delete charStateShallowCopy.history;
             return JSON.stringify(charStateShallowCopy, null, 2);
@@ -306,5 +337,41 @@ export const commands = {
         help: "Displays the raw JSON state for a given character.",
         cheat: true,
         args: ["<character name>"],
+    },
+
+    // hard cheats
+    "getbondvaluesfor": {
+        run: async (engine, args) => {
+            if (!engine.deObject) {
+                throw new Error("DEngine not initialized");
+            }
+            if (args.length < 2) {
+                return "Usage: /getbondvaluesfor <character name> <towards character name>";
+            }
+            const characterName = args[0];
+            const otherCharacterName = args[1];
+            const character = engine.deObject.characters[characterName];
+            const otherCharacter = engine.deObject.characters[otherCharacterName];
+            if (!character) {
+                return `Character "${characterName}" not found.`;
+            }
+            if (!otherCharacter) {
+                return `Character "${otherCharacterName}" not found.`;
+            }
+            const foundBond = engine.getDEObject().social.bonds[characterName].active.find(bond => bond.towards === otherCharacterName);
+            if (!foundBond) {
+                return `No active bond found from "${characterName}" towards "${otherCharacterName}".`;
+            }
+
+            const isFamilyOfType = getFamilyBondRelation(character, otherCharacter);
+
+            return `Friendship/Foe Axis value [-100,100]: ${foundBond.bond}\n` +
+            `Bond2/Romance value [0,100]: ${foundBond.bond2}\n` +
+            `Stranger Axis [false, true]: ${foundBond.stranger}\n` +
+            `Family relationship (if any): ${isFamilyOfType || "None"}`;
+        },
+        help: "Displays the first bond value between two characters.",
+        cheat: true,
+        args: ["<character name>", "<towards character name>"],
     },
 }

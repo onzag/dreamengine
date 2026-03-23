@@ -11,7 +11,7 @@ export const deEngineUtils = {
                 user: DE.user.name,
                 char: info.char?.name || "",
                 other: info.other?.name || "",
-                other_relationship: info.otherRelationship || "unknown",
+                other_family_relation: info.otherFamilyRelation || "unknown",
                 chars: info.chars?.map(c => c.name) || [],
                 causants: info.causants?.map(c => c.name) || [],
                 potential_causant: info.potentialCausant || "",

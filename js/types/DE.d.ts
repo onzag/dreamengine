@@ -610,50 +610,64 @@ declare interface DECharacterStateDefinition {
      * States that this state relieves when it gets relieved and the intensity drops to zero
      */
     modifiesStatesIntensitiesOnRemove?: { [stateName: string]: { intensity: number } };
-    /**
-     * An instruction that gets added to the character description where a potential causant that does not fit
-     * the criteria is set, for example, say the state is HUGGING, but the character has a low bond level, the
-     * negative description could be "{{char}} would feel uncomfortable hugging {{potential_causant}}" this would
-     * get injected into the system prompt, and reasoning step to help the character reason their behaviour
-     */
-    potentialCausantNegativeDescription?: DEStringTemplate;
-    /**
-     * An instruction that gets added to the character description where a potential causant that fits
-     * the criteria is set, for example, say the state is HUGGING, and the character has a high bond level, the
-     * positive description could be "{{char}} would feel happy hugging {{potential_causant}}" this would
-     * get injected into the system prompt, and reasoning step to help the character reason their behaviour
-     */
-    potentialCausantPositiveDescription?: DEStringTemplate;
-    /**
-     * Minimum bond level required for a potential character causant to be considered valid to activate this state
-     * if no characters are around, no questions are asked about triggering the state if requiresCausant is true
-     */
-    potentialCausantMinBondRequired?: number;
-    /**
-     * Maximum bond level allowed for a potential causant to be considered valid to activate this state
-     * if no characters are around, no questions are asked about triggering the state if requiresCausant is true
-     */
-    potentialCausantMaxBondAllowed?: number;
-    /**
-     * Minimum 2-bond level required for a potential causant to be considered valid to activate this state
-     * if no characters are around, no questions are asked about triggering the state if requiresCausant is true
-     */
-    potentialCausantMin2BondRequired?: number;
-    /**
-     * Maximum 2-bond level allowed for a potential causant to be considered valid to activate this state
-     * if no characters are around, no questions are asked about triggering the state if requiresCausant is true
-     */
-    potentialCausantMax2BondAllowed?: number;
-    /**
-     * Whether a potential causant that is a stranger (no bond) is allowed to be a causant of this state
-     * if no characters are around, no questions are asked about triggering the state if requiresCausant is true
-     */
-    potentialCausantStrangerAllowed?: boolean;
-    /**
-     * Whether a potential causant that is not a stranger (has some bond) is denied to be a causant of this state
-     * if no characters are around, no questions are asked about triggering the state if requiresCausant is true
-     */
-    potentialCausantNonStrangerDenied?: boolean;
+    potentialCausantsCriteria?: {
+        /**
+         * An instruction that gets added to the character description where a potential causant that does not fit
+         * the criteria is set, for example, say the state is HUGGING, but the character has a low bond level, the
+         * negative description could be "{{char}} would feel uncomfortable hugging {{potential_causant}}" this would
+         * get injected into the system prompt, and reasoning step to help the character reason their behaviour
+         * 
+         * TODO this hasn't been implemented in getsysprompt
+         */
+        negativeDescription?: DEStringTemplate;
+        /**
+         * An instruction that gets added to the character description where a potential causant that fits
+         * the criteria is set, for example, say the state is HUGGING, and the character has a high bond level, the
+         * positive description could be "{{char}} would feel happy hugging {{potential_causant}}" this would
+         * get injected into the system prompt, and reasoning step to help the character reason their behaviour
+         * 
+         * TODO this hasn't been implemented in getsysprompt
+         */
+        positiveDescription?: DEStringTemplate;
+        /**
+         * Minimum bond level required for a potential character causant to be considered valid to activate this state
+         * if no characters are around, no questions are asked about triggering the state if requiresCausant is true
+         */
+        minBondRequired?: number;
+        /**
+         * Maximum bond level allowed for a potential causant to be considered valid to activate this state
+         * if no characters are around, no questions are asked about triggering the state if requiresCausant is true
+         */
+        maxBondAllowed?: number;
+        /**
+         * Minimum 2-bond level required for a potential causant to be considered valid to activate this state
+         * if no characters are around, no questions are asked about triggering the state if requiresCausant is true
+         */
+        min2BondRequired?: number;
+        /**
+         * Maximum 2-bond level allowed for a potential causant to be considered valid to activate this state
+         * if no characters are around, no questions are asked about triggering the state if requiresCausant is true
+         */
+        max2BondAllowed?: number;
+        /**
+         * Whether a potential causant that is a completely total stranger (no bond) is allowed to be a causant of this state
+         * if no characters are around, no questions are asked about triggering the state if requiresCausant is true
+         */
+        noBondAllowed?: boolean;
+        /**
+         * Whether a potential causant that is not a stranger (has some bond) is denied to be a causant of this state
+         * if no characters are around, no questions are asked about triggering the state if requiresCausant is true
+         */
+        bondDenied?: boolean;
+        /**
+         * Whether to only allow family members as causants of this state, if no characters are around, no questions are asked about triggering the state if requiresCausant is true
+         */
+        onlyFamily?: boolean;
+        /**
+         * To deny familie who have a relationship of this type
+         */
+        familyExclude?: DEFamilyRelation[];
+    },
     /**
      * The intensity change rate per inference cycle when the state is active
      * should be a float bewteen -4 and 4
@@ -856,6 +870,21 @@ declare interface DEBondIncreaseDecreaseQuestion {
      * Whether this question affects the primary bond, secondary bond or both
      */
     affectsBonds: "primary" | "secondary" | "both";
+
+    /**
+     * TODO these hasn't been implemented
+     */
+    familyInteractions?: {
+        /**
+         * Exclude family members or family members of this specific type
+         */
+        excludeFamilyMembers?: boolean | DEFamilyRelation[];
+        /**
+         * Boost the weight of family members or family members of this specific type by multiplying the weight by this factor
+         * you can make the factor negative to invert the effect for family members
+         */
+        boostFamilyMembersWeight?: number;
+    }
 }
 
 declare interface DEBondDeclaration {
@@ -1433,9 +1462,11 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
     };
 }
 
+declare type DEFamilyRelation = "parent" | "sibling" | "child" | "spouse" | "cousin" | "uncle" | "aunt" | "grandparent" | "grandchild" | "niece" | "nephew" | "other";
+
 declare interface DEFamilyTie {
     character: string;
-    relation: string;
+    relation: DEFamilyRelation;
 }
 
 declare interface DECharacterPreferenceImportantEventGenerator {
@@ -2689,7 +2720,7 @@ declare type DEStringTemplate = string | ((
          * The relationship that the bond description has, usually this is for family only
          * as it otherwise defaults to "friend" for positive bond or "foe" for negative
          */
-        otherRelationship?: string,
+        otherFamilyRelation?: DEFamilyRelation,
         /**
          * Only available in state action/effect templates
          */
@@ -2986,11 +3017,49 @@ declare interface DEScript {
         }
     }>;
 
+    /**
+     * Initialize gets called when the script is loaded, before the world is initialized, this is useful for setting up any necessary properties, functions, or other things that need to be in place before the world starts
+     * @param DE 
+     */
     initialize?(DE: DEObject): Promise<void> | void;
-    postSpawnAllCharacters?(DE: DEObject): Promise<void> | void;
-    postAnyInference?(DE: DEObject, characterName: string): Promise<void> | void;
 
-    // TODO more lifecycle methods like preInference, postInference, preAction, postAction, etc... to allow more fine grained control over the simulation and character behaviour
+    /**
+     * Important script where all the logic for the world is installed, this is where you set up the world, locations, characters, connections, etc... and also where you set up the main scene of the world and other important scenes
+     * this function has a priority order where world functions get called first, then character functions, then world mechanic functions, then character mechanic functions, and finally misc functions, this means that if you have a world function and a character function with the same name, the world function will get called first, this allows for better organization of the code and also allows for more control over the execution order of the functions
+     * @param DE 
+     */
+    onWorldInitialized?(DE: DEObject): Promise<void> | void;
+    /**
+     * Called before a character's inference is executed, allowing for any necessary preparations
+     * @param DE 
+     * @param characterName 
+     */
+    onInferencePrepareToExecute?(DE: DEObject, characterName: string): Promise<void> | void;
+    /**
+     * Called after a character's inference is executed, allowing for any necessary follow-up actions based on the inference results, the info parameter provides details about the inference results, such as the primary emotion detected, the emotional range, whether the character has died or reached a dead end, and a message describing the inference outcome
+     * @param DE 
+     * @param characterName 
+     * @param info 
+     */
+    onInferenceExecuted?(DE: DEObject, characterName: string, info: {
+        primaryEmotion: DEEmotionNames,
+        emotionalRange: DEEmotionNames[],
+        hasDied: boolean,
+        hasDeadEnded: boolean,
+        message: string,
+    }): Promise<void> | void;
+    /**
+     * Called whenever a scene just started, but hasn't set up yet, allowing for any necessary preparations or actions to be performed right at the start of the scene, before the characters interact and before the scene is fully set up
+     * @param DE 
+     * @param scene 
+     */
+    onSceneStarted?(DE: DEObject, scene: DEScene): Promise<void> | void;
+    /**
+     * Called after a scene has started and is fully set up, right before the user's turn to talk
+     * @param DE 
+     * @param scene 
+     */
+    onSceneReady?(DE: DEObject, scene: DEScene): Promise<void> | void;
 }
 
 // declare a editable global variable that can be used to store a DEScript

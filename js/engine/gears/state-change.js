@@ -3,6 +3,7 @@
  */
 
 import { DEngine, getFrozenBonds } from "../index.js";
+import { getFamilyBondRelation } from "../util/character-info.js";
 import { getHistoryFragmentForCharacter } from "../util/messages.js";
 
 /**
@@ -561,18 +562,30 @@ function determinePotentialCharacterCausants(
     // just a quick short circuit in case there are no characters matching that criteria
     let potentialCausants = allCharactersInAnalysis;
 
-    const minBondLevel = typeof stateDefinition.potentialCausantMinBondRequired === "number" ? stateDefinition.potentialCausantMinBondRequired : -100;
-    const maxBondLevel = typeof stateDefinition.potentialCausantMaxBondAllowed === "number" ? stateDefinition.potentialCausantMaxBondAllowed : 100;
-    const min2BondLevel = stateDefinition.potentialCausantMin2BondRequired || 0;
-    const max2BondLevel = stateDefinition.potentialCausantMax2BondAllowed || 100;
-    const allowsStrangers = !!stateDefinition.potentialCausantStrangerAllowed;
-    const deniesKnownPeople = !!stateDefinition.potentialCausantNonStrangerDenied;
+    const minBondLevel = typeof stateDefinition.potentialCausantsCriteria?.minBondRequired === "number" ? stateDefinition.potentialCausantsCriteria.minBondRequired : -100;
+    const maxBondLevel = typeof stateDefinition.potentialCausantsCriteria?.maxBondAllowed === "number" ? stateDefinition.potentialCausantsCriteria.maxBondAllowed : 100;
+    const min2BondLevel = stateDefinition.potentialCausantsCriteria?.min2BondRequired || 0;
+    const max2BondLevel = stateDefinition.potentialCausantsCriteria?.max2BondAllowed || 100;
+    const allowsStrangers = !!stateDefinition.potentialCausantsCriteria?.noBondAllowed;
+    const deniesKnownPeople = !!stateDefinition.potentialCausantsCriteria?.bondDenied;
+    const onlyFamily = !!stateDefinition.potentialCausantsCriteria?.onlyFamily;
+    const familyExclude = stateDefinition.potentialCausantsCriteria?.familyExclude || [];
 
     potentialCausants = allCharactersInAnalysis.filter(otherCharacter => {
         const bondTowardsCharacter = engine.deObject?.social.bonds[character.name].active.find(b => b.towards === otherCharacter.name);
         const assumedBond = bondTowardsCharacter ? bondTowardsCharacter.bond : 0;
         const assumedBond2 = bondTowardsCharacter ? bondTowardsCharacter.bond2 : 0;
         const assumedStranger = bondTowardsCharacter ? bondTowardsCharacter.stranger : true;
+
+        const otherCharacterFamilyRelationship = getFamilyBondRelation(character, otherCharacter);
+        
+        if (onlyFamily && !otherCharacterFamilyRelationship) {
+            return false;
+        }
+
+        if (otherCharacterFamilyRelationship && familyExclude.length > 0 && familyExclude.includes(otherCharacterFamilyRelationship)) {
+            return false;
+        }
 
         if (
             (assumedStranger && deniesKnownPeople) ||

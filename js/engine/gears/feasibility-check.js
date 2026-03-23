@@ -250,6 +250,28 @@ import { getHistoryFragmentForCharacter } from "../util/messages.js";
 //             }
 //         };
 
+// /**
+//      * 
+//      * @param {DECompleteCharacterReference} character 
+//      * @param {string[]} listOfCharacters
+//      */
+//     getCharacterWithClosestBondToCharacter(character, listOfCharacters) {
+//         if (!this.deObject) {
+//             throw new Error("DEngine not initialized");
+//         }
+
+//         const bondsInOrder = listOfCharacters.map(otherCharName => {
+//             // @ts-expect-error
+//             const bondFound = this.deObject.social.bonds[character.name].active.find((b) => b.towards === otherCharName);
+//             if (!bondFound) {
+//                 return { name: otherCharName, bond: 0 };
+//             }
+//             return { name: otherCharName, bond: Math.abs(bondFound.bond) };
+//         }).sort((a, b) => b.bond - a.bond);
+
+//         return bondsInOrder.length > 0 ? bondsInOrder[0].name : null;
+//     }
+
 //         groups.forEach((group, index) => {
 //             // we have the hacky description renamed
 //             if (group.groupDescription.startsWith("?")) {
@@ -584,6 +606,136 @@ import { getHistoryFragmentForCharacter } from "../util/messages.js";
 //         };
 
 //         return result;
+//     }
+
+// /**
+//      * @param {DECompleteCharacterReference} character 
+//      * @param {boolean} characterIsSolo 
+//      */
+//     async determineCharacterHasMergedIntoAnotherConversationGroup(character, characterIsSolo) {
+//         if (!this.deObject) {
+//             throw new Error("DEngine not initialized");
+//         }
+
+//         const characterState = this.deObject.stateFor[character.name];
+//         if (!characterState) {
+//             throw new Error(`Character state for ${character.name} not found.`);
+//         }
+
+//         const systemMessage = `You are an assistant that determines if ${character.name} approached a conversation group together with all ` +
+//             `the members of their current conversation group and has merged into that other conversation group in a friedly manner as they are closeby.\n\n` +
+//             `if ${character.name} has gone with their conversation group towards another, say the name of the group, the people in the group, and mention the new people ` +
+//             `that will conform this new conversation group.`;
+//         const systemMessageSolo = `You are an assistant that determines if ${character.name} has decided to join a new conversation group ` +
+//             `if ${character.name} has joined a new conversation group, say the name of the group, and mention the people in the group`;
+
+//         const currentConversation = characterState.conversationId ? this.deObject.conversations[characterState.conversationId] : null;
+//         if (!currentConversation) {
+//             throw new Error(`Character ${character.name} is not in a conversation, cannot determine if they have left the conversation group.`);
+//         }
+
+//         const participantsThatAreNotCharacter = currentConversation.participants.filter(charName => charName !== character.name);
+//         if (participantsThatAreNotCharacter.length === 0) {
+//             throw new Error(`Character ${character.name} is the only participant in the conversation, cannot determine if they have left the conversation group.`);
+//         }
+
+//         let groupsList = `The list of groups is as follows:\n\n${character.name}'s own group:\n - ${character.name}: ${await getExternalDescriptionOfCharacter(this, character.name)}\n`;
+
+//         for (const ownGroupParticipant of currentConversation.participants) {
+//             groupsList += ` - ${ownGroupParticipant}: ${await getExternalDescriptionOfCharacter(this, ownGroupParticipant)}\n`;
+//         }
+
+//         const allCharactersSurrounding = getSurroundingCharacters(this, character.name)
+//         const allCharactersAround = [...allCharactersSurrounding.nonStrangers, ...allCharactersSurrounding.totalStrangers];
+
+//         /**
+//          * @type {string[][]}
+//          */
+//         const groups = [];
+//         const solos = [];
+//         for (const surrondingCharacterName of allCharactersAround) {
+//             if (surrondingCharacterName === character.name) continue;
+//             if (participantsThatAreNotCharacter.includes(surrondingCharacterName)) continue;
+
+//             // check if already in one of the groups
+//             let foundInGroup = false;
+//             for (const group of groups) {
+//                 if (group.includes(surrondingCharacterName)) {
+//                     foundInGroup = true;
+//                     break;
+//                 }
+//             }
+//             if (foundInGroup) continue;
+
+//             const surrondingCharacterState = this.deObject.stateFor[surrondingCharacterName];
+//             if (surrondingCharacterState.conversationId) {
+//                 const conv = this.deObject.conversations[surrondingCharacterState.conversationId];
+//                 const participants = conv.participants;
+//                 if (participants.length === 1) {
+//                     solos.push(surrondingCharacterName);
+//                 } else {
+//                     groups.push(participants);
+//                 }
+//             } else {
+//                 solos.push(surrondingCharacterName);
+//             }
+//         }
+
+//         for (const [index, group] of groups.entries()) {
+//             const strongestCharacterBond = this.getCharacterWithClosestBondToCharacter(character, group);
+//             groupsList += `\n\n${strongestCharacterBond}'s group:\n`;
+//             for (const member of group) {
+//                 groupsList += ` - ${member}: ${await getExternalDescriptionOfCharacter(this, member)}\n`;
+//             }
+//         };
+
+//         groupsList += `\n\nNow take into account the last message from ${character.name} and determine if they have merged into another conversation group together with all the members of their current conversation group. ` +
+//             `If they have approach a new group, say the new people that conform the new group that ${character.name} has joined, including any characters from the previous conversation that have joined as well. ` +
+//             `DO NOT say everyone in case it is everyone, use the specific names; if they have not merged into another group, say "NO, ${character.name} has not approached another group."`;
+
+//         // TODO inference to determine which group they have joined and with whom
+//         // TODO determine no
+//         let inferenceText = "";
+
+//         const inferenceTextLowered = inferenceText.toLowerCase();
+//         /**
+//          * @type {string[]}
+//          */
+//         const newPeopleOfTheGroup = [];
+//         for (const char of allCharactersAround) {
+//             if (char === character.name) continue;
+//             const lowered = char.toLowerCase();
+//             if (inferenceTextLowered.includes(lowered) && !newPeopleOfTheGroup.includes(char)) {
+//                 newPeopleOfTheGroup.push(char);
+
+//                 // now let's readd potential people from the groups that are conversing together that the LLM may have missed
+//                 for (const group of groups) {
+//                     if (group.includes(char)) {
+//                         for (const member of group) {
+//                             if (!newPeopleOfTheGroup.includes(member)) {
+//                                 newPeopleOfTheGroup.push(member);
+//                             }
+//                         }
+//                     }
+//                 }
+//             }
+//         }
+
+//         if (!newPeopleOfTheGroup.includes(character.name)) {
+//             // add to the list
+//             newPeopleOfTheGroup.push(character.name);
+//         }
+
+//         if (newPeopleOfTheGroup.length === 1) {
+//             // well, :| this is not good, the LLM must have missed everything
+//             // we will be alone I guess
+//             return { merged: false, newGroupMembers: currentConversation.participants };
+//         }
+
+//         return {
+//             merged: true,
+//             newGroupMembers: newPeopleOfTheGroup,
+//         }
 //     }
 
 /**

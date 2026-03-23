@@ -36,6 +36,7 @@ export async function talk(engine, character, options) {
 
     const addedMessagesForStoryMaster = [];
     let hasDeadEnded = false;
+    let hasDied = false;
 
     const characterSystemPrompt = await getSysPromptForCharacter(engine, character.name);
     const characterCanSee = await getCharacterCanSee(engine, character.name);
@@ -73,6 +74,9 @@ export async function talk(engine, character, options) {
 
     if (deadEndAction) {
         console.log(`Dead end scenario detected for character ${character.name} with action: ${deadEndAction.text}`);
+        if (deadEndAction.action.action.deadEndIsDeath) {
+            hasDied = true;
+        }
         // limiting to that one only
         actions = [deadEndAction];
     }
@@ -574,7 +578,13 @@ export async function talk(engine, character, options) {
     return {
         addedMessagesForStoryMaster,
         hasDeadEnded,
+        hasDied,
+        /** @type {DEEmotionNames} */
+        // @ts-ignore
         primaryEmotion,
+        /** @type {DEEmotionNames[]} */
+        // @ts-ignore
         emotionalRange,
+        message: totalGeneratedThusFar,
     }
 }

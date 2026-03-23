@@ -114,7 +114,7 @@ engine.exports = {
         },
     },
 
-    postSpawnAllCharacters(DE) {
+    onWorldInitialized(DE) {
         for (const charName in DE.characters) {
             const char = DE.characters[charName];
             if (char.properties.USE_SFW_SIMPLE_BOND_SYSTEM) {
