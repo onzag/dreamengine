@@ -359,7 +359,6 @@ export class DEngine {
             social: {
                 bonds: {},
             },
-            wanderHeuristics: {},
             utils: deEngineUtils,
             gameOver: false,
             worldRules: {},
@@ -469,15 +468,6 @@ export class DEngine {
                         this.deObject.social.bonds[charName] = {
                             active: [],
                             ex: [],
-                        };
-                    }
-
-                    const wanderHeuristic = this.deObject.wanderHeuristics[charName];
-                    if (!wanderHeuristic) {
-                        this.deObject.wanderHeuristics[charName] = {
-                            wanderConfinement: null,
-                            wanderPrimaryLocation: null,
-                            wanderOutsideConfinementActivatesState: null,
                         };
                     }
 
@@ -685,12 +675,6 @@ export class DEngine {
             wearing: [],
             seenItems: [],
             seenCharacters: [],
-        };
-
-        this.deObject.wanderHeuristics[character.name] = {
-            wanderConfinement: null,
-            wanderPrimaryLocation: null,
-            wanderOutsideConfinementActivatesState: null,
         };
 
         this.deObject.actionAccumulators[character.name] = {

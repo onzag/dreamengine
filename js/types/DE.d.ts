@@ -2739,30 +2739,6 @@ declare type DEStringTemplate = string | ((
     }
 ) => Promise<string> | string);
 
-declare interface DEWanderHeuristic {
-    /**
-     * Names of locations where the character can wander around freely
-     * this should set by the world, not by the character creator, as it depends on the world design
-     * make it null to allow wandering everywhere, the character will just keep wandering around the world
-     * otherwise it will only wander within the specified locations
-     * 
-     * If a character is not within its wanderConfinement locations, it will try to go to the nearest one
-     * before wandering around it, characters only wander when they are free of the user
-     */
-    wanderConfinement: string[] | null;
-    /**
-     * Primary location where the character wanders when no other location is specified
-     * this should set by the world upon the character, not by the character creator
-     */
-    wanderPrimaryLocation: string | null;
-    /**
-     * If the character is interacting with the user and is outside its wanderConfinement locations,
-     * it will activate a specific state, use this state to make the character try to leave user and
-     * go to the nearest wanderConfinement location
-     */
-    wanderOutsideConfinementActivatesState: string | null;
-}
-
 declare interface DEScene {
     /**
      * The starting location ID for the initial scene
@@ -2979,14 +2955,6 @@ declare interface DEObject {
      */
     worldRules: Record<string, DEWorldRule>;
     /**
-     * Heuristics that guide character wandering behaviour
-     * as how the character decides where to go when wandering
-     * without a heuristic a character will just stand still forever
-     * 
-     * TODO implement
-     */
-    wanderHeuristics: Record<string, DEWanderHeuristic>;
-    /**
      * Utility functions for common operations
      */
     utils: DEUtils;
@@ -3065,7 +3033,140 @@ declare interface DEScript {
      * @param scene 
      */
     onSceneReady?(DE: DEObject, scene: DEScene): Promise<void> | void;
+    /**
+     * Called whenever a character wants to wander in the background, allowing for a standard simulation type of characters in the
+     * background without LLM
+     * 
+     * If a character does not have wander behaviour they just stand still and do nothing unless the user interacts with them
+     * 
+     * The wander system can also make characters try to get away from user, for example, if the wander system says they need
+     * to go to work, but the user is talking to them at home, they are injected into the prompt that the wander system wants
+     * control and the character may try to leave the user to go to work, it's possible the user follows them
+     * 
+     * In order to build a belivable simulation, the wander system makes uses of the character social dynamics object and has
+     * many utilities to make characters interact with each other in the background, make rumors, perform actions, etc... without the user's direct involvement,
+     * but still making it feel alive and dynamic as they build a background story for the world
+     * 
+     * The wander system is purposefully left blank, so the developer can implement it as they see fit, with many functions
+     * available in the utilities to help define the wander behaviour, for example, you can make characters have a routine where they go to work in the morning, then go to the gym, then go back home, etc...
+     * or you can make them have a more dynamic wander behaviour where they interact with other characters in the background, make rumors, perform actions, etc... the possibilities are endless
+     * 
+     * The important thing is that they have a story, the LLM will make sense of the past wander actions once the character interacts with the user,
+     * and it will make the character refer to those past wander actions in a coherent way, making the world feel more alive and dynamic
+     *
+     * @param DE 
+     */
+    onWander?(DE: DEObject): Promise<DEWanderAction> | DEWanderAction;
 }
+
+/**
+ * TODO implement wandering
+ * 
+ * A wander action specifies on the actions of characters that want to wander in the background
+ * 
+ */
+declare interface DEWanderAction {
+    /**
+     * How dominant is the wander action over other actions
+     */
+    dominance: number;
+    /**
+     * Executes the controlled regardless of dominance
+     * 
+     * Remember that many scripts may give their own wander actions for the same character, so they can be competing with each other
+     * with this flag they will always execute regardless of the dominance, this is useful for important wander actions that you want to make sure they happen
+     */
+    alwaysExecuteControlled: boolean;
+    /**
+     * Merges the observed with another regardless of dominance
+     * 
+     * Remember that many scripts may give their own wander actions for the same character, so they can be competing with each other
+     * with this flag they will always merge the observed with the other wander actions regardless of the dominance, this is useful for important observed actions that you want to make sure they happen
+     */
+    alwaysMergeObserved: boolean;
+    /**
+     * Observed characters should not be middled with because the user is observing them, and they are under
+     * the control of the LLM, so they will take suggestions
+     */
+    observed: {
+        [characterName: string]: {
+            /**
+             * Will get injected into the prompt as char needs to go to {{needsToGoToLocation}} because {{reason}}, urgency level: {{urgencyLevel}}
+             * and the character may or may not try to do it depending on the circumstances
+             * 
+             * Potential the character leaves is high and gets passed into controlled
+             */
+            needsToGoToLocation?: string;
+            /**
+             * Will get injected into the prompt as char needs to go to the {{needsToGoToSlot}} slot in the {{currentLocation}} because {{reason}}, urgency level: {{urgencyLevel}}
+             * and the character may or may not try to do it depending on the circumstances
+             * 
+             * Potential the character leaves is high and gets passed into controlled
+             */
+            needsToGoToSlot?: string;
+            /**
+             * Will get injected into the prompt as char needs to go climb on top of {{needsToClimbAtopOf}} because {{reason}}, urgency level: {{urgencyLevel}}
+             * and the character may or may not try to do it depending on the circumstances
+             * 
+             * Potential the character leaves is low
+             */
+            needsToClimbAtopOf?: string;
+            /**
+             * Will get injected into the prompt as char needs to get inside of {{needsToGetInsideOf}} because {{reason}}, urgency level: {{urgencyLevel}}
+             * and the character may or may not try to do it depending on the circumstances
+             * 
+             * Potential the character leaves is low
+             */
+            needsToGetInsideOf?: string;
+            /**
+             * Will get injected into the prompt as char needs to get off of {{needsToGetOffOf}} because {{reason}}, urgency level: {{urgencyLevel}}
+             * and the character may or may not try to do it depending on the circumstances
+             * 
+             * Potential the character leaves is low
+             */
+            needsToGetOffOf?: string;
+            /**
+             * Will get injected into the prompt as char needs to leave {{user}} in order to catch up with {{needsToCatchUpWithCharacter}} who is at {{location}} because {{reason}}, urgency level: {{urgencyLevel}}
+             * and the character may or may not try to do it depending on the circumstances
+             * 
+             * Potential the character leaves is high and gets passed into controlled
+             */
+            needsToCatchUpWithCharacter?: string;
+            /**
+             * Will get injected straight into the prompt as an action that the character needs to do
+             * eg. "will fall asleep"
+             * urgency level is not applicable for this one, as it is already an action, so the character will just do it
+             */
+            rawInjectAction?: string;
+            /**
+             * Reason for why the character needs to do that
+             */
+            reason?: string;
+            /**
+             * Urgency level of the action, immediate gets sent as an action
+             * others are in sysprompt
+             * 
+             * default "medium"
+             */
+            urgencyLevel?: "low" | "medium" | "high" | "immediate";
+        }
+    },
+    /**
+     * A controlled character is fully controlled and in not talking to the user
+     */
+    controlled: {
+        [characterName: string]: DEWanderFunction;
+    }
+}
+
+/**
+ * This function is what gets called once the character wanders, without the user's direct involvement
+ * so there is no LLM interacting with it
+ * 
+ * check out the utilities to see how to make the character wander and do thing, you can give the character
+ * routines to do
+ */
+declare type DEWanderFunction = (DE: DEObject, character: DECharacter) => Promise<void> | void;
 
 // declare a editable global variable that can be used to store a DEScript
 declare interface engine {
