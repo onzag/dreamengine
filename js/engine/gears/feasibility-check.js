@@ -806,7 +806,7 @@ async function testMessageFeasibilityForce(engine, character) {
         "An attempt to force does not count, only successful compliance.",
         "Consider only the last story fragment",
     ], null);
-    const generator = engine.inferenceAdapter.runQuestioningCustomAgentOn("feasibility-check", systemPrompt, contextInfoSurroundingCharacters.value, lastCycleExpanded, null, true);
+    const generator = engine.inferenceAdapter.runQuestioningCustomAgentOn("feasibility-check", { system: systemPrompt, contextInfoBefore: contextInfoSurroundingCharacters.value, messages: lastCycleExpanded, contextInfoAfter: null, remarkLastStoryFragmentForAnalysis: true });
     const ready = await generator.next();
     if (ready.value !== "ready") {
         throw new Error("Questioning agent could not be started properly.");
@@ -916,24 +916,28 @@ async function testMessageFeasibilityForce(engine, character) {
                 const [, , , relationshipOfOwnCharacterTowardsForcedCharacter] = await getRelationshipBetweenCharacters(engine, character.name, forcedCharacterName);
                 ownCharacterDescription = engine.inferenceAdapter.buildSystemCharacterDescription(
                     character,
-                    internalDescriptionInfo.general,
-                    await getExternalDescriptionOfCharacter(engine, character.name, true),
-                    [
-                        relationshipOfOwnCharacterTowardsForcedCharacter,
-                    ],
-                    internalDescriptionInfo.expressiveStates,
-                    null,
-                    null,
+                    {
+                        description: internalDescriptionInfo.general,
+                        externalDescription: await getExternalDescriptionOfCharacter(engine, character.name, true),
+                        relationships: [
+                            relationshipOfOwnCharacterTowardsForcedCharacter,
+                        ],
+                        expressiveStates: internalDescriptionInfo.expressiveStates,
+                        scenario: null,
+                        lore: null,
+                    },
                 );
             } catch (e) {
                 ownCharacterDescription = engine.inferenceAdapter.buildSystemCharacterDescription(
                     character,
-                    internalDescriptionInfo.general,
-                    await getExternalDescriptionOfCharacter(engine, character.name, true),
-                    [],
-                    internalDescriptionInfo.expressiveStates,
-                    null,
-                    null,
+                    {
+                        description: internalDescriptionInfo.general,
+                        externalDescription: await getExternalDescriptionOfCharacter(engine, character.name, true),
+                        relationships: [],
+                        expressiveStates: internalDescriptionInfo.expressiveStates,
+                        scenario: null,
+                        lore: null,
+                    },
                 );
             }
 
@@ -944,25 +948,29 @@ async function testMessageFeasibilityForce(engine, character) {
                 const internalDescriptionInfoForcedCharacter = await getInternalDescriptionOfCharacter(engine, forcedCharacterName);
                 forcedCharacterDescription = engine.inferenceAdapter.buildSystemCharacterDescription(
                     forcedCharacter,
-                    internalDescriptionInfoForcedCharacter.general,
-                    await getExternalDescriptionOfCharacter(engine, forcedCharacterName, true),
-                    [
-                        relationshipOfForcedCharacterTowardsOwnCharacter,
-                    ],
-                    internalDescriptionInfoForcedCharacter.expressiveStates,
-                    null,
-                    null,
+                    {
+                        description: internalDescriptionInfoForcedCharacter.general,
+                        externalDescription: await getExternalDescriptionOfCharacter(engine, forcedCharacterName, true),
+                        relationships: [
+                            relationshipOfForcedCharacterTowardsOwnCharacter,
+                        ],
+                        expressiveStates: internalDescriptionInfoForcedCharacter.expressiveStates,
+                        scenario: null,
+                        lore: null,
+                    },
                 );
             } catch (e) {
                 const internalDescriptionInfoForcedCharacter = await getInternalDescriptionOfCharacter(engine, forcedCharacterName);
                 forcedCharacterDescription = engine.inferenceAdapter.buildSystemCharacterDescription(
                     forcedCharacter,
-                    internalDescriptionInfoForcedCharacter.general,
-                    await getExternalDescriptionOfCharacter(engine, forcedCharacterName, true),
-                    [],
-                    internalDescriptionInfoForcedCharacter.expressiveStates,
-                    null,
-                    null,
+                    {
+                        description: internalDescriptionInfoForcedCharacter.general,
+                        externalDescription: await getExternalDescriptionOfCharacter(engine, forcedCharacterName, true),
+                        relationships: [],
+                        expressiveStates: internalDescriptionInfoForcedCharacter.expressiveStates,
+                        scenario: null,
+                        lore: null,
+                    },
                 );
             }
 
@@ -981,7 +989,7 @@ async function testMessageFeasibilityForce(engine, character) {
                 "If the answer is no, elaborate briefly on why it is not feasible.",
             ], null);
 
-            const feasibilityGenerator = engine.inferenceAdapter.runQuestioningCustomAgentOn("feasibility-check", feasibilitySystemPrompt, isolatedCharacterInfo, lastCycleExpanded, null, true);
+            const feasibilityGenerator = engine.inferenceAdapter.runQuestioningCustomAgentOn("feasibility-check", { system: feasibilitySystemPrompt, contextInfoBefore: isolatedCharacterInfo, messages: lastCycleExpanded, contextInfoAfter: null, remarkLastStoryFragmentForAnalysis: true });
             const feasibilityReady = await feasibilityGenerator.next();
             if (feasibilityReady.value !== "ready") {
                 throw new Error("Questioning agent could not be started properly for feasibility check.");

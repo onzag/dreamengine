@@ -67,7 +67,7 @@ engine.exports = {
                 attractions: [],
                 attractiveness: 0.5,
                 gossipTendency: 0.5,
-                familyTies: [],
+                familyTies: {},
                 dislikes: [],
                 likes: [],
                 species: "robot",

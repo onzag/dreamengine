@@ -1634,10 +1634,15 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
 
     for (const activeBond of bonds.active) {
         if (!character.bonds) {
-            throw new Error(`Character ${characterName} has no bonds defined.`);
+            console.error(`Character ${characterName} has no bonds defined.`);
+            continue;
         }
         const bondDeclaration = character.bonds.declarations.find(bondDecl => bondDecl.strangerBond === activeBond.stranger && bondDecl.minBondLevel <= activeBond.bond && activeBond.bond < (bondDecl.maxBondLevel === 100 ? 200 : bondDecl.maxBondLevel) && bondDecl.min2BondLevel <= activeBond.bond2 && activeBond.bond2 < (bondDecl.max2BondLevel === 100 ? 200 : bondDecl.max2BondLevel));
         const otherCharacter = engine.deObject.characters[activeBond.towards];
+        if (!otherCharacter) {
+            console.warn(`Other character ${activeBond.towards} not found for bond with ${characterName}.`);
+            continue;
+        }
         const familyRelationship = getFamilyBondRelation(character, otherCharacter);
         if (bondDeclaration) {
             let result = typeof bondDeclaration.description === "string" ? bondDeclaration.description : (await bondDeclaration.description(engine.deObject, {
@@ -1770,6 +1775,25 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
         }
     }
 
+    /**
+     * @type {Array<string>}
+     */
+    const likes = [];
+    const dislikes = [];
+
+    for (const like of character.socialSimulation.likes) {
+        const globalInterest = engine.deObject.interests[like];
+        if (globalInterest) {
+            likes.push(globalInterest.simple);
+        }
+    }
+    for (const dislike of character.socialSimulation.dislikes) {
+        const globalInterest = engine.deObject.interests[dislike];
+        if (globalInterest) {
+            dislikes.push(globalInterest.simple);
+        }
+    }
+
     return {
         general: general.trim(),
         expressiveStates: statesDescriptions,
@@ -1778,6 +1802,8 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
         stateDominance: maxStateDominance,
         actions,
         stateInjections,
+        likes,
+        dislikes,
     };
 }
 
@@ -1914,18 +1940,21 @@ export async function getSysPromptForCharacter(engine, characterName) {
 
     scenario += `\n\n## Current time and date in the world:\n\n${makeTimestamp(engine, engine.deObject.currentTime, false)}`;
 
-
     const sysprompt = engine.inferenceAdapter.buildSystemPromptForCharacter(
         character,
-        internalDescription.general,
-        externalDescription,
-        internalDescription.relationships,
-        internalDescription.expressiveStates,
-        scenario,
-        lore,
-        interactingCharacters,
-        characterRules,
-        worldRules,
+        {
+            characterRules: characterRules,
+            worldRules: worldRules,
+            externalDescription: externalDescription,
+            scenario: scenario,
+            lore: lore,
+            description: internalDescription.general,
+            relationships: internalDescription.relationships,
+            expressiveStates: internalDescription.expressiveStates,
+            likes: internalDescription.likes,
+            dislikes: internalDescription.dislikes,
+            otherInteractingCharacters: interactingCharacters,
+        }
     );
 
     return {
@@ -2323,6 +2352,6 @@ export async function getRelationshipBetweenCharacters(engine, characterName, to
  * @param {DECompleteCharacterReference} towards 
  */
 export function getFamilyBondRelation(character, towards) {
-    const familyTie = character.socialSimulation.familyTies.find((tie) => tie.character === towards.name);
+    const familyTie = character.socialSimulation.familyTies[towards.name];
     return familyTie?.relation || null;
 }

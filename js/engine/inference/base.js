@@ -45,24 +45,20 @@ export class BaseInferenceAdapter {
      * Infers the next message for a character narrative purposes
      * 
      * @param {DECompleteCharacterReference} character
-     * @param {Array<{message: string, author: string, storyMaster: boolean}>} messages
-     * @param {Array<string>} messagesTrail extra messages to always add as trail
-     * @param {string} system 
-     * @param {string[]} stateInjections
-     * @param {string} visibleEnviroment
-     * @param {string[]} narrativeEffects
-     * @param {string|null} grammar
+     * @param {{
+     *   messages: Array<{message: string, author: string, storyMaster: boolean}>,
+     *   messagesTrail: Array<string>,
+     *   system: string,
+     *   stateInjections: string[],
+     *   visibleEnviroment: string,
+     *   narrativeEffects: string[],
+     *   grammar: string|null,
+     * }} options
      * @returns {AsyncGenerator<{type: "text" | "warning" | "hidden", content: string}, void, boolean>}
      */
     async* inferNextStoryFragmentFor(
         character,
-        messages,
-        messagesTrail,
-        system,
-        stateInjections,
-        visibleEnviroment,
-        narrativeEffects,
-        grammar,
+        options,
     ) {
         throw new Error("Method 'inferNextStoryFragmentFor()' must be implemented.");
     }
@@ -75,52 +71,56 @@ export class BaseInferenceAdapter {
      * question will make it keep ongoing, passing null will make it stop after the current answer and the generator will finish.
      * 
      * @param {string} gear the gear that is running this questioning agent
-     * @param {string} system
-     * @param {string|null} contextInfoBefore additional context information to provide to the agent
-     * @param {Array<{message: string, author: string, storyMaster: boolean}>} messages
-     * @param {string|null} contextInfoAfter additional context information to provide to the agent
-     * @param {boolean} [remarkLastStoryFragmentForAnalysis] whether to mark the last message with an special token so the agent can analyze it
+     * @param {{
+     *   system: string,
+     *   contextInfoBefore: string|null,
+     *   messages: Array<{message: string, author: string, storyMaster: boolean}>,
+     *   contextInfoAfter: string|null,
+     *   remarkLastStoryFragmentForAnalysis?: boolean,
+     * }} options
      * @returns {QuestionAgentGeneratorResponse}
      */
     async *runQuestioningCustomAgentOn(
         gear,
-        system,
-        contextInfoBefore,
-        messages,
-        contextInfoAfter,
-        remarkLastStoryFragmentForAnalysis,
+        options,
     ) {
         throw new Error("Method 'runQuestioningCustomAgentOn()' must be implemented.");
     }
 
     /**
      * @param {DECompleteCharacterReference} character the character in question that is building a prompt for
-     * @param {string} description the description of the character, general
-     * @param {string} externalDescription the external description of the character
-     * @param {string[]} relationships the relationships description of the character
-     * @param {string[]} expressiveStates the current applying expressive states of the character, most dominant ones, short summary do not explain everything
-     * @param {string} scenario the basic description of the current location
-     * @param {string|null} lore the lore related to the character or scenario
-     * @param {Array<string>} otherInteractingCharacters the other characters interacting with this character
-     * @param {Array<string>} characterRules the rules that apply specifically to this character
-     * @param {Array<string>} worldRules the rules that apply to the world or scenario
+     * @param {{
+     *   description: string,
+     *   externalDescription: string,
+     *   relationships: string[],
+     *   expressiveStates: string[],
+     *   scenario: string,
+     *   lore: string|null,
+     *   otherInteractingCharacters: Array<string>,
+     *   characterRules: Array<string>,
+     *   worldRules: Array<string>,
+     *   likes: Array<string>,
+     *   dislikes: Array<string>,
+     * }} options
      * @returns {string} the system prompt
      */
-    buildSystemPromptForCharacter(character, description, externalDescription, relationships, expressiveStates, scenario, lore, otherInteractingCharacters, characterRules, worldRules) {
+    buildSystemPromptForCharacter(character, options) {
         throw new Error("Method 'buildSystemPromptForCharacter()' must be implemented.");
     }
 
     /**
      * @param {DECompleteCharacterReference} character the character in question that is building a prompt for
-     * @param {string} description the description of the character, general
-     * @param {string|null} appereance the appereance description of the character
-     * @param {string[]} relationships the relationships description of the character
-     * @param {string[]} expressiveStates the current applying expressive states of the character, most dominant ones, short or long summary
-     * @param {string|null} scenario the basic description of the current location
-     * @param {string|null} lore the lore related to the character or scenario
+     * @param {{
+     *   description: string,
+     *   externalDescription: string|null,
+     *   relationships: string[],
+     *   expressiveStates: string[],
+     *   scenario: string|null,
+     *   lore: string|null,
+     * }} options
      * @returns {string} the system prompt
      */
-    buildSystemCharacterDescription(character, description, appereance, relationships, expressiveStates, scenario, lore) {
+    buildSystemCharacterDescription(character, options) {
         throw new Error("Method 'buildSystemCharacterDescription()' must be implemented.");
     }
 

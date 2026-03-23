@@ -267,25 +267,22 @@ export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
      * Infers the next message for a character narrative purposes
      * 
      * @param {DECompleteCharacterReference} character
-     * @param {Array<{message: string, author: string, storyMaster: boolean}>} messages
-     * @param {Array<string>} messagesTrail
-     * @param {string} system the system prompt, should be generated with buildSystemPromptForCharacter
-     * @param {string[]} stateInjections
-     * @param {string} visibleEnviroment
-     * @param {string[]} narrativeEffects
-     * @param {string|null} grammar
+     * @param {{
+     *   messages: Array<{message: string, author: string, storyMaster: boolean}>,
+     *   messagesTrail: Array<string>,
+     *   system: string,
+     *   stateInjections: string[],
+     *   visibleEnviroment: string,
+     *   narrativeEffects: string[],
+     *   grammar: string|null,
+     * }} options
      * @returns {AsyncGenerator<{type: "text" | "warning" | "hidden", content: string}, void, boolean>}
      */
     async* inferNextStoryFragmentFor(
         character,
-        messages,
-        messagesTrail,
-        system,
-        stateInjections,
-        visibleEnviroment,
-        narrativeEffects,
-        grammar,
+        options,
     ) {
+        const { messages, messagesTrail, system, stateInjections, visibleEnviroment, narrativeEffects, grammar } = options;
         await this.ensureInitialized();
 
         if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
@@ -442,21 +439,21 @@ RULE: Spoken dialogue should be done in first person, and start with the charact
 
     /**
      * @param {string} gear the gear that is running this questioning agent
-     * @param {string} system
-     * @param {string|null} contextInfoBefore additional context information to provide to the agent
-     * @param {Array<{message: string, author: string, storyMaster: boolean}>} messages
-     * @param {string|null} contextInfoAfter additional context information to provide to the agent
-     * @param {boolean} [remarkLastStoryFragmentForAnalysis] whether to mark the last message with an special token so the agent can analyze it
+     * @param {string} gear the gear that is running this questioning agent
+     * @param {{
+     *   system: string,
+     *   contextInfoBefore: string|null,
+     *   messages: Array<{message: string, author: string, storyMaster: boolean}>,
+     *   contextInfoAfter: string|null,
+     *   remarkLastStoryFragmentForAnalysis?: boolean,
+     * }} options
      * @returns {import('./base.js').QuestionAgentGeneratorResponse}
      */
     async *runQuestioningCustomAgentOn(
         gear,
-        system,
-        contextInfoBefore,
-        messages,
-        contextInfoAfter,
-        remarkLastStoryFragmentForAnalysis
+        options,
     ) {
+        const { system, contextInfoBefore, messages, contextInfoAfter, remarkLastStoryFragmentForAnalysis } = options;
         await this.ensureInitialized();
 
         if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
@@ -724,15 +721,18 @@ RULE: Spoken dialogue should be done in first person, and start with the charact
 
     /**
      * @param {DECompleteCharacterReference} character 
-     * @param {string} description 
-     * @param {string|null} externalDescription 
-     * @param {string[]} relationships 
-     * @param {string[]} expressiveStates 
-     * @param {string|null} scenario 
-     * @param {string|null} lore
+     * @param {{
+     *   description: string,
+     *   externalDescription: string|null,
+     *   relationships: string[],
+     *   expressiveStates: string[],
+     *   scenario: string|null,
+     *   lore: string|null,
+     * }} options
      * @returns {string}
      */
-    buildSystemCharacterDescription(character, description, externalDescription, relationships, expressiveStates, scenario, lore) {
+    buildSystemCharacterDescription(character, options) {
+        const { description, externalDescription, relationships, expressiveStates, scenario, lore } = options;
         return (
             `${externalDescription ? `# ${character.name}'s External Description:
             
@@ -761,20 +761,24 @@ ${lore}
     }
 
     /**
-     * 
-     * @param {DECompleteCharacterReference} character
-     * @param {string} description 
-     * @param {string} externalDescription
-     * @param {string[]} relationships
-     * @param {string[]} expressiveStates
-     * @param {string|null} scenario
-     * @param {string|null} lore
-     * @param {Array<string>} otherInteractingCharacters
-     * @param {Array<string>} characterRules
-     * @param {Array<string>} worldRules
-     * @returns {string}
+     * @param {DECompleteCharacterReference} character the character in question that is building a prompt for
+     * @param {{
+     *   description: string,
+     *   externalDescription: string,
+     *   relationships: string[],
+     *   expressiveStates: string[],
+     *   scenario: string,
+     *   lore: string|null,
+     *   otherInteractingCharacters: Array<string>,
+     *   characterRules: Array<string>,
+     *   worldRules: Array<string>,
+     *   likes: Array<string>,
+     *   dislikes: Array<string>,
+     * }} options
+     * @returns {string} the system prompt
      */
-    buildSystemPromptForCharacter(character, description, externalDescription, relationships, expressiveStates, scenario, lore, otherInteractingCharacters, characterRules, worldRules) {
+    buildSystemPromptForCharacter(character, options) {
+        const { description, externalDescription, relationships, expressiveStates, scenario, lore, otherInteractingCharacters, characterRules, worldRules } = options;
         const thinkingInfo = `${this.options.thinking ? `\n\nTo facilitate roleplay, use ${this.options.thinking.thinkTagOpen} and ${this.options.thinking.thinkTagClose} tags, to analyze the character thoughts and actions before narrating.` : ""}`;
 
         return (
@@ -816,12 +820,14 @@ ${characterRules.map(rule => `Rule: ${rule}`).join("\n")}
 
 # World Rules:
 ${worldRules.map(rule => `Rule: ${rule}`).join("\n")}
-` : ""}
+` : ""}${options.likes.length > 0 ? `\n\n# ${character.name} Likes:\n\n` +
+options.likes.map(like => `- ${like}`).join("\n") : ""}${options.dislikes.length > 0 ? `\n\n# ${character.name} Dislikes:\n\n` +
+options.dislikes.map(dislike => `- ${dislike}`).join("\n") : ""}
 
 # Roleplay Context:
 You are currently roleplaying as ${character.name}.
 
-${this.buildSystemCharacterDescription(character, description, externalDescription, relationships, expressiveStates, scenario, lore)}
+${this.buildSystemCharacterDescription(character, { description, externalDescription, relationships, expressiveStates, scenario, lore })}
 `
         )
     }

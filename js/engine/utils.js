@@ -119,6 +119,72 @@ export const deEngineUtils = {
         }
         createStateInCharacter(DE, character, stateName, stateDefinition);
     },
+    newBond(DE, char1, towards, bondDefinition) {
+        const existingBond = DE.social.bonds[char1].active.find(b => b.towards === towards);
+        if (existingBond) {
+            return;
+        }
+        DE.social.bonds[char1].active.push({
+            towards,
+            ...bondDefinition,
+        });
+    },
+    newMutualBond(DE, char1, char2, bondDefinition) {
+        deEngineUtils.newBond(DE, char1, char2, bondDefinition);
+        deEngineUtils.newBond(DE, char2, char1, bondDefinition);
+    },
+    newFamilyRelation(DE, char1, towards, relation) {
+        const character1 = DE.characters[char1];
+        const character2 = DE.characters[towards];
+        if (!character1) {
+            console.warn(`Character with name ${char1} not found when trying to create family relation towards ${towards}`);
+        } else {
+            character1.socialSimulation.familyTies[towards] = { relation };
+        }
+        if (!character2) {
+            console.warn(`Character with name ${towards} not found when trying to create family relation from ${char1}`);
+        } else {
+            /**
+             * @type {DEFamilyRelation}
+             */
+            let inverseRelation;
+            switch (relation) {
+                case "parent":
+                    inverseRelation = "child";
+                    break;
+                case "child":
+                    inverseRelation = "parent";
+                    break;
+                case "sibling":
+                    inverseRelation = "sibling";
+                    break;
+                case "spouse":
+                    inverseRelation = "spouse";
+                    break;
+                case "cousin":
+                    inverseRelation = "cousin";
+                    break;
+                case "uncle":
+                case "aunt":
+                    inverseRelation = character2.gender === "male" || character2.gender === "ambiguous" ? "nephew" : "niece";
+                    break;
+                case "grandparent":
+                    inverseRelation = "grandchild";
+                    break;
+                case "grandchild":
+                    inverseRelation = "grandparent";
+                    break;
+                case "niece":
+                case "nephew":
+                    inverseRelation = character2.gender === "male" || character2.gender === "ambiguous" ? "uncle" : "aunt";
+                    break;
+                default:
+                    inverseRelation = "other";
+            }
+
+            character2.socialSimulation.familyTies[char1] = { relation: inverseRelation };
+        }
+    },
 };
 
 /**

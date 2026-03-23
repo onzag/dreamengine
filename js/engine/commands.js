@@ -565,19 +565,19 @@ export const commands = {
                 return `Character "${otherCharacterName}" not found.`;
             }
             const familyTies = character.socialSimulation.familyTies;
-            const existingIndex = familyTies.findIndex(tie => tie.character === otherCharacterName);
+            const existingTie = familyTies[otherCharacterName]
             if (relation === "none") {
-                if (existingIndex === -1) {
+                if (!existingTie) {
                     return `No family tie found from "${characterName}" towards "${otherCharacterName}".`;
                 }
-                familyTies.splice(existingIndex, 1);
+                delete familyTies[otherCharacterName];
                 return `The family tie from "${characterName}" towards "${otherCharacterName}" has been removed.`;
             }
-            if (existingIndex !== -1) {
-                familyTies[existingIndex].relation = /** @type {any} */ (relation);
+            if (existingTie) {
+                existingTie.relation = /** @type {any} */ (relation);
                 return `The family relationship from "${characterName}" towards "${otherCharacterName}" has been updated to "${relation}".`;
             }
-            familyTies.push({ character: otherCharacterName, relation: /** @type {any} */ (relation) });
+            familyTies[otherCharacterName] = { relation: /** @type {any} */ (relation) };
             return `A new family tie from "${characterName}" towards "${otherCharacterName}" has been created with relation "${relation}".`;
         },
         help: "Sets the family relationship from one character towards another. Use \"none\" to remove it. Valid relations: parent, sibling, child, spouse, cousin, uncle, aunt, grandparent, grandchild, niece, nephew, other.",

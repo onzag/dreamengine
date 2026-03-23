@@ -1404,11 +1404,11 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
      */
     socialSimulation: {
         /**
-         * list of ids for likes, must be available in preferences object
+         * list of ids for likes, must be available in interests object
          */
         likes: string[];
         /**
-         * list of ids for dislikes, must be available in preferences object
+         * list of ids for dislikes, must be available in interests object
          */
         dislikes: string[];
         /**
@@ -1454,7 +1454,7 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
          * 
          * Make sure to create a bond for this
          */
-        familyTies: DEFamilyTie[];
+        familyTies: Record<string, DEFamilyTie>;
         /**
          * A number from 0 to 1 that represents how much the character likes to gossip and talk about other characters, higher means more likely to gossip and talk about others, this is useful for characters that are nosy or enjoy social interactions that involve talking about others, it can also affect how they interact with other characters and how they perceive them based on the gossip they hear and spread
          */
@@ -1465,11 +1465,11 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
 declare type DEFamilyRelation = "parent" | "sibling" | "child" | "spouse" | "cousin" | "uncle" | "aunt" | "grandparent" | "grandchild" | "niece" | "nephew" | "other";
 
 declare interface DEFamilyTie {
-    character: string;
     relation: DEFamilyRelation;
 }
 
-declare interface DECharacterPreferenceImportantEventGenerator {
+// TODO
+declare interface DECharacterInterestImportantEventGenerator {
     /**
      * The probability for this event to trigger, from 0 to 1, provided the characters were engaging on it
      */
@@ -1493,9 +1493,9 @@ declare interface DECharacterPreferenceImportantEventGenerator {
     eventTime: DETimeDescription;
 }
 
-declare interface DECharacterPreference {
+declare interface DECharacterInterest {
     /**
-     * An unique id for this preference, useful to identify it
+     * An unique id for this interest, useful to identify it
      * eg. "football", "politics", "sports", "cooking", "cleaning", "dancing", etc...
      * try to keep it lowercase
      */
@@ -1511,18 +1511,18 @@ declare interface DECharacterPreference {
      * eg. "{{chars}} are playing sports together", "{{chars}} are talking about politics together"
      */
     template: DEStringTemplate;
-    /**
-     * The species that this peference applies to
-     */
-    species?: string | null;
-    /**
-     * The race that this peference applies to
-     */
-    race?: string | null;
-    /**
-     * The group or social category that this preference applies to, for example, a character may like to talk about sports with other athletes, so the group could be "athletes", or a character may like to do chores with their family members, so the group could be "family", etc...
-     */
-    group?: string | null;
+    // /**
+    //  * The species that this peference applies to
+    //  */
+    // species?: string | null;
+    // /**
+    //  * The race that this peference applies to
+    //  */
+    // race?: string | null;
+    // /**
+    //  * The group or social category that this preference applies to, for example, a character may like to talk about sports with other athletes, so the group could be "athletes", or a character may like to do chores with their family members, so the group could be "family", etc...
+    //  */
+    // group?: string | null;
 }
 
 declare interface DEAttraction {
@@ -2918,6 +2918,9 @@ declare interface DEUtils {
     newConnection(DE: DEObject, definition: DEConnection): void;
     createStateInAllCharacters(DE: DEObject, stateName: string, stateDefinition: DECharacterStateDefinition): void;
     createStateInCharacter(DE: DEObject, characterName: string, stateName: string, stateDefinition: DECharacterStateDefinition): void;
+    newBond(DE: DEObject, char1: string, towards: string, bondDefinition: Omit<DESingleBondDescription, "towards">): void;
+    newMutualBond(DE: DEObject, char1: string, char2: string, bondDefinition: Omit<DESingleBondDescription, "towards">): void;
+    newFamilyRelation(DE: DEObject, char1: string, towards: string, relation: DEFamilyRelation): void;
 }
 
 declare interface DEWorldRule {
@@ -2979,6 +2982,8 @@ declare interface DEObject {
      * Heuristics that guide character wandering behaviour
      * as how the character decides where to go when wandering
      * without a heuristic a character will just stand still forever
+     * 
+     * TODO implement
      */
     wanderHeuristics: Record<string, DEWanderHeuristic>;
     /**
@@ -2996,7 +3001,7 @@ declare interface DEObject {
      * used internally by scripts and other code parts, not meant to be used by the UI, but can be used by the world and characters to store internal state and other information
      */
     internal: Record<string, any>;
-    preferences: Record<string, DECharacterPreference>;
+    interests: Record<string, DECharacterInterest>;
 }
 
 declare type DE = DEObject;

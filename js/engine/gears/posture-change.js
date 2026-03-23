@@ -24,13 +24,15 @@ export default async function calculatePostureChange(engine, character, knownCha
 
     const characterDescription = engine.inferenceAdapter.buildSystemCharacterDescription(
         character,
-        // hide the posture in the description, so the agent needs to find it out by itself
-        await getExternalDescriptionOfCharacter(engine, character.name, true, true),
-        null,
-        [],
-        [],
-        null,
-        null,
+        {
+            // hide the posture in the description, so the agent needs to find it out by itself
+            description: await getExternalDescriptionOfCharacter(engine, character.name, true, true),
+            externalDescription: null,
+            relationships: [],
+            expressiveStates: [],
+            scenario: null,
+            lore: null,
+        },
     );
 
     const systemPrompt = engine.inferenceAdapter.buildSystemPromptForQuestioningAgent(
@@ -47,11 +49,13 @@ export default async function calculatePostureChange(engine, character, knownCha
 
     const agent = engine.inferenceAdapter.runQuestioningCustomAgentOn(
         "posture-change",
-        systemPrompt,
-        null,
-        lastCycle.messages,
-        null,
-        true,
+        {
+            system: systemPrompt,
+            contextInfoBefore: null,
+            messages: lastCycle.messages,
+            contextInfoAfter: null,
+            remarkLastStoryFragmentForAnalysis: true,
+        },
     );
 
     // prime the agent
@@ -197,11 +201,13 @@ export default async function calculatePostureChange(engine, character, knownCha
 
             const agent = engine.inferenceAdapter.runQuestioningCustomAgentOn(
                 "posture-change",
-                systemPrompt,
-                null,
-                lastCycle.messages,
-                null,
-                true,
+                {
+                    system: systemPrompt,
+                    contextInfoBefore: null,
+                    messages: lastCycle.messages,
+                    contextInfoAfter: null,
+                    remarkLastStoryFragmentForAnalysis: true,
+                },
             );
 
             // prime the agent

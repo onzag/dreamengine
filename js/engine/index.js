@@ -165,7 +165,7 @@ function createCharacterFromUser(user) {
             species: "unknown",
             attractiveness: 1,
             dislikesSpecies: [],
-            familyTies: [],
+            familyTies: {},
             gossipTendency: 1,
         }
     }

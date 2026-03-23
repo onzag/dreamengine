@@ -932,10 +932,12 @@ export default async function calculateStateChange(engine, character, interacted
     const systemPrompt = `You are an assistant and social dynamics analyst that helps analyze interactions involving ${character.name}`;
     const questioningAgent = engine.inferenceAdapter.runQuestioningCustomAgentOn(
         "state-change",
-        engine.inferenceAdapter.buildSystemPromptForQuestioningAgent(systemPrompt, [], null),
-        null,
-        lastCycleMessagesInfo.messages,
-        null,
+        {
+            system: engine.inferenceAdapter.buildSystemPromptForQuestioningAgent(systemPrompt, [], null),
+            contextInfoBefore: null,
+            messages: lastCycleMessagesInfo.messages,
+            contextInfoAfter: null,
+        },
     );
 
     const prompter = {

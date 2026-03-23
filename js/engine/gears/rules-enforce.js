@@ -123,11 +123,13 @@ export default async function testWorldRulesOn(engine, character) {
 
     const characterInteractionGenerator = engine.inferenceAdapter.runQuestioningCustomAgentOn(
         "rules-enforce",
-        systemPromptCharacterInteractionsIntroduction,
-        contextInfoSurroundingCharacters.value,
-        lastCycleMessagesExpanded.messages,
-        null,
-        true,
+        {
+            system: systemPromptCharacterInteractionsIntroduction,
+            contextInfoBefore: contextInfoSurroundingCharacters.value,
+            messages: lastCycleMessagesExpanded.messages,
+            contextInfoAfter: null,
+            remarkLastStoryFragmentForAnalysis: true,
+        },
     );
 
     const readyCharInt = await characterInteractionGenerator.next(); // start the generator
@@ -180,7 +182,7 @@ export default async function testWorldRulesOn(engine, character) {
                 `The blunder is that ${character.name} was the one who introduced ${failureReason} as a physically present character or characters, even though that character is not actually present according to the known world state.`,
             ], null);
 
-            const schizophreniaGenerator = engine.inferenceAdapter.runQuestioningCustomAgentOn("rules-enforce",schizophreniaSystemPrompt, null, lastCycleMessagesExpanded.messages, null, true);
+            const schizophreniaGenerator = engine.inferenceAdapter.runQuestioningCustomAgentOn("rules-enforce", { system: schizophreniaSystemPrompt, contextInfoBefore: null, messages: lastCycleMessagesExpanded.messages, contextInfoAfter: null, remarkLastStoryFragmentForAnalysis: true });
 
             const readySchizo = await schizophreniaGenerator.next(); // start the generator
             if (readySchizo.done) {
@@ -228,7 +230,7 @@ export default async function testWorldRulesOn(engine, character) {
             null,
         );
 
-        const generatorSpecial = engine.inferenceAdapter.runQuestioningCustomAgentOn("rules-enforce", systemPromptSpecial, null, lastCycleMessagesExpanded.messages, contextInfoSurroundingCharacters.value, true);
+        const generatorSpecial = engine.inferenceAdapter.runQuestioningCustomAgentOn("rules-enforce", { system: systemPromptSpecial, contextInfoBefore: null, messages: lastCycleMessagesExpanded.messages, contextInfoAfter: contextInfoSurroundingCharacters.value, remarkLastStoryFragmentForAnalysis: true });
         const readySpecial = await generatorSpecial.next(); // start the generator
         if (readySpecial.done) {
             throw new Error("Inference adapter questioning generator ended unexpectedly.");
@@ -349,7 +351,7 @@ export default async function testWorldRulesOn(engine, character) {
             });
         }))).filter((v) => v !== null && v !== undefined && v !== "");
 
-        const generator = engine.inferenceAdapter.runQuestioningCustomAgentOn("rules-enforce", systemPrompt, null, lastCycleMessages.messages, null, true);
+        const generator = engine.inferenceAdapter.runQuestioningCustomAgentOn("rules-enforce", { system: systemPrompt, contextInfoBefore: null, messages: lastCycleMessages.messages, contextInfoAfter: null, remarkLastStoryFragmentForAnalysis: true });
         const ready = await generator.next(); // start the generator
         if (ready.done) {
             throw new Error("Inference adapter questioning generator ended unexpectedly.");
@@ -467,10 +469,12 @@ export default async function testWorldRulesOn(engine, character) {
 
     const itemsInteractionGenerator = engine.inferenceAdapter.runQuestioningCustomAgentOn(
         "rules-enforce",
-        systemPromptSpawnItems,
-        availableItemsContextInfo.value,
-        lastCycleMessages.messages,
-        null,
+        {
+            system: systemPromptSpawnItems,
+            contextInfoBefore: availableItemsContextInfo.value,
+            messages: lastCycleMessages.messages,
+            contextInfoAfter: null,
+        },
     );
     const readyItemsInteraction = await itemsInteractionGenerator.next(); // start the generator
     if (readyItemsInteraction.done) {
@@ -545,7 +549,7 @@ export default async function testWorldRulesOn(engine, character) {
                         `The blunder is that ${character.name} interacted with an item called "${itemNameMentioned}" which does not exist at their current location, the item must vanish or be revealed as not real.`,
                     ], null);
 
-                    const schizophreniaGenerator = engine.inferenceAdapter.runQuestioningCustomAgentOn("rules-enforce-storymode", schizophreniaSystemPrompt, null, lastCycleMessages.messages, null, true);
+                    const schizophreniaGenerator = engine.inferenceAdapter.runQuestioningCustomAgentOn("rules-enforce-storymode", { system: schizophreniaSystemPrompt, contextInfoBefore: null, messages: lastCycleMessages.messages, contextInfoAfter: null, remarkLastStoryFragmentForAnalysis: true });
 
                     const readySchizo = await schizophreniaGenerator.next();
                     if (readySchizo.done) {

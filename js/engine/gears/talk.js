@@ -225,11 +225,17 @@ export async function talk(engine, character, options) {
 
         const emotionsList = "## Possible emotions:\n\n" + emotions.map((emotion) => `- ${emotion}`).join("\n") + "\n\n";
 
-        const generator = engine.inferenceAdapter.runQuestioningCustomAgentOn("talk", systemPromptForEmotion, null, lastCycleExtended.messages, ([
-            emotionsList,
-            ...characterSystemPrompt.internalDescription.stateInjections,
-            actionsAsText,
-        ]).join("\n\n"), false);
+        const generator = engine.inferenceAdapter.runQuestioningCustomAgentOn("talk", {
+            system: systemPromptForEmotion,
+            contextInfoBefore: null,
+            messages: lastCycleExtended.messages,
+            contextInfoAfter: ([
+                emotionsList,
+                ...characterSystemPrompt.internalDescription.stateInjections,
+                actionsAsText,
+            ]).join("\n\n"),
+            remarkLastStoryFragmentForAnalysis: false,
+        });
 
         const ready = await generator.next();
         if (ready.done) {
@@ -447,13 +453,15 @@ export async function talk(engine, character, options) {
         console.log("Generating next " + nextToGenerate.type + (nextToGenerate.action ? ` with action: ${nextToGenerate.action}` : ""));
         const generator = engine.inferenceAdapter.inferNextStoryFragmentFor(
             character,
-            messages,
-            trailingMessages,
-            characterSystemPrompt.sysprompt,
-            characterSystemPrompt.internalDescription.stateInjections,
-            characterCanSee.everything,
-            narrativeEffects,
-            nextToGenerate.type === "dialogue" ? grammar.dialogue : grammar.narrative,
+            {
+                messages,
+                messagesTrail: trailingMessages,
+                system: characterSystemPrompt.sysprompt,
+                stateInjections: characterSystemPrompt.internalDescription.stateInjections,
+                visibleEnviroment: characterCanSee.everything,
+                narrativeEffects,
+                grammar: nextToGenerate.type === "dialogue" ? grammar.dialogue : grammar.narrative,
+            },
         );
 
         let next = await generator.next(true);

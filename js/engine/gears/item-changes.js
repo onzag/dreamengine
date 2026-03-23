@@ -148,11 +148,13 @@ export default async function calculateItemChanges(engine, character) {
 
         const itemsInteractionGenerator = engine.inferenceAdapter.runQuestioningCustomAgentOn(
             "item-changes",
-            systemPromptItemsInteracted,
-            null,
-            lastCycleExpanded,
-            null,
-            true,
+            {
+                system: systemPromptItemsInteracted,
+                contextInfoBefore: null,
+                messages: lastCycleExpanded,
+                contextInfoAfter: null,
+                remarkLastStoryFragmentForAnalysis: true,
+            },
         );
 
         const ready = await itemsInteractionGenerator.next();
@@ -251,11 +253,13 @@ export default async function calculateItemChanges(engine, character) {
 
     const charactersInteractionGenerator = engine.inferenceAdapter.runQuestioningCustomAgentOn(
         "item-changes",
-        systemPromptCharactersInteracted,
-        null,
-        lastCycleExpanded,
-        null,
-        true, // remark last story fragment for analysis, so the agent can analyze it to figure out indirect mentions and descriptions
+        {
+            system: systemPromptCharactersInteracted,
+            contextInfoBefore: null,
+            messages: lastCycleExpanded,
+            contextInfoAfter: null,
+            remarkLastStoryFragmentForAnalysis: true,
+        },
     );
 
     const readyCharacters = await charactersInteractionGenerator.next();
@@ -319,11 +323,13 @@ export default async function calculateItemChanges(engine, character) {
 
     const interactionGenerator = engine.inferenceAdapter.runQuestioningCustomAgentOn(
         "item-changes",
-        systemPrompt,
-        null,
-        lastCycleExpanded,
-        null,
-        true, // remark last story fragment for analysis, so the agent can analyze it to figure out indirect mentions and descriptions
+        {
+            system: systemPrompt,
+            contextInfoBefore: null,
+            messages: lastCycleExpanded,
+            contextInfoAfter: null,
+            remarkLastStoryFragmentForAnalysis: true,
+        },
     );
 
     const result = await interactionGenerator.next(); // start the generator for each item
@@ -3682,13 +3688,15 @@ async function updateItemAfterHappenance(
 
     const itemsInteractionGenerator = engine.inferenceAdapter.runQuestioningCustomAgentOn(
         "item-changes",
-        systemPromptItemsInteracted,
-        null,
-        lastCycleMessages,
-        engine.inferenceAdapter.buildContextInfoInstructions(
-            "It was determined that during the story provided, the item named " + item.name + " " + reason + ".\n\nThe item is currently described as: " + item.description,
-        ),
-        true,
+        {
+            system: systemPromptItemsInteracted,
+            contextInfoBefore: null,
+            messages: lastCycleMessages,
+            contextInfoAfter: engine.inferenceAdapter.buildContextInfoInstructions(
+                "It was determined that during the story provided, the item named " + item.name + " " + reason + ".\n\nThe item is currently described as: " + item.description,
+            ),
+            remarkLastStoryFragmentForAnalysis: true,
+        },
     );
 
     if (destroyedInfo?.breaks === "EXPLODED_CLOTHING") {

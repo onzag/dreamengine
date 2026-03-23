@@ -30,7 +30,7 @@ async function updateAllStrangerBonds(engine, character) {
             // now we can check if the actual interaction time between the characters is more than those minutes, for that we would look at conversation history
             // between the two characters
             const otherCharacterName = bond.towards;
-
+            // TODO the bond must never be deleted, just zeroed and strangered
         }
     }
 }
@@ -79,12 +79,14 @@ export default async function calculateBondsChangesDueToMessages(engine, charact
     const thisCharacterDescription = (await getInternalDescriptionOfCharacter(engine, character.name)).general;
     const thisCharacterDescriptionConverted = engine.inferenceAdapter.buildSystemCharacterDescription(
         character,
-        thisCharacterDescription,
-        null,
-        [],
-        [],
-        null,
-        null,
+        {
+            description: thisCharacterDescription,
+            externalDescription: null,
+            relationships: [],
+            expressiveStates: [],
+            scenario: null,
+            lore: null,
+        },
     );
 
     for (const characterNameToGetBondTowards of allCharactersToUpdateBondsTowards) {
@@ -146,7 +148,7 @@ export default async function calculateBondsChangesDueToMessages(engine, charact
                 ]
             );
 
-            const questioningAgent = engine.inferenceAdapter.runQuestioningCustomAgentOn("bonds-change", systemPromptBuilt, null, lastCycle.messages, null);
+            const questioningAgent = engine.inferenceAdapter.runQuestioningCustomAgentOn("bonds-change", { system: systemPromptBuilt, contextInfoBefore: null, messages: lastCycle.messages, contextInfoAfter: null });
             let isQuestioningAgentInitialized = false;
 
             if (!currentBond.knowsName) {
