@@ -71,6 +71,37 @@ export default async function build(options = { doNotBuildLocals: false, doNotWr
             // @ts-ignore
             console.warn(`Could not write ${scriptName}: ${err.message}`);
         }
+
+        // default de-server config
+        const deServerConfigPath = path.join(localDEPathAtHomeDir, 'de-server-config.json');
+        if (!fs.existsSync(deServerConfigPath)) {
+            const defaultConfig = JSON.stringify({
+                host: 'wss://localhost:8765',
+                secret: 'dev-secret-12345678900abcdef'
+            }, null, 4) + '\n';
+            try {
+                await fsPromises.writeFile(deServerConfigPath, defaultConfig, 'utf8');
+                console.log(`Wrote de-server-config.json to ${deServerConfigPath}`);
+            } catch (err) {
+                // @ts-ignore
+                console.warn(`Could not write de-server-config.json: ${err.message}`);
+            }
+        }
+
+        // cardtype-generator-llama-adapter script
+        const adapterFile = path.resolve(path.dirname(thisFile), 'cardtype-generator-llama-adapter.js');
+        const adapterScriptName = isWin ? 'generate-cardtype.cmd' : 'generate-cardtype.sh';
+        const adapterScriptContent = isWin
+            ? `@echo off\r\nnode "${adapterFile}" %*\r\n`
+            : `#!/bin/sh\nnode "${adapterFile}" "$@"\n`;
+        const adapterScriptPath = path.join(localDEPathAtHomeDir, adapterScriptName);
+        try {
+            await fsPromises.writeFile(adapterScriptPath, adapterScriptContent, { mode: 0o755 });
+            console.log(`Wrote ${adapterScriptName} to ${adapterScriptPath}`);
+        } catch (err) {
+            // @ts-ignore
+            console.warn(`Could not write ${adapterScriptName}: ${err.message}`);
+        }
     }
 
     console.log('Done.');

@@ -474,9 +474,14 @@ RULE: Spoken dialogue should be done in first person, and start with the charact
         if (!remarkLastStoryFragmentForAnalysis) {
             const messagesFormatted = messages.map(m => m.message).join("\n\n");
 
+            let story = "";
+            if (messagesFormatted) {
+                story = `# Story:\n\n${messagesFormatted}\n\n`;
+            }
+
             const payload = {
                 system: system,
-                userTrail: (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "") + "# Story:\n" + messagesFormatted + "\n\n" + (contextInfoAfter ? "\n" + contextInfoAfter : ""),
+                userTrail: (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "") + story + (contextInfoAfter ? "\n" + contextInfoAfter : ""),
                 gear: gear,
             };
 

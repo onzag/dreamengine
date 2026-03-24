@@ -21,7 +21,6 @@ declare interface DEScriptRegistry {
     "bond-systems/full-standard-bond-system": DEScript & {
         setup(DE: DEObject, character: DECompleteCharacterReference, options: FSS4DOptions | FSS4DCreepyOptions | FSS3DAceOptions | FSS3DNoFamilyOptions | FSS2DAceNoFamilyOptions | FSS1DAceNoStrangersNoFamilyOptions | FSS0DTesting): DECompleteCharacterReference;
     };
-    "bond-systems/sfw-simplified-standard": DEScript;
     "characters/dema-basic": DEScript;
     "testing/states": DEScript;
     "worlds/simple-lunar-station": DEScript;

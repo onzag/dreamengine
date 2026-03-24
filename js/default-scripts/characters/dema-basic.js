@@ -83,7 +83,6 @@ engine.exports = {
             ageYears: 5,
             weightKg: 70,
             initiative: 0.5,
-            wanderPotential: 0.05,
             strangerInitiative: 0.05,
             strangerRejection: 0,
             maintenanceCaloriesPerDay: 0,
@@ -99,6 +98,7 @@ engine.exports = {
             socialSimulation: {
                 attractions: [],
                 attractiveness: 0.5,
+                charisma: 0.3,
                 gossipTendency: 0.5,
                 familyTies: {},
                 dislikes: [],

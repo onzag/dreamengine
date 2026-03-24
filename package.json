@@ -22,7 +22,8 @@
     "package": "electron-forge package",
     "make": "electron-forge make",
     "build-types": "node js/util/build-types.js",
-    "build-home": "node js/util/build-dreamengine-home.js && node js/util/build-types.js --remote-only"
+    "build-home": "node js/util/build-dreamengine-home.js && node js/util/build-types.js --remote-only",
+    "build-card-llama-adapter": "node js/util/cardtype-generator-llama-adapter.js"
   },
   "devDependencies": {
     "@electron-forge/cli": "^7.10.2",

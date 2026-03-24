@@ -1145,6 +1145,8 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
      * value of 1 means that they will most likely never mutter a word in conversations and social interactions
      * 
      * A value of 0 means that they will never perform an autistic reaction in social interactions and conversations
+     * 
+     * TODO not implemented in talk.js
      */
     autism: number;
     /**
@@ -1166,6 +1168,8 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
      * 
      * It may seem insulting if you are schizophrenic yourself, but this is just a simplified approach; tried to make it as well as I could
      * without overcomplicating things too much based on a family member that is schizophrenic and my own research on the topic
+     * 
+     * TODO not implemented in talk.js yet
      */
     schizophrenia: number;
     /**
@@ -1185,18 +1189,6 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
      * If schizophrenia is given, but no voice description is provided, a default one will be used
      */
     schizophrenicVoiceDescription: DEStringTemplate;
-    /**
-     * How much the character likes to wander around aimlessly in locations
-     * without a specific goal, from 0 to 1, higher means more likely to wander
-     * 
-     * A value of 1 means that the character will often wander around locations
-     * exploring them without a specific goal or purpose, they may just walk around
-     * looking at things and interacting with the environment randomly
-     * 
-     * A value of 0 means that the character will never wander around aimlessly,
-     * they will always have a specific goal or purpose in mind when moving around
-     */
-    wanderPotential: number;
     /**
      * The crux of the engine, the states that define the character's behaviours
      * and how they react to different situations, the more states a character has
@@ -1428,6 +1420,10 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
          * A number from 0 to 1 that represents how attractive the character is, higher means more attractive and more likely to be approached by other characters and have romantic interactions, this is useful for characters that are meant to be charming or have a strong romantic appeal, it can also affect how other characters perceive them and interact with them in social situations
          */
         attractiveness: number;
+        /**
+         * A number from 0 to 1 that represents how charismatic the character is, higher means more charismatic and more likely to influence other characters and have strong social interactions, this is useful for characters that are meant to be leaders or have a strong social presence, it can also affect how other characters perceive them and interact with them in social situations
+         */
+        charisma: number;
         /**
          * List of things this character is attracted to
          */
