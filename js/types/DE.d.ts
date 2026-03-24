@@ -321,13 +321,26 @@ declare interface DEActionPromptInjection {
      * {{char}} begins to cry
      * 
      * The narrative effect can be
-     * When narrating describe {{char}} tantrum in detail and how the tears flow down their face
+     * Describe {{char}} tantrum in detail and how the tears flow down their face
      * 
      * A narrative effect gets applied to the whole narration of the character
      * 
      * While an action, gets applied towards a single paragraph of the story (or all of them if not contenders)
+     * 
+     * Narrative effects should be subtle
      */
     narrativeEffect?: DEStringTemplate;
+    /**
+     * A narrative action that gets applied in narration instead of in the character dialogue
+     * 
+     * Narrative actions should be specific and explicit, they are injected into story master
+     * as if he was saying that
+     * 
+     * For example, if the action is {{char}} begins to cry, the narrative action can be
+     * 
+     * Now I will describe {{char}}'s tears flowing down their face and their body shaking as they cry
+     */
+    narrativeAction?: DEStringTemplate;
     /**
      * The probability (0 to 1) that the action will be even checked for execution, if say
      * the probability is only 0.5 then the action will only be considered for execution half the time
@@ -2965,10 +2978,14 @@ declare interface DEObject {
      */
     gameOver: boolean;
     /**
-     * Arbitrary internal properties that the world or characters can use for various purposes
-     * used internally by scripts and other code parts, not meant to be used by the UI, but can be used by the world and characters to store internal state and other information
+     * Arbitrary internal properties that are used internally by the engine
+     * and not meant to be used by the world scripts, these are for internal bookkeeping and optimizations, they can be used for whatever the engine needs, but they should not be used by the world scripts as they may change or be removed without warning
      */
     internal: Record<string, any>;
+    /**
+     * Arbitrary properties of the world that can be used for various purposes, eg. "world_age": 1000, "technology_level": "medieval", "has_magic": true, etc...
+     */
+    properties: Record<string, any>;
     interests: Record<string, DECharacterInterest>;
 }
 
@@ -3057,6 +3074,11 @@ declare interface DEScript {
      * @param DE 
      */
     onWander?(DE: DEObject): Promise<DEWanderAction> | DEWanderAction;
+
+    /**
+     * Other exports
+     */
+    [key: string]: any;
 }
 
 /**
@@ -3168,10 +3190,86 @@ declare interface DEWanderAction {
  */
 declare type DEWanderFunction = (DE: DEObject, character: DECharacter) => Promise<void> | void;
 
-// declare a editable global variable that can be used to store a DEScript
+/**
+ * A registry mapping script keys ("namespace/id") to their export types.
+ * Extend this via declaration merging in your own `.d.ts` file to get automatic
+ * return-type inference from `importScript` calls without any casting.
+ *
+ * @example
+ * // In a custom types file (e.g. js/types/my-scripts.d.ts):
+ * declare interface DEScriptRegistry {
+ *     "bond-systems/my-custom-system": DEScript & {
+ *         mySpecialMethod(DE: DEObject): void;
+ *     };
+ * }
+ *
+ * // importScript will then return the registered type automatically:
+ * const script = await importScript("bond-systems", "my-custom-system");
+ * script.mySpecialMethod(DE); // fully typed!
+ *
+ * @remarks
+ * For scripts not yet registered here, `importScript` returns `DEScript | null`.
+ * You can also cast at the call site:
+ *
+ * const bondSystem = /** @type {DEScript & { myProp: string }} *\/ (
+ *     await importScript("bond-systems", "sfw-simplified-standard")
+ * );
+ */
+declare interface DEScriptRegistry {}
+
+/**
+ * The per-script module object, analogous to CommonJS `module`.
+ * Set `engine.exports` to define what the script exposes to callers of `importScript`.
+ * Internally `exports` starts as `{}` and can be `null` in some edge cases.
+ */
 declare interface engine {
+    /**
+     * The script's public API, analogous to `module.exports`.
+     * Assign a {@link DEScript}
+     */
     exports: DEScript;
 }
 declare var engine: engine;
 
-declare var importScript: (namespace: string, id: string) => Promise<any>;
+/**
+ * Imports a script by logical address (`namespace` + `id`), not a file path.
+ * At runtime the resolver maps this to a file (e.g. `default-scripts/namespace/id.js`).
+ *
+ * Return type is inferred from {@link DEScriptRegistry} when the `"namespace/id"` key
+ * is registered there; otherwise falls back to `DEScript | null`.
+ *
+ * @param namespace - The script category / namespace (e.g. `"bond-systems"`)
+ * @param id        - The script identifier within the namespace (e.g. `"sfw-simplified-standard"`)
+ * @param options   - `{ optional: true }` suppresses errors when the script cannot be resolved
+ *
+ * @example
+ * // Unregistered — returns DEScript, no null:
+ * const sys = await importScript("bond-systems", "sfw-simplified-standard");
+ *
+ * // With optional: true — may return null:
+ * const sys = await importScript("bond-systems", "sfw-simplified-standard", { optional: true });
+ *
+ * // Registered in DEScriptRegistry — fully typed, no cast needed:
+ * const sys = await importScript("bond-systems", "my-registered-system");
+ * sys.myMethod(); // typed!
+ */
+declare var importScript: {
+    <NS extends string, ID extends string>(
+        namespace: NS,
+        id: ID,
+        options: { optional: true }
+    ): Promise<
+        `${NS}/${ID}` extends keyof DEScriptRegistry
+            ? DEScriptRegistry[`${NS}/${ID}`] | null
+            : DEScript | null
+    >;
+    <NS extends string, ID extends string>(
+        namespace: NS,
+        id: ID,
+        options?: { optional?: false }
+    ): Promise<
+        `${NS}/${ID}` extends keyof DEScriptRegistry
+            ? DEScriptRegistry[`${NS}/${ID}`]
+            : DEScript
+    >;
+};

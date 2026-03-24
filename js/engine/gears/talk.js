@@ -22,8 +22,6 @@ export async function talk(engine, character, options) {
         throw new Error(`Character ${character.name} not found in the engine`);
     }
 
-    // TODO implement narrative effects posts and pre
-
     const charState = engine.deObject.stateFor[character.name];
 
     if (charState.dead) {
@@ -41,7 +39,6 @@ export async function talk(engine, character, options) {
     const characterSystemPrompt = await getSysPromptForCharacter(engine, character.name);
     const characterCanSee = await getCharacterCanSee(engine, character.name);
 
-    // TODO attempt direct story injection instead using ooc messages
     let actions = (await Promise.all(characterSystemPrompt.internalDescription.actions.map(async (action) => {
         if (action.action.action) {
             if (typeof action.action.probability === "number" && Math.random() > action.action.probability) {
@@ -55,12 +52,22 @@ export async function talk(engine, character, options) {
                     causants: action.applyingState?.causants || undefined,
                 }
             );
+            const narrativeText = typeof action.action.narrativeAction === "string" ? action.action.narrativeAction : (action.action.narrativeAction ? await action.action.narrativeAction(
+                // @ts-ignore
+                engine.deObject,
+                {
+                    char: character,
+                    causants: action.applyingState?.causants || undefined,
+                },
+            ) : null);
+            const narrativeTextTrimmed = narrativeText ? narrativeText.trim() : null;
             const trimmed = text.trim();
-            if (!trimmed) {
+            if (!trimmed && !narrativeTextTrimmed) {
                 return null;
             }
             return {
-                text: trimmed,
+                text: trimmed || null,
+                narrativeText: narrativeTextTrimmed,
                 action,
             }
         }
@@ -81,7 +88,7 @@ export async function talk(engine, character, options) {
         actions = [deadEndAction];
     }
 
-    let actionsAsText = actions.map((action) => action.text).join("\n - ");
+    let actionsAsText = actions.map((action) => action.text).filter((a) => !!a).join("\n - ");
     if (actionsAsText) {
         if (deadEndAction && deadEndAction.action.action.deadEndIsDeath) {
             actionsAsText = "# IMPORTANT: The following action will be executed by " + character.name + " and will result in death:\n\n - " + actionsAsText;
@@ -335,9 +342,63 @@ export async function talk(engine, character, options) {
 
     let totalToGenerate = narrationStyle.minParagraphs + Math.floor(Math.random() * (narrationStyle.maxParagraphs - narrationStyle.minParagraphs + 1));
     /**
-     * @type {Array<*>}
+     * @type {typeof actions}
+     * 
+     * I couldn't figure how to omit action from the array
      */
     const actionsLeftToConsume = actions;
+
+    // Pre narration and post narration injections
+    for (const state of characterSystemPrompt.internalDescription.activeStates) {
+        if (state.stateInfo.preNarration) {
+            const probability = state.stateInfo.preNarration.likelihood || 1;
+            if (Math.random() < probability) {
+                const isRelieving = state.applyingState.relieving;
+                const preNarrationOrigin = isRelieving ? state.stateInfo.preNarration.afterRelief : state.stateInfo.preNarration.narration;
+                if (preNarrationOrigin) {
+                    const preNarrationText = typeof preNarrationOrigin === "string" ? preNarrationOrigin : await preNarrationOrigin(engine.deObject, {
+                        char: character,
+                        causants: state.applyingState.causants || undefined,
+                    });
+                    const trimmed = preNarrationText.trim();
+                    if (trimmed) {
+                        actionsLeftToConsume.unshift({
+                            text: null,
+                            narrativeText: trimmed,
+
+                            // @ts-ignore
+                            action: null,
+                        })
+                    }
+                }
+            }
+        }
+
+        if (state.stateInfo.postNarration) {
+            const probability = state.stateInfo.postNarration.likelihood || 1;
+            if (Math.random() < probability) {
+                const isRelieving = state.applyingState.relieving;
+                const postNarrationOrigin = isRelieving ? state.stateInfo.postNarration.afterRelief : state.stateInfo.postNarration.narration;
+                if (postNarrationOrigin) {
+                    const postNarrationText = typeof postNarrationOrigin === "string" ? postNarrationOrigin : await postNarrationOrigin(engine.deObject, {
+                        char: character,
+                        causants: state.applyingState.causants || undefined,
+                    });
+                    const trimmed = postNarrationText.trim();
+                    if (trimmed) {
+                        actionsLeftToConsume.push({
+                            text: null,
+                            narrativeText: trimmed,
+
+                            // @ts-ignore
+                            action: null,
+                        })
+                    }
+                }
+            }
+        }
+    }
+
     /**
      * @type {*}
      */
@@ -351,7 +412,8 @@ export async function talk(engine, character, options) {
     /**
      * @type {() => ({
      *    type: "narration" | "dialogue",
-     *    action: string,
+     *    action: string | null,
+     *    narrativeAction: string | null,
      * } | null)}
      */
     const getNextToGenerate = () => {
@@ -361,18 +423,30 @@ export async function talk(engine, character, options) {
         }
         lastActionConsumed = toConsume;
 
+        const narrativeAction = toConsume && toConsume.narrativeText ? toConsume.narrativeText : null;
+        const action = toConsume ? toConsume.text : null;
+
         if (generatedElements.length >= totalToGenerate) {
             if (!generatedElements.includes("dialogue") && !baseVocabularyLimit?.mute) {
+                // force dialogue if we haven't generated any yet
                 generatedElements.push("dialogue");
+                if (narrativeAction) {
+                    generatedElements.push("narration");
+                }
                 return {
                     type: "dialogue",
-                    action: toConsume ? toConsume.text : null,
+                    action,
+                    narrativeAction,
                 }
             } else if (actionsLeftToConsume.length > 0) {
                 generatedElements.push("narration");
+                if (narrativeAction) {
+                    generatedElements.push("narration");
+                }
                 return {
                     type: "narration",
-                    action: toConsume ? toConsume.text : null,
+                    action,
+                    narrativeAction,
                 }
             }
             return null;
@@ -381,9 +455,13 @@ export async function talk(engine, character, options) {
         const lastGenerated = generatedElements[generatedElements.length - 1];
         if (lastGenerated && lastGenerated === "dialogue") {
             generatedElements.push("narration");
+            if (narrativeAction) {
+                generatedElements.push("narration");
+            }
             return {
                 type: "narration",
-                action: toConsume ? toConsume.text : null,
+                action,
+                narrativeAction,
             }
         }
 
@@ -391,9 +469,13 @@ export async function talk(engine, character, options) {
         const areLastTwoElementsNarration = generatedElements.length >= 2 && generatedElements[generatedElements.length - 1] === "narration" && generatedElements[generatedElements.length - 2] === "narration";
         const nextType = isMute ? "narration" : (areLastTwoElementsNarration ? "dialogue" : (Math.random() < narrationStyle.narrativeBias ? "narration" : "dialogue"));
         generatedElements.push(nextType);
+        if (narrativeAction) {
+            generatedElements.push("narration");
+        }
         return {
             type: nextType,
-            action: toConsume ? toConsume.text : null,
+            action,
+            narrativeAction,
         };
     }
 
@@ -436,9 +518,9 @@ export async function talk(engine, character, options) {
 
     await engine.informDEObjectUpdated();
 
-    // TODO pre narrative effects
-
     let nextToGenerate = getNextToGenerate();
+    let nextToGenerateIsSameAsPreviousButNarrativeAction = false;
+
     let hasHiddenContent = false;
     let hasStandardContent = false;
     while (nextToGenerate) {
@@ -446,11 +528,14 @@ export async function talk(engine, character, options) {
         let hasYieldDoubleLineHidden = false;
         let hasYieldDoubleLineStandard = false;
 
-        if (nextToGenerate.action) {
+        if (nextToGenerateIsSameAsPreviousButNarrativeAction) {
+            trailingMessages.push(`OOC, ${nextToGenerate.narrativeAction}`);
+            console.log("Generating next narrative action: " + nextToGenerate.narrativeAction);
+        } else if (nextToGenerate.action) {
             trailingMessages.push(`OOC, '${character.name} must take the following action next: ${nextToGenerate.action}`);
+            console.log("Generating next " + nextToGenerate.type + (nextToGenerate.action ? ` with action: ${nextToGenerate.action}` : ""));
         }
 
-        console.log("Generating next " + nextToGenerate.type + (nextToGenerate.action ? ` with action: ${nextToGenerate.action}` : ""));
         const generator = engine.inferenceAdapter.inferNextStoryFragmentFor(
             character,
             {
@@ -460,7 +545,7 @@ export async function talk(engine, character, options) {
                 stateInjections: characterSystemPrompt.internalDescription.stateInjections,
                 visibleEnviroment: characterCanSee.everything,
                 narrativeEffects,
-                grammar: nextToGenerate.type === "dialogue" ? grammar.dialogue : grammar.narrative,
+                grammar: nextToGenerateIsSameAsPreviousButNarrativeAction ? grammar.narrative : (nextToGenerate.type === "dialogue" ? grammar.dialogue : grammar.narrative),
             },
         );
 
@@ -509,7 +594,12 @@ export async function talk(engine, character, options) {
         trailingMessages.push(generatedMessage);
         finalMessages.push(generatedMessage);
 
-        nextToGenerate = getNextToGenerate();
+        if (nextToGenerate.narrativeAction) {
+            nextToGenerateIsSameAsPreviousButNarrativeAction = true;
+        } else {
+            nextToGenerate = getNextToGenerate();
+            nextToGenerateIsSameAsPreviousButNarrativeAction = false;
+        }
     }
 
     const totalGeneratedThusFar = finalMessages.join("\n\n");
@@ -528,6 +618,9 @@ export async function talk(engine, character, options) {
 
         if (charState.dead) {
             // TODO change the description of the character to reflect they are dead
+            // await updateCharacterDescription(engine, character.name, "dead", "The lifeless body of " + character.name);
+            // keep in mind "CHARACTER_OVERRIDES_" + characterDef.name
+            // so the state can be recovered
         }
 
         if (!charState.dead) {

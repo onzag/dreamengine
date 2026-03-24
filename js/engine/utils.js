@@ -105,6 +105,9 @@ export const deEngineUtils = {
             ...characterDef,
             properties: currentCharacter.properties,
         }
+        if (DE.internal["CHARACTER_OVERRIDES_" + characterDef.name]) {
+            Object.assign(DE.characters[characterDef.name], DE.internal["CHARACTER_OVERRIDES_" + characterDef.name]);
+        }
     },
     createStateInAllCharacters(DE, stateName, stateDefinition) {
         Object.values(DE.characters).forEach((character) => {

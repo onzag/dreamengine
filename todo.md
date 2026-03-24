@@ -20,6 +20,7 @@ Roadmap
 
 ## Future Improvements
 - [ ] Make communicators function.
+- [ ] Aging and character progression
 
 ## Alpha Release
 - [ ] Release an early alpha version to get feedback and iterate on the system (no sandboxing, No Agent 49, no UI, NodeJS only)

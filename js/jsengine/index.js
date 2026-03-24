@@ -55,15 +55,31 @@ export class DEJSEngine {
      * 
      * @param {string} namespace 
      * @param {string} id
+     * @param {{
+     *   optional?: boolean, // if true, the script is optional, it won't throw an error if it fails to resolve
+     * }} [options]
      * @returns {Promise<any>}
      */
-    async importScript(namespace, id) {
+    async importScript(namespace, id, options) {
         const key = `${namespace}/${id}`;
         if (this.scriptCache[key]) {
             return this.scriptCache[key];
         }
 
-        const file = await this.resolver(namespace, id);
+        /**
+         * @type {{src: string, srcUrl: string}}
+         */
+        let file;
+        try {
+            file = await this.resolver(namespace, id);
+        } catch (error) {
+            if (options?.optional) {
+                console.warn(`Optional script ${namespace}/${id} failed to resolve:`, error);
+                return null;
+            } else {
+                throw error;
+            }
+        }
 
         const insecureFn = loadFunctionInsecure("importScript, engine", file.src, file.srcUrl);
         const engine = { exports: {} };

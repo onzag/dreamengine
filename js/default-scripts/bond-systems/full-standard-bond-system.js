@@ -1,125 +1,21 @@
 /**
- * A simplified standard bond system for SFW characters.
- * It creates a standard bond grid and exposes certain properties, for altering how it functions
- * 
- * This is a very basic implementation for a bond system mostly meant for testing and prototyping.
- * More complex systems should be created and customized per character
+ * A complex 4 dimensional bond system with a lot of fine tuning, designed for SFW and NSFW characters alike
  */
 
 engine.exports = {
     type: "character-mechanic",
-    description: "A simplified standard bond system for SFW characters.",
-    exposeProperties: {
-        USE_SFW_SIMPLE_BOND_SYSTEM: {
-            propertyLocation: "characters",
-            type: "boolean",
-            description: "Whether to use the sfw simple bond system for this character.",
-        },
+    description: "A complex 4 dimensional bond system with a lot of fine tuning, designed for SFW and NSFW characters alike.",
+    exposeProperties: {},
 
-        BOND_INCREASE_QUESTION_1: {
-            propertyLocation: "characters",
-            type: "template",
-            description: "A question that, if answered yes, will increase the bond level. {{other}} will be replaced with the other character's name.",
-        },
-        BOND_INCREASE_QUESTION_2: {
-            propertyLocation: "characters",
-            type: "template",
-            description: "A question that, if answered yes, will increase the bond level. {{other}} will be replaced with the other character's name.",
-        },
-        BOND_INCREASE_QUESTION_3: {
-            propertyLocation: "characters",
-            type: "template",
-            description: "A question that, if answered yes, will increase the bond level. {{other}} will be replaced with the other character's name.",
-        },
-        BOND_DECREASE_QUESTION_1: {
-            propertyLocation: "characters",
-            type: "template",
-            description: "A question that, if answered yes, will decrease the bond level. {{other}} will be replaced with the other character's name.",
-        },
-        BOND_DECREASE_QUESTION_2: {
-            propertyLocation: "characters",
-            type: "template",
-            description: "A question that, if answered yes, will decrease the bond level. {{other}} will be replaced with the other character's name.",
-        },
-        BOND_DECREASE_QUESTION_3: {
-            propertyLocation: "characters",
-            type: "template",
-            description: "A question that, if answered yes, will decrease the bond level. {{other}} will be replaced with the other character's name.",
-        },
-
-        BOND_STRANGER_NEUTRAL: {
-            propertyLocation: "characters",
-            type: "template",
-            description: "A description for the 'Stranger (Neutral)' bond level. {{other}} will be replaced with the other character's name.",
-        },
-        BOND_STRANGER_GOOD: {
-            propertyLocation: "characters",
-            type: "template",
-            description: "A description for the 'Stranger (Good)' bond level. {{other}} will be replaced with the other character's name.",
-        },
-        BOND_STRANGER_BAD: {
-            propertyLocation: "characters",
-            type: "template",
-            description: "A description for the 'Stranger (Bad)' bond level. {{other}} will be replaced with the other character's name.",
-        },
-        "BOND_-100_-50": {
-            propertyLocation: "characters",
-            type: "template",
-            description: "A description for the '-100 to -50' bond level. {{other}} will be replaced with the other character's name.",
-        },
-        "BOND_-50_-35": {
-            propertyLocation: "characters",
-            type: "template",
-            description: "A description for the '-50 to -35' bond level. {{other}} will be replaced with the other character's name.",
-        },
-        "BOND_-35_-20": {
-            propertyLocation: "characters",
-            type: "template",
-            description: "A description for the '-35 to -20' bond level. {{other}} will be replaced with the other character's name.",
-        },
-        "BOND_-20_-10": {
-            propertyLocation: "characters",
-            type: "template",
-            description: "A description for the '-20 to -10' bond level. {{other}} will be replaced with the other character's name.",
-        },
-        "BOND_-10_0": {
-            propertyLocation: "characters",
-            type: "template",
-            description: "A description for the '-10 to 0' bond level. {{other}} will be replaced with the other character's name.",
-        },
-        "BOND_0_10": {
-            propertyLocation: "characters",
-            type: "template",
-            description: "A description for the '0 to 10' bond level. {{other}} will be replaced with the other character's name.",
-        },
-        "BOND_10_20": {
-            propertyLocation: "characters",
-            type: "template",
-            description: "A description for the '10 to 20' bond level. {{other}} will be replaced with the other character's name.",
-        },
-        "BOND_20_35": {
-            propertyLocation: "characters",
-            type: "template",
-            description: "A description for the '20 to 35' bond level. {{other}} will be replaced with the other character's name.",
-        },
-        "BOND_35_50": {
-            propertyLocation: "characters",
-            type: "template",
-            description: "A description for the '35 to 50' bond level. {{other}} will be replaced with the other character's name.",
-        },
-        "BOND_50_100": {
-            propertyLocation: "characters",
-            type: "template",
-            description: "A description for the '50 to 100' bond level. {{other}} will be replaced with the other character's name.",
-        },
-    },
-
-    initialize(DE) {
+    /**
+     * @param {DECompleteCharacterReference} character
+     */
+    setupManually(character) {
         for (const charName in DE.characters) {
             const char = DE.characters[charName];
-            if (char.properties.USE_SFW_SIMPLE_BOND_SYSTEM) {
+            if (char.properties.USE_FULL_STANDARD_BOND_SYSTEM) {
                 char.bonds = {
-                    system: "STANDARD_SFW",
+                    system: "STANDARD_FULL",
                     bondChangeFineTune: 1, // Multiplier for bond changes
                     bondChangeNegativityBias: 1.5,
                     declarations: [],
