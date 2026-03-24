@@ -1,0 +1,65 @@
+import path from 'path';
+import fs from 'fs';
+import { generateScriptRegistryContent } from './map-local-types.js';
+import { ALL_FUNCTIONS } from '../schema/functions.js';
+
+const fsPromises = fs.promises;
+const localDEPathAtHomeDir = path.join(process.env.HOME || process.env.USERPROFILE || '.', '.dreamengine');
+const typesSourceDir = path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Z]:)/, '$1')), '..', 'types');
+const deTypesDir = path.join(localDEPathAtHomeDir, 'types');
+
+/**
+ * Builds the type environment for both:
+ * - The local repo (`js/types/script-registry.d.ts`) — default-scripts only
+ * - The `.dreamengine` dev folder (`~/.dreamengine/types/`) — all search paths,
+ *   plus copies of DE.d.ts, electron.d.ts, and functypes.d.ts
+ * @param {{doNotBuildLocals: boolean}} options
+ */
+async function build(options = { doNotBuildLocals: false }) {
+    if (!options.doNotBuildLocals) {
+        let dType = "interface FunctionTypes {\n";
+        for (const [signature, details, returndesc] of ALL_FUNCTIONS) {
+            const parts = signature.split("->");
+            const name = parts[0].trim().split(" ")[0];
+            const argsPart = parts[0].trim().substring(name.length).trim();
+            const returnType = parts[1].trim();
+            const args = argsPart.split(" ").filter(a => a.trim().length > 0);
+            const docString = "/**\n  " + details + "\n  @returns " + returndesc + "\n*/\n";
+            dType += `${docString}${name}(DE: DEObject, char: CompleteCharacterReference, `;
+            dType += args.join(", ");
+            dType += `): ${returnType};\n`;
+        }
+        dType += "}\n";
+
+        await fsPromises.writeFile(path.join(typesSourceDir, 'functypes.d.ts'), dType, 'utf8');
+        console.log(`Wrote functypes.d.ts to ${typesSourceDir}`);
+
+        // 1. Local repo registry (default-scripts only)
+        const localRegistryContent = await generateScriptRegistryContent({ localOnly: true });
+        await fsPromises.writeFile(path.join(typesSourceDir, 'script-registry.d.ts'), localRegistryContent, 'utf-8');
+        console.log(`Wrote script-registry.d.ts to ${typesSourceDir}`);
+    }
+
+    // 2. .dreamengine dev environment (all search paths)
+    await fsPromises.mkdir(deTypesDir, { recursive: true });
+
+    const fullRegistryContent = await generateScriptRegistryContent({ localOnly: false });
+    await fsPromises.writeFile(path.join(deTypesDir, 'script-registry.d.ts'), fullRegistryContent, 'utf-8');
+    console.log(`Wrote script-registry.d.ts to ${deTypesDir}`);
+
+    // Copy the core type files to .dreamengine
+    const filesToCopy = ['DE.d.ts', 'electron.d.ts', 'functypes.d.ts'];
+    for (const file of filesToCopy) {
+        const src = path.join(typesSourceDir, file);
+        const dest = path.join(deTypesDir, file);
+        await fsPromises.copyFile(src, dest);
+        console.log(`Copied ${file} to ${deTypesDir}`);
+    }
+
+    console.log('Done.');
+}
+
+build().catch(err => {
+    console.error('Failed to build types:', err);
+    process.exit(1);
+});

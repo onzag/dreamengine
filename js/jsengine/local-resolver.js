@@ -20,16 +20,10 @@ export async function localResolver(namespace, id) {
     // 2. the local ~/.dreamengine/scripts/namespace/id.js file
     // 3. in this same repository under js/default-scripts/namespace/id.js
     const thisFileDir = path.dirname(fileURLToPath(import.meta.url));
-    const localPath = path.join(process.cwd(), namespace, id + '.js');
     const localDEPath = path.join(localDEPathAtHomeDir, 'scripts', namespace, id + '.js');
     const defaultScriptsPath = path.join(thisFileDir, '..', 'default-scripts', namespace, id + '.js');
     
-    if (fs.existsSync(localPath)) {
-        return {
-            src: await fsPromises.readFile(localPath, 'utf-8'),
-            srcUrl: "file://" + localPath,
-        };
-    } else if (fs.existsSync(localDEPath)) {
+    if (fs.existsSync(localDEPath)) {
         return {
             src: await fsPromises.readFile(localDEPath, 'utf-8'),
             srcUrl: "file://" + localDEPath,
@@ -41,5 +35,5 @@ export async function localResolver(namespace, id) {
         };
     }
 
-    throw new Error(`Script '${namespace}/${id}' not found in any of the search paths, searched at ${localPath}, ${localDEPath} and ${defaultScriptsPath}`);
+    throw new Error(`Script '${namespace}/${id}' not found in any of the search paths, searched at ${localDEPath} and ${defaultScriptsPath}`);
 }

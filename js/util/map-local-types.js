@@ -261,7 +261,6 @@ function parseJSDocParams(jsdoc) {
 }
 
 /**
- * Parses @returns / @return tag from a JSDoc comment.
  * @param {string} jsdoc
  * @returns {string|null}
  */
@@ -291,33 +290,30 @@ function buildTypedParams(rawParams, typeMap) {
  * Generates the content for a `script-registry.d.ts` file that declares
  * `DEScriptRegistry` entries for all discovered scripts.
  *
- * Searches the same paths as the local resolver:
- * 1. `cwd()/namespace/id.js`
- * 2. `~/.dreamengine/scripts/namespace/id.js`
- * 3. `js/default-scripts/namespace/id.js`
+ * @param {{ localOnly?: boolean }} [options]
+ *   - `localOnly` (default `true`): only scan `js/default-scripts` in this repo.
+ *   - `localOnly: false`: also scan `~/.dreamengine/scripts` and `cwd()`
+ *     (same priority order as the local resolver).
  *
  * @returns {Promise<string>} The generated `.d.ts` file content
  */
-export async function generateScriptRegistryContent() {
-    // Collect scripts from all search paths (same priority as local-resolver)
-    const cwdScriptsDir = process.cwd();
-    const localDEScriptsDir = path.join(localDEPathAtHomeDir, 'scripts');
+export async function generateScriptRegistryContent(options) {
+    const localOnly = options?.localOnly ?? true;
 
     // Use a Map keyed by "namespace/id" so that higher-priority paths win
     /** @type {Map<string, {namespace: string, id: string, filePath: string}>} */
     const scriptMap = new Map();
 
-    // Lowest priority first — default-scripts
+    // Lowest priority first — default-scripts (always included)
     const defaultScripts = await discoverScripts(defaultScriptsDir);
     for (const s of defaultScripts) scriptMap.set(`${s.namespace}/${s.id}`, s);
 
-    // Then ~/.dreamengine/scripts
-    const localDEScripts = await discoverScripts(localDEScriptsDir);
-    for (const s of localDEScripts) scriptMap.set(`${s.namespace}/${s.id}`, s);
-
-    // Highest priority — cwd scripts
-    const cwdScripts = await discoverScripts(cwdScriptsDir);
-    for (const s of cwdScripts) scriptMap.set(`${s.namespace}/${s.id}`, s);
+    if (!localOnly) {
+        // Then ~/.dreamengine/scripts
+        const localDEScriptsDir = path.join(localDEPathAtHomeDir, 'scripts');
+        const localDEScripts = await discoverScripts(localDEScriptsDir);
+        for (const s of localDEScripts) scriptMap.set(`${s.namespace}/${s.id}`, s);
+    }
 
     /** @type {string[]} */
     const entries = [];
@@ -354,21 +350,25 @@ export async function generateScriptRegistryContent() {
 
 /**
  * Generates and writes the script registry `.d.ts` file to `js/types/script-registry.d.ts`.
+ * @param {{ localOnly?: boolean }} [options] Same as {@link generateScriptRegistryContent}
  * @returns {Promise<string>} The path to the written file
  */
-export async function saveScriptRegistry() {
-    const content = await generateScriptRegistryContent();
+export async function saveScriptRegistry(options) {
+    const content = await generateScriptRegistryContent(options);
     const outPath = path.join(typesDir, 'script-registry.d.ts');
     await fsPromises.writeFile(outPath, content, 'utf-8');
     return outPath;
 }
 
-// Allow running directly: node js/util/map-local-types.js
+// Allow running directly:
+//   node js/util/map-local-types.js          (default-scripts only)
+//   node js/util/map-local-types.js --all    (all search paths)
 const isMain = process.argv[1] &&
     path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));
 if (isMain) {
-    saveScriptRegistry().then(outPath => {
-        console.log(`Script registry written to ${outPath}`);
+    const localOnly = !process.argv.includes('--all');
+    saveScriptRegistry({ localOnly }).then(outPath => {
+        console.log(`Script registry written to ${outPath}${localOnly ? ' (local only)' : ' (all paths)'}`);
     }).catch(err => {
         console.error('Failed to generate script registry:', err);
         process.exit(1);

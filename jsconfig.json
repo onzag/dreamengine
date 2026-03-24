@@ -8,5 +8,5 @@
     "moduleDetection": "force"
   },
   "typeAcquisition": {"enable": true},
-  "include": ["js/**/*.js", "js/types/**/*.d.ts", "js/schema/functions.js", "js/schema/internal-make-function-types.js"]
+  "include": ["js/**/*.js", "js/types/**/*.d.ts", "js/schema/functions.js", "js/util/internal-make-function-types.js"]
 }

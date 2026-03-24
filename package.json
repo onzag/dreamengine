@@ -20,7 +20,8 @@
     "start:debug": "ELECTRON_ENABLE_LOGGING=1 NODE_OPTIONS='--trace-uncaught --trace-warnings' electron --inspect=9229 .",
     "build:codemirror": "esbuild js/codemirror/build.js --bundle --outfile=js/codemirror/bundle.js",
     "package": "electron-forge package",
-    "make": "electron-forge make"
+    "make": "electron-forge make",
+    "build-types": "node js/util/build-types.js"
   },
   "devDependencies": {
     "@electron-forge/cli": "^7.10.2",
