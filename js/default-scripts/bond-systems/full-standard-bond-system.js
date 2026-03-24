@@ -3,27 +3,39 @@
  */
 
 /**
- * @typedef {Object} FSSByFamilyTie
- * @property {string} template The template to use for this bond definition, should include {{char}} and {{other}} as placeholders and {{other_family_relation}} if family ties are relevant
+ * @typedef {Object} FSSBase
+ * @property {string} description The template to use for this bond definition, should include {{char}} and {{other}} as placeholders and {{other_family_relation}} if family ties are relevant
  * @property {Array<DEBondIncreaseDecreaseQuestion>} bondIncreaseQuestions An array of questions to ask, to determine how much the bond should increase
  */
 
 /**
+ * @typedef {Object} FSSByFamilyTie
+ * @property {FSSBase} family
+ * @property {FSSBase} nonFamily
+ */
+
+/**
+ * @typedef {Object} FSSByStranger
+ * @property {FSSByFamilyTie} stranger
+ * @property {FSSByFamilyTie} nonStranger
+ */
+
+/**
  * @typedef {Object} FSSDefinition
- * @property {FSSByFamilyTie} [deepInLove]
- * @property {FSSByFamilyTie} [strongRomanticInterest]
- * @property {FSSByFamilyTie} [romanticInterest]
- * @property {FSSByFamilyTie} [slightRomanticInterest]
- * @property {FSSByFamilyTie} noRomanticInterest
+ * @property {FSSByStranger} deepInLove
+ * @property {FSSByStranger} strongRomanticInterest
+ * @property {FSSByStranger} romanticInterest
+ * @property {FSSByStranger} slightRomanticInterest
+ * @property {FSSByStranger} noRomanticInterest
  */
 
 /**
  * @typedef {Object} FSSCreepyDefinition
- * @property {FSSByFamilyTie} [sexualAbuseInterest]
- * @property {FSSByFamilyTie} [stalkingInterest]
- * @property {FSSByFamilyTie} [obsessiveInterest]
- * @property {FSSByFamilyTie} [creepyInterest]
- * @property {FSSByFamilyTie} noRomance
+ * @property {FSSByStranger} sexualAbuseInterest
+ * @property {FSSByStranger} stalkingInterest
+ * @property {FSSByStranger} obsessiveInterest
+ * @property {FSSByStranger} creepyInterest
+ * @property {FSSByStranger} noRomance
  */
 
 /**
@@ -84,26 +96,6 @@
 function valueOrDefault(value, defaultValue) {
     return value !== undefined ? value : defaultValue;
 }
-
-// Other normal bonds are divided as follows by default:
-//          * -100 to -50: foe bond
-//          * -50 to -35: hostile bond
-//          * -35 to -20: antagonistic bond
-//          * -20 to -10: unfriendly bond
-//          * -10 to 0: unpleasant bond
-//          * 0 to 10: acquaintance bond
-//          * 10 to 20: friendly bond
-//          * 20 to 35: good friend bond
-//          * 35 to 50: close friend bond
-//          * 50 to 100: best friend bond
-//          * 
-//          * By default the secondary bond graduation goes as follows:
-//          * 0 to 10: no romantic interest
-//          * 10 to 20: slight romantic interest
-//          * 20 to 35: romantic interest
-//          * 35 to 50: strong romantic interest
-//          * 50 to 100: deeply in love
-//          * 
 
 /**
  * 
@@ -191,6 +183,33 @@ function convertCreepyOptionsToStandardOptions(creepyOptions) {
     return standardOptions;
 }
 
+/**
+ * @type {Array<[string, number, number]>}
+ */
+const RANGES = [
+    ["foe", -100, -50],
+    ["hostile", -50, -35],
+    ["antagonistic", -35, -20],
+    ["unfriendly", -20, -10],
+    ["unpleasant", -10, 0],
+    ["acquaintance", 0, 10],
+    ["friendly", 10, 20],
+    ["goodFriend", 20, 35],
+    ["closeFriend", 35, 50],
+    ["bestFriend", 50, 100],
+];
+
+/**
+ * @type {Array<[string, number, number]>}
+ */
+const SECOND_RANGES = [
+    ["noRomanticInterest", 0, 10],
+    ["slightRomanticInterest", 10, 20],
+    ["romanticInterest", 20, 35],
+    ["strongRomanticInterest", 35, 50],
+    ["deepInLove", 50, 100],
+];
+
 engine.exports = {
     type: "misc",
     description: "A complex 4 dimensional bond system with a lot of fine tuning, designed for SFW and NSFW characters alike.",
@@ -216,6 +235,45 @@ engine.exports = {
             descriptionGeneralInjection: null,
         };
 
+        for (const [bondName, min, max] of RANGES) {
+            for (const [secondaryBondName, secondaryMin, secondaryMax] of SECOND_RANGES) {
+                /**
+                 * @type {FSSByStranger}
+                 */
+                const bondDef =
+                    // @ts-ignore
+                    standardForm[bondName][secondaryBondName];
 
+                for (const strangerStatus of ["stranger", "nonStranger"]) {
+                    /**
+                     * @type {FSSByFamilyTie}
+                     */
+                    const familyV =
+                        // @ts-ignore
+                        bondDef[strangerStatus];
+
+                    for (const familyStatus of ["family", "nonFamily"]) {
+                        /**
+                         * @type {FSSBase}
+                         */
+                        const baseRule =
+                            // @ts-ignore
+                            familyV[familyStatus];
+
+                        character.bonds.declarations.push({
+                            name: `${bondName}_${secondaryBondName}_${strangerStatus}_${familyStatus}`,
+                            description: baseRule.description,
+                            bondConditions: baseRule.bondIncreaseQuestions,
+                            minBondLevel: min,
+                            maxBondLevel: max,
+                            min2BondLevel: secondaryMin,
+                            max2BondLevel: secondaryMax,
+                            strangerBond: strangerStatus === "stranger",
+                            familyBond: familyStatus === "family",
+                        });
+                    }
+                }
+            }
+        }
     }
 }

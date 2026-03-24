@@ -1672,7 +1672,7 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
             } else {
                 result += ` ${activeBond.towards} is known to ${characterName}, ${characterName} knows their name and many details about them.`;
             }
-            
+
             if (familyRelationship) {
                 result += ` ${activeBond.towards} is ${characterName}'s ${familyRelationship}.`;
             }
@@ -1701,7 +1701,7 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
         if (!character.bonds) {
             throw new Error(`Character ${characterName} has no bonds defined.`);
         }
-        const bondDeclaration = character.bonds.declarations.find(bondDecl => bondDecl.strangerBond === exBond.stranger && bondDecl.minBondLevel <= exBond.bond && exBond.bond < (bondDecl.maxBondLevel === 100 ? 200 : bondDecl.maxBondLevel) && bondDecl.min2BondLevel <= exBond.bond2 && exBond.bond2 < (bondDecl.max2BondLevel === 100 ? 200 : bondDecl.max2BondLevel));
+        const bondDeclaration = getBondDeclarationFromBondDescription(engine, character, exBond);
         if (bondDeclaration) {
             if (bondDeclaration.generalCharacterDescriptionInjectionEx) {
                 const familyRelationship = getFamilyBondRelation(character, engine.deObject.characters[exBond.towards]);
@@ -1726,51 +1726,66 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
     }
 
     const surroundingChars = getSurroundingCharacters(engine, characterName);
-    const strangerBondDeclaration = character.bonds.declarations.find(bondDecl => bondDecl.strangerBond === true && bondDecl.minBondLevel <= 0 && 0 < (bondDecl.maxBondLevel === 100 ? 200 : bondDecl.maxBondLevel) && bondDecl.min2BondLevel <= 0 && 0 < (bondDecl.max2BondLevel === 100 ? 200 : bondDecl.max2BondLevel));
-    if (strangerBondDeclaration) {
-        // these do apply to all the total strangers
-        const allSurroundingTotalStrangers = surroundingChars.totalStrangers;
-        for (const strangerName of allSurroundingTotalStrangers) {
-            const strangerCharacter = engine.deObject.characters[strangerName];
-            if (strangerCharacter) {
-                const familyRelationship = getFamilyBondRelation(character, strangerCharacter);
-                let result = typeof strangerBondDeclaration.description === "string" ? strangerBondDeclaration.description : (await strangerBondDeclaration.description(engine.deObject, {
+
+
+    // these do apply to all the total strangers
+    const allSurroundingTotalStrangers = surroundingChars.totalStrangers;
+    for (const strangerName of allSurroundingTotalStrangers) {
+        const strangerCharacter = engine.deObject.characters[strangerName];
+
+        const strangerBondDeclaration = getBondDeclarationFromBondDescription(engine, character, {
+            stranger: true,
+            bond: 0,
+            bond2: 0,
+            knowsName: false,
+            towards: strangerName,
+
+            // @ts-ignore
+            createdAt: null,
+        });
+
+        if (!strangerBondDeclaration) {
+            continue;
+        }
+
+        if (strangerCharacter) {
+            const familyRelationship = getFamilyBondRelation(character, strangerCharacter);
+            let result = typeof strangerBondDeclaration.description === "string" ? strangerBondDeclaration.description : (await strangerBondDeclaration.description(engine.deObject, {
+                char: character,
+                other: strangerCharacter,
+                otherFamilyRelation: familyRelationship || undefined,
+            })).trim();
+            if (strangerBondDeclaration.bondAdditionalDescription) {
+                if (!result.endsWith(". ")) {
+                    result += ". ";
+                } else if (!result.endsWith(" ")) {
+                    result += " ";
+                }
+                result += typeof strangerBondDeclaration.bondAdditionalDescription === "string" ? strangerBondDeclaration.bondAdditionalDescription : (await strangerBondDeclaration.bondAdditionalDescription(engine.deObject, {
                     char: character,
                     other: strangerCharacter,
                     otherFamilyRelation: familyRelationship || undefined,
                 })).trim();
-                if (strangerBondDeclaration.bondAdditionalDescription) {
-                    if (!result.endsWith(". ")) {
-                        result += ". ";
-                    } else if (!result.endsWith(" ")) {
-                        result += " ";
-                    }
-                    result += typeof strangerBondDeclaration.bondAdditionalDescription === "string" ? strangerBondDeclaration.bondAdditionalDescription : (await strangerBondDeclaration.bondAdditionalDescription(engine.deObject, {
-                        char: character,
-                        other: strangerCharacter,
-                        otherFamilyRelation: familyRelationship || undefined,
-                    })).trim();
-                }
-                result += ` ${strangerName} is a total stranger to ${characterName} and ${characterName} does not know their name.`;
-                if (familyRelationship) {
-                    result += ` ${strangerName} is ${characterName}'s ${familyRelationship}.`;
-                }
-
-                relationships.push(result);
+            }
+            result += ` ${strangerName} is a total stranger to ${characterName} and ${characterName} does not know their name.`;
+            if (familyRelationship) {
+                result += ` ${strangerName} is ${characterName}'s ${familyRelationship}.`;
             }
 
-            if (strangerBondDeclaration.generalCharacterDescriptionInjection) {
-                const injection = typeof strangerBondDeclaration.generalCharacterDescriptionInjection === "string" ? strangerBondDeclaration.generalCharacterDescriptionInjection : (await strangerBondDeclaration.generalCharacterDescriptionInjection(engine.deObject, {
-                    char: character,
-                    other: strangerCharacter,
-                    otherFamilyRelation: getFamilyBondRelation(character, strangerCharacter) || undefined,
-                })).trim();
-                if (injection) {
-                    if (!general.endsWith("\n\n")) {
-                        general += "\n\n";
-                    }
-                    general += injection;
+            relationships.push(result);
+        }
+
+        if (strangerBondDeclaration.generalCharacterDescriptionInjection) {
+            const injection = typeof strangerBondDeclaration.generalCharacterDescriptionInjection === "string" ? strangerBondDeclaration.generalCharacterDescriptionInjection : (await strangerBondDeclaration.generalCharacterDescriptionInjection(engine.deObject, {
+                char: character,
+                other: strangerCharacter,
+                otherFamilyRelation: getFamilyBondRelation(character, strangerCharacter) || undefined,
+            })).trim();
+            if (injection) {
+                if (!general.endsWith("\n\n")) {
+                    general += "\n\n";
                 }
+                general += injection;
             }
         }
     }
