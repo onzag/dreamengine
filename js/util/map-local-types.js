@@ -1,6 +1,8 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import ts from 'typescript';
+
 const fsPromises = fs.promises;
 
 const thisFileDir = path.dirname(fileURLToPath(import.meta.url));
@@ -45,245 +47,161 @@ async function discoverScripts(baseDir) {
 }
 
 /**
- * Extracts the extra (non-base) method and property signatures from the source
- * of a script that uses `engine.exports = { ... }`.
- *
- * This is a heuristic source-level parser — it looks for top-level method definitions
- * and property assignments inside the `engine.exports = { ... }` block and extracts
- * their JSDoc parameter types when available.
- *
- * @param {string} src  The full source code of the script
- * @returns {{ members: Array<{name: string, signature: string}>, hasExports: boolean }}
+ * Collects all .d.ts files from a directory (non-recursive).
+ * @param {string} dir
+ * @returns {Promise<string[]>}
  */
-function extractExtraMembers(src) {
-    // Check that the file actually assigns engine.exports
-    if (!src.includes('engine.exports')) {
-        return { members: [], hasExports: false };
+async function collectTypeFiles(dir) {
+    /**
+     * @type {string[]}
+     */
+    const files = [];
+    if (!fs.existsSync(dir)) return files;
+    const entries = await fsPromises.readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+        if (entry.isFile() && entry.name.endsWith('.d.ts')) {
+            files.push(path.join(dir, entry.name));
+        }
+    }
+    return files;
+}
+
+const TYPE_FORMAT = ts.TypeFormatFlags.NoTruncation;
+const TYPE_FORMAT_IN_ALIAS = TYPE_FORMAT | ts.TypeFormatFlags.InTypeAlias;
+
+/**
+ * Walks the AST looking for typedef and callback JSDoc tags,
+ * extracts their types via the checker, and returns type alias declarations.
+ * @param {ts.SourceFile} sourceFile
+ * @param {ts.TypeChecker} checker
+ * @returns {string[]}
+ */
+function extractTypedefs(sourceFile, checker) {
+    /** @type {string[]} */
+    const typedefs = [];
+    /** @type {Set<string>} */
+    const seen = new Set();
+
+    /** @param {ts.Node} node */
+    function visit(node) {
+        // @ts-ignore — jsDoc property exists on statement nodes in JS files
+        const jsDocs = node.jsDoc;
+        if (jsDocs) {
+            for (const doc of jsDocs) {
+                if (!doc.tags) continue;
+                for (const tag of doc.tags) {
+                    if (!ts.isJSDocTypedefTag(tag) && !ts.isJSDocCallbackTag(tag)) continue;
+                    const nameNode = tag.name;
+                    if (!nameNode) continue;
+                    // @ts-ignore
+                    const name = nameNode.escapedText ?? nameNode.text;
+                    if (!name || seen.has(name)) continue;
+                    seen.add(name);
+
+                    const symbol = checker.getSymbolAtLocation(nameNode);
+                    if (!symbol) continue;
+
+                    const type = checker.getDeclaredTypeOfSymbol(symbol);
+                    const typeStr = checker.typeToString(type, sourceFile, TYPE_FORMAT_IN_ALIAS);
+                    typedefs.push(`type ${name} = ${typeStr};`);
+                }
+            }
+        }
+        ts.forEachChild(node, visit);
     }
 
-    // Find the engine.exports = { ... } block start
-    const exportsStart = src.indexOf('engine.exports');
-    if (exportsStart === -1) return { members: [], hasExports: false };
+    visit(sourceFile);
+    return typedefs;
+}
 
-    // Find the opening brace
-    const braceStart = src.indexOf('{', exportsStart);
-    if (braceStart === -1) return { members: [], hasExports: false };
-
-    // We'll parse from after the opening brace, tracking brace depth to find
-    // top-level members of the exports object
-    /** @type {Array<{name: string, signature: string}>} */
+/**
+ * Finds `engine.exports = { ... }` in the AST and extracts the extra
+ * (non-DEScript-base) members using the type checker.
+ * @param {ts.SourceFile} sourceFile
+ * @param {ts.TypeChecker} checker
+ * @returns {{ members: string[], hasExports: boolean }}
+ */
+function extractExportsMembers(sourceFile, checker) {
+    /** @type {string[]} */
     const members = [];
+    let hasExports = false;
 
-    // Regex to match method definitions at the top level of the object:
-    //   methodName(params) {
-    //   async methodName(params) {
-    //   methodName: function(params) {
-    //   methodName: async function(params) {
-    // Also property assignments:
-    //   propertyName: value,
-    //
-    // We do a brace-depth scan to only capture top-level members.
-    let depth = 1;
-    let i = braceStart + 1;
-    const len = src.length;
+    /** @param {ts.Node} node */
+    function visit(node) {
+        if (ts.isExpressionStatement(node) &&
+            ts.isBinaryExpression(node.expression) &&
+            node.expression.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
 
-    while (i < len && depth > 0) {
-        const ch = src[i];
+            const left = node.expression.left;
+            if (ts.isPropertyAccessExpression(left) &&
+                ts.isIdentifier(left.expression) && left.expression.text === 'engine' &&
+                ts.isIdentifier(left.name) && left.name.text === 'exports') {
 
-        // Skip string literals
-        if (ch === '"' || ch === '\'' || ch === '`') {
-            i = skipString(src, i);
-            continue;
-        }
-        // Skip line comments
-        if (ch === '/' && i + 1 < len && src[i + 1] === '/') {
-            i = src.indexOf('\n', i);
-            if (i === -1) break;
-            i++;
-            continue;
-        }
-        // Skip block comments but capture JSDoc
-        if (ch === '/' && i + 1 < len && src[i + 1] === '*') {
-            const commentEnd = src.indexOf('*/', i + 2);
-            if (commentEnd === -1) break;
-            i = commentEnd + 2;
-            continue;
-        }
+                hasExports = true;
+                const rhs = node.expression.right;
+                const type = checker.getTypeAtLocation(rhs);
 
-        if (ch === '{') { depth++; i++; continue; }
-        if (ch === '}') { depth--; i++; continue; }
+                for (const prop of type.getProperties()) {
+                    if (BASE_DESCRIPT_MEMBERS.has(prop.name)) continue;
 
-        // Only look for members at depth 1 (top-level of the object literal)
-        if (depth === 1) {
-            // Try to match a method or property definition starting roughly here
-            const remaining = src.slice(i);
+                    const propType = checker.getTypeOfSymbolAtLocation(prop, rhs);
+                    const callSigs = propType.getCallSignatures();
 
-            // async method(params) {
-            const asyncMethodMatch = remaining.match(/^(async\s+)?([a-zA-Z_$][a-zA-Z0-9_$]*)\s*\(([^)]*)\)\s*\{/);
-            if (asyncMethodMatch) {
-                const methodName = asyncMethodMatch[2];
-                if (!BASE_DESCRIPT_MEMBERS.has(methodName)) {
-                    const params = asyncMethodMatch[3].trim();
-                    const isAsync = !!asyncMethodMatch[1];
-                    const jsdoc = extractPrecedingJSDoc(src, i);
-                    const paramTypes = parseJSDocParams(jsdoc);
-                    const returnType = parseJSDocReturn(jsdoc);
-                    const typedParams = buildTypedParams(params, paramTypes);
-                    const retStr = returnType || (isAsync ? 'Promise<void>' : 'void');
-                    members.push({
-                        name: methodName,
-                        signature: `${methodName}(${typedParams}): ${retStr}`,
-                    });
+                    if (callSigs.length > 0) {
+                        for (const sig of callSigs) {
+                            const sigStr = checker.signatureToString(sig, sourceFile, TYPE_FORMAT);
+                            members.push(`${prop.name}${sigStr}`);
+                        }
+                    } else {
+                        const typeStr = checker.typeToString(propType, sourceFile, TYPE_FORMAT);
+                        members.push(`${prop.name}: ${typeStr}`);
+                    }
                 }
-                // Skip past the method name to avoid re-matching
-                i += asyncMethodMatch[0].length;
-                // Now skip the method body
-                let bodyDepth = 1;
-                while (i < len && bodyDepth > 0) {
-                    const bc = src[i];
-                    if (bc === '"' || bc === '\'' || bc === '`') { i = skipString(src, i); continue; }
-                    if (bc === '{') bodyDepth++;
-                    if (bc === '}') bodyDepth--;
-                    i++;
-                }
-                continue;
-            }
-
-            // propertyName: function / async function
-            const propFnMatch = remaining.match(/^([a-zA-Z_$][a-zA-Z0-9_$]*)\s*:\s*(async\s+)?function\s*\(([^)]*)\)\s*\{/);
-            if (propFnMatch) {
-                const propName = propFnMatch[1];
-                if (!BASE_DESCRIPT_MEMBERS.has(propName)) {
-                    const params = propFnMatch[3].trim();
-                    const isAsync = !!propFnMatch[2];
-                    const jsdoc = extractPrecedingJSDoc(src, i);
-                    const paramTypes = parseJSDocParams(jsdoc);
-                    const returnType = parseJSDocReturn(jsdoc);
-                    const typedParams = buildTypedParams(params, paramTypes);
-                    const retStr = returnType || (isAsync ? 'Promise<void>' : 'void');
-                    members.push({
-                        name: propName,
-                        signature: `${propName}(${typedParams}): ${retStr}`,
-                    });
-                }
-                i += propFnMatch[0].length;
-                let bodyDepth = 1;
-                while (i < len && bodyDepth > 0) {
-                    const bc = src[i];
-                    if (bc === '"' || bc === '\'' || bc === '`') { i = skipString(src, i); continue; }
-                    if (bc === '{') bodyDepth++;
-                    if (bc === '}') bodyDepth--;
-                    i++;
-                }
-                continue;
-            }
-
-            // propertyName: <arrow function>
-            const arrowMatch = remaining.match(/^([a-zA-Z_$][a-zA-Z0-9_$]*)\s*:\s*(async\s+)?\(([^)]*)\)\s*=>/);
-            if (arrowMatch) {
-                const propName = arrowMatch[1];
-                if (!BASE_DESCRIPT_MEMBERS.has(propName)) {
-                    const params = arrowMatch[3].trim();
-                    const isAsync = !!arrowMatch[2];
-                    const jsdoc = extractPrecedingJSDoc(src, i);
-                    const paramTypes = parseJSDocParams(jsdoc);
-                    const returnType = parseJSDocReturn(jsdoc);
-                    const typedParams = buildTypedParams(params, paramTypes);
-                    const retStr = returnType || (isAsync ? 'Promise<void>' : 'void');
-                    members.push({
-                        name: propName,
-                        signature: `${propName}(${typedParams}): ${retStr}`,
-                    });
-                }
-                // Skip past the arrow; the body may be a block or expression,
-                // advance past the match and let normal scanning continue
-                i += arrowMatch[0].length;
-                continue;
             }
         }
-
-        i++;
+        ts.forEachChild(node, visit);
     }
 
-    return { members, hasExports: true };
+    visit(sourceFile);
+    return { members, hasExports };
 }
 
 /**
- * Skip past a string literal (single, double, or template) starting at position i.
- * @param {string} src
- * @param {number} i Position of the opening quote
- * @returns {number} Position after the closing quote
+ * Creates a TypeScript Program for the given script + type files and
+ * extracts typedef declarations and engine.exports member types.
+ * @param {Array<{namespace: string, id: string, filePath: string}>} scripts
+ * @param {string[]} typeFiles
+ * @returns {Map<string, {typedefs: string[], members: string[], hasExports: boolean}>}
  */
-function skipString(src, i) {
-    const quote = src[i];
-    i++;
-    while (i < src.length) {
-        if (src[i] === '\\') { i += 2; continue; }
-        if (src[i] === quote) { i++; break; }
-        // Template literal can have ${...} but we just skip naively
-        i++;
+function analyzeScripts(scripts, typeFiles) {
+    const program = ts.createProgram(
+        [...scripts.map(s => s.filePath), ...typeFiles],
+        {
+            allowJs: true,
+            checkJs: true,
+            noEmit: true,
+            target: ts.ScriptTarget.ES2020,
+            module: ts.ModuleKind.ESNext,
+            moduleResolution: ts.ModuleResolutionKind.Node10,
+            strict: true,
+        }
+    );
+    const checker = program.getTypeChecker();
+
+    /** @type {Map<string, {typedefs: string[], members: string[], hasExports: boolean}>} */
+    const results = new Map();
+
+    for (const { namespace, id, filePath } of scripts) {
+        const key = `${namespace}/${id}`;
+        const sourceFile = program.getSourceFile(filePath);
+        if (!sourceFile) continue;
+
+        const typedefs = extractTypedefs(sourceFile, checker);
+        const { members, hasExports } = extractExportsMembers(sourceFile, checker);
+        results.set(key, { typedefs, members, hasExports });
     }
-    return i;
-}
 
-/**
- * Extracts the JSDoc comment immediately preceding position `pos` in the source.
- * @param {string} src
- * @param {number} pos
- * @returns {string} The JSDoc text (between the markers), or empty string
- */
-function extractPrecedingJSDoc(src, pos) {
-    // Walk backwards from pos, skipping whitespace, looking for a */ ending
-    let j = pos - 1;
-    while (j >= 0 && /\s/.test(src[j])) j--;
-    if (j < 1 || src[j] !== '/' || src[j - 1] !== '*') return '';
-    // Found */, now find the matching /**
-    const closeIdx = j + 1;
-    const openIdx = src.lastIndexOf('/**', j);
-    if (openIdx === -1) return '';
-    return src.slice(openIdx, closeIdx);
-}
-
-/**
- * Parses @param tags from a JSDoc comment.
- * @param {string} jsdoc
- * @returns {Record<string, string>} Map from param name → type string
- */
-function parseJSDocParams(jsdoc) {
-    /** @type {Record<string, string>} */
-    const params = {};
-    const regex = /@param\s+\{([^}]+)\}\s+(\w+)/g;
-    let m;
-    while ((m = regex.exec(jsdoc)) !== null) {
-        params[m[2]] = m[1].trim();
-    }
-    return params;
-}
-
-/**
- * @param {string} jsdoc
- * @returns {string|null}
- */
-function parseJSDocReturn(jsdoc) {
-    const m = jsdoc.match(/@returns?\s+\{([^}]+)\}/);
-    return m ? m[1].trim() : null;
-}
-
-/**
- * Builds a typed parameter list string from the raw param names and a
- * JSDoc-extracted type map. Untyped params default to `any`.
- * @param {string} rawParams  Comma-separated parameter names from the source
- * @param {Record<string, string>} typeMap
- * @returns {string}
- */
-function buildTypedParams(rawParams, typeMap) {
-    if (!rawParams) return '';
-    return rawParams.split(',').map(p => {
-        const name = p.trim();
-        if (!name) return '';
-        const type = typeMap[name] || 'any';
-        return `${name}: ${type}`;
-    }).filter(Boolean).join(', ');
+    return results;
 }
 
 /**
@@ -292,45 +210,56 @@ function buildTypedParams(rawParams, typeMap) {
  *
  * @param {{ localOnly?: boolean }} [options]
  *   - `localOnly` (default `true`): only scan `js/default-scripts` in this repo.
- *   - `localOnly: false`: also scan `~/.dreamengine/scripts` and `cwd()`
- *     (same priority order as the local resolver).
+ *   - `localOnly: false`: also scan `~/.dreamengine/scripts`
  *
  * @returns {Promise<string>} The generated `.d.ts` file content
  */
 export async function generateScriptRegistryContent(options) {
     const localOnly = options?.localOnly ?? true;
 
-    // Use a Map keyed by "namespace/id" so that higher-priority paths win
     /** @type {Map<string, {namespace: string, id: string, filePath: string}>} */
     const scriptMap = new Map();
 
-    // Lowest priority first — default-scripts (always included)
     const defaultScripts = await discoverScripts(defaultScriptsDir);
     for (const s of defaultScripts) scriptMap.set(`${s.namespace}/${s.id}`, s);
 
     if (!localOnly) {
-        // Then ~/.dreamengine/scripts
         const localDEScriptsDir = path.join(localDEPathAtHomeDir, 'scripts');
         const localDEScripts = await discoverScripts(localDEScriptsDir);
         for (const s of localDEScripts) scriptMap.set(`${s.namespace}/${s.id}`, s);
     }
 
+    const scripts = [...scriptMap.values()];
+    const typeFiles = await collectTypeFiles(typesDir);
+
+    const analysisResults = analyzeScripts(scripts, typeFiles);
+
+    // Deduplicate typedefs by name across all scripts
+    /** @type {Map<string, string>} name → declaration */
+    const typedefMap = new Map();
     /** @type {string[]} */
     const entries = [];
 
-    for (const [key, { filePath }] of scriptMap) {
-        const src = await fsPromises.readFile(filePath, 'utf-8');
-        const { members, hasExports } = extractExtraMembers(src);
+    for (const [key] of scriptMap) {
+        const result = analysisResults.get(key);
+        if (!result || !result.hasExports) continue;
 
-        if (!hasExports) continue;
+        for (const td of result.typedefs) {
+            const match = td.match(/^type (\w+)/);
+            if (match) typedefMap.set(match[1], td);
+        }
 
-        if (members.length === 0) {
+        if (result.members.length === 0) {
             entries.push(`    "${key}": DEScript;`);
         } else {
-            const memberLines = members.map(m => `        ${m.signature};`).join('\n');
+            const memberLines = result.members.map(m => `        ${m};`).join('\n');
             entries.push(`    "${key}": DEScript & {\n${memberLines}\n    };`);
         }
     }
+
+    const typedefBlock = typedefMap.size > 0
+        ? [...typedefMap.values()].join('\n') + '\n'
+        : '';
 
     const content = [
         '// Auto-generated by map-local-types.js — do not edit manually.',
@@ -339,6 +268,7 @@ export async function generateScriptRegistryContent(options) {
         '// This file extends DEScriptRegistry (declared in DE.d.ts) via declaration merging',
         '// so that importScript() calls return the correct types for known scripts.',
         '',
+        typedefBlock,
         'declare interface DEScriptRegistry {',
         entries.join('\n'),
         '}',

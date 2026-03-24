@@ -4,9 +4,15 @@
 // This file extends DEScriptRegistry (declared in DE.d.ts) via declaration merging
 // so that importScript() calls return the correct types for known scripts.
 
+type FSSByFamilyTie = { template: string; bondIncreaseQuestions: Array<DEBondIncreaseDecreaseQuestion>; };
+type FSSDefinition = { deepInLove?: FSSByFamilyTie | undefined; strongRomanticInterest?: FSSByFamilyTie | undefined; romanticInterest?: FSSByFamilyTie | undefined; slightRomanticInterest?: FSSByFamilyTie | undefined; noRomanticInterest: FSSByFamilyTie; };
+type FSSCreepyDefinition = { sexualAbuseInterest?: FSSByFamilyTie | undefined; stalkingInterest?: FSSByFamilyTie | undefined; obsessiveInterest?: FSSByFamilyTie | undefined; creepyInterest?: FSSByFamilyTie | undefined; noRomance: FSSByFamilyTie; };
+type FSSOptions = { type: "standard"; bondChangeFineTune: number; bondChangeNegativityBias: number; strangerBreakawayBondWeightAbsolute: number; strangerBreakawayInteractionsCount: number; strangerBreakawayTimeMinutes: number; strangerNegativeMultiplier: number; strangerPositiveMultiplier: number; foe: FSSDefinition; hostile: FSSDefinition; antagonistic: FSSDefinition; unfriendly: FSSDefinition; unpleasant: FSSDefinition; acquaintance: FSSDefinition; friendly: FSSDefinition; goodFriend: FSSDefinition; closeFriend: FSSDefinition; bestFriend: FSSDefinition; };
+type FSSCreepyOptions = { type: "creepy"; bondChangeFineTune: number; bondChangeNegativityBias: number; strangerBreakawayBondWeightAbsolute: number; strangerBreakawayInteractionsCount: number; strangerBreakawayTimeMinutes: number; strangerNegativeMultiplier: number; strangerPositiveMultiplier: number; foe: FSSCreepyDefinition; hostile: FSSCreepyDefinition; antagonistic: FSSCreepyDefinition; unfriendly: FSSCreepyDefinition; unpleasant: FSSCreepyDefinition; acquaintance: FSSCreepyDefinition; friendly: FSSCreepyDefinition; goodFriend: FSSCreepyDefinition; closeFriend: FSSCreepyDefinition; bestFriend: FSSCreepyDefinition; };
+
 declare interface DEScriptRegistry {
     "bond-systems/full-standard-bond-system": DEScript & {
-        setupManually(character: DECompleteCharacterReference, options: FSSOptions): void;
+        setupManually(character: DECompleteCharacterReference, options: FSSOptions | FSSCreepyOptions): void;
     };
     "bond-systems/sfw-simplified-standard": DEScript;
     "characters/dema-basic": DEScript;
