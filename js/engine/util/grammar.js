@@ -109,7 +109,7 @@ export function createGrammarFromList(engine, list) {
         throw new Error("Inference adapter is required to create grammar");
     }
     return {
-        grammar: `root ::= (${list.map(item => caseInsensitiveGrammar(item)).join(" | ")}) ${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()}\n`,
+        grammar: `root ::= (${list.map(item => caseInsensitiveGrammar(item)).join(" | ")})`,
         stopAfter: [],
     };
 }
@@ -129,7 +129,7 @@ export function createGrammarListFromList(engine, list, limit = 5) {
         suffix = ` (", " LIST_ELEMENT${suffix})?`;
     }
     return {
-        grammar: `root ::= LIST_ELEMENT${suffix} ${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()}\nLIST_ELEMENT ::= (${list.slice(0, limit).map(item => caseInsensitiveGrammar(item)).join(" | ")})`,
+        grammar: `root ::= LIST_ELEMENT${suffix}\nLIST_ELEMENT ::= (${list.slice(0, limit).map(item => caseInsensitiveGrammar(item)).join(" | ")})`,
         stopAfter: [],
     };
 }
@@ -153,7 +153,7 @@ export function yesNoGrammar(engine) {
         throw new Error("Inference adapter is required to create grammar");
     }
     return {
-        grammar: `root ::= ("yes" | "no" | "Yes" | "No" | "YES" | "NO") ${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()}\n`,
+        grammar: `root ::= ("yes" | "no" | "Yes" | "No" | "YES" | "NO")`,
         stopAfter: ["yes", "no", "Yes", "No", "YES", "NO"],
     };
 }

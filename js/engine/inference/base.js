@@ -170,21 +170,6 @@ export class BaseInferenceAdapter {
     }
 
     /**
-     * When generating custom grammar these are the required grammar rules to be included at the root level
-     * 
-     * When defining a custom grammar for question generation this function should return the required root level grammar rules
-     * 
-     * eg. root ::= answer | {getRequiredRootGrammarForQuestionGeneration()}
-     * answer ::= word+
-     * word ::= "a" | "b" | "c"
-     * 
-     * @returns {string}
-     */
-    getRequiredRootGrammarForQuestionGeneration() {
-        throw new Error("Method 'getRequiredRootGrammarForQuestionGeneration()' must be implemented.");
-    }
-
-    /**
      * @param {DECompleteCharacterReference} character
      * @param {string} info
      * @returns {{characterDescriptionAt: string, value: string}}

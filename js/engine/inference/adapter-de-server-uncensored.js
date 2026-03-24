@@ -541,7 +541,7 @@ RULE: Spoken dialogue should be done in first person, and start with the charact
                 rid,
                 payload: {
                     question: (nextQuestion.contextInfo ? nextQuestion.contextInfo + "\n\n" : "") + "# Question:\n\n" + nextQuestion.nextQuestion + (nextQuestion.instructions ? ("\n\n# Instructions:\n\n" + nextQuestion.instructions) : ""),
-                    stopAt: ["\n\n"].concat(nextQuestion.stopAt),
+                    stopAt: nextQuestion.stopAt,
                     stopAfter: nextQuestion.stopAfter,
                     maxParagraphs: nextQuestion.maxParagraphs,
                     maxCharacters: nextQuestion.maxCharacters,
@@ -835,10 +835,6 @@ You are currently roleplaying as ${character.name}.
 ${this.buildSystemCharacterDescription(character, { description, externalDescription, relationships, expressiveStates, scenario, lore })}
 `
         )
-    }
-
-    getRequiredRootGrammarForQuestionGeneration() {
-        return JSON.stringify("\n\n");
     }
 
     supportsGrammar() {

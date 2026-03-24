@@ -563,7 +563,7 @@ export default async function calculateItemChanges(engine, character) {
 
             // Now we want to know how many of the item were moved
             const baseAmountMovedQuestion = `By the end of the last story fragment, how many of "${item}" were moved or had their location changed? Answer with a number, or if the amount is not clear, answer with one of the following: "a few", "several", "many", "a lot", "some", "half", "most", or "all".`;
-            const amountGrammar = `root ::= ([0-9]+ | "a few" | "several" | "many" | "a lot" | "some" | "half" | "most" | "all" | "none") ${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()}`;
+            const amountGrammar = `root ::= ([0-9]+ | "a few" | "several" | "many" | "a lot" | "some" | "half" | "most" | "all" | "none")`;
             console.log("Asking question, " + baseAmountMovedQuestion);
             const baseAmountMovedAnswer = await interactionGenerator.next({
                 maxCharacters: 0, maxSafetyCharacters: 100,
@@ -769,7 +769,7 @@ export default async function calculateItemChanges(engine, character) {
                     if (isAmbiguouslyAtop || isAmbiguouslyContained) {
                         // now we will ask for a general amount question, to figure out how many of the item are either atop or inside the other item, we will ask a general question first, and then we will ask a specific question for inside, and by difference we can get the atop amount
                         const nextQuestion = `By the end of the last story fragment, how many of "${item}" are ${canContain ? "inside or on top" : "on top"} of ${otherItem}? Answer with a number, or if the amount is not clear, answer with one of the following: "a few", "several", "many", "a lot", "some", "half", "most", "all", or "none".`;
-                        const amountGrammar = `root ::= ([0-9]+ | "a few" | "several" | "many" | "a lot" | "some" | "half" | "most" | "all" | "none") ${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()}`;
+                        const amountGrammar = `root ::= ([0-9]+ | "a few" | "several" | "many" | "a lot" | "some" | "half" | "most" | "all" | "none")`;
 
                         console.log("Asking question, " + nextQuestion);
 
@@ -1055,7 +1055,7 @@ export default async function calculateItemChanges(engine, character) {
                         if (isPossessed || wasThrownTowards) {
                             let expectedLocLast = "carrying";
                             const nextQuestion = `By the end of the last story fragment, how many of "${item}" ${questionPiece} ${charName}${questionPiece2}? Answer with a number, or if the amount is not clear, answer with one of the following: "a few", "several", "many", "a lot", "some", "half", "most", or "all".`;
-                            const amountGrammar = `root ::= ([0-9]+ | "a few" | "several" | "many" | "a lot" | "some" | "half" | "most" | "all") ${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()}`;
+                            const amountGrammar = `root ::= ([0-9]+ | "a few" | "several" | "many" | "a lot" | "some" | "half" | "most" | "all")`;
 
                             console.log("Asking question, " + nextQuestion);
 
@@ -1176,7 +1176,7 @@ export default async function calculateItemChanges(engine, character) {
                         if (isYes(droppedQuestion.value)) {
                             const howManyDroppedQuestion = `By the end of the last story fragment, how many of "${item}" were dropped on the ground? Answer with a number, or if the amount is not clear, answer with one of the following: "a few", "several", "many", "a lot", "some", "half", "most", or "all".`;
                             console.log("Asking question, " + howManyDroppedQuestion);
-                            const amountGrammar = `root ::= ([0-9]+ | "a few" | "several" | "many" | "a lot" | "some" | "half" | "most" | "all") ${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()}`;
+                            const amountGrammar = `root ::= ([0-9]+ | "a few" | "several" | "many" | "a lot" | "some" | "half" | "most" | "all")`;
                             const droppedAmountQuestion = await interactionGenerator.next({
                                 maxCharacters: 0, maxSafetyCharacters: 100,
                                 maxParagraphs: 1,
@@ -1323,7 +1323,7 @@ export default async function calculateItemChanges(engine, character) {
                             nextQuestion: nextQuestion,
                             stopAfter: charactersToQuestion.concat(["none"]),
                             stopAt: [],
-                            grammar: `root ::= (${charactersToQuestion.map((char) => JSON.stringify(char)).join(" | ")} | "none") ${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()}\n`,
+                            grammar: `root ::= (${charactersToQuestion.map((char) => JSON.stringify(char)).join(" | ")} | "none")`,
                             contextInfo: engine.inferenceAdapter.buildContextInfoExample(
                                 `Example: If the last story fragment reads that "Alice took ${item} from Bob without asking", the answer would be "Alice", since Alice is the character who stole the item.`,
                             ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
@@ -1352,7 +1352,7 @@ export default async function calculateItemChanges(engine, character) {
                                 nextQuestion: nextQuestion,
                                 stopAfter: [],
                                 stopAt: [],
-                                grammar: `root ::= ((charactername (", " charactername)*) | "none") ${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()}\n`,
+                                grammar: `root ::= ((charactername (", " charactername)*) | "none")`,
                                 contextInfo: engine.inferenceAdapter.buildContextInfoExample(
                                     `Example: If the last story fragment reads that "Alice took ${item} from Bob without asking, and Charlie saw it happen", the answer would be "Charlie", since Charlie is the character who witnessed the theft.`,
                                 ) + "\n\n" + engine.inferenceAdapter.buildContextInfoExample(
@@ -3760,7 +3760,7 @@ async function updateItemAfterHappenance(
                 nextQuestion: questionPiecesCount,
                 stopAfter: [],
                 stopAt: ["\n"],
-                grammar: `root ::= [0-9]+ ${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()}\n`,
+                grammar: `root ::= [0-9]+`,
                 answerTrail: "Answer:\n\n",
                 contextInfo: engine.inferenceAdapter.buildContextInfoInstructions(
                     "It was determined that the item named " + item.name + " is now broken in multiple pieces after the damage it received\n\n" +
@@ -3788,7 +3788,7 @@ async function updateItemAfterHappenance(
 
     const questionName = "What is the new name for the item named " + item.name + "?";
 
-    const pureTextGrammar = `root ::= [a-zA-Z0-9 _/-]+ ${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()}\n`;
+    const pureTextGrammar = `root ::= [a-zA-Z0-9 _/-]+`;
 
     console.log("Asking question: " + questionName);
 

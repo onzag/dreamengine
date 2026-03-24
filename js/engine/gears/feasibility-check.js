@@ -557,7 +557,7 @@ import { getHistoryFragmentForCharacter } from "../util/messages.js";
 //                 // if yes, we then ask who specifically
 //                 const contextInfoGroups = this.inferenceAdapter.buildContextInfoForAvailableCharacters(groups);
 
-//                 const customGrammar = `root ::= nameList (${this.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()})\nnameList ::= name (\",\" name)*\nname ::= ${Array.from(allValidNamesForGrammar).map(name => JSON.stringify(name)).join(" | ")}`;
+//                 const customGrammar = `root ::= nameList (${this.inferenceAdapter.aaaa()})\nnameList ::= name (\",\" name)*\nname ::= ${Array.from(allValidNamesForGrammar).map(name => JSON.stringify(name)).join(" | ")}`;
 
 //                 const answerToQuestion = await generator.next({
 //                     contextInfo: contextInfoGroups.value,
@@ -820,7 +820,7 @@ async function testMessageFeasibilityForce(engine, character) {
         nextQuestion: nextQuestion,
         stopAt: ["\n", "."],
         stopAfter: [],
-        grammar: `root ::= nameList (${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()})\nnameList ::= name (\",\" name)*\nname ::= ${characters.map(c => JSON.stringify(c.name)).join(" | ")} | "none"`,
+        grammar: `root ::= nameList\nnameList ::= name (\",\" name)*\nname ::= ${characters.map(c => JSON.stringify(c.name)).join(" | ")} | "none"`,
         answerTrail: "The characters that have been successfully forced to do something by " + character.name + " are: ",
     });
 
@@ -875,7 +875,7 @@ async function testMessageFeasibilityForce(engine, character) {
                 stopAt: ["\n", "."],
                 stopAfter: [],
                 answerTrail: forcedCharacterName + " ",
-                grammar: `root ::= ("has not been forced to do anything" | "has been forced to " .*) ${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()}`,
+                grammar: `root ::= ("has not been forced to do anything" | "has been forced to " .*)`,
             });
 
             if (answerAboutWhat.done) {
@@ -1005,7 +1005,7 @@ async function testMessageFeasibilityForce(engine, character) {
                 nextQuestion: nextQuestion,
                 stopAt: ["\n", "."],
                 stopAfter: [],
-                grammar: `root ::= (yesanswer | noanswer)\nyesanswer ::= "yes" ${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()}\nnoanswer ::= "no" "," " " "because" .* ${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()}`,
+                grammar: `root ::= (yesanswer | noanswer)\nyesanswer ::= "yes"\nnoanswer ::= "no" "," " " "because" .*`,
             });
 
             if (feasibilityAnswer.done) {

@@ -96,13 +96,13 @@ export const commands = {
                 throw new Error("DEngine not initialized");
             }
             if (args.length < 2) {
-                return "Usage: whatwouldtheweatherbelikefor <character name> <location id> <location slot id>, options for location are: " + Object.keys(engine.deObject.world.locations).join(", ");
+                return "Usage: /whatwouldtheweatherbelikefor <character name>, <location id>, <location slot id>\nOptions for location are: " + Object.keys(engine.deObject.world.locations).join(", ");
             }
             const characterName = args[0];
             const locationId = args[1];
 
             if (args.length < 3) {
-                return `Usage: /whatwouldtheweatherbelikefor <character name> <location id> <location slot id>, options for location slots in location "${locationId}" are: ` + Object.keys(engine.deObject.world.locations[locationId]?.slots || {}).join(", ");
+                return `Usage: /whatwouldtheweatherbelikefor <character name>, <location id>, <location slot id>\nOptions for location slots in location "${locationId}" are: ` + Object.keys(engine.deObject.world.locations[locationId]?.slots || {}).join(", ");
             }
 
             const locationSlotId = args[2];
@@ -140,7 +140,7 @@ export const commands = {
             }
         },
         cheat: true,
-        help: "Displays what the weather would be like for a given character if they were in a specified location and slot.",
+        help: "Displays what the weather would be like for a given character if they were in a specified location and slot. Arguments are comma-separated.",
         args: ["<character name>", "<location id>", "<location slot id>"],
     },
     "whereis": {
@@ -346,7 +346,7 @@ export const commands = {
                 throw new Error("DEngine not initialized");
             }
             if (args.length < 2) {
-                return "Usage: /getbondvaluesfor <character name> <towards character name>";
+                return "Usage: /getbondvaluesfor <character name>, <towards character name>";
             }
             const characterName = args[0];
             const otherCharacterName = args[1];
@@ -370,7 +370,7 @@ export const commands = {
             `Stranger Axis [false, true]: ${foundBond.stranger}\n` +
             `Family relationship (if any): ${isFamilyOfType || "None"}`;
         },
-        help: "Displays the first bond value between two characters.",
+        help: "Displays the first bond value between two characters. Arguments are comma-separated.",
         cheat: true,
         args: ["<character name>", "<towards character name>"],
     },
@@ -380,7 +380,7 @@ export const commands = {
                 throw new Error("DEngine not initialized");
             }
             if (args.length < 3) {
-                return "Usage: /setfirstbondvaluefor <character name> <towards character name> <bond value [-100,100]>";
+                return "Usage: /setfirstbondvaluefor <character name>, <towards character name>, <bond value [-100,100]>";
             }
             const characterName = args[0];
             const otherCharacterName = args[1];
@@ -412,7 +412,7 @@ export const commands = {
             foundBond.bond = bondValue;
             return `The bond value from "${characterName}" towards "${otherCharacterName}" has been updated to ${bondValue}.`;
         },
-        help: "Sets the first bond value between two characters. This is the value on the axis of friendship vs enmity, where -100 is an extreme enemy, 0 is neutral, and 100 is an extreme friend.",
+        help: "Sets the first bond value between two characters. This is the value on the axis of friendship vs enmity, where -100 is an extreme enemy, 0 is neutral, and 100 is an extreme friend. Arguments are comma-separated.",
         cheat: true,
         args: ["<character name>", "<towards character name>", "<bond value [-100,100]>"],
     },
@@ -422,7 +422,7 @@ export const commands = {
                 throw new Error("DEngine not initialized");
             }
             if (args.length < 3) {
-                return "Usage: /setsecondbondvaluefor <character name> <towards character name> <bond2 value [0,100]>";
+                return "Usage: /setsecondbondvaluefor <character name>, <towards character name>, <bond2 value [0,100]>";
             }
             const characterName = args[0];
             const otherCharacterName = args[1];
@@ -453,7 +453,7 @@ export const commands = {
             foundBond.bond2 = bondValue;
             return `The bond2 value from "${characterName}" towards "${otherCharacterName}" has been updated to ${bondValue}.`;
         },
-        help: "Sets the second bond value between two characters. This is the romance/intimacy axis, where 0 is none and 100 is maximum.",
+        help: "Sets the second bond value between two characters. This is the romance/intimacy axis, where 0 is none and 100 is maximum. Arguments are comma-separated.",
         cheat: true,
         args: ["<character name>", "<towards character name>", "<bond2 value [0,100]>"],
     },
@@ -463,7 +463,7 @@ export const commands = {
                 throw new Error("DEngine not initialized");
             }
             if (args.length < 3) {
-                return "Usage: /setstrangervaluefor <character name> <towards character name> <true|false>";
+                return "Usage: /setstrangervaluefor <character name>, <towards character name>, <true|false>";
             }
             const characterName = args[0];
             const otherCharacterName = args[1];
@@ -495,7 +495,7 @@ export const commands = {
             foundBond.stranger = strangerValue;
             return `The stranger value from "${characterName}" towards "${otherCharacterName}" has been updated to ${strangerValue}.`;
         },
-        help: "Sets the stranger flag on a bond between two characters. When true, the character treats the other as a stranger; when false, they are considered known.",
+        help: "Sets the stranger flag on a bond between two characters. When true, the character treats the other as a stranger; when false, they are considered known. Arguments are comma-separated.",
         cheat: true,
         args: ["<character name>", "<towards character name>", "<true|false>"],
     },
@@ -505,7 +505,7 @@ export const commands = {
                 throw new Error("DEngine not initialized");
             }
             if (args.length < 3) {
-                return "Usage: /setknowsnamefor <character name> <towards character name> <true|false>";
+                return "Usage: /setknowsnamefor <character name>, <towards character name>, <true|false>";
             }
             const characterName = args[0];
             const otherCharacterName = args[1];
@@ -537,7 +537,7 @@ export const commands = {
             foundBond.knowsName = knowsNameValue;
             return `The knowsName value from "${characterName}" towards "${otherCharacterName}" has been updated to ${knowsNameValue}.`;
         },
-        help: "Sets whether a character knows the name of another character in their bond.",
+        help: "Sets whether a character knows the name of another character in their bond. Arguments are comma-separated.",
         cheat: true,
         args: ["<character name>", "<towards character name>", "<true|false>"],
     },
@@ -548,7 +548,7 @@ export const commands = {
             }
             const validRelations = ["parent", "sibling", "child", "spouse", "cousin", "uncle", "aunt", "grandparent", "grandchild", "niece", "nephew", "other"];
             if (args.length < 3) {
-                return `Usage: /setfamilyrelationshipfor <character name> <towards character name> <relation|none>\nValid relations: ${validRelations.join(", ")}, or "none" to remove the tie.`;
+                return `Usage: /setfamilyrelationshipfor <character name>, <towards character name>, <relation|none>\nValid relations: ${validRelations.join(", ")}, or "none" to remove the tie.`;
             }
             const characterName = args[0];
             const otherCharacterName = args[1];
@@ -580,7 +580,7 @@ export const commands = {
             familyTies[otherCharacterName] = { relation: /** @type {any} */ (relation) };
             return `A new family tie from "${characterName}" towards "${otherCharacterName}" has been created with relation "${relation}".`;
         },
-        help: "Sets the family relationship from one character towards another. Use \"none\" to remove it. Valid relations: parent, sibling, child, spouse, cousin, uncle, aunt, grandparent, grandchild, niece, nephew, other.",
+        help: "Sets the family relationship from one character towards another. Use \"none\" to remove it. Valid relations: parent, sibling, child, spouse, cousin, uncle, aunt, grandparent, grandchild, niece, nephew, other. Arguments are comma-separated.",
         cheat: true,
         args: ["<character name>", "<towards character name>", "<relation|none>"],
     },

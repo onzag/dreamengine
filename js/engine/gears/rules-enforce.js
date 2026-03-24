@@ -147,7 +147,7 @@ export default async function testWorldRulesOn(engine, character) {
         nextQuestion: nextQuestion,
         stopAfter: [],
         stopAt: ["\n", "."],
-        grammar: `root ::= ("no." | "NO." | "No." | "yes," | "YES," | "Yes,") " " .* ${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()}`,
+        grammar: `root ::= ("no." | "NO." | "No." | "yes," | "YES," | "Yes,") " " .*`,
         instructions: "Answer with a simple \"No\" if no new characters are introduced, otherwise answer with \"Yes\" and specify the name or names or the description of the character in the same sentence and a brief explanation in one sentence only",
     });
 
@@ -251,7 +251,7 @@ export default async function testWorldRulesOn(engine, character) {
                 ),
                 stopAfter: [],
                 stopAt: ["\n", "."],
-                grammar: `root::= yesanswer | noanswer\nnoanswer ::= ("no" | "NO" | "No") (${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()})\nyesanswer ::= ("yes" | "YES" | "Yes") ", the specific " ("action" | "reaction") " is about " .*`,
+                grammar: `root::= yesanswer | noanswer\nnoanswer ::= ("no" | "NO" | "No")\nyesanswer ::= ("yes" | "YES" | "Yes") ", the specific " ("action" | "reaction") " is about " .*`,
             });
 
             if (specialResult1.done) {
@@ -276,7 +276,7 @@ export default async function testWorldRulesOn(engine, character) {
                     ),
                     stopAfter: [],
                     stopAt: ["\n", "."],
-                    grammar: `root::= yesanswer | noanswer\nnoanswer ::= ("no" | "NO" | "No") (${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()})\nyesanswer ::= ("yes" | "YES" | "Yes") ", the specific " ("emotional response" | "thought process") " is about " .*`,
+                    grammar: `root::= yesanswer | noanswer\nnoanswer ::= ("no" | "NO" | "No")\nyesanswer ::= ("yes" | "YES" | "Yes") ", the specific " ("emotional response" | "thought process") " is about " .*`,
                 });
 
                 if (specialResult1.done) {
@@ -302,7 +302,7 @@ export default async function testWorldRulesOn(engine, character) {
                     ),
                     stopAfter: [],
                     stopAt: ["\n", "."],
-                    grammar: `root::= yesanswer | noanswer\nnoanswer ::= ("no" | "NO" | "No") (${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()})\nyesanswer ::= ("yes" | "YES" | "Yes") ", the specific verbal response is about " .*`,
+                    grammar: `root::= yesanswer | noanswer\nnoanswer ::= ("no" | "NO" | "No")\nyesanswer ::= ("yes" | "YES" | "Yes") ", the specific verbal response is about " .*`,
                 });
 
                 if (specialResult1.done) {
@@ -413,7 +413,7 @@ export default async function testWorldRulesOn(engine, character) {
                 contextInfo: (rule.moreContext ? rule.moreContext + "\n" : "") + engine.inferenceAdapter.buildContextInfoRule(rule.rule),
                 // turns out the LLM is dumber if I limit the grammar too much
                 // so we will just let it be freeform yes/no with the opportunity to explain
-                grammar: `root::= yesanswer | noanswer\nnoanswer ::= ("NO" | "No" | "no") (${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()})\nyesanswer ::= ("YES" | "Yes" | "yes") "," " " "because" .*`
+                grammar: `root::= yesanswer | noanswer\nnoanswer ::= ("NO" | "No" | "no")\nyesanswer ::= ("YES" | "Yes" | "yes") "," " " "because" .*`
             });
 
             if (yesNoResult.done) {
@@ -491,7 +491,7 @@ export default async function testWorldRulesOn(engine, character) {
         nextQuestion: nextQuestion2,
         stopAfter: [],
         stopAt: ["\n", "."],
-        grammar: `root::= yesanswer | noanswer\nnoanswer ::= ("NO" | "No" | "no") (${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()})\nyesanswer ::= ("YES" | "yes" | "Yes") ", ${character.name} has interacted with an unavailable item called:\n\n" .* ${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()}`,
+        grammar: `root::= yesanswer | noanswer\nnoanswer ::= ("NO" | "No" | "no")\nyesanswer ::= ("YES" | "yes" | "Yes") ", ${character.name} has interacted with an unavailable item called:\n\n" .*`,
     });
 
     if (spawnedMissingItems.done) {

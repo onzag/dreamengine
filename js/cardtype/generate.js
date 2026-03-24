@@ -57,13 +57,13 @@ export async function generate(engine, source) {
     code += `\t\tname: ${JSON.stringify(name)},\n`;
 
     const answerDescription = await generator.next({
-        maxCharacters: 1000,
+        maxCharacters: 3000,
         maxSafetyCharacters: 0,
         maxParagraphs: 10,
         nextQuestion: "Describe " + name + "'s appearance, personality, and any special traits or abilities they have.",
         stopAfter: [],
         stopAt: [],
-        instructions: "Be creative, answer with a detailed description of " + name + "'s general appearance, personality, and any special traits or abilities they have. Use multiple paragraphs and sentences. Do not include items of clothing or specific equipment, just the character's inherent traits and features.",
+        instructions: "Be creative, answer with a detailed description of " + name + "'s general appearance, personality, and any special traits or abilities they have. Use multiple paragraphs and sentences. Do not include items of clothing or specific equipment, just the character's inherent traits and features. Make at least 3 paragraphs",
     });
 
     if (answerDescription.done) {
@@ -540,7 +540,8 @@ export async function generate(engine, source) {
         throw new Error("Generator finished without producing output");
     }
 
-    code += `\t\tage: ${answerHowOld.value.trim()},\n`;
+    const howOldYears = parseInt(answerHowOld.value.trim());
+    code += `\t\tageYears: ${howOldYears},\n`;
 
     const weightKg = await generator.next({
         maxCharacters: 10,
@@ -657,7 +658,7 @@ export async function generate(engine, source) {
         nextQuestion: "From 1 to 10 how stealthy is " + name + "? with 10 being extremely stealthy and 1 being not stealthy at all",
         stopAfter: [],
         stopAt: [],
-        grammar: "root ::= [1-9] | 10",
+        grammar: "root ::= [1-9] | \"10\"",
     });
 
     if (stealthValue.done) {
@@ -673,7 +674,7 @@ export async function generate(engine, source) {
         nextQuestion: "From 1 to 10 how perceptive is " + name + "? with 10 being extremely perceptive and 1 being lost and clueless all the time",
         stopAfter: [],
         stopAt: [],
-        grammar: "root ::= [1-9] | 10",
+        grammar: "root ::= [1-9] | \"10\"",
     });
 
     if (perceptionValue.done) {
@@ -689,7 +690,7 @@ export async function generate(engine, source) {
         nextQuestion: "From 1 to 10 how heroic is " + name + "? with 10 being extremely heroic and always taking on threats and challenges, and 1 being more passive and avoiding trouble",
         stopAfter: [],
         stopAt: [],
-        grammar: "root ::= [1-9] | 10",
+        grammar: "root ::= [1-9] | \"10\"",
     });
 
     if (heroismValue.done) {
@@ -728,7 +729,7 @@ export async function generate(engine, source) {
         nextQuestion: "From 1 to 10 how attractive is " + name + "? with 10 being extremely attractive and 1 being very unattractive",
         stopAfter: [],
         stopAt: [],
-        grammar: "root ::= [1-9] | 10",
+        grammar: "root ::= [1-9] | \"10\"",
     });
 
     if (attractivenessValue.done) {
@@ -744,7 +745,7 @@ export async function generate(engine, source) {
         nextQuestion: "From 1 to 10 how charismatic is " + name + "? with 10 being extremely charismatic and able to easily charm and influence others, and 1 being very uncharismatic and awkward in social situations",
         stopAfter: [],
         stopAt: [],
-        grammar: "root ::= [1-9] | 10",
+        grammar: "root ::= [1-9] | \"10\"",
     });
 
     if (charismaValue.done) {
@@ -760,7 +761,7 @@ export async function generate(engine, source) {
         nextQuestion: "From 1 to 10 how much does " + name + " like gossip and talking about others? with 10 being loving gossip and always talking about others, and 1 being hating gossip and never talking about others",
         stopAfter: [],
         stopAt: [],
-        grammar: "root ::= [1-9] | 10",
+        grammar: "root ::= [1-9] | \"10\"",
     });
 
     if (gossipValue.done) {
@@ -774,35 +775,35 @@ export async function generate(engine, source) {
         maxCharacters: 1000,
         maxSafetyCharacters: 0,
         maxParagraphs: 10,
-        nextQuestion: "List some things that " + name + " likes, such as activities, foods, topics of conversation, personality traits in others, etc.",
+        nextQuestion: "List some activities or topics of conversation that " + name + " likes",
         stopAfter: [],
         stopAt: [],
-        instructions: "Answer with a list of things that " + name + " likes, these should be single words and in lowercase only, separate them with commas, do not use conjunctions like and, or, etc. just a simple list of things that " + name + " likes separated by commas. these can be activities, foods, topics of conversation, personality traits in others, etc.",
-        grammar: "root ::= item (',' item)*\nitem ::= [a-z]+"
+        instructions: "Answer with a list of things that " + name + " likes, these should be single words and in lowercase only, separate them with commas, do not use conjunctions like and, or, etc. just a simple list of things that " + name + " likes separated by commas. these can be activities or topics of conversation.",
+        grammar: "root ::= item moreItems\nmoreItems ::= \",\" item moreItems | \"\"\nitem ::= [a-z]+"
     });
 
     if (likesList.done) {
         throw new Error("Generator finished without producing output");
     }
 
-    code += `\t\t\tlikes: [${likesList.value.trim().split(",").map(item => `"${item.trim()}"`).join(", ")}], // These are ids that need to be specified for the social simulation\n`;
+    code += `\t\t\tlikes: [${likesList.value.trim().split(",").filter(item => item.trim() !== "").map(item => `"${item.trim()}"`).join(", ")}], // These are ids that need to be specified for the social simulation\n`;
 
     const dislikesList = await generator.next({
         maxCharacters: 1000,
         maxSafetyCharacters: 0,
         maxParagraphs: 10,
-        nextQuestion: "List some things that " + name + " dislikes, such as activities, foods, topics of conversation, personality traits in others, etc.",
+        nextQuestion: "List some activities or topics of conversation that " + name + " dislikes",
         stopAfter: [],
         stopAt: [],
-        instructions: "Answer with a list of things that " + name + " dislikes, these should be single words and in lowercase only, separate them with commas, do not use conjunctions like and, or, etc. just a simple list of things that " + name + " dislikes separated by commas. these can be activities, foods, topics of conversation, personality traits in others, etc.",
-        grammar: "root ::= item (',' item)*\nitem ::= [a-z]+"
+        instructions: "Answer with a list of things that " + name + " dislikes, these should be single words and in lowercase only, separate them with commas, do not use conjunctions like and, or, etc. just a simple list of things that " + name + " dislikes separated by commas. these can be activities or topics of conversation.",
+        grammar: "root ::= item moreItems\nmoreItems ::= \",\" item moreItems | \"\"\nitem ::= [a-z]+"
     });
 
     if (dislikesList.done) {
         throw new Error("Generator finished without producing output");
     }
 
-    code += `\t\t\tdislikes: [${dislikesList.value.trim().split(",").map(item => `"${item.trim()}"`).join(", ")}], // These are ids that need to be specified for the social simulation\n`;
+    code += `\t\t\tdislikes: [${dislikesList.value.trim().split(",").filter(item => item.trim() !== "").map(item => `"${item.trim()}"`).join(", ")}], // These are ids that need to be specified for the social simulation\n`;
 
     const species = await generator.next({
         maxCharacters: 50,
@@ -843,7 +844,7 @@ export async function generate(engine, source) {
         nextQuestion: "Does " + name + " belong to any specific group, organization, team, family, etc? if so which one? answer with the name of the group or organization in lowercase, if they don't belong to any group answer with none",
         stopAfter: [],
         stopAt: [],
-        grammar: "root ::= [a-z ]+ | none",
+        grammar: "root ::= [a-z ]+ | \"none\"",
     });
 
     if (groupBelonging.done) {
@@ -853,7 +854,7 @@ export async function generate(engine, source) {
     if (groupBelonging.value.trim().toLowerCase() === "none") {
         code += `\t\t\tgroupBelonging: null,\n`;
     } else {
-        code += `\t\t\tgroupBelonging: ${JSON.stringify(groupBelonging.value.trim())},\n`;
+        code += `\t\t\tgroupBelonging: [${JSON.stringify(groupBelonging.value.trim())}],\n`;
     }
 
     code += `\t\t\tdislikesSpecies: [], // Up to you to make the character prejudiced against certain species\n`;
@@ -878,6 +879,9 @@ export async function generate(engine, source) {
 
     const isAsexualValue = isAsexual.value.trim().toLowerCase() === "yes";
 
+    const minAgeAttractionPotential = (howOldYears / 2) + 7; // the half your age plus seven rule is a common rule of thumb for the minimum age of attraction
+    const maxAgeAttractionPotential = howOldYears + 10;
+
     if (isAsexualValue) {
         // no attractions
     } else {
@@ -900,9 +904,9 @@ export async function generate(engine, source) {
         code += `\t\t\t\t// You can make these far more specific if needed, but these are for the social simulation and wander heuristics\n`;
 
         if (findsAmbiguousGendersSexuallyAttractiveValue) {
-            code += `\t\t\t\t{towards: "ambiguous"},\n`;
-            code += `\t\t\t\t{towards: "male"},\n`;
-            code += `\t\t\t\t{towards: "female"},\n`;
+            code += `\t\t\t\t{towards: "ambiguous", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}]},\n`;
+            code += `\t\t\t\t{towards: "male", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}]},\n`;
+            code += `\t\t\t\t{towards: "female", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}]},\n`;
         } else {
             const findsMalesSexuallyAttractive = await generator.next({
                 maxCharacters: 5,
@@ -921,7 +925,7 @@ export async function generate(engine, source) {
             const findsMalesSexuallyAttractiveValue = findsMalesSexuallyAttractive.value.trim().toLowerCase() === "yes";
 
             if (findsMalesSexuallyAttractiveValue) {
-                code += `\t\t\t\t{towards: "male"},\n`;
+                code += `\t\t\t\t{towards: "male", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}]},\n`;
             }
 
             const findsFemalesSexuallyAttractive = await generator.next({
@@ -941,7 +945,7 @@ export async function generate(engine, source) {
             const findsFemalesSexuallyAttractiveValue = findsFemalesSexuallyAttractive.value.trim().toLowerCase() === "yes";
 
             if (findsFemalesSexuallyAttractiveValue) {
-                code += `\t\t\t\t{towards: "female"},\n`;
+                code += `\t\t\t\t{towards: "female", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}]},\n`;
             }
         }
     }
@@ -955,7 +959,7 @@ export async function generate(engine, source) {
     } else {
     }
 
-    code += `\t});\n`;
+    code += `\t}));\n}`;
 
     const newScript = `const fss = await importScript("bond-systems", "full-standard-bond-system");
 

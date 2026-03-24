@@ -1001,7 +1001,7 @@ export default async function calculateStateChange(engine, character, interacted
                             await prompter.generator.next();
                             prompter.initialized = true;
                         }
-                        const yesNoGrammar = `root ::= ("yes" | "no" | "Yes" | "No" | "YES" | "NO") ${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()}\n`;
+                        const yesNoGrammar = `root ::= ("yes" | "no" | "Yes" | "No" | "YES" | "NO")`;
                         const answer = await prompter.generator.next({
                             maxCharacters: 0,
                             maxSafetyCharacters: 250,
@@ -1298,7 +1298,7 @@ export default async function calculateStateChange(engine, character, interacted
                         prompter.initialized = true;
                     }
 
-                    const yesNoGrammar = `root ::= ("yes" | "no" | "Yes" | "No" | "YES" | "NO") ${engine.inferenceAdapter.getRequiredRootGrammarForQuestionGeneration()}\n`;
+                    const yesNoGrammar = `root ::= ("yes" | "no" | "Yes" | "No" | "YES" | "NO")`;
                     const answer = await prompter.generator.next({
                         maxCharacters: 0,
                         maxSafetyCharacters: 250,
