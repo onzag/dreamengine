@@ -13,9 +13,9 @@ const deTypesDir = path.join(localDEPathAtHomeDir, 'types');
  * - The local repo (`js/types/script-registry.d.ts`) — default-scripts only
  * - The `.dreamengine` dev folder (`~/.dreamengine/types/`) — all search paths,
  *   plus copies of DE.d.ts, electron.d.ts, and functypes.d.ts
- * @param {{doNotBuildLocals: boolean}} options
+ * @param {{doNotBuildLocals: boolean, doNotWriteHomeScript: boolean}} options
  */
-async function build(options = { doNotBuildLocals: false }) {
+export default async function build(options = { doNotBuildLocals: false, doNotWriteHomeScript: false }) {
     if (!options.doNotBuildLocals) {
         let dType = "interface FunctionTypes {\n";
         for (const [signature, details, returndesc] of ALL_FUNCTIONS) {
@@ -56,10 +56,31 @@ async function build(options = { doNotBuildLocals: false }) {
         console.log(`Copied ${file} to ${deTypesDir}`);
     }
 
+    if (!options.doNotWriteHomeScript) {
+        const thisFile = new URL(import.meta.url).pathname.replace(/^\/([A-Z]:)/, '$1');
+        const isWin = process.platform === 'win32';
+        const scriptName = isWin ? 'update-types.cmd' : 'update-types.sh';
+        const scriptContent = isWin
+            ? `@echo off\r\nnode "${thisFile}" --remote-only\r\n`
+            : `#!/bin/sh\nnode "${thisFile}" --remote-only\n`;
+        const scriptPath = path.join(localDEPathAtHomeDir, scriptName);
+        try {
+            await fsPromises.writeFile(scriptPath, scriptContent, { mode: 0o755 });
+            console.log(`Wrote ${scriptName} to ${scriptPath}`);
+        } catch (err) {
+            // @ts-ignore
+            console.warn(`Could not write ${scriptName}: ${err.message}`);
+        }
+    }
+
     console.log('Done.');
 }
 
-build().catch(err => {
+const remoteOnly = process.argv.includes('--remote-only');
+build({
+    doNotBuildLocals: remoteOnly,
+    doNotWriteHomeScript: remoteOnly,
+}).catch(err => {
     console.error('Failed to build types:', err);
     process.exit(1);
 });

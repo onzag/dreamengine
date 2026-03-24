@@ -6,7 +6,7 @@
 
 declare interface DEScriptRegistry {
     "bond-systems/full-standard-bond-system": DEScript & {
-        setupManually(character: DECompleteCharacterReference): void;
+        setupManually(character: DECompleteCharacterReference, options: FSSOptions): void;
     };
     "bond-systems/sfw-simplified-standard": DEScript;
     "characters/dema-basic": DEScript;

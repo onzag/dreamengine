@@ -21,7 +21,8 @@
     "build:codemirror": "esbuild js/codemirror/build.js --bundle --outfile=js/codemirror/bundle.js",
     "package": "electron-forge package",
     "make": "electron-forge make",
-    "build-types": "node js/util/build-types.js"
+    "build-types": "node js/util/build-types.js",
+    "build-home": "node js/util/build-dreamengine-home.js && node js/util/build-types.js --remote-only"
   },
   "devDependencies": {
     "@electron-forge/cli": "^7.10.2",

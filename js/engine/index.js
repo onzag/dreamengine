@@ -27,7 +27,8 @@ const INVALID_NAMES = ["system", "assistant", "user", "everyone", "nobody",
     "they", "them", "their", "theirs", "he", "him", "his", "she", "her", "hers",
     "it", "its", "i", "me", "my", "mine", "we", "us", "our", "ours", "you", "your", "yours",
     "everyone else", "everybody else", "anyone else", "anybody else",
-    "somebody else", "somebodyelse", "nobody else", "nobody", "story master", "storymaster", "story", "master"];
+    "somebody else", "somebodyelse", "nobody else", "nobody", "story master", "storymaster", "story", "master",
+    "ooc"];
 
 const ROOT_SKIP_KEYS = new Set(['utils', 'functions']);
 

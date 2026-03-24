@@ -2,233 +2,103 @@
  * A complex 4 dimensional bond system with a lot of fine tuning, designed for SFW and NSFW characters alike
  */
 
+/**
+ * @typedef {Object} FSSByFamilyTie
+ * @property {string} family
+ * @property {string} nonFamily
+ */
+
+/**
+ * @typedef {Object} FSSDefinition
+ * @property {FSSByFamilyTie} deepInLove
+ * @property {FSSByFamilyTie} strongRomanticInterest
+ * @property {FSSByFamilyTie} romanticInterest
+ * @property {FSSByFamilyTie} slightRomanticInterest
+ * @property {FSSByFamilyTie} noRomanticInterest
+ */
+
+/**
+ * @typedef {Object} FSSOptions
+ * @property {number} bondChangeFineTune Multiplier for bond changes, default 1
+ * @property {number} bondChangeNegativityBias Multiplier for negative bond changes, default 1.5
+ * @property {number} strangerBreakawayBondWeightAbsolute Absolute bond weight threshold for strangers to break away, default 10
+ * @property {number} strangerBreakawayInteractionsCount Number of interactions with a stranger after which they can break away, default 30
+ * @property {number} strangerBreakawayTimeMinutes Time in minutes after which a stranger can break away, default 30
+ * @property {number} strangerNegativeMultiplier Multiplier for bond changes with strangers when the change is negative, default 1.5
+ * @property {number} strangerPositiveMultiplier Multiplier for bond changes with strangers when the change is positive, default 1.0
+ * 
+ * @property {FSSDefinition} foe
+ * @property {FSSDefinition} hostile
+ * @property {FSSDefinition} antagonistic
+ * @property {FSSDefinition} unfriendly
+ * @property {FSSDefinition} unpleasant
+ * @property {FSSDefinition} acquaintance
+ * @property {FSSDefinition} friendly
+ * @property {FSSDefinition} goodFriend
+ * @property {FSSDefinition} closeFriend
+ * @property {FSSDefinition} bestFriend
+ */
+
+/**
+ * 
+ * @param {any} value 
+ * @param {any} defaultValue 
+ * @returns 
+ */
+function valueOrDefault(value, defaultValue) {
+    return value !== undefined ? value : defaultValue;
+}
+
+// Other normal bonds are divided as follows by default:
+//          * -100 to -50: foe bond
+//          * -50 to -35: hostile bond
+//          * -35 to -20: antagonistic bond
+//          * -20 to -10: unfriendly bond
+//          * -10 to 0: unpleasant bond
+//          * 0 to 10: acquaintance bond
+//          * 10 to 20: friendly bond
+//          * 20 to 35: good friend bond
+//          * 35 to 50: close friend bond
+//          * 50 to 100: best friend bond
+//          * 
+//          * By default the secondary bond graduation goes as follows:
+//          * 0 to 10: no romantic interest
+//          * 10 to 20: slight romantic interest
+//          * 20 to 35: romantic interest
+//          * 35 to 50: strong romantic interest
+//          * 50 to 100: deeply in love
+//          * 
+//          * In the negative side of the primary bond it could be used in a one-sided manner
+//          * which basically indicates a romantic creep or stalker type of bond
+//          * 0 to 10: no romance
+//          * 10 to 20: creepy interest
+//          * 20 to 35: obsessive interest
+//          * 35 to 50: stalking interest
+//          * 50 to 100: abuser interest
+
 engine.exports = {
-    type: "character-mechanic",
+    type: "misc",
     description: "A complex 4 dimensional bond system with a lot of fine tuning, designed for SFW and NSFW characters alike.",
     exposeProperties: {},
 
     /**
      * @param {DECompleteCharacterReference} character
+     * @param {FSSOptions} options
      */
-    setupManually(character) {
-        for (const charName in DE.characters) {
-            const char = DE.characters[charName];
-            if (char.properties.USE_FULL_STANDARD_BOND_SYSTEM) {
-                char.bonds = {
-                    system: "STANDARD_FULL",
-                    bondChangeFineTune: 1, // Multiplier for bond changes
-                    bondChangeNegativityBias: 1.5,
-                    declarations: [],
-                    strangerBreakawayBondWeightAbsolute: 10,
-                    strangerBreakawayInteractionsCount: 30,
-                    strangerBreakawayTimeMinutes: 30,
-                    strangerNegativeMultiplier: 1.5,
-                    strangerPositiveMultiplier: 1.0,
-                    descriptionGeneralInjection: DE.utils.newHandlebarsTemplate(DE, "{{char}} is an asexual and aromantic individual and does not form romantic or sexual bonds with others, {{char}} will react negatively to any attempts to form or force such bonds."),
-                };
+    setupManually(character, options) {
+        character.bonds = {
+            system: "STANDARD_FULL",
+            bondChangeFineTune: valueOrDefault(options.bondChangeFineTune, 1), // Multiplier for bond changes
+            bondChangeNegativityBias: valueOrDefault(options.bondChangeNegativityBias, 1.5),
+            declarations: [],
+            strangerBreakawayBondWeightAbsolute: valueOrDefault(options.strangerBreakawayBondWeightAbsolute, 10),
+            strangerBreakawayInteractionsCount: valueOrDefault(options.strangerBreakawayInteractionsCount, 30),
+            strangerBreakawayTimeMinutes: valueOrDefault(options.strangerBreakawayTimeMinutes, 30),
+            strangerNegativeMultiplier: valueOrDefault(options.strangerNegativeMultiplier, 1.5),
+            strangerPositiveMultiplier: valueOrDefault(options.strangerPositiveMultiplier, 1.0),
+            descriptionGeneralInjection: null,
+        };
 
-                /**
-                 * @type {DEBondIncreaseDecreaseQuestion[]}
-                 */
-                const basicBondConditions = [
-                    {
-                        affectsBonds: "primary",
-                        weight: 1,
-                        template: DE.utils.newHandlebarsTemplate(DE, char.properties["BOND_INCREASE_QUESTION_1"]),
-                    },
-                    {
-                        affectsBonds: "primary",
-                        weight: 1,
-                        template: DE.utils.newHandlebarsTemplate(DE, char.properties["BOND_INCREASE_QUESTION_2"]),
-                    },
-                    {
-                        affectsBonds: "primary",
-                        weight: 1,
-                        template: DE.utils.newHandlebarsTemplate(DE, char.properties["BOND_INCREASE_QUESTION_3"]),
-                    },
-                    {
-                        affectsBonds: "primary",
-                        weight: -1,
-                        template: DE.utils.newHandlebarsTemplate(DE, char.properties["BOND_DECREASE_QUESTION_1"]),
-                    },
-                    {
-                        affectsBonds: "primary",
-                        weight: -1,
-                        template: DE.utils.newHandlebarsTemplate(DE, char.properties["BOND_DECREASE_QUESTION_2"]),
-                    },
-                    {
-                        affectsBonds: "primary",
-                        weight: -1,
-                        template: DE.utils.newHandlebarsTemplate(DE, char.properties["BOND_DECREASE_QUESTION_3"]),
-                    },
-                    {
-                        affectsBonds: "primary",
-                        weight: -1,
-                        template: DE.utils.newHandlebarsTemplate(DE, "has {{other}} attempted to form a romantic or sexual bond with {{char}}?"),
-                    },
-                    {
-                        affectsBonds: "primary",
-                        weight: -5,
-                        template: DE.utils.newHandlebarsTemplate(DE, "has {{other}} attempted to have sex with {{char}}?"),
-                    },
-                ];
 
-                char.bonds.declarations.push({
-                    name: "Stranger (Neutral)",
-                    minBondLevel: 0,
-                    maxBondLevel: 5,
-                    min2BondLevel: 0,
-                    max2BondLevel: 100,
-                    description: DE.utils.newHandlebarsTemplate(DE, char.properties["BOND_STRANGER_NEUTRAL"]),
-                    bondConditions: basicBondConditions,
-                    strangerBond: true,
-                    familyBond: false,
-                });
-
-                char.bonds.declarations.push({
-                    name: "Stranger (Good)",
-                    minBondLevel: 5,
-                    maxBondLevel: 100,
-                    min2BondLevel: 0,
-                    max2BondLevel: 100,
-                    description: DE.utils.newHandlebarsTemplate(DE, char.properties["BOND_STRANGER_GOOD"]),
-                    bondConditions: basicBondConditions,
-                    strangerBond: true,
-                    familyBond: false,
-                });
-
-                char.bonds.declarations.push({
-                    name: "Stranger (Bad)",
-                    minBondLevel: -100,
-                    maxBondLevel: 0,
-                    min2BondLevel: 0,
-                    max2BondLevel: 100,
-                    description: DE.utils.newHandlebarsTemplate(DE, char.properties["BOND_STRANGER_BAD"]),
-                    bondConditions: basicBondConditions,
-                    strangerBond: true,
-                    familyBond: false,
-                });
-
-                char.bonds.declarations.push({
-                    name: "Foe",
-                    minBondLevel: -100,
-                    maxBondLevel: -50,
-                    min2BondLevel: 0,
-                    max2BondLevel: 100,
-                    description: DE.utils.newHandlebarsTemplate(DE, char.properties["BOND_-100_-50"]),
-                    bondConditions: basicBondConditions,
-                    strangerBond: false,
-                    familyBond: false,
-                });
-
-                char.bonds.declarations.push({
-                    name: "Hostile",
-                    minBondLevel: -50,
-                    maxBondLevel: -35,
-                    min2BondLevel: 0,
-                    max2BondLevel: 100,
-                    description: DE.utils.newHandlebarsTemplate(DE, char.properties["BOND_-50_-35"]),
-                    bondConditions: basicBondConditions,
-                    strangerBond: false,
-                    familyBond: false,
-                });
-
-                char.bonds.declarations.push({
-                    name: "Antagonistic",
-                    minBondLevel: -35,
-                    maxBondLevel: -20,
-                    min2BondLevel: 0,
-                    max2BondLevel: 100,
-                    description: DE.utils.newHandlebarsTemplate(DE, char.properties["BOND_-35_-20"]),
-                    bondConditions: basicBondConditions,
-                    strangerBond: false,
-                    familyBond: false,
-                });
-
-                char.bonds.declarations.push({
-                    name: "Unfriendly",
-                    minBondLevel: -20,
-                    maxBondLevel: -10,
-                    min2BondLevel: 0,
-                    max2BondLevel: 100,
-                    description: DE.utils.newHandlebarsTemplate(DE, char.properties["BOND_-20_-10"]),
-                    bondConditions: basicBondConditions,
-                    strangerBond: false,
-                    familyBond: false,
-                });
-
-                char.bonds.declarations.push({
-                    name: "Unpleasant",
-                    minBondLevel: -10,
-                    maxBondLevel: -0,
-                    min2BondLevel: 0,
-                    max2BondLevel: 100,
-                    description: DE.utils.newHandlebarsTemplate(DE, char.properties["BOND_-10_0"]),
-                    bondConditions: basicBondConditions,
-                    strangerBond: false,
-                    familyBond: false,
-                });
-
-                char.bonds.declarations.push({
-                    name: "Acquaintance",
-                    minBondLevel: 0,
-                    maxBondLevel: 10,
-                    min2BondLevel: 0,
-                    max2BondLevel: 100,
-                    description: DE.utils.newHandlebarsTemplate(DE, char.properties["BOND_0_10"]),
-                    bondConditions: basicBondConditions,
-                    strangerBond: false,
-                    familyBond: false,
-                });
-
-                char.bonds.declarations.push({
-                    name: "Friendly",
-                    minBondLevel: 10,
-                    maxBondLevel: 20,
-                    min2BondLevel: 0,
-                    max2BondLevel: 100,
-                    description: DE.utils.newHandlebarsTemplate(DE, char.properties["BOND_10_20"]),
-                    bondConditions: basicBondConditions,
-                    strangerBond: false,
-                    familyBond: false,
-                });
-
-                char.bonds.declarations.push({
-                    name: "Good Friend",
-                    minBondLevel: 20,
-                    maxBondLevel: 35,
-                    min2BondLevel: 0,
-                    max2BondLevel: 100,
-                    description: DE.utils.newHandlebarsTemplate(DE, char.properties["BOND_20_35"]),
-                    bondConditions: basicBondConditions,
-                    strangerBond: false,
-                    familyBond: false,
-                });
-
-                char.bonds.declarations.push({
-                    name: "Close Friend",
-                    minBondLevel: 35,
-                    maxBondLevel: 50,
-                    min2BondLevel: 0,
-                    max2BondLevel: 100,
-                    description: DE.utils.newHandlebarsTemplate(DE, char.properties["BOND_35_50"]),
-                    bondConditions: basicBondConditions,
-                    strangerBond: false,
-                    familyBond: false,
-                });
-
-                char.bonds.declarations.push({
-                    name: "Best Friend",
-                    minBondLevel: 50,
-                    maxBondLevel: 100,
-                    min2BondLevel: 0,
-                    max2BondLevel: 100,
-                    description: DE.utils.newHandlebarsTemplate(DE, char.properties["BOND_50_100"]),
-                    bondConditions: basicBondConditions,
-                    strangerBond: false,
-                    familyBond: false,
-                });
-            }
-        }
     }
 }
