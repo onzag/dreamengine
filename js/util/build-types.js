@@ -1,7 +1,7 @@
 import path from 'path';
 import fs from 'fs';
 import { generateScriptRegistryContent } from './map-local-types.js';
-import { ALL_FUNCTIONS } from '../schema/functions.js';
+import { ALL_FUNCTIONS } from './functions.js';
 
 const fsPromises = fs.promises;
 const localDEPathAtHomeDir = path.join(process.env.HOME || process.env.USERPROFILE || '.', '.dreamengine');

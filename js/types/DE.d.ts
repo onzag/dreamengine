@@ -2902,14 +2902,14 @@ declare interface DENarrationStyle {
 
 declare interface DEUtils {
     newHandlebarsTemplate(DE: DEObject, source: string): DEStringTemplate;
-    newLocation(DE: DEObject, name: string, definition: DELocationDefinition): void;
-    newCharacter(DE: DEObject, definition: DECompleteCharacterReference): void;
-    newConnection(DE: DEObject, definition: DEConnection): void;
-    createStateInAllCharacters(DE: DEObject, stateName: string, stateDefinition: DECharacterStateDefinition): void;
-    createStateInCharacter(DE: DEObject, characterName: string, stateName: string, stateDefinition: DECharacterStateDefinition): void;
-    newBond(DE: DEObject, char1: string, towards: string, bondDefinition: Omit<DESingleBondDescription, "towards">): void;
-    newMutualBond(DE: DEObject, char1: string, char2: string, bondDefinition: Omit<DESingleBondDescription, "towards">): void;
-    newFamilyRelation(DE: DEObject, char1: string, towards: string, relation: DEFamilyRelation): void;
+    newLocation(DE: DEObject, name: string, definition: DELocationDefinition): DELocationDefinition;
+    newCharacter(DE: DEObject, definition: DECompleteCharacterReference): DECompleteCharacterReference;
+    newConnection(DE: DEObject, definition: DEConnection): DEConnection;
+    createStateInAllCharacters(DE: DEObject, stateName: string, stateDefinition: DECharacterStateDefinition): DECharacterStateDefinition;
+    createStateInCharacter(DE: DEObject, character: string | DECompleteCharacterReference | null, stateName: string, stateDefinition: DECharacterStateDefinition): DECharacterStateDefinition | null;
+    newBond(DE: DEObject, char1: string | DECompleteCharacterReference | null, towards: string | DECompleteCharacterReference | null, bondDefinition: Omit<DESingleBondDescription, "towards">): DESingleBondDescription | null;
+    newMutualBond(DE: DEObject, char1: string | DECompleteCharacterReference | null, char2: string | DECompleteCharacterReference | null, bondDefinition: Omit<DESingleBondDescription, "towards">): [DESingleBondDescription | null, DESingleBondDescription | null];
+    newFamilyRelation(DE: DEObject, char1: string | DECompleteCharacterReference | null, towards: string | DECompleteCharacterReference | null, relation: DEFamilyRelation): [DEFamilyTie | null, DEFamilyTie | null];
 }
 
 declare interface DEWorldRule {
@@ -3217,6 +3217,14 @@ declare type DEWanderFunction = (DE: DEObject, character: DECharacter) => Promis
  */
 declare interface DEScriptRegistry {}
 
+/** Extract the namespace portion from a `"namespace/id"` registry key */
+type _ScriptNS<K extends string = keyof DEScriptRegistry & string> =
+    K extends `${infer NS}/${string}` ? NS : never;
+
+/** Extract the id portion from a registry key that matches a given namespace */
+type _ScriptID<NS extends string, K extends string = keyof DEScriptRegistry & string> =
+    K extends `${NS}/${infer ID}` ? ID : never;
+
 /**
  * The per-script module object, analogous to CommonJS `module`.
  * Set `engine.exports` to define what the script exposes to callers of `importScript`.
@@ -3238,6 +3246,9 @@ declare var engine: engine;
  * Return type is inferred from {@link DEScriptRegistry} when the `"namespace/id"` key
  * is registered there; otherwise falls back to `DEScript | null`.
  *
+ * When `DEScriptRegistry` has entries, both `namespace` and `id` will autocomplete
+ * with registered values while still accepting arbitrary strings for unregistered scripts.
+ *
  * @param namespace - The script category / namespace (e.g. `"bond-systems"`)
  * @param id        - The script identifier within the namespace (e.g. `"sfw-simplified-standard"`)
  * @param options   - `{ optional: true }` suppresses errors when the script cannot be resolved
@@ -3254,7 +3265,7 @@ declare var engine: engine;
  * sys.myMethod(); // typed!
  */
 declare var importScript: {
-    <NS extends string, ID extends string>(
+    <NS extends _ScriptNS | (string & {}), ID extends _ScriptID<NS & string> | (string & {})>(
         namespace: NS,
         id: ID,
         options: { optional: true }
@@ -3263,7 +3274,7 @@ declare var importScript: {
             ? DEScriptRegistry[`${NS}/${ID}`] | null
             : DEScript | null
     >;
-    <NS extends string, ID extends string>(
+    <NS extends _ScriptNS | (string & {}), ID extends _ScriptID<NS & string> | (string & {})>(
         namespace: NS,
         id: ID,
         options?: { optional?: false }

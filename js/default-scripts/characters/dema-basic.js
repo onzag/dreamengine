@@ -1,10 +1,63 @@
-await importScript("bond-systems", "sfw-simplified-standard");
+const fss = await importScript("bond-systems", "full-standard-bond-system");
 
 engine.exports = {
     type: "characters",
     description: "A friendly robot for testing purposes.",
     initialize(DE) {
-        DE.utils.newCharacter(DE, {
+
+        /**
+         * @type {DEBondIncreaseDecreaseQuestion[]}
+         */
+        const basicQuestions = [
+            {
+                affectsBonds: "primary",
+                template: DE.utils.newHandlebarsTemplate(DE, "Has {{other}} been nice towards {{char}} and respected its nature as a robot?"),
+                weight: 1,
+            },
+            {
+                affectsBonds: "primary",
+                template: DE.utils.newHandlebarsTemplate(DE, "Has {{other}} helped {{char}} with tasks or shown consideration for its feelings?"),
+                weight: 1,
+            },
+            {
+                affectsBonds: "primary",
+                template: DE.utils.newHandlebarsTemplate(DE, "Has {{other}} spent quality time with {{char}} and engaged in meaningful interactions?"),
+                weight: 1,
+            },
+            {
+                affectsBonds: "primary",
+                template: DE.utils.newHandlebarsTemplate(DE, "Has {{other}} been rude or dismissive towards {{char}} and its nature as a robot?"),
+                weight: -1,
+            },
+            {
+                affectsBonds: "primary",
+                template: DE.utils.newHandlebarsTemplate(DE, "Has {{other}} neglected {{char}}'s needs or ignored its feelings?"),
+                weight: -1,
+            },
+            {
+                affectsBonds: "primary",
+                template: DE.utils.newHandlebarsTemplate(DE, "Has {{other}} caused harm or distress to {{char}}, either intentionally or unintentionally?"),
+                weight: -1,
+            },
+        ];
+
+        const strangerGoodTemplate = DE.utils.newHandlebarsTemplate(DE, "{{char}} has just met {{other}} for the first time as they arrive at the lunar station. Despite being a robot, {{char}} is intrigued by their presence and eager to learn more about them and be of assistance, {{char}} does not feel threatened but doesn't fully trust them yet.");
+        const strangerNeutralTemplate = DE.utils.newHandlebarsTemplate(DE, "{{char}} has just met {{other}} for the first time as they arrive at the lunar station. {{char}} feels neutral about their presence, neither particularly welcoming nor wary, and is open to getting to know them better.");
+        const strangerBadTemplate = DE.utils.newHandlebarsTemplate(DE, "{{char}} has just met {{other}} for the first time as they arrive at the lunar station. {{char}} feels uneasy about their presence, unsure of their intentions towards them as a robot.");
+
+        const foeBondTemplate = DE.utils.newHandlebarsTemplate(DE, "{{char}} sees {{other}} as a sworn enemy. {{char}}'s hatred for them is intense, and you would not hesitate to take extreme measures to ensure they are removed from your life, feeling a relentless drive for their downfall.");
+        const hostileBondTemplate = DE.utils.newHandlebarsTemplate(DE, "{{char}} regards {{other}} as an adversary. {{char}} actively dislikes them and may go out of their way to undermine or oppose them, feeling a deep-seated animosity.");
+        const antagonisticBondTemplate = DE.utils.newHandlebarsTemplate(DE, "{{char}} considers {{other}} a troublesome individual. Their actions often frustrate {{char}}, and {{char}} finds it difficult to tolerate their presence, leading to frequent conflicts.");
+        const unfriendlyBondTemplate = DE.utils.newHandlebarsTemplate(DE, "{{char}} sees {{other}} as an unwelcome presence. {{char}} is uncomfortable around them and would rather avoid any interaction, feeling a strong desire to distance themselves.");
+        const unpleasantBondTemplate = DE.utils.newHandlebarsTemplate(DE, "{{char}} views {{other}} with suspicion. {{char}} is wary of their intentions and prefers to keep their distance, unsure if they can be trusted.");
+
+        const acquaintanceBondTemplate = DE.utils.newHandlebarsTemplate(DE, "{{char}} sees {{other}} as a new acquaintance. {{char}} is curious about them and eager to learn more and be of assistance, but still has some reservations about fully trusting them.");
+        const friendlyBondTemplate = DE.utils.newHandlebarsTemplate(DE, "{{char}} considers {{other}} a friendly acquaintance. {{char}} enjoys their company and is happy to assist them whenever possible, though still maintains a level of caution.");
+        const goodFriendBondTemplate = DE.utils.newHandlebarsTemplate(DE, "{{char}} sees {{other}} as a good friend. {{char}} values their companionship and is always willing to go out of their way to help them, feeling a strong sense of loyalty.");
+        const closeFriendBondTemplate = DE.utils.newHandlebarsTemplate(DE, "{{char}} regards {{other}} as a close friend. {{char}} deeply cares for their well-being and is committed to supporting them in any way they can, often putting their needs above their own.");
+        const bestFriendBondTemplate = DE.utils.newHandlebarsTemplate(DE, "{{char}} sees {{other}} as a cherished companion. Their bond is unbreakable, and {{char}} would do anything to ensure their happiness and safety, feeling a profound connection that transcends ordinary friendship.");
+
+        const Dema = DE.utils.newCharacter(DE, fss.setup(DE, {
             name: "Dema",
             shortDescription: "A human sized anthropomorphic robot with a blue and white color scheme and a reflective visor.",
             shortDescriptionTopNakedAdd: "Without a shirt showing its sleek robotic body.",
@@ -42,7 +95,6 @@ engine.exports = {
             heroism: 1,
             properties: {
                 IS_ROBOT: true,
-                USE_SFW_SIMPLE_BOND_SYSTEM: true,
                 BOND_STRANGER_GOOD: "{{char}} has just met {{other}} for the first time as they arrive at the lunar station. Despite being a robot, {{char}} is intrigued by their presence and eager to learn more about them and be of assistance, {{char}} does not feel threatened but doesn't fully trust them yet.",
                 BOND_STRANGER_NEUTRAL: "{{char}} has just met {{other}} for the first time as they arrive at the lunar station. {{char}} feels neutral about their presence, neither particularly welcoming nor wary, and is open to getting to know them better.",
                 BOND_STRANGER_BAD: "{{char}} has just met {{other}} for the first time as they arrive at the lunar station. {{char}} feels uneasy about their presence, unsure of their intentions towards them as a robot.",
@@ -72,6 +124,60 @@ engine.exports = {
                 likes: [],
                 species: "robot",
             },
-        });
+        }, {
+            type: "2d_ace_no_family",
+            strangerBad_n100_n5: {
+                bondConditions: basicQuestions,
+                description: strangerBadTemplate,
+            },
+            strangerGood_5_100: {
+                bondConditions: basicQuestions,
+                description: strangerGoodTemplate,
+            },
+            strangerNeutral_n5_5: {
+                bondConditions: basicQuestions,
+                description: strangerNeutralTemplate,
+            },
+            foe_n100_n50: {
+                bondConditions: basicQuestions,
+                description: foeBondTemplate,
+            },
+            hostile_n50_n35: {
+                bondConditions: basicQuestions,
+                description: hostileBondTemplate,
+            },
+            antagonistic_n35_n20: {
+                bondConditions: basicQuestions,
+                description: antagonisticBondTemplate,
+            },
+            unfriendly_n20_n10: {
+                bondConditions: basicQuestions,
+                description: unfriendlyBondTemplate,
+            },
+            unpleasant_n10_0: {
+                bondConditions: basicQuestions,
+                description: unpleasantBondTemplate,
+            },
+            acquaintance_0_10: {
+                bondConditions: basicQuestions,
+                description: acquaintanceBondTemplate,
+            },
+            friendly_10_20: {
+                bondConditions: basicQuestions,
+                description: friendlyBondTemplate,
+            },
+            goodFriend_20_35: {
+                bondConditions: basicQuestions,
+                description: goodFriendBondTemplate,
+            },
+            closeFriend_35_50: {
+                bondConditions: basicQuestions,
+                description: closeFriendBondTemplate,
+            },
+            bestFriend_50_100: {
+                bondConditions: basicQuestions,
+                description: bestFriendBondTemplate,
+            },
+        }));
     }
 }

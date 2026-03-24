@@ -1,4 +1,4 @@
-import { ALL_FUNCTIONS_WITH_SPECIALS } from "../schema/functions.js"
+import { ALL_FUNCTIONS_WITH_SPECIALS } from "../util/functions.js"
 import { weightedRandomByLikelihood } from "../util/random.js"
 import { EMOTIONS_LIST } from "./rolling-emotion.js";
 import { deEngineUtils } from "./utils.js";

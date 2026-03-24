@@ -73,7 +73,7 @@ export const deEngineUtils = {
             if (!parentLocation) {
                 console.warn(`Parent location ${locationDef.parent} not found for location ${name}`);
                 DE.world.locations[name] = statefulLocation;
-                return;
+                return DE.world.locations[name];
             }
 
             // copy weather from parent
@@ -87,6 +87,7 @@ export const deEngineUtils = {
         }
 
         DE.world.locations[name] = statefulLocation;
+        return DE.world.locations[name];
     },
     newConnection(DE, connectionDef) {
         const id = connectionDef.from + " to " + connectionDef.to;
@@ -95,6 +96,7 @@ export const deEngineUtils = {
         if (existingConnection.properties) {
             DE.world.connections[id].properties = existingConnection.properties;
         }
+        return DE.world.connections[id];
     },
     newCharacter(DE, characterDef) {
         const currentCharacter = DE.characters[characterDef.name];
@@ -108,45 +110,94 @@ export const deEngineUtils = {
         if (DE.internal["CHARACTER_OVERRIDES_" + characterDef.name]) {
             Object.assign(DE.characters[characterDef.name], DE.internal["CHARACTER_OVERRIDES_" + characterDef.name]);
         }
+        return DE.characters[characterDef.name];
     },
     createStateInAllCharacters(DE, stateName, stateDefinition) {
         Object.values(DE.characters).forEach((character) => {
             createStateInCharacter(DE, character, stateName, stateDefinition);
         });
+        return stateDefinition;
     },
-    createStateInCharacter(DE, characterName, stateName, stateDefinition) {
-        const character = DE.characters[characterName];
-        if (!character) {
-            console.warn(`Character with name ${characterName} not found`);
-            return;
+    createStateInCharacter(DE, character, stateName, stateDefinition) {
+        const characterRef = typeof character === "string" ? DE.characters[character] : character;
+        if (!characterRef) {
+            if (typeof character === "string") {
+                console.warn(`Character with name ${character} not found`);
+            } else {
+                console.warn(`Received null as character reference when trying to create state ${stateName}`);
+            }
+            return null;
         }
-        createStateInCharacter(DE, character, stateName, stateDefinition);
+        return createStateInCharacter(DE, characterRef, stateName, stateDefinition);
     },
     newBond(DE, char1, towards, bondDefinition) {
-        const existingBond = DE.social.bonds[char1].active.find(b => b.towards === towards);
-        if (existingBond) {
-            return;
+        const char1Ref = typeof char1 === "string" ? DE.characters[char1] : char1;
+        const towardsRef = typeof towards === "string" ? DE.characters[towards] : towards;
+
+        if (!char1Ref) {
+            if (typeof char1 === "string") {
+                console.warn(`Character with name ${char1} not found when trying to create bond towards ${towards}`);
+            } else {
+                console.warn(`Received null as char1 reference when trying to create bond towards ${towards}`);
+            }
+
+            return null;
         }
-        DE.social.bonds[char1].active.push({
-            towards,
+
+        if (!towardsRef) {
+            if (typeof towards === "string") {
+                console.warn(`Character with name ${towards} not found when trying to create bond from ${char1}`);
+            } else {
+                console.warn(`Received null as towards reference when trying to create bond from ${char1}`);
+            }
+            return null;
+        }
+
+        const existingBond = DE.social.bonds[char1Ref.name].active.find(b => b.towards === towardsRef.name);
+        if (existingBond) {
+            return existingBond;
+        }
+        const newBond = {
+            towards: towardsRef.name,
             ...bondDefinition,
-        });
+        };
+        DE.social.bonds[char1Ref.name].active.push(newBond);
+        return newBond;
     },
     newMutualBond(DE, char1, char2, bondDefinition) {
-        deEngineUtils.newBond(DE, char1, char2, bondDefinition);
-        deEngineUtils.newBond(DE, char2, char1, bondDefinition);
+        const bond1 = deEngineUtils.newBond(DE, char1, char2, bondDefinition);
+        const bond2 = deEngineUtils.newBond(DE, char2, char1, bondDefinition);
+        return [bond1, bond2];
     },
     newFamilyRelation(DE, char1, towards, relation) {
-        const character1 = DE.characters[char1];
-        const character2 = DE.characters[towards];
+        const character1 = typeof char1 === "string" ? DE.characters[char1] : char1;
+        const towardsRef = typeof towards === "string" ? DE.characters[towards] : towards;
+
+        /**
+         * @type {DEFamilyTie | null}
+         */
+        let familyTie1 = null;
         if (!character1) {
             console.warn(`Character with name ${char1} not found when trying to create family relation towards ${towards}`);
         } else {
-            character1.socialSimulation.familyTies[towards] = { relation };
+            if (typeof towards === "string") {
+                character1.socialSimulation.familyTies[towards] = { relation };
+                familyTie1 = character1.socialSimulation.familyTies[towards];
+            } else if (towardsRef) {
+                character1.socialSimulation.familyTies[towardsRef.name] = { relation };
+                familyTie1 = character1.socialSimulation.familyTies[towardsRef.name];
+            } else {
+                console.warn(`Received null as towards reference when trying to create family relation from ${char1}`);
+            }
         }
-        if (!character2) {
+
+        /**
+         * @type {DEFamilyTie | null}
+         */
+        let familyTie2 = null;
+        if (!towardsRef) {
             console.warn(`Character with name ${towards} not found when trying to create family relation from ${char1}`);
-        } else {
+        } else if (character1) {
             /**
              * @type {DEFamilyRelation}
              */
@@ -169,7 +220,7 @@ export const deEngineUtils = {
                     break;
                 case "uncle":
                 case "aunt":
-                    inverseRelation = character2.gender === "male" || character2.gender === "ambiguous" ? "nephew" : "niece";
+                    inverseRelation = character1.gender === "male" || character1.gender === "ambiguous" ? "nephew" : "niece";
                     break;
                 case "grandparent":
                     inverseRelation = "grandchild";
@@ -179,14 +230,19 @@ export const deEngineUtils = {
                     break;
                 case "niece":
                 case "nephew":
-                    inverseRelation = character2.gender === "male" || character2.gender === "ambiguous" ? "uncle" : "aunt";
+                    inverseRelation = character1.gender === "male" || character1.gender === "ambiguous" ? "uncle" : "aunt";
                     break;
                 default:
                     inverseRelation = "other";
             }
 
-            character2.socialSimulation.familyTies[char1] = { relation: inverseRelation };
+            towardsRef.socialSimulation.familyTies[character1.name] = { relation: inverseRelation };
+            familyTie2 = towardsRef.socialSimulation.familyTies[character1.name];
+        } else {
+            console.warn(`Received null as character reference when trying to create family relation towards ${towards}`);
         }
+
+        return [familyTie1, familyTie2];
     },
 };
 
@@ -195,11 +251,13 @@ export const deEngineUtils = {
  * @param {DEObject} DE 
  * @param {DECompleteCharacterReference} character 
  * @param {string} stateName 
- * @param {DECharacterStateDefinition} stateDefinition 
+ * @param {DECharacterStateDefinition} stateDefinition
+ * @return {DECharacterStateDefinition}
  */
 function createStateInCharacter(DE, character, stateName, stateDefinition) {
     if (character.states[stateName]) {
         console.warn(`Character ${character.name} already has a state named ${stateName}`);
     }
     character.states[stateName] = stateDefinition;
+    return character.states[stateName];
 }

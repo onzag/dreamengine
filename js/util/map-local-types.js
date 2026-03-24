@@ -258,7 +258,7 @@ export async function generateScriptRegistryContent(options) {
     }
 
     const typedefBlock = typedefMap.size > 0
-        ? [...typedefMap.values()].join('\n') + '\n'
+        ? [...typedefMap.values()].map(v => "declare " + v).join('\n') + '\n'
         : '';
 
     const content = [
