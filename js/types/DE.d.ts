@@ -862,6 +862,15 @@ declare interface DEVocabularyLimit {
     narrationStyle?: DENarrationStyle;
 }
 
+declare interface DEBondFilterReaction {
+    multiplier: number;
+    rewriteAffectsBonds?: "primary" | "secondary" | "both";
+    rewriteWeight?: number;
+    reason?: string;
+    injectActionOnYes?: DEActionPromptInjection;
+    injectActionOnNo?: DEActionPromptInjection;
+}
+
 declare interface DEBondIncreaseDecreaseQuestion {
     /**
      * The question to ask to determine if the bond increases or decreases
@@ -885,19 +894,11 @@ declare interface DEBondIncreaseDecreaseQuestion {
     affectsBonds: "primary" | "secondary" | "both";
 
     /**
-     * TODO these hasn't been implemented
+     * Custom filter
+     * @param otherCharacter The other character involved in the interaction
+     * @returns A DEBondFilterReaction object indicating the result of the filter
      */
-    familyInteractions?: {
-        /**
-         * Exclude family members or family members of this specific type
-         */
-        excludeFamilyMembers?: boolean | DEFamilyRelation[];
-        /**
-         * Boost the weight of family members or family members of this specific type by multiplying the weight by this factor
-         * you can make the factor negative to invert the effect for family members
-         */
-        boostFamilyMembersWeight?: number;
-    }
+    filter?: (otherCharacter: DECharacter) => DEBondFilterReaction;
 }
 
 declare interface DEBondDeclaration {

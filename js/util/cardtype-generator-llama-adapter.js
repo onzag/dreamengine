@@ -2,7 +2,7 @@ import { DEngine } from '../engine/index.js';
 import { InferenceAdapterLlamaUncensored } from "../engine/inference/adapter-de-server-uncensored.js";
 import { DEJSEngine } from '../jsengine/index.js';
 import { localResolver } from '../jsengine/local-resolver.js';
-import { generate } from '../cardtype/generate.js';
+import { generateBase } from '../cardtype/generate-base.js';
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { basename, dirname, join, extname } from 'path';
 
@@ -18,9 +18,16 @@ const args = process.argv.slice(2);
 let configPath = null;
 let inputPath = null;
 
+let action = 'generate';
+let secondFile = null;
 for (let i = 0; i < args.length; i++) {
     if (args[i] === '--config' && i + 1 < args.length) {
         configPath = args[++i];
+    } else if (args[i] === '--infer-bonds') {
+        action = 'infer-bonds';
+    } else if (args[i] === '--infer-states' && i + 1 < args.length) {
+        action = 'infer-states';
+        secondFile = args[++i];
     } else if (!inputPath) {
         inputPath = args[i];
     }
@@ -31,7 +38,7 @@ if (!configPath && existsSync(defaultConfigPath)) {
 }
 
 if (!inputPath) {
-    console.error('Usage: node cardtype-generator-llama-adapter.js [--config <config.json>] <inputfile>');
+    console.error('Usage: node cardtype-generator-llama-adapter.js [--config <config.json>] [--infer-bonds] [--infer-states <statefile.md>] <inputfile.md | inputfile.js>');
     process.exit(1);
 }
 
@@ -45,7 +52,7 @@ new InferenceAdapterLlamaUncensored(engine, {
     secret: config.secret || "dev-secret-12345678900abcdef",
 });
 
-const result = await generate(engine, sourceContent);
+const result = await generateBase(engine, sourceContent);
 
 const dir = dirname(inputPath);
 const base = basename(inputPath, extname(inputPath));

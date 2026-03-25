@@ -11,6 +11,11 @@ import { applyStateChange, checkAllActiveStatesConsistency } from "./state-chang
  * @param {DECompleteCharacterReference} character
  * @param {{
  *   doNotMove: boolean, // if true, the character will not be allowed to change location
+ *   injectedActions: Array<{
+ *     text: string | null,
+ *     narrativeText: string | null,
+ *     action: DEActionPromptInjection,
+ *   }>,
  * }} options
  */
 export async function talk(engine, character, options) {
@@ -73,6 +78,24 @@ export async function talk(engine, character, options) {
         }
         return null;
     }))).filter((action) => !!action);
+
+    if (options.injectedActions) {
+        actions = options.injectedActions.map((a) => ({
+            text: a.text,
+            narrativeText: a.narrativeText,
+            action: {
+                /**
+                 * @type {DEApplyingState | null}
+                 */
+                applyingState: null,
+                action: a.action,
+                /**
+                 * @type {DECharacterStateDefinition | null}
+                 */
+                stateInfo: null,
+            }
+        })).concat(actions);
+    }
 
     let deadEndAction = actions.find((action) => action.action.action.isDeadEndScenario && action.action.action.deadEndIsDeath);
     if (!deadEndAction) {

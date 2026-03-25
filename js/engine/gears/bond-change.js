@@ -50,6 +50,15 @@ export default async function calculateBondsChangesDueToMessages(engine, charact
 
     const yesNoGrammarObject = yesNoGrammar(engine);
 
+    /**
+     * @type {Array<{
+     *    text: string, // the text to inject into the questioning agent prompt, should be a question or a statement that can be evaluated as yes or no
+     *    narrativeText: string | null, // the text to inject into the narrative, if different from the text for the questioning agent, can be null if it should be the same
+     *    action: DEActionPromptInjection, // the actual action to inject into the prompt of the questioning agent, should be constructed by the filter function of the bond condition that generated this injection, and can be used to trigger specific actions in the story based on the answers to the questions or statements injected into the questioning agent
+     * }>} actions to inject into the prompt of the questioning agent, based on the bond conditions filters, to help it answer the questions more accurately, we will inject them after the first question to not interfere with the initial question about knowing the name, which is usually the most important one to get right and is also the one that is most likely to be known by the character without needing to infer it from context
+     */
+    const injectedActions = [];
+
     // first we need to update the bonds towards the character, for that we need to get a whole extended cycle
     // gather all the other characters that talked inbetween, and update bonds for each
     const lastCycle = await getHistoryFragmentForCharacter(engine, character, {
@@ -71,7 +80,9 @@ export default async function calculateBondsChangesDueToMessages(engine, charact
     // well that is weird, they talk and talked again themselves?
     if (allCharactersToUpdateBondsTowards.size === 0) {
         engine.informCycleState("info", `No messages from other characters to update ${character.name} bonds`);
-        return;
+        return {
+            injectedActions,
+        };
     } else {
         engine.informCycleState("info", `Updating bonds for ${character.name} towards: ${Array.from(allCharactersToUpdateBondsTowards).join(", ")}`);
     }
@@ -98,7 +109,6 @@ export default async function calculateBondsChangesDueToMessages(engine, charact
             if (currentBondExists) {
                 engine.deObject.social.bonds[character.name].active = engine.deObject.social.bonds[character.name].active.filter(bond => bond.towards !== characterNameToGetBondTowards);
                 engine.deObject.social.bonds[character.name].ex.push(currentBondExists);
-                await engine.informDEObjectUpdated();
             }
             continue;
         }
@@ -114,7 +124,6 @@ export default async function calculateBondsChangesDueToMessages(engine, charact
                 createdAt: { ...engine.deObject.currentTime },
             };
             engine.deObject.social.bonds[character.name].active.push(currentBond);
-            await engine.informDEObjectUpdated();
         }
 
         const currentBondDescription = getBondDeclarationFromBondDescription(engine, character, currentBond);
@@ -181,16 +190,16 @@ export default async function calculateBondsChangesDueToMessages(engine, charact
                 if (answer) {
                     console.log(`Updating bond for ${character.name} towards ${characterNameToGetBondTowards} to know the name based on question about knowing the name, answer was yes`);
                     currentBond.knowsName = true;
-                    await engine.informDEObjectUpdated();
                 } else {
                     console.log(`Not updating bond for ${character.name} towards ${characterNameToGetBondTowards} to know the name based on question about knowing the name, answer was no`);
                 }
             }
 
             // now we can process the messages to update the bond
-            for (const condition of currentBondDescription.bondConditions) {
+            for (const conditionBase of currentBondDescription.bondConditions) {
+                let condition = conditionBase;
                 let conditionMultiplier = (currentBond.stranger ? (condition.weight < 0 ? character.bonds.strangerNegativeMultiplier : character.bonds.strangerPositiveMultiplier) : (condition.weight < 0 ? character.bonds.bondChangeNegativityBias : character.bonds.bondChangeFineTune));
-                const conditionYesValue = condition.weight * conditionMultiplier;
+                let conditionYesValue = condition.weight * conditionMultiplier;
 
                 // let's check if it will be pointless to ask, eg maxed out bond or zeroed or so forth
                 let wouldModifyPrimaryBond = false;
@@ -211,21 +220,31 @@ export default async function calculateBondsChangesDueToMessages(engine, charact
                 }
 
                 // asking this would be pointless as it would not change anything, so we skip it and save the questioning agent usage for other conditions that might actually change the bond
-                if (!wouldModifyPrimaryBond && !wouldModifySecondaryBond) {
-                    engine.informCycleState("info", `Bond condition with template ${JSON.stringify(condition.template)} for bond from ${character.name} towards ${characterNameToGetBondTowards} would not modify any bond, skipping`);
+                if ((!wouldModifyPrimaryBond && !wouldModifySecondaryBond) && !condition.filter) {
+                    engine.informCycleState("info", `Bond condition with template ${JSON.stringify(condition.template)} for bond from ${character.name} towards ${characterNameToGetBondTowards} would not modify any bond and has no filter, skipping`);
                     continue;
                 }
 
-                if (condition.familyInteractions && isFamilyWithRelation) {
-                    if (condition.familyInteractions.boostFamilyMembersWeight) {
-                        conditionMultiplier *= condition.familyInteractions.boostFamilyMembersWeight;
+                /**
+                 * @type {DEBondFilterReaction | null}
+                 */
+                let filterResult = null;
+                if (condition.filter) {
+                    filterResult = condition.filter(engine.deObject.characters[characterNameToGetBondTowards]);
+                    if (filterResult && filterResult.multiplier === 0 && !filterResult.injectActionOnYes && !filterResult.injectActionOnNo) {
+                        engine.informCycleState("info", `Bond condition with template ${JSON.stringify(condition.template)} for bond from ${character.name} towards ${characterNameToGetBondTowards} is excluded by custom filter with reason: ${filterResult.reason || "no reason provided"}, skipping`);
+                        continue;
                     }
-                    if (typeof condition.familyInteractions.excludeFamilyMembers === "boolean" && condition.familyInteractions.excludeFamilyMembers) {
-                        console.log(`Bond condition with template ${JSON.stringify(condition.template)} for bond from ${character.name} towards ${characterNameToGetBondTowards} is excluded for family members, and they are family, skipping`);
-                        continue;
-                    } else if (condition.familyInteractions.excludeFamilyMembers && Array.isArray(condition.familyInteractions.excludeFamilyMembers) && isFamilyWithRelation && condition.familyInteractions.excludeFamilyMembers.includes(isFamilyWithRelation)) {
-                        console.log(`Bond condition with template ${JSON.stringify(condition.template)} for bond from ${character.name} towards ${characterNameToGetBondTowards} is excluded for family members with relation ${isFamilyWithRelation}, and they are family with that relation, skipping`);
-                        continue;
+
+                    condition = {
+                        ...condition,
+                    };
+                    condition.affectsBonds = filterResult.rewriteAffectsBonds || condition.affectsBonds;
+                    condition.weight = typeof filterResult.rewriteWeight === "number" ? filterResult.rewriteWeight : condition.weight;
+                    if (typeof filterResult.rewriteWeight === "number") {
+                        conditionYesValue = condition.weight * conditionMultiplier * filterResult.multiplier;
+                    } else {
+                        conditionYesValue *= filterResult.multiplier;
                     }
                 }
 
@@ -253,7 +272,32 @@ export default async function calculateBondsChangesDueToMessages(engine, charact
                             currentBond.bond2 = 100;
                         }
                     }
-                    await engine.informDEObjectUpdated();
+                    if (filterResult?.injectActionOnYes) {
+                        if (filterResult?.injectActionOnYes.probability) {
+                            const random = Math.random();
+                            if (random > filterResult.injectActionOnYes.probability) {
+                                console.log(`Skipping injection of action for yes answer on statement ${JSON.stringify(result)} for bond from ${character.name} towards ${characterNameToGetBondTowards} due to probability check, random value was ${random} and threshold was ${filterResult.injectActionOnYes.probability}`);
+                                continue;
+                            } else {
+                                console.log(`Injecting action for yes answer on statement ${JSON.stringify(result)} for bond from ${character.name} towards ${characterNameToGetBondTowards} after passing probability check, random value was ${random} and threshold was ${filterResult.injectActionOnYes.probability}`);
+                            }
+                        } else {
+                            console.log(`Injecting action for yes answer on statement ${JSON.stringify(result)} for bond from ${character.name} towards ${characterNameToGetBondTowards} with no probability check`);
+                        }
+                        injectedActions.push({
+                            text: typeof filterResult.injectActionOnYes.action === "string" ? filterResult.injectActionOnYes.action : await filterResult.injectActionOnYes.action(engine.deObject, {
+                                char: character,
+                                other: engine.deObject.characters[characterNameToGetBondTowards],
+                                otherFamilyRelation: isFamilyWithRelation || undefined,
+                            }),
+                            narrativeText: typeof filterResult.injectActionOnYes.narrativeAction === "string" ? filterResult.injectActionOnYes.narrativeAction : filterResult.injectActionOnYes.narrativeAction ? await filterResult.injectActionOnYes.narrativeAction(engine.deObject, {
+                                char: character,
+                                other: engine.deObject.characters[characterNameToGetBondTowards],
+                                otherFamilyRelation: isFamilyWithRelation || undefined,
+                            }) : null,
+                            action: filterResult.injectActionOnYes,
+                        });
+                    }
                 } else if (result.endsWith("?")) {
                     console.log(`Bond condition is a question ${JSON.stringify(result)}, requesting inference`);
                     if (!isQuestioningAgentInitialized) {
@@ -307,7 +351,59 @@ export default async function calculateBondsChangesDueToMessages(engine, charact
                                 currentBond.bond2 = 100;
                             }
                         }
-                        await engine.informDEObjectUpdated();
+                        if (filterResult?.injectActionOnYes) {
+                            if (filterResult?.injectActionOnYes.probability) {
+                                const random = Math.random();
+                                if (random > filterResult.injectActionOnYes.probability) {
+                                    console.log(`Skipping injection of action for yes answer on question ${JSON.stringify(result)} for bond from ${character.name} towards ${characterNameToGetBondTowards} due to probability check, random value was ${random} and threshold was ${filterResult.injectActionOnYes.probability}`);
+                                    continue;
+                                } else {
+                                    console.log(`Injecting action for yes answer on question ${JSON.stringify(result)} for bond from ${character.name} towards ${characterNameToGetBondTowards} after passing probability check, random value was ${random} and threshold was ${filterResult.injectActionOnYes.probability}`);
+                                }
+                            } else {
+                                console.log(`Injecting action for yes answer on question ${JSON.stringify(result)} for bond from ${character.name} towards ${characterNameToGetBondTowards} with no probability check`);
+                            }
+                            injectedActions.push({
+                                text: typeof filterResult.injectActionOnYes.action === "string" ? filterResult.injectActionOnYes.action : await filterResult.injectActionOnYes.action(engine.deObject, {
+                                    char: character,
+                                    other: engine.deObject.characters[characterNameToGetBondTowards],
+                                    otherFamilyRelation: isFamilyWithRelation || undefined,
+                                }),
+                                narrativeText: typeof filterResult.injectActionOnYes.narrativeAction === "string" ? filterResult.injectActionOnYes.narrativeAction : filterResult.injectActionOnYes.narrativeAction ? await filterResult.injectActionOnYes.narrativeAction(engine.deObject, {
+                                    char: character,
+                                    other: engine.deObject.characters[characterNameToGetBondTowards],
+                                    otherFamilyRelation: isFamilyWithRelation || undefined,
+                                }) : null,
+                                action: filterResult.injectActionOnYes,
+                            });
+                        }
+                    } else {
+                        if (filterResult?.injectActionOnNo) {
+                            if (filterResult?.injectActionOnNo.probability) {
+                                const random = Math.random();
+                                if (random > filterResult.injectActionOnNo.probability) {
+                                    console.log(`Skipping injection of action for no answer on question ${JSON.stringify(result)} for bond from ${character.name} towards ${characterNameToGetBondTowards} due to probability check, random value was ${random} and threshold was ${filterResult.injectActionOnNo.probability}`);
+                                    continue;
+                                } else {
+                                    console.log(`Injecting action for no answer on question ${JSON.stringify(result)} for bond from ${character.name} towards ${characterNameToGetBondTowards} after passing probability check, random value was ${random} and threshold was ${filterResult.injectActionOnNo.probability}`);
+                                }
+                            } else {
+                                console.log(`Injecting action for no answer on question ${JSON.stringify(result)} for bond from ${character.name} towards ${characterNameToGetBondTowards} with no probability check`);
+                            }
+                            injectedActions.push({
+                                text: typeof filterResult.injectActionOnNo.action === "string" ? filterResult.injectActionOnNo.action : await filterResult.injectActionOnNo.action(engine.deObject, {
+                                    char: character,
+                                    other: engine.deObject.characters[characterNameToGetBondTowards],
+                                    otherFamilyRelation: isFamilyWithRelation || undefined,
+                                }),
+                                narrativeText: typeof filterResult.injectActionOnNo.narrativeAction === "string" ? filterResult.injectActionOnNo.narrativeAction : filterResult.injectActionOnNo.narrativeAction ? await filterResult.injectActionOnNo.narrativeAction(engine.deObject, {
+                                    char: character,
+                                    other: engine.deObject.characters[characterNameToGetBondTowards],
+                                    otherFamilyRelation: isFamilyWithRelation || undefined,
+                                }) : null,
+                                action: filterResult.injectActionOnNo,
+                            });
+                        }
                     }
                 }
             }
@@ -320,6 +416,11 @@ export default async function calculateBondsChangesDueToMessages(engine, charact
     }
 
     await updateAllStrangerBonds(engine, character);
+    await engine.informDEObjectUpdated();
 
     engine.informCycleState("info", `Finished updating bonds from ${character.name} towards other characters.`);
+
+    return {
+        injectedActions,
+    }
 }

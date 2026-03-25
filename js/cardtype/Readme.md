@@ -16,3 +16,17 @@ Use the card type generation result to refine a character further after the init
  4. Basic emotional states only, no complex states or traits, some examples of states added are Happy, Sad, Angry, etc...
 
 You must check the generated code to fine tune behaviour, traits, and other aspects of the character, the card type is meant to be a starting point for character creation, the created script is very barebones by default.
+
+## Usage from command line
+
+Generate the initial character script from the card, this will produce invalid js code, but it will be the start point
+
+`npm run cardtype charactercard.md`
+
+That should produce an output file named `charactercard.js` which will contain the generated character code, you can then edit that file to refine the character further, the process of the initial generation is broken in two because it is very expensive to run, then you can run.
+
+Before running check the configuration and make sure that your character config in the // config comment is correct for what you want, for example, the character asexuality is set there, asexual characters will receive a 4d_creepy bond system which allows for tension being created with one sided non reciprocating sexual and romantic bonds, and non asexual characters will receive a standard bond system.
+
+`npm run cardtype --infer-bonds charactercard.js`
+
+This will modify charactercard.js to add the bond system that was missing, 

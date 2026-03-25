@@ -892,7 +892,7 @@ export class DEngine {
                 await calculateStateChange(this, this.deObject.characters[participantName], lastItemChangesInfo.interactedCharacters);
 
                 this.informCycleState("info", "Pre-calculating initial bonds for " + participantName + "...");
-                await calculateBondsChangesDueToMessages(this, this.deObject.characters[participantName]);
+                const bondChangeInfo = await calculateBondsChangesDueToMessages(this, this.deObject.characters[participantName]);
 
                 /**
                  * @type {string[]}
@@ -915,6 +915,7 @@ export class DEngine {
 
                 const talkResult = await talk(this, this.deObject.characters[participantName], {
                     doNotMove: true,
+                    injectedActions: bondChangeInfo.injectedActions,
                 });
 
                 await addMessageForStoryMaster(talkResult.addedMessagesForStoryMaster);
@@ -947,7 +948,8 @@ export class DEngine {
         await calculateStateChange(this, this.userCharacter, lastItemChangesInfo.interactedCharacters);
 
         this.informCycleState("info", "Pre-calculating initial bonds for your character...");
-        await calculateBondsChangesDueToMessages(this, this.userCharacter);
+        const bondChangeInfo = await calculateBondsChangesDueToMessages(this, this.userCharacter);
+        // TODO what to do about the potential injected actions here, user bond should not really have anything to it
 
         /**
          * @type {string[]}

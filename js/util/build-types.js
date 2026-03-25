@@ -90,7 +90,7 @@ export default async function build(options = { doNotBuildLocals: false, doNotWr
 
         // cardtype-generator-llama-adapter script
         const adapterFile = path.resolve(path.dirname(thisFile), 'cardtype-generator-llama-adapter.js');
-        const adapterScriptName = isWin ? 'generate-cardtype.cmd' : 'generate-cardtype.sh';
+        const adapterScriptName = isWin ? 'cardtype.cmd' : 'cardtype.sh';
         const adapterScriptContent = isWin
             ? `@echo off\r\nnode "${adapterFile}" %*\r\n`
             : `#!/bin/sh\nnode "${adapterFile}" "$@"\n`;
