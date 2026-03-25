@@ -17,12 +17,12 @@ export function rerollLocationWeather(engine, locationName, location, parentLoca
 
     if (!location.ownWeatherSystem || location.ownWeatherSystem.length === 0) {
         if (parentLocation) {
-            location.currentWeather = parentLocation.currentWeather;
-            location.currentWeatherHasBeenOngoingFor = parentLocation.currentWeatherHasBeenOngoingFor;
-            location.currentWeatherNoEffectDescription = parentLocation.currentWeatherNoEffectDescription;
-            location.currentWeatherPartialEffectDescription = parentLocation.currentWeatherPartialEffectDescription;
-            location.currentWeatherFullEffectDescription = parentLocation.currentWeatherFullEffectDescription;
-            location.currentWeatherNegativelyExposedDescription = parentLocation.currentWeatherNegativelyExposedDescription;
+            location.internalState.currentWeather = parentLocation.internalState.currentWeather;
+            location.internalState.currentWeatherHasBeenOngoingFor = parentLocation.internalState.currentWeatherHasBeenOngoingFor;
+            location.internalState.currentWeatherNoEffectDescription = parentLocation.internalState.currentWeatherNoEffectDescription;
+            location.internalState.currentWeatherPartialEffectDescription = parentLocation.internalState.currentWeatherPartialEffectDescription;
+            location.internalState.currentWeatherFullEffectDescription = parentLocation.internalState.currentWeatherFullEffectDescription;
+            location.internalState.currentWeatherNegativelyExposedDescription = parentLocation.internalState.currentWeatherNegativelyExposedDescription;
 
             // find every children locations and reroll their weather
             if (cascade) {
@@ -38,11 +38,11 @@ export function rerollLocationWeather(engine, locationName, location, parentLoca
         }
     } else {
         let shouldHaveNewWeather = false;
-        const currentWeather = location.currentWeather;
+        const currentWeather = location.internalState.currentWeather;
         if (!currentWeather) {
             shouldHaveNewWeather = true;
         } else {
-            const weatherDuration = location.currentWeatherHasBeenOngoingFor.inHours;
+            const weatherDuration = location.internalState.currentWeatherHasBeenOngoingFor.inHours;
             const weatherSystemInfo = location.ownWeatherSystem.find(ws => ws.name === currentWeather);
             if (!weatherSystemInfo) {
                 throw new Error(`Weather system info for current weather ${currentWeather} not found.`);
@@ -63,18 +63,18 @@ export function rerollLocationWeather(engine, locationName, location, parentLoca
             if (!newWeatherSystem) {
                 throw new Error("Failed to pick new weather system. Are there any weather systems defined?");
             }
-            location.currentWeather = newWeatherSystem.name;
+            location.internalState.currentWeather = newWeatherSystem.name;
             // TODO this needs to update when we reroll weather
-            location.currentWeatherHasBeenOngoingFor = {
+            location.internalState.currentWeatherHasBeenOngoingFor = {
                 inMinutes: 0,
                 inHours: 0,
                 inDays: 0,
                 inSeconds: 0,
             };
-            location.currentWeatherNoEffectDescription = newWeatherSystem.noEffectDescription;
-            location.currentWeatherPartialEffectDescription = newWeatherSystem.partialEffectDescription;
-            location.currentWeatherFullEffectDescription = newWeatherSystem.fullEffectDescription;
-            location.currentWeatherNegativelyExposedDescription = newWeatherSystem.negativelyExposedDescription;
+            location.internalState.currentWeatherNoEffectDescription = newWeatherSystem.noEffectDescription;
+            location.internalState.currentWeatherPartialEffectDescription = newWeatherSystem.partialEffectDescription;
+            location.internalState.currentWeatherFullEffectDescription = newWeatherSystem.fullEffectDescription;
+            location.internalState.currentWeatherNegativelyExposedDescription = newWeatherSystem.negativelyExposedDescription;
 
             // find every children locations and reroll their weather
             if (cascade) {
@@ -121,11 +121,11 @@ function updateAllWeatherDurations(engine, timeForwards) {
      * @param {DEStatefulLocationDefinition} location 
      */
     const updateWeatherForLocation = (location) => {
-        if (location.currentWeatherHasBeenOngoingFor) {
-            location.currentWeatherHasBeenOngoingFor.inMinutes += timeForwards.inMinutes;
-            location.currentWeatherHasBeenOngoingFor.inHours += timeForwards.inHours;
-            location.currentWeatherHasBeenOngoingFor.inDays += timeForwards.inDays;
-            location.currentWeatherHasBeenOngoingFor.inSeconds += timeForwards.inSeconds;
+        if (location.internalState.currentWeatherHasBeenOngoingFor) {
+            location.internalState.currentWeatherHasBeenOngoingFor.inMinutes += timeForwards.inMinutes;
+            location.internalState.currentWeatherHasBeenOngoingFor.inHours += timeForwards.inHours;
+            location.internalState.currentWeatherHasBeenOngoingFor.inDays += timeForwards.inDays;
+            location.internalState.currentWeatherHasBeenOngoingFor.inSeconds += timeForwards.inSeconds;
         }
     }
 
@@ -265,16 +265,16 @@ export default async function timeForwardsUsingLastMessage(engine, character) {
     }
 
     for (const location of Object.values(engine.deObject.world.locations)) {
-        location.currentWeatherHasBeenOngoingFor.inDays += totalMilliseconds / (24 * 60 * 60 * 1000);
-        location.currentWeatherHasBeenOngoingFor.inHours += totalMilliseconds / (60 * 60 * 1000);
-        location.currentWeatherHasBeenOngoingFor.inMinutes += totalMilliseconds / (60 * 1000);
+        location.internalState.currentWeatherHasBeenOngoingFor.inDays += totalMilliseconds / (24 * 60 * 60 * 1000);
+        location.internalState.currentWeatherHasBeenOngoingFor.inHours += totalMilliseconds / (60 * 60 * 1000);
+        location.internalState.currentWeatherHasBeenOngoingFor.inMinutes += totalMilliseconds / (60 * 1000);
     }
 
     const storyMasterMessagesToAdd = [];
 
     // reroll world weather
     const characterState = engine.deObject.stateFor[character.name];
-    const currentWeatherAtLocation = engine.deObject.world.locations[characterState.location].currentWeather;
+    const currentWeatherAtLocation = engine.deObject.world.locations[characterState.location].internalState.currentWeather;
 
     const duration = millisecondsToDuration(totalMilliseconds);
     const timeNow = millisecondsToTime(currentTime.time);
@@ -283,7 +283,7 @@ export default async function timeForwardsUsingLastMessage(engine, character) {
     updateAllWeatherDurations(engine, duration)
     rerollWorldWeather(engine);
 
-    const newWeatherAtLocation = engine.deObject.world.locations[characterState.location].currentWeather;
+    const newWeatherAtLocation = engine.deObject.world.locations[characterState.location].internalState.currentWeather;
     if (currentWeatherAtLocation !== newWeatherAtLocation) {
         console.log(`Time-Forwards: Weather at ${characterState.location} changed from ${currentWeatherAtLocation} to ${newWeatherAtLocation} after time advanced.`);
         storyMasterMessagesToAdd.push(`The weather at ${characterState.location} has changed from ${currentWeatherAtLocation} to ${newWeatherAtLocation}.`);

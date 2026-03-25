@@ -19,6 +19,7 @@ import timeForwardsUsingLastMessage, { rerollWorldWeather, timeForwardsToNewTime
 import { talk } from "./gears/talk.js";
 import { millisecondsToTime } from "./util/time.js";
 import { regenerateDEFromSavedDE } from "./util/save-de.js";
+import runAllTriggersFor from "./gears/triggers-run.js";
 
 const INVALID_NAMES = ["system", "assistant", "user", "everyone", "nobody",
     "anyone", "somebody", "narrator", "observer", "admin", "moderator",
@@ -127,7 +128,6 @@ function createCharacterFromUser(user) {
         maintenanceHydrationLitersPerDay: user.maintenanceHydrationLitersPerDay,
         rangeMeters: user.rangeMeters,
         generalCharacterDescriptionInjection: {},
-        wanderPotential: 0,
         bonds: {
             system: "UNKNOWN",
             declarations: [],
@@ -145,7 +145,7 @@ function createCharacterFromUser(user) {
         shortDescriptionTopNakedAdd: user.shortDescriptionTopNakedAdd,
         general: "",
         initiative: 1,
-        properties: {},
+        state: {},
         schizophrenia: 0,
         schizophrenicVoiceDescription: "",
         states: {},
@@ -168,7 +168,9 @@ function createCharacterFromUser(user) {
             dislikesSpecies: [],
             familyTies: {},
             gossipTendency: 1,
-        }
+            charisma: 1,
+        },
+        triggers: [],
     }
 }
 
@@ -464,18 +466,12 @@ export class DEngine {
                         }
                     }
 
-                    const bonds = this.deObject.social.bonds[charName];
+                    const bonds = this.deObject.bonds[charName];
                     if (!bonds) {
-                        this.deObject.social.bonds[charName] = {
+                        this.deObject.bonds[charName] = {
                             active: [],
                             ex: [],
                         };
-                    }
-
-                    if (!this.deObject.actionAccumulators[charName]) {
-                        this.deObject.actionAccumulators[charName] = {
-                            accumulators: {},
-                        }
                     }
                 }
             }
@@ -647,7 +643,7 @@ export class DEngine {
         }
 
         this.deObject.characters[character.name] = character;
-        this.deObject.social.bonds[character.name] = {
+        this.deObject.bonds[character.name] = {
             active: [],
             ex: [],
         };
@@ -676,10 +672,6 @@ export class DEngine {
             wearing: [],
             seenItems: [],
             seenCharacters: [],
-        };
-
-        this.deObject.actionAccumulators[character.name] = {
-            accumulators: {},
         };
     }
 
@@ -829,9 +821,10 @@ export class DEngine {
 
         let index = 0;
         /**
-         * @param {string[]} messages 
+         * @param {string[]} messages
+         * @param {boolean} [userOnly=false] if true, the message will only be added to the conversation for the user character, otherwise it will be added for all participants to see
          */
-        const addMessageForStoryMaster = async (messages) => {
+        const addMessageForStoryMaster = async (messages, userOnly = false) => {
             if (!this.deObject) {
                 throw new Error("DEngine not initialized");
             }
@@ -845,7 +838,8 @@ export class DEngine {
             const messageCombined = messages.join("\n\n");
             this.deObject.conversations[sceneId].messages.push({
                 id: `${sceneId}_MESSAGE_${index}`,
-                canOnlyBeSeenByCharacter: null,
+                // @ts-ignore
+                canOnlyBeSeenByCharacter: userOnly ? this.userCharacter.name : null,
                 content: messageCombined,
                 sender: "Story Master",
                 duration: {
@@ -863,7 +857,7 @@ export class DEngine {
                 perspectiveSummaryIds: {},
                 singleSummary: null,
                 isRejectedMessage: false,
-                isHiddenMessage: false,
+                isHiddenMessage: userOnly ? true : false,
                 emotion: null,
                 emotionalRange: null,
                 interactingCharacters: [],
@@ -888,11 +882,32 @@ export class DEngine {
         if (sceneObject.charactersStart) {
             const randomizedList = ([...sceneObject.engagedCharacters]).sort(() => Math.random() - 0.5);
             for (const participantName of randomizedList) {
+                this.informCycleState("info", "Running all triggers for " + participantName + "...");
+                await runAllTriggersFor(this, this.deObject.characters[participantName], lastItemChangesInfo.interactedCharacters);
+
+                const nextActionsProduced = this.deObject.internalState.NEXT_ACTIONS || [];
+                delete this.deObject.internalState.NEXT_ACTIONS;
+
+                const storyMasterMessagesProduced = this.deObject.internalState.ADD_STORY_MASTER_MESSAGES;
+                delete this.deObject.internalState.ADD_STORY_MASTER_MESSAGES;
+
+                for (const message of storyMasterMessagesProduced || []) {
+                    await addMessageForStoryMaster([message]);
+                }
+
+                const forcedGameOver = this.deObject.internalState.GAME_OVER;
+                delete this.deObject.internalState.GAME_OVER;
+
+                if (forcedGameOver) {
+                    this.deObject.gameOver = true;
+                    return await this.gameOver();
+                }
+
                 this.informCycleState("info", "Pre-calculating initial states for " + participantName + " and the world...");
                 await calculateStateChange(this, this.deObject.characters[participantName], lastItemChangesInfo.interactedCharacters);
 
                 this.informCycleState("info", "Pre-calculating initial bonds for " + participantName + "...");
-                const bondChangeInfo = await calculateBondsChangesDueToMessages(this, this.deObject.characters[participantName]);
+                await calculateBondsChangesDueToMessages(this, this.deObject.characters[participantName]);
 
                 /**
                  * @type {string[]}
@@ -915,7 +930,7 @@ export class DEngine {
 
                 const talkResult = await talk(this, this.deObject.characters[participantName], {
                     doNotMove: true,
-                    injectedActions: bondChangeInfo.injectedActions,
+                    injectedActions: nextActionsProduced,
                 });
 
                 await addMessageForStoryMaster(talkResult.addedMessagesForStoryMaster);
@@ -940,6 +955,27 @@ export class DEngine {
             }
         }
 
+        this.informCycleState("info", "Running all triggers for " + this.userCharacter.name + "...");
+        await runAllTriggersFor(this, this.userCharacter, lastItemChangesInfo.interactedCharacters);
+
+        const nextActionsProduced = this.deObject.internalState.NEXT_ACTIONS || [];
+        delete this.deObject.internalState.NEXT_ACTIONS;
+
+        const storyMasterMessagesProduced = this.deObject.internalState.ADD_STORY_MASTER_MESSAGES;
+        delete this.deObject.internalState.ADD_STORY_MASTER_MESSAGES;
+
+        for (const message of storyMasterMessagesProduced || []) {
+            await addMessageForStoryMaster([message]);
+        }
+
+        const forcedGameOver = this.deObject.internalState.GAME_OVER;
+        delete this.deObject.internalState.GAME_OVER;
+
+        if (forcedGameOver) {
+            this.deObject.gameOver = true;
+            return await this.gameOver();
+        }
+
         // now the user starts, let's precalculate these states and bonds
         // so that they are ready for the user's first turn, even though
         // the user has no real affecting states, they are forced upon the user
@@ -948,8 +984,7 @@ export class DEngine {
         await calculateStateChange(this, this.userCharacter, lastItemChangesInfo.interactedCharacters);
 
         this.informCycleState("info", "Pre-calculating initial bonds for your character...");
-        const bondChangeInfo = await calculateBondsChangesDueToMessages(this, this.userCharacter);
-        // TODO what to do about the potential injected actions here, user bond should not really have anything to it
+        await calculateBondsChangesDueToMessages(this, this.userCharacter);
 
         /**
          * @type {string[]}
@@ -1486,7 +1521,7 @@ export function getFrozenBonds(engine, characters) {
     const frozenBonds = {};
     characters.forEach(charName => {
         // @ts-expect-error
-        frozenBonds[charName] = deepCopy(engine.deObject.social.bonds[charName]);
+        frozenBonds[charName] = deepCopy(engine.deObject.bonds[charName]);
     });
     return frozenBonds;
 }

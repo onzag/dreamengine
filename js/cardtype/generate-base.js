@@ -15,6 +15,9 @@ export async function generateBase(engine, source) {
     card.card = source;
     
     card.imports.push(`const fss = await importScript("bond-systems", "full-standard-bond-system");`);
+    card.imports.push(`await importScript("bond-systems", "deteriorating-bonds");`);
+    card.imports.push(`await importScript("bond-systems", "deteriorating-bonds");`);
+    
     card.head.push(`engine.exports = {`);
     card.head.push(`type: "characters",`);
     card.head.push(`initialize(DE) {`);
@@ -108,7 +111,7 @@ export async function generateBase(engine, source) {
         stopAfter: [],
         stopAt: [],
         contextInfo: "The short description is: " + JSON.stringify(shortDescription),
-        instructions: "Answer with a single sentence that can be appended to the short description to describe " + name + " without any upper body clothing, focusing on their upper body's most distinctive features. Do not include the character name in the description, just describe as an external observer would perceive them, focusing on their most distinctive features. Do not add details already mentioned in the short description, only add new details that would be visible when the character is not wearing any upper body clothing.",
+        instructions: "Answer with a single sentence that can be appended to the short description to describe " + name + " without any upper body clothing, focusing on their upper body's most distinctive features. Do not include the character name in the description, just describe as an external observer would perceive them, focusing on their most distinctive features. Do not add details already mentioned in the short description, only add new details that would be visible when the character is not wearing any upper body clothing. If the character has boobs or a flat chest, nipples, etc... describe it",
     });
 
     if (answerShortDescriptionTopNakedAdd.done) {
@@ -126,7 +129,7 @@ export async function generateBase(engine, source) {
         stopAfter: [],
         stopAt: [],
         contextInfo: "The short description is: " + JSON.stringify(shortDescription),
-        instructions: "Answer with a single sentence that can be appended to the short description to describe " + name + " without any lower body clothing, focusing on their lower body's most distinctive features. Do not include the character name in the description, just describe as an external observer would perceive them, focusing on their most distinctive features. Do not add details already mentioned in the short description, only add new details that would be visible when the character is not wearing any lower body clothing.",
+        instructions: "Answer with a single sentence that can be appended to the short description to describe " + name + " without any lower body clothing, focusing on their lower body's most distinctive features. Do not include the character name in the description, just describe as an external observer would perceive them, focusing on their most distinctive features. Do not add details already mentioned in the short description, only add new details that would be visible when the character is not wearing any lower body clothing. If the character has a penis or vagina, describe it",
     });
 
     if (answerShortDescriptionBottomNakedAdd.done) {
@@ -710,7 +713,11 @@ export async function generateBase(engine, source) {
 
     card.body.push(`heroism: ${parseInt(heroismValue.value.trim()) / 10},`);
 
-    card.body.push(`properties: {},`);
+    card.body.push(`properties: {`);
+
+    card.body.push(`BOND_SYSTEM_FORGIVENESS_RATE_PER_DAY: 0.5,`),
+
+    card.body.push(`},`)
 
     const isMute = await generator.next({
         maxCharacters: 5,

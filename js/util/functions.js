@@ -397,7 +397,7 @@ export const utils = [
         "Get the list of social group members for the current character",
         "eg. [Arya, Thalon, Mira]",
         (DE, character, minBondLevel, maxBondLevel, min2BondLevel, max2BondLevel) => {
-            return DE.social.bonds[character.name].active.filter(bond => {
+            return DE.bonds[character.name].active.filter(bond => {
                 const bondValue = bond.bond;
                 const secondaryBond = bond.bond2;
                 return bondValue >= minBondLevel && bondValue <= maxBondLevel && secondaryBond >= min2BondLevel && secondaryBond <= max2BondLevel;
@@ -410,7 +410,7 @@ export const utils = [
         "eg. [Arya, Thalon, Mira]",
         (DE, character, minBondLevel, maxBondLevel, min2BondLevel, max2BondLevel) => {
             const currentLocation = DE.world.currentLocation;
-            const socialGroup = DE.social.bonds[character.name].active.filter(bond => {
+            const socialGroup = DE.bonds[character.name].active.filter(bond => {
                 const bondValue = bond.bond;
                 const secondaryBond = bond.bond2;
                 return bondValue >= minBondLevel && bondValue <= maxBondLevel && secondaryBond >= min2BondLevel && secondaryBond <= max2BondLevel;
@@ -435,7 +435,7 @@ export const utils = [
             const stateForChar = DE.stateFor[character.name];
             const conversationId = stateForChar.conversationId;
             if (!conversationId) return [];
-            const socialGroup = DE.social.bonds[character.name].active.filter(bond => {
+            const socialGroup = DE.bonds[character.name].active.filter(bond => {
                 const bondValue = bond.bond;
                 const secondaryBond = bond.bond2;
                 return bondValue >= minBondLevel && bondValue <= maxBondLevel && secondaryBond >= min2BondLevel && secondaryBond <= max2BondLevel;
@@ -450,7 +450,7 @@ export const utils = [
         "eg. [Arya, Thalon]",
         (DE, character, list) => {
             const currentLocation = DE.world.currentLocation;
-            const socialGroup = DE.social.bonds[character.name].active.map(bond => bond.towards);
+            const socialGroup = DE.bonds[character.name].active.map(bond => bond.towards);
             const presentSocialGroup = socialGroup.filter(memberName => {
                 const stateOfChar = DE.stateFor[memberName];
                 const locationOfChar = stateOfChar.location;
@@ -465,7 +465,7 @@ export const utils = [
         "Get the list of social group members that are gone forever (most likely dead) for the current character",
         "eg. [Thalon, Mira]",
         (DE, character, minBondLevel, maxBondLevel, min2BondLevel, max2BondLevel) => {
-            return DE.social.bonds[character.name].ex.filter(bond => {
+            return DE.bonds[character.name].ex.filter(bond => {
                 const bondValue = bond.bond;
                 const secondaryBond = bond.bond2;
                 return bondValue >= minBondLevel && bondValue <= maxBondLevel && secondaryBond >= min2BondLevel && secondaryBond <= max2BondLevel;
@@ -639,7 +639,7 @@ export const utils = [
         "Boolean indicating if the character is gone forever (most likely dead)",
         "true or false",
         (DE, character, characterQuestioned) => {
-            const exbonds = DE.social.bonds[character.name].ex;
+            const exbonds = DE.bonds[character.name].ex;
             for (const bond of exbonds) {
                 if (bond.towards === characterQuestioned) {
                     return true;
@@ -780,7 +780,7 @@ export const utils = [
         "Boolean indicating if the character does not know the questioned character and does not have a bond with them",
         "true or false",
         (DE, character, characterQuestioned) => {
-            const bonds = DE.social.bonds[character.name].active;
+            const bonds = DE.bonds[character.name].active;
             for (const bond of bonds) {
                 if (bond.towards === characterQuestioned) {
                     return false;
@@ -794,7 +794,7 @@ export const utils = [
         "Boolean indicating if the character has a stranger relationship with the questioned character",
         "true or false",
         (DE, character, characterQuestioned) => {
-            const bonds = DE.social.bonds[character.name].active;
+            const bonds = DE.bonds[character.name].active;
             for (const bond of bonds) {
                 if (bond.towards === characterQuestioned && bond.stranger) {
                     return true;
@@ -808,7 +808,7 @@ export const utils = [
         "Get the bond value of our character towards the questioned character",
         "eg. 50",
         (DE, character, characterQuestioned) => {
-            const bonds = DE.social.bonds[character.name].active;
+            const bonds = DE.bonds[character.name].active;
             for (const bond of bonds) {
                 if (bond.towards === characterQuestioned) {
                     return bond.bond;
@@ -822,7 +822,7 @@ export const utils = [
         "Get the secondary bond value of our character towards the questioned character",
         "eg. 30",
         (DE, character, characterQuestioned) => {
-            const bonds = DE.social.bonds[character.name].active;
+            const bonds = DE.bonds[character.name].active;
             for (const bond of bonds) {
                 if (bond.towards === characterQuestioned) {
                     return bond.bond2;

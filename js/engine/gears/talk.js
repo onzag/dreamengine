@@ -4,18 +4,13 @@ import { emotions } from "../util/emotions.js";
 import { createGrammarFromList, generateGrammarForVocabulary, parseListFromGrammarResponse } from "../util/grammar.js";
 import { getHistoryFragmentForCharacter } from "../util/messages.js";
 import { mergeVocabularyLimits } from "../util/vocabulary.js";
-import { applyStateChange, checkAllActiveStatesConsistency } from "./state-change.js";
 
 /**
  * @param {DEngine} engine 
  * @param {DECompleteCharacterReference} character
  * @param {{
  *   doNotMove: boolean, // if true, the character will not be allowed to change location
- *   injectedActions: Array<{
- *     text: string | null,
- *     narrativeText: string | null,
- *     action: DEActionPromptInjection,
- *   }>,
+ *   injectedActions: Array<DEActionPromptInjection>,
  * }} options
  */
 export async function talk(engine, character, options) {
@@ -57,7 +52,7 @@ export async function talk(engine, character, options) {
                     causants: action.applyingState?.causants || undefined,
                 }
             );
-            const narrativeText = typeof action.action.narrativeAction === "string" ? action.action.narrativeAction : (action.action.narrativeAction ? await action.action.narrativeAction(
+            const narrativeAction = typeof action.action.narrativeAction === "string" ? action.action.narrativeAction : (action.action.narrativeAction ? await action.action.narrativeAction(
                 // @ts-ignore
                 engine.deObject,
                 {
@@ -65,14 +60,14 @@ export async function talk(engine, character, options) {
                     causants: action.applyingState?.causants || undefined,
                 },
             ) : null);
-            const narrativeTextTrimmed = narrativeText ? narrativeText.trim() : null;
+            const narrativeActionTrimmed = narrativeAction ? narrativeAction.trim() : null;
             const trimmed = text.trim();
-            if (!trimmed && !narrativeTextTrimmed) {
+            if (!trimmed && !narrativeActionTrimmed) {
                 return null;
             }
             return {
                 text: trimmed || null,
-                narrativeText: narrativeTextTrimmed,
+                narrativeAction: narrativeActionTrimmed,
                 action,
             }
         }
@@ -80,21 +75,26 @@ export async function talk(engine, character, options) {
     }))).filter((action) => !!action);
 
     if (options.injectedActions) {
-        actions = options.injectedActions.map((a) => ({
-            text: a.text,
-            narrativeText: a.narrativeText,
+        const injectedActionsProcessed = (await Promise.all(options.injectedActions.map(async (a) => ({
+            text: typeof a.action === "string" ? a.action : a.action ? await a.action(engine.getDEObject(), {
+                char: character,
+            }) : null,
+            narrativeAction: typeof a.narrativeAction === "string" ? a.narrativeAction : a.narrativeAction ? await a.narrativeAction(engine.getDEObject(), {
+                char: character,
+            }) : null,
             action: {
                 /**
                  * @type {DEApplyingState | null}
                  */
                 applyingState: null,
-                action: a.action,
+                action: a,
                 /**
                  * @type {DECharacterStateDefinition | null}
                  */
                 stateInfo: null,
             }
-        })).concat(actions);
+        })))).filter((action) => !!action.text || !!action.narrativeAction);
+        actions = injectedActionsProcessed.concat(actions);
     }
 
     let deadEndAction = actions.find((action) => action.action.action.isDeadEndScenario && action.action.action.deadEndIsDeath);
@@ -446,7 +446,7 @@ export async function talk(engine, character, options) {
         }
         lastActionConsumed = toConsume;
 
-        const narrativeAction = toConsume && toConsume.narrativeText ? toConsume.narrativeText : null;
+        const narrativeAction = toConsume && toConsume.narrativeAction ? toConsume.narrativeAction : null;
         const action = toConsume ? toConsume.text : null;
 
         if (generatedElements.length >= totalToGenerate) {
@@ -674,7 +674,7 @@ export async function talk(engine, character, options) {
             charState.locationSlot = null;
         }
 
-        const socialBonds = engine.deObject.social.bonds;
+        const socialBonds = engine.deObject.bonds;
         for (const charName in socialBonds) {
             const charBonds = socialBonds[charName];
             const existingBond = charBonds.active.find((bond) => bond.towards === character.name);
@@ -685,16 +685,6 @@ export async function talk(engine, character, options) {
         }
 
         hasDeadEnded = true;
-    } else {
-        for (const action of actions) {
-            const actionAsWithIntensity = /** @type {DEActionPromptInjectionWithIntensity} */ (action.action.action);
-            if (actionAsWithIntensity.intensityModification && action.action.applyingState) {
-                console.log(`Action: ${action.text} (applies intensity modification: ${actionAsWithIntensity.intensityModification})`);
-                await applyStateChange(engine, character, action.action.applyingState.state, actionAsWithIntensity.intensityModification);
-            }
-        }
-
-        await checkAllActiveStatesConsistency(engine, character);
     }
 
     await engine.informDEObjectUpdated();

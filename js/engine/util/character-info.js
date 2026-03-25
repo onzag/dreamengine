@@ -373,7 +373,7 @@ export function getSurroundingCharacters(engine, characterName) {
         if (charStateToCheck.location !== location || charToCheck === characterName) {
             continue;
         }
-        if (engine.deObject.social.bonds[characterName].active.find(b => b.towards === charToCheck) || engine.deObject.social.bonds[characterName].ex.find(b => b.towards === charToCheck)) {
+        if (engine.deObject.bonds[characterName].active.find(b => b.towards === charToCheck) || engine.deObject.bonds[characterName].ex.find(b => b.towards === charToCheck)) {
             if (charStateToCheck.dead) {
                 deadNonStrangers.push(charToCheck);
             } else {
@@ -1071,7 +1071,7 @@ export async function getCharacterCanSee(engine, characterName) {
         if (otherCharState.location === characterState.location) {
             finalDescription += `# Character: ${otherCharName}:\n\n`;
 
-            const bondToOtherChar = engine.deObject.social.bonds[characterName].active.find(b => b.towards === otherCharName) || engine.deObject.social.bonds[characterName].ex.find(b => b.towards === otherCharName);
+            const bondToOtherChar = engine.deObject.bonds[characterName].active.find(b => b.towards === otherCharName) || engine.deObject.bonds[characterName].ex.find(b => b.towards === otherCharName);
             if (!bondToOtherChar) {
                 finalDescription += `${otherCharName} is a complete stranger to ${characterName}, ${characterName} does not know their name or any details about them.\n\n`;
             } else if (!bondToOtherChar.knowsName && bondToOtherChar.stranger) {
@@ -1468,7 +1468,7 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
     /**
      * @type {Array<{
      *   applyingState: DEApplyingState | null,
-     *   action: DEActionPromptInjectionWithIntensity | DEActionPromptInjection,
+     *   action: DEActionPromptInjection,
      *   stateInfo: DECharacterStateDefinition | null,
      * }>}
      */
@@ -1625,7 +1625,7 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
         }
     }
 
-    const bonds = engine.deObject.social.bonds[characterName];
+    const bonds = engine.deObject.bonds[characterName];
 
     /**
      * @type {string[]}
@@ -2001,19 +2001,19 @@ export async function whatIsWeatherLikeForCharacter(engine, characterName) {
     const characterLocation = characterState.location;
     const characterLocationSlot = characterState.locationSlot;
     const location = engine.deObject.world.locations[characterLocation];
-    const weatherThere = location.currentWeather;
+    const weatherThere = location.internalState.currentWeather;
     const isSheltered = await isCharacterShelteredFromWeather(engine, characterName, weatherThere, characterLocation, characterLocationSlot);
     if (isSheltered.fullySheltered) {
-        const noEffectDescription = typeof location.currentWeatherNoEffectDescription === "string" ? location.currentWeatherNoEffectDescription : await location.currentWeatherNoEffectDescription(engine.deObject, { char: character });
+        const noEffectDescription = typeof location.internalState.currentWeatherNoEffectDescription === "string" ? location.internalState.currentWeatherNoEffectDescription : await location.internalState.currentWeatherNoEffectDescription(engine.deObject, { char: character });
         return `The current weather where "${characterName}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}". However, "${characterName}" is fully sheltered from its effects. ${isSheltered.reason || ""}, therefore ${noEffectDescription || "no weather effects apply to them."}`;
     } else if (isSheltered.partiallySheltered) {
-        const partialEffectDescription = typeof location.currentWeatherPartialEffectDescription === "string" ? location.currentWeatherPartialEffectDescription : await location.currentWeatherPartialEffectDescription(engine.deObject, { char: character });
+        const partialEffectDescription = typeof location.internalState.currentWeatherPartialEffectDescription === "string" ? location.internalState.currentWeatherPartialEffectDescription : await location.internalState.currentWeatherPartialEffectDescription(engine.deObject, { char: character });
         return `The current weather where "${characterName}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}". "${characterName}" is partially sheltered from its effects. ${isSheltered.reason || ""}, therefore ${partialEffectDescription || "some weather effects may apply to them."}`;
     } else if (isSheltered.negativelyExposed) {
-        const negativeEffectsDescription = typeof location.currentWeatherNegativelyExposedDescription === "string" ? location.currentWeatherNegativelyExposedDescription : await location.currentWeatherNegativelyExposedDescription(engine.deObject, { char: character });
+        const negativeEffectsDescription = typeof location.internalState.currentWeatherNegativelyExposedDescription === "string" ? location.internalState.currentWeatherNegativelyExposedDescription : await location.internalState.currentWeatherNegativelyExposedDescription(engine.deObject, { char: character });
         return `The current weather where "${characterName}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}". "${characterName}" is negatively exposed to its effects. ${isSheltered.reason || ""}, therefore ${negativeEffectsDescription || "strongly negative weather effects apply to them."}`;
     } else {
-        const effectDescription = typeof location.currentWeatherFullEffectDescription === "string" ? location.currentWeatherFullEffectDescription : await location.currentWeatherFullEffectDescription(engine.deObject, { char: character });
+        const effectDescription = typeof location.internalState.currentWeatherFullEffectDescription === "string" ? location.internalState.currentWeatherFullEffectDescription : await location.internalState.currentWeatherFullEffectDescription(engine.deObject, { char: character });
         return `The current weather where "${characterName}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}". ${isSheltered.reason || ""}, therefore ${effectDescription || "all weather effects apply to them."}`;
     }
 }
@@ -2324,7 +2324,7 @@ export async function getRelationshipBetweenCharacters(engine, characterName, to
         throw new Error(`Character ${towards} not found.`);
     }
     // @ts-ignore
-    let bond = engine.deObject.social.bonds[characterName].active.find(bond => bond.towards === towards);
+    let bond = engine.deObject.bonds[characterName].active.find(bond => bond.towards === towards);
     let bondInfo = "";
     let pseudoBond = false;
     if (!bond) {
@@ -2369,4 +2369,33 @@ export async function getRelationshipBetweenCharacters(engine, characterName, to
 export function getFamilyBondRelation(character, towards) {
     const familyTie = character.socialSimulation.familyTies[towards.name];
     return familyTie?.relation || null;
+}
+
+/**
+ * @param {DEngine} engine
+ * @param {DECompleteCharacterReference} character 
+ * @param {DECompleteCharacterReference} towards
+ * @return {Promise<string|null>}
+ */
+export async function getRelationship(engine, character, towards) {
+    if (!engine.deObject) {
+        throw new Error("DEngine not initialized");
+    }
+    if (!character.bonds || !character.bonds.declarations) {
+        return null;
+    }
+    const activeBond = engine.deObject?.bonds[character.name]?.active.find(bond => bond.towards === towards.name);
+    if (!activeBond) {
+        return null;
+    }
+    const bondDecl = character.bonds.declarations.find((b => b.strangerBond === activeBond.stranger && b.minBondLevel <= activeBond.bond && activeBond.bond < (b.maxBondLevel === 100 ? 200 : b.maxBondLevel) && b.min2BondLevel <= activeBond.bond2 && activeBond.bond2 < (b.max2BondLevel === 100 ? 200 : b.max2BondLevel)));
+    if (!bondDecl) {
+        return null;
+    }
+
+    if (!bondDecl.relationshipName) {
+        return null;
+    }
+
+    return typeof bondDecl.relationshipName === "string" ? bondDecl.relationshipName : await bondDecl.relationshipName(engine.deObject, { char: character, other: towards });
 }

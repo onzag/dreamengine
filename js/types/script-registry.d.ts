@@ -18,6 +18,9 @@ declare type FSS1DAceNoStrangersNoFamilyOptions = { type: "1d_ace_no_strangers_n
 declare type FSS0DTesting = { type: "0d_testing"; bondChangeFineTune?: number | undefined; bondChangeNegativityBias?: number | undefined; strangerBreakawayBondWeightAbsolute?: number | undefined; strangerBreakawayInteractionsCount?: number | undefined; strangerBreakawayTimeMinutes?: number | undefined; strangerNegativeMultiplier?: number | undefined; strangerPositiveMultiplier?: number | undefined; value: FSSBase; };
 
 declare interface DEScriptRegistry {
+    "bond-systems/deteriorating-bonds": DEScript & {
+        name: string;
+    };
     "bond-systems/full-standard-bond-system": DEScript & {
         setup(DE: DEObject, character: DECompleteCharacterReference, options: FSS4DOptions | FSS4DCreepyOptions | FSS3DAceOptions | FSS3DNoFamilyOptions | FSS2DAceNoFamilyOptions | FSS1DAceNoStrangersNoFamilyOptions | FSS0DTesting): DECompleteCharacterReference;
     };

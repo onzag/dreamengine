@@ -159,6 +159,20 @@ export function yesNoGrammar(engine) {
 }
 
 /**
+ * @param {DEngine} engine
+ * @returns {{grammar: string, stopAfter: string[]}}
+ */
+export function numberGrammar(engine) {
+    if (!engine.inferenceAdapter) {
+        throw new Error("Inference adapter is required to create grammar");
+    }
+    return {
+        grammar: `root ::= [0-9]+`,
+        stopAfter: [],
+    };
+}
+
+/**
  * @param {string} answer 
  * @returns {boolean}
  */

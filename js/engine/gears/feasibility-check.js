@@ -262,7 +262,7 @@ import { getHistoryFragmentForCharacter } from "../util/messages.js";
 
 //         const bondsInOrder = listOfCharacters.map(otherCharName => {
 //             // @ts-expect-error
-//             const bondFound = this.deObject.social.bonds[character.name].active.find((b) => b.towards === otherCharName);
+//             const bondFound = this.deObject.bonds[character.name].active.find((b) => b.towards === otherCharName);
 //             if (!bondFound) {
 //                 return { name: otherCharName, bond: 0 };
 //             }

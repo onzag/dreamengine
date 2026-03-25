@@ -4,12 +4,13 @@ import { DEJSEngine } from '../jsengine/index.js';
 import { localResolver } from '../jsengine/local-resolver.js';
 import { generateBase } from '../cardtype/generate-base.js';
 import { readFileSync, writeFileSync, existsSync } from 'fs';
-import { basename, dirname, join, extname } from 'path';
+import { basename, dirname, join, extname, resolve } from 'path';
 
 if (typeof process !== "undefined" && process.versions && process.versions.node) {
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 }
 
+const initCwd = process.env.INIT_CWD || process.cwd();
 const localDEPathAtHomeDir = join(process.env.HOME || process.env.USERPROFILE || '.', '.dreamengine');
 const defaultConfigPath = join(localDEPathAtHomeDir, 'de-server-config.json');
 
@@ -41,6 +42,10 @@ if (!inputPath) {
     console.error('Usage: node cardtype-generator-llama-adapter.js [--config <config.json>] [--infer-bonds] [--infer-states <statefile.md>] <inputfile.md | inputfile.js>');
     process.exit(1);
 }
+
+inputPath = resolve(initCwd, inputPath);
+if (configPath) configPath = resolve(initCwd, configPath);
+if (secondFile) secondFile = resolve(initCwd, secondFile);
 
 const config = configPath ? JSON.parse(readFileSync(configPath, 'utf-8')) : {};
 const sourceContent = readFileSync(inputPath, 'utf-8');

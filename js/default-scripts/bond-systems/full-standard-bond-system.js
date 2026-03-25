@@ -5,7 +5,7 @@
 /**
  * @typedef {Object} FSSBase
  * @property {DEStringTemplate} description The template to use for this bond definition, should include {{char}} and {{other}} as placeholders and {{other_family_relation}} if family ties are relevant
- * @property {Array<DEBondIncreaseDecreaseQuestion>} bondConditions An array of questions to ask, to determine how much the bond should increase
+ * @property {DEStringTemplate|null} relationshipName The relationship name, should be one word, eg. friend, lover, colleague, etc... this is used for reasoning about the relationship and for the character to refer to the other character in the relationship, for example, if the relationship name is "friend", the character may refer to the other character as "my friend" or just "friend" when talking about them
  * @property {DEStringTemplate} [bondAdditionalDescription] additional description to be added to the bond description
  * @property {DEStringTemplate} [generalCharacterDescriptionInjection] A template that can be injected into the general character description when this bond declaration is active, it will have access to the same variables as the description, but it is meant to be a smaller piece of text that can be added to the general description when relevant, instead of being the main description of the bond level.
  * @property {DEStringTemplate} [generalCharacterDescriptionInjectionEx] Similar to generalCharacterDescriptionInjection but it will only be injected in the general character description and not in the bond description, this is useful for cases where the information is relevant for the character description but not for the bond description, for example if you want to add a sentence about how the character's family relationship with the other character affects their behavior towards them, you might want that to be in the general description injection but not in the bond description, since the bond description might be focused on romantic feelings and the family relationship might not be relevant for that.
@@ -398,7 +398,7 @@ engine.exports = {
             character.bonds.declarations.push({
                 name: `${options.type}_strangerBad_n100_n5`,
                 description: options.strangerBad_n100_n5.description,
-                bondConditions: options.strangerBad_n100_n5.bondConditions,
+                relationshipName: options.strangerBad_n100_n5.relationshipName,
                 minBondLevel: -100,
                 maxBondLevel: -5,
                 min2BondLevel: 0,
@@ -413,7 +413,7 @@ engine.exports = {
             character.bonds.declarations.push({
                 name: `${options.type}_strangerNeutral_n5_5`,
                 description: options.strangerNeutral_n5_5.description,
-                bondConditions: options.strangerNeutral_n5_5.bondConditions,
+                relationshipName: options.strangerNeutral_n5_5.relationshipName,
                 minBondLevel: -5,
                 maxBondLevel: 5,
                 min2BondLevel: 0,
@@ -428,7 +428,7 @@ engine.exports = {
             character.bonds.declarations.push({
                 name: `${options.type}_strangerGood_5_100`,
                 description: options.strangerGood_5_100.description,
-                bondConditions: options.strangerGood_5_100.bondConditions,
+                relationshipName: options.strangerGood_5_100.relationshipName,
                 minBondLevel: 5,
                 maxBondLevel: 100,
                 min2BondLevel: 0,
@@ -457,7 +457,7 @@ engine.exports = {
                         character.bonds.declarations.push({
                             name: `${options.type}_${bondName}_${secondaryBondName}_non_stranger_${familyStatus}`,
                             description: baseRule.description,
-                            bondConditions: baseRule.bondConditions,
+                            relationshipName: baseRule.relationshipName,
                             minBondLevel: min,
                             maxBondLevel: max,
                             min2BondLevel: secondaryMin,
@@ -484,7 +484,7 @@ engine.exports = {
                     character.bonds.declarations.push({
                         name: `${options.type}_${bondName}_non_stranger_${familyStatus}`,
                         description: baseRule.description,
-                        bondConditions: baseRule.bondConditions,
+                        relationshipName: baseRule.relationshipName,
                         minBondLevel: min,
                         maxBondLevel: max,
                         min2BondLevel: 0,
@@ -510,7 +510,7 @@ engine.exports = {
                     character.bonds.declarations.push({
                         name: `${options.type}_${bondName}_${secondaryBondName}_non_stranger`,
                         description: baseRule.description,
-                        bondConditions: baseRule.bondConditions,
+                        relationshipName: baseRule.relationshipName,
                         minBondLevel: min,
                         maxBondLevel: max,
                         min2BondLevel: secondaryMin,
@@ -535,7 +535,7 @@ engine.exports = {
                 character.bonds.declarations.push({
                     name: `${options.type}_${bondName}_non_stranger`,
                     description: baseRule.description,
-                    bondConditions: baseRule.bondConditions,
+                    relationshipName: baseRule.relationshipName,
                     minBondLevel: min,
                     maxBondLevel: max,
                     min2BondLevel: 0,
@@ -559,7 +559,7 @@ engine.exports = {
                 character.bonds.declarations.push({
                     name: `${options.type}_${bondName}`,
                     description: baseRule.description,
-                    bondConditions: baseRule.bondConditions,
+                    relationshipName: baseRule.relationshipName,
                     minBondLevel: min,
                     maxBondLevel: max,
                     min2BondLevel: 0,
@@ -574,7 +574,7 @@ engine.exports = {
                 character.bonds.declarations.push({
                     name: `${options.type}_${bondName}_stranger`,
                     description: baseRule.description,
-                    bondConditions: baseRule.bondConditions,
+                    relationshipName: baseRule.relationshipName,
                     minBondLevel: min,
                     maxBondLevel: max,
                     min2BondLevel: 0,
@@ -592,7 +592,7 @@ engine.exports = {
             character.bonds.declarations.push({
                 name: `${options.type}_default`,
                 description: baseRule.description,
-                bondConditions: baseRule.bondConditions,
+                relationshipName: baseRule.relationshipName,
                 minBondLevel: -100,
                 maxBondLevel: 100,
                 min2BondLevel: 0,
@@ -607,7 +607,7 @@ engine.exports = {
             character.bonds.declarations.push({
                 name: `${options.type}_stranger`,
                 description: baseRule.description,
-                bondConditions: baseRule.bondConditions,
+                relationshipName: baseRule.relationshipName,
                 minBondLevel: -100,
                 maxBondLevel: 100,
                 min2BondLevel: 0,

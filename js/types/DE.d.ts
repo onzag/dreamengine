@@ -109,205 +109,6 @@ declare interface DEMinimalCharacterReference {
     powerGrowthRate: number;
 }
 
-interface DEStringTemplateWithIntensityAndCausants {
-    /**
-     * Relevant template in question,
-     * should be a yes/no question or similar
-     * if yes is returned instead of a question mark at the end it will increase/decrease intensity to the specified level
-     * 
-     * You may also return just "yes" or "no" to increase or decrease intensity
-     * 
-     * Otherwise return a question mark at the end to indicate it is a question and it will
-     * be fed to the LLM to determine if the state triggers/modifies intensity
-     * 
-     * Remember to make use of the bond system to determine
-     * if a potential causant is good or not for triggering
-     * the state (or increasing intensity)
-     * 
-     * for that you may use the potentialCausantMinBondRequired, potentialCausantMaxBondAllowed,
-     * potentialCausantMin2BondRequired, potentialCausantMax2BondAllowed, etc...
-     * to limit the characters that can trigger the state
-     * 
-     * That is provided that requiresCharacterCausants is true for this state
-     * 
-     * For example, say the state is NEEDS_AFFECTION
-     * it may not be good for the state to be triggered by complete strangers
-     * so you may want to write a template like:
-     * 
-     * potentialCausantMinBondRequired: 20
-     * potentialCausantMaxBondAllowed: 100
-     * potentialCausantMin2BondRequired: 20
-     * potentialCausantMax2BondAllowed: 100
-     * 
-     * template:
-     * "Is {{char}} getting a hug from {{format_or potential_causants}}?"
-     * 
-     * determineCausants:
-     * "Who is hugging {{char}}?"
-     * 
-     * Alternatively you may define potential causants with this and 
-     * 
-     * Depending on the bond system, this basically means the state will only trigger
-     * if someone the character has a good bond with and they know them and has
-     * some romantic interest (if the second bond was used that way) is giving them a hug
-     * then only the NEEDS_AFFECTION state will trigger
-     * 
-     * You may also add an opposite state, like DISGUSTED_BY_AFFECTION that triggers
-     * for the opposite characters with bonds that just don't clear the threshold
-     * for this state
-     * 
-     * """
-     * {{#with (difference (get_present_conversing_social_group 20 100 20 100) (get_present_conversing_social_group -100 100 0 100)) as |potential_causants|}}
-     *    {{#if potential_causants}}
-     *       Is {{char}} receiving affection from {{format_or potential_causants}}?"
-     *    {{/if}}
-     * {{/with}}
-     * """
-     * 
-     * You may wonder why the state description also has potentialCausantMinBondRequired, potentialCausantMaxBondRequired, etc...
-     * That is because those are used to help the character reason and do not imply state activation, so say, you meet a character for the first time
-     * as the reason, the potentialCausantNegativeDescription may help her reason with "{{char}} would feel uncomfortable hugging {{potential_causant}}"
-     * meaning this character will not hug and will not allow hug, and the state won't even be considered for activation if none of the characters around
-     * her fit the criteria
-     * 
-     * But if one does, that consumes inference LLM calls as the LLM will have to answer the questions, once a character is going to interact and speak,
-     * the logic goes as follows:
-     * 
-     * 1. Determine all potential causants in the vicinity
-     * 2. Are there any potentialCausants that fit the criteria? If not, skip to 4.
-     * 3. If yes, ask the LLM the questions in the template to determine if the state triggers or its intensity modifies; update the state accordingly.
-     * 4. Generate all the messages for the potentialCausantNegativeDescription and potentialCausantPositiveDescription and inject them into reasoning message, as well as the state the character is in, and
-     * everything required for reasoning.
-     * 5. Generate a short reasoning about what the character will do next, at this point the state is already updated OR if actionPromptInjection is set and one returns, that will override reasoning
-     * 6. Proceed with the character message generation as usual.
-     * 
-     * This means the state activation and intensity modification is done before reasoning (or the actionPromptInjection), and the potentialCausant descriptions are just to help
-     * reasoning about the character behaviour.
-     * 
-     * These YES/NO questions can be very expensive in terms of LLM calls. Make sure to optimize them well and avoid having too many, keep them as compact as possible; remember it is not just this
-     * state, but all other states are also asking their own YES/NO questions as well, so the total number of LLM calls can skyrocket.
-     */
-    template: DEStringTemplate;
-    /**
-     * Intensity of the template effect, from -4 to 4
-     */
-    intensity: number | "DO_NOT_MODIFY_INTENSITY_ADD_CAUSANTS_ONLY" | "DO_NOT_MODIFY_INTENSITY_REMOVE_CAUSANTS_ONLY";
-    /**
-     * If the template holds true, how are causants handled
-     * this should be a comma-separated list of causant names
-     * if however the value ends with "?" it means that it is a question
-     * that will be answered by the LLM to determine the causants
-     * 
-     * for example, say the template is "{{char}} is feeling scared and threatened by someone"
-     * triggering the state FEARFUL
-     * and the determineCausants is "who is {{char}} threatened by?"
-     * 
-     * It is also possible to just give it a static name eg.
-     * for example, "{{char}} is in the dark forest"
-     * triggering the state FEARFUL
-     * and the determineCausants is "the dark forest"
-     * it expects a list nevertheless, but for a single causant it will be just one item in the list
-     * comma separate them, eg. Bob, Alice, the dark forest
-     * 
-     * Note if the causants represents a trigger with negative intensity, the causants will be removed from the state causants
-     * instead of added to them, if the resulting causant list is empty, and the state requires causants, the state will be removed
-     * 
-     * For example, say the state is FEARFUL, and the character is currently fearful of Bob and Alice
-     * now Bob shows himself as non threatening, based on the question "has {{format_or causants}} show themselves as non threatening?"
-     * and the determineCausants is "Who has shown themselves as non threatening to {{char}}?" with a trail of "the characters not showing themselves as threatening anymore is " and a
-     * determineCausantsAnswerForceGrammarTo LIST_OF_ANY_CAUSANTS (meaning the answer should be Bob, Alice, etc..)
-     * then once "Bob" returns from the inference step, Bob will be removed from the causants of the FEARFUL state
-     * meaning the character is now only fearful of Alice
-     * 
-     * If then Alice shows herself as non threatening as well, the causants list becomes empty
-     * and the FEARFUL state is removed from the character as it requires causants to be active
-     * 
-     * if the state does not require causants, then the state remains active but with no causants
-     */
-    determineCausants?: DEStringTemplate | null;
-    /**
-     * The trail to determine the causants from, for example
-     * if determineCausants is "who is {{char}} threatened by?"
-     * determineCausantsTrail is "{{char}} is threatened by "
-     */
-    determineCausantsAnswerTrail?: DEStringTemplate | null;
-    /**
-     * The grammar to use when answering the determineCausants question
-     * The default is LIST_OF_ANY_CAUSANTS
-     */
-    determineCausantsAnswerForceGrammarTo?: "LIST_OF_ANY_CAUSANTS" | "LIST_OF_CHARACTER_CAUSANTS" | "LIST_OF_OBJECT_CAUSANTS" | "SINGLE_ANY_CAUSANT" | "SINGLE_CHARACTER_CAUSANT" | "SINGLE_OBJECT_CAUSANT" | "SINGLE_CHARACTER_POTENTIAL_CAUSANT" | "LIST_OF_CHARACTER_POTENTIAL_CAUSANTS" | null;
-    /**
-     * Use an action accumulator to track the number of times this trigger/modifier has fired,
-     * this does not include any trigger likelihood checks, only when the template holds true
-     * the accummulator name should be unique per state per trigger/modifier (or it can be shared if that is desired)
-     * 
-     * eg. for example, let's say a character will only get angry after being insulted 3 times
-     * you may have a trigger like:
-     * """
-     * Has {{char}} been insulted by {{format_or potential_causants}}?
-     * """
-     * with a determineCausants like:
-     * """
-     * Who has insulted {{char}}?
-     * """
-     * and an intensity of 1
-     * and an action accumulator name of
-     * {
-     *    name: "insult_accumulator",
-     *    usePerCausant: true,
-     *    triggerThreshold: 3,
-     *    reset: "when_state_triggers"
-     * }
-     * 
-     * You may use trigger likelihood in addition to this to avoid the state triggering right at 3 consistently
-     * every time, adding some randomness to it
-     * 
-     * An action accumulator can be used more creatively, for example, the character Mob Psycho 100, accumulates
-     * emotional energy until it reaches a threshold and then it explodes in a psychic outburst, the accumulator can
-     * be used to track the emotional energy accumulation until it reaches the threshold to trigger the outburst state
-     * 
-     * States with accumulators are expensive when used on triggers, as they are always evaluated every inference cycle to determine if the accumulator
-     * has changed, while on intensity modifiers they have the same cost as normal; this is because triggers are evaluated until one is found that triggers the state
-     * but if it has an accumulator, it must always be evaluated to update the accumulator value
-     */
-    useActionAccumulator?: {
-        /**
-         * Name of the accumulator to use, should be unique per character
-         */
-        name: string;
-        /**
-         * Whether to use a separate accumulator per causant, if causants are used and known
-         * otherwise it would not make sense to use per causant
-         */
-        usePerCausant: boolean;
-        /**
-         * The threshold to trigger the state or intensity modification
-         * basically the accumulator must hold this value or more to trigger
-         */
-        triggerThreshold: number;
-        /**
-         * When to reset the accumulator
-         */
-        reset?: "when_state_triggers" | "when_state_relieves" | "when_state_removed";
-        /**
-         * The number to accumulate towards the threshold each time the template holds true
-         * default is 1, negative values are allowed to allow for decrementing accumulators
-         */
-        accumulateAmount?: number;
-        /**
-         * Resets the accumulator back to zero
-         */
-        resetIfNo?: boolean;
-    };
-    /**
-     * If the answer to the triggers question is yes, this is the likelihood that the state will actually get triggered
-     * anyway even if the condition holds true.
-     * 
-     * Statistically the check is not even done if this doesn't pass the likelihood check
-     */
-    triggerLikelihood?: number;
-}
-
 declare interface DEActionPromptInjection {
     /**
      * The template to inject into the character's action reasoning
@@ -315,7 +116,7 @@ declare interface DEActionPromptInjection {
      * So be careful check actionPromptInjection documentation description for more details
      * on a proper use case
      */
-    action: DEStringTemplate;
+    action?: DEStringTemplate;
     /**
      * An optional narrive effect for the action, suppose for example the action is
      * {{char}} begins to cry
@@ -385,16 +186,6 @@ declare interface DEActionPromptInjection {
      * Do not specify this if you do not want to limit vocabulary
      */
     vocabularyLimit?: DEVocabularyLimit;
-}
-
-declare interface DEActionPromptInjectionWithIntensity extends DEActionPromptInjection {
-    /**
-     * The intensity modification this action will cause provided
-     * that something is injected, from -4 to 4
-     * you may use 0 if you just want the character to perform
-     * an action without modifying intensity
-     */
-    intensityModification: number;
 }
 
 declare interface DECharacterStateDefinition {
@@ -504,7 +295,7 @@ declare interface DECharacterStateDefinition {
      * The injection can have intensity levels as well to allow for different instructions
      * allowing it to be more dynamic
      */
-    actionPromptInjection: Record<string, DEActionPromptInjectionWithIntensity>;
+    actionPromptInjection: Record<string, DEActionPromptInjection>;
     /**
      * Description of the state, used for reasoning about the state
      */
@@ -535,7 +326,7 @@ declare interface DECharacterStateDefinition {
      * 
      * Check the actionPromptInjection description for an example use case
      */
-    relievingActionPromptInjection?: Record<string, DEActionPromptInjectionWithIntensity>;
+    relievingActionPromptInjection?: Record<string, DEActionPromptInjection>;
     /**
      * Whether this state triggers a dead end that causes the character to be permanently removed from the story
      * use this for the description of the dead end scenario
@@ -567,16 +358,6 @@ declare interface DECharacterStateDefinition {
      */
     requiresPosture: DEPosture | null;
     /**
-     * Whether the state requires a specific posture to trigger only
-     */
-    requiresPostureForTrigger?: DEPosture | null;
-    /**
-     * Whether the character falls down to the ground when the state is triggered
-     * for example, the UNCONSCIOUS state may cause the character to fall down
-     * when triggered
-     */
-    fallsDown: boolean;
-    /**
      * A random spawn rate (0 to 1) that the state will trigger spontaneously
      * every inference cycle
      */
@@ -593,10 +374,6 @@ declare interface DECharacterStateDefinition {
      * These are applied for trigger and mantenience
      */
     requiredStates: string[];
-    /**
-     * States that are required for trigger only
-     */
-    requiredStatesForTrigger?: string[];
     /**
      * States that this state triggers when it gets activated
      */
@@ -623,11 +400,18 @@ declare interface DECharacterStateDefinition {
      * States that this state relieves when it gets relieved and the intensity drops to zero
      */
     modifiesStatesIntensitiesOnRemove?: { [stateName: string]: { intensity: number } };
+    requiresCausants?: boolean;
+    requiresCharacterCausants?: boolean;
+    requiresObjectCausants?: boolean;
+
+    /**
+     * If not given everyone around the character is a potential causant
+     */
     potentialCausantsCriteria?: {
         /**
          * An instruction that gets added to the character description where a potential causant that does not fit
          * the criteria is set, for example, say the state is HUGGING, but the character has a low bond level, the
-         * negative description could be "{{char}} would feel uncomfortable hugging {{potential_causant}}" this would
+         * negative description could be "{{char}} would feel uncomfortable hugging {{other}}" this would
          * get injected into the system prompt, and reasoning step to help the character reason their behaviour
          * 
          * TODO this hasn't been implemented in getsysprompt
@@ -636,40 +420,34 @@ declare interface DECharacterStateDefinition {
         /**
          * An instruction that gets added to the character description where a potential causant that fits
          * the criteria is set, for example, say the state is HUGGING, and the character has a high bond level, the
-         * positive description could be "{{char}} would feel happy hugging {{potential_causant}}" this would
+         * positive description could be "{{char}} would feel happy hugging {{other}}" this would
          * get injected into the system prompt, and reasoning step to help the character reason their behaviour
          * 
          * TODO this hasn't been implemented in getsysprompt
          */
         positiveDescription?: DEStringTemplate;
         /**
-         * Minimum bond level required for a potential character causant to be considered valid to activate this state
-         * if no characters are around, no questions are asked about triggering the state if requiresCausant is true
+         * Minimum bond level required for a potential character causant to be considered
          */
         minBondRequired?: number;
         /**
          * Maximum bond level allowed for a potential causant to be considered valid to activate this state
-         * if no characters are around, no questions are asked about triggering the state if requiresCausant is true
          */
         maxBondAllowed?: number;
         /**
          * Minimum 2-bond level required for a potential causant to be considered valid to activate this state
-         * if no characters are around, no questions are asked about triggering the state if requiresCausant is true
          */
         min2BondRequired?: number;
         /**
          * Maximum 2-bond level allowed for a potential causant to be considered valid to activate this state
-         * if no characters are around, no questions are asked about triggering the state if requiresCausant is true
          */
         max2BondAllowed?: number;
         /**
          * Whether a potential causant that is a completely total stranger (no bond) is allowed to be a causant of this state
-         * if no characters are around, no questions are asked about triggering the state if requiresCausant is true
          */
         noBondAllowed?: boolean;
         /**
          * Whether a potential causant that is not a stranger (has some bond) is denied to be a causant of this state
-         * if no characters are around, no questions are asked about triggering the state if requiresCausant is true
          */
         bondDenied?: boolean;
         /**
@@ -680,31 +458,28 @@ declare interface DECharacterStateDefinition {
          * To deny familie who have a relationship of this type
          */
         familyExclude?: DEFamilyRelation[];
+        /**
+         * Custom potential causant determiner
+         * 
+         * @param character 
+         * @param potentialCausant 
+         * @returns 
+         */
+        custom?: (character: DEMinimalCharacterReference, potentialCausant: DEMinimalCharacterReference) => boolean;
     },
+
     /**
      * The intensity change rate per inference cycle when the state is active
      * should be a float bewteen -4 and 4
      */
     intensityChangeRatePerInferenceCycle: number;
+
     /**
      * The intensity change rate per minute when the state is active
      * should be a float bewteen -4 and 4
      */
     intensityChangePerMinute?: number;
-    /**
-     * The triggers that can cause this state to pop up
-     */
-    triggers: Array<DEStringTemplateWithIntensityAndCausants>;
-    /**
-     * The intensity modifiers once the state is active, what might intensify it further
-     * or relieve it
-     */
-    intensityModifiers: Array<DEStringTemplateWithIntensityAndCausants>;
-    /**
-     * The intensity modifiers when the state is being relieved, what might intensify it further
-     * or relieve it
-     */
-    intensityModifiersDuringRelief?: Array<DEStringTemplateWithIntensityAndCausants>;
+
     /**
      * INTENSITY_EXPRESSIVE:
      * For example the state SCARED may be intensity expressive, it will cause the injection on the character state of:
@@ -747,22 +522,6 @@ declare interface DECharacterStateDefinition {
      * this is important to track separately for the world simulation
      */
     injuryAndDeath: boolean;
-    /**
-     * Whether this state requires character causants to be triggered,
-     * for example, say a state named IN_LOVE you may want to require a causant
-     * you should have trackCausants enabled for this to work properly
-     * 
-     * check out the potentialCausant... properties to help the character reason
-     */
-    requiresCharacterCausants: boolean;
-    /**
-     * Whether this state requires object causants to be triggered,
-     * for example, say a state named HATING_THE_FOREST you may want to require a causant
-     * that is an inanimate object like "the forest" or "trees"
-     * 
-     * Honestly mostly useless to require object causants but here for completeness
-     */
-    requiresObjectCausants: boolean;
     /**
      * Limit vocabulary to these specific words or grammatical tokens, ensure to double quote strings
      * that match specific words, these are used for grammar control so they should be in
@@ -862,50 +621,19 @@ declare interface DEVocabularyLimit {
     narrationStyle?: DENarrationStyle;
 }
 
-declare interface DEBondFilterReaction {
-    multiplier: number;
-    rewriteAffectsBonds?: "primary" | "secondary" | "both";
-    rewriteWeight?: number;
-    reason?: string;
-    injectActionOnYes?: DEActionPromptInjection;
-    injectActionOnNo?: DEActionPromptInjection;
-}
-
-declare interface DEBondIncreaseDecreaseQuestion {
-    /**
-     * The question to ask to determine if the bond increases or decreases
-     * it should be a yes/no question
-     * 
-     * If nothing is returned, the bond does not change
-     * 
-     * If instead of a question it is "yes, ..." and does not end with "?" the bond increases by weight
-     * as it is considered a static increase, emtpy string or "no, ..." means no change
-     * 
-     * In this template the value of {{other}} is the other character involved in the interaction
-     */
-    template: DEStringTemplate;
-    /**
-     * The weight of the bond increase or decrease
-     */
-    weight: number;
-    /**
-     * Whether this question affects the primary bond, secondary bond or both
-     */
-    affectsBonds: "primary" | "secondary" | "both";
-
-    /**
-     * Custom filter
-     * @param otherCharacter The other character involved in the interaction
-     * @returns A DEBondFilterReaction object indicating the result of the filter
-     */
-    filter?: (otherCharacter: DECharacter) => DEBondFilterReaction;
-}
-
 declare interface DEBondDeclaration {
     /**
      * Name of the bond, useful to identify it
      */
     name: string;
+    /**
+     * TODO implement in sysprompt and other places
+     * 
+     * The relationship name, should be one word, eg. friend, lover, colleague, etc... this is used for reasoning about the relationship and for the character to refer to the other character in the relationship, for example, if the relationship name is "friend", the character may refer to the other character as "my friend" or just "friend" when talking about them
+     * 
+     * can leave empty if the relationship does not exist, eg. strangers, or if the relationship name is not important for the bond declaration 
+     */
+    relationshipName: DEStringTemplate | null;
     /**
      * Whether it is a stranger bond or not, stranger bonds are used
      * when characters have just met and have no prior relationship
@@ -913,8 +641,6 @@ declare interface DEBondDeclaration {
     strangerBond: boolean;
     /**
      * Whether it is a family bond or not, family bonds are used when characters are related by blood
-     * 
-     * TODO implement special handling for family bonds
      */
     familyBond: boolean;
     /**
@@ -970,11 +696,6 @@ declare interface DEBondDeclaration {
      * {{char}} used to trust {{other}} a lot and be best friends but now {{other}} is gone and they feel sad about it.
      */
     generalCharacterDescriptionInjectionEx?: DEStringTemplate;
-    /**
-     * The questions to ask to determine bond increases or decreases
-     * based on interactions and events happening in the story
-     */
-    bondConditions: DEBondIncreaseDecreaseQuestion[];
 }
 
 declare interface DEEmotionDefinition {
@@ -1023,9 +744,9 @@ type DEEmotionNames =
 
 declare interface DECompleteCharacterReference extends DEMinimalCharacterReference {
     /**
-     * Arbitrary properties attached to the character
+     * Arbitrary state attached to the character
      */
-    properties: Record<string, any>;
+    state: Record<string, any>;
 
     /**
      * Injects extra information into the character's general description
@@ -1470,7 +1191,75 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
          */
         gossipTendency: number;
     };
+
+    /**
+     * Self asked questions to evolve bond system and trigger states
+     */
+    triggers: Array<DECharacterYesNoQuestion | DECharacterNumericQuestion | DECharacterTextQuestion>;
 }
+
+declare interface DECharacterQuestionBase {
+    /**
+     * The question to run
+     */
+    question: DEStringTemplate;
+    /**
+     * Now the question has access to {{other}} and {{other_family_relation}}
+     */
+    askPer?: "present_character" | "potential_character_causants_of_state" | "character_causants_of_state" | "object_causants_of_state" | "any_causants_of_state" | "present_family_members";
+    /**
+     * Used in combination with askPer: "potential_character_causants_of_state" or "causants_of_state" or "character_causants_of_state" or "object_causants_of_state" to specify the state that the question should be asked for each potential causant of it, this way the question can be asked for each potential causant of a specific state and have access to {{other}} and {{other_family_relation}} in the question template, which refer to the potential causant character and their family relation to the character respectively
+     */
+    askPerState?: string;
+    /**
+     * Run the question only if this condition is met
+     * @param character 
+     * @param otherChar 
+     * @param otherFamilyRelation 
+     * @returns 
+     */
+    runIf?: (character: DECompleteCharacterReference, otherChar: DEMinimalCharacterReference | null, otherFamilyRelation: DEFamilyRelation | null) => boolean | Promise<boolean>;
+}
+
+declare interface DECharacterYesNoQuestion extends DECharacterQuestionBase {
+    type: "yes_no";
+    onValue: DEYesNoQuestionCallback;
+}
+
+declare type DEYesNoQuestionCallback = (
+    answer: boolean,
+    character: DECompleteCharacterReference,
+    otherChar: DEMinimalCharacterReference | null,
+    otherFamilyRelation: DEFamilyRelation | null,
+    otherRelationship: string | null,
+) => Promise<void> | void;
+
+declare interface DECharacterNumericQuestion extends DECharacterQuestionBase {
+    type: "numeric";
+    onNumber: DENumericQuestionCallback;
+}
+
+declare type DENumericQuestionCallback = (
+    answer: number,
+    character: DECompleteCharacterReference,
+    otherChar: DEMinimalCharacterReference | null,
+    otherFamilyRelation: DEFamilyRelation | null,
+    otherRelationship: string | null,
+) => Promise<void> | void;
+
+declare interface DECharacterTextQuestion extends DECharacterQuestionBase {
+    type: "text";
+    grammar?: string;
+    onText: DETextQuestionCallback;
+}
+
+declare type DETextQuestionCallback = (
+    answer: string,
+    character: DECompleteCharacterReference,
+    otherChar: DEMinimalCharacterReference | null,
+    otherFamilyRelation: DEFamilyRelation | null,
+    otherRelationship: string | null,
+) => Promise<void> | void;
 
 declare type DEFamilyRelation = "parent" | "sibling" | "child" | "spouse" | "cousin" | "uncle" | "aunt" | "grandparent" | "grandchild" | "niece" | "nephew" | "other";
 
@@ -1605,6 +1394,8 @@ declare interface DEApplyingState {
      * it just keeped being active
      * 
      * This number is zero for states that were activated during this inference cycle
+     * 
+     * TODO is not being updated
      */
     contiguousStartActivationCyclesAgo: number;
 }
@@ -1718,7 +1509,7 @@ declare interface DEItem {
     weightKg: number;
     description: string;
     canSeeContentsFromOutside: boolean;
-    properties: Record<string, any>;
+    state: Record<string, any>;
     isConsumable: boolean;
     consumableProperties?: {
         calories: number;
@@ -2015,10 +1806,10 @@ declare interface DELocationSlot {
     /**
      * Arbitrary properties at this slot
      */
-    properties: Record<string, any>;
+    state: Record<string, any>;
 }
 
-declare interface WeatherSystemApplyingStateWithIntensity {
+declare interface DEWeatherSystemApplyingStateWithIntensity {
     stateName: string;
     intensity: number;
 }
@@ -2161,21 +1952,21 @@ declare interface DEWeatherSystem {
      * Names of states that are applied to characters while they are fully exposed to the weather system
      * eg. "WET" for rain, "SUNBURNED" for sunny weather
      */
-    applyingStatesDuringFullEffect: Array<WeatherSystemApplyingStateWithIntensity>;
+    applyingStatesDuringFullEffect: Array<DEWeatherSystemApplyingStateWithIntensity>;
     /**
      * Names of states that are applied to characters while they are partially exposed to the weather system
      * eg. "SLIGHTLY_WET" for rain, "SLIGHTLY_SUNBURNED" for sunny weather
      */
-    applyingStatesDuringPartialEffect: Array<WeatherSystemApplyingStateWithIntensity>;
+    applyingStatesDuringPartialEffect: Array<DEWeatherSystemApplyingStateWithIntensity>;
     /**
      * Names of states that are applied to characters while they are not exposed to the weather system
      * and fully sheltered from it
      */
-    applyingStatesDuringNoEffect: Array<WeatherSystemApplyingStateWithIntensity>;
+    applyingStatesDuringNoEffect: Array<DEWeatherSystemApplyingStateWithIntensity>;
     /**
      * Names of states that are added if they are in a negative effect state and exposed to the weather system
      */
-    applyingStatesDuringNegativeEffect: Array<WeatherSystemApplyingStateWithIntensity>;
+    applyingStatesDuringNegativeEffect: Array<DEWeatherSystemApplyingStateWithIntensity>;
     /**
      * Whether to apply the states in the order they are listed in the arrays above along the duration of exposure
      * or to apply them all at once on contact with the weather system
@@ -2323,7 +2114,7 @@ declare interface DELocationDefinition {
      * Arbitrary properties of the location that can be used for various purposes
      * eg. "has_fireplace": true, "number_of_windows": 3, etc...
      */
-    properties: Record<string, any>;
+    state: Record<string, any>;
     /**
      * The parent location ID, null if none, this means that the location is inside another location
      * for example, a bedroom is inside a house, so the bedroom's parent would be the house location ID
@@ -2431,42 +2222,43 @@ declare interface DEConnection {
     /**
      * Arbitrary properties of the connection that can be used for various purposes
      */
-    properties: Record<string, any>;
+    state: Record<string, any>;
 }
 
 declare interface DEStatefulLocationDefinition extends DELocationDefinition {
-
     /**
      * Arbitrary properties of the location that can be used for various purposes
      */
-    properties: Record<string, any>;
+    state: Record<string, any>;
 
-    // STATEFUL PROPERTIES
-    /**
-     * The current weather system affecting this location
-     * children of this location will have the same weather unless they have their own weather system
-     */
-    currentWeather: string;
-    /**
-     * How long the current weather has been ongoing for
-     */
-    currentWeatherHasBeenOngoingFor: DETimeDurationDescription;
-    /**
-     * Either the location-specific full effect description or the general weather full effect description
-     */
-    currentWeatherFullEffectDescription: DEStringTemplate;
-    /**
-     * Either the location-specific partial effect description or the general weather partial effect description
-     */
-    currentWeatherPartialEffectDescription: DEStringTemplate;
-    /**
-     * Either the location-specific no effect description or the general weather no effect description
-     */
-    currentWeatherNoEffectDescription: DEStringTemplate;
-    /**
-     * Either the location-specific negative effect description or the general weather negative effect description
-     */
-    currentWeatherNegativelyExposedDescription: DEStringTemplate;
+    internalState: {
+        // STATEFUL PROPERTIES
+        /**
+         * The current weather system affecting this location
+         * children of this location will have the same weather unless they have their own weather system
+         */
+        currentWeather: string;
+        /**
+         * How long the current weather has been ongoing for
+         */
+        currentWeatherHasBeenOngoingFor: DETimeDurationDescription;
+        /**
+         * Either the location-specific full effect description or the general weather full effect description
+         */
+        currentWeatherFullEffectDescription: DEStringTemplate;
+        /**
+         * Either the location-specific partial effect description or the general weather partial effect description
+         */
+        currentWeatherPartialEffectDescription: DEStringTemplate;
+        /**
+         * Either the location-specific no effect description or the general weather no effect description
+         */
+        currentWeatherNoEffectDescription: DEStringTemplate;
+        /**
+         * Either the location-specific negative effect description or the general weather negative effect description
+         */
+        currentWeatherNegativelyExposedDescription: DEStringTemplate;
+    }
 }
 
 declare interface DEConversationMessage {
@@ -2718,10 +2510,12 @@ declare type DEStringTemplate = string | ((
          * it may not be
          */
         char?: DECompleteCharacterReference,
+
         /**
          * Only available in likes and dislikes description templates
          */
         chars?: DECompleteCharacterReference[],
+
         /**
          * Only available in bond description templates
          */
@@ -2732,20 +2526,14 @@ declare type DEStringTemplate = string | ((
          */
         otherFamilyRelation?: DEFamilyRelation,
         /**
-         * Only available in state action/effect templates
+         * The relationship with the other
+         */
+        otherRelationship?: string,
+
+        /**
+         * Only available in state description templates, these are the causants of a given state
          */
         causants?: DEStateCausant[],
-        /**
-         * Only really available in
-         * potentialCausantNegativeDescription
-         * and
-         * potentialCausantPositiveDescription
-         */
-        potentialCausant?: DECompleteCharacterReference,
-        /**
-         * Only really available when called from a state trigger template
-         */
-        potentialCausants?: DECompleteCharacterReference[],
     }
 ) => Promise<string> | string);
 
@@ -2870,7 +2658,7 @@ declare interface DEWorld {
     /**
      * Properties of the world that can be used for various purposes, eg. "world_age": 1000, "technology_level": "medieval", "has_magic": true, etc...
      */
-    properties: Record<string, any>;
+    state: Record<string, any>;
 }
 
 declare interface DENarrationStyle {
@@ -2907,6 +2695,53 @@ declare interface DEUtils {
     newBond(DE: DEObject, char1: string | DECompleteCharacterReference | null, towards: string | DECompleteCharacterReference | null, bondDefinition: Omit<DESingleBondDescription, "towards">): DESingleBondDescription | null;
     newMutualBond(DE: DEObject, char1: string | DECompleteCharacterReference | null, char2: string | DECompleteCharacterReference | null, bondDefinition: Omit<DESingleBondDescription, "towards">): [DESingleBondDescription | null, DESingleBondDescription | null];
     newFamilyRelation(DE: DEObject, char1: string | DECompleteCharacterReference | null, towards: string | DECompleteCharacterReference | null, relation: DEFamilyRelation): [DEFamilyTie | null, DEFamilyTie | null];
+
+    /**
+     * To be used during questions and triggers mostly
+     * @param DE 
+     * @param char1 
+     * @param towards 
+     * @param primaryShift 
+     * @param secondaryShift 
+     */
+    shiftBond(DE: DEObject, char1: string | DECompleteCharacterReference | null, towards: string | DECompleteCharacterReference | null, primaryShift: number, secondaryShift: number): void;
+    /**
+     * Shifts the state of a character by a certain amount
+     * To be used during questions and triggers mostly
+     * @param DE 
+     * @param character 
+     * @param stateName 
+     * @param shift 
+     * @param causants 
+     */
+    shiftState(DE: DEObject, character: string | DECompleteCharacterReference | null, stateName: string, shift: number, causants: DEStateCausant[] | null): void;
+    /**
+     * Adds a causant to a character state, this is used to keep track of what caused a state to be applied
+     * @param DE 
+     * @param character 
+     * @param stateName 
+     * @param causant 
+     */
+    addCausantToState(DE: DEObject, character: string | DECompleteCharacterReference | null, stateName: string, causant: DEStateCausant): void;
+    /**
+     * Removes a causant from a character state, this is used to keep track of what caused a state to be applied
+     * @param DE 
+     * @param character 
+     * @param stateName 
+     * @param causant 
+     */
+    removeCausantFromState(DE: DEObject, character: string | DECompleteCharacterReference | null, stateName: string, causant: DEStateCausant): void;
+    /**
+     * To be used during questions and triggers mostly
+     * 
+     * Will trigger that action once the character is to talk
+     * 
+     * @param DE 
+     * @param action 
+     */
+    triggerActionNext(DE: DEObject, action: DEActionPromptInjection): void;
+    accumulateInCharacter(DE: DEObject, character: string | DECompleteCharacterReference, accumulatorName: string, amount: number): number;
+    getAccumulatedValueInCharacter(DE: DEObject, character: string | DECompleteCharacterReference, accumulatorName: string): number;
 }
 
 declare interface DEWorldRule {
@@ -2917,17 +2752,10 @@ declare interface DEWorldRule {
     rule: DEStringTemplate;
 }
 
-declare interface DEActionAccumulators {
-    accumulators: Record<string, number>;
-}
-
 declare interface DEObject {
-    actionAccumulators: Record<string, DEActionAccumulators>;
     user: DEMinimalCharacterReference;
     characters: Record<string, DECompleteCharacterReference>;
-    social: {
-        bonds: Record<string, DEBondDescription>;
-    };
+    bonds: Record<string, DEBondDescription>;
     worldNames: DENamePool;
     stateFor: Record<string, DEStateForCharacterWithHistory>;
     world: DEWorld;
@@ -2970,19 +2798,22 @@ declare interface DEObject {
     utils: DEUtils;
     /**
      * Whether the game is over or not, this means the user
-     * has reached an ending condition, eg. died, arrested, sucesful completition, etc...
+     * has reached an ending condition, eg. died, arrested, successful completion, etc...
      * whatever the world defines as game over conditions
      */
     gameOver: boolean;
     /**
-     * Arbitrary internal properties that are used internally by the engine
+     * Arbitrary internal state that is used internally by the engine
      * and not meant to be used by the world scripts, these are for internal bookkeeping and optimizations, they can be used for whatever the engine needs, but they should not be used by the world scripts as they may change or be removed without warning
      */
-    internal: Record<string, any>;
+    internalState: Record<string, any>;
     /**
-     * Arbitrary properties of the world that can be used for various purposes, eg. "world_age": 1000, "technology_level": "medieval", "has_magic": true, etc...
+     * Arbitrary state of the world that can be used for various purposes, eg. "world_age": 1000, "technology_level": "medieval", "has_magic": true, etc...
      */
-    properties: Record<string, any>;
+    state: Record<string, any>;
+    /**
+     * List of interests that characters can have
+     */
     interests: Record<string, DECharacterInterest>;
 }
 
@@ -3079,106 +2910,6 @@ declare interface DEScript {
 }
 
 /**
- * TODO implement wandering
- * 
- * A wander action specifies on the actions of characters that want to wander in the background
- * 
- */
-declare interface DEWanderAction {
-    /**
-     * How dominant is the wander action over other actions
-     */
-    dominance: number;
-    /**
-     * Executes the controlled regardless of dominance
-     * 
-     * Remember that many scripts may give their own wander actions for the same character, so they can be competing with each other
-     * with this flag they will always execute regardless of the dominance, this is useful for important wander actions that you want to make sure they happen
-     */
-    alwaysExecuteControlled: boolean;
-    /**
-     * Merges the observed with another regardless of dominance
-     * 
-     * Remember that many scripts may give their own wander actions for the same character, so they can be competing with each other
-     * with this flag they will always merge the observed with the other wander actions regardless of the dominance, this is useful for important observed actions that you want to make sure they happen
-     */
-    alwaysMergeObserved: boolean;
-    /**
-     * Observed characters should not be middled with because the user is observing them, and they are under
-     * the control of the LLM, so they will take suggestions
-     */
-    observed: {
-        [characterName: string]: {
-            /**
-             * Will get injected into the prompt as char needs to go to {{needsToGoToLocation}} because {{reason}}, urgency level: {{urgencyLevel}}
-             * and the character may or may not try to do it depending on the circumstances
-             * 
-             * Potential the character leaves is high and gets passed into controlled
-             */
-            needsToGoToLocation?: string;
-            /**
-             * Will get injected into the prompt as char needs to go to the {{needsToGoToSlot}} slot in the {{currentLocation}} because {{reason}}, urgency level: {{urgencyLevel}}
-             * and the character may or may not try to do it depending on the circumstances
-             * 
-             * Potential the character leaves is high and gets passed into controlled
-             */
-            needsToGoToSlot?: string;
-            /**
-             * Will get injected into the prompt as char needs to go climb on top of {{needsToClimbAtopOf}} because {{reason}}, urgency level: {{urgencyLevel}}
-             * and the character may or may not try to do it depending on the circumstances
-             * 
-             * Potential the character leaves is low
-             */
-            needsToClimbAtopOf?: string;
-            /**
-             * Will get injected into the prompt as char needs to get inside of {{needsToGetInsideOf}} because {{reason}}, urgency level: {{urgencyLevel}}
-             * and the character may or may not try to do it depending on the circumstances
-             * 
-             * Potential the character leaves is low
-             */
-            needsToGetInsideOf?: string;
-            /**
-             * Will get injected into the prompt as char needs to get off of {{needsToGetOffOf}} because {{reason}}, urgency level: {{urgencyLevel}}
-             * and the character may or may not try to do it depending on the circumstances
-             * 
-             * Potential the character leaves is low
-             */
-            needsToGetOffOf?: string;
-            /**
-             * Will get injected into the prompt as char needs to leave {{user}} in order to catch up with {{needsToCatchUpWithCharacter}} who is at {{location}} because {{reason}}, urgency level: {{urgencyLevel}}
-             * and the character may or may not try to do it depending on the circumstances
-             * 
-             * Potential the character leaves is high and gets passed into controlled
-             */
-            needsToCatchUpWithCharacter?: string;
-            /**
-             * Will get injected straight into the prompt as an action that the character needs to do
-             * eg. "will fall asleep"
-             * urgency level is not applicable for this one, as it is already an action, so the character will just do it
-             */
-            rawInjectAction?: string;
-            /**
-             * Reason for why the character needs to do that
-             */
-            reason?: string;
-            /**
-             * Urgency level of the action, immediate gets sent as an action
-             * others are in sysprompt
-             * 
-             * default "medium"
-             */
-            urgencyLevel?: "low" | "medium" | "high" | "immediate";
-        }
-    },
-    /**
-     * A controlled character is fully controlled and in not talking to the user
-     */
-    controlled: {
-        [characterName: string]: DEWanderFunction;
-    }
-}
-
-/**
  * This function is what gets called once the character wanders, without the user's direct involvement
  * so there is no LLM interacting with it
  * 
@@ -3212,7 +2943,7 @@ declare type DEWanderFunction = (DE: DEObject, character: DECharacter) => Promis
  *     await importScript("bond-systems", "sfw-simplified-standard")
  * );
  */
-declare interface DEScriptRegistry {}
+declare interface DEScriptRegistry { }
 
 /** Extract the namespace portion from a `"namespace/id"` registry key */
 type _ScriptNS<K extends string = keyof DEScriptRegistry & string> =
@@ -3268,8 +2999,8 @@ declare var importScript: {
         options: { optional: true }
     ): Promise<
         `${NS}/${ID}` extends keyof DEScriptRegistry
-            ? DEScriptRegistry[`${NS}/${ID}`] | null
-            : DEScript | null
+        ? DEScriptRegistry[`${NS}/${ID}`] | null
+        : DEScript | null
     >;
     <NS extends _ScriptNS | (string & {}), ID extends _ScriptID<NS & string> | (string & {})>(
         namespace: NS,
@@ -3277,7 +3008,7 @@ declare var importScript: {
         options?: { optional?: false }
     ): Promise<
         `${NS}/${ID}` extends keyof DEScriptRegistry
-            ? DEScriptRegistry[`${NS}/${ID}`]
-            : DEScript
+        ? DEScriptRegistry[`${NS}/${ID}`]
+        : DEScript
     >;
 };

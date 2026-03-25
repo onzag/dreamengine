@@ -43,23 +43,27 @@ export const commands = {
                 throw new Error("DEngine has no user character defined");
             }
             const currentLocation = engine.deObject.world.locations[engine.deObject.world.currentLocation];
-            const currentWeather = currentLocation.currentWeather;
+            const currentWeather = currentLocation.internalState.currentWeather;
             const isSheltered = await isCharacterShelteredFromWeather(engine, engine.userCharacter.name, currentWeather, engine.deObject.world.currentLocation, engine.deObject.world.currentLocationSlot);
             if (isSheltered.fullySheltered) {
-                // @ts-ignore
-                const noEffectDescription = await currentLocation.currentWeatherNoEffectDescription.execute(engine.deObject, engine.userCharacter);
+                const noEffectDescription = typeof currentLocation.internalState.currentWeatherNoEffectDescription === "function" ? await currentLocation.internalState.currentWeatherNoEffectDescription(engine.deObject, {
+                    char: engine.userCharacter,
+                }) : currentLocation.internalState.currentWeatherNoEffectDescription;
                 return `The current weather in your location is "${currentWeather}". However, you are fully sheltered from its effects. ${isSheltered.reason || ""}, therefore ${noEffectDescription || "no weather effects apply to you."}`;
             } else if (isSheltered.partiallySheltered) {
-                // @ts-ignore
-                const partialEffectDescription = await currentLocation.currentWeatherPartialEffectDescription.execute(engine.deObject, engine.userCharacter);
+                const partialEffectDescription = typeof currentLocation.internalState.currentWeatherPartialEffectDescription === "function" ? await currentLocation.internalState.currentWeatherPartialEffectDescription(engine.deObject, {
+                    char: engine.userCharacter,
+                }) : currentLocation.internalState.currentWeatherPartialEffectDescription;
                 return `The current weather in your location is "${currentWeather}". You are partially sheltered from its effects. ${isSheltered.reason || ""}, therefore ${partialEffectDescription || "some weather effects may apply to you."}`;
             } else if (isSheltered.negativelyExposed) {
-                // @ts-ignore
-                const negativeEffectsDescription = await currentLocation.currentWeatherNegativelyExposedDescription.execute(engine.deObject, engine.userCharacter);
+                const negativeEffectsDescription = typeof currentLocation.internalState.currentWeatherNegativelyExposedDescription === "function" ? await currentLocation.internalState.currentWeatherNegativelyExposedDescription(engine.deObject, {
+                    char: engine.userCharacter,
+                }) : currentLocation.internalState.currentWeatherNegativelyExposedDescription;
                 return `The current weather in your location is "${currentWeather}". You are negatively exposed to its effects. ${isSheltered.reason || ""}, therefore ${negativeEffectsDescription || "strongly negative weather effects apply to you."}`;
             } else {
-                // @ts-ignore
-                const effectDescription = await currentLocation.currentWeatherFullEffectDescription.execute(engine.deObject, engine.userCharacter);
+                const effectDescription = typeof currentLocation.internalState.currentWeatherFullEffectDescription === "function" ? await currentLocation.internalState.currentWeatherFullEffectDescription(engine.deObject, {
+                    char: engine.userCharacter,
+                }) : currentLocation.internalState.currentWeatherFullEffectDescription;
                 return `The current weather in your location is "${currentWeather}". ${isSheltered.reason || ""}, therefore ${effectDescription || "all weather effects apply to you."}`;
             }
         },
@@ -119,23 +123,27 @@ export const commands = {
             if (!slot) {
                 return `Location slot "${locationSlotId}" not found in location "${locationId}", options are: ${Object.keys(location.slots).join(", ")}`;
             }
-            const weatherThere = location.currentWeather;
+            const weatherThere = location.internalState.currentWeather;
             const isSheltered = await isCharacterShelteredFromWeather(engine, characterName, weatherThere, locationId, locationSlotId);
             if (isSheltered.fullySheltered) {
-                // @ts-ignore
-                const noEffectDescription = await location.currentWeatherNoEffectDescription.execute(engine.deObject, character);
+                const noEffectDescription = typeof location.internalState.currentWeatherNoEffectDescription === "function" ? await location.internalState.currentWeatherNoEffectDescription(engine.deObject, {
+                    char: character,
+                }) : location.internalState.currentWeatherNoEffectDescription;
                 return `Hypothetical - The current weather at (${locationId}, ${locationSlotId}) is "${weatherThere}". However, "${characterName}" would be fully sheltered from its effects. ${isSheltered.reason || ""}, therefore ${noEffectDescription || "no weather effects would apply to them."}`;
             } else if (isSheltered.partiallySheltered) {
-                // @ts-ignore
-                const partialEffectDescription = await location.currentWeatherPartialEffectDescription.execute(engine.deObject, character);
+                const partialEffectDescription = typeof location.internalState.currentWeatherPartialEffectDescription === "function" ? await location.internalState.currentWeatherPartialEffectDescription(engine.deObject, {
+                    char: character,
+                }) : location.internalState.currentWeatherPartialEffectDescription;
                 return `Hypothetical - The current weather at (${locationId}, ${locationSlotId}) is "${weatherThere}". "${characterName}" would be partially sheltered from its effects. ${isSheltered.reason || ""}, therefore ${partialEffectDescription || "some weather effects might apply to them."}`;
             } else if (isSheltered.negativelyExposed) {
-                // @ts-ignore
-                const negativeEffectsDescription = await location.currentWeatherNegativelyExposedDescription.execute(engine.deObject, character);
+                const negativeEffectsDescription = typeof location.internalState.currentWeatherNegativelyExposedDescription === "function" ? await location.internalState.currentWeatherNegativelyExposedDescription(engine.deObject, {
+                    char: character,
+                }) : location.internalState.currentWeatherNegativelyExposedDescription;
                 return `Hypothetical - The current weather at (${locationId}, ${locationSlotId}) is "${weatherThere}". "${characterName}" would be negatively exposed to its effects. ${isSheltered.reason || ""}, therefore ${negativeEffectsDescription || "strongly negative weather effects would apply to them."}`;
             } else {
-                // @ts-ignore
-                const effectDescription = await location.currentWeatherFullEffectDescription.execute(engine.deObject, character);
+                const effectDescription = typeof location.internalState.currentWeatherFullEffectDescription === "function" ? await location.internalState.currentWeatherFullEffectDescription(engine.deObject, {
+                    char: character,
+                }) : location.internalState.currentWeatherFullEffectDescription;
                 return `Hypothetical - The current weather at (${locationId}, ${locationSlotId}) is "${weatherThere}". ${isSheltered.reason || ""}, therefore ${effectDescription || "all weather effects would apply to them."}`;
             }
         },
@@ -358,7 +366,7 @@ export const commands = {
             if (!otherCharacter) {
                 return `Character "${otherCharacterName}" not found.`;
             }
-            const foundBond = engine.getDEObject().social.bonds[characterName].active.find(bond => bond.towards === otherCharacterName);
+            const foundBond = engine.getDEObject().bonds[characterName].active.find(bond => bond.towards === otherCharacterName);
             if (!foundBond) {
                 return `No active bond found from "${characterName}" towards "${otherCharacterName}".`;
             }
@@ -396,9 +404,9 @@ export const commands = {
             if (!otherCharacter) {
                 return `Character "${otherCharacterName}" not found.`;
             }
-            const foundBond = engine.getDEObject().social.bonds[characterName].active.find(bond => bond.towards === otherCharacterName);
+            const foundBond = engine.getDEObject().bonds[characterName].active.find(bond => bond.towards === otherCharacterName);
             if (!foundBond) {
-                engine.deObject.social.bonds[characterName].active.push({
+                engine.deObject.bonds[characterName].active.push({
                     towards: otherCharacterName,
                     bond: bondValue,
                     bond2: 0,
@@ -438,9 +446,9 @@ export const commands = {
             if (!otherCharacter) {
                 return `Character "${otherCharacterName}" not found.`;
             }
-            const foundBond = engine.getDEObject().social.bonds[characterName].active.find(bond => bond.towards === otherCharacterName);
+            const foundBond = engine.getDEObject().bonds[characterName].active.find(bond => bond.towards === otherCharacterName);
             if (!foundBond) {
-                engine.deObject.social.bonds[characterName].active.push({
+                engine.deObject.bonds[characterName].active.push({
                     towards: otherCharacterName,
                     bond: 0,
                     bond2: bondValue,
@@ -480,9 +488,9 @@ export const commands = {
             if (!otherCharacter) {
                 return `Character "${otherCharacterName}" not found.`;
             }
-            const foundBond = engine.getDEObject().social.bonds[characterName].active.find(bond => bond.towards === otherCharacterName);
+            const foundBond = engine.getDEObject().bonds[characterName].active.find(bond => bond.towards === otherCharacterName);
             if (!foundBond) {
-                engine.deObject.social.bonds[characterName].active.push({
+                engine.deObject.bonds[characterName].active.push({
                     towards: otherCharacterName,
                     bond: 0,
                     bond2: 0,
@@ -522,9 +530,9 @@ export const commands = {
             if (!otherCharacter) {
                 return `Character "${otherCharacterName}" not found.`;
             }
-            const foundBond = engine.getDEObject().social.bonds[characterName].active.find(bond => bond.towards === otherCharacterName);
+            const foundBond = engine.getDEObject().bonds[characterName].active.find(bond => bond.towards === otherCharacterName);
             if (!foundBond) {
-                engine.deObject.social.bonds[characterName].active.push({
+                engine.deObject.bonds[characterName].active.push({
                     towards: otherCharacterName,
                     bond: 0,
                     bond2: 0,
