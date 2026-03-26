@@ -326,10 +326,16 @@ export const deEngineUtils = {
         let hasRemovedIt = false;
 
         activeState.intensity += shiftAmount;
-        if (activeState.causants && causants) {
-            activeState.causants.push(...causants);
-        } else if (causants) {
-            activeState.causants = causants;
+        if (shiftAmount > 0) {
+            if (activeState.causants && causants) {
+                activeState.causants.push(...causants);
+            } else if (causants) {
+                activeState.causants = causants;
+            }
+        } else {
+            if (activeState.causants && causants) {
+                activeState.causants = activeState.causants.filter(c => !causants.some(c2 => c2.name === c.name && c2.type === c.type));
+            }
         }
 
         if (activeState.intensity > 4) {
@@ -418,7 +424,48 @@ export const deEngineUtils = {
         if (activeState.causants) {
             activeState.causants = activeState.causants.filter(c => c.name !== causant.name && c.type !== causant.type);
         }
-    }
+    },
+    newTrigger(DE, character, trigger) {
+        const characterRef = typeof character === "string" ? DE.characters[character] : character;
+        if (!characterRef) {
+            if (typeof character === "string") {
+                console.warn(`Character with name ${character} not found when trying to create trigger`);
+            } else {
+                console.warn(`Received null as character reference when trying to create trigger`);
+            }
+            return;
+        }
+        // Add the trigger to the character's state or handle it as needed
+
+        characterRef.triggers.push(trigger);
+    },
+    newTriggerInAllCharacters(DE, trigger) {
+        Object.values(DE.characters).forEach((character) => {
+            deEngineUtils.newTrigger(DE, character, trigger);
+        });
+    },
+    charHasState(DE, character, stateName) {
+        const characterName = typeof character === "string" ? character : character.name;
+        const characterState = DE.stateFor[characterName];
+        if (!characterState) {
+            console.warn(`Character state for ${characterName} not found when checking for state ${stateName}`);
+            return false;
+        }
+        return characterState.states.some(s => s.state === stateName && s.intensity > 0);
+    },
+    charIsRelievingState(DE, character, stateName) {
+        const characterName = typeof character === "string" ? character : character.name;
+        const characterState = DE.stateFor[characterName];
+        if (!characterState) {
+            console.warn(`Character state for ${characterName} not found when checking if relieving state ${stateName}`);
+            return false;
+        }
+        const stateInfo = characterState.states.find(s => s.state === stateName);
+        if (!stateInfo) {
+            return false;
+        }
+        return stateInfo.relieving;
+    },
 };
 
 /**

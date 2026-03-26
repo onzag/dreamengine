@@ -62,7 +62,7 @@ engine.exports = {
             fullyProtectingCarriedItems: [],
             partiallyProtectingCarriedItems: [],
             fullyProtectedTemplate: (DE, info) => {
-                if (info.char?.properties["IS_ROBOT"]) {
+                if (info.char?.state["IS_ROBOT"]) {
                     return `"${info.char.name}" is a robot and is inpervious to the vaccuum of space`;
                 }
                 return "";
@@ -104,7 +104,7 @@ engine.exports = {
             description: "A bulky space suit designed for extra-vehicular activity on the lunar surface. It provides life support and protection from the harsh environment of space",
             weightKg: 20,
             volumeLiters: 150,
-            properties: {},
+            state: {},
             amount: 2,
             consumableProperties: null,
             containing: [],
@@ -141,7 +141,7 @@ engine.exports = {
             description: "A sturdy locker used for storing personal belongings and equipment within the lunar station",
             weightKg: 1500,
             volumeLiters: 1000,
-            properties: {},
+            state: {},
             containerProperties: {
                 capacityKg: 50,
                 capacityLiters: 1000,
@@ -169,7 +169,7 @@ engine.exports = {
             description: "A compact stove designed for cooking meals in the confined space of the lunar station. It features multiple burners and a small oven",
             weightKg: 30,
             volumeLiters: 100,
-            properties: {},
+            state: {},
             containerProperties: {
                 capacityKg: 100,
                 capacityLiters: 20,
@@ -197,7 +197,7 @@ engine.exports = {
             description: "A standard eating utensil with four tines, used for picking up and eating food",
             weightKg: 0.1,
             volumeLiters: 0.05,
-            properties: {},
+            state: {},
             amount: 10,
             consumableProperties: null,
             containing: [],
@@ -220,7 +220,7 @@ engine.exports = {
             description: "A standard eating utensil with a rounded bowl, used for scooping and eating food",
             weightKg: 0.1,
             volumeLiters: 0.05,
-            properties: {},
+            state: {},
             amount: 10,
             consumableProperties: null,
             containing: [],
@@ -243,7 +243,7 @@ engine.exports = {
             description: "A small drawer within the lunar station's kitchenette, used for storing utensils and small kitchen items",
             weightKg: 5,
             volumeLiters: 20,
-            properties: {},
+            state: {},
             containerProperties: {
                 capacityKg: 10,
                 capacityLiters: 20,
@@ -271,7 +271,7 @@ engine.exports = {
             description: "A small bowl used for holding food or liquids",
             weightKg: 0.2,
             volumeLiters: 0.5,
-            properties: {},
+            state: {},
             containerProperties: {
                 capacityKg: 1,
                 capacityLiters: 0.5,
@@ -299,7 +299,7 @@ engine.exports = {
             description: "A small drawer within the lunar station's kitchenette, used for storing utensils and small kitchen items",
             weightKg: 5,
             volumeLiters: 20,
-            properties: {},
+            state: {},
             containerProperties: {
                 capacityKg: 10,
                 capacityLiters: 20,
@@ -327,7 +327,7 @@ engine.exports = {
             description: "A storage cabinet in the lunar station's kitchenette, used for storing food items, utensils, and kitchen supplies",
             weightKg: 50,
             volumeLiters: 200,
-            properties: {},
+            state: {},
             containerProperties: {
                 capacityKg: 100,
                 capacityLiters: 200,
@@ -355,7 +355,7 @@ engine.exports = {
             description: "A compact, vacuum-sealed food pack designed for consumption in space. It contains a nutritious meal suitable for astronauts",
             weightKg: 0.5,
             volumeLiters: 0.3,
-            properties: {},
+            state: {},
             amount: 10000,
             consumableProperties: {
                 calories: 2500,
@@ -381,7 +381,7 @@ engine.exports = {
             description: "A large storage cabinet in the lunar station's kitchenette, used for storing bulk food items and kitchen supplies",
             weightKg: 500,
             volumeLiters: spaceFoodPack.volumeLiters * spaceFoodPack.amount + 100,
-            properties: {},
+            state: {},
             containerProperties: {
                 capacityKg: spaceFoodPack.weightKg * spaceFoodPack.amount + 100,
                 capacityLiters: spaceFoodPack.volumeLiters * spaceFoodPack.amount + 100,
@@ -409,7 +409,7 @@ engine.exports = {
             description: "A simple chair made of metal and plastic, designed for use in the lunar station's common area",
             weightKg: 5,
             volumeLiters: 30,
-            properties: {},
+            state: {},
             containerProperties: {
                 capacityKg: 0,
                 capacityLiters: 0,
@@ -442,21 +442,21 @@ engine.exports = {
             maxVolumeLiters: 0,
             maxWeightKg: 0,
             ownWeatherSystem: [vaccuumWeatherSystem],
-            properties: {},
+            state: {},
             parent: null,
             slots: {
                 "Moon Surface": {
                     description: "The open expanse of the lunar surface, with its grey dust and scattered rocks",
                     maxVolumeLiters: 0,
                     maxWeightKg: 0,
-                    properties: {},
+                    state: {},
                     items: [
                         {
                             name: "Lunar rock",
                             description: "A small, jagged rock from the surface of the Moon. It's covered in a fine layer of grey dust",
                             weightKg: 0.5,
                             volumeLiters: 0.2,
-                            properties: {},
+                            state: {},
                             containerProperties: {
                                 capacityKg: 0,
                                 capacityLiters: 0,
@@ -513,7 +513,7 @@ engine.exports = {
             maxWeightKg: 2000,
             ownWeatherSystem: [],
             parent: "Surface of the Moon",
-            properties: {},
+            state: {},
             slots: {
                 "Common Area": {
                     description: "The common area of the lunar station, featuring a few chairs, a table, and a small kitchenette. The walls are lined with control panels and monitors displaying various data about the station's systems",
@@ -523,7 +523,7 @@ engine.exports = {
                     ],
                     maxVolumeLiters: 2000,
                     maxWeightKg: 2000,
-                    properties: {},
+                    state: {},
                 },
                 "Cooking Area": {
                     description: "A small kitchenette area with a compact stove, a sink, and storage cabinets. There are a few packaged food items and utensils stored here for the crew to use",
@@ -535,7 +535,7 @@ engine.exports = {
                     ],
                     maxVolumeLiters: 2000,
                     maxWeightKg: 2000,
-                    properties: {},
+                    state: {},
                 },
             },
         });
@@ -551,7 +551,7 @@ engine.exports = {
             onlyVehicles: false,
             otherPassageConditions: {},
             vehicleTypes: [],
-            properties: {},
+            state: {},
         });
 
         for (let i = 0; i < 2; i++) {
@@ -589,20 +589,20 @@ engine.exports = {
                 maxWeightKg: 500,
                 ownWeatherSystem: [],
                 parent: "Lunar Station",
-                properties: {},
+                state: {},
                 slots: {
                     "Bedroom Area": {
                         description: "The bedroom area of the lunar station, featuring a bunk bed, a small desk, and a locker for personal belongings",
                         maxVolumeLiters: 2000,
                         maxWeightKg: 2000,
-                        properties: {},
+                        state: {},
                         items: [
                             {
                                 name: "Bunk Bed",
                                 description: "A sturdy bunk bed designed for use in the confined space of the lunar station. It features a simple mattress and bedding",
                                 weightKg: 20,
                                 volumeLiters: 100,
-                                properties: {},
+                                state: {},
                                 amount: 1,
                                 consumableProperties: null,
                                 containing: [],
@@ -631,13 +631,79 @@ engine.exports = {
                 maxWeightKg: 0,
                 onlyVehicles: false,
                 otherPassageConditions: {},
-                properties: {},
+                state: {},
                 vehicleTypes: [],
             });
         }
     },
 
     onWorldInitialized(DE) {
+        DE.utils.newTriggerInAllCharacters(DE, {
+            type: "yes_no",
+            question: DE.utils.newHandlebarsTemplate(
+                DE,
+                "has {{char}} returned to a pressurized environment successfully?"
+            ),
+            runIf: (char) => {
+                return DE.utils.charHasState(DE, char, "Asphyxiating in the Vaccuum")
+            },
+            onValue: (answer, char) => {
+                if (answer) {
+                    DE.utils.shiftState(DE, char, "Asphyxiating in the Vaccuum", -4, null);
+                    DE.utils.shiftState(DE, char, "Freezing in the Vaccuum", -1, null);
+                }
+            }
+        });
+
+        DE.utils.newTriggerInAllCharacters(DE, {
+            type: "yes_no",
+            question: DE.utils.newHandlebarsTemplate(
+                DE,
+                "has {{char}} put on a space suit?"
+            ),
+            runIf: (char) => {
+                return DE.utils.charHasState(DE, char, "Asphyxiating in the Vaccuum") || DE.utils.charHasState(DE, char, "Freezing in the Vaccuum");
+            },
+            onValue: (answer, char) => {
+                if (answer) {
+                    DE.utils.shiftState(DE, char, "Asphyxiating in the Vaccuum", -4, null);
+                    DE.utils.shiftState(DE, char, "Freezing in the Vaccuum", -1, null);
+                }
+            }
+        });
+
+        DE.utils.newTriggerInAllCharacters(DE, {
+            type: "yes_no",
+            question: DE.utils.newHandlebarsTemplate(
+                DE,
+                "has {{char}} taken a hot shower or used a heater?"
+            ),
+            runIf: (char) => {
+                return DE.utils.charIsRelievingState(DE, char, "Freezing in the Vaccuum");
+            },
+            onValue: (answer, char) => {
+                if (answer) {
+                    DE.utils.shiftState(DE, char, "Freezing in the Vaccuum", -2, null);
+                }
+            }
+        });
+
+        DE.utils.newTriggerInAllCharacters(DE, {
+            type: "yes_no",
+            question: DE.utils.newHandlebarsTemplate(
+                DE,
+                "has {{char}} put on a blanket, warm clothes or similar?"
+            ),
+            runIf: (char) => {
+                return DE.utils.charIsRelievingState(DE, char, "Freezing in the Vaccuum");
+            },
+            onValue: (answer, char) => {
+                if (answer) {
+                    DE.utils.shiftState(DE, char, "Freezing in the Vaccuum", -1, null);
+                }
+            },
+        });
+
         DE.utils.createStateInAllCharacters(DE, "Asphyxiating in the Vaccuum", {
             randomSpawnRate: 0,
             permanent: false,
@@ -647,26 +713,6 @@ engine.exports = {
             requiresObjectCausants: false,
             requiresPosture: null,
             injuryAndDeath: true,
-            intensityModifiers: [
-                {
-                    determineCausants: null,
-                    intensity: -4,
-                    template: DE.utils.newHandlebarsTemplate(
-                        DE,
-                        "has {{char}} returned to a pressurized environment successfully?"
-                    ),
-                },
-                {
-                    determineCausants: null,
-                    intensity: -4,
-                    template: DE.utils.newHandlebarsTemplate(
-                        DE,
-                        "has {{char}} put on a space suit?"
-                    ),
-                }
-            ],
-            // need no triggers, the weather system will apply the state
-            triggers: [],
             triggersStates: {},
 
             // No reasoning required, obviously should get out of the vaccuum
@@ -677,7 +723,6 @@ engine.exports = {
                         DE,
                         "{{char}} has an urgent need to return to the airlock and into the lunar station to avoid asphyxiation"
                     ),
-                    intensityModification: 0,
                     isDeadEndScenario: false,
                     deadEndIsDeath: false,
                     primaryEmotion: "fearful",
@@ -695,7 +740,6 @@ engine.exports = {
             ),
             intensityChangeRatePerInferenceCycle: 0,
             dominance: 10,
-            fallsDown: false,
             general: DE.utils.newHandlebarsTemplate(
                 DE,
                 "{{char}} is struggling to breathe in the vacuum of space"
@@ -711,50 +755,13 @@ engine.exports = {
             requiresObjectCausants: false,
             requiresPosture: null,
             injuryAndDeath: true,
-            intensityModifiers: [
-                {
-                    determineCausants: null,
-                    intensity: -1,
-                    template: DE.utils.newHandlebarsTemplate(
-                        DE,
-                        "has {{char}} returned to a pressurized environment successfully?"
-                    ),
-                },
-                {
-                    determineCausants: null,
-                    intensity: -1,
-                    template: DE.utils.newHandlebarsTemplate(
-                        DE,
-                        "has {{char}} put on a space suit?"
-                    ),
-                },
-            ],
             usesReliefDynamic: true,
             relieving: DE.utils.newHandlebarsTemplate(
                 DE,
                 "{{char}} is recovering from the severe freezing effects of the vacuum of space and should look for warmth"
             ),
             intensityChangeRatePerInferenceCycleAfterRelief: -0.1,
-            intensityModifiersDuringRelief: [
-                {
-                    determineCausants: null,
-                    intensity: -1,
-                    template: DE.utils.newHandlebarsTemplate(
-                        DE,
-                        "has {{char}} put on a blanket, warm clothes or similar?"
-                    ),
-                },
-                {
-                    determineCausants: null,
-                    intensity: -2,
-                    template: DE.utils.newHandlebarsTemplate(
-                        DE,
-                        "has {{char}} taken a hot shower?"
-                    ),
-                },
-            ],
             // need no triggers, the weather system will apply the state
-            triggers: [],
             triggersStates: {},
             actionPromptInjection: {},
             behaviourType: "BINARY",
@@ -769,7 +776,6 @@ engine.exports = {
             intensityChangeRatePerInferenceCycle: 0,
             dominance: 10,
             dominanceAfterRelief: 1,
-            fallsDown: false,
             general: DE.utils.newHandlebarsTemplate(
                 DE,
                 "{{char}} is freezing in the vacuum of space"

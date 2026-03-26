@@ -2742,6 +2742,12 @@ declare interface DEUtils {
     triggerActionNext(DE: DEObject, action: DEActionPromptInjection): void;
     accumulateInCharacter(DE: DEObject, character: string | DECompleteCharacterReference, accumulatorName: string, amount: number): number;
     getAccumulatedValueInCharacter(DE: DEObject, character: string | DECompleteCharacterReference, accumulatorName: string): number;
+
+    newTrigger(DE: DEObject, character: string | DECompleteCharacterReference, trigger: DECharacterYesNoQuestion | DECharacterNumericQuestion | DECharacterTextQuestion): void;
+    newTriggerInAllCharacters(DE: DEObject, trigger: DECharacterYesNoQuestion | DECharacterNumericQuestion | DECharacterTextQuestion): void;
+
+    charHasState(DE: DEObject, character: string | DECompleteCharacterReference, stateName: string): boolean;
+    charIsRelievingState(DE: DEObject, character: string | DECompleteCharacterReference, stateName: string): boolean;
 }
 
 declare interface DEWorldRule {
