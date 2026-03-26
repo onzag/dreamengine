@@ -50,6 +50,7 @@ export async function talk(engine, character, options) {
                 {
                     char: character,
                     causants: action.applyingState?.causants || undefined,
+                    causes: action.applyingState?.causes || undefined,
                 }
             );
             const narrativeAction = typeof action.action.narrativeAction === "string" ? action.action.narrativeAction : (action.action.narrativeAction ? await action.action.narrativeAction(
@@ -58,6 +59,7 @@ export async function talk(engine, character, options) {
                 {
                     char: character,
                     causants: action.applyingState?.causants || undefined,
+                    causes: action.applyingState?.causes || undefined,
                 },
             ) : null);
             const narrativeActionTrimmed = narrativeAction ? narrativeAction.trim() : null;
@@ -213,12 +215,14 @@ export async function talk(engine, character, options) {
                 narrativeEffects.push(typeof action.action.action.narrativeEffect === "string" ? action.action.action.narrativeEffect : await action.action.action.narrativeEffect(engine.deObject, {
                     char: character,
                     causants: action.action.applyingState?.causants || undefined,
+                    causes: action.action.applyingState?.causes || undefined,
                 }));
                 narrativeEffectsDominance = stateDominance;
             } else if (action.action.action.narrativeEffect && narrativeEffectsDominance === stateDominance) {
                 narrativeEffects.push(typeof action.action.action.narrativeEffect === "string" ? action.action.action.narrativeEffect : await action.action.action.narrativeEffect(engine.deObject, {
                     char: character,
                     causants: action.action.applyingState?.causants || undefined,
+                    causes: action.action.applyingState?.causes || undefined,
                 }));
             }
         }
@@ -253,7 +257,14 @@ export async function talk(engine, character, options) {
             msgLimit: "LAST_CYCLE_EXPANDED",
         });
 
-        const emotionsList = "## Possible emotions:\n\n" + emotions.map((emotion) => `- ${emotion}`).join("\n") + "\n\n";
+        const emotionsCharacterCantFeel = Object.keys(character.emotions).filter((emotion) =>
+            // @ts-ignore
+            character.emotions[emotion].unable
+        );
+
+        const availableEmotions = emotions.filter((emotion) => !emotionsCharacterCantFeel.includes(emotion));
+
+        const emotionsList = "## Possible emotions:\n\n" + availableEmotions.map((emotion) => `- ${emotion}`).join("\n") + "\n\n";
 
         const generator = engine.inferenceAdapter.runQuestioningCustomAgentOn("talk", {
             system: systemPromptForEmotion,
@@ -281,7 +292,7 @@ export async function talk(engine, character, options) {
             nextQuestion: nextQuestion,
             stopAt: ["\n"],
             stopAfter: [],
-            grammar: createGrammarFromList(engine, emotions).grammar,
+            grammar: createGrammarFromList(engine, availableEmotions).grammar,
             answerTrail: "Emotions:\n\n",
         });
 
@@ -382,6 +393,7 @@ export async function talk(engine, character, options) {
                     const preNarrationText = typeof preNarrationOrigin === "string" ? preNarrationOrigin : await preNarrationOrigin(engine.deObject, {
                         char: character,
                         causants: state.applyingState.causants || undefined,
+                        causes: state.applyingState.causes || undefined,
                     });
                     const trimmed = preNarrationText.trim();
                     if (trimmed) {
@@ -406,6 +418,7 @@ export async function talk(engine, character, options) {
                     const postNarrationText = typeof postNarrationOrigin === "string" ? postNarrationOrigin : await postNarrationOrigin(engine.deObject, {
                         char: character,
                         causants: state.applyingState.causants || undefined,
+                        causes: state.applyingState.causes || undefined,
                     });
                     const trimmed = postNarrationText.trim();
                     if (trimmed) {

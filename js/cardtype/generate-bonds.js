@@ -21,7 +21,7 @@ export async function generateBonds(engine, jsSource) {
     const systemPrompt = inferenceAdapter.buildSystemPromptForQuestioningAgent(
         `You are a helpful assistant that will answer and assist in defining a character for a game based on their description, you are allowed free rein to interpret the character's description and generate the code that defines them in the game, you will be asked questions about the character and you should answer them as best as you can`,
         [],
-        `# Character Card:\n\n${card.contents}`
+        `# Character Card:\n\n${card.card}`
     );
 
     const generator = inferenceAdapter.runQuestioningCustomAgentOn("cardtype-gen", {
@@ -55,83 +55,173 @@ export async function generateBonds(engine, jsSource) {
         isIncestuousValue = isIncestuous.value.trim().toLowerCase() === "yes";
     }
 
-    card.config.isIncestuous = isIncestuousValue;
+    if (isIncestuousValue) {
+        card.config.isIncestuous = isIncestuousValue;
+    }
+
+    const wouldUseViolenceTowardsEnemies = await generator.next({
+        maxCharacters: 5,
+        maxSafetyCharacters: 0,
+        maxParagraphs: 1,
+        nextQuestion: "If " + name + " has an extremely hostile and abusive relationship with another character, would they be willing use violence towards that character if they had the opportunity? Answer with yes or no.",
+        stopAfter: [],
+        stopAt: [],
+        grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
+    });
+
+    if (wouldUseViolenceTowardsEnemies.done) {
+        throw new Error("Generator finished without producing output");
+    }
+
+    const wouldUseViolenceTowardsEnemiesValue = wouldUseViolenceTowardsEnemies.value.trim().toLowerCase() === "yes";
 
     const SETTINGS = {
         "foe_n100_n50": {
             "noRomanticInterest_0_10": {
-                nonFamily: "another character that " + name + " has an extremely bad and extremely hostile relationship with",
-                family: "a family member that " + name + " has an extremely bad and extremely hostile relationship with",
+                nonFamily: wouldUseViolenceTowardsEnemiesValue ?
+                    "a sworn enemy that " + name + " truly hates with every fiber of their being — someone " + name + " considers dangerous and would not hesitate to hurt, harm, or even kill if given the chance, and who may want " + name + " dead in return" :
+                    "a sworn enemy that " + name + " truly hates with every fiber of their being — someone " + name + " despises with a cold, burning intensity",
+                family: wouldUseViolenceTowardsEnemiesValue ?
+                    "a family member that " + name + " considers a sworn enemy — someone who has caused " + name + " deep harm or trauma, whom " + name + " despises so completely that violence between them is not out of the question, and whose very existence " + name + " may wish to end" :
+                    "a family member that " + name + " considers a sworn enemy — someone who has caused " + name + " deep harm or trauma, whom " + name + " despises with an absolute and unforgiving hatred",
             },
             "slightRomanticInterest_10_20": {
-                nonFamily: isAsexualValue ?
-                    "another character that " + name + " has an extremely bad and extremely hostile relationship with but also such character has shown slight romantic and sexual interest in " + name + " but " + name + " does not reciprocate because they are asexual" :
-                    "another character that " + name + " despises and has an extremely hostile relationship with, yet is unsettlingly drawn to with a slight, deeply unwanted romantic and sexual attraction that " + name + " cannot fully explain or accept",
-                family: isIncestuousValue ?
-                    "a family member that " + name + " has an extremely bad and extremely hostile relationship with but also " + name + " has a slight romantic and sexual interest in" :
-                    "a family member that " + name + " has an extremely bad and extremely hostile relationship with and such family member has shown slight romantic and sexual interest in " + name + " but " + name + " does not reciprocate that interest",
+                nonFamily: wouldUseViolenceTowardsEnemiesValue ?
+                    (isAsexualValue ?
+                        "a sworn enemy that " + name + " truly hates and would hurt or kill without hesitation — someone who has also shown slight romantic and sexual interest in " + name + ", but " + name + " does not reciprocate because they are asexual, and the unwanted attention only deepens the murderous hatred" :
+                        "a sworn enemy that " + name + " truly hates and would hurt or kill without hesitation, yet is unsettlingly drawn to with a slight, deeply unwanted romantic and sexual attraction — a sickening contradiction that makes " + name + " hate them and themselves even more") :
+                    (isAsexualValue ?
+                        "a sworn enemy that " + name + " despises with an absolute hatred — someone who has also shown slight romantic and sexual interest in " + name + ", but " + name + " does not reciprocate because they are asexual, and the unwanted attention only deepens the contempt" :
+                        "a sworn enemy that " + name + " despises with an absolute hatred, yet is unsettlingly drawn to with a slight, deeply unwanted romantic and sexual attraction that " + name + " cannot fully explain or accept"),
+                family: wouldUseViolenceTowardsEnemiesValue ?
+                    (isIncestuousValue ?
+                        "a family member that " + name + " considers a sworn enemy and has caused " + name + " deep harm or trauma, yet " + name + " has a slight and deeply shameful romantic and sexual interest in — feelings that coexist sickeningly with the desire to see them suffer" :
+                        "a family member that " + name + " considers a sworn enemy — someone who has caused " + name + " deep harm or trauma, and who has shown slight romantic and sexual interest in " + name + ", which " + name + " finds revolting and does not reciprocate, and which may provoke a violent response") :
+                    (isIncestuousValue ?
+                        "a family member that " + name + " considers a sworn enemy and has caused " + name + " deep harm or trauma, yet " + name + " has a slight and deeply shameful romantic and sexual interest in" :
+                        "a family member that " + name + " considers a sworn enemy — someone who has caused " + name + " deep harm or trauma, and who has shown slight romantic and sexual interest in " + name + ", which " + name + " finds revolting and does not reciprocate"),
             },
             "romanticInterest_20_35": {
-                nonFamily: isAsexualValue ?
-                    "another character that " + name + " has an extremely bad and extremely hostile relationship with but also such character has shown romantic and sexual interest in " + name + " but " + name + " does not reciprocate because they are asexual" :
-                    "another character that " + name + " despises and has an extremely hostile relationship with, yet cannot help but feel a real and disturbing romantic and sexual attraction toward — a contradiction " + name + " resents deeply",
-                family: isIncestuousValue ?
-                    "a family member that " + name + " has an extremely bad and extremely hostile relationship with but also " + name + " has a romantic and sexual interest in" :
-                    "a family member that " + name + " has an extremely bad and extremely hostile relationship with and such family member has shown romantic and sexual interest in " + name + " but " + name + " does not reciprocate that interest",
+                nonFamily: wouldUseViolenceTowardsEnemiesValue ?
+                    (isAsexualValue ?
+                        "a sworn enemy that " + name + " truly hates and would hurt or kill without hesitation — someone who has shown romantic and sexual interest in " + name + ", but " + name + " does not reciprocate because they are asexual, and the persistent unwanted desire only fuels " + name + "'s murderous contempt" :
+                        "a sworn enemy that " + name + " truly hates and would hurt or kill without hesitation, yet cannot help but feel a real and disturbing romantic and sexual attraction toward — a monstrous contradiction that disgusts " + name + " to their core") :
+                    (isAsexualValue ?
+                        "a sworn enemy that " + name + " despises with an absolute hatred — someone who has shown romantic and sexual interest in " + name + ", but " + name + " does not reciprocate because they are asexual, and the persistent desire only deepens " + name + "'s cold contempt" :
+                        "a sworn enemy that " + name + " despises with an absolute hatred, yet cannot help but feel a real and disturbing romantic and sexual attraction toward — a contradiction " + name + " resents deeply"),
+                family: wouldUseViolenceTowardsEnemiesValue ?
+                    (isIncestuousValue ?
+                        "a family member that " + name + " considers a sworn enemy and has caused " + name + " deep harm or trauma, yet " + name + " has a real and deeply shameful romantic and sexual interest in — feelings that war violently with the desire to hurt them" :
+                        "a family member that " + name + " considers a sworn enemy — someone who has caused " + name + " deep harm or trauma, and who has shown romantic and sexual interest in " + name + ", which " + name + " finds revolting and does not reciprocate") :
+                    (isIncestuousValue ?
+                        "a family member that " + name + " considers a sworn enemy and has caused " + name + " deep harm or trauma, yet " + name + " has a real and deeply shameful romantic and sexual interest in" :
+                        "a family member that " + name + " considers a sworn enemy — someone who has caused " + name + " deep harm or trauma, and who has shown romantic and sexual interest in " + name + ", which " + name + " finds revolting and does not reciprocate"),
             },
             "strongRomanticInterest_35_50": {
-                nonFamily: isAsexualValue ?
-                    "another character that " + name + " has an extremely bad and extremely hostile relationship with but also such character has shown strong romantic and sexual interest in " + name + " but " + name + " does not reciprocate because they are asexual" :
-                    "another character that " + name + " despises and has an extremely hostile relationship with, yet is strongly and almost obsessively attracted to, both romantically and sexually, in a way that fills " + name + " with self-loathing — the hate and the desire feeding each other in a destructive loop",
-                family: isIncestuousValue ?
-                    "a family member that " + name + " has an extremely bad and extremely hostile relationship with but also " + name + " has a strong romantic and sexual interest in" :
-                    "a family member that " + name + " has an extremely bad and extremely hostile relationship with and such family member has shown strong romantic and sexual interest in " + name + " but " + name + " does not reciprocate that interest",
+                nonFamily: wouldUseViolenceTowardsEnemiesValue ?
+                    (isAsexualValue ?
+                        "a sworn enemy that " + name + " truly hates and would hurt or kill without hesitation — someone who has shown strong romantic and sexual interest in " + name + ", but " + name + " does not reciprocate because they are asexual, and the obsessive unwanted desire makes this enemy even more dangerous and repulsive to " + name :
+                        "a sworn enemy that " + name + " truly hates and would kill if they could, yet is strongly and almost obsessively attracted to, both romantically and sexually — the hatred and the desire feeding each other in a destructive loop, and though " + name + " would still destroy them, the attraction makes every confrontation agonizing") :
+                    (isAsexualValue ?
+                        "a sworn enemy that " + name + " despises with an absolute hatred — someone who has shown strong romantic and sexual interest in " + name + ", but " + name + " does not reciprocate because they are asexual, and the obsessive unwanted attention only intensifies the loathing" :
+                        "a sworn enemy that " + name + " despises with an absolute hatred, yet is strongly and almost obsessively attracted to, both romantically and sexually, in a way that fills " + name + " with self-loathing — the hate and the desire feeding each other in a destructive loop"),
+                family: wouldUseViolenceTowardsEnemiesValue ?
+                    (isIncestuousValue ?
+                        "a family member that " + name + " considers a sworn enemy and has caused " + name + " deep harm or trauma, yet " + name + " has strong and deeply shameful romantic and sexual feelings for — feelings that make the violence between them even more agonizing and twisted" :
+                        "a family member that " + name + " considers a sworn enemy — someone who has caused " + name + " deep harm or trauma, and who has shown strong romantic and sexual interest in " + name + ", which " + name + " finds revolting and does not reciprocate") :
+                    (isIncestuousValue ?
+                        "a family member that " + name + " considers a sworn enemy and has caused " + name + " deep harm or trauma, yet " + name + " has strong and deeply shameful romantic and sexual feelings for" :
+                        "a family member that " + name + " considers a sworn enemy — someone who has caused " + name + " deep harm or trauma, and who has shown strong romantic and sexual interest in " + name + ", which " + name + " finds revolting and does not reciprocate"),
             },
             "deepInLove_50_100": {
-                nonFamily: isAsexualValue ?
-                    "another character that " + name + " has an extremely bad and extremely hostile relationship with but also such character has shown deep love and sexual desire for " + name + " but " + name + " does not reciprocate because they are asexual" :
-                    "another character that " + name + " despises and has an extremely hostile relationship with, yet is consumed by a deep and agonizing love and sexual desire for — feelings " + name + " finds monstrous and cannot reconcile with the hatred, leaving them in a state of constant inner turmoil",
-                family: isIncestuousValue ?
-                    "a family member that " + name + " has an extremely bad and extremely hostile relationship with but also " + name + " is deeply in love with and sexually attracted to" :
-                    "a family member that " + name + " has an extremely bad and extremely hostile relationship with and such family member is deeply in love with and sexually attracted to " + name + " but " + name + " does not reciprocate that love",
+                nonFamily: wouldUseViolenceTowardsEnemiesValue ?
+                    (isAsexualValue ?
+                        "a sworn enemy that " + name + " truly hates and would hurt or kill without hesitation — someone who has shown deep love and sexual desire for " + name + ", but " + name + " does not reciprocate because they are asexual, and the consuming obsession makes this enemy the most dangerous and repulsive person in " + name + "'s life" :
+                        "a sworn enemy that " + name + " truly hates and has the capacity to kill, yet is consumed by a deep and agonizing love and sexual desire for — the hatred and the love are so intertwined that " + name + " cannot tell where one ends and the other begins, and though they might still destroy this person, every attempt would break something inside " + name + " as well") :
+                    (isAsexualValue ?
+                        "a sworn enemy that " + name + " despises with an absolute hatred — someone who has shown deep love and sexual desire for " + name + ", but " + name + " does not reciprocate because they are asexual, and the consuming obsession makes this person the most loathsome presence in " + name + "'s life" :
+                        "a sworn enemy that " + name + " despises with an absolute hatred, yet is consumed by a deep and agonizing love and sexual desire for — feelings " + name + " finds monstrous and cannot reconcile with the hatred, leaving them in a state of constant inner turmoil"),
+                family: wouldUseViolenceTowardsEnemiesValue ?
+                    (isIncestuousValue ?
+                        "a family member that " + name + " considers a sworn enemy and has caused " + name + " deep harm or trauma, yet " + name + " is deeply in love with and sexually attracted to — a consuming and shameful obsession where the desire to see them suffer and the desire to possess them are indistinguishable, and the violence between them is as intimate as it is destructive" :
+                        "a family member that " + name + " considers a sworn enemy — someone who has caused " + name + " deep harm or trauma, and who is deeply in love with and sexually attracted to " + name + ", a love " + name + " finds sickening and does not reciprocate") :
+                    (isIncestuousValue ?
+                        "a family member that " + name + " considers a sworn enemy and has caused " + name + " deep harm or trauma, yet " + name + " is deeply in love with and sexually attracted to — a consuming and shameful obsession intertwined with the hatred" :
+                        "a family member that " + name + " considers a sworn enemy — someone who has caused " + name + " deep harm or trauma, and who is deeply in love with and sexually attracted to " + name + ", a love " + name + " finds sickening and does not reciprocate"),
             },
         },
         "hostile_n50_n35": {
             "noRomanticInterest_0_10": {
-                nonFamily: "another character that " + name + " has a hostile relationship with",
-                family: "a family member that " + name + " has a hostile relationship with",
+                nonFamily: wouldUseViolenceTowardsEnemiesValue ?
+                    "another character that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm, fear, or trauma, and whom " + name + " may respond to with intimidation, threats, or physical violence" :
+                    "another character that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma, and whom " + name + " treats with verbal cruelty, cold aggression, and sustained hostility, though without resorting to physical violence",
+                family: wouldUseViolenceTowardsEnemiesValue ?
+                    "a family member that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm, fear, or trauma within the family, and interactions between them may involve verbal abuse, intimidation, or even physical violence" :
+                    "a family member that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma within the family, and interactions between them involve verbal abuse, emotional manipulation, and sustained hostility, though without physical violence",
             },
             "slightRomanticInterest_10_20": {
-                nonFamily: isAsexualValue ?
-                    "another character that " + name + " has a hostile relationship with but also such character has shown slight romantic and sexual interest in " + name + " but " + name + " does not reciprocate because they are asexual" :
-                    "another character that " + name + " has a hostile relationship with, yet feels a slight and uncomfortable romantic and sexual attraction toward that " + name + " tries to suppress and deny",
-                family: isIncestuousValue ?
-                    "a family member that " + name + " has a hostile relationship with but also " + name + " has a slight romantic and sexual interest in" :
-                    "a family member that " + name + " has a hostile relationship with and such family member has shown slight romantic and sexual interest in " + name + " but " + name + " does not reciprocate that interest",
+                nonFamily: wouldUseViolenceTowardsEnemiesValue ?
+                    (isAsexualValue ?
+                        "another character that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm or trauma, and who has also shown slight romantic and sexual interest in " + name + ", but " + name + " does not reciprocate because they are asexual, and the unwanted attention feels threatening and may provoke a violent reaction" :
+                        "another character that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm or trauma, yet " + name + " feels a slight and deeply unwanted romantic and sexual attraction toward them that feels like a betrayal of their own safety") :
+                    (isAsexualValue ?
+                        "another character that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma, and who has also shown slight romantic and sexual interest in " + name + ", but " + name + " does not reciprocate because they are asexual, and the unwanted attention only deepens the hostility" :
+                        "another character that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma, yet " + name + " feels a slight and deeply unwanted romantic and sexual attraction toward that " + name + " tries to suppress and deny"),
+                family: wouldUseViolenceTowardsEnemiesValue ?
+                    (isIncestuousValue ?
+                        "a family member that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm or trauma within the family, yet " + name + " has a slight and deeply shameful romantic and sexual interest in, which makes the violence between them even more twisted" :
+                        "a family member that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm or trauma, and who has shown slight romantic and sexual interest in " + name + ", which " + name + " finds threatening and does not reciprocate") :
+                    (isIncestuousValue ?
+                        "a family member that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma within the family, yet " + name + " has a slight and deeply shameful romantic and sexual interest in" :
+                        "a family member that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma, and who has shown slight romantic and sexual interest in " + name + ", which " + name + " does not reciprocate"),
             },
             "romanticInterest_20_35": {
-                nonFamily: isAsexualValue ?
-                    "another character that " + name + " has a hostile relationship with but also such character has shown romantic and sexual interest in " + name + " but " + name + " does not reciprocate because they are asexual" :
-                    "another character that " + name + " has a hostile relationship with, yet feels a genuine and troubling romantic and sexual attraction toward — a pull " + name + " resents and struggles to make sense of",
-                family: isIncestuousValue ?
-                    "a family member that " + name + " has a hostile relationship with but also " + name + " has a romantic and sexual interest in" :
-                    "a family member that " + name + " has a hostile relationship with and such family member has shown romantic and sexual interest in " + name + " but " + name + " does not reciprocate that interest",
+                nonFamily: wouldUseViolenceTowardsEnemiesValue ?
+                    (isAsexualValue ?
+                        "another character that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm or trauma, and who has shown romantic and sexual interest in " + name + ", but " + name + " does not reciprocate because they are asexual, and the persistent desire feels predatory and dangerous" :
+                        "another character that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm or trauma, yet " + name + " feels a genuine and disturbing romantic and sexual attraction toward them that conflicts violently with the fear and rage they also feel") :
+                    (isAsexualValue ?
+                        "another character that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma, and who has shown romantic and sexual interest in " + name + ", but " + name + " does not reciprocate because they are asexual, and the persistent desire only deepens the hostility" :
+                        "another character that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma, yet " + name + " feels a genuine and troubling romantic and sexual attraction toward — a pull " + name + " resents and struggles to make sense of"),
+                family: wouldUseViolenceTowardsEnemiesValue ?
+                    (isIncestuousValue ?
+                        "a family member that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm or trauma within the family, yet " + name + " has a real and deeply shameful romantic and sexual interest in — feelings that war with the violence and rage between them" :
+                        "a family member that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm or trauma, and who has shown romantic and sexual interest in " + name + ", which " + name + " finds threatening and does not reciprocate") :
+                    (isIncestuousValue ?
+                        "a family member that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma within the family, yet " + name + " has a real and deeply shameful romantic and sexual interest in" :
+                        "a family member that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma, and who has shown romantic and sexual interest in " + name + ", which " + name + " does not reciprocate"),
             },
             "strongRomanticInterest_35_50": {
-                nonFamily: isAsexualValue ?
-                    "another character that " + name + " has a hostile relationship with but also such character has shown strong romantic and sexual interest in " + name + " but " + name + " does not reciprocate because they are asexual" :
-                    "another character that " + name + " has a hostile relationship with, yet is strongly drawn to with a romantic and sexual intensity that wars with their hostility — the antagonism and the desire intertwined in a push and pull " + name + " cannot easily escape",
-                family: isIncestuousValue ?
-                    "a family member that " + name + " has a hostile relationship with but also " + name + " has a strong romantic and sexual interest in" :
-                    "a family member that " + name + " has a hostile relationship with and such family member has shown strong romantic and sexual interest in " + name + " but " + name + " does not reciprocate that interest",
+                nonFamily: wouldUseViolenceTowardsEnemiesValue ?
+                    (isAsexualValue ?
+                        "another character that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm or trauma, and who has shown strong romantic and sexual interest in " + name + ", but " + name + " does not reciprocate because they are asexual, and the obsessive unwanted desire makes this person feel even more dangerous and threatening" :
+                        "another character that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm or trauma, yet " + name + " is strongly drawn to with a romantic and sexual intensity that wars with the fear, rage, and desire for revenge — though the strong attraction may sometimes stay " + name + "'s hand when violence would otherwise follow") :
+                    (isAsexualValue ?
+                        "another character that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma, and who has shown strong romantic and sexual interest in " + name + ", but " + name + " does not reciprocate because they are asexual, and the obsessive attention only intensifies the hostility" :
+                        "another character that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma, yet " + name + " is strongly drawn to with a romantic and sexual intensity that wars with the hostility — the aggression and the desire intertwined in a toxic push and pull " + name + " cannot easily escape"),
+                family: wouldUseViolenceTowardsEnemiesValue ?
+                    (isIncestuousValue ?
+                        "a family member that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm or trauma within the family, yet " + name + " has strong and deeply shameful romantic and sexual feelings for — feelings that make the violence between them even more agonizing" :
+                        "a family member that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm or trauma, and who has shown strong romantic and sexual interest in " + name + ", which " + name + " finds threatening and does not reciprocate") :
+                    (isIncestuousValue ?
+                        "a family member that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma within the family, yet " + name + " has strong and deeply shameful romantic and sexual feelings for" :
+                        "a family member that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma, and who has shown strong romantic and sexual interest in " + name + ", which " + name + " does not reciprocate"),
             },
             "deepInLove_50_100": {
-                nonFamily: isAsexualValue ?
-                    "another character that " + name + " has a hostile relationship with but also such character has shown deep love and sexual desire for " + name + " but " + name + " does not reciprocate because they are asexual" :
-                    "another character that " + name + " has a hostile relationship with, yet is deeply in love with and sexually attracted to in a way that " + name + " finds agonizing — the love and desire sharpening the hostility and the hostility curdling them into something painful and consuming",
-                family: isIncestuousValue ?
-                    "a family member that " + name + " has a hostile relationship with but also " + name + " is deeply in love with and sexually attracted to" :
-                    "a family member that " + name + " has a hostile relationship with and such family member is deeply in love with and sexually attracted to " + name + " but " + name + " does not reciprocate that love",
+                nonFamily: wouldUseViolenceTowardsEnemiesValue ?
+                    (isAsexualValue ?
+                        "another character that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm or trauma, and who has shown deep love and sexual desire for " + name + ", but " + name + " does not reciprocate because they are asexual, and the consuming obsession makes this person the most dangerous threat in " + name + "'s life" :
+                        "another character that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm or trauma, yet " + name + " is deeply in love with and sexually attracted to — the love and desire tangled with fear, rage, and the scars of real violence into something deeply toxic, and though " + name + " could hurt them, the depth of the love makes every violent impulse a source of anguish") :
+                    (isAsexualValue ?
+                        "another character that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma, and who has shown deep love and sexual desire for " + name + ", but " + name + " does not reciprocate because they are asexual, and the consuming obsession makes this person the most loathsome presence in " + name + "'s life" :
+                        "another character that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma, yet " + name + " is deeply in love with and sexually attracted to in a way that is agonizing — the love and desire sharpening the hostility and the hostility curdling them into something painful and consuming"),
+                family: wouldUseViolenceTowardsEnemiesValue ?
+                    (isIncestuousValue ?
+                        "a family member that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm or trauma within the family, yet " + name + " is deeply in love with and sexually attracted to — a consuming and shameful obsession where the desire to hurt them and the desire to hold them are indistinguishable" :
+                        "a family member that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm or trauma, and who is deeply in love with and sexually attracted to " + name + ", a love " + name + " finds threatening and does not reciprocate") :
+                    (isIncestuousValue ?
+                        "a family member that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma within the family, yet " + name + " is deeply in love with and sexually attracted to — a consuming and shameful obsession intertwined with deep wounds" :
+                        "a family member that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma, and who is deeply in love with and sexually attracted to " + name + ", a love " + name + " does not reciprocate"),
             },
         },
         "antagonistic_n35_n20": {
@@ -446,210 +536,6 @@ export async function generateBonds(engine, jsSource) {
         "strangerBad_n100_n5": "a stranger that " + name + " just met but has already formed a bad impression of and has negative feelings towards them",
     };
 
-    const needsReversed = !isIncestuousValue || isAsexualValue;
-
-    const QUESTIONS = {
-        "bondIncreaseQuestionsSlight": "would improve the relationship between " + name + " and OTHER_CHARACTER slightly, something that " + name + " would appreciate but not feel strongly about",
-        "bondDecreaseQuestionsSlight": "would worsen the relationship between " + name + " and OTHER_CHARACTER slightly, something that " + name + " would dislike but not feel strongly about",
-        "bondIncreaseQuestionsStrong": "would improve the relationship between " + name + " and OTHER_CHARACTER significantly, something that " + name + " would really appreciate and feel strongly about",
-        "bondDecreaseQuestionsStrong": "would worsen the relationship between " + name + " and OTHER_CHARACTER significantly, something that " + name + " would really dislike and feel strongly about",
-
-        "bondIncreaseQuestionsWhenStrangerSlight": "would improve the relationship between " + name + " and OTHER_CHARACTER if OTHER_CHARACTER considering that OTHER_CHARACTER is a stranger that they have just met, something that " + name + " would appreciate but not feel strongly about",
-        "bondDecreaseQuestionsWhenStrangerSlight": "would worsen the relationship between " + name + " and OTHER_CHARACTER if OTHER_CHARACTER considering that OTHER_CHARACTER is a stranger that they have just met, something that " + name + " would dislike but not feel strongly about",
-        "bondIncreaseQuestionsWhenStrangerStrong": "would improve the relationship between " + name + " and OTHER_CHARACTER if OTHER_CHARACTER considering that OTHER_CHARACTER is a stranger that they have just met, something that " + name + " would really appreciate and feel strongly about",
-        "bondDecreaseQuestionsWhenStrangerStrong": "would worsen the relationship between " + name + " and OTHER_CHARACTER if OTHER_CHARACTER considering that OTHER_CHARACTER is a stranger that they have just met, something that " + name + " would really dislike and feel strongly about",
-
-        "secondBondIncreaseQuestions_noRomanticInterest_0_10": "would make " + name + " start liking OTHER_CHARACTER whom they previously had no romantic feelings towards",
-        "secondBondDecreaseQuestions_noRomanticInterest_0_10": "would make " + name + " feel less sexually and romantically attracted towards OTHER_CHARACTER, despite only having a minor romantic interest. The questions should be specific to attraction",
-        "secondBondIncreaseQuestions_slightRomanticInterest_10_20": "would make " + name + " start liking OTHER_CHARACTER even more romantically and sexually whom they have a slight romantic interest in. The questions should be specific to attraction",
-        "secondBondDecreaseQuestions_slightRomanticInterest_10_20": "would make " + name + " feel less attracted romantically and sexually towards OTHER_CHARACTER (who they had already shown a slight romantic interest in). The questions should be specific to attraction and intimate physical contact",
-        "secondBondIncreaseQuestions_romanticInterest_20_35": "would make " + name + " start liking OTHER_CHARACTER even more sexually and romantically (who they have a romantic interest in). The questions should be specific to attraction and intimate physical contact",
-        "secondBondDecreaseQuestions_romanticInterest_20_35": "would make " + name + " feel less sexually and romantically attracted towards OTHER_CHARACTER (who they had already shown a romantic interest in). The questions should be specific to attraction and intimate physical contact",
-        "secondBondIncreaseQuestions_strongRomanticInterest_35_50": "would make " + name + " start liking OTHER_CHARACTER even more sexually and romantically (who they have a strong romantic interest in). The questions should be specific to attraction and intimate physical contact",
-        "secondBondDecreaseQuestions_strongRomanticInterest_35_50": "would make " + name + " feel less sexual and romantically attracted towards OTHER_CHARACTER (who they had already shown a strong romantic interest in). The questions should be specific to attraction and intimate physical contact",
-        "secondBondIncreaseQuestions_deepInLove_50_100": "would make " + name + " start liking OTHER_CHARACTER even more sexually and romantically whom they have a deep romantic interest in. The questions should be specific to attraction and intimate physical contact",
-        "secondBondDecreaseQuestions_deepInLove_50_100": "would make " + name + " feel less sexual and romantically attracted towards OTHER_CHARACTER (who they had already shown a deep romantic interest in). The questions should be specific to attraction and intimate physical contact",
-
-        "secondBondIncreaseQuestionsReversedSlight": "would make " + name + " realize OTHER_CHARACTER is showing romantic and sexual interest in them",
-        "secondBondIncreaseQuestionsReversedMedium": "would make " + name + " feel uncomfortable due to OTHER_CHARACTER showing romantic and sexual interest in them, as " + name + " does not reciprocate those feelings",
-        "secondBondIncreaseQuestionsReversedStrong": "would make " + name + " feel very uncomfortable due to OTHER_CHARACTER performing sexual physical contact and deep sexual interest in them, as " + name + " does not reciprocate those feelings",
-    }
-
-    /**
-     * @type {{[key in keyof typeof QUESTIONS]: string[]}}
-     */
-    const result = /** @type {{[key in keyof typeof QUESTIONS]: string[]}} */ ({});
-    for (const [questionKey, questionValue] of Object.entries(QUESTIONS)) {
-        const isReversed = questionKey.endsWith("_reversed");
-        if (isReversed && !needsReversed) {
-            continue;
-        }
-
-        const questionsAnswer = await generator.next({
-            maxCharacters: 200,
-            maxSafetyCharacters: 0,
-            maxParagraphs: 5,
-            nextQuestion: "Provide a concise list of paragraph separated yes/no 3rd person questions (one question per paragraph) that provided a positive or yes answer " + questionValue,
-            stopAfter: [],
-            stopAt: [],
-            instructions: "The questions should be answerable with a simple yes/no and end in question mark. Provide as many questions as possible, keep them short and simple.",
-        });
-
-        if (questionsAnswer.done) {
-            throw new Error("Generator ended unexpectedly while generating questions for " + questionKey);
-        }
-
-        const questionsValue = questionsAnswer.value.trim().split("OTHER_CHARACTER").join("{{other}}").split(name).join("{{char}}")
-            .split("\n").map(q => q.trim()).filter(q => q && q.endsWith("?") && (q.toLowerCase().startsWith("is") || q.toLowerCase().startsWith("does") || q.toLowerCase().startsWith("would") || q.toLowerCase().startsWith("has") || q.toLowerCase().startsWith("have") || q.toLowerCase().startsWith("can") || q.toLowerCase().startsWith("could") || q.toLowerCase().startsWith("should") || q.toLowerCase().startsWith("will") || q.toLowerCase().startsWith("did")));
-        // @ts-ignore
-        result[questionKey] = questionsValue
-    }
-
-    card.head.push(`/** @type {DEBondIncreaseDecreaseQuestion[]} */`);
-    card.head.push(`const bondIncreaseDecreaseWhenStranger = [`);
-
-    for (const slightQuestionValue of result["bondIncreaseQuestionsWhenStrangerSlight"]) {
-        card.head.push(`{`);
-        card.head.push(`template: DE.utils.newHandlebarsTemplate(DE, ${JSON.stringify(slightQuestionValue)}),`);
-        card.head.push(`weight: 0.5,`);
-        card.head.push(`affectsBonds: "primary",`);
-        card.head.push(`},`);
-    }
-
-    for (const slightQuestionValue of result["bondDecreaseQuestionsSlight"]) {
-        card.head.push(`{`);
-        card.head.push(`template: DE.utils.newHandlebarsTemplate(DE, ${JSON.stringify(slightQuestionValue)}),`);
-        card.head.push(`weight: -0.5,`);
-        card.head.push(`affectsBonds: "both",`);
-        card.head.push(`},`);
-    }
-
-    for (const strongQuestionValue of result["bondIncreaseQuestionsWhenStrangerStrong"]) {
-        card.head.push(`{`);
-        card.head.push(`template: DE.utils.newHandlebarsTemplate(DE, ${JSON.stringify(strongQuestionValue)}),`);
-        card.head.push(`weight: 1,`);
-        card.head.push(`affectsBonds: "primary",`);
-        card.head.push(`},`);
-    }
-
-    for (const strongQuestionValue of result["bondDecreaseQuestionsWhenStrangerStrong"]) {
-        card.head.push(`{`);
-        card.head.push(`template: DE.utils.newHandlebarsTemplate(DE, ${JSON.stringify(strongQuestionValue)}),`);
-        card.head.push(`weight: -1,`);
-        card.head.push(`affectsBonds: "both",`);
-        card.head.push(`},`);
-    }
-
-    card.head.push(`];\n`);
-    card.head.push(`/** @type {DEBondIncreaseDecreaseQuestion[]} */`);
-    card.head.push(`const bondIncreaseDecreaseBase = [`);
-
-    for (const slightQuestionValue of result["bondIncreaseQuestionsSlight"]) {
-        card.head.push(`{`);
-        card.head.push(`template: DE.utils.newHandlebarsTemplate(DE, ${JSON.stringify(slightQuestionValue)}),`);
-        card.head.push(`weight: 0.5,`);
-        card.head.push(`affectsBonds: "primary",`);
-        card.head.push(`},`);
-    }
-
-    for (const slightQuestionValue of result["bondDecreaseQuestionsSlight"]) {
-        card.head.push(`{`);
-        card.head.push(`template: DE.utils.newHandlebarsTemplate(DE, ${JSON.stringify(slightQuestionValue)}),`);
-        card.head.push(`weight: -0.5,`);
-        card.head.push(`affectsBonds: "both",`);
-        card.head.push(`},`);
-    }
-
-    for (const strongQuestionValue of result["bondIncreaseQuestionsStrong"]) {
-        card.head.push(`{`);
-        card.head.push(`template: DE.utils.newHandlebarsTemplate(DE, ${JSON.stringify(strongQuestionValue)}),`);
-        card.head.push(`weight: 1,`);
-        card.head.push(`affectsBonds: "primary",`);
-        card.head.push(`},`);
-    }
-
-    for (const strongQuestionValue of result["bondDecreaseQuestionsStrong"]) {
-        card.head.push(`{`);
-        card.head.push(`template: DE.utils.newHandlebarsTemplate(DE, ${JSON.stringify(strongQuestionValue)}),`);
-        card.head.push(`weight: -1,`);
-        card.head.push(`affectsBonds: "both",`);
-        card.head.push(`},`);
-    }
-
-    card.head.push(`];\n`);
-
-    const loopables = [
-        "noRomanticInterest_0_10",
-        "slightRomanticInterest_10_20",
-        "romanticInterest_20_35",
-        "strongRomanticInterest_35_50",
-        "deepInLove_50_100",
-    ]
-
-    if (needsReversed) {
-        for (const loopable of loopables) {
-            /**
-             * @type {string[]}
-             */
-            // @ts-ignore
-            const reversedQuestionsIncrease = result["secondBondIncreaseQuestions_" + loopable + "_reversed"] || [];
-            /**
-             * @type {string[]}
-             */
-            // @ts-ignore
-            const reversedQuestionsDecrease = result["secondBondDecreaseQuestions_" + loopable + "_reversed"] || [];
-
-            card.head.push(`/** @type {DEBondIncreaseDecreaseQuestion[]} */`);
-            card.head.push(`const secondBondIncreaseDecreaseQuestions_${loopable}_reversed = [`);
-            for (const question of reversedQuestionsIncrease) {
-                card.head.push(`{`);
-                card.head.push(`template: DE.utils.newHandlebarsTemplate(DE, ${JSON.stringify(question)}),`);
-                card.head.push(`weight: 1,`);
-                card.head.push(`affectsBonds: "secondary",`);
-                card.head.push(`},`);
-            }
-            for (const question of reversedQuestionsDecrease) {
-                card.head.push(`{`);
-                card.head.push(`template: DE.utils.newHandlebarsTemplate(DE, ${JSON.stringify(question)}),`);
-                card.head.push(`weight: -1,`);
-                card.head.push(`affectsBonds: "secondary",`);
-                card.head.push(`},`);
-            }
-            card.head.push(`];\n`);
-        }
-    }
-
-    for (const loopable of loopables) {
-        /**
-         * @type {string[]}
-         */
-        // @ts-ignore
-        const questionsIncrease = result["secondBondIncreaseQuestions_" + loopable] || [];
-        /**
-         * @type {string[]}
-         */
-        // @ts-ignore
-        const questionsDecrease = result["secondBondDecreaseQuestions_" + loopable] || [];
-
-        card.head.push(`/** @type {DEBondIncreaseDecreaseQuestion[]} */`);
-        card.head.push(`const secondBondIncreaseDecreaseQuestions_${loopable} = [`);
-        for (const question of questionsIncrease) {
-            card.head.push(`{`);
-            card.head.push(`template: DE.utils.newHandlebarsTemplate(DE, ${JSON.stringify(question)}),`);
-            card.head.push(`weight: 1,`);
-            card.head.push(`affectsBonds: "secondary",`);
-            card.head.push(`},`);
-        }
-        for (const question of questionsDecrease) {
-            card.head.push(`{`);
-            card.head.push(`template: DE.utils.newHandlebarsTemplate(DE, ${JSON.stringify(question)}),`);
-            card.head.push(`weight: -1,`);
-            card.head.push(`affectsBonds: "secondary",`);
-            card.head.push(`},`);
-        }
-        card.head.push(`];\n`);
-    }
-
     for (const [strangerKey, strangerValue] of Object.entries(STRANGERS)) {
         card.body.push(`${strangerKey}: {`);
 
@@ -657,10 +543,10 @@ export async function generateBonds(engine, jsSource) {
             maxCharacters: 200,
             maxSafetyCharacters: 0,
             maxParagraphs: 1,
-            nextQuestion: "Provide a concise one paragraph description of how " + name + " perceives and feels about " + strangerValue + ". Focus on the emotional and psychological aspects of their perception, rather than physical details. This should capture the essence of their feelings and attitudes towards this person in a way that informs their interactions and relationship dynamics.",
+            nextQuestion: "Provide a concise one paragraph description of how " + name + " perceives and feels about " + strangerValue + ". Focus on the emotional and psychological aspects of their perception, rather than physical details. This should capture the essence of their feelings and attitudes towards this person in a way that informs their interactions and relationship dynamics. Keep the paragraph short, ideally under 100 words.",
             stopAfter: [],
             stopAt: [],
-            instructions: "The response should use the word 'OTHER_CHARACTER' to refer to the other character name, ensure to specify whether " + name + " has any romantic feelings towards OTHER_CHARACTER or not, and how they would feel or react regarding sexual interactions, intimacy and other interactions, include friendship, emotional, romantic and sexual aspects",
+            instructions: "NEVER ask for clarification or more information. ALWAYS directly write the description paragraph. Invent any specific details as needed. The response should use the word 'OTHER_CHARACTER' to refer to the other character name, ensure to specify whether " + name + " has any romantic feelings towards OTHER_CHARACTER or not, and how they would feel or react regarding sexual interactions, intimacy and other interactions, include friendship, emotional, romantic and sexual aspects",
         });
 
         if (descriptionQuestion.done) {
@@ -669,8 +555,8 @@ export async function generateBonds(engine, jsSource) {
 
         const descriptionValue = descriptionQuestion.value.trim().split(name).join("{{char}}").split("OTHER_CHARACTER").join("{{other}}");
 
-        card.body.push(`description: \`${descriptionValue}\`,`);
-        card.body.push(`bondConditions: bondIncreaseDecreaseWhenStranger,`);
+        card.body.push(`relationshipName: null,`);
+        card.body.push(`description: DE.utils.newHandlebarsTemplate(DE, \`${JSON.stringify(descriptionValue)}\`),`);
         card.body.push(`},`);
     }
 
@@ -687,10 +573,10 @@ export async function generateBonds(engine, jsSource) {
                     maxCharacters: 200,
                     maxSafetyCharacters: 0,
                     maxParagraphs: 1,
-                    nextQuestion: "Provide a concise one paragraph description of how " + name + " perceives and feels about " + familyValue + ". Focus on the emotional and psychological aspects of their perception, rather than physical details. This should capture the essence of their feelings and attitudes towards this person in a way that informs their interactions and relationship dynamics.",
+                    nextQuestion: "Provide a concise one paragraph description of how " + name + " perceives and feels about " + familyValue + ". Focus on the emotional and psychological aspects of their perception, rather than physical details. This should capture the essence of their feelings and attitudes towards this person in a way that informs their interactions and relationship dynamics. Keep the paragraph short, ideally under 100 words.",
                     stopAfter: [],
                     stopAt: [],
-                    instructions: "The response should use the word 'OTHER_CHARACTER' to refer to the other character name, ensure to specify whether " + name + " has any romantic feelings towards OTHER_CHARACTER or not, and how they would feel or react regarding sexual interactions, intimacy and other interactions, include friendship, emotional, romantic and sexual aspects",
+                    instructions: "NEVER ask for clarification or more information. ALWAYS directly write the description paragraph. Invent any specific details as needed. The response should use the word 'OTHER_CHARACTER' to refer to the other character name, ensure to specify whether " + name + " has any romantic feelings towards OTHER_CHARACTER or not, and how they would feel or react regarding sexual interactions, intimacy and other interactions, include friendship, emotional, romantic and sexual aspects",
                 });
 
                 if (descriptionQuestion.done) {
@@ -699,14 +585,9 @@ export async function generateBonds(engine, jsSource) {
 
                 const descriptionValue = descriptionQuestion.value.trim().split(name).join("{{char}}").split("OTHER_CHARACTER").join("{{other}}");
 
-                const secondBondIncreaseVariableLocation = "secondBondIncreaseDecreaseQuestions_" + romanticInterestKey;
+                card.body.push(`relationshipName: null, // fill if you want this relationship to have a name`);
+                card.body.push(`description: DE.utils.newHandlebarsTemplate(DE, \`${JSON.stringify(descriptionValue)}\`),`);
 
-                card.body.push(`description: \`${descriptionValue}\`,`);
-                if (isAsexualValue || (familyValue === "family" && !isIncestuousValue)) {
-                    card.body.push(`bondConditions: [...bondIncreaseDecreaseBase, ...${secondBondIncreaseVariableLocation}_reversed],`);
-                } else {
-                    card.body.push(`bondConditions: [...bondIncreaseDecreaseBase, ...${secondBondIncreaseVariableLocation}],`);
-                }
                 card.body.push(`},`);
             }
 
@@ -717,7 +598,6 @@ export async function generateBonds(engine, jsSource) {
     }
 
     card.body.push(`}));`);
-    card.body.push("}")
 
     if (isAsexualValue) {
         const replacementsForCreepyBond = {

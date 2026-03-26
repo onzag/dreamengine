@@ -4,7 +4,7 @@
 // This file extends DEScriptRegistry (declared in DE.d.ts) via declaration merging
 // so that importScript() calls return the correct types for known scripts.
 
-declare type FSSBase = { description: DEStringTemplate; bondConditions: Array<DEBondIncreaseDecreaseQuestion>; bondAdditionalDescription?: DEStringTemplate | undefined; generalCharacterDescriptionInjection?: DEStringTemplate | undefined; generalCharacterDescriptionInjectionEx?: DEStringTemplate | undefined; };
+declare type FSSBase = { description: DEStringTemplate; relationshipName: DEStringTemplate | null; bondAdditionalDescription?: DEStringTemplate | undefined; generalCharacterDescriptionInjection?: DEStringTemplate | undefined; generalCharacterDescriptionInjectionEx?: DEStringTemplate | undefined; };
 declare type FSSByFamilyTie = { family: FSSBase; nonFamily: FSSBase; };
 declare type FSSLoveDefinition = { deepInLove_50_100: FSSByFamilyTie; strongRomanticInterest_35_50: FSSByFamilyTie; romanticInterest_20_35: FSSByFamilyTie; slightRomanticInterest_10_20: FSSByFamilyTie; noRomanticInterest_0_10: FSSByFamilyTie; };
 declare type FSSLoveDefinitionNoFamily = { deepInLove_50_100: FSSBase; strongRomanticInterest_35_50: FSSBase; romanticInterest_20_35: FSSBase; slightRomanticInterest_10_20: FSSBase; noRomanticInterest_0_10: FSSBase; };
@@ -18,6 +18,9 @@ declare type FSS1DAceNoStrangersNoFamilyOptions = { type: "1d_ace_no_strangers_n
 declare type FSS0DTesting = { type: "0d_testing"; bondChangeFineTune?: number | undefined; bondChangeNegativityBias?: number | undefined; strangerBreakawayBondWeightAbsolute?: number | undefined; strangerBreakawayInteractionsCount?: number | undefined; strangerBreakawayTimeMinutes?: number | undefined; strangerNegativeMultiplier?: number | undefined; strangerPositiveMultiplier?: number | undefined; value: FSSBase; };
 
 declare interface DEScriptRegistry {
+    "bond-systems/basic-bond-questions": DEScript & {
+        name: string;
+    };
     "bond-systems/deteriorating-bonds": DEScript & {
         name: string;
     };

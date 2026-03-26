@@ -2,9 +2,7 @@
  * Gear that calculates state changes for a character based on recent interactions.
  */
 
-import { stat } from "original-fs";
 import { DEngine, getFrozenBonds } from "../index.js";
-import { getFamilyBondRelation } from "../util/character-info.js";
 import { onStateRelievedOnCharacter, onStateRemovedOnCharacter } from "../utils.js";
 
 /**
@@ -120,6 +118,21 @@ export default async function calculateStateChange(engine, character, interacted
             const causants = alreadyActivatedInfo.causants || [];
             if (causants.length === 0) {
                 console.log(`State ${stateName} on character ${character.name} requires causants but has none. Removing state ${stateName}.`);
+                engine.deObject.stateFor[character.name].states = engine.deObject.stateFor[character.name].states.filter(s => s.state !== stateName);
+                removedState = true;
+                await onStateRemovedOnCharacter(engine.deObject, character, stateName);
+                continue;
+            }
+        }
+
+        if (removedState) {
+            continue;
+        }
+
+        if (stateDescription.requiresCauses) {
+            const causes = alreadyActivatedInfo.causes || [];
+            if (causes.length === 0) {
+                console.log(`State ${stateName} on character ${character.name} requires causes but has none. Removing state ${stateName}.`);
                 engine.deObject.stateFor[character.name].states = engine.deObject.stateFor[character.name].states.filter(s => s.state !== stateName);
                 removedState = true;
                 await onStateRemovedOnCharacter(engine.deObject, character, stateName);

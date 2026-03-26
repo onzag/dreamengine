@@ -443,6 +443,7 @@ engine.exports = {
             maxWeightKg: 0,
             ownWeatherSystem: [vaccuumWeatherSystem],
             state: {},
+            temp: {},
             parent: null,
             slots: {
                 "Moon Surface": {
@@ -450,6 +451,7 @@ engine.exports = {
                     maxVolumeLiters: 0,
                     maxWeightKg: 0,
                     state: {},
+                    temp: {},
                     items: [
                         {
                             name: "Lunar rock",
@@ -514,6 +516,7 @@ engine.exports = {
             ownWeatherSystem: [],
             parent: "Surface of the Moon",
             state: {},
+            temp: {},
             slots: {
                 "Common Area": {
                     description: "The common area of the lunar station, featuring a few chairs, a table, and a small kitchenette. The walls are lined with control panels and monitors displaying various data about the station's systems",
@@ -524,6 +527,7 @@ engine.exports = {
                     maxVolumeLiters: 2000,
                     maxWeightKg: 2000,
                     state: {},
+                    temp: {},
                 },
                 "Cooking Area": {
                     description: "A small kitchenette area with a compact stove, a sink, and storage cabinets. There are a few packaged food items and utensils stored here for the crew to use",
@@ -536,6 +540,7 @@ engine.exports = {
                     maxVolumeLiters: 2000,
                     maxWeightKg: 2000,
                     state: {},
+                    temp: {},
                 },
             },
         });
@@ -552,6 +557,7 @@ engine.exports = {
             otherPassageConditions: {},
             vehicleTypes: [],
             state: {},
+            temp: {},
         });
 
         for (let i = 0; i < 2; i++) {
@@ -590,12 +596,14 @@ engine.exports = {
                 ownWeatherSystem: [],
                 parent: "Lunar Station",
                 state: {},
+                temp: {},
                 slots: {
                     "Bedroom Area": {
                         description: "The bedroom area of the lunar station, featuring a bunk bed, a small desk, and a locker for personal belongings",
                         maxVolumeLiters: 2000,
                         maxWeightKg: 2000,
                         state: {},
+                        temp: {},
                         items: [
                             {
                                 name: "Bunk Bed",
@@ -632,6 +640,7 @@ engine.exports = {
                 onlyVehicles: false,
                 otherPassageConditions: {},
                 state: {},
+                temp: {},
                 vehicleTypes: [],
             });
         }
@@ -649,8 +658,8 @@ engine.exports = {
             },
             onValue: (answer, char) => {
                 if (answer) {
-                    DE.utils.shiftState(DE, char, "Asphyxiating in the Vaccuum", -4, null);
-                    DE.utils.shiftState(DE, char, "Freezing in the Vaccuum", -1, null);
+                    DE.utils.shiftState(DE, char, "Asphyxiating in the Vaccuum", -4, null, null);
+                    DE.utils.shiftState(DE, char, "Freezing in the Vaccuum", -1, null, null);
                 }
             }
         });
@@ -666,8 +675,8 @@ engine.exports = {
             },
             onValue: (answer, char) => {
                 if (answer) {
-                    DE.utils.shiftState(DE, char, "Asphyxiating in the Vaccuum", -4, null);
-                    DE.utils.shiftState(DE, char, "Freezing in the Vaccuum", -1, null);
+                    DE.utils.shiftState(DE, char, "Asphyxiating in the Vaccuum", -4, null, null);
+                    DE.utils.shiftState(DE, char, "Freezing in the Vaccuum", -1, null, null);
                 }
             }
         });
@@ -683,7 +692,7 @@ engine.exports = {
             },
             onValue: (answer, char) => {
                 if (answer) {
-                    DE.utils.shiftState(DE, char, "Freezing in the Vaccuum", -2, null);
+                    DE.utils.shiftState(DE, char, "Freezing in the Vaccuum", -2, null, null);
                 }
             }
         });
@@ -699,7 +708,7 @@ engine.exports = {
             },
             onValue: (answer, char) => {
                 if (answer) {
-                    DE.utils.shiftState(DE, char, "Freezing in the Vaccuum", -1, null);
+                    DE.utils.shiftState(DE, char, "Freezing in the Vaccuum", -1, null, null);
                 }
             },
         });

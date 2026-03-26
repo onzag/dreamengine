@@ -1,6 +1,6 @@
 import { ALL_FUNCTIONS_WITH_SPECIALS } from "../util/functions.js"
 import { weightedRandomByLikelihood } from "../util/random.js"
-import { EMOTIONS_LIST } from "./rolling-emotion.js";
+import { emotions } from "./util/emotions.js";
 import { deEngineUtils } from "./utils.js";
 import { commands } from "./commands.js";
 import { BaseInferenceAdapter } from "./inference/base.js";
@@ -146,6 +146,7 @@ function createCharacterFromUser(user) {
         general: "",
         initiative: 1,
         state: {},
+        temp: {},
         schizophrenia: 0,
         schizophrenicVoiceDescription: "",
         states: {},
@@ -637,7 +638,7 @@ export class DEngine {
         // check all the emotion names are in our rolling emotion list
         for (const emotionName in character.emotions) {
             // @ts-ignore
-            if (!EMOTIONS_LIST.includes(emotionName)) {
+            if (!emotions.includes(emotionName)) {
                 throw new Error(`Character ${character.name} has invalid emotion name ${emotionName}.`);
             }
         }

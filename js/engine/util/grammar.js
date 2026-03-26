@@ -126,10 +126,10 @@ export function createGrammarListFromList(engine, list, limit = 5) {
     }
     let suffix = '';
     for (let i = 1; i < limit; i++) {
-        suffix = ` (", " LIST_ELEMENT${suffix})?`;
+        suffix = ` (", " LISTELEMENT${suffix})?`;
     }
     return {
-        grammar: `root ::= LIST_ELEMENT${suffix}\nLIST_ELEMENT ::= (${list.slice(0, limit).map(item => caseInsensitiveGrammar(item)).join(" | ")})`,
+        grammar: `root ::= LISTELEMENT${suffix}\nLISTELEMENT ::= (${list.slice(0, limit).map(item => caseInsensitiveGrammar(item)).join(" | ")})`,
         stopAfter: [],
     };
 }

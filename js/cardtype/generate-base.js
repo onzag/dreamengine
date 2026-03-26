@@ -1,8 +1,37 @@
 import { DEngine } from '../engine/index.js';
+import { emotions } from '../engine/util/emotions.js';
+import { createGrammarListFromList } from '../engine/util/grammar.js';
 import { createCardStructureFrom, getJsCard } from './base.js';
 
 if (typeof process !== "undefined" && process.versions && process.versions.node) {
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+}
+
+/**
+ * 
+ * @param {string} str 
+ * @param {string} charName 
+ * @returns {string}
+ */
+export function replaceAllCharNameWithPlaceholder(str, charName) {
+    const parts = charName.trim().split(/\s+/);
+    // Build all contiguous subsequences of the name parts, longest first
+    const variants = [];
+    for (let len = parts.length; len >= 1; len--) {
+        for (let start = 0; start <= parts.length - len; start++) {
+            const variant = parts.slice(start, start + len).join(" ");
+            if (variant.length > 3) {
+                variants.push(variant);
+            }
+        }
+    }
+    // Case-sensitive replacement with word boundaries, longest variants first
+    for (const variant of variants) {
+        const escaped = variant.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const re = new RegExp('\\b' + escaped + '\\b', 'g');
+        str = str.replace(re, '{{char}}');
+    }
+    return str;
 }
 
 /**
@@ -13,11 +42,10 @@ if (typeof process !== "undefined" && process.versions && process.versions.node)
 export async function generateBase(engine, source) {
     const card = createCardStructureFrom('');
     card.card = source;
-    
+
     card.imports.push(`const fss = await importScript("bond-systems", "full-standard-bond-system");`);
     card.imports.push(`await importScript("bond-systems", "deteriorating-bonds");`);
-    card.imports.push(`await importScript("bond-systems", "deteriorating-bonds");`);
-    
+
     card.head.push(`engine.exports = {`);
     card.head.push(`type: "characters",`);
     card.head.push(`initialize(DE) {`);
@@ -83,7 +111,7 @@ export async function generateBase(engine, source) {
         throw new Error("Generator finished without producing output");
     }
 
-    const description = answerDescription.value.trim().split(name).join('{{char}}');
+    const description = replaceAllCharNameWithPlaceholder(answerDescription.value.trim(), name);
     card.body.push(`general: DE.utils.newHandlebarsTemplate(DE, ${JSON.stringify(description)}),`);
 
     const answerShortDescription = await generator.next({
@@ -143,8 +171,66 @@ export async function generateBase(engine, source) {
     card.body.push(`actionPromptInjection: {},`);
     card.body.push(`bonds: null,`);
     card.body.push(`characterRules: {},`);
-    card.body.push(`emotions: {},`);
+
     card.body.push(`states: {},`);
+    card.body.push(`emotions: {`);
+
+    const emotionsGrammar = createGrammarListFromList(engine, emotions, 7);
+
+    const commonEmotions = await generator.next({
+        maxCharacters: 200,
+        maxSafetyCharacters: 0,
+        maxParagraphs: 1,
+        nextQuestion: "Provide a comma separated list of common emotions for " + name + " provide between 3 to 7 emotions",
+        stopAfter: emotionsGrammar.stopAfter,
+        stopAt: [],
+        grammar: emotionsGrammar.grammar,
+        instructions: "Pick from the list of following emotions: \"" + emotions.join(", ") + "\" and answer with a comma separated list of the emotions that are common for " + name,
+    });
+
+    if (commonEmotions.done) {
+        throw new Error("Generator finished without producing output");
+    }
+
+    const commonEmotionsList = commonEmotions.value.trim().split(",").map(e => e.trim().toLowerCase()).filter(e =>
+        // @ts-ignore
+        emotions.includes(e)
+    ).filter((e, i, arr) => arr.indexOf(e) === i); // remove duplicates
+
+    for (const emotion of commonEmotionsList) {
+        card.body.push(`${emotion}: {`);
+        card.body.push(`common: true,`);
+        card.body.push(`},`);
+    }
+
+    const uncommonEmotions = await generator.next({
+        maxCharacters: 200,
+        maxSafetyCharacters: 0,
+        maxParagraphs: 1,
+        nextQuestion: "Provide a comma separated list of uncommon emotions for " + name + " provide between 3 to 7 emotions",
+        stopAfter: emotionsGrammar.stopAfter,
+        stopAt: [],
+        grammar: emotionsGrammar.grammar,
+        instructions: "Pick from the list of following emotions: \"" + emotions.join(", ") + "\" and answer with a comma separated list of the emotions that are uncommon for " + name,
+    });
+
+    if (uncommonEmotions.done) {
+        throw new Error("Generator finished without producing output");
+    }
+
+    const uncommonEmotionsList = uncommonEmotions.value.trim().split(",").map(e => e.trim().toLowerCase()).filter(e =>
+        // @ts-ignore
+        emotions.includes(e)
+    ).filter((e, i, arr) => arr.indexOf(e) === i); // remove duplicates
+
+    for (const emotion of uncommonEmotionsList) {
+        if (commonEmotionsList.includes(emotion)) continue;
+        card.body.push(`${emotion}: {`);
+        card.body.push(`uncommon: true,`);
+        card.body.push(`},`);
+    }
+
+    card.body.push(`},`);
 
     const hasSchizophrenia = await generator.next({
         maxCharacters: 5,
@@ -182,7 +268,7 @@ export async function generateBase(engine, source) {
         if (severityStr === "mild") severity = 0.33;
         else if (severityStr === "moderate") severity = 0.66;
         else if (severityStr === "severe") severity = 1;
-        
+
         card.body.push(`schizophrenia: ${severity},`);
 
         const schizophrenicVoiceDescription = await generator.next({
@@ -199,7 +285,7 @@ export async function generateBase(engine, source) {
             throw new Error("Generator finished without producing output");
         }
 
-        const voiceDescription = schizophrenicVoiceDescription.value.trim().split(name).join('{{char}}');
+        const voiceDescription = replaceAllCharNameWithPlaceholder(schizophrenicVoiceDescription.value.trim(), name);
         card.body.push(`schizophrenicVoiceDescription: DE.utils.newHandlebarTemplate(${JSON.stringify(voiceDescription)}),`);
     } else {
         card.body.push(`schizophrenia: 0,`);
@@ -713,11 +799,13 @@ export async function generateBase(engine, source) {
 
     card.body.push(`heroism: ${parseInt(heroismValue.value.trim()) / 10},`);
 
-    card.body.push(`properties: {`);
+    card.body.push(`state: {`);
 
     card.body.push(`BOND_SYSTEM_FORGIVENESS_RATE_PER_DAY: 0.5,`),
 
-    card.body.push(`},`)
+        card.body.push(`},`)
+    card.body.push("triggers: [],");
+    card.body.push("temp: {},"); // Temporary properties to use during inference cycles, they do not persist
 
     const isMute = await generator.next({
         maxCharacters: 5,
@@ -793,10 +881,10 @@ export async function generateBase(engine, source) {
         maxCharacters: 1000,
         maxSafetyCharacters: 0,
         maxParagraphs: 10,
-        nextQuestion: "List some activities or topics of conversation that " + name + " likes, at most 10 things",
+        nextQuestion: "List some hobbies, activities, interests, or conversation topics that " + name + " enjoys, at most 10 things. Examples: swimming, cooking, cats, astronomy, music, gardening, chess",
         stopAfter: [],
         stopAt: [],
-        instructions: "Answer with a list of things that " + name + " likes, these should be single words and in lowercase only, separate them with commas, do not use conjunctions like and, or, etc. just a simple list of things that " + name + " likes separated by commas. these can be activities or topics of conversation.",
+        instructions: "Answer with a comma-separated list of single lowercase words representing concrete hobbies, activities, subjects, or things that " + name + " likes. Each entry must be a noun or activity like: swimming, reading, cats, magic, cooking, astronomy, horses, painting, archery. Do NOT include emotional states, interpersonal situations, or multi-word phrases. Just single-word nouns or activities separated by commas.",
         grammar: "root ::= item moreItems\nmoreItems ::= \",\" item moreItems | \"\"\nitem ::= [a-z]+"
     });
 
@@ -804,16 +892,18 @@ export async function generateBase(engine, source) {
         throw new Error("Generator finished without producing output");
     }
 
-    card.body.push(`likes: [${likesList.value.trim().split(",").filter(item => item.trim() !== "").map(item => `"${item.trim()}"`).join(", ")}], // These are ids that need to be specified for the social simulation`);
+    const likesListParsedAndDeduped = likesList.value.trim().split(",").filter(item => item.trim() !== "").map(item => `"${item.trim()}"`).filter((item, index, self) => self.indexOf(item) === index); // trim items, filter out empty items and dedupe
+
+    card.body.push(`likes: ${JSON.stringify(likesListParsedAndDeduped)}, // These are ids that need to be specified for the social simulation`);
 
     const dislikesList = await generator.next({
         maxCharacters: 1000,
         maxSafetyCharacters: 0,
         maxParagraphs: 10,
-        nextQuestion: "List some activities or topics of conversation that " + name + " dislikes, at most 10 things",
+        nextQuestion: "List some hobbies, activities, interests, or conversation topics that " + name + " dislikes, at most 10 things. Examples: swimming, cooking, cats, politics, math, spiders, crowds",
         stopAfter: [],
         stopAt: [],
-        instructions: "Answer with a list of things that " + name + " dislikes, these should be single words and in lowercase only, separate them with commas, do not use conjunctions like and, or, etc. just a simple list of things that " + name + " dislikes separated by commas. these can be activities or topics of conversation.",
+        instructions: "Answer with a comma-separated list of single lowercase words representing concrete hobbies, activities, subjects, or things that " + name + " dislikes. Each entry must be a noun or activity like: swimming, math, spiders, crowds, politics, mornings, heights, snakes, thunder. Do NOT include emotional states, interpersonal situations, or multi-word phrases. Just single-word nouns or activities separated by commas.",
         grammar: "root ::= item moreItems\nmoreItems ::= \",\" item moreItems | \"\"\nitem ::= [a-z]+"
     });
 
@@ -821,7 +911,13 @@ export async function generateBase(engine, source) {
         throw new Error("Generator finished without producing output");
     }
 
-    card.body.push(`dislikes: [${dislikesList.value.trim().split(",").filter(item => item.trim() !== "").map(item => `"${item.trim()}"`).join(", ")}], // These are ids that need to be specified for the social simulation`);
+    const dislikesListParsedAndDeduped = dislikesList.value.trim().split(",").filter(item => item.trim() !== "").map(item => `"${item.trim()}"`)
+        .filter((item, index, self) => self.indexOf(item) === index) // trim items, filter out empty items and dedupe
+        .filter(item => !likesListParsedAndDeduped.includes(item)); // ensure there is no overlap with likes
+
+    card.body.push(`dislikes: ${JSON.stringify(dislikesListParsedAndDeduped)}, // These are ids that need to be specified for the social simulation`);
+
+    card.config.globalInterests = [...likesListParsedAndDeduped, ...dislikesListParsedAndDeduped];
 
     const species = await generator.next({
         maxCharacters: 50,
@@ -928,9 +1024,9 @@ export async function generateBase(engine, source) {
         card.body.push(`// You can make these far more specific if needed, but these are for the social simulation and wander heuristics`);
 
         if (findsAmbiguousGendersSexuallyAttractiveValue) {
-            card.body.push(`{towards: "ambiguous", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}]},`);
-            card.body.push(`{towards: "male", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}]},`);
-            card.body.push(`{towards: "female", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}]},`);
+            card.body.push(`{towards: "ambiguous", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], "species": "${species.value.trim()}"},`);
+            card.body.push(`{towards: "male", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], "species": "${species.value.trim()}"},`);
+            card.body.push(`{towards: "female", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], "species": "${species.value.trim()}"},`);
             attractions.push("ambiguous");
             attractions.push("male");
             attractions.push("female");
@@ -973,7 +1069,7 @@ export async function generateBase(engine, source) {
             const findsFemalesSexuallyAttractiveValue = findsFemalesSexuallyAttractive.value.trim().toLowerCase() === "yes";
 
             if (findsFemalesSexuallyAttractiveValue) {
-                card.body.push(`{towards: "female", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}]},`);
+                card.body.push(`{towards: "female", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], "species": "${species.value.trim()}"},`);
                 attractions.push("female");
             }
         }
@@ -982,7 +1078,6 @@ export async function generateBase(engine, source) {
     card.body.push(`],`);
     card.body.push(`},`);
     card.body.push(`}, {`);
-    card.body.push(`type: "4d_standard",`);
 
     card.config.isAsexual = isAsexualValue;
     card.config.name = name;

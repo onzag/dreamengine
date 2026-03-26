@@ -25,6 +25,77 @@ That should produce an output file named `charactercard.js` which will contain t
 
 Before running check the configuration and make sure that your character config in the // config comment is correct for what you want, for example, the character asexuality is set there, asexual characters will receive a 4d_creepy bond system which allows for tension being created with one sided non reciprocating sexual and romantic bonds, and non asexual characters will receive a standard bond system.
 
-`npm run cardtype --infer-bonds charactercard.js`
+## Required steps
 
-This will modify charactercard.js to add the bond system that was missing, 
+To create a nice dreamengine character script base from a card, check the output at each step to see if they fit your character, and if not correct, take a view at the header generated rather than the code as that is what is used for future steps
+
+1. Get the initial character script from the card, this will produce invalid js code, but it will be the start point
+`npm run cardtype charactercard.md`
+
+2. Add the bond system to the character
+`npm run cardtype -- --infer-bonds charactercard.js`
+
+2. Add bond triggers to the character
+`npm run cardtype -- --add-bond-triggers charactercard.js`
+
+3. Add activities to the world that refer to your character likes and dislikes
+`npm run cardtype -- add-activities charactercard.js`
+
+4. Add basic emotional states to the character
+`npm run cardtype -- add-basic-states charactercard.js`
+
+## Optional steps but recommended
+
+- Add a emotional state that should refer to a state, check out the already created by default
+`npm run cardtype -- --add-state statefile.md charactercard.js`
+
+### Example statefile.md
+
+Narrative Effect, Relievers, and Action are optional.
+
+```
+# Needs to Cry
+type: solo
+state: {{char}} will look for a private place to cry and try to go away from others
+
+## Triggers
+ - is {{char}} having a mental breakdown?
+ - is {{char}} very sad?
+ - is {{char}} very stressed?
+ - is {{char}} very upset?
+
+## Relievers
+ - has {{char}} been comforted?
+ - has {{char}} been given a hug?
+
+## Narrative effect
+decribe {{char}} being uncomfortable and moving around trying to find a private place to cry
+
+## Action
+{{char}} will look for a private place to cry
+```
+
+## Example statefile.md with a causant
+
+Narrative Effect, Relievers, and Action are optional.
+
+```
+# Gone Berserk
+type: triggered
+state: {{char}} is in a berserk rage state, their muscles are bulging, their eyes are wide open and bloodshot, they are trembling with rage and their vision is tunnelled, they are only focused on attacking {{causants}} and anyone around them, they don't care about anything else
+
+## Triggers
+ - has {{char}} been injured by {{other}}?
+ - has {{char}} been insulted by {{other}}?
+ - has {{char}} been betrayed by {{other}}?
+
+## Relievers
+ - has {{char}} been knocked out?
+ - has {{char}} been given a powerful drug?
+
+## Narrative effect
+decribe {{char}} going berserk and attacking everyone around, especially {{causants}}
+
+## Action
+{{char}} will go berserk and attack everyone around, especially {{causants}}
+```

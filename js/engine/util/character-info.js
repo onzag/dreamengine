@@ -656,6 +656,7 @@ export async function getExternalDescriptionOfCharacter(engine, characterName, o
                     toAdd = await stateInfo.relievingGeneralCharacterExternalDescriptionInjection(engine.deObject, {
                         char: character,
                         causants: state.causants || undefined,
+                        causes: state.causes || undefined,
                     });
                 }
             }
@@ -667,6 +668,7 @@ export async function getExternalDescriptionOfCharacter(engine, characterName, o
                     toAdd = await stateInfo.generalCharacterExternalDescriptionInjection(engine.deObject, {
                         char: character,
                         causants: state.causants || undefined,
+                        causes: state.causes || undefined,
                     });
                 }
             }
@@ -1546,6 +1548,7 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
                 const generalDescription = typeof generalDescriptionOrigin === "string" ? generalDescriptionOrigin : await generalDescriptionOrigin(engine.deObject, {
                     char: character,
                     causants: state.causants || undefined,
+                    causes: state.causes || undefined,
                 });
                 const trimmed = generalDescription.trim();
                 if (trimmed) {
@@ -1800,12 +1803,16 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
         const globalInterest = engine.deObject.interests[like];
         if (globalInterest) {
             likes.push(globalInterest.simple);
+        } else {
+            likes.push(like);
         }
     }
     for (const dislike of character.socialSimulation.dislikes) {
         const globalInterest = engine.deObject.interests[dislike];
         if (globalInterest) {
             dislikes.push(globalInterest.simple);
+        } else {
+            dislikes.push(dislike);
         }
     }
 

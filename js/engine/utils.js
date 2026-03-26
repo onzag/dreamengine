@@ -4,6 +4,24 @@ import Handlebars from "handlebars";
  * @type {DEUtils}
  */
 export const deEngineUtils = {
+    newGlobalInterest(DE, interest) {
+        if (DE.interests[interest.id]) {
+            console.warn(`Interest with id ${interest.id} already exists, mixing it.`);
+            if (!Array.isArray(DE.interests[interest.id].template)) {
+                // @ts-ignore
+                DE.interests[interest.id].template = [DE.interests[interest.id].template];
+            }
+            if (Array.isArray(interest.template)) {
+                // @ts-ignore
+                DE.interests[interest.id].template.push(...interest.template);
+            } else {
+                // @ts-ignore
+                DE.interests[interest.id].template.push(interest.template);
+            }
+        } else {
+            DE.interests[interest.id] = interest;
+        }
+    },
     newHandlebarsTemplate(DE, source) {
         const compiled = Handlebars.compile(source);
         return (DE, info) => {
@@ -13,7 +31,8 @@ export const deEngineUtils = {
                 other: info.other?.name || "",
                 other_family_relation: info.otherFamilyRelation || "none",
                 other_relationship: info.otherRelationship || "none",
-                causants: info.causants || [],
+                causants: info.causants?.map(c => c.name) || [],
+                causes: info.causes?.map(c => c.characterCausant ? c.description + " by " + c.characterCausant : c.description) || [],
                 chars: info.chars?.map(c => c.name) || [],
             };
             Object.keys(DE.functions).forEach((key) => {
@@ -275,20 +294,63 @@ export const deEngineUtils = {
             const overallShift = primaryShift + secondaryShift;
             const conditionMultiplier = (bond.stranger ? (overallShift < 0 ? char1Ref.bonds.strangerNegativeMultiplier : char1Ref.bonds.strangerPositiveMultiplier) :
                 (overallShift < 0 ? char1Ref.bonds.bondChangeNegativityBias : char1Ref.bonds.bondChangeFineTune));
+            let actualPrimaryShift = primaryShift * conditionMultiplier;
+            let actualSecondaryShift = secondaryShift * conditionMultiplier;
 
-            bond.bond += primaryShift * conditionMultiplier;
-            bond.bond2 = (bond.bond2 || 0) + secondaryShift * conditionMultiplier;
+            const alreadyShiftedPrimary = char1Ref.temp["alreadyShiftedBondPrimary_" + towardsRef.name] || 0;
+            if (alreadyShiftedPrimary !== 0) {
+                if ((alreadyShiftedPrimary > 0 && actualPrimaryShift > 0 && actualPrimaryShift <= alreadyShiftedPrimary) ||
+                    (alreadyShiftedPrimary < 0 && actualPrimaryShift < 0 && actualPrimaryShift >= alreadyShiftedPrimary)) {
+                    actualPrimaryShift = alreadyShiftedPrimary;
+                }
+            }
+
+            const alreadyShiftedSecondary = char1Ref.temp["alreadyShiftedBondSecondary_" + towardsRef.name] || 0;
+            if (alreadyShiftedSecondary !== 0) {
+                if ((alreadyShiftedSecondary > 0 && actualSecondaryShift > 0 && actualSecondaryShift <= alreadyShiftedSecondary) ||
+                    (alreadyShiftedSecondary < 0 && actualSecondaryShift < 0 && actualSecondaryShift >= alreadyShiftedSecondary)) {
+                    actualSecondaryShift = alreadyShiftedSecondary;
+                }
+            }
+
+            const effectivePrimary = actualPrimaryShift - alreadyShiftedPrimary;
+            const effectiveSecondary = actualSecondaryShift - alreadyShiftedSecondary;
+
+            if (effectivePrimary === 0 && effectiveSecondary === 0) {
+                console.log(`Already shifted bond from ${char1Ref.name} towards ${towardsRef.name} by primary=${alreadyShiftedPrimary}, secondary=${alreadyShiftedSecondary}, skipping because new shifts are smaller or equal.`);
+                return;
+            }
+
+            bond.bond += effectivePrimary;
+            bond.bond2 += effectiveSecondary;
+
+            char1Ref.temp["alreadyShiftedBondPrimary_" + towardsRef.name] = actualPrimaryShift;
+            char1Ref.temp["alreadyShiftedBondSecondary_" + towardsRef.name] = actualSecondaryShift;
         }
     },
     triggerActionNext(DE, action) {
         DE.internalState.NEXT_ACTIONS = DE.internalState.NEXT_ACTIONS || [];
         DE.internalState.NEXT_ACTIONS.push(action);
     },
-    async shiftState(DE, character, stateName, shiftAmount, causants) {
+    isStrangerTowards(DE, char1, towards) {
+        const char1Ref = typeof char1 === "string" ? DE.characters[char1] : char1;
+        const towardsRef = typeof towards === "string" ? DE.characters[towards] : towards;
+        if (!char1Ref || !towardsRef) {
+            console.warn(`Cannot check if ${char1} is stranger towards ${towards} because one of the characters was not found`);
+            return true;
+        }
+        const bond = DE.bonds[char1Ref.name].active.find(b => b.towards === towardsRef.name);
+        return !bond || bond.stranger;
+    },
+    async shiftState(DE, character, stateName, shiftAmount, causants, causes) {
+        return DE.utils.tickleState(DE, character, stateName, shiftAmount, shiftAmount > 0 ? Infinity : -Infinity, causants, causes);
+    },
+    async tickleState(DE, character, stateName, shiftAmount, cap, causants, causes) {
         if (shiftAmount === 0) {
             console.warn(`Shift amount is 0 when trying to shift state ${stateName} on character ${character}, skipping.`);
             return;
         }
+
         const characterRef = typeof character === "string" ? DE.characters[character] : character;
         if (!characterRef) {
             if (typeof character === "string") {
@@ -300,6 +362,23 @@ export const deEngineUtils = {
         } else if (!characterRef.states[stateName]) {
             console.warn(`Character ${characterRef.name} does not have state ${stateName} when trying to shift it by ${shiftAmount}`);
             return;
+        }
+
+        const alreadyShiftedInfo = characterRef.temp["alreadyShifted_" + stateName] || 0;
+        if (alreadyShiftedInfo !== 0) {
+            // check if they are the same sign
+            if ((alreadyShiftedInfo > 0 && shiftAmount > 0)) {
+                // check if our new shift amount would be larger
+                if (shiftAmount <= alreadyShiftedInfo) {
+                    console.log(`Already shifted state ${stateName} on character ${characterRef.name} by ${alreadyShiftedInfo}, skipping shift by ${shiftAmount} because it's smaller or equal.`);
+                    return;
+                }
+            } else if (alreadyShiftedInfo < 0 && shiftAmount < 0) {
+                if (shiftAmount >= alreadyShiftedInfo) {
+                    console.log(`Already shifted state ${stateName} on character ${characterRef.name} by ${alreadyShiftedInfo}, skipping shift by ${shiftAmount} because it's smaller or equal.`);
+                    return;
+                }
+            }
         }
 
         const stateRef = characterRef.states[stateName];
@@ -314,6 +393,7 @@ export const deEngineUtils = {
             activeState = {
                 state: stateName,
                 causants: null,
+                causes: null,
                 intensity: 0,
                 relieving: false,
                 contiguousStartActivationCyclesAgo: 0,
@@ -325,16 +405,44 @@ export const deEngineUtils = {
 
         let hasRemovedIt = false;
 
-        activeState.intensity += shiftAmount;
+        const newExpectedIntensity = activeState.intensity + shiftAmount - alreadyShiftedInfo;
+        if (newExpectedIntensity > cap) {
+            shiftAmount = cap - activeState.intensity + alreadyShiftedInfo;
+        }
+
+        activeState.intensity += shiftAmount - alreadyShiftedInfo;
+        characterRef.temp["alreadyShifted_" + stateName] = shiftAmount;
+
         if (shiftAmount > 0) {
             if (activeState.causants && causants) {
                 activeState.causants.push(...causants);
             } else if (causants) {
                 activeState.causants = causants;
             }
+            if (activeState.causes && causes) {
+                activeState.causes.push(...causes);
+            } else if (causes) {
+                activeState.causes = causes;
+            }
         } else {
             if (activeState.causants && causants) {
-                activeState.causants = activeState.causants.filter(c => !causants.some(c2 => c2.name === c.name && c2.type === c.type));
+                activeState.causants = activeState.causants.filter(c => causants.some(c2 => c2.name === c.name && c2.type === c.type));
+            }
+            if (activeState.causes && causes) {
+                activeState.causes = activeState.causes.filter(c =>
+                    !causes.some(c2 => c2.description === c.description && (c2.characterCausant || null) === (c.characterCausant || null)) ||
+                    (causants && causants.some(c2 => c2.name === c.characterCausant && c2.type === "character"))
+                );
+            }
+        }
+
+        for (const cause of activeState.causes || []) {
+            if (cause.characterCausant && !activeState.causants?.find(c => c.name === cause.characterCausant && c.type === "character")) {
+                activeState.causants = activeState.causants || [];
+                activeState.causants.push({
+                    name: cause.characterCausant,
+                    type: "character",
+                });
             }
         }
 
@@ -491,7 +599,7 @@ function createStateInCharacter(DE, character, stateName, stateDefinition) {
  */
 function makeUserStoryMasterMessage(DE, content) {
     DE.internalState.ADD_STORY_MASTER_MESSAGES = DE.internalState.ADD_STORY_MASTER_MESSAGES || [];
-    DE.internalState.ADD_STORY_MASTER_MESSAGES.push({type: "user", content});
+    DE.internalState.ADD_STORY_MASTER_MESSAGES.push({ type: "user", content });
 }
 
 /**
@@ -508,7 +616,7 @@ function markGameOver(DE) {
  */
 function makeStoryMasterMessage(DE, content) {
     DE.internalState.ADD_STORY_MASTER_MESSAGES = DE.internalState.ADD_STORY_MASTER_MESSAGES || [];
-    DE.internalState.ADD_STORY_MASTER_MESSAGES.push({type: "everyone", content});
+    DE.internalState.ADD_STORY_MASTER_MESSAGES.push({ type: "everyone", content });
 }
 
 /**
@@ -537,6 +645,7 @@ async function onStateTriggeredOnCharacter(deObject, character, stateName) {
         let stateDescriptionText = typeof characterStateDescription.general === "string" ? characterStateDescription.general : await characterStateDescription.general(deObject, {
             char: character,
             causants: characterStateInfo.causants || undefined,
+            causes: characterStateInfo.causes || undefined,
         });
         if (!stateDescriptionText.endsWith(".")) {
             stateDescriptionText += ".";
@@ -564,6 +673,7 @@ async function onStateTriggeredOnCharacter(deObject, character, stateName) {
                  */
                 const state = {
                     causants: characterStateInfo.causants,
+                    causes: characterStateInfo.causes,
                     state: triggeredState,
                     intensity: withIntensity,
                     relieving: false,
@@ -687,6 +797,7 @@ export async function onStateRemovedOnCharacter(deObject, character, stateName) 
                  */
                 const state = {
                     causants: characterStateInfo.causants,
+                    causes: characterStateInfo.causes,
                     state: triggeredState,
                     intensity: withIntensity,
                     relieving: false,
@@ -743,7 +854,7 @@ export async function onStateRemovedOnCharacter(deObject, character, stateName) 
  * @param {DEObject} deObject
  * @param {DECompleteCharacterReference} character 
  * @param {string} stateName 
- */ 
+ */
 export async function onStateRelievedOnCharacter(deObject, character, stateName) {
     const characterState = deObject.stateFor[character.name];
     if (!characterState) {
@@ -768,6 +879,7 @@ export async function onStateRelievedOnCharacter(deObject, character, stateName)
             stateDescriptionText += typeof characterStateDescription.relieving === "string" ? characterStateDescription.relieving : (await characterStateDescription.relieving(deObject, {
                 char: character,
                 causants: characterStateInfo.causants || undefined,
+                causes: characterStateInfo.causes || undefined,
             })).trim();
             if (!stateDescriptionText.endsWith(".")) {
                 stateDescriptionText += ".";
@@ -794,6 +906,7 @@ export async function onStateRelievedOnCharacter(deObject, character, stateName)
                  */
                 const state = {
                     causants: characterStateInfo.causants,
+                    causes: characterStateInfo.causes,
                     state: triggeredState,
                     intensity: withIntensity,
                     relieving: false,

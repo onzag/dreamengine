@@ -110,6 +110,12 @@ export async function runQuestion(engine, character, question, options) {
                 return; // skip this question if there are no surrounding characters
             }
             others = allCharacters;
+        } else if (question.askPer === "conversing_character") {
+            const conversingCharactersRelevant = options.interactedCharactersAccordingToItemChange;
+            if (conversingCharactersRelevant.length === 0) {
+                return; // skip this question if there are no conversing characters
+            }
+            others = conversingCharactersRelevant;
         } else if (question.askPer === "present_family_members") {
             const surroundingCharacters = getSurroundingCharacters(engine, character.name);
             const familyMembers = surroundingCharacters.nonStrangers.filter(c => {
@@ -333,5 +339,40 @@ export default async function runAllTriggersFor(engine, character, interactedCha
         await questioningAgent.return();
     }
 
+    await deleteTemp(engine);
+
     return;
 }
+
+/**
+ * 
+ * @param {DEngine} engine 
+ */
+export async function deleteTemp(engine) {
+    if (!engine.deObject) {
+        throw new Error("DEngine not initialized");
+    }
+
+    engine.deObject.world.temp = {};
+
+    for (const locationName in engine.deObject.world.locations) {
+        const location = engine.deObject.world.locations[locationName];
+        location.temp = {};
+
+        for (const slotName in location.slots) {
+            const slot = location.slots[slotName];
+            slot.temp = {};
+        }
+    }
+
+    for (const connectionName in engine.deObject.world.connections) {
+        const connection = engine.deObject.world.connections[connectionName];
+        connection.temp = {};
+    }
+
+    for (const characterName in engine.deObject.characters) {
+        const character = engine.deObject.characters[characterName];
+        character.temp = {};
+    }
+}
+

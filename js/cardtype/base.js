@@ -21,40 +21,41 @@ export function createCardStructureFrom(jsContent) {
     const card = splittedLines[1] ? splittedLines[1].startsWith('// card:') ? JSON.parse(splittedLines[1].replace('// card:', '').trim()) : '' : '';
     baseFile.card = card;
 
-    let isInImports = true;
+    let isInImports = false;
     let isInHead = false;
     let isInBody = false;
     let isInFoot = false;
     for (const line of splittedLines) {
-        if (line.trim() === '// imports') {
+        const trimmedLine = line.trim();
+        if (trimmedLine === '// imports') {
             isInImports = true;
             isInHead = false;
             isInBody = false;
             isInFoot = false;
-        } else if (line.trim() === '// head') {
+        } else if (trimmedLine === '// head') {
             isInImports = false;
             isInHead = true;
             isInBody = false;
             isInFoot = false;
-        }  else if (line.trim() === '// body') {
+        }  else if (trimmedLine === '// body') {
             isInImports = false;
             isInHead = false;
             isInBody = true;
             isInFoot = false;
-        } else if (line.trim() === '// foot') {
+        } else if (trimmedLine === '// foot') {
             isInImports = false;
             isInHead = false;
             isInBody = false;
             isInFoot = true;
         } else {
             if (isInHead) {
-                baseFile.head.push(line);
+                baseFile.head.push(trimmedLine);
             } else if (isInBody) {
-                baseFile.body.push(line);
+                baseFile.body.push(trimmedLine);
             } else if (isInFoot) {
-                baseFile.foot.push(line);
+                baseFile.foot.push(trimmedLine);
             } else if (isInImports) {
-                baseFile.imports.push(line);
+                baseFile.imports.push(trimmedLine);
             }
         }
     }
@@ -85,15 +86,17 @@ export function getJsCard(base) {
     let tabCount = 0;
     for (const line of linesInOrder) {
         const trimmedLine = line.trim();
+        let alreadyReduced = false;
         if (trimmedLine.startsWith("}") || trimmedLine.startsWith(")") || trimmedLine.startsWith("]")) {
             tabCount = Math.max(tabCount - 1, 0);
+            alreadyReduced = true;
         }
         endResult += "\t".repeat(tabCount) + trimmedLine + "\n";
         if (trimmedLine.endsWith('{') || trimmedLine.endsWith('(') || trimmedLine.endsWith('[')) {
             tabCount++;
         }
         
-        if (trimmedLine.endsWith('}') || trimmedLine.endsWith(')') || trimmedLine.endsWith(']')) {
+        if (!alreadyReduced && (trimmedLine.endsWith('}') || trimmedLine.endsWith(')') || trimmedLine.endsWith(']'))) {
             tabCount = Math.max(tabCount - 1, 0);
         }
     }

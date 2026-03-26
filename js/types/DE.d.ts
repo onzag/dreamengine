@@ -339,6 +339,8 @@ declare interface DECharacterStateDefinition {
     /**
      * Whether the dead end triggers after a certain time being in the state
      * meaning that the character has a time limit to relieve the state
+     * 
+     * TODO unimplemented
      */
     deadEndByTimeInMinutes?: number;
     /**
@@ -400,9 +402,11 @@ declare interface DECharacterStateDefinition {
      * States that this state relieves when it gets relieved and the intensity drops to zero
      */
     modifiesStatesIntensitiesOnRemove?: { [stateName: string]: { intensity: number } };
+
     requiresCausants?: boolean;
     requiresCharacterCausants?: boolean;
     requiresObjectCausants?: boolean;
+    requiresCauses?: boolean;
 
     /**
      * If not given everyone around the character is a potential causant
@@ -699,9 +703,9 @@ declare interface DEBondDeclaration {
 }
 
 declare interface DEEmotionDefinition {
-    common: boolean;
-    uncommon: boolean;
-    triggeredByStates: string[];
+    common?: boolean;
+    uncommon?: boolean;
+    unable?: boolean;
 }
 
 type DEEmotionNames =
@@ -747,6 +751,7 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
      * Arbitrary state attached to the character
      */
     state: Record<string, any>;
+    temp: Record<string, any>;
 
     /**
      * Injects extra information into the character's general description
@@ -1096,7 +1101,12 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
          */
         descriptionGeneralInjection: DEStringTemplate | null;
     };
+
+    /**
+     * TODO add in sysprompt about the character emotional profile
+     */
     emotions: Partial<Record<DEEmotionNames, DEEmotionDefinition>>;
+
     /**
      * Limit vocabulary to these specific words or grammatical tokens, ensure to double quote strings
      * that match specific words, these are used for grammar control so they should be in
@@ -1198,6 +1208,8 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
     triggers: Array<DECharacterYesNoQuestion | DECharacterNumericQuestion | DECharacterTextQuestion>;
 }
 
+declare type DEAskPerType = "present_character" | "conversing_character" | "potential_character_causants_of_state" | "character_causants_of_state" | "object_causants_of_state" | "any_causants_of_state" | "present_family_members";
+
 declare interface DECharacterQuestionBase {
     /**
      * The question to run
@@ -1206,7 +1218,7 @@ declare interface DECharacterQuestionBase {
     /**
      * Now the question has access to {{other}} and {{other_family_relation}}
      */
-    askPer?: "present_character" | "potential_character_causants_of_state" | "character_causants_of_state" | "object_causants_of_state" | "any_causants_of_state" | "present_family_members";
+    askPer?: DEAskPerType;
     /**
      * Used in combination with askPer: "potential_character_causants_of_state" or "causants_of_state" or "character_causants_of_state" or "object_causants_of_state" to specify the state that the question should be asked for each potential causant of it, this way the question can be asked for each potential causant of a specific state and have access to {{other}} and {{other_family_relation}} in the question template, which refer to the potential causant character and their family relation to the character respectively
      */
@@ -1218,45 +1230,64 @@ declare interface DECharacterQuestionBase {
      * @param otherFamilyRelation 
      * @returns 
      */
-    runIf?: (character: DECompleteCharacterReference, otherChar: DEMinimalCharacterReference | null, otherFamilyRelation: DEFamilyRelation | null) => boolean | Promise<boolean>;
+    runIf?: (character: DECompleteCharacterReference, otherChar: DECompleteCharacterReference | null, otherFamilyRelation: DEFamilyRelation | null) => boolean | Promise<boolean>;
 }
 
-declare interface DECharacterYesNoQuestion extends DECharacterQuestionBase {
-    type: "yes_no";
-    onValue: DEYesNoQuestionCallback;
-}
+declare type DECharacterQuestionWithAskPer = Omit<DECharacterQuestionBase, 'runIf' | 'askPer'> & {
+    askPer: DEAskPerType;
+    runIf?: (character: DECompleteCharacterReference, otherChar: DECompleteCharacterReference, otherFamilyRelation: DEFamilyRelation | null) => boolean | Promise<boolean>;
+};
+
+declare type DECharacterYesNoQuestion =
+    | (DECharacterQuestionWithAskPer & { type: "yes_no"; onValue: (
+        answer: boolean,
+        character: DECompleteCharacterReference,
+        otherChar: DECompleteCharacterReference,
+        otherFamilyRelation: DEFamilyRelation | null,
+        otherRelationship: string | null,
+    ) => Promise<void> | void; })
+    | (DECharacterQuestionBase & { type: "yes_no"; askPer?: undefined; onValue: DEYesNoQuestionCallback; });
 
 declare type DEYesNoQuestionCallback = (
     answer: boolean,
     character: DECompleteCharacterReference,
-    otherChar: DEMinimalCharacterReference | null,
+    otherChar: DECompleteCharacterReference | null,
     otherFamilyRelation: DEFamilyRelation | null,
     otherRelationship: string | null,
 ) => Promise<void> | void;
 
-declare interface DECharacterNumericQuestion extends DECharacterQuestionBase {
-    type: "numeric";
-    onNumber: DENumericQuestionCallback;
-}
+declare type DECharacterNumericQuestion =
+    | (DECharacterQuestionWithAskPer & { type: "numeric"; onNumber: (
+        answer: number,
+        character: DECompleteCharacterReference,
+        otherChar: DECompleteCharacterReference,
+        otherFamilyRelation: DEFamilyRelation | null,
+        otherRelationship: string | null,
+    ) => Promise<void> | void; })
+    | (DECharacterQuestionBase & { type: "numeric"; askPer?: undefined; onNumber: DENumericQuestionCallback; });
 
 declare type DENumericQuestionCallback = (
     answer: number,
     character: DECompleteCharacterReference,
-    otherChar: DEMinimalCharacterReference | null,
+    otherChar: DECompleteCharacterReference | null,
     otherFamilyRelation: DEFamilyRelation | null,
     otherRelationship: string | null,
 ) => Promise<void> | void;
 
-declare interface DECharacterTextQuestion extends DECharacterQuestionBase {
-    type: "text";
-    grammar?: string;
-    onText: DETextQuestionCallback;
-}
+declare type DECharacterTextQuestion =
+    | (DECharacterQuestionWithAskPer & { type: "text"; grammar?: string; onText: (
+        answer: string,
+        character: DECompleteCharacterReference,
+        otherChar: DECompleteCharacterReference,
+        otherFamilyRelation: DEFamilyRelation | null,
+        otherRelationship: string | null,
+    ) => Promise<void> | void; })
+    | (DECharacterQuestionBase & { type: "text"; grammar?: string; askPer?: undefined; onText: DETextQuestionCallback; });
 
 declare type DETextQuestionCallback = (
     answer: string,
     character: DECompleteCharacterReference,
-    otherChar: DEMinimalCharacterReference | null,
+    otherChar: DECompleteCharacterReference | null,
     otherFamilyRelation: DEFamilyRelation | null,
     otherRelationship: string | null,
 ) => Promise<void> | void;
@@ -1309,7 +1340,7 @@ declare interface DECharacterInterest {
      * A string where the task is specified as being done with other characters, using {{others}} to refer to them
      * eg. "{{chars}} are playing sports together", "{{chars}} are talking about politics together"
      */
-    template: DEStringTemplate;
+    template: DEStringTemplate | DEStringTemplate[];
     // /**
     //  * The species that this peference applies to
     //  */
@@ -1371,6 +1402,7 @@ declare interface DEStateCausant {
 
 declare interface DEStateCause {
     description: string;
+    characterCausant?: string | null;
 }
 
 declare interface DEApplyingState {
@@ -1381,6 +1413,7 @@ declare interface DEApplyingState {
     relieving: boolean;
     intensity: number;
     causants: Array<DEStateCausant> | null;
+    causes: Array<DEStateCause> | null;
 
     /**
      * The time when this state was first activated that was contiguous with the current state
@@ -1807,6 +1840,10 @@ declare interface DELocationSlot {
      * Arbitrary properties at this slot
      */
     state: Record<string, any>;
+    /**
+     * Temporary properties to use during inference cycles, they do not persist
+     */
+    temp: Record<string, any>;
 }
 
 declare interface DEWeatherSystemApplyingStateWithIntensity {
@@ -2116,6 +2153,10 @@ declare interface DELocationDefinition {
      */
     state: Record<string, any>;
     /**
+     * Temporary properties to use during inference cycles, they do not persist
+     */
+    temp: Record<string, any>;
+    /**
      * The parent location ID, null if none, this means that the location is inside another location
      * for example, a bedroom is inside a house, so the bedroom's parent would be the house location ID
      * and if the house has a city location as parent, the bedroom's grandparent would be the city location ID
@@ -2223,6 +2264,10 @@ declare interface DEConnection {
      * Arbitrary properties of the connection that can be used for various purposes
      */
     state: Record<string, any>;
+    /**
+     * Temporary properties to use during inference cycles, they do not persist
+     */
+    temp: Record<string, any>;
 }
 
 declare interface DEStatefulLocationDefinition extends DELocationDefinition {
@@ -2534,6 +2579,7 @@ declare type DEStringTemplate = string | ((
          * Only available in state description templates, these are the causants of a given state
          */
         causants?: DEStateCausant[],
+        causes?: DEStateCause[],
     }
 ) => Promise<string> | string);
 
@@ -2659,6 +2705,10 @@ declare interface DEWorld {
      * Properties of the world that can be used for various purposes, eg. "world_age": 1000, "technology_level": "medieval", "has_magic": true, etc...
      */
     state: Record<string, any>;
+    /**
+     * Temporary properties to use during inference cycles, they do not persist
+     */
+    temp: Record<string, any>;
 }
 
 declare interface DENarrationStyle {
@@ -2695,6 +2745,9 @@ declare interface DEUtils {
     newBond(DE: DEObject, char1: string | DECompleteCharacterReference | null, towards: string | DECompleteCharacterReference | null, bondDefinition: Omit<DESingleBondDescription, "towards">): DESingleBondDescription | null;
     newMutualBond(DE: DEObject, char1: string | DECompleteCharacterReference | null, char2: string | DECompleteCharacterReference | null, bondDefinition: Omit<DESingleBondDescription, "towards">): [DESingleBondDescription | null, DESingleBondDescription | null];
     newFamilyRelation(DE: DEObject, char1: string | DECompleteCharacterReference | null, towards: string | DECompleteCharacterReference | null, relation: DEFamilyRelation): [DEFamilyTie | null, DEFamilyTie | null];
+    newGlobalInterest(DE: DEObject, interest: DECharacterInterest);
+
+    isStrangerTowards(DE: DEObject, char1: string | DECompleteCharacterReference | null, char2: string | DECompleteCharacterReference | null): boolean;
 
     /**
      * To be used during questions and triggers mostly
@@ -2712,9 +2765,21 @@ declare interface DEUtils {
      * @param character 
      * @param stateName 
      * @param shift 
-     * @param causants 
+     * @param causants
+     * @param causes
      */
-    shiftState(DE: DEObject, character: string | DECompleteCharacterReference | null, stateName: string, shift: number, causants: DEStateCausant[] | null): void;
+    shiftState(DE: DEObject, character: string | DECompleteCharacterReference | null, stateName: string, shift: number, causants: DEStateCausant[] | null, causes: DEStateCause[] | null): void;
+    /**
+     * Similar to shift state but there is a max limit to how much the state can be shifted based on the cap parameter
+     * @param DE 
+     * @param character 
+     * @param stateName 
+     * @param shift 
+     * @param cap 
+     * @param causants 
+     * @param causes
+     */
+    tickleState(DE: DEObject, character: string | DECompleteCharacterReference | null, stateName: string, shift: number, cap: number, causants: DEStateCausant[] | null, causes: DEStateCause[] | null): void;
     /**
      * Adds a causant to a character state, this is used to keep track of what caused a state to be applied
      * @param DE 
