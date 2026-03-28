@@ -82,7 +82,6 @@ export default async function calculatePostureChange(engine, character, knownCha
                 const postureHumanReadable = postureToText(extendedPosture);
 
                 const question = "By the end of the last story fragment, has " + character.name + "'s posture changed to " + postureHumanReadable + "?";
-                console.log("Asking question: " + question);
 
                 const answer = await agent.next({
                     maxCharacters: 100,
@@ -100,7 +99,6 @@ export default async function calculatePostureChange(engine, character, knownCha
                 }
 
                 const answerText = answer.value.trim().toLowerCase();
-                console.log("Received answer: " + answerText);
                 if (answerText === "yes") {
                     console.log("Posture change detected for posture " + extendedPosture);
                     // @ts-ignore
@@ -117,7 +115,6 @@ export default async function calculatePostureChange(engine, character, knownCha
         const postureHumanReadable = postureToText(posture);
 
         const question = "By the end of the last story fragment, has " + character.name + "'s posture changed to " + postureHumanReadable + "?";
-        console.log("Asking question: " + question);
 
         const answer = await agent.next({
             maxCharacters: 100,
@@ -135,7 +132,6 @@ export default async function calculatePostureChange(engine, character, knownCha
         }
 
         const answerText = answer.value.trim().toLowerCase();
-        console.log("Received answer: " + answerText);
 
         if (answerText === "yes") {
             console.log("Posture change detected for posture " + posture);
@@ -151,7 +147,6 @@ export default async function calculatePostureChange(engine, character, knownCha
                 const postureHumanReadable = postureToText(extendedPosture);
 
                 const question = "By the end of the last story fragment, has " + character.name + "'s posture changed to " + postureHumanReadable + "?";
-                console.log("Asking question: " + question);
 
                 const answer = await agent.next({
                     maxCharacters: 100,
@@ -169,7 +164,6 @@ export default async function calculatePostureChange(engine, character, knownCha
                 }
 
                 const answerText = answer.value.trim().toLowerCase();
-                console.log("Received answer: " + answerText);
                 if (answerText === "yes") {
                     console.log("Posture change detected for posture " + extendedPosture);
                     // @ts-ignore
@@ -217,7 +211,6 @@ export default async function calculatePostureChange(engine, character, knownCha
             }
 
             const question = "Given that " + character.name + " is known to have moved in the last story fragment due to " + JSON.stringify(knownCharactersThatMoved[character.name].reason) + ", what is the most likely posture of " + character.name + " by the end of the last story fragment?";
-            console.log("Asking question: " + question);
 
             const listGrammar = createGrammarFromList(engine, allPosturesAndExtended);
 
@@ -238,7 +231,6 @@ export default async function calculatePostureChange(engine, character, knownCha
             }
 
             const answerText = answer.value.trim();
-            console.log("Received answer: " + answerText);
 
             const postureMatched = humanReadablePostureToPosture(answerText);
             if (postureMatched) {

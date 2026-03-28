@@ -130,8 +130,6 @@ export default async function calculateItemChanges(engine, character) {
     matchedItems.sort((a, b) => a.index - b.index);
     itemsInteractedWith = matchedItems.map((m) => m.name);
 
-    console.log("Pre check for item interactions based on keyword matching, items potentially interacted with: ", itemsInteractedWith);
-
     if (itemsAtLocation.length) {
         // now we want to know which items were interacted with in the last 
         // message, so we will ask the questioning agent to analyze the last story fragment and answer which items were interacted with, if any, based on the definition of interaction we give them, and only considering items that are at the location of the character state that sent the last story fragment
@@ -200,7 +198,6 @@ export default async function calculateItemChanges(engine, character) {
             }
 
             const nextQuestion = `In the last story fragment, was the item "${item}" interacted with? Remember that interaction means lifting, carrying, moving, using, or manipulating the item in any way, giving, carrying, dropping, stealing, wearing, taking off, putting on, or any other form of direct physical interaction with the item. Just mentioning or describing the item without any of these interactions does not count as an interaction. Answer yes if "${item}" was interacted with, or no if it was not interacted with.`;
-            console.log("Asking question, " + nextQuestion)
             const answer = await itemsInteractionGenerator.next({
                 maxCharacters: 0,
                 maxSafetyCharacters: 100,
@@ -215,7 +212,6 @@ export default async function calculateItemChanges(engine, character) {
             if (answer.done) {
                 throw new Error("Questioning agent finished without providing an answer for item interaction check for item " + item);
             }
-            console.log("Received answer, " + answer.value);
             if (isYes(answer.value)) {
                 itemsInteractedWith.push(itemLowerCase);
                 console.log(`The item "${item}" was identified as interacted with in the last story fragment, according to the questioning agent.`);
@@ -273,7 +269,6 @@ export default async function calculateItemChanges(engine, character) {
         }
 
         const nextQuestion = `In the last story fragment, was the character "${charName}" mentioned or interacted with in any way (talked to, looked at, thought about, mentioned, described, etc.)? Answer yes if "${charName}" was mentioned or interacted with, or no if they were not.`;
-        console.log("Asking question, " + nextQuestion);
 
         const charDescription = await getExternalDescriptionOfCharacter(engine, charName);
         const charDescriptionContextInfo = engine.inferenceAdapter.buildContextInfoCharacterDescription(
@@ -293,7 +288,6 @@ export default async function calculateItemChanges(engine, character) {
             grammar: yesNoGrammarObject.grammar,
             instructions: "Use the character description at: " + charDescriptionContextInfo.characterDescriptionAt + " to figure out if the character was indirectly interacted with by a description",
         });
-        console.log("Received answer, " + answer.value);
 
         if (answer.done) {
             throw new Error("Questioning agent finished without providing an answer for character interaction check for character " + charName);
@@ -399,8 +393,6 @@ export default async function calculateItemChanges(engine, character) {
 
             const wasItMovedNextQuestion = `In the last story fragment, did any character move, picked up, wear, carry, or change the location of the item "${item}" itself? IMPORTANT: The item "${item}" must be the DIRECT OBJECT being physically relocated. If "${item}" is only a DESTINATION or LOCATION where something else was placed, the answer is NO.`;
 
-            console.log("Asking question, " + wasItMovedNextQuestion);
-
             const wasItMovedQuestion = await interactionGenerator.next({
                 maxCharacters: 0, maxSafetyCharacters: 100,
                 maxParagraphs: 1,
@@ -430,7 +422,6 @@ export default async function calculateItemChanges(engine, character) {
             if (wasItMovedQuestion.done) {
                 throw new Error("Questioning agent finished without providing an answer for item movement check.");
             }
-            console.log("Received answer, " + wasItMovedQuestion.value);
 
             wasMoved = true;
             if (wasItMovedQuestion.value.trim().toLowerCase() !== "yes") {
@@ -440,7 +431,6 @@ export default async function calculateItemChanges(engine, character) {
             // if it was moved, we will ask a confirmation question to make sure the agent is consistent in its answers, since this is a crucial point for the rest of the checks for this item, if the item was not moved, we will skip the rest of the checks for this item, since if it was not moved, it can't have its location changed or be stolen
             if (wasMoved) {
                 const wasItMovedConfirmationQuestion = `Is the following statement correct? In the last story fragment, the item "${item}" was moved, worn, picked up, carried, or had its location changed. Answer "yes" if this statement is correct, or "no" if this statement is incorrect.`;
-                console.log("Asking question, " + wasItMovedConfirmationQuestion);
                 const wasItMovedConfirmation = await interactionGenerator.next({
                     maxCharacters: 0, maxSafetyCharacters: 100,
                     maxParagraphs: 1,
@@ -452,7 +442,6 @@ export default async function calculateItemChanges(engine, character) {
                 if (wasItMovedConfirmation.done) {
                     throw new Error("Questioning agent finished without providing an answer for item movement confirmation check.");
                 }
-                console.log("Received answer, " + wasItMovedConfirmation.value);
 
                 if (wasItMovedConfirmation.value.trim().toLowerCase() !== "yes") {
                     console.log(`The confirmation question for item movement check received a "no" answer, which contradicts the initial answer that indicated the item "${item}" was moved. This may indicate a false positive in the initial movement question, or it may indicate that the item was moved but then moved back to its original location by the end of the message.`);
@@ -460,7 +449,6 @@ export default async function calculateItemChanges(engine, character) {
                     isTotallyCertainAndConfirmedOfTheMovingState = true;
                 }
             } else {
-                console.log("Asking question again, " + wasItMovedNextQuestion);
                 const wasItMovedQuestionAgain = await interactionGenerator.next({
                     maxCharacters: 0, maxSafetyCharacters: 100,
                     maxParagraphs: 1,
@@ -490,7 +478,6 @@ export default async function calculateItemChanges(engine, character) {
                 if (wasItMovedQuestionAgain.done) {
                     throw new Error("Questioning agent finished without providing an answer for item movement check.");
                 }
-                console.log("Received answer, " + wasItMovedQuestionAgain.value);
 
                 if (isYes(wasItMovedQuestionAgain.value)) {
                     console.log(`The confirmation question for item movement check received a "yes" answer, which contradicts the initial answer that indicated the item "${item}" was not moved. This may indicate a false positive in the initial movement question, or it may indicate that the item was moved but then moved back to its original location by the end of the message.`);
@@ -522,7 +509,6 @@ export default async function calculateItemChanges(engine, character) {
                     for (let i = 0; i < allPotentialLocationsForItem.length; i++) {
                         const answerAlt = allPotentialLocationsForItem[i].includes("table") ? "on the table" : "on the ground";
                         const nextQuestion = `For the item "${item}", according to the last story fragment to analyze, before it was interacted with, was it originally ${allPotentialLocationsForItem[i]}?`;
-                        console.log("Asking question, " + nextQuestion);
                         const whereWasItQuestion = await interactionGenerator.next({
                             maxCharacters: 0, maxSafetyCharacters: 100,
                             maxParagraphs: 1,
@@ -540,8 +526,6 @@ export default async function calculateItemChanges(engine, character) {
                         if (whereWasItQuestion.done) {
                             throw new Error("Questioning agent finished without providing an answer for item original location check.");
                         }
-
-                        console.log("Received answer, " + whereWasItQuestion.value);
 
                         if (isYes(whereWasItQuestion.value)) {
                             answerForLocationIndexes.push(i);
@@ -564,7 +548,6 @@ export default async function calculateItemChanges(engine, character) {
             // Now we want to know how many of the item were moved
             const baseAmountMovedQuestion = `By the end of the last story fragment, how many of "${item}" were moved or had their location changed? Answer with a number, or if the amount is not clear, answer with one of the following: "a few", "several", "many", "a lot", "some", "half", "most", or "all".`;
             const amountGrammar = `root ::= ([0-9]+ | "a few" | "several" | "many" | "a lot" | "some" | "half" | "most" | "all" | "none")`;
-            console.log("Asking question, " + baseAmountMovedQuestion);
             const baseAmountMovedAnswer = await interactionGenerator.next({
                 maxCharacters: 0, maxSafetyCharacters: 100,
                 maxParagraphs: 1,
@@ -591,7 +574,6 @@ export default async function calculateItemChanges(engine, character) {
                 throw new Error("Questioning agent finished without providing an answer for base amount of item moved check.");
             }
 
-            console.log("Received answer, " + baseAmountMovedAnswer.value);
             const baseAmountMovedStr = baseAmountMovedAnswer.value.trim().toLowerCase();
             if (baseAmountMovedStr === "none" || baseAmountMovedStr === "0") {
                 console.log(`The answer for the amount of "${item}" that was moved or had its location changed is none or 0, which seems to be a contradiction with the previous answer that indicated that the item was moved. This may indicate a false positive in the initial movement question, or it may indicate that the item was moved but then moved back to its original location by the end of the message. Skipping further checks for this item due to this inconsistency.`);
@@ -660,7 +642,6 @@ export default async function calculateItemChanges(engine, character) {
                     if (canContain) {
                         // we will ask the LLM if that happened
                         const nextQuestion = `By the end of the last story fragment, was the item "${item}" placed inside ${isAnother ? "another " : "the item "}"${otherItem}"? As a container, ${item} must have been placed inside the item "${otherItem}", not the opposite. Answer "yes" ONLY if ${item} was PUT INTO or PLACED INSIDE ${otherItem}.`;
-                        console.log("Asking question, " + nextQuestion);
                         const ambiguousPlacement = await interactionGenerator.next({
                             maxCharacters: 0, maxSafetyCharacters: 100,
                             maxParagraphs: 1,
@@ -683,14 +664,12 @@ export default async function calculateItemChanges(engine, character) {
                             throw new Error("Questioning agent finished without providing an answer for item placement check.");
                         }
 
-                        console.log("Received answer, " + ambiguousPlacement.value);
                         ambiguousPlacementContainedValue = ambiguousPlacement.value.trim().toLowerCase();
                     }
 
                     // Now we are going to ask for atop, atop is always possible, since we can always have something on top of something else
                     // even if it is ridiculous, like a cabinet on top of a plastic cup, it can happen, it will merely destroy the plastic cup
                     const nextQuestion2 = `By the end of the last story fragment, was the item "${item}" placed on top of ${isAnother ? "another " : "the item "}"${otherItem}"? In other words, "${otherItem}" is the surface and "${item}" is what was placed on it. Answer "yes" ONLY if ${item} ended up on top of ${otherItem}, not the other way around.`;
-                    console.log("Asking question, " + nextQuestion2);
                     const ambiguousPlacement2 = await interactionGenerator.next({
                         maxCharacters: 0, maxSafetyCharacters: 100,
                         maxParagraphs: 1,
@@ -713,8 +692,6 @@ export default async function calculateItemChanges(engine, character) {
                         throw new Error("Questioning agent finished without providing an answer for item placement check.");
                     }
 
-                    console.log("Received answer, " + ambiguousPlacement2.value);
-
                     // now we know if it is ambiguously atop or contained
                     isAmbiguouslyAtop = isYes(ambiguousPlacement2.value);
                     isAmbiguouslyContained = isYes(ambiguousPlacementContainedValue);
@@ -724,8 +701,6 @@ export default async function calculateItemChanges(engine, character) {
                         // comfirm because the AI keeps answering yes when the answer is NO
                         if (isAmbiguouslyAtop) {
                             const confirmQuestionAtop = `Is the following statement correct? By the end of the last story fragment, the item "${item}" was placed on top of ${isAnother ? "another " : "the item "}"${otherItem}". Answer "yes" if this statement is correct, or "no" if this statement is incorrect.`;
-
-                            console.log("Asking question, " + confirmQuestionAtop);
 
                             const ambiguousPlacement2 = await interactionGenerator.next({
                                 maxCharacters: 0, maxSafetyCharacters: 100,
@@ -739,14 +714,11 @@ export default async function calculateItemChanges(engine, character) {
                             if (ambiguousPlacement2.done) {
                                 throw new Error("Questioning agent finished without providing an answer for item placement confirmation check.");
                             }
-                            console.log("Received answer, " + ambiguousPlacement2.value);
                             isAmbiguouslyAtop = isYes(ambiguousPlacement2.value);
                         }
 
                         if (isAmbiguouslyContained) {
                             const confirmQuestionContained = `Is the following statement correct? By the end of the last story fragment, the item "${item}" was placed inside ${isAnother ? "another " : "the item "}"${otherItem}". Answer "yes" if this statement is correct, or "no" if this statement is incorrect.`;
-
-                            console.log("Asking question, " + confirmQuestionContained);
 
                             const ambiguousPlacementContained = await interactionGenerator.next({
                                 maxCharacters: 0, maxSafetyCharacters: 100,
@@ -760,7 +732,6 @@ export default async function calculateItemChanges(engine, character) {
                             if (ambiguousPlacementContained.done) {
                                 throw new Error("Questioning agent finished without providing an answer for item placement confirmation check.");
                             }
-                            console.log("Received answer, " + ambiguousPlacementContained.value);
                             isAmbiguouslyContained = isYes(ambiguousPlacementContained.value);
                         }
                     }
@@ -770,8 +741,6 @@ export default async function calculateItemChanges(engine, character) {
                         // now we will ask for a general amount question, to figure out how many of the item are either atop or inside the other item, we will ask a general question first, and then we will ask a specific question for inside, and by difference we can get the atop amount
                         const nextQuestion = `By the end of the last story fragment, how many of "${item}" are ${canContain ? "inside or on top" : "on top"} of ${otherItem}? Answer with a number, or if the amount is not clear, answer with one of the following: "a few", "several", "many", "a lot", "some", "half", "most", "all", or "none".`;
                         const amountGrammar = `root ::= ([0-9]+ | "a few" | "several" | "many" | "a lot" | "some" | "half" | "most" | "all" | "none")`;
-
-                        console.log("Asking question, " + nextQuestion);
 
                         const possessionQuestion = await interactionGenerator.next({
                             maxCharacters: 0, maxSafetyCharacters: 100,
@@ -785,8 +754,6 @@ export default async function calculateItemChanges(engine, character) {
                         if (possessionQuestion.done) {
                             throw new Error("Questioning agent finished without providing an answer for item amount in possession check.");
                         }
-
-                        console.log("Received answer, " + possessionQuestion.value);
 
                         const amountTransferred = possessionQuestion.value.trim().toLowerCase();
                         if (amountTransferred === "0" || amountTransferred === "none") {
@@ -804,8 +771,6 @@ export default async function calculateItemChanges(engine, character) {
                         if (canContain) {
                             // We ask
                             const nextQuestion = `By the end of the last story fragment, how many of "${item}" are inside of ${otherItem}? Answer with a number, or if the amount is not clear, answer with one of the following: "a few", "several", "many", "a lot", "some", "half", "most", or "all"; note that the ${item} must be INSIDE ${otherItem} to be counted for this question.`;
-
-                            console.log("Asking question, " + nextQuestion);
 
                             const possessionQuestion = await interactionGenerator.next({
                                 maxCharacters: 0, maxSafetyCharacters: 100,
@@ -826,8 +791,6 @@ export default async function calculateItemChanges(engine, character) {
                             if (possessionQuestion.done) {
                                 throw new Error("Questioning agent finished without providing an answer for item amount in possession check.");
                             }
-
-                            console.log("Received answer, " + possessionQuestion.value);
 
                             const amountTransferred = possessionQuestion.value.trim().toLowerCase();
                             ambiguousAmountMovedFromOneItemToAnotherContained = convertItemAmountToNumericValue(amountTransferred, allPotentialItemsForItem.filter((v, index) => answerForLocationIndexes.includes(index)).flat());
@@ -858,7 +821,6 @@ export default async function calculateItemChanges(engine, character) {
 
                             if (hasContainer && currentAmountOfItemsMovedToAnotherContained < ambiguousAmountMovedFromOneItemToAnotherContained) {
                                 const nextQuestion = `How many of "${item}" were placed inside ${isAnother ? "another " : ""}"${otherItem}" where the target location of ${otherItem} is EXPLICITLY stated to be ${JSON.stringify(potentialLocation)}? ${item} must have been explcitly specified to be placed inside ${otherItem} at the explicit location ${potentialLocation}. Answer with the amount of ONLY the ${item} that were explicitly stated to be placed INSIDE ${otherItem} at the location ${potentialLocation}.`;
-                                console.log("Asking question, " + nextQuestion);
                                 const placementQuestion2 = await interactionGenerator.next({
                                     maxCharacters: 0, maxSafetyCharacters: 100,
                                     maxParagraphs: 1,
@@ -880,7 +842,6 @@ export default async function calculateItemChanges(engine, character) {
                                     throw new Error("Questioning agent finished without providing an answer for item placement check.");
                                 }
 
-                                console.log("Received answer, " + placementQuestion2.value);
                                 const amountAtThisLocationStr = placementQuestion2.value.trim().toLowerCase();
                                 if (amountAtThisLocationStr !== "0" && amountAtThisLocationStr !== "none") {
                                     const amountAtThisLocation = convertItemAmountToNumericValue(amountAtThisLocationStr, allPotentialItemsForItem.filter((v, index) => answerForLocationIndexes.includes(index)).flat());
@@ -903,7 +864,6 @@ export default async function calculateItemChanges(engine, character) {
 
                             if (currentAmountOfItemsMovedToAnotherAtop < ambiguousAmountMovedFromOneItemToAnotherAtop) {
                                 const nextQuestion = `How many of "${item}" were placed on top of ${isAnother ? "another " : ""}"${otherItem}" where the target location of ${otherItem} is EXPLICITLY stated to be ${JSON.stringify(potentialLocation)}? ${item} must have been explcitly specified to be placed on top of ${otherItem} at the explicit location ${potentialLocation}. Answer with the amount of ONLY the ${item} that were explicitly stated to be placed ON TOP OF ${otherItem} at the location ${potentialLocation}.`;
-                                console.log("Asking question, " + nextQuestion);
                                 const placementQuestion2 = await interactionGenerator.next({
                                     maxCharacters: 0, maxSafetyCharacters: 100,
                                     maxParagraphs: 1,
@@ -925,7 +885,6 @@ export default async function calculateItemChanges(engine, character) {
                                     throw new Error("Questioning agent finished without providing an answer for item placement check.");
                                 }
 
-                                console.log("Received answer, " + placementQuestion2.value);
                                 const amountAtThisLocationStr = placementQuestion2.value.trim().toLowerCase();
                                 if (amountAtThisLocationStr !== "0" && amountAtThisLocationStr !== "none") {
                                     const amountAtThisLocation = convertItemAmountToNumericValue(amountAtThisLocationStr, allPotentialItemsForItem.filter((v, index) => answerForLocationIndexes.includes(index)).flat());
@@ -995,7 +954,7 @@ export default async function calculateItemChanges(engine, character) {
                         }
 
                         const nextQuestion = `By the end of the last story fragment, is the item "${item}" in direct possession of ${charName}? they are carrying it or wearing it`;
-                        console.log("Asking question, " + nextQuestion);
+
                         const anotherChar = `${getCharacterNameForExample([charName], 0)}`;
                         const possessionQuestion = await interactionGenerator.next({
                             maxCharacters: 0, maxSafetyCharacters: 100,
@@ -1021,7 +980,6 @@ export default async function calculateItemChanges(engine, character) {
                         if (possessionQuestion.done) {
                             throw new Error("Questioning agent finished without providing an answer for item possession check.");
                         }
-                        console.log("Received answer, " + possessionQuestion.value);
 
                         const isPossessed = isYes(possessionQuestion.value);
                         let wasThrownTowards = false;
@@ -1030,7 +988,6 @@ export default async function calculateItemChanges(engine, character) {
 
                         if (!isPossessed) {
                             const nextQuestion = `By the end of the last story fragment, was the item "${item}" thrown/launched towards ${charName} or in their general direction?`;
-                            console.log("Asking question, " + nextQuestion);
                             const thrownQuestion = await interactionGenerator.next({
                                 maxCharacters: 0, maxSafetyCharacters: 100,
                                 maxParagraphs: 1,
@@ -1042,7 +999,6 @@ export default async function calculateItemChanges(engine, character) {
                             if (thrownQuestion.done) {
                                 throw new Error("Questioning agent finished without providing an answer for item thrown towards character check.");
                             }
-                            console.log("Received answer, " + thrownQuestion.value);
 
                             wasThrownTowards = isYes(thrownQuestion.value);
                             if (wasThrownTowards) {
@@ -1056,8 +1012,6 @@ export default async function calculateItemChanges(engine, character) {
                             let expectedLocLast = "carrying";
                             const nextQuestion = `By the end of the last story fragment, how many of "${item}" ${questionPiece} ${charName}${questionPiece2}? Answer with a number, or if the amount is not clear, answer with one of the following: "a few", "several", "many", "a lot", "some", "half", "most", or "all".`;
                             const amountGrammar = `root ::= ([0-9]+ | "a few" | "several" | "many" | "a lot" | "some" | "half" | "most" | "all")`;
-
-                            console.log("Asking question, " + nextQuestion);
 
                             const possessionQuestion = await interactionGenerator.next({
                                 maxCharacters: 0, maxSafetyCharacters: 100,
@@ -1075,8 +1029,6 @@ export default async function calculateItemChanges(engine, character) {
                             const expectedAmount = possessionQuestion.value.trim().toLowerCase();
                             const actualAmount = convertItemAmountToNumericValue(expectedAmount, allPotentialItemsForItem.filter((v, index) => answerForLocationIndexes.includes(index)).flat());
 
-                            console.log("Received answer, " + possessionQuestion.value);
-
                             if (actualAmount === 0) {
                                 console.log(`The answer for the amount of "${item}" that is in possession of ${charName} is 0 or none, which seems to be a contradiction with the previous answer that indicated that ${charName} has the item in their possession. This may indicate a false positive in the initial possession question, or it may indicate that the item was in their possession at some point during the message but then was removed from their possession by the end of the message. Skipping this relationship due to this inconsistency.`);
                                 continue;
@@ -1084,7 +1036,6 @@ export default async function calculateItemChanges(engine, character) {
 
                             if (hasAWornPotential && isPossessed) {
                                 const nextQuestion = `By the end of the last story fragment, is the item "${item}" being worn by ${charName}? Answer "yes" ONLY if ${item} was PUT ON or WORN by ${charName}. If ${item} was taken off, removed, or not put on, answer "no".`;
-                                console.log("Asking question, " + nextQuestion);
                                 const wornQuestion = await interactionGenerator.next({
                                     maxCharacters: 0, maxSafetyCharacters: 100,
                                     maxParagraphs: 1,
@@ -1106,8 +1057,6 @@ export default async function calculateItemChanges(engine, character) {
                                 if (wornQuestion.done) {
                                     throw new Error("Questioning agent finished without providing an answer for item worn check.");
                                 }
-
-                                console.log("Received answer, " + wornQuestion.value);
 
                                 if (isYes(wornQuestion.value)) {
                                     expectedLocLast = "wearing";
@@ -1150,7 +1099,6 @@ export default async function calculateItemChanges(engine, character) {
                     if (totalMovedSoFar < expectedAmountToMove) {
                         // ask whether it was dropped on the ground
                         const nextQuestion = `By the end of the last story fragment, was the item "${item}" dropped on the ground? Answer "yes" ONLY if the item is on the ground and not inside or atop another item. If the item is inside or atop another item, answer "no".`;
-                        console.log("Asking question, " + nextQuestion);
                         const charName = character.name;
                         const droppedQuestion = await interactionGenerator.next({
                             maxCharacters: 0, maxSafetyCharacters: 100,
@@ -1171,11 +1119,9 @@ export default async function calculateItemChanges(engine, character) {
                         if (droppedQuestion.done) {
                             throw new Error("Questioning agent finished without providing an answer for item dropped on the ground check.");
                         }
-                        console.log("Received answer, " + droppedQuestion.value);
 
                         if (isYes(droppedQuestion.value)) {
                             const howManyDroppedQuestion = `By the end of the last story fragment, how many of "${item}" were dropped on the ground? Answer with a number, or if the amount is not clear, answer with one of the following: "a few", "several", "many", "a lot", "some", "half", "most", or "all".`;
-                            console.log("Asking question, " + howManyDroppedQuestion);
                             const amountGrammar = `root ::= ([0-9]+ | "a few" | "several" | "many" | "a lot" | "some" | "half" | "most" | "all")`;
                             const droppedAmountQuestion = await interactionGenerator.next({
                                 maxCharacters: 0, maxSafetyCharacters: 100,
@@ -1189,7 +1135,6 @@ export default async function calculateItemChanges(engine, character) {
                             if (droppedAmountQuestion.done) {
                                 throw new Error("Questioning agent finished without providing an answer for item amount dropped on the ground check.");
                             }
-                            console.log("Received answer, " + droppedAmountQuestion.value);
 
                             const expectedAmount = droppedAmountQuestion.value.trim().toLowerCase();
                             const actualAmountDropped = convertItemAmountToNumericValue(expectedAmount, allPotentialItemsForItem.filter((v, index) => answerForLocationIndexes.includes(index)).flat());
@@ -1209,7 +1154,6 @@ export default async function calculateItemChanges(engine, character) {
                                 if (wasThrown.done) {
                                     throw new Error("Questioning agent finished without providing an answer for item thrown check.");
                                 }
-                                console.log("Received answer, " + wasThrown.value);
 
                                 const thrown = isYes(wasThrown.value);
 
@@ -1219,7 +1163,6 @@ export default async function calculateItemChanges(engine, character) {
 
                                 for (const slot of potentialSlotsDroppedAt) {
                                     const nextQuestion = thrown ? `By the end of the last story fragment, did "${item}" land in "${slot}"? Answer "yes" ONLY if it is explicitly stated or very strongly implied that the item landed in "${slot}". If it is not clear that the item landed in "${slot}", answer "no".` : `By the end of the last story fragment, did "${item}" get dropped at the location of "${slot}"? Answer "yes" ONLY if it is explicitly stated or very strongly implied that the item was dropped at the location of "${slot}". If it is not clear that the item was dropped at the location of "${slot}", answer "no".`;
-                                    console.log("Asking question, " + nextQuestion);
                                     const slotQuestion = await interactionGenerator.next({
                                         maxCharacters: 0, maxSafetyCharacters: 100,
                                         maxParagraphs: 1,
@@ -1232,15 +1175,12 @@ export default async function calculateItemChanges(engine, character) {
                                     if (slotQuestion.done) {
                                         throw new Error("Questioning agent finished without providing an answer for item dropped slot check.");
                                     }
-                                    console.log("Received answer, " + slotQuestion.value);
 
                                     if (isYes(slotQuestion.value)) {
                                         expectedSlot = slot;
                                         break;
                                     }
                                 }
-
-                                console.log("Moving " + actualAmountDropped + " of " + item + " to " + expectedSlot + " with relation " + (thrown ? "thrown" : "dropped") + " and with expected location last as ground");
 
                                 moveItems(
                                     engine,
@@ -1284,7 +1224,6 @@ export default async function calculateItemChanges(engine, character) {
                     let witnessesThatTurnHeroes = [];
 
                     const nextQuestionSteal = `By the last story fragment, was the item "${item}" stolen? Answer "yes" ONLY if a character took the item without permission from its previous possessor. If the item was obtained through other means (like finding it, being given it, or moving it from one place to another without taking it from someone else), answer "no".`;
-                    console.log("Asking question, " + nextQuestionSteal);
                     const stealQuestion = await interactionGenerator.next({
                         maxCharacters: 0, maxSafetyCharacters: 100,
                         maxParagraphs: 1,
@@ -1307,16 +1246,12 @@ export default async function calculateItemChanges(engine, character) {
                         throw new Error("Questioning agent finished without providing an answer for item steal check.");
                     }
 
-                    console.log("Received answer, " + stealQuestion.value);
-
                     if (isYes(stealQuestion.value)) {
                         wasStolen = true;
                     }
 
                     if (wasStolen) {
                         const nextQuestion = `By the last story fragment, who stole the item "${item}"? Answer with the name of the character who stole it. If it's not clear who stole it, answer with "none".`;
-
-                        console.log("Asking question, " + nextQuestion);
                         const stealByQuestion = await interactionGenerator.next({
                             maxCharacters: 0, maxSafetyCharacters: 100,
                             maxParagraphs: 1,
@@ -1340,12 +1275,10 @@ export default async function calculateItemChanges(engine, character) {
                             throw new Error("Questioning agent finished without providing an answer for item steal by check.");
                         }
 
-                        console.log("Received answer, " + stealByQuestion.value);
                         if (stealByQuestion.value.trim().toLowerCase() !== "none") {
                             wasStolenBy = stealByQuestion.value.trim();
 
                             const nextQuestion = `By the last story fragment, which characters could have witnessed the theft of "${item}"? Answer with the names of the characters who witnessed it, separated by commas. If it's not clear who witnessed it, answer with "none".`;
-                            console.log("Asking question, " + nextQuestion);
                             const witnessesQuestion = await interactionGenerator.next({
                                 maxCharacters: 0, maxSafetyCharacters: 100,
                                 maxParagraphs: 1,
@@ -1369,8 +1302,6 @@ export default async function calculateItemChanges(engine, character) {
                             if (witnessesQuestion.done) {
                                 throw new Error("Questioning agent finished without providing an answer for item theft witnesses check.");
                             }
-
-                            console.log("Received answer, " + witnessesQuestion.value);
 
                             if (witnessesQuestion.value.trim().toLowerCase() !== "none") {
                                 witnesses = witnessesQuestion.value.split(",").map((w) => w.trim()).filter((w) => w != wasStolenBy);
@@ -1451,7 +1382,6 @@ export default async function calculateItemChanges(engine, character) {
                     for (let i = 0; i < allPotentialLocationsForItem.length; i++) {
                         const answerAlt = allPotentialLocationsForItem[i].includes("table") ? "on the table" : "on the ground";
                         const nextQuestion = `According to the last story fragment to analyze, did ${charName} get ${interactionType} the ${item} that was originally ${allPotentialLocationsForItem[i]}?`;
-                        console.log("Asking question, " + nextQuestion);
                         const whereWasItQuestion = await interactionGenerator.next({
                             maxCharacters: 0, maxSafetyCharacters: 100,
                             maxParagraphs: 1,
@@ -1469,8 +1399,6 @@ export default async function calculateItemChanges(engine, character) {
                         if (whereWasItQuestion.done) {
                             throw new Error("Questioning agent finished without providing an answer for item original location check.");
                         }
-
-                        console.log("Received answer, " + whereWasItQuestion.value);
 
                         if (isYes(whereWasItQuestion.value)) {
                             answerForLocationInsideOrAtopIndexes.push(i);
@@ -1496,7 +1424,6 @@ export default async function calculateItemChanges(engine, character) {
             const alreadyInside = charExactLocation.item && charExactLocation.item.name === item && charExactLocation.itemPathEnd === "containingCharacters";
             if (canBeInside && !alreadyInside) {
                 const nextQuestion = `By the end of the last story fragment, is ${charName} inside ${item}? Answer "yes" ONLY if ${charName} got inside ${item} by entering it, climbing into it, or being put into it. If ${charName} is near ${item} but not inside it, or if it's not clear if they are inside it, answer "no".`;
-                console.log("Asking question, " + nextQuestion);
                 const insideQuestion = await interactionGenerator.next({
                     maxCharacters: 0, maxSafetyCharacters: 100,
                     maxParagraphs: 1,
@@ -1519,7 +1446,6 @@ export default async function calculateItemChanges(engine, character) {
                 if (insideQuestion.done) {
                     throw new Error("Questioning agent finished without providing an answer for character inside item check.");
                 }
-                console.log("Received answer, " + insideQuestion.value);
                 if (isYes(insideQuestion.value)) {
                     isInsideItem = true;
                 }
@@ -1528,7 +1454,6 @@ export default async function calculateItemChanges(engine, character) {
             const alreadyAtop = charExactLocation.item && charExactLocation.item.name === item && charExactLocation.itemPathEnd === "ontopCharacters";
             if (!isInsideItem && !alreadyAtop) {
                 const nextQuestion = `By the end of the last story fragment, is ${charName} on top of ${item} (sitting, standing, or laying on it, or any other position atop)? Answer "yes" ONLY if ${charName} got on top of ${item} by sitting, standing, laying on it, or being placed on top of it. If ${charName} is near ${item} but not on top of it, or if it's not clear if they are on top of it, answer "no".`;
-                console.log("Asking question, " + nextQuestion);
                 const atopQuestion = await interactionGenerator.next({
                     maxCharacters: 0, maxSafetyCharacters: 100,
                     maxParagraphs: 1,
@@ -1552,7 +1477,6 @@ export default async function calculateItemChanges(engine, character) {
                 if (atopQuestion.done) {
                     throw new Error("Questioning agent finished without providing an answer for character atop item check.");
                 }
-                console.log("Received answer, " + atopQuestion.value);
                 if (isYes(atopQuestion.value)) {
                     isAtopItem = true;
                 }
@@ -1613,7 +1537,6 @@ export default async function calculateItemChanges(engine, character) {
             }
 
             const nextQuestion = `By the end of the last story fragment, did ${charName} get on top of ${otherCharName}? Answer "yes" ONLY if ${charName} themselves physically ended up on top of ${otherCharName} (for example, ${charName} is sitting, standing, laying, or riding on ${otherCharName}, or was placed on ${otherCharName}'s back, shoulders, head, etc...). Be careful about directionality: if ${otherCharName} picked up or carried ${charName}, then ${charName} is on top — but if ${charName} picked up or carried ${otherCharName}, then ${charName} is NOT on top. If ${charName} is near ${otherCharName} but not physically on top of them, or if it's not clear, answer "NO".`;
-            console.log("Asking question, " + nextQuestion);
             const atopQuestion = await interactionGenerator.next({
                 maxCharacters: 0, maxSafetyCharacters: 100,
                 maxParagraphs: 1,
@@ -1640,8 +1563,6 @@ export default async function calculateItemChanges(engine, character) {
                 throw new Error("Questioning agent finished without providing an answer for character atop other character check.");
             }
 
-            console.log("Received answer, " + atopQuestion.value);
-
             if (isYes(atopQuestion.value)) {
                 moveCharacters(
                     engine,
@@ -1657,7 +1578,6 @@ export default async function calculateItemChanges(engine, character) {
             }
 
             const nextQuestionGrabbedOrPickedUp = `By the end of the last story fragment, did ${otherCharName} pick up or start carrying ${charName}? Answer "yes" ONLY if ${otherCharName} is now carrying ${charName} in any way — such as lifting them onto a shoulder, placing them on their head, lifting them, letting them ride on their back, holding them in their arms, carrying them by hand, or any other form of carrying (characters can vary greatly in size). If ${otherCharName} is merely near ${charName} but is not carrying them, or if it's not clear, answer "no".`;
-            console.log("Asking question, " + nextQuestionGrabbedOrPickedUp);
             const grabbedOrPickedUpQuestion = await interactionGenerator.next({
                 maxCharacters: 0, maxSafetyCharacters: 100,
                 maxParagraphs: 1,
@@ -1682,8 +1602,6 @@ export default async function calculateItemChanges(engine, character) {
                 throw new Error("Questioning agent finished without providing an answer for character grabbed or picked up other character check.");
             }
 
-            console.log("Received answer, " + grabbedOrPickedUpQuestion.value);
-
             if (isYes(grabbedOrPickedUpQuestion.value)) {
                 moveCharacters(
                     engine,
@@ -1707,7 +1625,6 @@ export default async function calculateItemChanges(engine, character) {
         const charExactLocation = getCharacterExactLocation(engine, charName);
         if (charExactLocation.itemPathEnd === "containingCharacters") {
             const nextQuestion = `By the end of the last story fragment, did ${charName} get out of ${charExactLocation.item?.name} (the item they were inside)? Answer "yes" ONLY if ${charName} got out of ${charExactLocation.item?.name} by exiting it, climbing out of it, or being taken out of it. If ${charName} is still inside ${charExactLocation.item?.name}, or if it's not clear if they got out of it, answer "no".`;
-            console.log("Asking question, " + nextQuestion);
             const outsideQuestion = await interactionGenerator.next({
                 maxCharacters: 0, maxSafetyCharacters: 100,
                 maxParagraphs: 1,
@@ -1731,7 +1648,6 @@ export default async function calculateItemChanges(engine, character) {
             if (outsideQuestion.done) {
                 throw new Error("Questioning agent finished without providing an answer for character outside item check.");
             }
-            console.log("Received answer, " + outsideQuestion.value);
             if (isYes(outsideQuestion.value)) {
                 // move them outside of the item on top of ground
                 moveCharacters(
@@ -1746,7 +1662,6 @@ export default async function calculateItemChanges(engine, character) {
             }
         } else if (charExactLocation.itemPathEnd === "ontopCharacters") {
             const nextQuestion = `By the end of the last story fragment, did ${charName} get out from being on top of ${charExactLocation.item?.name} (the item they were laying/sitting/standing on)? Answer "yes" ONLY if ${charName} got out from ${charExactLocation.item?.name} by exiting it, climbing out of it, or being taken out of it. If ${charName} is still on top of ${charExactLocation.item?.name}, or if it's not clear if they got out of it, answer "no".`;
-            console.log("Asking question, " + nextQuestion);
             const outsideQuestion = await interactionGenerator.next({
                 maxCharacters: 0, maxSafetyCharacters: 100,
                 maxParagraphs: 1,
@@ -1770,7 +1685,6 @@ export default async function calculateItemChanges(engine, character) {
             if (outsideQuestion.done) {
                 throw new Error("Questioning agent finished without providing an answer for character outside item check.");
             }
-            console.log("Received answer, " + outsideQuestion.value);
             if (isYes(outsideQuestion.value)) {
                 // move them outside of the item on top of ground
                 moveCharacters(
@@ -1785,7 +1699,6 @@ export default async function calculateItemChanges(engine, character) {
             }
         } else if (charExactLocation.beingCarriedBy) {
             const nextQuestion = `By the end of the last story fragment, did ${charName} is no longer being carried by ${charExactLocation.beingCarriedBy}? Answer "yes" ONLY if ${charName} got put down from being carried by ${charExactLocation.beingCarriedBy} by being set down on the ground or on a surface, or being given to someone else. If ${charName} is still being carried by ${charExactLocation.beingCarriedBy}, or if it's not clear if they got put down, answer "no".`;
-            console.log("Asking question, " + nextQuestion);
             const outsideQuestion = await interactionGenerator.next({
                 maxCharacters: 0, maxSafetyCharacters: 100,
                 maxParagraphs: 1,
@@ -1809,7 +1722,6 @@ export default async function calculateItemChanges(engine, character) {
             if (outsideQuestion.done) {
                 throw new Error("Questioning agent finished without providing an answer for character outside item check.");
             }
-            console.log("Received answer, " + outsideQuestion.value);
             if (isYes(outsideQuestion.value)) {
                 // move them outside of the item on top of ground
                 moveCharacters(
@@ -3726,7 +3638,6 @@ async function updateItemAfterHappenance(
     let brokeInPiecesCount = 0;
     if (destroyedInfo) {
         const questionBrokenMultipleName = "Given the damage received, did the item named " + item.name + " broke in multiple pieces that are now separate items?";
-        console.log("Asking question: " + questionBrokenMultipleName);
 
         const answerBrokenMultiple = await itemsInteractionGenerator.next({
             maxCharacters: 5,
@@ -3752,7 +3663,6 @@ async function updateItemAfterHappenance(
 
         if (isBrokenInMultiplePieces) {
             const questionPiecesCount = "How many pieces is the item named " + item.name + " now broken into?";
-            console.log("Asking question: " + questionPiecesCount);
             const answerPiecesCount = await itemsInteractionGenerator.next({
                 maxCharacters: 5,
                 maxParagraphs: 1,
@@ -3789,9 +3699,6 @@ async function updateItemAfterHappenance(
     const questionName = "What is the new name for the item named " + item.name + "?";
 
     const pureTextGrammar = `root ::= [a-zA-Z0-9 _/-]+`;
-
-    console.log("Asking question: " + questionName);
-
     const answerName = await itemsInteractionGenerator.next({
         maxCharacters: 100,
         maxParagraphs: 1,
@@ -3811,15 +3718,12 @@ async function updateItemAfterHappenance(
     }
 
     const answerText = answerName.value;
-    console.log("Received answer: " + answerText);
 
     const originalName = item.name;
 
     item.name = answerText.trim();
 
     const questionDescription = "What is the new description for the item named " + originalName + "?";
-
-    console.log("Asking question: " + questionDescription);
 
     const answerDescription = await itemsInteractionGenerator.next({
         maxCharacters: 200,
@@ -3841,7 +3745,6 @@ async function updateItemAfterHappenance(
     }
 
     const answerDescriptionText = answerDescription.value;
-    console.log("Received answer: " + answerDescriptionText);
 
     item.description = answerDescriptionText.trim();
 

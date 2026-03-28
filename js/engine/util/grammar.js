@@ -129,7 +129,7 @@ export function createGrammarListFromList(engine, list, limit = 5) {
         suffix = ` (", " LISTELEMENT${suffix})?`;
     }
     return {
-        grammar: `root ::= LISTELEMENT${suffix}\nLISTELEMENT ::= (${list.slice(0, limit).map(item => caseInsensitiveGrammar(item)).join(" | ")})`,
+        grammar: `root ::= LISTELEMENT${suffix}\nLISTELEMENT ::= (${list.map(item => caseInsensitiveGrammar(item)).join(" | ")})`,
         stopAfter: [],
     };
 }

@@ -195,7 +195,6 @@ export default async function timeForwardsUsingLastMessage(engine, character) {
     }
 
     const nextQuestion = `According to the last story fragment provided, how much time has passed?`;
-    console.log("Asking question, " + nextQuestion);
 
     const answer = await timePassedGenerator.next({
         maxCharacters: 100,
@@ -213,8 +212,6 @@ export default async function timeForwardsUsingLastMessage(engine, character) {
     if (answer.done || !answer.value) {
         throw new Error("Failed to get a valid response from time-forwards agent.");
     }
-
-    console.log("Received answer, " + answer.value.trim());
 
     // now we have to parse this time passed value, into milliseconds
     const timePassedText = answer.value.trim();

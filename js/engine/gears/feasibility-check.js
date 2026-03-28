@@ -812,7 +812,6 @@ async function testMessageFeasibilityForce(engine, character) {
         throw new Error("Questioning agent could not be started properly.");
     }
     const nextQuestion = "Considering the list at " + contextInfoSurroundingCharacters.availableCharactersAt + ". Which characters, if any, have been successfully forced to do something in the last story fragment? Provide a comma separated list of names only, or say 'none' if no characters were successfully forced.";
-    console.log("Asking question, " + nextQuestion);
     const answerToQuestion = await generator.next({
         maxParagraphs: 1,
         maxCharacters: 0,
@@ -827,8 +826,6 @@ async function testMessageFeasibilityForce(engine, character) {
     if (answerToQuestion.done) {
         throw new Error("Questioning agent ended unexpectedly when asking about who was forced.");
     }
-
-    console.log("Received answer, ", answerToQuestion.value);
 
     /**
      * @type {string[]}
@@ -865,8 +862,6 @@ async function testMessageFeasibilityForce(engine, character) {
             }
 
             const nextQuestion = "In the last story fragment, what specific action or actions has " + forcedCharacterName + " been successfully forced to do? Provide a brief description of the action or actions, if no action was forced, say 'they have not been forced to do anything'.";
-            console.log("Asking question, " + nextQuestion);
-
             const answerAboutWhat = await generator.next({
                 maxParagraphs: 1,
                 maxCharacters: 0,
@@ -881,8 +876,6 @@ async function testMessageFeasibilityForce(engine, character) {
             if (answerAboutWhat.done) {
                 throw new Error("Questioning agent ended unexpectedly when asking about what was forced.");
             }
-
-            console.log("Received answer, ", answerAboutWhat.value);
 
             if (answerAboutWhat.value.trim().toLowerCase().startsWith("has been forced to")) {
                 forcedToDoWhat[forcedCharacterName] = answerAboutWhat.value.trim();
@@ -996,8 +989,6 @@ async function testMessageFeasibilityForce(engine, character) {
             }
             const nextQuestion = "Considering the character descriptions and current states of both characters, is it feasible for " + forcedCharacterName + " to be successfully been forced to " + forcedAction + " by " + character.name + " in the last story fragment from such character? Answer 'yes' if it is feasible, 'no' and elaborate if it is not feasible.";
 
-            console.log("Asking question, " + nextQuestion);
-
             const feasibilityAnswer = await feasibilityGenerator.next({
                 maxParagraphs: 1,
                 maxCharacters: 0,
@@ -1011,8 +1002,6 @@ async function testMessageFeasibilityForce(engine, character) {
             if (feasibilityAnswer.done) {
                 throw new Error("Questioning agent ended unexpectedly when asking about feasibility.");
             }
-
-            console.log("Received answer, ", feasibilityAnswer.value);
 
             const feasible = feasibilityAnswer.value.trim().toLowerCase().indexOf("yes") === 0;
 

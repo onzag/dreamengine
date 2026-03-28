@@ -138,7 +138,6 @@ export default async function testWorldRulesOn(engine, character) {
     }
 
     const nextQuestion = `Considering the list of present characters ${contextInfoSurroundingCharacters.availableCharactersAt}, has the last story fragment specified new characters as being physically present?`;
-    console.log("Asking question, " + nextQuestion);
 
     const spawnedMissingCharacters = await characterInteractionGenerator.next({
         maxSafetyCharacters: 500,
@@ -156,8 +155,6 @@ export default async function testWorldRulesOn(engine, character) {
     }
 
     await characterInteractionGenerator.next(null); // finish the generator
-
-    console.log("Received answer, " + spawnedMissingCharacters.value.trim());
 
     if (isYes(spawnedMissingCharacters.value)) {
         const failureReason = spawnedMissingCharacters.value.trim().replace("yes, ", "").replace("Yes, ", "").replace("YES, ", "").trim();
@@ -191,8 +188,6 @@ export default async function testWorldRulesOn(engine, character) {
 
             const nextQuestion = `Create a narrative message that explains the hallucination of ${character.name} about ${failureReason}. Remember to keep it short and concise, and to preserve the immersion and consistency of the story.`;
 
-            console.log("Asking question: ", nextQuestion);
-
             const hallucinationMessage = await schizophreniaGenerator.next({
                 maxCharacters: 500,
                 maxParagraphs: 1,
@@ -207,8 +202,6 @@ export default async function testWorldRulesOn(engine, character) {
             if (hallucinationMessage.done || !hallucinationMessage.value) {
                 throw new Error("Inference adapter questioning generator for schizophrenia hallucination ended unexpectedly during hallucination message generation.");
             }
-
-            console.log("Received answer: " + hallucinationMessage.value);
 
             const messageWithoutAsterisks = hallucinationMessage.value.trim().replace(/^\*/, "").replace(/\*$/, "").trim();
             addedMessagesForStoryMaster.push(messageWithoutAsterisks);
@@ -238,7 +231,6 @@ export default async function testWorldRulesOn(engine, character) {
 
         for (const characterName of [...characterSurroundInfo.totalStrangers, ...characterSurroundInfo.nonStrangers]) {
             const nextQuestion = `Has the last message described any actions or reactions performed by ${characterName}?`;
-            console.log("Asking question, " + nextQuestion);
             let specialResult1 = await generatorSpecial.next({
                 maxCharacters: 0,
                 maxSafetyCharacters: 500,
@@ -258,14 +250,11 @@ export default async function testWorldRulesOn(engine, character) {
                 throw new Error("Inference adapter questioning generator ended unexpectedly during special action/reaction check.");
             }
 
-            console.log("Received answer, " + specialResult1.value.trim());
-
             const specialRuleSplitted = specialResult1.value.trim().toLowerCase().split(" ")[0];
             let brokenSpecialRule = specialRuleSplitted === "yes," || specialRuleSplitted === "Yes," || specialRuleSplitted === "YES,";
 
             if (!brokenSpecialRule) {
                 const nextQuestion = `Has the last message described an emotional response or thought process by ${characterName}? do not make assumptions, only consider what is explicitly described.`;
-                console.log("Asking question, " + nextQuestion);
                 specialResult1 = await generatorSpecial.next({
                     maxCharacters: 0,
                     maxSafetyCharacters: 500,
@@ -283,15 +272,12 @@ export default async function testWorldRulesOn(engine, character) {
                     throw new Error("Inference adapter questioning generator ended unexpectedly during special action/reaction emotional check.");
                 }
 
-                console.log("Received answer, " + specialResult1.value.trim());
-
                 const specialRuleSplitted = specialResult1.value.trim().toLowerCase().split(" ")[0];
                 brokenSpecialRule = specialRuleSplitted === "yes," || specialRuleSplitted === "Yes," || specialRuleSplitted === "YES,";
             }
 
             if (!brokenSpecialRule) {
                 const nextQuestion = `Has the last message described any verbal response from ${characterName}? do not make assumptions, only consider what is explicitly described.`;
-                console.log("Asking question, " + nextQuestion);
                 specialResult1 = await generatorSpecial.next({
                     maxCharacters: 0,
                     maxSafetyCharacters: 500,
@@ -308,8 +294,6 @@ export default async function testWorldRulesOn(engine, character) {
                 if (specialResult1.done) {
                     throw new Error("Inference adapter questioning generator ended unexpectedly during special action/reaction verbal check.");
                 }
-
-                console.log("Received answer, " + specialResult1.value.trim());
 
                 const specialRuleSplitted = specialResult1.value.trim().toLowerCase().split(" ")[0];
                 brokenSpecialRule = specialRuleSplitted === "yes," || specialRuleSplitted === "Yes," || specialRuleSplitted === "YES,";
@@ -399,8 +383,6 @@ export default async function testWorldRulesOn(engine, character) {
         ];
 
         for (const rule of basicYesNoRules) {
-            // @ts-ignore
-            console.log("Asking question, " + (rule.question || ruleBreakMessage));
             const yesNoResult = await generator.next({
                 maxCharacters: 0,
                 maxSafetyCharacters: 250,
@@ -422,8 +404,6 @@ export default async function testWorldRulesOn(engine, character) {
 
             const yesNoResultSplitted = yesNoResult.value.trim().toLowerCase().split(" ")[0];
             const brokenRule = yesNoResultSplitted === "yes," || yesNoResultSplitted === "Yes," || yesNoResultSplitted === "YES,";
-
-            console.log("Received answer, " + yesNoResult.value.trim());
 
             if (brokenRule) {
                 // finish the generator
@@ -482,7 +462,6 @@ export default async function testWorldRulesOn(engine, character) {
     }
 
     const nextQuestion2 = `Considering the list at ${availableItemsContextInfo.availableItemsAt}. Has ${character.name} interacted with an item that is not in the list?`;
-    console.log("Asking question, " + nextQuestion2);
 
     const spawnedMissingItems = await itemsInteractionGenerator.next({
         maxCharacters: 0,
@@ -497,8 +476,6 @@ export default async function testWorldRulesOn(engine, character) {
     if (spawnedMissingItems.done) {
         throw new Error("Inference adapter questioning generator for item interactions ended unexpectedly during spawned missing items check.");
     }
-
-    console.log("Received answer, " + spawnedMissingItems.value.trim());
 
     await itemsInteractionGenerator.next(null); // finish the generator
 
@@ -558,8 +535,6 @@ export default async function testWorldRulesOn(engine, character) {
 
                     const nextQuestionPhantom = `Create a narrative message that explains the hallucination of ${character.name} about the item "${itemNameMentioned}". The item was not real and must vanish or be revealed as an illusion. Remember to keep it short and concise, and to preserve the immersion and consistency of the story.`;
 
-                    console.log("Asking question: ", nextQuestionPhantom);
-
                     const hallucinationMessage = await schizophreniaGenerator.next({
                         maxCharacters: 500,
                         maxParagraphs: 1,
@@ -574,8 +549,6 @@ export default async function testWorldRulesOn(engine, character) {
                     if (hallucinationMessage.done || !hallucinationMessage.value) {
                         throw new Error("Inference adapter questioning generator for phantom item hallucination ended unexpectedly during hallucination message generation.");
                     }
-
-                    console.log("Received answer: " + hallucinationMessage.value);
 
                     const messageWithoutAsterisks = hallucinationMessage.value.trim().replace(/^\*/, "").replace(/\*$/, "").trim();
                     addedMessagesForStoryMaster.push(messageWithoutAsterisks);
