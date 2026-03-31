@@ -103,3 +103,12 @@ export function getJsCard(base) {
 
     return endResult;
 }
+
+/**
+ * @typedef {Object} CardTypeGuider
+ * @property {(question: string, options: string[], defaultValue?: string) => Promise<{value: string}>} askOption
+ * @property {(question: string, defaultValue?: string) => Promise<{value: string}>} askOpen
+ * @property {(question: string, defaultValue?: number) => Promise<{value: number}>} askNumber
+ * @property {(question: string, defaultValue?: boolean) => Promise<{value: boolean}>} askBoolean
+ * @property {(question: string, defaultValue?: string[]) => Promise<{value: string[]}>} askList
+ */

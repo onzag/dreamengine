@@ -295,7 +295,7 @@ declare interface DECharacterStateDefinition {
      * The injection can have intensity levels as well to allow for different instructions
      * allowing it to be more dynamic
      */
-    actionPromptInjection: Record<string, DEActionPromptInjection>;
+    actionPromptInjection: DEActionPromptInjection[];
     /**
      * Description of the state, used for reasoning about the state
      */
@@ -326,7 +326,7 @@ declare interface DECharacterStateDefinition {
      * 
      * Check the actionPromptInjection description for an example use case
      */
-    relievingActionPromptInjection?: Record<string, DEActionPromptInjection>;
+    relievingActionPromptInjection?: DEActionPromptInjection[];
     /**
      * Whether this state triggers a dead end that causes the character to be permanently removed from the story
      * use this for the description of the dead end scenario
@@ -726,7 +726,7 @@ type DEEmotionNames =
     // confusion
     "confused" | "uncertain" | "doubtful" |
     // embarassment
-    "embarassed" | "shy" | "sheepish" | "blushing" | "ashamed" | "guilty" |
+    "embarassed" | "shy" | "sheepish" | "ashamed" | "guilty" |
     // tired
     "tired" | "sleepy" | "exhausted" | "fatigued" |
     // boredom,
@@ -801,7 +801,7 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
      * Now if forceDominant is set to false for this one, this way the character may have a tic sometimes but it won't override other more important states that are
      * keeping them busy and their behaviour in check
      */
-    actionPromptInjection: Record<string, DEActionPromptInjection>;
+    actionPromptInjection: DEActionPromptInjection[];
 
     /**
      * Just the general description of the character and the base of the system prompt,
@@ -1165,9 +1165,13 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
          */
         species: string;
         /**
+         * Type of species of the character
+         */
+        speciesType: "humanoid" | "feral" | "animal";
+        /**
          * List of species that this character dislikes
          */
-        dislikesSpecies?: string[];
+        dislikesSpecies?: string[] | null;
         /**
          * The race of the character, used for social simulation to determine interactions and preferences based on race
          */
@@ -1176,15 +1180,15 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
          * List of races that this character dislikes,
          * yes you can make the character racist
          */
-        dislikesRaces?: string[];
+        dislikesRaces?: string[] | null;
         /**
          * List of groups or social categories that this characters belongs to
          */
-        groupBelonging?: string[];
+        groupBelonging?: string[] | null;
         /**
          * List of groups or social categories that this character dislikes
          */
-        dislikesGroups?: string[];
+        dislikesGroups?: string[] | null;
         /**
          * Allows characters to have sex with each other once they reach a certain bond 2 level
          */
@@ -1239,13 +1243,15 @@ declare type DECharacterQuestionWithAskPer = Omit<DECharacterQuestionBase, 'runI
 };
 
 declare type DECharacterYesNoQuestion =
-    | (DECharacterQuestionWithAskPer & { type: "yes_no"; onValue: (
-        answer: boolean,
-        character: DECompleteCharacterReference,
-        otherChar: DECompleteCharacterReference,
-        otherFamilyRelation: DEFamilyRelation | null,
-        otherRelationship: string | null,
-    ) => Promise<void> | void; })
+    | (DECharacterQuestionWithAskPer & {
+        type: "yes_no"; onValue: (
+            answer: boolean,
+            character: DECompleteCharacterReference,
+            otherChar: DECompleteCharacterReference,
+            otherFamilyRelation: DEFamilyRelation | null,
+            otherRelationship: string | null,
+        ) => Promise<void> | void;
+    })
     | (DECharacterQuestionBase & { type: "yes_no"; askPer?: undefined; onValue: DEYesNoQuestionCallback; });
 
 declare type DEYesNoQuestionCallback = (
@@ -1257,13 +1263,15 @@ declare type DEYesNoQuestionCallback = (
 ) => Promise<void> | void;
 
 declare type DECharacterNumericQuestion =
-    | (DECharacterQuestionWithAskPer & { type: "numeric"; onNumber: (
-        answer: number,
-        character: DECompleteCharacterReference,
-        otherChar: DECompleteCharacterReference,
-        otherFamilyRelation: DEFamilyRelation | null,
-        otherRelationship: string | null,
-    ) => Promise<void> | void; })
+    | (DECharacterQuestionWithAskPer & {
+        type: "numeric"; onNumber: (
+            answer: number,
+            character: DECompleteCharacterReference,
+            otherChar: DECompleteCharacterReference,
+            otherFamilyRelation: DEFamilyRelation | null,
+            otherRelationship: string | null,
+        ) => Promise<void> | void;
+    })
     | (DECharacterQuestionBase & { type: "numeric"; askPer?: undefined; onNumber: DENumericQuestionCallback; });
 
 declare type DENumericQuestionCallback = (
@@ -1275,13 +1283,15 @@ declare type DENumericQuestionCallback = (
 ) => Promise<void> | void;
 
 declare type DECharacterTextQuestion =
-    | (DECharacterQuestionWithAskPer & { type: "text"; grammar?: string; onText: (
-        answer: string,
-        character: DECompleteCharacterReference,
-        otherChar: DECompleteCharacterReference,
-        otherFamilyRelation: DEFamilyRelation | null,
-        otherRelationship: string | null,
-    ) => Promise<void> | void; })
+    | (DECharacterQuestionWithAskPer & {
+        type: "text"; grammar?: string; onText: (
+            answer: string,
+            character: DECompleteCharacterReference,
+            otherChar: DECompleteCharacterReference,
+            otherFamilyRelation: DEFamilyRelation | null,
+            otherRelationship: string | null,
+        ) => Promise<void> | void;
+    })
     | (DECharacterQuestionBase & { type: "text"; grammar?: string; askPer?: undefined; onText: DETextQuestionCallback; });
 
 declare type DETextQuestionCallback = (
@@ -1369,6 +1379,10 @@ declare interface DEAttraction {
      * The species that this attraction applies to, null or unspecified means own species
      */
     species?: string | null;
+    /**
+     * The type of species that this attraction applies to, for example, a character may be attracted to anthropomorphic characters, but not feral or animal characters, etc...
+     */
+    speciesType?: "anthropomorphic" | "feral" | "animal";
     /**
      * The age range that this attraction applies to
      */
@@ -2543,44 +2557,46 @@ declare interface DEConversation {
     pseudoConversationSummary?: string | null;
 }
 
+declare interface DEStringTemplateInfo {
+    /**
+     * Available the character invoking the template
+     * Usually available, but in rare cases like in narration
+     * it may not be
+     */
+    char?: DECompleteCharacterReference,
+
+    /**
+     * Only available in likes and dislikes description templates
+     */
+    chars?: DECompleteCharacterReference[],
+
+    /**
+     * Only available in bond description templates
+     */
+    other?: DECompleteCharacterReference,
+    /**
+     * The relationship that the bond description has, usually this is for family only
+     * as it otherwise defaults to "friend" for positive bond or "foe" for negative
+     */
+    otherFamilyRelation?: DEFamilyRelation,
+    /**
+     * The relationship with the other
+     */
+    otherRelationship?: string,
+
+    /**
+     * Only available in state description templates, these are the causants of a given state
+     */
+    causants?: DEStateCausant[],
+    causes?: DEStateCause[],
+}
+
 declare type DEStringTemplate = string | ((
     /**
      * Always available the DE object representing the whole simulation
      */
     DE: DEObject,
-    info: {
-        /**
-         * Available the character invoking the template
-         * Usually available, but in rare cases like in narration
-         * it may not be
-         */
-        char?: DECompleteCharacterReference,
-
-        /**
-         * Only available in likes and dislikes description templates
-         */
-        chars?: DECompleteCharacterReference[],
-
-        /**
-         * Only available in bond description templates
-         */
-        other?: DECompleteCharacterReference,
-        /**
-         * The relationship that the bond description has, usually this is for family only
-         * as it otherwise defaults to "friend" for positive bond or "foe" for negative
-         */
-        otherFamilyRelation?: DEFamilyRelation,
-        /**
-         * The relationship with the other
-         */
-        otherRelationship?: string,
-
-        /**
-         * Only available in state description templates, these are the causants of a given state
-         */
-        causants?: DEStateCausant[],
-        causes?: DEStateCause[],
-    }
+    info: DEStringTemplateInfo
 ) => Promise<string> | string);
 
 declare interface DEScene {
@@ -2736,6 +2752,7 @@ declare interface DENarrationStyle {
 }
 
 declare interface DEUtils {
+    runHandlebarsTemplate(DE: DEObject, template: DEStringTemplate, info: DEStringTemplateInfo): string;
     newHandlebarsTemplate(DE: DEObject, source: string): DEStringTemplate;
     newLocation(DE: DEObject, name: string, definition: DELocationDefinition): DELocationDefinition;
     newCharacter(DE: DEObject, definition: DECompleteCharacterReference): DECompleteCharacterReference;

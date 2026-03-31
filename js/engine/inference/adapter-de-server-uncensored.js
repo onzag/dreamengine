@@ -536,7 +536,7 @@ RULE: Spoken dialogue should be done in first person, and start with the charact
 
             const rid = cheapRID();
 
-            console.log("Asking question: " + nextQuestion.nextQuestion);
+            console.log("\nAsking question: " + nextQuestion.nextQuestion);
 
             // send the next question
             this.socket.send(JSON.stringify({
@@ -566,7 +566,7 @@ RULE: Spoken dialogue should be done in first person, and start with the charact
                 throw new Error(data.message);
             } else if (data.type === "answer") {
                 const answer = data.text;
-                console.log("Received answer: " + answer);
+                console.log("\nReceived answer: " + answer);
                 nextQuestion = yield answer;
             } else {
                 throw new Error("Unexpected message type during questioning: " + data.type);

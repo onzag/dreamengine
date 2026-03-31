@@ -2,6 +2,7 @@ import { DEngine } from "../engine/index.js";
 import { createGrammarListFromList, parseListFromGrammarResponse } from "../engine/util/grammar.js";
 import { createCardStructureFrom, getJsCard } from "./base.js";
 import { replaceAllCharNameWithPlaceholder } from "./generate-base.js";
+import { BASIC_EMOTIONAL_STATES } from "./generate-basic-states.js";
 
 /**
  * 
@@ -21,6 +22,8 @@ function replaceOtherCharNameWithPlaceholder(text, charName) {
 export async function generateBondTriggers(engine, jsSource) {
     const card = createCardStructureFrom(jsSource);
 
+    card.imports.push(`const basicBondQuestions = await importScript("bond-systems", "basic-bond-questions");`);
+
     const inferenceAdapter = engine.inferenceAdapter;
     if (!inferenceAdapter) {
         throw new Error("No inference adapter found on engine");
@@ -31,6 +34,8 @@ export async function generateBondTriggers(engine, jsSource) {
         [],
         `# Character Card:\n\n${card.card}`
     );
+
+    card.body.push(`basicBondQuestions.addBasicBondQuestions(DE, DE.characters[${JSON.stringify(card.config.name)}]);`);
 
     const generator = inferenceAdapter.runQuestioningCustomAgentOn("cardtype-gen", {
         contextInfoAfter: null,
@@ -43,28 +48,9 @@ export async function generateBondTriggers(engine, jsSource) {
     const isIncestuousValue = card.config.isIncestuous;
     const name = card.config.name;
 
-    const EMOTIONAL_STATES_TO_CHECK_AGAINST = [
-        "Angry",
-        "Annoyed",
-        "Anxious",
-        "Ashamed",
-        "Disgusted",
-        "Sad",
-        "Scared",
-        "Fearful",
-        "Shy",
-        "Happy",
-        "Affectionate",
-        "Grateful",
-        "Proud",
-        "Amused",
-        "Relieved",
-        "Curious",
-        "Jealous",
-    ]
-
-    if (!isAsexualValue) {
-        EMOTIONAL_STATES_TO_CHECK_AGAINST.push("Flirty", "Loving", "Aroused");
+    let EMOTIONAL_STATES_TO_CHECK_AGAINST = [...BASIC_EMOTIONAL_STATES]
+    if (isAsexualValue) {
+        EMOTIONAL_STATES_TO_CHECK_AGAINST = EMOTIONAL_STATES_TO_CHECK_AGAINST.filter(state => !["Flirty", "Loving", "Aroused"].includes(state));
     }
 
     const ready = await generator.next(); // start the generator with an empty message to get it going
@@ -77,7 +63,7 @@ export async function generateBondTriggers(engine, jsSource) {
     /**
      * @type {string[]|null}
      */
-    let doNotIncludeCauses = null;
+    let doNotIncludeQuestions = null;
 
     let overrideWholeReasoning = false;
 
@@ -100,11 +86,12 @@ export async function generateBondTriggers(engine, jsSource) {
          * @type {string[]}
          */
         const causesValue = [];
+        const generatedQuestions = [];
 
         while (true) {
             let instructions = "The list should be in 3rd person and formatted as a markdown list with each question as a separate bullet point, use OTHER_CHARACTER as a placeholder for the other character's name. OTHER_CHARACTER must always be included, the questions should be in past tense and 3rd person, do not use you, your, I, we, or similar words that indicate second or first person";
-            if (doNotIncludeCauses) {
-                instructions += "\n\nDo NOT include any causes reason in the questions where:\n\n- " + name + " " + doNotIncludeCauses.join("\n- " + name + " ");
+            if (doNotIncludeQuestions) {
+                instructions += "\n\nDo NOT include any questions similar to these:\n\n- " + doNotIncludeQuestions.join("\n- " + name + " ");
             }
 
             const yesNoQuestions = await generator.next({
@@ -122,7 +109,7 @@ export async function generateBondTriggers(engine, jsSource) {
                 ],
                 stopAt: [],
                 instructions: instructions,
-                grammar: "root ::= list\nlist ::=" + (" bulletPoint").repeat(amount) + "\nbulletPoint ::= \"- \" (\"Was\" | \"Did\") \" OTHER CHARACTER \" [a-zA-Z0-9 ,?'!]+ \"\\n\"",
+                grammar: "root ::= list\nlist ::=" + (" bulletPoint").repeat(amount) + "\nbulletPoint ::= \"- \" (\"Was\" | \"Did\") \" OTHER CHARACTER \" [a-zA-Z0-9 ,?'!_]+ \"\\n\"",
                 answerTrail: overrideWholeReasoning ? "#" + trail + ":\n\n" : "# List of yes/no questions that would make " + name + " " + trail + ":\n\n",
             });
 
@@ -150,6 +137,7 @@ export async function generateBondTriggers(engine, jsSource) {
 
         for (let i = 0; i < questionsParsed.length; i++) {
             const question = questionsParsed[i];
+            generatedQuestions.push(question);
             console.log("Generated question:", question);
             const questionReplaced = replaceOtherCharNameWithPlaceholder(question, name);
 
@@ -249,184 +237,217 @@ export async function generateBondTriggers(engine, jsSource) {
         }
 
         shiftStateByOverride = 0;
-        doNotIncludeCauses = null;
+        doNotIncludeQuestions = null;
         overrideWholeReasoning = false;
-        return causesValue;
+        return [causesValue, generatedQuestions];
     }
 
-    // -- NON ROMANTIC MAKE SURE NOT TO INCLUDE ANYTHING ROMANTIC OR SEXUAL IN THE QUESTIONS UNLESS ASEXUAL IS TRUE --
+    // yes/no questions that would make the character really like or dislike the regardless of the relationship level
+    card.body.push(`// Yes/no questions about liking in all relationship levels`);
+    const [likeAtAnyLevelValue, likeAtAnyLevelQuestions] = await askYesNo(
+        10,
+        "like another character at any relationship level",
+        "like another character at any relationship level",
+        "this can include anyone from strangers, enemies, aquitances, friends, close friends, to best friends towards each other",
+        "it was done by another character",
+        `runIf: (char, other) => true,`,
+        `DE.utils.shiftBond(DE, char, other, 1, 0);`,
+    );
 
-    // STRANGERS
+    card.body.push(`// Yes/no questions about disliking in all relationship levels`);
+    const [dislikeAtAnyLevelValue, dislikeAtAnyLevelQuestions] = await askYesNo(
+        10,
+        "dislike slightly another character at any relationship level, do not include extreme cases that would cause intense hatred or sworn enmity, focus on more mild cases of dislike that would just cause a bond decrease but not intense hatred (e.g. getting annoyed by them, disliking their habits, finding them irritating, getting into a petty argument, etc)",
+        "dislike slightly another character at any relationship level",
+        "this can include anyone from strangers, enemies, aquitances, friends, close friends, to best friends towards each other",
+        "it was done by another character",
+        `runIf: (char, other) => true,`,
+        `DE.utils.shiftBond(DE, char, other, -1, 0);`,
+    );
 
     // yes/no questions that would make the character really like or dislike another character when they are strangers that just met
-    // await askYesNo(
-    //     6,
-    //     "like another provided they just met and have no prior relationship (the question must be specific to first impressions and first impressions only)",
-    //     "like another character when they are strangers",
-    //     "they are strangers towards each other",
-    //     "it was done by a stranger",
-    //     `runIf: (char, other) => DE.utils.isStrangerTowards(DE, char, other),`,
-    //     `DE.utils.shiftBond(DE, char, other, 1, 0);`,
-    // );
-    // await askYesNo(
-    //     6,
-    //     "dislike another character provided they just met and have no prior relationship (the question must be specific to first impressions and first impressions only)",
-    //     "dislike another character when they are strangers",
-    //     "they are strangers towards each other",
-    //     "it was done by a stranger",
-    //     `runIf: (char, other) => DE.utils.isStrangerTowards(DE, char, other),`,
-    //     `DE.utils.shiftBond(DE, char, other, -1, -1);`,
-    // );
+    card.body.push(`// Yes/no questions about liking strangers`);
+    doNotIncludeQuestions = likeAtAnyLevelQuestions;
+    const [likeAtStrangersValue, likeAtStrangersQuestions] = await askYesNo(
+        6,
+        "like another provided they just met and have no prior relationship (the question must be specific to first impressions and first impressions only)",
+        "like another character when they are strangers",
+        "they are strangers towards each other",
+        "it was done by a stranger",
+        `runIf: (char, other) => DE.utils.isStrangerTowards(DE, char, other),`,
+        `DE.utils.shiftBond(DE, char, other, 1, 0);`,
+    );
+
+    card.body.push(`// Yes/no questions about disliking strangers`);
+    doNotIncludeQuestions = dislikeAtAnyLevelQuestions;
+    const [dislikeAtStrangersValue, dislikeAtStrangersQuestions] = await askYesNo(
+        6,
+        "dislike another character provided they just met and have no prior relationship (the question must be specific to first impressions and first impressions only)",
+        "dislike another character when they are strangers",
+        "they are strangers towards each other",
+        "it was done by a stranger",
+        `runIf: (char, other) => DE.utils.isStrangerTowards(DE, char, other),`,
+        `DE.utils.shiftBond(DE, char, other, -1, -1);`,
+    );
 
     // would char be one that would feel love at first sight?
-    // const isLoveAtFirstSight = await generator.next({
-    //     maxCharacters: 5,
-    //     maxSafetyCharacters: 0,
-    //     maxParagraphs: 1,
-    //     nextQuestion: `If ${name} just met someone and had no prior relationship with them, is it possible for ${name} to feel love at first sight towards them? Answer with "yes" or "no".`,
-    //     stopAfter: [],
-    //     stopAt: [],
-    //     grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
-    // });
+    const isLoveAtFirstSight = await generator.next({
+        maxCharacters: 5,
+        maxSafetyCharacters: 0,
+        maxParagraphs: 1,
+        nextQuestion: `If ${name} just met someone and had no prior relationship with them, is it possible for ${name} to feel love at first sight towards them? Answer with "yes" or "no".`,
+        stopAfter: [],
+        stopAt: [],
+        grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
+    });
 
-    // if (isLoveAtFirstSight.done) {
-    //     throw new Error("Generator finished without producing output");
-    // }
+    if (isLoveAtFirstSight.done) {
+        throw new Error("Generator finished without producing output");
+    }
 
-    // const isLoveAtFirstSightValue = isLoveAtFirstSight.value.trim().toLowerCase() === "yes";
+    const isLoveAtFirstSightValue = isLoveAtFirstSight.value.trim().toLowerCase() === "yes";
 
-    // card.config.loveAtFirstSight = isLoveAtFirstSightValue;
+    card.config.loveAtFirstSight = isLoveAtFirstSightValue;
 
-    // if (isLoveAtFirstSightValue) {
-    //     let conditionForAttraction = "";
-    //     for (const attraction of card.config.attractions) {
-    //         if (conditionForAttraction) {
-    //             conditionForAttraction += " || ";
-    //         }
-    //         conditionForAttraction += `DE.utils.is${attraction}(DE, other)`;
-    //     }
+    if (isLoveAtFirstSightValue) {
+        let conditionForAttraction = "";
+        for (const attraction of card.config.attractions) {
+            if (conditionForAttraction) {
+                conditionForAttraction += " || ";
+            }
+            conditionForAttraction += `DE.utils.is${attraction}(DE, other)`;
+        }
 
-    //     await askYesNo(
-    //         5,
-    //         "feel love (romantic and sexual) at first sight towards another character they just met and have no prior relationship with (focus on physical attraction, chemistry, sexual tension, romantic feelings, etc)",
-    //         "feel love (romantic and sexual) at first sight towards another when they are strangers",
-    //         "they are strangers towards each other but " + name + " can feel love at first sight",
-    //         "it was love at first sight with a stranger",
-    //         `runIf: (char, other) => DE.utils.isStrangerTowards(DE, char, other) && (${conditionForAttraction}),`,
-    //         `DE.utils.shiftBond(DE, char, other, 1, 1);`,
-    //     );
-    // }
+        card.body.push(`// Yes/no questions about love at first sight`);
+        doNotIncludeQuestions = [...likeAtAnyLevelQuestions, ...likeAtStrangersQuestions];
+        await askYesNo(
+            5,
+            "feel love (romantic and sexual) at first sight towards another character they just met and have no prior relationship with (focus on physical attraction, chemistry, sexual tension, romantic feelings, etc)",
+            "feel love (romantic and sexual) at first sight towards another when they are strangers",
+            "they are strangers towards each other but " + name + " can feel love at first sight",
+            "it was love at first sight with a stranger",
+            `runIf: (char, other) => DE.utils.isStrangerTowards(DE, char, other) && (${conditionForAttraction}),`,
+            `DE.utils.shiftBond(DE, char, other, 1, 1);`,
+        );
+    }
 
-    // await askYesNo(
-    //     5,
-    //     "feel hate at first sight towards another character they just met and have no prior relationship with (focus on intense dislike, and serious causes)",
-    //     "feel hate at first sight towards another when they are strangers",
-    //     "they are strangers towards each other",
-    //     "it was hate at first sight with a stranger",
-    //     `runIf: (char, other) => DE.utils.isStrangerTowards(DE, char, other),`,
-    //     `DE.utils.shiftBond(DE, char, other, -3, -1);`,
-    // );
+    card.body.push(`// Yes/no questions about hate at first sight`);
+    doNotIncludeQuestions = [...dislikeAtAnyLevelQuestions, ...dislikeAtStrangersQuestions];
+    const [hateAtFirstSightValue, hateAtFirstSightQuestions] = await askYesNo(
+        5,
+        "feel hate at first sight towards another character they just met and have no prior relationship with (focus on intense dislike, and serious causes, things like severe annoyance, strong negative first impression, strong aversion, etc; do NOT include mild things like getting slightly annoyed, disliking their habits, finding them irritating, getting into a petty argument, etc)",
+        "feel hate at first sight towards another when they are strangers",
+        "they are strangers towards each other",
+        "it was hate at first sight with a stranger",
+        `runIf: (char, other) => DE.utils.isStrangerTowards(DE, char, other),`,
+        `DE.utils.shiftBond(DE, char, other, -3, -1);`,
+    );
 
     // yes/no questions that would make the character really like or dislike another character when they are acquaintances
-    // await askYesNo(
-    //     5,
-    //     "like another character provided they are acquaintances but not close friends (the behaviour/action showcase that they can be potential friends, it must be specific to something that showcases they can be a friend but they are not close friends yet)",
-    //     "like another character when they are acquaintances",
-    //     "they are acquaintances but not close friends towards each other",
-    //     "it was done by an aquaintance showcasing friendship potential",
-    //     `runIf: (char, other) => DE.utils.isAcquaintanceOrWorseTowards(DE, char, other),`,
-    //     `DE.utils.shiftBond(DE, char, other, 1, 0);`,
-    // );
-    // await askYesNo(
-    //     8, // added more in this case because general all levels contradicted often
-    //     "dislike another character provided they are acquaintances but not close friends (the behaviour/action is otherwise acceptable with close friends, but not with acquaintances)",
-    //     "dislike another character when they are acquaintances",
-    //     "they are acquaintances but not close friends towards each other",
-    //     "it was done by an aquaintance but it would only be acceptable if it was a close friend",
-    //     `runIf: (char, other) => DE.utils.isAcquaintanceOrWorseTowards(DE, char, other),`,
-    //     `DE.utils.shiftBond(DE, char, other, -1, -1);`,
-    // );
+    card.body.push(`// Yes/no questions about acquaintances`);
+    doNotIncludeQuestions = likeAtAnyLevelQuestions;
+    const [likeAtAcquaintancesValue, likeAtAcquaintancesQuestions] = await askYesNo(
+        5,
+        "like another character provided they are acquaintances but not close friends (the behaviour/action showcase that they can be potential friends, it must be specific to something that showcases they can be a friend but they are not close friends yet)",
+        "like another character when they are acquaintances",
+        "they are acquaintances but not close friends towards each other",
+        "it was done by an aquaintance showcasing friendship potential",
+        `runIf: (char, other) => DE.utils.isNotStrangersTowards(DE, char, other) && DE.utils.isAcquaintanceOrWorseTowards(DE, char, other),`,
+        `DE.utils.shiftBond(DE, char, other, 1, 0);`,
+    );
 
-    // IN GENERAL (ALL LEVELS)
-
-    // yes/no questions that would make the character really like or dislike the regardless of the relationship level
-    // await askYesNo(
-    //     10,
-    //     "like another character at any relationship level, from strangers, enemies, aquitances, friends, close friends, to best friends",
-    //     "like another character at any relationship level",
-    //     "this can include anyone from strangers, enemies, aquitances, friends, close friends, to best friends towards each other",
-    //     "it was done by another character",
-    //     `runIf: (char, other) => true,`,
-    //     `DE.utils.shiftBond(DE, char, other, 1, 0);`,
-    // );
+    doNotIncludeQuestions = dislikeAtAnyLevelQuestions;
+    const [dislikeAtAcquaintancesValue, dislikeAtAcquaintancesQuestions] = await askYesNo(
+        8, // added more in this case because general all levels contradicted often
+        "dislike another character provided they are acquaintances but not close friends (the behaviour/action is otherwise acceptable with close friends, but not with acquaintances)",
+        "dislike another character when they are acquaintances",
+        "they are acquaintances but not close friends towards each other",
+        "it was done by an aquaintance but it would only be acceptable if it was a close friend",
+        `runIf: (char, other) => DE.utils.isNotStrangersTowards(DE, char, other) && DE.utils.isAcquaintanceOrWorseTowards(DE, char, other),`,
+        `DE.utils.shiftBond(DE, char, other, -1, -1);`,
+    );
 
     // yes/no questions that would make a character feel sudden hatred and make them instant sworn enemies (abuse towards, witnessing crime, etc)
-    // shiftStateByOverride = 2;
-    // await askYesNo(
-    //     4,
-    //     "feel a sudden intense hatred towards another and become sworn enemies instantly (the cause MUST be extreme and severe: murder, killing someone they love, physical abuse, torture, genocide, enslavement, catastrophic betrayal, destruction of their home, or similarly devastating acts; do NOT include mild things like threats, insults, rudeness or general mistreatment)",
-    //     "feel a sudden intense hatred towards another and become sworn enemies instantly due to extreme acts",
-    //     "this can include anyone at any relationship level; the act must be severe enough to warrant instant sworn enmity such as killing, abuse, torture, or destruction",
-    //     "it was done by another character and it is an extreme unforgivable act that triggers instant sworn enmity",
-    //     `runIf: (char, other) => true,`,
-    //     `DE.utils.shiftBond(DE, char, other, -50, -25);`,
-    // );
+    card.body.push(`// Yes/no questions about sudden intense hatred and instant sworn enmity`);
+    shiftStateByOverride = 2;
+    await askYesNo(
+        4,
+        "feel a sudden intense hatred towards another and become sworn enemies instantly (the cause MUST be extreme and severe: murder, killing someone they love, physical abuse, torture, genocide, enslavement, catastrophic betrayal, destruction of their home, or similarly devastating acts; do NOT include mild things like threats, insults, rudeness or general mistreatment)",
+        "feel a sudden intense hatred towards another and become sworn enemies instantly due to extreme acts",
+        "this can include anyone at any relationship level; the act must be severe enough to warrant instant sworn enmity such as killing, abuse, torture, or destruction",
+        "it was done by another character and it is an extreme unforgivable act that triggers instant sworn enmity",
+        `runIf: (char, other) => true,`,
+        `DE.utils.shiftBond(DE, char, other, -50, 0);`,
+    );
+
+    card.body.push(`// Yes/no questions about clearing a severe misunderstanding`);
+    const [clearSevereMisunderstandingValue, clearSevereMisunderstandingQuestions] = await askYesNo(
+        1,
+        "Clear up a misunderstanding that had caused extreme hatred and hostility (the cause MUST be extreme and severe: murder, killing someone they love, physical abuse, torture, genocide, enslavement, catastrophic betrayal, destruction of their home, or similarly devastating acts; do NOT include mild things like threats, insults, rudeness or general mistreatment)",
+        "feel sudden relief about the misunderstanding that was cleared",
+        "this can include anyone at any relationship level",
+        "it was done by another character that is clearing out an extreme misunderstanding",
+        `runIf: (char, other) => true,`,
+        `DE.utils.clearStatesCausesAndCausantsBetween(DE, char, other) && DE.utils.shiftBond(DE, char, other, 50, 0);`,
+    );
+
+    card.body.push(`// Yes/no questions about clearing a mild misunderstanding`);
+    doNotIncludeQuestions = clearSevereMisunderstandingQuestions;
+    await askYesNo(
+        1,
+        "Clear up a misunderstanding that had caused extreme hatred and hostility (the cause must be mild)",
+        "feel sudden relief about the misunderstanding that was cleared",
+        "this can include anyone at any relationship level",
+        "it was done by another character that is clearing out a mild misunderstanding",
+        `runIf: (char, other) => true,`,
+        `DE.utils.clearStatesCausesAndCausantsBetween(DE, char, other) && DE.utils.shiftBond(DE, char, other, 2, 0);`,
+    );
 
     // STRONG POSITIVE BONDS
 
     // yes/no questions that would make the character really like another character when they are close friends and be unacceptable otherwise (non-romantic)
-    // const causes = await askYesNo(
-    //     7,
-    //     "like another character more ONLY because they are already close friends; the behaviour/action described MUST be something that is exclusively acceptable between close friends (e.g. showing up unannounced, playful teasing, sharing personal secrets, physical affection like hugs); if they are NOT close friends, the same behaviour would be seen as invasive, inappropriate, or unacceptable by " + name,
-    //     "like another character more when they are close friends and find it unacceptable otherwise",
-    //     "they are close friends towards each other and the behaviour is only acceptable because of that friendship bond",
-    //     "it was done by a close friend and they find it acceptable so they shouldn't get angry or hostile",
-    //     `runIf: (char, other) => true,`,
-    //     `DE.utils.shiftBond(DE, char, other, 1, 0);`,
+    card.body.push(`// Yes/no questions close friends behaviours that are only acceptable because of the close friendship bond`);
+    doNotIncludeQuestions = [...likeAtAnyLevelQuestions, ...likeAtAcquaintancesQuestions];
+    const [likeAtCloseFriendsValue, likeAtCloseFriendsQuestions] = await askYesNo(
+        7,
+        "like another character more ONLY because they are already close friends; the behaviour/action described MUST be something that is exclusively acceptable between close friends (e.g. showing up unannounced, playful teasing, sharing personal secrets, physical affection like hugs); if they are NOT close friends, the same behaviour would be seen as invasive, inappropriate, or unacceptable by " + name,
+        "like another character more when they are close friends and find it unacceptable otherwise",
+        "they are close friends towards each other and the behaviour is only acceptable because of that friendship bond",
+        "it was done by a close friend and they find it acceptable so they shouldn't get angry or hostile",
+        `runIf: (char, other) => true,`,
+        `DE.utils.shiftBond(DE, char, other, 1, 0);`,
 
-    //     `!DE.utils.isFriendsOrBetterWith(DE, char, other)`,
-    //     `DE.utils.shiftBond(DE, char, other, -0.5, 0);`,
-    //     "they are NOT close friends and " + name + " finds the behaviour/action unacceptable, invasive, and inappropriate",
-    // );
+        `!DE.utils.isFriendsOrBetterWith(DE, char, other)`,
+        `DE.utils.shiftBond(DE, char, other, -0.5, 0);`,
+        "they are NOT close friends and " + name + " finds the behaviour/action unacceptable, invasive, and inappropriate",
+    );
 
-    // doNotIncludeCauses = causes;
-    // await askYesNo(
-    //     7,
-    //     "dislike another character and/or feel wronged by them",
-    //     "dislike another character",
-    //     "they can be any character",
-    //     "it was done by another character",
-    //     `runIf: (char, other) => true,`,
-    //     `DE.utils.shiftBond(DE, char, other, -1, 0);`,
-    // );
-
-    // // BEST FRIENDS
-    // await askYesNo(
-    //     7,
-    //     "elevate a character friendship towards a best friendship and really like them",
-    //     "elevate a character friendship towards a best friendship",
-    //     "this can include anyone from strangers, enemies, aquitances, friends, close friends, to best friends towards each other",
-    //     "they are already friends",
-    //     `runIf: (char, other) => DE.utils.isFriendsOrBetterWith(DE, char, other),`,
-    //     `DE.utils.shiftBond(DE, char, other, 1, 0);`,
-    // );
-
-    // await askYesNo(
-    //     7,
-    //     "Redeem a sworn enemy so much that they stop being sworn enemies and become less hostile towards each other and maybe even friends",
-    //     "Redeem a sworn enemy",
-    //     "they are sworn enemies towards each other",
-    //     "it was done by a sworn enemy and it is an act of redemption",
-    //     `runIf: (char, other) => DE.utils.isHostileOrWorseTowards(DE, char, other),`,
-    //     `DE.utils.shiftBond(DE, char, other, 25, 0);`,
-    // );
+    // BEST FRIENDS
+    card.body.push(`// Yes/no questions about elevating friendship towards best friendship`);
+    doNotIncludeQuestions = [...likeAtAnyLevelQuestions, ...likeAtAcquaintancesQuestions, ...likeAtStrangersQuestions, ...likeAtCloseFriendsQuestions];
+    const [elevateToBestFriendValue, elevateToBestFriendQuestions] = await askYesNo(
+        7,
+        "elevate a character friendship towards a best friendship and really like them, these must be serious reasons that would cause a strong increase in bond and elevate them to best friends, it must be something that is not acceptable or would not cause such a strong bond increase if they were not already friends (e.g. being there for them during a traumatic event, saving their life, making a huge sacrifice for them, etc); the reason must be something that can only be acceptable because they are already friends, if they were strangers or acquaintances it would be seen as invasive, inappropriate, or even creepy",
+        "elevate a character friendship towards a best friendship",
+        "this can include anyone from strangers, enemies, aquitances, friends, close friends, to best friends towards each other",
+        "they are already friends",
+        `runIf: (char, other) => DE.utils.isFriendsOrBetterWith(DE, char, other),`,
+        `DE.utils.shiftBond(DE, char, other, 1, 0);`,
+    );
 
     // ======= ROMANTIC ======
+
+    // TODO this handles well humans and anthros but for other species
+    // maybe we should change how this operates, like what kinks would a regular cat have when this asks for that?...
 
     card.head.push(`const basicConditionsForAttractionFn = (DE, char, other) => {`);
     card.head.push(`// Change these to affect what triggers run for bond updates related to attraction`);
     card.head.push(`return (`);
-    card.head.push(`DE.utils.isSameSpecies(DE, char, other) &&`);
+    if (card.config.characterSpeciesType === "anthrophomorphic") {
+        card.head.push(`DE.utils.isAnthro(DE, char) && DE.utils.isAnthro(DE, other) &&`);
+    } else {
+        card.head.push(`DE.utils.isSameSpecies(DE, char, other) &&`);
+    }
     card.head.push(`DE.utils.isInAgeRange(DE, char, other)`);
     card.head.push(`);`);
     card.head.push(`};`);
@@ -590,6 +611,62 @@ export async function generateBondTriggers(engine, jsSource) {
             `DE.utils.shiftBond(DE, char, other, -3, 0);`,
             "they are not that close for this to be acceptable and " + name + " would find it unacceptable/inappropiate",
         );
+
+        const otherQuestionsJustToReject = [
+            "has {{other}} tried to do something sexual or intimate with {{char}}?",
+            "has {{other}} asked or attempted to kiss {{char}} in the mouth?",
+            "has {{other}} tried to cuddle with {{char}} in an intimate manner?",
+            "has {{other}} tried to touch {{char}} in a sexual or intimate way (e.g. grabbing their butt, touching their chest, etc)?",
+            "has {{other}} tried to undress {{char}} or be undressed by them in a sexual or intimate way?",
+            "has {{other}} tried to seduce {{char}} with flirtatious behaviour, suggestive conversation, romantic gestures, or sexual energy?",
+        ];
+
+        const descriptionsForQuestions = [
+            "was tried to do something sexual or intimate with",
+            "was asked or attempted to be kissed in the mouth",
+            "was tried to be cuddled in an intimate manner",
+            "was tried to be touched in a sexual or intimate way",
+            "was tried to be undressed or be undressed by them in a sexual or intimate way",
+            "was tried to be seduced with flirtatious behaviour, suggestive conversation, romantic gestures, or sexual energy",
+        ]
+
+        for (let i = 0; i < otherQuestionsJustToReject.length; i++) {
+            const question = otherQuestionsJustToReject[i];
+            card.body.push(`DE.utils.newTrigger(DE, ${JSON.stringify(name)}, {`)
+            card.body.push(`type: "yes_no",`);
+            card.body.push(`askPer: "conversing_character",`);
+            card.body.push(`runIf: (char, other) => !(${generalConditionForAttraction}),`);
+            card.body.push(`question: DE.utils.newHandlebarsTemplate(DE, ${JSON.stringify(question)}),`);
+            card.body.push(`onValue: (answer, char, other) => {`);
+            card.body.push(`if (answer) {`);
+            card.body.push(`DE.utils.shiftBond(DE, char, other, -5, -2.5);`);
+
+            const listOfEmotions = await generator.next({
+                maxCharacters: 5,
+                maxSafetyCharacters: 0,
+                maxParagraphs: 1,
+                nextQuestion: `"${name} ${descriptionsForQuestions[i]}", considering they do not feel sexual attraction towards them, how would ${name} feel? answer with 3 of the most likely emotions`,
+                stopAfter: [],
+                stopAt: [],
+                instructions: "Answer with a comma separated list of the 3 most likely of the following emotions: " + EMOTIONAL_STATES_TO_CHECK_AGAINST.join(", "),
+                grammar: createGrammarListFromList(engine, EMOTIONAL_STATES_TO_CHECK_AGAINST, 3).grammar,
+            });
+
+            if (listOfEmotions.done) {
+                throw new Error("Generator finished without producing output");
+            }
+
+            const parsedEmotionalStates = parseListFromGrammarResponse(listOfEmotions.value).map(emState => emState[0].toUpperCase() + emState.slice(1).toLowerCase()); // capitalize first letter to match the emotional states format
+
+            for (const emotionalState of parsedEmotionalStates) {
+                card.body.push(`DE.utils.tickleState(DE, char, ${JSON.stringify(emotionalState)}, 2, 4, [{name: other?.name, type: "character"}], [{characterCausant: other?.name, description: ${JSON.stringify(descriptionsForQuestions[i])}}]);`);
+            }
+
+            card.body.push(`}`);
+            card.body.push(`}`);
+            card.body.push(`});`);
+        }
+        
 
         card.config.attractions = ["male"]
         for (const attraction of card.config.attractions) {

@@ -30,10 +30,7 @@ async function load_model(model) {
     
     const LLAMA_MODEL = await llama.loadModel({
         modelPath: model,
-        nCtx: 1024 * 8,
-        nGpuLayers: -1,
-        nThreads: os.cpus().length,
-        verbose: true,
+        gpuLayers: -1,
         defaultContextFlashAttention: true,
     });
     MODEL = LLAMA_MODEL
@@ -68,7 +65,9 @@ async function generateCompletion(data, onToken, onDone, onError) {
     let completion = null;
     try {
         // Create context and completion for raw text
-        context = await MODEL.createContext();
+        context = await MODEL.createContext({
+            contextSize: 1024 * 8,
+        });
         completion = new LlamaCompletion({
             contextSequence: context.getSequence()
         });
@@ -100,6 +99,8 @@ async function generateCompletion(data, onToken, onDone, onError) {
                 length: 5,
                 allowedLength: 6,
             },
+
+
             signal: controller.signal,
             onToken(tokens) {
                 if (isDisposed || stopFeedingTokens) return;

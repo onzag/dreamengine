@@ -48,6 +48,29 @@ export const deEngineUtils = {
             return compiled(obj);
         }
     },
+    runHandlebarsTemplate(DE, template, info) {
+        const obj = {
+            user: DE.user.name,
+            char: info.char?.name || "",
+            other: info.other?.name || "",
+            other_family_relation: info.otherFamilyRelation || "none",
+            other_relationship: info.otherRelationship || "none",
+            causants: info.causants?.map(c => c.name) || [],
+            causes: info.causes?.map(c => c.characterCausant ? c.description + " by " + c.characterCausant : c.description) || [],
+            chars: info.chars?.map(c => c.name) || [],
+        };
+        Object.keys(DE.functions).forEach((key) => {
+            // @ts-ignore
+            if (!obj[key]) {
+                // @ts-ignore
+                obj[key] = (...args) => {
+                    // @ts-ignore
+                    return DE.functions[key](DE, info.char, ...args);
+                };
+            }
+        });
+        return Handlebars.compile(template)(obj);
+    },
     newLocation(DE, name, locationDef) {
         /**
          * @type {DEStatefulLocationDefinition}
@@ -382,7 +405,34 @@ export const deEngineUtils = {
         }
 
         const stateRef = characterRef.states[stateName];
+
+        if (!stateRef) {
+            console.warn(`Character ${characterRef.name} does not have state ${stateName}`);
+            return;
+        }
+
         let activeState = DE.stateFor[characterRef.name].states.find(s => s.state === stateName);
+
+        const conflictingActiveStates = DE.stateFor[characterRef.name].states.filter(s => s.intensity > 0 && DE.characters[characterRef.name].states[s.state].conflictStates.includes(stateName));
+
+        if (conflictingActiveStates.length > 0) {
+            const defaultDominance = stateRef.dominance;
+            const defaultDominanceAfterRelief = stateRef.dominanceAfterRelief || defaultDominance;
+
+            const currentDominance = activeState ? (activeState.relieving ? defaultDominanceAfterRelief : defaultDominance) : -Infinity;
+            const conflictingStateMaxDominance = Math.max(...conflictingActiveStates.map(s => {
+                const sRef = DE.characters[characterRef.name].states[s.state];
+                const sDominance = sRef.dominance;
+                const sDominanceAfterRelief = sRef.dominanceAfterRelief || sDominance;
+                return s.relieving ? sDominanceAfterRelief : sDominance;
+            }));
+
+            if (currentDominance < conflictingStateMaxDominance) {
+                console.warn(`Cannot shift state ${stateName} on character ${characterRef.name} by ${shiftAmount} because of conflicting active states with higher dominance: ${conflictingActiveStates.map(s => s.state).join(", ")}`);
+                return;
+            }
+        }
+
         let hasTriggeredIt = false;
         if (!activeState) {
             if (shiftAmount <= 0) {

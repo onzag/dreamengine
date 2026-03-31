@@ -12,7 +12,7 @@ if (typeof process !== "undefined" && process.versions && process.versions.node)
  */
 export async function generateBonds(engine, jsSource) {
     const card = createCardStructureFrom(jsSource);
-    
+
     const inferenceAdapter = engine.inferenceAdapter;
     if (!inferenceAdapter) {
         throw new Error("No inference adapter found on engine");
@@ -539,21 +539,25 @@ export async function generateBonds(engine, jsSource) {
     for (const [strangerKey, strangerValue] of Object.entries(STRANGERS)) {
         card.body.push(`${strangerKey}: {`);
 
-        const descriptionQuestion = await generator.next({
-            maxCharacters: 200,
-            maxSafetyCharacters: 0,
-            maxParagraphs: 1,
-            nextQuestion: "Provide a concise one paragraph description of how " + name + " perceives and feels about " + strangerValue + ". Focus on the emotional and psychological aspects of their perception, rather than physical details. This should capture the essence of their feelings and attitudes towards this person in a way that informs their interactions and relationship dynamics. Keep the paragraph short, ideally under 100 words.",
-            stopAfter: [],
-            stopAt: [],
-            instructions: "NEVER ask for clarification or more information. ALWAYS directly write the description paragraph. Invent any specific details as needed. The response should use the word 'OTHER_CHARACTER' to refer to the other character name, ensure to specify whether " + name + " has any romantic feelings towards OTHER_CHARACTER or not, and how they would feel or react regarding sexual interactions, intimacy and other interactions, include friendship, emotional, romantic and sexual aspects",
-        });
+        let descriptionValueUnprocessed = "";
+        while (!descriptionValueUnprocessed.includes("OTHER_CHARACTER") && !descriptionValueUnprocessed.includes("OTHER CHARACTER")) {
+            const descriptionQuestion = await generator.next({
+                maxCharacters: 200,
+                maxSafetyCharacters: 0,
+                maxParagraphs: 1,
+                nextQuestion: "Provide a concise one paragraph description of how " + name + " perceives and feels about " + strangerValue + ". Focus on the emotional and psychological aspects of their perception, rather than physical details. This should capture the essence of their feelings and attitudes towards this person in a way that informs their interactions and relationship dynamics. Keep the paragraph short, ideally under 100 words.",
+                stopAfter: [],
+                stopAt: [],
+                instructions: "NEVER ask for clarification or more information. ALWAYS directly write the description paragraph. Invent any specific details as needed. The response should use the word 'OTHER_CHARACTER' to refer to the other character name, ensure to specify whether " + name + " has any romantic feelings towards OTHER_CHARACTER or not, and how they would feel or react regarding sexual interactions, intimacy and other interactions, include friendship, emotional, romantic and sexual aspects",
+            });
 
-        if (descriptionQuestion.done) {
-            throw new Error("Generator ended unexpectedly while generating description for " + strangerKey);
+            if (descriptionQuestion.done) {
+                throw new Error("Generator ended unexpectedly while generating description for " + strangerKey);
+            }
+            descriptionValueUnprocessed = descriptionQuestion.value.trim();
         }
 
-        const descriptionValue = descriptionQuestion.value.trim().split(name).join("{{char}}").split("OTHER_CHARACTER").join("{{other}}");
+        const descriptionValue = descriptionValueUnprocessed.split(name).join("{{char}}").split("OTHER_CHARACTER").join("{{other}}").split("OTHER CHARACTER").join("{{other}}");
 
         card.body.push(`relationshipName: null,`);
         card.body.push(`description: DE.utils.newHandlebarsTemplate(DE, \`${JSON.stringify(descriptionValue)}\`),`);
@@ -569,21 +573,26 @@ export async function generateBonds(engine, jsSource) {
             for (const [familyKey, familyValue] of Object.entries(romanticInterestValue)) {
                 card.body.push(`${familyKey}: {`);
 
-                const descriptionQuestion = await generator.next({
-                    maxCharacters: 200,
-                    maxSafetyCharacters: 0,
-                    maxParagraphs: 1,
-                    nextQuestion: "Provide a concise one paragraph description of how " + name + " perceives and feels about " + familyValue + ". Focus on the emotional and psychological aspects of their perception, rather than physical details. This should capture the essence of their feelings and attitudes towards this person in a way that informs their interactions and relationship dynamics. Keep the paragraph short, ideally under 100 words.",
-                    stopAfter: [],
-                    stopAt: [],
-                    instructions: "NEVER ask for clarification or more information. ALWAYS directly write the description paragraph. Invent any specific details as needed. The response should use the word 'OTHER_CHARACTER' to refer to the other character name, ensure to specify whether " + name + " has any romantic feelings towards OTHER_CHARACTER or not, and how they would feel or react regarding sexual interactions, intimacy and other interactions, include friendship, emotional, romantic and sexual aspects",
-                });
+                let descriptionValueUnprocessed = "";
+                while (!descriptionValueUnprocessed.includes("OTHER_CHARACTER") && !descriptionValueUnprocessed.includes("OTHER CHARACTER")) {
+                    const descriptionQuestion = await generator.next({
+                        maxCharacters: 200,
+                        maxSafetyCharacters: 0,
+                        maxParagraphs: 1,
+                        nextQuestion: "Provide a concise one paragraph description of how " + name + " perceives and feels about " + familyValue + ". Focus on the emotional and psychological aspects of their perception, rather than physical details. This should capture the essence of their feelings and attitudes towards this person in a way that informs their interactions and relationship dynamics. Keep the paragraph short, ideally under 100 words.",
+                        stopAfter: [],
+                        stopAt: [],
+                        instructions: "NEVER ask for clarification or more information. ALWAYS directly write the description paragraph. Invent any specific details as needed. The response should use the word 'OTHER_CHARACTER' to refer to the other character name, ensure to specify whether " + name + " has any romantic feelings towards OTHER_CHARACTER or not, and how they would feel or react regarding sexual interactions, intimacy and other interactions, include friendship, emotional, romantic and sexual aspects",
+                    });
 
-                if (descriptionQuestion.done) {
-                    throw new Error("Generator ended unexpectedly while generating description for " + relationshipKey + " > " + romanticInterestKey + " > " + familyKey);
+                    if (descriptionQuestion.done) {
+                        throw new Error("Generator ended unexpectedly while generating description for " + relationshipKey + " > " + romanticInterestKey + " > " + familyKey);
+                    }
+
+                    descriptionValueUnprocessed = descriptionQuestion.value.trim();
                 }
 
-                const descriptionValue = descriptionQuestion.value.trim().split(name).join("{{char}}").split("OTHER_CHARACTER").join("{{other}}");
+                const descriptionValue = descriptionValueUnprocessed.split(name).join("{{char}}").split("OTHER_CHARACTER").join("{{other}}").split("OTHER CHARACTER").join("{{other}}");
 
                 card.body.push(`relationshipName: null, // fill if you want this relationship to have a name`);
                 card.body.push(`description: DE.utils.newHandlebarsTemplate(DE, \`${JSON.stringify(descriptionValue)}\`),`);

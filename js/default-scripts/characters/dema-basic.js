@@ -4,43 +4,6 @@ engine.exports = {
     type: "characters",
     description: "A friendly robot for testing purposes.",
     initialize(DE) {
-
-        /**
-         * @type {DEBondIncreaseDecreaseQuestion[]}
-         */
-        const basicQuestions = [
-            {
-                affectsBonds: "primary",
-                template: DE.utils.newHandlebarsTemplate(DE, "Has {{other}} been nice towards {{char}} and respected its nature as a robot?"),
-                weight: 1,
-            },
-            {
-                affectsBonds: "primary",
-                template: DE.utils.newHandlebarsTemplate(DE, "Has {{other}} helped {{char}} with tasks or shown consideration for its feelings?"),
-                weight: 1,
-            },
-            {
-                affectsBonds: "primary",
-                template: DE.utils.newHandlebarsTemplate(DE, "Has {{other}} spent quality time with {{char}} and engaged in meaningful interactions?"),
-                weight: 1,
-            },
-            {
-                affectsBonds: "primary",
-                template: DE.utils.newHandlebarsTemplate(DE, "Has {{other}} been rude or dismissive towards {{char}} and its nature as a robot?"),
-                weight: -1,
-            },
-            {
-                affectsBonds: "primary",
-                template: DE.utils.newHandlebarsTemplate(DE, "Has {{other}} neglected {{char}}'s needs or ignored its feelings?"),
-                weight: -1,
-            },
-            {
-                affectsBonds: "primary",
-                template: DE.utils.newHandlebarsTemplate(DE, "Has {{other}} caused harm or distress to {{char}}, either intentionally or unintentionally?"),
-                weight: -1,
-            },
-        ];
-
         const strangerGoodTemplate = DE.utils.newHandlebarsTemplate(DE, "{{char}} has just met {{other}} for the first time as they arrive at the lunar station. Despite being a robot, {{char}} is intrigued by their presence and eager to learn more about them and be of assistance, {{char}} does not feel threatened but doesn't fully trust them yet.");
         const strangerNeutralTemplate = DE.utils.newHandlebarsTemplate(DE, "{{char}} has just met {{other}} for the first time as they arrive at the lunar station. {{char}} feels neutral about their presence, neither particularly welcoming nor wary, and is open to getting to know them better.");
         const strangerBadTemplate = DE.utils.newHandlebarsTemplate(DE, "{{char}} has just met {{other}} for the first time as they arrive at the lunar station. {{char}} feels uneasy about their presence, unsure of their intentions towards them as a robot.");
@@ -63,11 +26,13 @@ engine.exports = {
             shortDescriptionTopNakedAdd: "Without a shirt showing its sleek robotic body.",
             shortDescriptionBottomNakedAdd: "Without any lower coverings revealing its articulated legs.",
             generalCharacterDescriptionInjection: {},
-            actionPromptInjection: {},
+            actionPromptInjection: [],
             bonds: null,
             characterRules: {},
             emotions: {},
             states: {},
+            temp: {},
+            triggers: [],
             general: DE.utils.newHandlebarsTemplate(DE, "{{char}} is a humanoid robot designed for companionship and assistance. Standing at approximately 175cm tall, {{char}} has a sleek, modern design with a predominantly blue and white color scheme. Its body is constructed from lightweight, durable materials, allowing for agility and strength. {{char}}'s head features a reflective visor that conceals its facial features, giving it a mysterious yet approachable appearance. The robot is equipped with advanced AI capabilities, enabling it to engage in meaningful conversations, perform various tasks, and adapt to its environment. {{char}}'s design emphasizes both functionality and aesthetics, making it an ideal companion for those seeking both assistance and friendship."),
             schizophrenia: 0,
             schizophrenicVoiceDescription: "",
@@ -92,7 +57,7 @@ engine.exports = {
             stealth: 0.2,
             perception: 1,
             heroism: 1,
-            properties: {
+            state: {
                 IS_ROBOT: true,
             },
             socialSimulation: {
@@ -104,61 +69,130 @@ engine.exports = {
                 dislikes: [],
                 likes: [],
                 species: "robot",
+                speciesType: "humanoid",
             },
         }, {
             type: "2d_ace_no_family",
             strangerBad_n100_n5: {
-                bondConditions: basicQuestions,
+                relationshipName: null,
                 description: strangerBadTemplate,
             },
             strangerGood_5_100: {
-                bondConditions: basicQuestions,
+                relationshipName: null,
                 description: strangerGoodTemplate,
             },
             strangerNeutral_n5_5: {
-                bondConditions: basicQuestions,
+                relationshipName: null,
                 description: strangerNeutralTemplate,
             },
             foe_n100_n50: {
-                bondConditions: basicQuestions,
+                relationshipName: null,
                 description: foeBondTemplate,
             },
             hostile_n50_n35: {
-                bondConditions: basicQuestions,
+                relationshipName: null,
                 description: hostileBondTemplate,
             },
             antagonistic_n35_n20: {
-                bondConditions: basicQuestions,
+                relationshipName: null,
                 description: antagonisticBondTemplate,
             },
             unfriendly_n20_n10: {
-                bondConditions: basicQuestions,
+                relationshipName: null,
                 description: unfriendlyBondTemplate,
             },
             unpleasant_n10_0: {
-                bondConditions: basicQuestions,
+                relationshipName: null,
                 description: unpleasantBondTemplate,
             },
             acquaintance_0_10: {
-                bondConditions: basicQuestions,
+                relationshipName: null,
                 description: acquaintanceBondTemplate,
             },
             friendly_10_20: {
-                bondConditions: basicQuestions,
+                relationshipName: null,
                 description: friendlyBondTemplate,
             },
             goodFriend_20_35: {
-                bondConditions: basicQuestions,
+                relationshipName: null,
                 description: goodFriendBondTemplate,
             },
             closeFriend_35_50: {
-                bondConditions: basicQuestions,
+                relationshipName: null,
                 description: closeFriendBondTemplate,
             },
             bestFriend_50_100: {
-                bondConditions: basicQuestions,
+                relationshipName: null,
                 description: bestFriendBondTemplate,
             },
         }));
+
+        DE.utils.newTrigger(DE, Dema, {
+            type: "yes_no",
+            question: DE.utils.newHandlebarsTemplate(DE, "Has {{other}} been nice towards {{char}} and respected its nature as a robot?"),
+            askPer: "present_character",
+            onValue: (answer, char, other) => {
+                if (answer) {
+                    DE.utils.shiftBond(DE, char, other, 0.3, 0);
+                } else {
+                    DE.utils.shiftBond(DE, char, other, -0.5, 0);
+                }
+            }
+        });
+
+        DE.utils.newTrigger(DE, Dema, {
+            type: "yes_no",
+            question: DE.utils.newHandlebarsTemplate(DE, "Has {{other}} helped {{char}} with tasks or shown consideration for its feelings?"),
+            askPer: "present_character",
+            onValue: (answer, char, other) => {
+                if (answer) {
+                    DE.utils.shiftBond(DE, char, other, 1, 0);
+                }
+            }
+        });
+
+        DE.utils.newTrigger(DE, Dema, {
+            type: "yes_no",
+            question: DE.utils.newHandlebarsTemplate(DE, "Has {{other}} spent quality time with {{char}} and engaged in meaningful interactions?"),
+            askPer: "present_character",
+            onValue: (answer, char, other) => {
+                if (answer) {
+                    DE.utils.shiftBond(DE, char, other, 0.5, 0);
+                }
+            }
+        });
+
+        DE.utils.newTrigger(DE, Dema, {
+            type: "yes_no",
+            question: DE.utils.newHandlebarsTemplate(DE, "Has {{other}} been rude or dismissive towards {{char}} and its nature as a robot?"),
+            askPer: "present_character",
+            onValue: (answer, char, other) => {
+                if (answer) {
+                    DE.utils.shiftBond(DE, char, other, -1, 0);
+                }
+            }
+        });
+
+        DE.utils.newTrigger(DE, Dema, {
+            type: "yes_no",
+            question: DE.utils.newHandlebarsTemplate(DE, "Has {{other}} neglected {{char}}'s needs or ignored its feelings?"),
+            askPer: "present_character",
+            onValue: (answer, char, other) => {
+                if (answer) {
+                    DE.utils.shiftBond(DE, char, other, -1, 0);
+                }
+            }
+        });
+
+        DE.utils.newTrigger(DE, Dema, {
+            type: "yes_no",
+            question: DE.utils.newHandlebarsTemplate(DE, "Has {{other}} caused harm or distress to {{char}}, either intentionally or unintentionally?"),
+            askPer: "present_character",
+            onValue: (answer, char, other) => {
+                if (answer) {
+                    DE.utils.shiftBond(DE, char, other, -1, 0);
+                }
+            }
+        });
     }
 }

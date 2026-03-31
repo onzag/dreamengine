@@ -1482,7 +1482,7 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
     * }>}
     */
     const activeStates = [];
-    for (const injectable of Object.values(character.actionPromptInjection)) {
+    for (const injectable of character.actionPromptInjection) {
         actions.push({
             applyingState: null,
             action: injectable,
@@ -1500,8 +1500,7 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
         if (dominanceOfThisState >= maxStateDominance || stateInfo.ignoreDominanceForActionPromptInjection) {
             const origin = state.relieving ? stateInfo.relievingActionPromptInjection : stateInfo.actionPromptInjection;
             if (origin) {
-                for (const actionPromptInjectableKey in origin) {
-                    const actionPromptInjectable = origin[actionPromptInjectableKey];
+                for (const actionPromptInjectable of origin) {
                     actions.push({
                         applyingState: state,
                         action: actionPromptInjectable,

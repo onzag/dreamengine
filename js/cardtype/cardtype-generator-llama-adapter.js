@@ -2,12 +2,14 @@ import { DEngine } from '../engine/index.js';
 import { InferenceAdapterLlamaUncensored } from "../engine/inference/adapter-de-server-uncensored.js";
 import { DEJSEngine } from '../jsengine/index.js';
 import { localResolver } from '../jsengine/local-resolver.js';
-import { generateBase } from '../cardtype/generate-base.js';
+import { generateBase } from './generate-base.js';
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { basename, dirname, join, extname, resolve } from 'path';
-import { generateBonds } from '../cardtype/generate-bonds.js';
-import { generateActivities } from '../cardtype/generate-activities.js';
-import { generateBondTriggers } from '../cardtype/generate-bond-triggers.js';
+import { createInterface } from 'readline';
+import { generateBonds } from './generate-bonds.js';
+import { generateActivities } from './generate-activities.js';
+import { generateBondTriggers } from './generate-bond-triggers.js';
+import { generateBasicStates } from './generate-basic-states.js';
 
 if (typeof process !== "undefined" && process.versions && process.versions.node) {
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
@@ -22,9 +24,9 @@ const args = process.argv.slice(2);
 let configPath = null;
 let inputPath = null;
 
-const recognizedFlags = ['--config', '--infer-bonds', '--infer-bond-triggers', '--infer-state-from', "--add-activities", '--help', '-h'];
-const actionFlags = ['--infer-bonds', '--infer-bond-triggers', '--infer-state-from', '--add-activities'];
-const secondFileFlags = ['--infer-state-from'];
+const recognizedFlags = ['--config', '--add-bonds', '--add-bond-triggers', '--add-state-from', "--add-activities", '--help', '-h', "--add-basic-states", '--guided'];
+const actionFlags = ['--add-bonds', '--add-bond-triggers', '--add-state-from', '--add-activities', '--add-basic-states'];
+const secondFileFlags = ['--add-state-from'];
 
 function printUsageAndExit() {
     console.log('Usage: node cardtype-generator-llama-adapter.js [--config <config.json>] [OPTION] <reference.md> <inputfile.md | inputfile.js>');
@@ -38,6 +40,7 @@ function printUsageAndExit() {
 let action = 'generate';
 let secondFile = null;
 let isNextSecondFile = false;
+let guided = false;
 for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (recognizedFlags.includes(arg)) {
@@ -55,7 +58,9 @@ for (let i = 0; i < args.length; i++) {
             i++; // skip next argument since it's the config path
         }
 
-        if (actionFlags.includes(arg)) {
+        if (arg === '--guided') {
+            guided = true;
+        } else if (actionFlags.includes(arg)) {
             action = arg.substring(2);
             isNextSecondFile = secondFileFlags.includes(arg);
         } else {
@@ -88,7 +93,7 @@ if (!configPath && existsSync(defaultConfigPath)) {
 }
 
 if (!inputPath) {
-    console.error('Usage: node cardtype-generator-llama-adapter.js [--config <config.json>] [--infer-bonds] [--infer-states <statefile.md>] <inputfile.md | inputfile.js>');
+    printUsageAndExit();
     process.exit(1);
 }
 
@@ -114,15 +119,62 @@ new InferenceAdapterLlamaUncensored(engine, {
     secret: config.secret || "dev-secret-12345678900abcdef",
 });
 
+/**
+ * @param {string} question
+ * @returns {Promise<string>}
+ */
+function askLine(question) {
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    return new Promise(resolve => rl.question(question + ' ', answer => { rl.close(); resolve(answer); }));
+}
+
+/** @type {import('./base.js').CardTypeGuider | null} */
+const guider = guided ? {
+    async askOption(question, options, defaultValue) {
+        const optList = options.map((o, i) => `  ${i + 1}) ${o}`).join('\n');
+        const def = defaultValue !== undefined ? ` [${defaultValue}]` : '';
+        const answer = await askLine(`${question}\n${optList}\nChoose${def}:`);
+        if (!answer && defaultValue !== undefined) return { value: defaultValue };
+        const idx = parseInt(answer, 10);
+        if (idx >= 1 && idx <= options.length) return { value: options[idx - 1] };
+        return { value: options.includes(answer) ? answer : (defaultValue ?? options[0]) };
+    },
+    async askOpen(question, defaultValue) {
+        const def = defaultValue !== undefined ? ` [${defaultValue}]` : '';
+        const answer = await askLine(`${question}${def}:`);
+        return { value: answer || defaultValue || '' };
+    },
+    async askNumber(question, defaultValue) {
+        const def = defaultValue !== undefined ? ` [${defaultValue}]` : '';
+        const answer = await askLine(`${question}${def}:`);
+        const num = parseFloat(answer);
+        return { value: isNaN(num) ? (defaultValue ?? 0) : num };
+    },
+    async askBoolean(question, defaultValue) {
+        const def = defaultValue !== undefined ? ` [${defaultValue ? 'Y/n' : 'y/N'}]` : ' [y/n]';
+        const answer = await askLine(`${question}${def}:`);
+        if (!answer && defaultValue !== undefined) return { value: defaultValue };
+        return { value: answer.toLowerCase().startsWith('y') };
+    },
+    async askList(question, defaultValue) {
+        const def = defaultValue !== undefined ? ` [${defaultValue.join(', ')}]` : '';
+        const answer = await askLine(`${question} (comma-separated)${def}:`);
+        if (!answer && defaultValue !== undefined) return { value: defaultValue };
+        return { value: answer.split(',').map(s => s.trim()).filter(Boolean) };
+    },
+} : null;
+
 let result = "";
 if (action === "generate") {
-    result = await generateBase(engine, sourceContent);
-} else if (action === "infer-bonds") {
-    result = await generateBonds(engine, sourceContent);
+    result = await generateBase(engine, sourceContent, guider);
+} else if (action === "add-bonds") {
+    result = await generateBonds(engine, sourceContent, guider);
 } else if (action === "add-activities") {
-    result = await generateActivities(engine, sourceContent);
-} else if (action === "infer-bond-triggers") {
-    result = await generateBondTriggers(engine, sourceContent);
+    result = await generateActivities(engine, sourceContent, guider);
+} else if (action === "add-bond-triggers") {
+    result = await generateBondTriggers(engine, sourceContent, guider);
+} else if (action === "add-basic-states") {
+    result = await generateBasicStates(engine, sourceContent, guider);
 }
 
 const dir = dirname(inputPath);

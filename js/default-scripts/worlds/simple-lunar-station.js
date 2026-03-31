@@ -726,8 +726,8 @@ engine.exports = {
 
             // No reasoning required, obviously should get out of the vaccuum
             // what else could it be?
-            actionPromptInjection: {
-                "RETURN_TO_AIRLOCK": {
+            actionPromptInjection: [
+                {
                     action: DE.utils.newHandlebarsTemplate(
                         DE,
                         "{{char}} has an urgent need to return to the airlock and into the lunar station to avoid asphyxiation"
@@ -737,7 +737,7 @@ engine.exports = {
                     primaryEmotion: "fearful",
                     emotionalRange: [],
                 },
-            },
+            ],
             behaviourType: "BINARY",
             conflictStates: [],
             deadEndIsDeath: true,
@@ -772,7 +772,7 @@ engine.exports = {
             intensityChangeRatePerInferenceCycleAfterRelief: -0.1,
             // need no triggers, the weather system will apply the state
             triggersStates: {},
-            actionPromptInjection: {},
+            actionPromptInjection: [],
             behaviourType: "BINARY",
             conflictStates: [],
             deadEndIsDeath: true,

@@ -122,7 +122,7 @@ function createCharacterFromUser(user) {
         carryingCapacityLiters: user.carryingCapacityLiters,
         carryingCapacityKg: user.carryingCapacityKg,
         characterRules: {},
-        actionPromptInjection: {},
+        actionPromptInjection: [],
         locomotionSpeedMetersPerSecond: user.locomotionSpeedMetersPerSecond,
         maintenanceCaloriesPerDay: user.maintenanceCaloriesPerDay,
         maintenanceHydrationLitersPerDay: user.maintenanceHydrationLitersPerDay,
