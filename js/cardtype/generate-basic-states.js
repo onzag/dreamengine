@@ -106,7 +106,7 @@ export async function generateBasicStates(engine, jsSource) {
 
 
     // TODO remove
-    for (const emotionalState of EMOTIONAL_STATES_TO_CHECK_AGAINST) {
+    for (const emotionalState of ["Aroused"]) {
 
         const variableNameBase = emotionalState + "Description";
         for (const modifier of modifiers) {

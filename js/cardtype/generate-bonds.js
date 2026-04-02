@@ -8,9 +8,10 @@ if (typeof process !== "undefined" && process.versions && process.versions.node)
 /**
  * @param {DEngine} engine
  * @param {string} jsSource
+ * @param {import('./base.js').CardTypeGuider | null} guider
  * @return {Promise<string>}
  */
-export async function generateBonds(engine, jsSource) {
+export async function generateBonds(engine, jsSource, guider) {
     const card = createCardStructureFrom(jsSource);
 
     const inferenceAdapter = engine.inferenceAdapter;
@@ -55,6 +56,15 @@ export async function generateBonds(engine, jsSource) {
         isIncestuousValue = isIncestuous.value.trim().toLowerCase() === "yes";
     }
 
+    if (guider) {
+        const guiderResponse = await guider.askBoolean("Should family relationships be excluded from romantic possibilities for " + name + "?", !isIncestuousValue);
+        if (guiderResponse.value === false) {
+            isIncestuousValue = true;
+        } else {
+            isIncestuousValue = false;
+        }
+    }
+
     if (isIncestuousValue) {
         card.config.isIncestuous = isIncestuousValue;
     }
@@ -73,7 +83,16 @@ export async function generateBonds(engine, jsSource) {
         throw new Error("Generator finished without producing output");
     }
 
-    const wouldUseViolenceTowardsEnemiesValue = wouldUseViolenceTowardsEnemies.value.trim().toLowerCase() === "yes";
+    let wouldUseViolenceTowardsEnemiesValue = wouldUseViolenceTowardsEnemies.value.trim().toLowerCase() === "yes";
+
+    if (guider) {
+        const guiderResponse = await guider.askBoolean("Would " + name + " use violence towards people they have a hostile relationship with?", wouldUseViolenceTowardsEnemiesValue);
+        if (guiderResponse.value === false) {
+            wouldUseViolenceTowardsEnemiesValue = false;
+        } else {
+            wouldUseViolenceTowardsEnemiesValue = true;
+        }
+    }
 
     const SETTINGS = {
         "foe_n100_n50": {
@@ -539,8 +558,23 @@ export async function generateBonds(engine, jsSource) {
     for (const [strangerKey, strangerValue] of Object.entries(STRANGERS)) {
         card.body.push(`${strangerKey}: {`);
 
+        let guidanceGiven = "";
+        let redoGuidance = false;
         let descriptionValueUnprocessed = "";
-        while (!descriptionValueUnprocessed.includes("OTHER_CHARACTER") && !descriptionValueUnprocessed.includes("OTHER CHARACTER")) {
+        let descriptionValue = "";
+        while (true) {
+            if (guider && redoGuidance) {
+                const guiderResult = await guider.askOpen("Guidance for describing a relationship with " + strangerValue + ". What are some important things to keep in mind when writing about a relationship with " + strangerValue + " in the context of " + name + "'s character and personality?");
+                if (guiderResult) {
+                    guidanceGiven = guiderResult.value.trim();
+                }
+                redoGuidance = false;
+            }
+
+            let baseInstructions = "NEVER ask for clarification or more information. ALWAYS directly write the description paragraph. Invent any specific details as needed. The response should use the word 'OTHER_CHARACTER' to refer to the other character name, ensure to specify whether " + name + " has any romantic feelings towards OTHER_CHARACTER or not, and how they would feel or react regarding sexual interactions, intimacy and other interactions, include friendship, emotional, romantic and sexual aspects"
+            if (guidanceGiven) {
+                baseInstructions += ".\n\nIMPORTANT Guidance for constructing the relationship: " + guidanceGiven;
+            }
             const descriptionQuestion = await generator.next({
                 maxCharacters: 200,
                 maxSafetyCharacters: 0,
@@ -548,16 +582,26 @@ export async function generateBonds(engine, jsSource) {
                 nextQuestion: "Provide a concise one paragraph description of how " + name + " perceives and feels about " + strangerValue + ". Focus on the emotional and psychological aspects of their perception, rather than physical details. This should capture the essence of their feelings and attitudes towards this person in a way that informs their interactions and relationship dynamics. Keep the paragraph short, ideally under 100 words.",
                 stopAfter: [],
                 stopAt: [],
-                instructions: "NEVER ask for clarification or more information. ALWAYS directly write the description paragraph. Invent any specific details as needed. The response should use the word 'OTHER_CHARACTER' to refer to the other character name, ensure to specify whether " + name + " has any romantic feelings towards OTHER_CHARACTER or not, and how they would feel or react regarding sexual interactions, intimacy and other interactions, include friendship, emotional, romantic and sexual aspects",
+                instructions: baseInstructions,
             });
 
             if (descriptionQuestion.done) {
                 throw new Error("Generator ended unexpectedly while generating description for " + strangerKey);
             }
             descriptionValueUnprocessed = descriptionQuestion.value.trim();
-        }
 
-        const descriptionValue = descriptionValueUnprocessed.split(name).join("{{char}}").split("OTHER_CHARACTER").join("{{other}}").split("OTHER CHARACTER").join("{{other}}");
+            if (descriptionValueUnprocessed.includes("OTHER_CHARACTER") || descriptionValueUnprocessed.includes("OTHER CHARACTER")) {
+                descriptionValue = descriptionValueUnprocessed.split(name).join("{{char}}").split("OTHER_CHARACTER").join("{{other}}").split("OTHER CHARACTER").join("{{other}}");
+                if (guider) {
+                    const guiderResult = await guider.askBoolean("Generated Description:\n\n" + descriptionValue + "\n\nDo you want to retry?", false);
+                    if (guiderResult.value) {
+                        redoGuidance = true;
+                        continue;
+                    }
+                }
+                break;
+            }
+        }
 
         card.body.push(`relationshipName: null,`);
         card.body.push(`description: DE.utils.newHandlebarsTemplate(DE, \`${JSON.stringify(descriptionValue)}\`),`);
@@ -573,8 +617,23 @@ export async function generateBonds(engine, jsSource) {
             for (const [familyKey, familyValue] of Object.entries(romanticInterestValue)) {
                 card.body.push(`${familyKey}: {`);
 
+                let guidanceGiven = "";
+                let redoGuidance = false;
                 let descriptionValueUnprocessed = "";
-                while (!descriptionValueUnprocessed.includes("OTHER_CHARACTER") && !descriptionValueUnprocessed.includes("OTHER CHARACTER")) {
+                let descriptionValue = "";
+                while (true) {
+                    if (guider && redoGuidance) {
+                        const guiderResult = await guider.askOpen("Guidance for describing a relationship with " + familyValue + ". What are some important things to keep in mind when writing about a relationship with " + familyValue + " in the context of " + name + "'s character and personality?");
+                        if (guiderResult) {
+                            guidanceGiven = guiderResult.value.trim();
+                        }
+                        redoGuidance = false;
+                    }
+
+                    let baseInstructions = "NEVER ask for clarification or more information. ALWAYS directly write the description paragraph. Invent any specific details as needed. The response should use the word 'OTHER_CHARACTER' to refer to the other character name, ensure to specify whether " + name + " has any romantic feelings towards OTHER_CHARACTER or not, and how they would feel or react regarding sexual interactions, intimacy and other interactions, include friendship, emotional, romantic and sexual aspects"
+                    if (guidanceGiven) {
+                        baseInstructions += ".\n\nIMPORTANT Guidance for constructing the relationship: " + guidanceGiven;
+                    }
                     const descriptionQuestion = await generator.next({
                         maxCharacters: 200,
                         maxSafetyCharacters: 0,
@@ -582,17 +641,26 @@ export async function generateBonds(engine, jsSource) {
                         nextQuestion: "Provide a concise one paragraph description of how " + name + " perceives and feels about " + familyValue + ". Focus on the emotional and psychological aspects of their perception, rather than physical details. This should capture the essence of their feelings and attitudes towards this person in a way that informs their interactions and relationship dynamics. Keep the paragraph short, ideally under 100 words.",
                         stopAfter: [],
                         stopAt: [],
-                        instructions: "NEVER ask for clarification or more information. ALWAYS directly write the description paragraph. Invent any specific details as needed. The response should use the word 'OTHER_CHARACTER' to refer to the other character name, ensure to specify whether " + name + " has any romantic feelings towards OTHER_CHARACTER or not, and how they would feel or react regarding sexual interactions, intimacy and other interactions, include friendship, emotional, romantic and sexual aspects",
+                        instructions: baseInstructions,
                     });
 
                     if (descriptionQuestion.done) {
                         throw new Error("Generator ended unexpectedly while generating description for " + relationshipKey + " > " + romanticInterestKey + " > " + familyKey);
                     }
-
                     descriptionValueUnprocessed = descriptionQuestion.value.trim();
-                }
 
-                const descriptionValue = descriptionValueUnprocessed.split(name).join("{{char}}").split("OTHER_CHARACTER").join("{{other}}").split("OTHER CHARACTER").join("{{other}}");
+                    if (descriptionValueUnprocessed.includes("OTHER_CHARACTER") || descriptionValueUnprocessed.includes("OTHER CHARACTER")) {
+                        descriptionValue = descriptionValueUnprocessed.split(name).join("{{char}}").split("OTHER_CHARACTER").join("{{other}}").split("OTHER CHARACTER").join("{{other}}");
+                        if (guider) {
+                            const guiderResult = await guider.askBoolean("Generated Description:\n\n" + descriptionValue + "\n\nDo you want to retry?", false);
+                            if (guiderResult.value) {
+                                redoGuidance = true;
+                                continue;
+                            }
+                        }
+                        break;
+                    }
+                }
 
                 card.body.push(`relationshipName: null, // fill if you want this relationship to have a name`);
                 card.body.push(`description: DE.utils.newHandlebarsTemplate(DE, \`${JSON.stringify(descriptionValue)}\`),`);
