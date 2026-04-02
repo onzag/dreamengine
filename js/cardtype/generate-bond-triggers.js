@@ -17,9 +17,10 @@ function replaceOtherCharNameWithPlaceholder(text, charName) {
 /**
  * @param {DEngine} engine
  * @param {string} jsSource
+ * @param {import('./base.js').CardTypeGuider | null} guider
  * @return {Promise<string>}
  */
-export async function generateBondTriggers(engine, jsSource) {
+export async function generateBondTriggers(engine, jsSource, guider) {
     const card = createCardStructureFrom(jsSource);
 
     card.imports.push(`const basicBondQuestions = await importScript("bond-systems", "basic-bond-questions");`);
@@ -88,10 +89,24 @@ export async function generateBondTriggers(engine, jsSource) {
         const causesValue = [];
         const generatedQuestions = [];
 
+        let guidanceGiven = "";
+        let redoGuidance = false;
+
         while (true) {
+            if (guider && redoGuidance) {
+                const guiderResult = await guider.askOpen("Guidance for generating yes/no questions about " + JSON.stringify(reasoning) + ". What are some important things to keep in mind when writing about that in the context of " + name + "'s character and personality?");
+                if (guiderResult) {
+                    guidanceGiven = guiderResult.value.trim();
+                }
+                redoGuidance = false;
+            }
+
             let instructions = "The list should be in 3rd person and formatted as a markdown list with each question as a separate bullet point, use OTHER_CHARACTER as a placeholder for the other character's name. OTHER_CHARACTER must always be included, the questions should be in past tense and 3rd person, do not use you, your, I, we, or similar words that indicate second or first person";
             if (doNotIncludeQuestions) {
                 instructions += "\n\nDo NOT include any questions similar to these:\n\n- " + doNotIncludeQuestions.join("\n- " + name + " ");
+            }
+            if (guidanceGiven) {
+                instructions += ".\n\nIMPORTANT Guidance for constructing the questions: " + guidanceGiven;
             }
 
             const yesNoQuestions = await generator.next({
@@ -129,6 +144,13 @@ export async function generateBondTriggers(engine, jsSource) {
             if (/\b(you|your|yours|yourself|yourselves|I|I'm|I've|I'd|I'll|me|my|mine|myself|we|our|ours|ourselves)\b/i.test(yesNoQuestionValue)) {
                 console.log("Detected second/first person language, retrying...");
                 continue;
+            }
+            if (guider) {
+                const guiderResult = await guider.askBoolean("Generated Questions:\n\n" + yesNoQuestionValue + "\n\nDo you want to retry?", false);
+                if (guiderResult.value) {
+                    redoGuidance = true;
+                    continue;
+                }
             }
             break;
         }
@@ -492,8 +514,18 @@ export async function generateBondTriggers(engine, jsSource) {
                 throw new Error("Generator finished without producing output");
             }
 
+            let valueParsed = generatedValue.value.trim().toLowerCase();
+
+            if (guider) {
+                const guiderResult = await guider.askOption("How difficult is it to get " + name + " to engage sexually/romantically with another character? (in general)", Object.keys(levelsOfRomanticBond), valueParsed);
+
+                if (guiderResult.value) {
+                    valueParsed = guiderResult.value;
+                }
+            }
+
             // @ts-ignore
-            const romanticBondValue = await levelsOfRomanticBond[generatedValue.value.trim().toLowerCase()];
+            const romanticBondValue = await levelsOfRomanticBond[valueParsed];
 
             generalConditionForAttraction += `(basicConditionsForAttractionFn(DE, char, other) && DE.utils.isSecondBondEqOrMoreThan(DE, char, other, ${romanticBondValue}))`;
             romanticBondValueMale = romanticBondValue;
@@ -518,8 +550,16 @@ export async function generateBondTriggers(engine, jsSource) {
                     throw new Error("Generator finished without producing output");
                 }
 
+                let valueParsed = generatedValue.value.trim().toLowerCase();
+                if (guider) {
+                    const guiderResult = await guider.askOption("How difficult is it to get " + name + " to engage sexually/romantically with " + attraction + " characters?", Object.keys(levelsOfRomanticBond), valueParsed);
+                    if (guiderResult.value) {
+                        valueParsed = guiderResult.value;
+                    }
+                }
+
                 // @ts-ignore
-                const romanticBondValue = await levelsOfRomanticBond[generatedValue.value.trim().toLowerCase()];
+                const romanticBondValue = await levelsOfRomanticBond[valueParsed];
 
                 if (generalConditionForAttraction) {
                     generalConditionForAttraction += " || ";
@@ -548,7 +588,15 @@ export async function generateBondTriggers(engine, jsSource) {
         if (kinks.done) {
             throw new Error("Generator finished without producing output");
         }
-        const kinksParsed = kinks.value.split("\n").join(",").split(",").map(kink => kink.trim().replace("- ", " ").trim()).filter(kink => kink);
+        let kinksParsed = kinks.value.split("\n").join(",").split(",").map(kink => kink.trim().replace("- ", " ").trim()).filter(kink => kink);
+
+        if (guider) {
+            const guiderResult = await guider.askList("Provide a list of kinks and special sexual/romantic interests for " + name, kinksParsed);
+            if (guiderResult.value) {
+                kinksParsed = guiderResult.value;
+            }
+        }
+
         card.config.kinks = kinksParsed;
 
         const reversedKinks = await generator.next({
@@ -564,7 +612,15 @@ export async function generateBondTriggers(engine, jsSource) {
         if (reversedKinks.done) {
             throw new Error("Generator finished without producing output");
         }
-        const reversedKinksParsed = reversedKinks.value.split(",").map(kink => kink.trim()).filter(kink => kink);
+        let reversedKinksParsed = reversedKinks.value.split(",").map(kink => kink.trim()).filter(kink => kink);
+
+        if (guider) {
+            const guiderResult = await guider.askList("Provide a list of kinks and special sexual/romantic interests that " + name + " would find repulsive and be a hard no for them", reversedKinksParsed);
+            if (guiderResult.value) {
+                reversedKinksParsed = guiderResult.value;
+            }
+        }
+
         card.config.reversedKinks = reversedKinksParsed;
 
         overrideWholeReasoning = true;

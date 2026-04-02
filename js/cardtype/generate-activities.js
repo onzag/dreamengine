@@ -8,9 +8,10 @@ if (typeof process !== "undefined" && process.versions && process.versions.node)
 /**
  * @param {DEngine} engine
  * @param {string} jsSource
+ * @param {import('./base.js').CardTypeGuider | null} guider
  * @return {Promise<string>}
  */
-export async function generateActivities(engine, jsSource) {
+export async function generateActivities(engine, jsSource, guider) {
     const card = createCardStructureFrom(jsSource);
 
     const inferenceAdapter = engine.inferenceAdapter;

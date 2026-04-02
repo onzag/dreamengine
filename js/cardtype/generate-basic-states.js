@@ -65,9 +65,10 @@ function replaceOtherCharNameWithPlaceholder(text, charName) {
 /**
  * @param {DEngine} engine
  * @param {string} jsSource
+ * @param {import('./base.js').CardTypeGuider | null} guider
  * @return {Promise<string>}
  */
-export async function generateBasicStates(engine, jsSource) {
+export async function generateBasicStates(engine, jsSource, guider) {
     const card = createCardStructureFrom(jsSource);
     const isAsexualValue = card.config.isAsexual;
     const name = card.config.name;
@@ -104,11 +105,16 @@ export async function generateBasicStates(engine, jsSource) {
 
     const modifiers = ["", "Very "];
 
-
-    // TODO remove
-    for (const emotionalState of ["Aroused"]) {
+    for (const emotionalState of EMOTIONAL_STATES_TO_CHECK_AGAINST) {
 
         const variableNameBase = emotionalState + "Description";
+
+        let extraGuidanceInstructions = "";
+        let extraGuidanceInstructionsSource = "";
+
+        let extraGuidanceActionInstructions = "";
+        let extraGuidanceActionInstructionsSource = "";
+
         for (const modifier of modifiers) {
             console.log("Generating emotional state:", emotionalState);
             let extraInstructions = "";
@@ -119,34 +125,58 @@ export async function generateBasicStates(engine, jsSource) {
                 extraActionInstructions = "The actions should reflect a very high intensity of the emotional state, more so than a normal " + emotionalState + ". ";
             }
 
-            if (EMOTIONAL_STATES_WITH_EXPLICIT_ACTIONS.includes(emotionalState)) {
-                extraActionInstructions += "Because this emotional state is one that can have explicit actions, make sure to ensure that the actions are particularly sexually explicit and romantically explicit, ensuring there is some level of sensual tension. ";
-            }
-
-            const question = `Based on the information of the character ${name}, Provide a small description to how they act/behave when they are ${modifier}${emotionalState}? Answer in a single short paragraph, do NOT provide concrete actions they might do, only how they feel and behave.`;
-            const response = await generator.next({
-                maxCharacters: 200,
-                maxParagraphs: 1,
-                maxSafetyCharacters: 0,
-                nextQuestion: question,
-                stopAfter: [],
-                stopAt: [],
-                answerTrail: "Here is a small description of how " + name + " acts/feels when they are " + modifier + emotionalState + ":\n\nWhen " + name + " is " + modifier + emotionalState + ", ",
-                instructions: extraInstructions,
-            });
-
-            if (response.done) {
-                throw new Error("Generator finished before we could get all emotional states");
-            }
-
-            const emotionalStateDescription = replaceOtherCharNameWithPlaceholder(response.value.trim(), name);
-
             let variableName = variableNameBase;
             if (modifier === "Very ") {
                 variableName += "Very";
             }
 
-            card.body.push("const " + variableName + " = " + JSON.stringify(emotionalStateDescription) + ";");
+            let approved = true;
+            while (true) {
+                if (guider) {
+                    const guiderResult = await guider.askOpen("Guidance for generating a description for how " + name + " acts/behaves when they are " + modifier + emotionalState + ". What are some important things to keep in mind when writing about that in the context of " + name + "'s character and personality?", extraGuidanceInstructionsSource);
+                    if (guiderResult) {
+                        extraGuidanceInstructions = "\n\nIMPORTANT Guidance for constructing the description: " + guiderResult.value.trim() + ".";
+                        extraGuidanceInstructionsSource = guiderResult.value.trim();
+                    }
+                }
+
+                if (EMOTIONAL_STATES_WITH_EXPLICIT_ACTIONS.includes(emotionalState)) {
+                    extraActionInstructions += "Because this emotional state is one that can have explicit actions, make sure to ensure that the actions are particularly sexually explicit and romantically explicit, ensuring there is some level of sensual tension. ";
+                }
+
+                const question = `Based on the information of the character ${name}, Provide a small description to how they act/behave when they are ${modifier}${emotionalState}? Answer in a single short paragraph, do NOT provide concrete actions they might do, only how they feel and behave.`;
+                const response = await generator.next({
+                    maxCharacters: 200,
+                    maxParagraphs: 1,
+                    maxSafetyCharacters: 0,
+                    nextQuestion: question,
+                    stopAfter: [],
+                    stopAt: [],
+                    answerTrail: "Here is a small description of how " + name + " acts/feels when they are " + modifier + emotionalState + ":\n\nWhen " + name + " is " + modifier + emotionalState + ", ",
+                    instructions: extraInstructions + extraGuidanceInstructions,
+                });
+
+                if (response.done) {
+                    throw new Error("Generator finished before we could get all emotional states");
+                }
+
+                const emotionalStateDescription = replaceOtherCharNameWithPlaceholder(response.value.trim(), name);
+
+                if (guider) {
+                    const approvedGuiderValue = await guider.askBoolean("Do you approve of this description for how " + name + " acts/behaves when they are " + modifier + emotionalState + "?\n\n" + emotionalStateDescription, approved);
+                    if (approvedGuiderValue.value === false) {
+                        approved = false;
+                        continue;
+                    } else {
+                        approved = true;
+                    }
+                }
+
+                if (approved) {
+                    card.body.push("const " + variableName + " = " + JSON.stringify(emotionalStateDescription) + ";");
+                    break;
+                }
+            }
 
             const BONDS_TO_CHECK_FOR = [
                 { "name": "Stranger", "description": "someone they have just met or don't know well", varEnd: "Stranger" },
@@ -160,47 +190,186 @@ export async function generateBasicStates(engine, jsSource) {
             ];
 
             for (const bond of BONDS_TO_CHECK_FOR) {
-                const question2 = `Based on the information of the character ${name}, Provide a small template description to how they act when they are ${modifier}${emotionalState} towards a ${bond.name} (${bond.description})? Answer in a single short paragraph, do NOT provide concrete actions they might do, only how they feel and behave, do not specify clothing`;
-                const response2 = await generator.next({
-                    maxCharacters: 200,
-                    maxParagraphs: 1,
-                    maxSafetyCharacters: 0,
-                    nextQuestion: question2,
-                    stopAfter: [],
-                    stopAt: [],
-                    instructions: extraInstructions + "Because this is a template, use OTHER_CHARACTER to specify the name of who caused the emotional state and you can direct the description at that OTHER_CHARACTER",
-                    answerTrail: "Here is a small description of how " + name + " acts/feels when they are " + modifier + emotionalState + " and how it is directed towards that OTHER_CHARACTER:\n\nWhen " + name + " is " + modifier + emotionalState + ", ",
-                });
+                let approvedBondDescription = true;
+                let approvedBondActions = true;
 
-                if (response2.done) {
-                    throw new Error("Generator finished before we could get all emotional states");
+                while (true) {
+                    if (guider) {
+                        const guiderResult = await guider.askOpen("Guidance for generating a description for how " + name + " acts/behaves when they are " + modifier + emotionalState + " towards a " + bond.name + " (" + bond.description + "). What are some important things to keep in mind when writing about that in the context of " + name + "'s character and personality?", extraGuidanceInstructionsSource);
+                        if (guiderResult) {
+                            extraGuidanceInstructions = "\n\nIMPORTANT Guidance for constructing the description: " + guiderResult.value.trim() + ".";
+                            extraGuidanceInstructionsSource = guiderResult.value.trim();
+                        }
+                    }
+
+                    const question2 = `Based on the information of the character ${name}, Provide a small template description to how they act when they are ${modifier}${emotionalState} towards a ${bond.name} (${bond.description})? Answer in a single short paragraph, do NOT provide concrete actions they might do, only how they feel and behave, do not specify clothing`;
+                    const response2 = await generator.next({
+                        maxCharacters: 200,
+                        maxParagraphs: 1,
+                        maxSafetyCharacters: 0,
+                        nextQuestion: question2,
+                        stopAfter: [],
+                        stopAt: [],
+                        instructions: extraInstructions + "Because this is a template, use OTHER_CHARACTER to specify the name of who caused the emotional state and you can direct the description at that OTHER_CHARACTER" + extraGuidanceInstructions,
+                        answerTrail: "Here is a small description of how " + name + " acts/feels when they are " + modifier + emotionalState + " and how it is directed towards that OTHER_CHARACTER:\n\nWhen " + name + " is " + modifier + emotionalState + ", ",
+                    });
+
+                    if (response2.done) {
+                        throw new Error("Generator finished before we could get all emotional states");
+                    }
+
+                    const variableName2 = variableName + "_" + bond.varEnd;
+
+                    const emotionalStateTemplateDescription = replaceOtherCharNameWithPlaceholder(response2.value.trim(), name);
+
+                    if (guider) {
+                        const approvedGuiderValue = await guider.askBoolean("Do you approve of this description for how " + name + " acts/behaves when they are " + modifier + emotionalState + " towards a " + bond.name + " (" + bond.description + ")?\n\n" + emotionalStateTemplateDescription, approvedBondDescription);
+                        if (approvedGuiderValue.value === false) {
+                            approvedBondDescription = false;
+                            continue;
+                        } else {
+                            approvedBondDescription = true;
+                        }
+                    }
+
+                    if (approvedBondDescription) {
+                        card.body.push("const " + variableName2 + " = " + JSON.stringify(emotionalStateTemplateDescription) + ";");
+                        break;
+                    }
                 }
 
-                const variableName2 = variableName + "_" + bond.varEnd;
+                while (true) {
+                    if (guider) {
+                        const guiderResult = await guider.askOpen("Guidance for generating actions for when " + name + " is " + modifier + emotionalState + " towards a " + bond.name + " and they are in a GROUP in PUBLIC (" + bond.description + "). What are some important things to keep in mind when writing about that in the context of " + name + "'s character and personality?", extraGuidanceActionInstructionsSource);
+                        if (guiderResult) {
+                            extraGuidanceActionInstructions = "\n\nIMPORTANT Guidance for constructing the actions: " + guiderResult.value.trim() + ".";
+                            extraGuidanceActionInstructionsSource = guiderResult.value.trim();
+                        }
+                    }
 
-                const emotionalStateTemplateDescription = replaceOtherCharNameWithPlaceholder(response2.value.trim(), name);
+                    const listOfPotentialActions = await generator.next({
+                        maxCharacters: 10000,
+                        maxParagraphs: 10,
+                        maxSafetyCharacters: 0,
+                        nextQuestion: `Based on the information of the character ${name}, Make a list of 5 potential actions that they might do when they are ${modifier}${emotionalState} towards a ${bond.name} (${bond.description}) when they are in a GROUP in PUBLIC? Answer in a single short paragraph, just make a list of actions without any explanations, each action should be separated by a new line.`,
+                        stopAfter: [],
+                        stopAt: [],
+                        instructions: extraActionInstructions + "Because this is a template, use OTHER_CHARACTER to specify the name of who caused the emotional state and you can direct the description at that OTHER_CHARACTER; use future tense for the actions, the actions must be concrete and specific things they might do, not vague or general actions, they should be things that can be easily translated into game mechanics or code, do not specify clothing" + extraGuidanceActionInstructions,
+                        answerTrail: "Here is a list of potential actions that " + name + " might do when they are " + modifier + emotionalState + " and how it is directed towards that OTHER_CHARACTER + :\n\n",
+                        grammar: "root ::= list\nlist ::=" + (" bulletPoint").repeat(5) + "\nbulletPoint ::= \"- \" " + JSON.stringify(name) + " \" will \" [a-zA-Z0-9 ,?'!_]+ \"\\n\"",
+                    });
 
-                card.body.push("const " + variableName2 + " = " + JSON.stringify(emotionalStateTemplateDescription) + ";");
+                    if (listOfPotentialActions.done) {
+                        throw new Error("Generator finished before we could get all emotional states");
+                    }
 
-                const listOfPotentialActions = await generator.next({
-                    maxCharacters: 10000,
-                    maxParagraphs: 10,
-                    maxSafetyCharacters: 0,
-                    nextQuestion: `Based on the information of the character ${name}, Make a list of 5 potential actions that they might do when they are ${modifier}${emotionalState} towards a ${bond.name} (${bond.description})? Answer in a single short paragraph, just make a list of actions without any explanations, each action should be separated by a new line.`,
-                    stopAfter: [],
-                    stopAt: [],
-                    instructions: extraActionInstructions + "Because this is a template, use OTHER_CHARACTER to specify the name of who caused the emotional state and you can direct the description at that OTHER_CHARACTER; use future tense for the actions, the actions must be concrete and specific things they might do, not vague or general actions, they should be things that can be easily translated into game mechanics or code, do not specify clothing",
-                    answerTrail: "Here is a list of potential actions that " + name + " might do when they are " + modifier + emotionalState + " and how it is directed towards that OTHER_CHARACTER + :\n\n",
-                    grammar: "root ::= list\nlist ::=" + (" bulletPoint").repeat(5) + "\nbulletPoint ::= \"- \" " + JSON.stringify(name) + " \" will \" [a-zA-Z0-9 ,?'!_]+ \"\\n\"",
-                });
+                    const listSplitted = listOfPotentialActions.value.trim().split("\n").map(line => replaceOtherCharNameWithPlaceholder((line.replace("- ", "").trim()), name)).filter(line => line.length > 0);
 
-                if (listOfPotentialActions.done) {
-                    throw new Error("Generator finished before we could get all emotional states");
+                    if (guider) {
+                        const approvedGuiderValue = await guider.askBoolean("Do you approve of these actions for how " + name + " acts/behaves when they are " + modifier + emotionalState + " towards a " + bond.name + " (" + bond.description + ") in a GROUP in PUBLIC?\n\n" + listSplitted.map(action => "- " + action).join("\n"), approvedBondActions);
+                        if (approvedGuiderValue.value === false) {
+                            approvedBondActions = false;
+                            continue;
+                        } else {
+                            approvedBondActions = true;
+                        }
+                    }
+
+                    if (approvedBondActions) {
+                        card.body.push("const " + variableName + "_" + bond.varEnd + "_GroupPublicActions = " + JSON.stringify(listSplitted) + ";");
+                        break;
+                    }
                 }
 
-                const listSplitted = response2.value.trim().split("\n").map(line => replaceOtherCharNameWithPlaceholder((line.replace("- ", "").trim()), name)).filter(line => line.length > 0);
+                approvedBondActions = true;
 
-                card.body.push("const " + variableName2 + "_Actions = " + JSON.stringify(listSplitted) + ";");
+                while (true) {
+                    if (guider) {
+                        const guiderResult = await guider.askOpen("Guidance for generating actions for when " + name + " is " + modifier + emotionalState + " towards a " + bond.name + " and they are in PUBLIC but mostly alone together with passersby around (" + bond.description + "). What are some important things to keep in mind when writing about that in the context of " + name + "'s character and personality?", extraGuidanceActionInstructionsSource);
+                        if (guiderResult) {
+                            extraGuidanceActionInstructions = "\n\nIMPORTANT Guidance for constructing the actions: " + guiderResult.value.trim() + ".";
+                            extraGuidanceActionInstructionsSource = guiderResult.value.trim();
+                        }
+                    }
+
+                    const listOfPotentialActions = await generator.next({
+                        maxCharacters: 10000,
+                        maxParagraphs: 10,
+                        maxSafetyCharacters: 0,
+                        nextQuestion: `Based on the information of the character ${name}, Make a list of 5 potential actions that they might do when they are ${modifier}${emotionalState} towards a ${bond.name} (${bond.description}) when they are in PUBLIC but mostly alone together, with others being passersby not directly involved? Answer in a single short paragraph, just make a list of actions without any explanations, each action should be separated by a new line.`,
+                        stopAfter: [],
+                        stopAt: [],
+                        instructions: extraActionInstructions + "Because this is a template, use OTHER_CHARACTER to specify the name of who caused the emotional state and you can direct the description at that OTHER_CHARACTER; use future tense for the actions, the actions must be concrete and specific things they might do, not vague or general actions, they should be things that can be easily translated into game mechanics or code, do not specify clothing; the setting is public but they are mostly alone together with passersby around, so they have some privacy but are still in a public space" + extraGuidanceActionInstructions,
+                        answerTrail: "Here is a list of potential actions that " + name + " might do when they are " + modifier + emotionalState + " and how it is directed towards that OTHER_CHARACTER in a public setting where they are mostly alone together:\n\n",
+                        grammar: "root ::= list\nlist ::=" + (" bulletPoint").repeat(5) + "\nbulletPoint ::= \"- \" " + JSON.stringify(name) + " \" will \" [a-zA-Z0-9 ,?'!_]+ \"\\n\"",
+                    });
+
+                    if (listOfPotentialActions.done) {
+                        throw new Error("Generator finished before we could get all emotional states");
+                    }
+
+                    const listSplitted = listOfPotentialActions.value.trim().split("\n").map(line => replaceOtherCharNameWithPlaceholder((line.replace("- ", "").trim()), name)).filter(line => line.length > 0);
+
+                    if (guider) {
+                        const approvedGuiderValue = await guider.askBoolean("Do you approve of these actions for how " + name + " acts/behaves when they are " + modifier + emotionalState + " towards a " + bond.name + " in public but mostly alone together (passersby around)?\n\n" + listSplitted.map(action => "- " + action).join("\n"), approvedBondActions);
+                        if (approvedGuiderValue.value === false) {
+                            approvedBondActions = false;
+                            continue;
+                        } else {
+                            approvedBondActions = true;
+                        }
+                    }
+
+                    if (approvedBondActions) {
+                        card.body.push("const " + variableName + "_" + bond.varEnd + "_PublicAloneActions = " + JSON.stringify(listSplitted) + ";");
+                        break;
+                    }
+                }
+
+                approvedBondActions = true;
+
+                while (true) {
+                    if (guider) {
+                        const guiderResult = await guider.askOpen("Guidance for generating actions for when " + name + " is " + modifier + emotionalState + " towards a " + bond.name + " and they are in a totally PRIVATE setting (" + bond.description + "). What are some important things to keep in mind when writing about that in the context of " + name + "'s character and personality?", extraGuidanceActionInstructionsSource);
+                        if (guiderResult) {
+                            extraGuidanceActionInstructions = "\n\nIMPORTANT Guidance for constructing the actions: " + guiderResult.value.trim() + ".";
+                            extraGuidanceActionInstructionsSource = guiderResult.value.trim();
+                        }
+                    }
+
+                    const listOfPotentialActions = await generator.next({
+                        maxCharacters: 10000,
+                        maxParagraphs: 10,
+                        maxSafetyCharacters: 0,
+                        nextQuestion: `Based on the information of the character ${name}, Make a list of 5 potential actions that they might do when they are ${modifier}${emotionalState} towards a ${bond.name} (${bond.description}) when they are in a totally PRIVATE setting with no one else around? Answer in a single short paragraph, just make a list of actions without any explanations, each action should be separated by a new line.`,
+                        stopAfter: [],
+                        stopAt: [],
+                        instructions: extraActionInstructions + "Because this is a template, use OTHER_CHARACTER to specify the name of who caused the emotional state and you can direct the description at that OTHER_CHARACTER; use future tense for the actions, the actions must be concrete and specific things they might do, not vague or general actions, they should be things that can be easily translated into game mechanics or code, do not specify clothing; the setting is completely private with no one else around, so they can be as uninhibited as their character would allow" + extraGuidanceActionInstructions,
+                        answerTrail: "Here is a list of potential actions that " + name + " might do when they are " + modifier + emotionalState + " and how it is directed towards that OTHER_CHARACTER in a totally private setting:\n\n",
+                        grammar: "root ::= list\nlist ::=" + (" bulletPoint").repeat(5) + "\nbulletPoint ::= \"- \" " + JSON.stringify(name) + " \" will \" [a-zA-Z0-9 ,?'!_]+ \"\\n\"",
+                    });
+
+                    if (listOfPotentialActions.done) {
+                        throw new Error("Generator finished before we could get all emotional states");
+                    }
+
+                    const listSplitted = listOfPotentialActions.value.trim().split("\n").map(line => replaceOtherCharNameWithPlaceholder((line.replace("- ", "").trim()), name)).filter(line => line.length > 0);
+
+                    if (guider) {
+                        const approvedGuiderValue = await guider.askBoolean("Do you approve of these actions for how " + name + " acts/behaves when they are " + modifier + emotionalState + " towards a " + bond.name + " in a totally private setting?\n\n" + listSplitted.map(action => "- " + action).join("\n"), approvedBondActions);
+                        if (approvedGuiderValue.value === false) {
+                            approvedBondActions = false;
+                            continue;
+                        } else {
+                            approvedBondActions = true;
+                        }
+                    }
+
+                    if (approvedBondActions) {
+                        card.body.push("const " + variableName + "_" + bond.varEnd + "_PrivateActions = " + JSON.stringify(listSplitted) + ";");
+                        break;
+                    }
+                }
             }
         }
 
