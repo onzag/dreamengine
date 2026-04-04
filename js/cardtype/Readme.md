@@ -15,57 +15,21 @@ The generations by cardtype should not be considered final, but rather a startin
 
 You must check the generated code to fine tune behaviour, traits, and other aspects of the character, the card type is meant to be a starting point for character creation, the created script is very barebones by default.
 
-## Usage from command line
-
-Generate the initial character script from the card, this will produce invalid js code, but it will be the start point
-
-`npm run cardtype charactercard.md`
-
-That should produce an output file named `charactercard.js` which will contain the generated character code, you can then edit that file to refine the character further, the process of the initial generation is broken in two because it is very expensive to run, then you can run.
-
-Before running check the configuration and make sure that your character config in the // config comment is correct for what you want, for example, the character asexuality is set there, asexual characters will receive a 4d_creepy bond system which allows for tension being created with one sided non reciprocating sexual and romantic bonds, and non asexual characters will receive a standard bond system.
-
 ## Guided mode
 
 The guided mode will ask you questions about the character and use your answers to generate a more fitting character script, it is recommended to use it if you want a more fitting character script, but it is not required, you can also edit the generated script manually to refine it further.
 
 The guided mode can ask a lot of questions, can be upwards to thousands of questions depending on the character.
 
-## Manually running Steps
+## Running cardtype
 
-To create a nice dreamengine character script base from a card, check the output at each step to see if they fit your character, and if not correct, take a view at the header generated rather than the code as that is what is used for future steps
+`npm run cardtype -- charactercard.md`
 
-1. Get the initial character script from the card, this will produce invalid js code, but it will be the start point
-`npm run cardtype charactercard.md`
+This will create a file named `charactercard.js` and it will autosave the progress of the wizard, so you can stop it and continue later, you can also use the guided mode.
 
-Guided:
-`npm run cardtype charactercard.md --guided`
+`npm run cardtype -- charactercard.md --guided`
 
-2. Add the bond system to the character
-`npm run cardtype -- --add-bonds charactercard.js`
-
-Guided:
-`npm run cardtype -- --add-bonds charactercard.js --guided`
-
-2. Add bond triggers to the character
-`npm run cardtype -- --add-bond-triggers charactercard.js`
-
-Guided:
-`npm run cardtype -- --add-bond-triggers charactercard.js --guided`
-
-3. Add activities to the world that refer to your character likes and dislikes
-`npm run cardtype -- add-activities charactercard.js`
-
-Guided:
-`npm run cardtype -- add-activities charactercard.js --guided`
-
-4. Add basic emotional states to the character
-`npm run cardtype -- add-basic-states charactercard.js`
-
-Guided:
-`npm run cardtype -- add-basic-states charactercard.js --guided`
-
-## Optional steps but recommended
+## Optional steps but recommended (after the wizard is done)
 
 - Add a emotional state that should refer to a state, check out the already created by default
 `npm run cardtype -- --add-state statefile.md charactercard.js`

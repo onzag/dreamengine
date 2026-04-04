@@ -10,6 +10,7 @@ import { generateBonds } from './generate-bonds.js';
 import { generateActivities } from './generate-activities.js';
 import { generateBondTriggers } from './generate-bond-triggers.js';
 import { generateBasicStates } from './generate-basic-states.js';
+import { createCardStructureFrom, getJsCard } from './base.js';
 
 if (typeof process !== "undefined" && process.versions && process.versions.node) {
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
@@ -24,8 +25,8 @@ const args = process.argv.slice(2);
 let configPath = null;
 let inputPath = null;
 
-const recognizedFlags = ['--config', '--add-bonds', '--add-bond-triggers', '--add-state-from', "--add-activities", '--help', '-h', "--add-basic-states", '--guided'];
-const actionFlags = ['--add-bonds', '--add-bond-triggers', '--add-state-from', '--add-activities', '--add-basic-states'];
+const recognizedFlags = ['--config', '--help', '-h', '--guided', '--generate'];
+const actionFlags = ['--add-state-from', '--generate'];
 const secondFileFlags = ['--add-state-from'];
 
 function printUsageAndExit() {
@@ -101,7 +102,7 @@ if (inputPath.endsWith(".js") && action === 'generate') {
     console.error('Input file cannot be a .js file when generating a card, please provide a .md file with the card definition.');
     process.exit(1);
 } else if (inputPath.endsWith(".md") && action !== 'generate') {
-    console.error('Input file must be a .js file when inferring bonds or states, please provide a .js file with the character definition.');
+    console.error('Input file must be a .js file when running other actions, please provide a .js file');
     process.exit(1);
 }
 
@@ -164,48 +165,46 @@ const guider = guided ? {
     },
 } : null;
 
-let result = "";
-if (action === "generate") {
-    result = await generateBase(engine, sourceContent, guider);
-} else if (action === "add-bonds") {
-    result = await generateBonds(engine, sourceContent, guider);
-} else if (action === "add-activities") {
-    result = await generateActivities(engine, sourceContent, guider);
-} else if (action === "add-bond-triggers") {
-    result = await generateBondTriggers(engine, sourceContent, guider);
-} else if (action === "add-basic-states") {
-    result = await generateBasicStates(engine, sourceContent, guider);
-}
-
-const dir = dirname(inputPath);
-const base = basename(inputPath, extname(inputPath));
-
 /**
- * 
- * @param {string} dir 
- * @param {string} base 
- * @returns {string}
+ * @type {import('./base.js').CardTypeCard}
  */
-function findAvailablePath(dir, base) {
-    const alreadyEndsInNumber = base.match(/_(\d+)$/);
-    let baseWithoutNumber = base;
-    /**
-     * @type {number | null}
-     */
-    let baseNumber = null;
-    if (alreadyEndsInNumber) {
-        baseNumber = parseInt(alreadyEndsInNumber[1], 10);
-        baseWithoutNumber = base.substring(0, base.length - alreadyEndsInNumber[0].length);
+let currentCard;
+let currentCardSourcePath = "";
+
+const autosave = {
+    async save() {
+        if (!currentCard) return;
+        const jsContent = getJsCard(currentCard);
+        console.log(`Autosaving card to ${currentCardSourcePath}...`);
+        writeFileSync(currentCardSourcePath, jsContent, 'utf-8');
     }
-    const candidate = join(dir, baseWithoutNumber + '.js');
-    if (!existsSync(candidate)) return candidate;
-    let n = baseNumber !== null ? baseNumber + 1 : 2;
-    while (existsSync(join(dir, baseWithoutNumber + '_' + n + '.js'))) {
-        n++;
-    }
-    return join(dir, baseWithoutNumber + '_' + n + '.js');
 }
 
-const outputPath = findAvailablePath(dir, base);
-writeFileSync(outputPath, result, 'utf-8');
-console.log('Written to ' + outputPath);
+if (action === "generate") {
+    const mdFileContents = sourceContent;
+    const potentialJsFile = inputPath.replace(/\.md$/, '.js');
+    currentCardSourcePath = potentialJsFile;
+
+    if (!existsSync(potentialJsFile)) {
+        currentCard = {
+            card: mdFileContents,
+            config: {},
+            imports: [],
+            head: [],
+            body: [],
+            foot: [],
+        };
+        await autosave.save();
+    } else {
+        const jsContent = readFileSync(potentialJsFile, 'utf-8');
+        currentCard = createCardStructureFrom(jsContent);
+    }
+
+    await generateBase(engine, currentCard, guider, autosave);
+    await generateBonds(engine, currentCard, guider, autosave);
+    await generateActivities(engine, currentCard, guider, autosave);
+    await generateBondTriggers(engine, currentCard, guider, autosave);
+    await generateBasicStates(engine, currentCard, guider, autosave);
+} else {
+    // TODO: implement other actions like --add-state-from
+}

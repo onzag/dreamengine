@@ -1,13 +1,12 @@
 /**
- * 
  * @param {string} jsContent
+ * @returns {CardTypeCard}
  */
 export function createCardStructureFrom(jsContent) {
     /**
-     * @type {{contents: string, card: string, config: *, head: string[], body: string[], foot: string[], imports: string[]}}
+     * @type {CardTypeCard}
      */
     const baseFile = {
-        contents: jsContent,
         config: {},
         card: '',
         imports: [],
@@ -17,8 +16,8 @@ export function createCardStructureFrom(jsContent) {
     };
 
     const splittedLines = jsContent.split('\n');
-    const config = splittedLines[0] ? splittedLines[0].startsWith('// config:') ? JSON.parse(splittedLines[0].replace('// config:', '').trim()) : {} : {};
-    const card = splittedLines[1] ? splittedLines[1].startsWith('// card:') ? JSON.parse(splittedLines[1].replace('// card:', '').trim()) : '' : '';
+    const config = splittedLines[0] ? splittedLines[0].startsWith('//@config:') ? JSON.parse(splittedLines[0].replace('//@config:', '').trim()) : {} : {};
+    const card = splittedLines[1] ? splittedLines[1].startsWith('//@card:') ? JSON.parse(splittedLines[1].replace('//@card:', '').trim()) : '' : '';
     baseFile.card = card;
 
     let isInImports = false;
@@ -66,7 +65,8 @@ export function createCardStructureFrom(jsContent) {
 }
 
 /**
- * @param {{contents: string, card: string, config: *, head: string[], body: string[], foot: string[], imports: string[]}} base 
+ * @param {CardTypeCard} base
+ * @returns {string}
  */
 export function getJsCard(base) {
     let endResult = `//@config: ${JSON.stringify(base.config)}` +
@@ -115,7 +115,17 @@ export function getJsCard(base) {
 
 /**
  * @typedef {Object} CardTypeAutoSave
- * @property {(data: string) => Promise<void>} save - A function that saves the current state of the card, for example to a file or database. This can be called after any change is made to the card to ensure that progress is not lost.
+ * @property {() => Promise<void>} save - A function that saves the current state of the card, for example to a file or database. This can be called after any change is made to the card to ensure that progress is not lost.
+ */
+
+/**
+ * @typedef {Object} CardTypeCard
+ * @property {string} card
+ * @property {*} config
+ * @property {string[]} head
+ * @property {string[]} body
+ * @property {string[]} foot
+ * @property {string[]} imports
  */
 
 

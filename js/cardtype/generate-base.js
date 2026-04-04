@@ -36,18 +36,17 @@ export function replaceAllCharNameWithPlaceholder(str, charName) {
 
 /**
  * @param {DEngine} engine
- * @param {string} jsSource
+ * @param {import('./base.js').CardTypeCard} card
  * @param {import('./base.js').CardTypeGuider | null} guider
  * @param {import('./base.js').CardTypeAutoSave | null} autosave
- * @return {Promise<string>}
+ * @return {Promise<void>}
  */
-export async function generateBase(engine, jsSource, guider, autosave) {
-    const card = createCardStructureFrom(jsSource);
-
+export async function generateBase(engine, card, guider, autosave) {
     if (!hasSpecialComent(card.imports, "base-imports")) {
         insertSpecialComment(card.imports, "base-imports");
         card.imports.push(`const fss = await importScript("bond-systems", "full-standard-bond-system");`);
         card.imports.push(`await importScript("bond-systems", "deteriorating-bonds");`);
+        await autosave?.save();
     }
 
     if (!hasSpecialComent(card.head, "base-head")) {
@@ -58,6 +57,7 @@ export async function generateBase(engine, jsSource, guider, autosave) {
 
         card.foot.push(`},`);
         card.foot.push(`};`);
+        await autosave?.save();
     }
 
     const inferenceAdapter = engine.inferenceAdapter;
@@ -79,13 +79,19 @@ export async function generateBase(engine, jsSource, guider, autosave) {
     });
 
     // prime the generator
-    const ready = await generator.next();
-    if (ready.done) {
-        throw new Error("Generator finished without producing output");
+    let primed = false;
+    const prime = async () => {
+        if (primed) return;
+        primed = true;
+        const ready = await generator.next();
+        if (ready.done) {
+            throw new Error("Generator finished without producing output");
+        }
     }
 
     let name = "";
     if (!hasSpecialComent(card.body, "base-name")) {
+        await prime();
         const answer = await generator.next({
             maxCharacters: 20,
             maxSafetyCharacters: 20,
@@ -107,6 +113,7 @@ export async function generateBase(engine, jsSource, guider, autosave) {
         insertSpecialComment(card.body, "base-name");
         card.body.push(`DE.utils.newCharacter(DE, fss.setup(DE, {`);
         card.body.push(`name: ${JSON.stringify(name)},`);
+        await autosave?.save();
     } else {
         name = card.config.name;
     }
@@ -117,6 +124,7 @@ export async function generateBase(engine, jsSource, guider, autosave) {
             specialInstructions = ". " + specialInstructions.trim();
         }
 
+        await prime();
         const answerDescription = await generator.next({
             maxCharacters: 3000,
             maxSafetyCharacters: 0,
@@ -135,6 +143,7 @@ export async function generateBase(engine, jsSource, guider, autosave) {
         const description = replaceAllCharNameWithPlaceholder(answerDescription.value.trim(), name);
         insertSpecialComment(card.body, "base-description");
         card.body.push(`general: DE.utils.newHandlebarsTemplate(DE, ${JSON.stringify(description)}),`);
+        await autosave?.save();
     }
 
     let shortDescription = "";
@@ -144,6 +153,7 @@ export async function generateBase(engine, jsSource, guider, autosave) {
             specialInstructionsForShortDescription = ". " + specialInstructionsForShortDescription.trim();
         }
 
+        await prime();
         const answerShortDescription = await generator.next({
             maxCharacters: 100,
             maxSafetyCharacters: 0,
@@ -162,6 +172,7 @@ export async function generateBase(engine, jsSource, guider, autosave) {
         insertSpecialComment(card.body, "base-short-description");
         card.body.push(`shortDescription: ${JSON.stringify(shortDescription)},`);
         card.config.shortDescription = shortDescription;
+        await autosave?.save();
     } else {
         shortDescription = card.config.shortDescription;
     }
@@ -172,6 +183,7 @@ export async function generateBase(engine, jsSource, guider, autosave) {
             specialInstructionsForShortDescriptionAdd = ". " + specialInstructionsForShortDescriptionAdd.trim();
         }
 
+        await prime();
         const answerShortDescriptionTopNakedAdd = await generator.next({
             maxCharacters: 100,
             maxSafetyCharacters: 0,
@@ -197,6 +209,7 @@ export async function generateBase(engine, jsSource, guider, autosave) {
             specialInstructionsForShortDescriptionBottomAdd = ". " + specialInstructionsForShortDescriptionBottomAdd.trim();
         }
 
+        await prime();
         const answerShortDescriptionBottomNakedAdd = await generator.next({
             maxCharacters: 100,
             maxSafetyCharacters: 0,
@@ -215,6 +228,7 @@ export async function generateBase(engine, jsSource, guider, autosave) {
         const shortDescriptionBottomNakedAdd = answerShortDescriptionBottomNakedAdd.value.trim();
         insertSpecialComment(card.body, "base-short-description-bottom-naked-add");
         card.body.push(`shortDescriptionBottomNakedAdd: ${JSON.stringify(shortDescriptionBottomNakedAdd)},`);
+        await autosave?.save();
     }
 
     // don't need it anymore
@@ -235,12 +249,14 @@ export async function generateBase(engine, jsSource, guider, autosave) {
         card.body.push("temp: {},"); // Temporary properties to use during inference cycles, they do not persist
 
         card.body.push(`emotions: {`);
+        await autosave?.save();
     }
 
 
     const emotionsGrammar = createGrammarListFromList(engine, emotions, 7);
 
     if (!hasSpecialComent(card.body, "base-emotions")) {
+        await prime();
         const commonEmotions = await generator.next({
             maxCharacters: 200,
             maxSafetyCharacters: 0,
@@ -277,9 +293,11 @@ export async function generateBase(engine, jsSource, guider, autosave) {
         }
 
         card.config.commonEmotions = commonEmotionsList;
+        await autosave?.save();
     }
 
     if (!hasSpecialComent(card.body, "base-emotions-uncommon")) {
+        await prime();
         const uncommonEmotions = await generator.next({
             maxCharacters: 200,
             maxSafetyCharacters: 0,
@@ -319,12 +337,14 @@ export async function generateBase(engine, jsSource, guider, autosave) {
         }
 
         card.body.push(`},`);
+        await autosave?.save();
     }
 
     delete card.config.commonEmotions;
 
     let schizophrenia = 0;
     if (!hasSpecialComent(card.body, "base-schizo")) {
+        await prime();
         const hasSchizophrenia = await generator.next({
             maxCharacters: 5,
             maxSafetyCharacters: 0,
@@ -352,6 +372,7 @@ export async function generateBase(engine, jsSource, guider, autosave) {
 
         card.config.schizophrenia = schizophrenia;
         insertSpecialComment(card.body, "base-schizo");
+        await autosave?.save();
     } else {
         schizophrenia = card.config.schizophrenia;
     }
@@ -363,6 +384,7 @@ export async function generateBase(engine, jsSource, guider, autosave) {
                 severity = card.config.schizophreniaSeverity;
             } else {
                 let severityStr = "";
+                await prime();
                 const schizophreniaSeverity = await generator.next({
                     maxCharacters: 5,
                     maxSafetyCharacters: 0,
@@ -395,6 +417,7 @@ export async function generateBase(engine, jsSource, guider, autosave) {
                 specialInstructionsForVoiceDescription = ". " + specialInstructionsForVoiceDescription.trim();
             }
 
+            await prime();
             const schizophrenicVoiceDescription = await generator.next({
                 maxCharacters: 200,
                 maxSafetyCharacters: 0,
@@ -414,10 +437,12 @@ export async function generateBase(engine, jsSource, guider, autosave) {
             insertSpecialComment(card.body, "base-schizo-details");
             card.body.push(`schizophrenia: ${severity},`);
             card.body.push(`schizophrenicVoiceDescription: DE.utils.newHandlebarTemplate(${JSON.stringify(voiceDescription)}),`);
+            await autosave?.save();
         } else {
             insertSpecialComment(card.body, "base-schizo-details");
             card.body.push(`schizophrenia: 0,`);
             card.body.push(`schizophrenicVoiceDescription: "",`);
+            await autosave?.save();
         }
     }
 
@@ -426,6 +451,7 @@ export async function generateBase(engine, jsSource, guider, autosave) {
 
     let doesHaveAutism = false;
     if (!hasSpecialComent(card.body, "base-autism")) {
+        await prime();
         const hasAutism = await generator.next({
             maxCharacters: 5,
             maxSafetyCharacters: 0,
@@ -453,6 +479,7 @@ export async function generateBase(engine, jsSource, guider, autosave) {
 
         card.config.autism = doesHaveAutism ? 1 : 0;
         insertSpecialComment(card.body, "base-autism");
+        await autosave?.save();
     } else {
         doesHaveAutism = card.config.autism === 1;
     }
@@ -460,6 +487,7 @@ export async function generateBase(engine, jsSource, guider, autosave) {
     if (!hasSpecialComent(card.body, "base-autism-details")) {
         if (doesHaveAutism) {
             let severityStr = "";
+            await prime();
             const autismSeverity = await generator.next({
                 maxCharacters: 5,
                 maxSafetyCharacters: 0,
@@ -487,15 +515,18 @@ export async function generateBase(engine, jsSource, guider, autosave) {
 
             insertSpecialComment(card.body, "base-autism-details");
             card.body.push(`autism: ${severity},`);
+            await autosave?.save();
         } else {
             insertSpecialComment(card.body, "base-autism-details");
             card.body.push(`autism: 0,`);
+            await autosave?.save();
         }
     }
 
     delete card.config.autism;
 
     if (!hasSpecialComent(card.body, "base-carrying-capacity")) {
+        await prime();
         const carryingCapacityKg = await generator.next({
             maxCharacters: 10,
             maxSafetyCharacters: 0,
@@ -522,9 +553,12 @@ export async function generateBase(engine, jsSource, guider, autosave) {
 
         // double the volume of the potential weight lifted
         card.body.push(`carryingCapacityLiters: ${finalCarryingCapacity * 2},`);
+
+        await autosave?.save();
     }
 
     if (!hasSpecialComent(card.body, "base-height")) {
+        await prime();
         const heightCm = await generator.next({
             maxCharacters: 10,
             maxSafetyCharacters: 0,
@@ -548,9 +582,12 @@ export async function generateBase(engine, jsSource, guider, autosave) {
 
         insertSpecialComment(card.body, "base-height");
         card.body.push(`heightCm: ${finalHeightCm},`);
+
+        await autosave?.save();
     }
 
     if (!hasSpecialComent(card.body, "base-gender")) {
+        await prime();
         const isAmb = await generator.next({
             maxCharacters: 5,
             maxSafetyCharacters: 0,
@@ -567,6 +604,7 @@ export async function generateBase(engine, jsSource, guider, autosave) {
 
         let genderGuess = "ambiguous";
         if (isAmb.value.trim().toLowerCase() !== "yes") {
+            await prime();
             const isMale = await generator.next({
                 maxCharacters: 5,
                 maxSafetyCharacters: 0,
@@ -585,6 +623,7 @@ export async function generateBase(engine, jsSource, guider, autosave) {
             if (isMale.value.trim().toLowerCase() === "yes") {
                 genderGuess = "male";
             } else {
+                await prime();
                 const isFemale = await generator.next({
                     maxCharacters: 5,
                     maxSafetyCharacters: 0,
@@ -608,9 +647,11 @@ export async function generateBase(engine, jsSource, guider, autosave) {
 
         insertSpecialComment(card.body, "base-gender");
         card.body.push(`gender: ${JSON.stringify(finalGender)},`);
+        await autosave?.save();
     }
 
     if (!hasSpecialComent(card.body, "base-sex")) {
+        await prime();
         const hasNoSex = await generator.next({
             maxCharacters: 5,
             maxSafetyCharacters: 0,
@@ -628,6 +669,7 @@ export async function generateBase(engine, jsSource, guider, autosave) {
 
         let sexGuess = "none";
         if (hasNoSex.value.trim().toLowerCase() !== "yes") {
+            await prime();
             const isIntersex = await generator.next({
                 maxCharacters: 5,
                 maxSafetyCharacters: 0,
@@ -646,6 +688,7 @@ export async function generateBase(engine, jsSource, guider, autosave) {
             if (isIntersex.value.trim().toLowerCase() === "yes") {
                 sexGuess = "intersex";
             } else {
+                await prime();
                 const isMale = await generator.next({
                     maxCharacters: 5,
                     maxSafetyCharacters: 0,
@@ -672,6 +715,7 @@ export async function generateBase(engine, jsSource, guider, autosave) {
 
         insertSpecialComment(card.body, "base-sex");
         card.body.push(`sex: ${JSON.stringify(finalSex)},`);
+        await autosave?.save();
     }
 
     const sortedTiers = ["insect", "critter", "human", "apex", "street_level", "block_level", "city_level", "country_level", "continental", "planetary", "stellar", "galactic", "universal", "multiversal", "limitless"];
@@ -720,6 +764,7 @@ export async function generateBase(engine, jsSource, guider, autosave) {
         let tierAnswers = {};
 
         for (const [tier, question] of Object.entries(tierQuestions)) {
+            await prime();
             const answer = await generator.next({
                 maxCharacters: 5,
                 maxSafetyCharacters: 0,
@@ -753,6 +798,7 @@ export async function generateBase(engine, jsSource, guider, autosave) {
         insertSpecialComment(card.body, "base-tier");
         card.body.push(`tier: ${JSON.stringify(highestTier)},`);
         card.config.highestTier = highestTier;
+        await autosave?.save();
     } else {
         highestTier = card.config.highestTier;
     }
@@ -766,6 +812,7 @@ export async function generateBase(engine, jsSource, guider, autosave) {
             // @ts-ignore
             tierToBaseRange[highestTier];
 
+        await prime();
         const answerIsBabyOrWeakened = await generator.next({
             maxCharacters: 5,
             maxSafetyCharacters: 0,
@@ -795,6 +842,7 @@ export async function generateBase(engine, jsSource, guider, autosave) {
             tierValue = 5;
             range = range / 10;
         } else {
+            await prime();
             const answerIsYoungOrWeakened = await generator.next({
                 maxCharacters: 5,
                 maxSafetyCharacters: 0,
@@ -823,6 +871,7 @@ export async function generateBase(engine, jsSource, guider, autosave) {
                 tierValue = 20;
                 range = range / 2;
             } else {
+                await prime();
                 const answerIsInPrime = await generator.next({
                     maxCharacters: 5,
                     maxSafetyCharacters: 0,
@@ -859,11 +908,13 @@ export async function generateBase(engine, jsSource, guider, autosave) {
         card.body.push(`powerGrowthRate: 0.25,`);
         card.body.push(`rangeMeters: ${range},`);
         card.body.push(`locomotionSpeedMetersPerSecond: ${range * 0.0015},`);
+        await autosave?.save();
     }
 
     delete card.config.highestTier;
 
     if (!hasSpecialComent(card.body, "base-age")) {
+        await prime();
         const answerHowOld = await generator.next({
             maxCharacters: 10,
             maxSafetyCharacters: 0,
@@ -891,9 +942,11 @@ export async function generateBase(engine, jsSource, guider, autosave) {
         insertSpecialComment(card.body, "base-age");
         card.config.characterAge = howOldYears;
         card.body.push(`ageYears: ${howOldYears},`);
+        await autosave?.save();
     }
 
     if (!hasSpecialComent(card.body, "base-weight")) {
+        await prime();
         const weightKg = await generator.next({
             maxCharacters: 10,
             maxSafetyCharacters: 0,
@@ -920,6 +973,7 @@ export async function generateBase(engine, jsSource, guider, autosave) {
 
         insertSpecialComment(card.body, "base-weight");
         card.body.push(`weightKg: ${weightKgValue},`);
+        await autosave?.save();
     }
 
     if (!hasSpecialComent(card.body, "base-initiative")) {
@@ -927,6 +981,7 @@ export async function generateBase(engine, jsSource, guider, autosave) {
         let strangerInitiative = 0.05;
         let strangerRejection = 0;
 
+        await prime();
         const hightInitiative = await generator.next({
             maxCharacters: 5,
             maxSafetyCharacters: 0,
@@ -957,6 +1012,7 @@ export async function generateBase(engine, jsSource, guider, autosave) {
             strangerInitiative = 0.1;
             strangerRejection = 0;
         } else {
+            await prime();
             const annoyinglySocial = await generator.next({
                 maxCharacters: 5,
                 maxSafetyCharacters: 0,
@@ -987,6 +1043,7 @@ export async function generateBase(engine, jsSource, guider, autosave) {
                 strangerInitiative = 0.3;
                 strangerRejection = 0;
             } else {
+                await prime();
                 const shy = await generator.next({
                     maxCharacters: 5,
                     maxSafetyCharacters: 0,
@@ -1017,6 +1074,7 @@ export async function generateBase(engine, jsSource, guider, autosave) {
                     strangerInitiative = 0;
                     strangerRejection = 0.2;
                 } else {
+                    await prime();
                     const completelyAsocial = await generator.next({
                         maxCharacters: 5,
                         maxSafetyCharacters: 0,
@@ -1057,9 +1115,11 @@ export async function generateBase(engine, jsSource, guider, autosave) {
         card.body.push(`strangerRejection: ${strangerRejection},`);
         card.body.push(`maintenanceCaloriesPerDay: 2000,`);
         card.body.push(`maintenanceHydrationLitersPerDay: 2,`);
+        await autosave?.save();
     }
 
     if (!hasSpecialComent(card.body, "base-stealth")) {
+        await prime();
         const stealthValue = await generator.next({
             maxCharacters: 5,
             maxSafetyCharacters: 0,
@@ -1086,9 +1146,11 @@ export async function generateBase(engine, jsSource, guider, autosave) {
 
         insertSpecialComment(card.body, "base-stealth");
         card.body.push(`stealth: ${parseInt(stealthValue.value.trim()) / 10},`);
+        await autosave?.save();
     }
 
     if (!hasSpecialComent(card.body, "base-perception")) {
+        await prime();
         const perceptionValue = await generator.next({
             maxCharacters: 5,
             maxSafetyCharacters: 0,
@@ -1115,9 +1177,11 @@ export async function generateBase(engine, jsSource, guider, autosave) {
 
         insertSpecialComment(card.body, "base-perception");
         card.body.push(`perception: ${parseInt(perceptionValue.value.trim()) / 10},`);
+        await autosave?.save();
     }
 
     if (!hasSpecialComent(card.body, "base-heroism")) {
+        await prime();
         const heroismValue = await generator.next({
             maxCharacters: 5,
             maxSafetyCharacters: 0,
@@ -1144,9 +1208,11 @@ export async function generateBase(engine, jsSource, guider, autosave) {
 
         insertSpecialComment(card.body, "base-heroism");
         card.body.push(`heroism: ${parseInt(heroismValue.value.trim()) / 10},`);
+        await autosave?.save();
     }
 
     if (!hasSpecialComent(card.body, "base-mute")) {
+        await prime();
         const isMute = await generator.next({
             maxCharacters: 5,
             maxSafetyCharacters: 0,
@@ -1177,15 +1243,18 @@ export async function generateBase(engine, jsSource, guider, autosave) {
         if (isMuteValue) {
             card.body.push(`vocabularyLimit: {mute: true},`);
         }
+        await autosave?.save();
     }
 
     if (!hasSpecialComent(card.body, "base-social-simulation")) {
         insertSpecialComment(card.body, "base-social-simulation");
         card.body.push(`socialSimulation: {`);
+        await autosave?.save();
     }
 
 
     if (!hasSpecialComent(card.body, "base-attractiveness")) {
+        await prime();
         const attractivenessValue = await generator.next({
             maxCharacters: 5,
             maxSafetyCharacters: 0,
@@ -1214,9 +1283,11 @@ export async function generateBase(engine, jsSource, guider, autosave) {
 
         insertSpecialComment(card.body, "base-attractiveness");
         card.body.push(`attractiveness: ${attractivenessValueNum / 10},`);
+        await autosave?.save();
     }
 
     if (!hasSpecialComent(card.body, "base-charisma")) {
+        await prime();
         const charismaValue = await generator.next({
             maxCharacters: 5,
             maxSafetyCharacters: 0,
@@ -1246,9 +1317,11 @@ export async function generateBase(engine, jsSource, guider, autosave) {
 
         insertSpecialComment(card.body, "base-charisma");
         card.body.push(`charisma: ${charismaValueNum / 10},`);
+        await autosave?.save();
     }
 
     if (!hasSpecialComent(card.body, "base-gossip")) {
+        await prime();
         const gossipValue = await generator.next({
             maxCharacters: 5,
             maxSafetyCharacters: 0,
@@ -1277,6 +1350,7 @@ export async function generateBase(engine, jsSource, guider, autosave) {
 
         insertSpecialComment(card.body, "base-gossip");
         card.body.push(`gossipTendency: ${gossipValueNum / 10},`);
+        await autosave?.save();
     }
 
     if (!hasSpecialComent(card.body, "base-family-ties")) {
@@ -1300,15 +1374,18 @@ export async function generateBase(engine, jsSource, guider, autosave) {
             } while (nextFamilyMemberToAdd !== "no");
             insertSpecialComment(card.body, "base-family-ties");
             card.body.push(`familyTies: ${JSON.stringify(collectedTies)},`);
+            await autosave?.save();
 
             // TODO ask to pre-create bond towards other characters
         } else {
             insertSpecialComment(card.body, "base-family-ties");
             card.body.push(`familyTies: {}, // Not covered in cardtype`);
+            await autosave?.save();
         }
     }
 
     if (!hasSpecialComent(card.body, "base-likes")) {
+        await prime();
         const likesList = await generator.next({
             maxCharacters: 1000,
             maxSafetyCharacters: 0,
@@ -1341,9 +1418,12 @@ export async function generateBase(engine, jsSource, guider, autosave) {
         } else {
             card.config.globalInterests = Array.from(new Set([...card.config.globalInterests, ...likesListParsedAndDeduped]));
         }
+
+        await autosave?.save();
     }
 
     if (!hasSpecialComent(card.body, "base-dislikes")) {
+        await prime();
         const dislikesList = await generator.next({
             maxCharacters: 1000,
             maxSafetyCharacters: 0,
@@ -1378,9 +1458,11 @@ export async function generateBase(engine, jsSource, guider, autosave) {
         } else {
             card.config.globalInterests = Array.from(new Set([...card.config.globalInterests, ...dislikesListParsedAndDeduped]));
         }
+        await autosave?.save();
     }
 
     if (!hasSpecialComent(card.body, "base-species")) {
+        await prime();
         const species = await generator.next({
             maxCharacters: 50,
             maxSafetyCharacters: 0,
@@ -1400,6 +1482,7 @@ export async function generateBase(engine, jsSource, guider, autosave) {
         let speciesType = "humanoid";
 
         if (actualSpecies !== "human") {
+            await prime();
             const isAnthro = await generator.next({
                 maxCharacters: 5,
                 maxSafetyCharacters: 0,
@@ -1420,6 +1503,7 @@ export async function generateBase(engine, jsSource, guider, autosave) {
             if (isAnthroValue) {
                 actualSpecies = "anthro " + actualSpecies;
             } else {
+                await prime();
                 const isFeral = await generator.next({
                     maxCharacters: 5,
                     maxSafetyCharacters: 0,
@@ -1457,9 +1541,11 @@ export async function generateBase(engine, jsSource, guider, autosave) {
 
         card.config.characterSpecies = actualSpecies;
         card.config.characterSpeciesType = speciesType;
+        await autosave?.save();
     }
 
     if (!hasSpecialComent(card.body, "base-race")) {
+        await prime();
         const race = await generator.next({
             maxCharacters: 50,
             maxSafetyCharacters: 0,
@@ -1492,9 +1578,11 @@ export async function generateBase(engine, jsSource, guider, autosave) {
         }
         insertSpecialComment(card.body, "base-race");
         card.body.push(`race: ${JSON.stringify(raceValue)},`);
+        await autosave?.save();
     }
 
     if (!hasSpecialComent(card.body, "base-group-belonging")) {
+        await prime();
         const groupBelonging = await generator.next({
             maxCharacters: 50,
             maxSafetyCharacters: 0,
@@ -1524,6 +1612,7 @@ export async function generateBase(engine, jsSource, guider, autosave) {
         } else {
             card.body.push(`groupBelonging: ${JSON.stringify(finalGroupBelongingValue)},`);
         }
+        await autosave?.save();
     }
 
     if (!hasSpecialComent(card.body, "base-prejudices-species")) {
@@ -1536,9 +1625,11 @@ export async function generateBase(engine, jsSource, guider, autosave) {
             } else {
                 card.body.push(`dislikesSpecies: [], // Up to you to make the character prejudiced against certain species`);
             }
+            await autosave?.save();
         } else {
             insertSpecialComment(card.body, "base-prejudices-species");
             card.body.push(`dislikesSpecies: [], // Up to you to make the character prejudiced against certain species`);
+            await autosave?.save();
         }
     }
 
@@ -1552,9 +1643,11 @@ export async function generateBase(engine, jsSource, guider, autosave) {
             } else {
                 card.body.push(`dislikesRaces: [], // Up to you to make the character racist`);
             }
+            await autosave?.save();
         } else {
             insertSpecialComment(card.body, "base-prejudices-races");
             card.body.push(`dislikesRaces: [], // Up to you to make the character racist`);
+            await autosave?.save();
         }
     }
 
@@ -1568,13 +1661,16 @@ export async function generateBase(engine, jsSource, guider, autosave) {
             } else {
                 card.body.push(`dislikesGroups: [], // Up to you to make the character prejudiced against certain groups`);
             }
+            await autosave?.save();
         } else {
             insertSpecialComment(card.body, "base-prejudices-groups");
             card.body.push(`dislikesGroups: [], // Up to you to make the character prejudiced against certain groups`);
+            await autosave?.save();
         }
     }
 
     if (!hasSpecialComent(card.body, "base-attractions")) {
+        await prime();
         const isAsexual = await generator.next({
             maxCharacters: 5,
             maxSafetyCharacters: 0,
@@ -1633,6 +1729,7 @@ export async function generateBase(engine, jsSource, guider, autosave) {
             insertSpecialComment(card.body, "base-attractions");
             card.body.push(`attractions: [`);
         } else {
+            await prime();
             const findsAmbiguousGendersSexuallyAttractive = await generator.next({
                 maxCharacters: 5,
                 maxSafetyCharacters: 0,
@@ -1675,6 +1772,7 @@ export async function generateBase(engine, jsSource, guider, autosave) {
                 attractions.push("male");
                 attractions.push("female");
             } else {
+                await prime();
                 const findsMalesSexuallyAttractive = await generator.next({
                     maxCharacters: 5,
                     maxSafetyCharacters: 0,
@@ -1699,6 +1797,7 @@ export async function generateBase(engine, jsSource, guider, autosave) {
                     }
                 }
 
+                await prime();
                 const findsFemalesSexuallyAttractive = await generator.next({
                     maxCharacters: 5,
                     maxSafetyCharacters: 0,
@@ -1753,15 +1852,17 @@ export async function generateBase(engine, jsSource, guider, autosave) {
         card.config.isAsexual = isAsexualValue;
         card.config.attractions = attractions;
         card.config.attractionAgeRange = attractionAgeRange;
+        await autosave?.save();
     }
 
     if (!hasSpecialComent(card.body, "base-end")) {
         insertSpecialComment(card.body, "base-end");
         card.body.push(`},`);
         card.body.push(`}, {`);
+        await autosave?.save();
     }
 
-    await generator.next(null); // end the generator
-
-    return getJsCard(card);
+    if (primed) {
+        await generator.next(null); // end the generator
+    }
 }
