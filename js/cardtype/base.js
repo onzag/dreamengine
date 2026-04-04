@@ -27,22 +27,22 @@ export function createCardStructureFrom(jsContent) {
     let isInFoot = false;
     for (const line of splittedLines) {
         const trimmedLine = line.trim();
-        if (trimmedLine === '// imports') {
+        if (trimmedLine === '//@imports') {
             isInImports = true;
             isInHead = false;
             isInBody = false;
             isInFoot = false;
-        } else if (trimmedLine === '// head') {
+        } else if (trimmedLine === '//@head') {
             isInImports = false;
             isInHead = true;
             isInBody = false;
             isInFoot = false;
-        }  else if (trimmedLine === '// body') {
+        }  else if (trimmedLine === '//@body') {
             isInImports = false;
             isInHead = false;
             isInBody = true;
             isInFoot = false;
-        } else if (trimmedLine === '// foot') {
+        } else if (trimmedLine === '//@foot') {
             isInImports = false;
             isInHead = false;
             isInBody = false;
@@ -69,17 +69,17 @@ export function createCardStructureFrom(jsContent) {
  * @param {{contents: string, card: string, config: *, head: string[], body: string[], foot: string[], imports: string[]}} base 
  */
 export function getJsCard(base) {
-    let endResult = `// config: ${JSON.stringify(base.config)}` +
-        `\n// card: ${JSON.stringify(base.card)}` + "\n\n";
+    let endResult = `//@config: ${JSON.stringify(base.config)}` +
+        `\n//@card: ${JSON.stringify(base.card)}` + "\n\n";
 
     const linesInOrder = [
-        "// imports",
+        "//@imports",
         ...base.imports,
-        "// head",
+        "//@head",
         ...base.head,
-        "// body",
+        "//@body",
         ...base.body,
-        "// foot",
+        "//@foot",
         ...base.foot,
     ];
 
@@ -112,3 +112,29 @@ export function getJsCard(base) {
  * @property {(question: string, defaultValue?: boolean) => Promise<{value: boolean}>} askBoolean
  * @property {(question: string, defaultValue?: string[]) => Promise<{value: string[]}>} askList
  */
+
+/**
+ * @typedef {Object} CardTypeAutoSave
+ * @property {(data: string) => Promise<void>} save - A function that saves the current state of the card, for example to a file or database. This can be called after any change is made to the card to ensure that progress is not lost.
+ */
+
+
+/**
+ * 
+ * @param {string[]} lines 
+ * @param {string} commentId 
+ */
+export function hasSpecialComent(lines, commentId) {
+    return lines.some(line => line.trim() === `//@${commentId}`);
+}
+
+/**
+ * 
+ * @param {string[]} lines 
+ * @param {string} commentId 
+ */
+export function insertSpecialComment(lines, commentId) {
+    if (!hasSpecialComent(lines, commentId)) {
+        lines.push(`//@${commentId}`);
+    }
+}

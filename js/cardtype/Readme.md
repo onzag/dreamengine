@@ -29,7 +29,9 @@ Before running check the configuration and make sure that your character config 
 
 The guided mode will ask you questions about the character and use your answers to generate a more fitting character script, it is recommended to use it if you want a more fitting character script, but it is not required, you can also edit the generated script manually to refine it further.
 
-## Required steps
+The guided mode can ask a lot of questions, can be upwards to thousands of questions depending on the character.
+
+## Manually running Steps
 
 To create a nice dreamengine character script base from a card, check the output at each step to see if they fit your character, and if not correct, take a view at the header generated rather than the code as that is what is used for future steps
 
