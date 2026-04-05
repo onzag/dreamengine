@@ -148,3 +148,14 @@ export function insertSpecialComment(lines, commentId) {
         lines.push(`//@${commentId}`);
     }
 }
+
+/**
+ * 
+ * @param {string[]} lines 
+ * @param {string} commentId 
+ */
+export function unshiftSpecialComment(lines, commentId) {
+    if (!hasSpecialComent(lines, commentId)) {
+        lines.unshift(`//@${commentId}`);
+    }
+}

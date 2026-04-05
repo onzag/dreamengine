@@ -32,6 +32,11 @@ async function load_model(model) {
         modelPath: model,
         gpuLayers: -1,
         defaultContextFlashAttention: true,
+
+        nCtx: 1024 * 8,
+        nGpuLayers: -1,
+        nThreads: os.cpus().length,
+        verbose: true,
     });
     MODEL = LLAMA_MODEL
     MODEL_PATH = model;
@@ -65,9 +70,10 @@ async function generateCompletion(data, onToken, onDone, onError) {
     let completion = null;
     try {
         // Create context and completion for raw text
-        context = await MODEL.createContext({
-            contextSize: 1024 * 8,
-        });
+        // context = await MODEL.createContext({
+        //     //contextSize: 1024 * 8,
+        // });
+        context = await MODEL.createContext();
         completion = new LlamaCompletion({
             contextSequence: context.getSequence()
         });

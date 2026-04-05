@@ -1,5 +1,5 @@
 import { DEngine } from '../engine/index.js';
-import { createCardStructureFrom, getJsCard } from './base.js';
+import { createCardStructureFrom, getJsCard, hasSpecialComent, insertSpecialComment, unshiftSpecialComment } from './base.js';
 
 if (typeof process !== "undefined" && process.versions && process.versions.node) {
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
@@ -7,13 +7,12 @@ if (typeof process !== "undefined" && process.versions && process.versions.node)
 
 /**
  * @param {DEngine} engine
- * @param {string} jsSource
+ * @param {import('./base.js').CardTypeCard} card
  * @param {import('./base.js').CardTypeGuider | null} guider
- * @return {Promise<string>}
+ * @param {import('./base.js').CardTypeAutoSave | null} autosave
+ * @return {Promise<void>}
  */
-export async function generateActivities(engine, jsSource, guider) {
-    const card = createCardStructureFrom(jsSource);
-
+export async function generateActivities(engine, card, guider, autosave) {
     const inferenceAdapter = engine.inferenceAdapter;
     if (!inferenceAdapter) {
         throw new Error("No inference adapter found on engine");
@@ -34,12 +33,23 @@ export async function generateActivities(engine, jsSource, guider) {
         system: systemPrompt2,
     });
 
-    const ready2 = await generator2.next(); // start the generator with an empty message to get it going
-    if (ready2.done) {
-        throw new Error("Generator finished without producing output");
+
+    // prime the generator
+    let primed = false;
+    const prime = async () => {
+        if (primed) return;
+        primed = true;
+        const ready = await generator2.next();
+        if (ready.done) {
+            throw new Error("Generator finished without producing output");
+        }
     }
 
     for (const likeOrDislike of allLikesAndDislikes) {
+        if (hasSpecialComent(card.body, "interest " + likeOrDislike)) {
+            continue;
+        }
+        await prime();
         const isAnActivity = await generator2.next({
             maxCharacters: 5,
             maxSafetyCharacters: 0,
@@ -59,6 +69,7 @@ export async function generateActivities(engine, jsSource, guider) {
 
         const activitySimple = isActivityValue ? likeOrDislike : "talk about " + likeOrDislike;
 
+        await prime();
         const activityTemplate = await generator2.next({
             maxCharacters: 100,
             maxSafetyCharacters: 0,
@@ -75,8 +86,12 @@ export async function generateActivities(engine, jsSource, guider) {
 
         const templateValue = activityTemplate.value.trim().split("MANY_CHARACTERS").join("{{chars}}");
 
-        card.head.push(`DE.utils.newGlobalInterest(DE, { id: ${JSON.stringify(likeOrDislike)}, simple: ${JSON.stringify(activitySimple)}, template: DE.utils.newHandlebarsTemplate(DE, ${JSON.stringify(templateValue)}) });`);
+        card.body.unshift(`DE.utils.newGlobalInterest(DE, { id: ${JSON.stringify(likeOrDislike)}, simple: ${JSON.stringify(activitySimple)}, template: DE.utils.newHandlebarsTemplate(DE, ${JSON.stringify(templateValue)}) });`);
+        unshiftSpecialComment(card.body, "interest " + likeOrDislike);
+        await autosave?.save();
     }
 
-    return getJsCard(card);
+    if (primed) {
+        await generator2.next(null); // end the generator
+    }
 }

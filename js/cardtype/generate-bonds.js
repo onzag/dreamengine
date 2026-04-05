@@ -1,5 +1,5 @@
 import { DEngine } from '../engine/index.js';
-import { createCardStructureFrom, getJsCard } from './base.js';
+import { createCardStructureFrom, getJsCard, hasSpecialComent, insertSpecialComment } from './base.js';
 
 if (typeof process !== "undefined" && process.versions && process.versions.node) {
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
@@ -7,12 +7,12 @@ if (typeof process !== "undefined" && process.versions && process.versions.node)
 
 /**
  * @param {DEngine} engine
- * @param {string} jsSource
+ * @param {import('./base.js').CardTypeCard} card
  * @param {import('./base.js').CardTypeGuider | null} guider
- * @return {Promise<string>}
+ * @param {import('./base.js').CardTypeAutoSave | null} autosave
+ * @return {Promise<void>}
  */
-export async function generateBonds(engine, jsSource, guider) {
-    const card = createCardStructureFrom(jsSource);
+export async function generateBonds(engine, card, guider, autosave) {
 
     const inferenceAdapter = engine.inferenceAdapter;
     if (!inferenceAdapter) {
@@ -32,66 +32,96 @@ export async function generateBonds(engine, jsSource, guider) {
         system: systemPrompt,
     });
 
+    // prime the generator
+    let primed = false;
+    const prime = async () => {
+        if (primed) return;
+        primed = true;
+        const ready = await generator.next();
+        if (ready.done) {
+            throw new Error("Generator finished without producing output");
+        }
+    }
+
     const isAsexualValue = card.config.isAsexual;
     const name = card.config.name;
 
-    card.body.push(isAsexualValue ? `type: "4d_creepy",` : `type: "4d_standard",`);
+    if (!hasSpecialComent(card.body, "bonds-type")) {
+        card.body.push(isAsexualValue ? `type: "4d_creepy",` : `type: "4d_standard",`);
+        insertSpecialComment(card.body, "bonds-type");
+        await autosave?.save();
+    }
 
     let isIncestuousValue = false;
-    if (!isAsexualValue) {
-        const isIncestuous = await generator.next({
+    if (!hasSpecialComent(card.body, "bonds-incestuous")) {
+        if (!isAsexualValue) {
+            await prime();
+            const isIncestuous = await generator.next({
+                maxCharacters: 5,
+                maxSafetyCharacters: 0,
+                maxParagraphs: 1,
+                nextQuestion: "Does " + name + " have an incestuous attraction towards family members? Answer with yes or no.",
+                stopAfter: [],
+                stopAt: [],
+                grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
+            });
+
+            if (isIncestuous.done) {
+                throw new Error("Generator finished without producing output");
+            }
+
+            isIncestuousValue = isIncestuous.value.trim().toLowerCase() === "yes";
+        }
+
+        if (guider) {
+            const guiderResponse = await guider.askBoolean("Should family relationships be excluded from romantic possibilities for " + name + "?", !isIncestuousValue);
+            if (guiderResponse.value === false) {
+                isIncestuousValue = true;
+            } else {
+                isIncestuousValue = false;
+            }
+        }
+
+        card.config.isIncestuous = isIncestuousValue;
+        insertSpecialComment(card.body, "bonds-incestuous");
+        await autosave?.save();
+    } else {
+        isIncestuousValue = card.config.isIncestuous || false;
+    }
+
+    let wouldUseViolenceTowardsEnemiesValue = false;
+    if (!hasSpecialComent(card.body, "bonds-violence")) {
+        await prime();
+        const wouldUseViolenceTowardsEnemies = await generator.next({
             maxCharacters: 5,
             maxSafetyCharacters: 0,
             maxParagraphs: 1,
-            nextQuestion: "Does " + name + " have an incestuous attraction towards family members? Answer with yes or no.",
+            nextQuestion: "If " + name + " has an extremely hostile and abusive relationship with another character, would they be willing use violence towards that character if they had the opportunity? Answer with yes or no.",
             stopAfter: [],
             stopAt: [],
             grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
         });
 
-        if (isIncestuous.done) {
+        if (wouldUseViolenceTowardsEnemies.done) {
             throw new Error("Generator finished without producing output");
         }
 
-        isIncestuousValue = isIncestuous.value.trim().toLowerCase() === "yes";
-    }
+        wouldUseViolenceTowardsEnemiesValue = wouldUseViolenceTowardsEnemies.value.trim().toLowerCase() === "yes";
 
-    if (guider) {
-        const guiderResponse = await guider.askBoolean("Should family relationships be excluded from romantic possibilities for " + name + "?", !isIncestuousValue);
-        if (guiderResponse.value === false) {
-            isIncestuousValue = true;
-        } else {
-            isIncestuousValue = false;
+        if (guider) {
+            const guiderResponse = await guider.askBoolean("Would " + name + " use violence towards people they have a hostile relationship with?", wouldUseViolenceTowardsEnemiesValue);
+            if (guiderResponse.value === false) {
+                wouldUseViolenceTowardsEnemiesValue = false;
+            } else {
+                wouldUseViolenceTowardsEnemiesValue = true;
+            }
         }
-    }
 
-    if (isIncestuousValue) {
-        card.config.isIncestuous = isIncestuousValue;
-    }
-
-    const wouldUseViolenceTowardsEnemies = await generator.next({
-        maxCharacters: 5,
-        maxSafetyCharacters: 0,
-        maxParagraphs: 1,
-        nextQuestion: "If " + name + " has an extremely hostile and abusive relationship with another character, would they be willing use violence towards that character if they had the opportunity? Answer with yes or no.",
-        stopAfter: [],
-        stopAt: [],
-        grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
-    });
-
-    if (wouldUseViolenceTowardsEnemies.done) {
-        throw new Error("Generator finished without producing output");
-    }
-
-    let wouldUseViolenceTowardsEnemiesValue = wouldUseViolenceTowardsEnemies.value.trim().toLowerCase() === "yes";
-
-    if (guider) {
-        const guiderResponse = await guider.askBoolean("Would " + name + " use violence towards people they have a hostile relationship with?", wouldUseViolenceTowardsEnemiesValue);
-        if (guiderResponse.value === false) {
-            wouldUseViolenceTowardsEnemiesValue = false;
-        } else {
-            wouldUseViolenceTowardsEnemiesValue = true;
-        }
+        card.config.wouldUseViolence = wouldUseViolenceTowardsEnemiesValue;
+        insertSpecialComment(card.body, "bonds-violence");
+        await autosave?.save();
+    } else {
+        wouldUseViolenceTowardsEnemiesValue = card.config.wouldUseViolence || false;
     }
 
     const SETTINGS = {
@@ -556,7 +586,9 @@ export async function generateBonds(engine, jsSource, guider) {
     };
 
     for (const [strangerKey, strangerValue] of Object.entries(STRANGERS)) {
-        card.body.push(`${strangerKey}: {`);
+        if (hasSpecialComent(card.body, "bonds-stranger " + strangerKey)) {
+            continue;
+        }
 
         let guidanceGiven = "";
         let redoGuidance = false;
@@ -575,6 +607,7 @@ export async function generateBonds(engine, jsSource, guider) {
             if (guidanceGiven) {
                 baseInstructions += ".\n\nIMPORTANT Guidance for constructing the relationship: " + guidanceGiven;
             }
+            await prime();
             const descriptionQuestion = await generator.next({
                 maxCharacters: 200,
                 maxSafetyCharacters: 0,
@@ -603,18 +636,33 @@ export async function generateBonds(engine, jsSource, guider) {
             }
         }
 
+        
+        insertSpecialComment(card.body, "bonds-stranger " + strangerKey);
+        card.body.push(`${strangerKey}: {`);
         card.body.push(`relationshipName: null,`);
-        card.body.push(`description: DE.utils.newHandlebarsTemplate(DE, \`${JSON.stringify(descriptionValue)}\`),`);
+        card.body.push(`description: DE.utils.newHandlebarsTemplate(DE, ${JSON.stringify(descriptionValue)}),`);
         card.body.push(`},`);
+        await autosave?.save();
     }
 
     for (const [relationshipKey, relationshipValue] of Object.entries(SETTINGS)) {
-        card.body.push(`${relationshipKey}: {`);
+        if (!hasSpecialComent(card.body, "bonds-relgroup-open " + relationshipKey)) {
+            insertSpecialComment(card.body, "bonds-relgroup-open " + relationshipKey);
+            card.body.push(`${relationshipKey}: {`);
+        }
 
         for (const [romanticInterestKey, romanticInterestValue] of Object.entries(relationshipValue)) {
-            card.body.push(`${romanticInterestKey}: {`);
+            if (!hasSpecialComent(card.body, "bonds-relrom-open " + relationshipKey + " " + romanticInterestKey)) {
+                insertSpecialComment(card.body, "bonds-relrom-open " + relationshipKey + " " + romanticInterestKey);
+                card.body.push(`${romanticInterestKey}: {`);
+            }
 
             for (const [familyKey, familyValue] of Object.entries(romanticInterestValue)) {
+                const bondCommentId = "bonds-rel " + relationshipKey + " " + romanticInterestKey + " " + familyKey;
+                if (hasSpecialComent(card.body, bondCommentId)) {
+                    continue;
+                }
+
                 card.body.push(`${familyKey}: {`);
 
                 let guidanceGiven = "";
@@ -634,6 +682,7 @@ export async function generateBonds(engine, jsSource, guider) {
                     if (guidanceGiven) {
                         baseInstructions += ".\n\nIMPORTANT Guidance for constructing the relationship: " + guidanceGiven;
                     }
+                    await prime();
                     const descriptionQuestion = await generator.next({
                         maxCharacters: 200,
                         maxSafetyCharacters: 0,
@@ -662,21 +711,34 @@ export async function generateBonds(engine, jsSource, guider) {
                     }
                 }
 
+                
+                insertSpecialComment(card.body, bondCommentId);
                 card.body.push(`relationshipName: null, // fill if you want this relationship to have a name`);
-                card.body.push(`description: DE.utils.newHandlebarsTemplate(DE, \`${JSON.stringify(descriptionValue)}\`),`);
+                card.body.push(`description: DE.utils.newHandlebarsTemplate(DE, ${JSON.stringify(descriptionValue)}),`);
 
                 card.body.push(`},`);
+                await autosave?.save();
             }
 
-            card.body.push(`},`);
+            if (!hasSpecialComent(card.body, "bonds-relrom-close " + relationshipKey + " " + romanticInterestKey)) {
+                card.body.push(`},`);
+                insertSpecialComment(card.body, "bonds-relrom-close " + relationshipKey + " " + romanticInterestKey);
+            }
         }
 
-        card.body.push(`},`);
+        if (!hasSpecialComent(card.body, "bonds-relgroup-close " + relationshipKey)) {
+            insertSpecialComment(card.body, "bonds-relgroup-close " + relationshipKey);
+            card.body.push(`},`);
+        }
     }
 
-    card.body.push(`}));`);
+    if (!hasSpecialComent(card.body, "bonds-close")) {
+        card.body.push(`}));`);
+        insertSpecialComment(card.body, "bonds-close");
+        await autosave?.save();
+    }
 
-    if (isAsexualValue) {
+    if (isAsexualValue && !hasSpecialComent(card.body, "bonds-asexual-replacements")) {
         const replacementsForCreepyBond = {
             "deepInLove_50_100": "sexualAbuseInterest_50_100",
             "strongRomanticInterest_35_50": "stalkingInterest_35_50",
@@ -693,9 +755,11 @@ export async function generateBonds(engine, jsSource, guider) {
             });
             card.body[i] = line;
         }
+        insertSpecialComment(card.body, "bonds-asexual-replacements");
+        await autosave?.save();
     }
 
-    await generator.next(null); // end the generator
-
-    return getJsCard(card);
+    if (primed) {
+        await generator.next(null); // end the generator
+    }
 }

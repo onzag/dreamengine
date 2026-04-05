@@ -64,12 +64,12 @@ function replaceOtherCharNameWithPlaceholder(text, charName) {
 
 /**
  * @param {DEngine} engine
- * @param {string} jsSource
+ * @param {import('./base.js').CardTypeCard} card
  * @param {import('./base.js').CardTypeGuider | null} guider
- * @return {Promise<string>}
+ * @param {import('./base.js').CardTypeAutoSave | null} autosave
+ * @return {Promise<void>}
  */
-export async function generateBasicStates(engine, jsSource, guider) {
-    const card = createCardStructureFrom(jsSource);
+export async function generateBasicStates(engine, card, guider, autosave) {
     const isAsexualValue = card.config.isAsexual;
     const name = card.config.name;
 
@@ -97,10 +97,14 @@ export async function generateBasicStates(engine, jsSource, guider) {
     });
 
     // prime the generator
-    const prime = await generator.next();
-
-    if (prime.done) {
-        throw new Error("Generator finished before we could prime it");
+    let primed = false;
+    const prime = async () => {
+        if (primed) return;
+        primed = true;
+        const ready = await generator.next();
+        if (ready.done) {
+            throw new Error("Generator finished without producing output");
+        }
     }
 
     const modifiers = ["", "Very "];
@@ -145,6 +149,7 @@ export async function generateBasicStates(engine, jsSource, guider) {
                 }
 
                 const question = `Based on the information of the character ${name}, Provide a small description to how they act/behave when they are ${modifier}${emotionalState}? Answer in a single short paragraph, do NOT provide concrete actions they might do, only how they feel and behave.`;
+                await prime();
                 const response = await generator.next({
                     maxCharacters: 200,
                     maxParagraphs: 1,
@@ -247,6 +252,7 @@ export async function generateBasicStates(engine, jsSource, guider) {
                         }
                     }
 
+                    await prime();
                     const listOfPotentialActions = await generator.next({
                         maxCharacters: 10000,
                         maxParagraphs: 10,
@@ -292,6 +298,7 @@ export async function generateBasicStates(engine, jsSource, guider) {
                         }
                     }
 
+                    await prime();
                     const listOfPotentialActions = await generator.next({
                         maxCharacters: 10000,
                         maxParagraphs: 10,
@@ -337,6 +344,7 @@ export async function generateBasicStates(engine, jsSource, guider) {
                         }
                     }
 
+                    await prime();
                     const listOfPotentialActions = await generator.next({
                         maxCharacters: 10000,
                         maxParagraphs: 10,
@@ -404,6 +412,4 @@ export async function generateBasicStates(engine, jsSource, guider) {
         //     actionPromptInjection: [],
         // }
     }
-
-    return getJsCard(card);
 }
