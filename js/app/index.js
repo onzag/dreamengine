@@ -5,6 +5,8 @@ import './components/settings.js';
 import './components/character.js';
 import './components/manage.js';
 
+import { EngineWorkerClient } from "../worker-sandbox/client.js";
+
 import { playConfirmSound, playHoverSound, toggleAmbience,
     toggleFX, isAmbienceEnabled, isFXEnabled, startAmbienceWithFade } from './sound.js';
 
@@ -193,3 +195,16 @@ function removeLoadingBlur() {
         }, 1000);
     }
 }
+
+console.log("Loading worker...");
+const worker = new Worker('../worker-sandbox/index.js', { type: "module" });
+const client = new EngineWorkerClient(worker);
+client.ready.then(() => {
+    console.log("Worker is ready");
+}).catch((err) => {
+    console.error("Worker failed to initialize:", err);
+});
+
+// For debugging: expose client on window
+// @ts-ignore
+window.engineClient = client;

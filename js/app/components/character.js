@@ -1,4 +1,3 @@
-import { character, world, utils, specials } from '../../util/functions.js';
 import { playCancelSound, playConfirmSound, playHoverSound, playPauseSound } from '../sound.js';
 
 /**
@@ -161,56 +160,55 @@ class CharacterOverlay extends HTMLElement {
         this.render();
         playPauseSound();
         await this.buildChildrenMap();
-        // @ts-expect-error
-        this.root.querySelector('app-overlay').addEventListener('special-button-click', () => {
-            const dialog = document.createElement('app-dialog');
-            dialog.setAttribute('dialog-title', 'Character Creation Help');
-            dialog.innerHTML = `
-                <p>The character creator uses handlebars for templating.</p>
-                <p>For more information on how to use it, please visit <a href="https://handlebarsjs.com/" target="_blank">the official Handlebars website</a>.</p>
-                <p>Available values for templating are the following:</p>
-                <h3>Character Variables</h3>
-                <table>
-                <thead>
-                    <tr><th>Variable</th><th>Description</th></tr>
-                    </thead>
-                    <tbody>
-                    ${character.map(varInfo => `<tr title=${JSON.stringify(escapeHTML(varInfo[2]))}><td>${varInfo[0]}</td><td>${escapeHTML(varInfo[1])}</td></tr>`).join('')}
-                </tbody>
-                </table>
-                <h3>World Variables</h3>
-                <table>
-                <thead>
-                    <tr><th>Variable</th><th>Description</th></tr>
-                    </thead>
-                    <tbody>
-                    ${world.map(varInfo => `<tr title=${JSON.stringify(escapeHTML(varInfo[2]))}><td>${varInfo[0]}</td><td>${escapeHTML(varInfo[1])}</td></tr>`).join('')}
-                </tbody>
-                </table>
-                <h3>Special Variables</h3>
-                <table>
-                <thead>
-                    <tr><th>Variable</th><th>Description</th></tr>
-                    </thead>
-                    <tbody>
-                    ${specials.map(varInfo => `<tr title=${JSON.stringify(escapeHTML(varInfo[2]))}><td>${varInfo[0]}</td><td>${escapeHTML(varInfo[1])}</td></tr>`).join('')}
-                </tbody>
-                </table>
-                <h3 Utility Functions</h3>
-                <table>
-                <thead>
-                    <tr><th>Function</th><th>Description</th></tr>
-                    </thead>
-                    <tbody>
-                    ${utils.map(funcInfo => `<tr title=${JSON.stringify(escapeHTML(funcInfo[2]))}><td>${funcInfo[0]}</td><td>${escapeHTML(funcInfo[1])}</td></tr>`).join('')}
-                </tbody>
-                </table>
-            `;
-            this.root.appendChild(dialog);
-            dialog.addEventListener('cancel', () => {
-                this.root.removeChild(dialog);
-            });
-        });
+        // this.root.querySelector('app-overlay').addEventListener('special-button-click', () => {
+        //     const dialog = document.createElement('app-dialog');
+        //     dialog.setAttribute('dialog-title', 'Character Creation Help');
+        //     dialog.innerHTML = `
+        //         <p>The character creator uses handlebars for templating.</p>
+        //         <p>For more information on how to use it, please visit <a href="https://handlebarsjs.com/" target="_blank">the official Handlebars website</a>.</p>
+        //         <p>Available values for templating are the following:</p>
+        //         <h3>Character Variables</h3>
+        //         <table>
+        //         <thead>
+        //             <tr><th>Variable</th><th>Description</th></tr>
+        //             </thead>
+        //             <tbody>
+        //             ${character.map(varInfo => `<tr title=${JSON.stringify(escapeHTML(varInfo[2]))}><td>${varInfo[0]}</td><td>${escapeHTML(varInfo[1])}</td></tr>`).join('')}
+        //         </tbody>
+        //         </table>
+        //         <h3>World Variables</h3>
+        //         <table>
+        //         <thead>
+        //             <tr><th>Variable</th><th>Description</th></tr>
+        //             </thead>
+        //             <tbody>
+        //             ${world.map(varInfo => `<tr title=${JSON.stringify(escapeHTML(varInfo[2]))}><td>${varInfo[0]}</td><td>${escapeHTML(varInfo[1])}</td></tr>`).join('')}
+        //         </tbody>
+        //         </table>
+        //         <h3>Special Variables</h3>
+        //         <table>
+        //         <thead>
+        //             <tr><th>Variable</th><th>Description</th></tr>
+        //             </thead>
+        //             <tbody>
+        //             ${specials.map(varInfo => `<tr title=${JSON.stringify(escapeHTML(varInfo[2]))}><td>${varInfo[0]}</td><td>${escapeHTML(varInfo[1])}</td></tr>`).join('')}
+        //         </tbody>
+        //         </table>
+        //         <h3 Utility Functions</h3>
+        //         <table>
+        //         <thead>
+        //             <tr><th>Function</th><th>Description</th></tr>
+        //             </thead>
+        //             <tbody>
+        //             ${utils.map(funcInfo => `<tr title=${JSON.stringify(escapeHTML(funcInfo[2]))}><td>${funcInfo[0]}</td><td>${escapeHTML(funcInfo[1])}</td></tr>`).join('')}
+        //         </tbody>
+        //         </table>
+        //     `;
+        //     this.root.appendChild(dialog);
+        //     dialog.addEventListener('cancel', () => {
+        //         this.root.removeChild(dialog);
+        //     });
+        // });
         // @ts-expect-error
         this.root.querySelector('app-overlay').addEventListener('confirm', () => {
             // check everything is valid

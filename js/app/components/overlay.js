@@ -1,5 +1,3 @@
-import { ALL_FUNCTIONS_WITH_SPECIALS } from '../../util/functions.js';
-
 import { playCancelSound, playConfirmSound, playHoverSound, playPauseSound } from '../sound.js';
 
 class Overlay extends HTMLElement {

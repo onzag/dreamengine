@@ -149,7 +149,7 @@ function createCharacterFromUser(user) {
         temp: {},
         schizophrenia: 0,
         schizophrenicVoiceDescription: "",
-        states: {},
+        stateDefinitions: {},
         sex: user.sex,
         strangerInitiative: 1,
         strangerRejection: 0,
@@ -161,6 +161,7 @@ function createCharacterFromUser(user) {
         tierValue: user.tierValue,
         powerGrowthRate: user.powerGrowthRate,
         socialSimulation: {
+            speciesType: "humanoid",
             attractions: [],
             dislikes: [],
             likes: [],
@@ -535,10 +536,10 @@ export class DEngine {
 
                 const measuredCharacters = [];
                 for (const item of slot.items) {
-                    const weight = getItemWeight(this, item);
+                    const weight = getItemWeight(this.getDEObject(), item);
                     measuredCharacters.push(...weight.allCharactersInvolved);
                     allItemWeight += weight.completeWeight;
-                    const volume = getItemVolume(this, item);
+                    const volume = getItemVolume(this.getDEObject(), item);
                     measuredCharacters.push(...volume.allCharactersInvolved);
                     allItemVolume += volume.completeVolume;
                 }
@@ -551,8 +552,8 @@ export class DEngine {
                         if (measuredCharacters.includes(charName)) {
                             continue;
                         }
-                        allItemWeight += getCharacterWeight(this, charName).weight;
-                        allItemVolume += getCharacterVolume(this, charName).volume;
+                        allItemWeight += getCharacterWeight(this.getDEObject(), charName).weight;
+                        allItemVolume += getCharacterVolume(this.getDEObject(), charName).volume;
                     }
                 }
 
