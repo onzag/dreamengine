@@ -381,7 +381,7 @@ export async function generateBasicStates(engine, card, guider, autosave) {
             }
         }
 
-        // card.body.push("DE.utils.createStateInCharacter(DE, " + JSON.stringify(name) + ", " + JSON.stringify(emotionalState) + ", {");
+        // card.body.push("DE.utils.defineStateInCharacter(DE, " + JSON.stringify(name) + ", " + JSON.stringify(emotionalState) + ", {");
         // card.body.push("dominance: 0,");
         // card.body.push("behaviourType: " + JSON.stringify("INTENSITY_EXPRESSIVE") + ",");
         // card.body.push("conflictStates: [],");

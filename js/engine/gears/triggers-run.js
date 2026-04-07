@@ -133,7 +133,7 @@ export async function runQuestion(engine, character, question, options) {
                 return;
             }
 
-            const stateDef = engine.deObject.characters[character.name].states[stateInQuestion];
+            const stateDef = engine.deObject.characters[character.name].stateDefinitions[stateInQuestion];
             if (!stateDef) {
                 console.warn(`Question has askPerState set to ${stateInQuestion} but character has no state with that name, skipping`);
                 return;

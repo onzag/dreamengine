@@ -1,4 +1,3 @@
-import schema from '../../schema/script.js';
 import { playCancelSound, playConfirmSound, playHoverSound, playPauseSound } from '../sound.js';
 import "./non-repeat-taglist.js";
 
@@ -200,91 +199,91 @@ class ScriptOverlay extends HTMLElement {
     buildChildrenMap() {
         const sectionToDisplay = WIZARD_SECTIONS[this.currentSectionIndex];
 
-        const fields = sectionToDisplay.fields;
-        const fieldsAsHTML = fields.map(fieldGroup => {
-            const fieldName = fieldGroup[0];
-            const groupFields = fieldGroup[1];
-            const fieldsHTML = groupFields.map(fieldName => {
-                if (schema.properties[fieldName].type === "string" || schema.properties[fieldName].code_language) {
-                    if (schema.properties[fieldName].enum) {
-                        // It's a select input
-                        return `<app-overlay-select
-                                    class="${fieldName}"
-                                    label="${escapeHTML(schema.properties[fieldName].title)}" 
-                                    title="${escapeHTML(schema.properties[fieldName].description || '')}"
-                                    input-data-location="${fieldName}"
-                                    input-data-file="${this.currentScriptFile}"
-                                    input-data-type="script"
-                                    input-options='${JSON.stringify(schema.properties[fieldName].enum)}'
-                                    input-options-descriptions='${JSON.stringify(schema.properties[fieldName].enumDescriptions || [])}'
-                                    input-default-value="${escapeHTML(schema.properties[fieldName].default || '')}"
-                                >
-                                </app-overlay-select>`;
-                    } else {
-                        // It's a text input
-                        const isMultiline = schema.properties[fieldName].multiline || false;
-                        return `<app-overlay-input
-                                    class="${fieldName}"
-                                    label="${escapeHTML(schema.properties[fieldName].title)}" 
-                                    title="${escapeHTML(schema.properties[fieldName].description || '')}" 
-                                    input-data-location="${fieldName}"
-                                    input-data-file="${this.currentScriptFile}"
-                                    input-data-type="script"
-                                    input-placeholder="${escapeHTML(schema.properties[fieldName].placeholder || '')}"
-                                    input-default-value="${escapeHTML(schema.properties[fieldName].default || '')}"
-                                    input-placeholder-ts="${escapeHTML(schema.properties[fieldName].placeholder_ts || '')}"
-                                    ${isMultiline ? 'multiline="true"' + (schema.properties[fieldName].code_language ? ' input-is-codemirror="' + (schema.properties[fieldName].code_language) + '"' : '') : ''}
-                                >
-                                </app-overlay-input>`;
-                    }
-                } else if (schema.properties[fieldName].type === "number") {
-                    return `<app-overlay-input
-                                    class="${fieldName}"
-                                    label="${escapeHTML(schema.properties[fieldName].title)}" 
-                                    title="${escapeHTML(schema.properties[fieldName].description || '')}"
-                                    input-type="number"
-                                    input-number-min="${schema.properties[fieldName].minimum !== undefined ? schema.properties[fieldName].minimum : ''}"
-                                    input-number-max="${schema.properties[fieldName].maximum !== undefined ? schema.properties[fieldName].maximum : ''}"
-                                    input-data-location="${fieldName}"
-                                    input-data-file="${this.currentScriptFile}"
-                                    input-data-type="script"
-                                    input-placeholder="${escapeHTML(schema.properties[fieldName].placeholder || '')}"
-                                    input-default-value="${escapeHTML(schema.properties[fieldName].default)}"
-                                    input-is-percentage="${schema.properties[fieldName].percentage ? 'true' : ''}"
-                                >
-                                </app-overlay-input>`;
-                } else if (schema.properties[fieldName].type === "boolean") {
-                    return `<app-overlay-input-boolean
-                                    class="${fieldName}"
-                                    label="${escapeHTML(schema.properties[fieldName].title)}" 
-                                    title="${escapeHTML(schema.properties[fieldName].description || '')}"
-                                    input-data-location="${fieldName}"
-                                    input-data-file="${this.currentScriptFile}"
-                                    input-data-type="script"
-                                    input-default-value="${schema.properties[fieldName].default || ''}"
-                                >
-                                </app-overlay-input-boolean>`;
-                } else if (schema.properties[fieldName].real_type === "arbitrary_property_object" || schema.properties[fieldName].real_type === "arbitrary_state_object") {
-                    const childrenSchema = schema.properties[fieldName]?.additionalProperties?.properties;
-                    return `<non-repeat-taglist
-                                class="${fieldName}"
-                                label="${escapeHTML(schema.properties[fieldName].title)}"
-                                title="${escapeHTML(schema.properties[fieldName].description || '')}"
-                                input-data-location="${fieldName}"
-                                input-data-file="${this.currentScriptFile}"
-                                input-data-type="script"
-                                input-type="${schema.properties[fieldName].real_type === "arbitrary_property_object" ? 'property' : 'state'}"
-                                children-schema="${childrenSchema ? escapeHTML(JSON.stringify(childrenSchema)) : ''}"
-                            >
-                            </non-repeat-taglist>`;
-                }
-            }).join('');
+        // const fields = sectionToDisplay.fields;
+        // const fieldsAsHTML = fields.map(fieldGroup => {
+        //     const fieldName = fieldGroup[0];
+        //     const groupFields = fieldGroup[1];
+        //     const fieldsHTML = groupFields.map(fieldName => {
+        //         if (schema.properties[fieldName].type === "string" || schema.properties[fieldName].code_language) {
+        //             if (schema.properties[fieldName].enum) {
+        //                 // It's a select input
+        //                 return `<app-overlay-select
+        //                             class="${fieldName}"
+        //                             label="${escapeHTML(schema.properties[fieldName].title)}" 
+        //                             title="${escapeHTML(schema.properties[fieldName].description || '')}"
+        //                             input-data-location="${fieldName}"
+        //                             input-data-file="${this.currentScriptFile}"
+        //                             input-data-type="script"
+        //                             input-options='${JSON.stringify(schema.properties[fieldName].enum)}'
+        //                             input-options-descriptions='${JSON.stringify(schema.properties[fieldName].enumDescriptions || [])}'
+        //                             input-default-value="${escapeHTML(schema.properties[fieldName].default || '')}"
+        //                         >
+        //                         </app-overlay-select>`;
+        //             } else {
+        //                 // It's a text input
+        //                 const isMultiline = schema.properties[fieldName].multiline || false;
+        //                 return `<app-overlay-input
+        //                             class="${fieldName}"
+        //                             label="${escapeHTML(schema.properties[fieldName].title)}" 
+        //                             title="${escapeHTML(schema.properties[fieldName].description || '')}" 
+        //                             input-data-location="${fieldName}"
+        //                             input-data-file="${this.currentScriptFile}"
+        //                             input-data-type="script"
+        //                             input-placeholder="${escapeHTML(schema.properties[fieldName].placeholder || '')}"
+        //                             input-default-value="${escapeHTML(schema.properties[fieldName].default || '')}"
+        //                             input-placeholder-ts="${escapeHTML(schema.properties[fieldName].placeholder_ts || '')}"
+        //                             ${isMultiline ? 'multiline="true"' + (schema.properties[fieldName].code_language ? ' input-is-codemirror="' + (schema.properties[fieldName].code_language) + '"' : '') : ''}
+        //                         >
+        //                         </app-overlay-input>`;
+        //             }
+        //         } else if (schema.properties[fieldName].type === "number") {
+        //             return `<app-overlay-input
+        //                             class="${fieldName}"
+        //                             label="${escapeHTML(schema.properties[fieldName].title)}" 
+        //                             title="${escapeHTML(schema.properties[fieldName].description || '')}"
+        //                             input-type="number"
+        //                             input-number-min="${schema.properties[fieldName].minimum !== undefined ? schema.properties[fieldName].minimum : ''}"
+        //                             input-number-max="${schema.properties[fieldName].maximum !== undefined ? schema.properties[fieldName].maximum : ''}"
+        //                             input-data-location="${fieldName}"
+        //                             input-data-file="${this.currentScriptFile}"
+        //                             input-data-type="script"
+        //                             input-placeholder="${escapeHTML(schema.properties[fieldName].placeholder || '')}"
+        //                             input-default-value="${escapeHTML(schema.properties[fieldName].default)}"
+        //                             input-is-percentage="${schema.properties[fieldName].percentage ? 'true' : ''}"
+        //                         >
+        //                         </app-overlay-input>`;
+        //         } else if (schema.properties[fieldName].type === "boolean") {
+        //             return `<app-overlay-input-boolean
+        //                             class="${fieldName}"
+        //                             label="${escapeHTML(schema.properties[fieldName].title)}" 
+        //                             title="${escapeHTML(schema.properties[fieldName].description || '')}"
+        //                             input-data-location="${fieldName}"
+        //                             input-data-file="${this.currentScriptFile}"
+        //                             input-data-type="script"
+        //                             input-default-value="${schema.properties[fieldName].default || ''}"
+        //                         >
+        //                         </app-overlay-input-boolean>`;
+        //         } else if (schema.properties[fieldName].real_type === "arbitrary_property_object" || schema.properties[fieldName].real_type === "arbitrary_state_object") {
+        //             const childrenSchema = schema.properties[fieldName]?.additionalProperties?.properties;
+        //             return `<non-repeat-taglist
+        //                         class="${fieldName}"
+        //                         label="${escapeHTML(schema.properties[fieldName].title)}"
+        //                         title="${escapeHTML(schema.properties[fieldName].description || '')}"
+        //                         input-data-location="${fieldName}"
+        //                         input-data-file="${this.currentScriptFile}"
+        //                         input-data-type="script"
+        //                         input-type="${schema.properties[fieldName].real_type === "arbitrary_property_object" ? 'property' : 'state'}"
+        //                         children-schema="${childrenSchema ? escapeHTML(JSON.stringify(childrenSchema)) : ''}"
+        //                     >
+        //                     </non-repeat-taglist>`;
+        //         }
+        //     }).join('');
 
-            return `<app-overlay-section section-title="${escapeHTML(fieldName)}">${fieldsHTML}</app-overlay-section>`;
-        }).join('');
+        //     return `<app-overlay-section section-title="${escapeHTML(fieldName)}">${fieldsHTML}</app-overlay-section>`;
+        // }).join('');
 
-        // @ts-ignore
-        this.root.querySelector('app-overlay-tabs').innerHTML = fieldsAsHTML;
+        // // @ts-ignore
+        // this.root.querySelector('app-overlay-tabs').innerHTML = fieldsAsHTML;
     }
 
     async saveCurrent() {

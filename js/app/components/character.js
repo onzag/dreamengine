@@ -1,5 +1,4 @@
-import schema from '../../schema/character.js';
-import { character, world, utils, specials } from '../../schema/functions.js';
+import { character, world, utils, specials } from '../../util/functions.js';
 import { playCancelSound, playConfirmSound, playHoverSound, playPauseSound } from '../sound.js';
 
 /**
@@ -348,106 +347,106 @@ class CharacterOverlay extends HTMLElement {
             }
         }
         
-        const fields = sectionToDisplay.fields;
-        const fieldsAsHTML = fields.map(fieldGroup => {
-            const fieldName = fieldGroup[0];
-            const groupFields = fieldGroup[1];
-            const fieldsHTML = groupFields.map(fieldName => {
-                if (schema.properties[fieldName].type === "string" || schema.properties[fieldName].code_language) {
-                    if (schema.properties[fieldName].enum) {
-                        // It's a select input
-                        return `<app-overlay-select
-                                    class="${fieldName}"
-                                    label="${escapeHTML(schema.properties[fieldName].title)}" 
-                                    title="${escapeHTML(schema.properties[fieldName].description || '')}"
-                                    input-data-location="${fieldName}"
-                                    input-data-file="${this.currentCharacterFile}"
-                                    input-data-type="character"
-                                    input-options='${JSON.stringify(schema.properties[fieldName].enum)}'
-                                    input-options-descriptions='${JSON.stringify(schema.properties[fieldName].enumDescriptions || [])}'
-                                    input-default-value="${escapeHTML(schema.properties[fieldName].default || '')}"
-                                >
-                                </app-overlay-select>`;
-                    } else {
-                        // It's a text input
-                        const isMultiline = schema.properties[fieldName].multiline || false;
-                        return `<app-overlay-input
-                                    class="${fieldName}"
-                                    label="${escapeHTML(schema.properties[fieldName].title)}" 
-                                    title="${escapeHTML(schema.properties[fieldName].description || '')}" 
-                                    input-data-location="${fieldName}"
-                                    input-data-file="${this.currentCharacterFile}"
-                                    input-data-type="character"
-                                    input-minlength="${schema.properties[fieldName].minLength !== undefined ? schema.properties[fieldName].minLength : ''}"
-                                    input-maxlength="${schema.properties[fieldName].maxLength !== undefined ? schema.properties[fieldName].maxLength : ''}"
-                                    input-placeholder="${escapeHTML(schema.properties[fieldName].placeholder || '')}"
-                                    input-default-value="${escapeHTML(schema.properties[fieldName].default || '')}"
-                                    input-placeholder-ts="${escapeHTML(schema.properties[fieldName].placeholder_ts || '')}"
-                                    input-allows-imports-from="${schema.properties[fieldName].code_context || ''}"
-                                    ${isMultiline ? 'multiline="true"' + (schema.properties[fieldName].code_language ? ' input-is-codemirror="' + (schema.properties[fieldName].code_language) + '"' : '') : ''}
-                                >
-                                </app-overlay-input>`;
-                    }
-                } else if (schema.properties[fieldName].type === "number" || schema.properties[fieldName].type === "integer") {
-                    return `<app-overlay-input
-                                    class="${fieldName}"
-                                    label="${escapeHTML(schema.properties[fieldName].title)}" 
-                                    title="${escapeHTML(schema.properties[fieldName].description || '')}"
-                                    input-is-integer="${schema.properties[fieldName].type === 'integer' ? 'true' : ''}"
-                                    input-type="number"
-                                    input-number-min="${schema.properties[fieldName].minimum !== undefined ? schema.properties[fieldName].minimum : ''}"
-                                    input-number-max="${schema.properties[fieldName].maximum !== undefined ? schema.properties[fieldName].maximum : ''}"
-                                    input-data-location="${fieldName}"
-                                    input-data-file="${this.currentCharacterFile}"
-                                    input-data-type="character"
-                                    input-placeholder="${escapeHTML(schema.properties[fieldName].placeholder || '')}"
-                                    input-default-value="${escapeHTML(schema.properties[fieldName].default)}"
-                                    input-is-percentage="${schema.properties[fieldName].percentage ? 'true' : ''}"
-                                    input-number-unit="${schema.properties[fieldName].unit || ''}"
-                                >
-                                </app-overlay-input>`;
-                } else if (
-                    schema.properties[fieldName].real_type === "arbitrary_property_object" ||
-                    schema.properties[fieldName].real_type === "arbitrary_state_object" ||
-                    schema.properties[fieldName].real_type === "known_state_string" ||
-                    schema.properties[fieldName].real_type === "arbitrary_object" ||
-                    schema.properties[fieldName].real_type === "for_properties_input" ||
-                    schema.properties[fieldName].real_type === "arbitrary_emotion_object" ||
-                    schema.properties[fieldName].real_type === "not_known_state_string"
-                ) {
-                    let inputType = "";
-                    if (schema.properties[fieldName].real_type === "known_state_string") {
-                        inputType = "known_state";
-                    } else if (schema.properties[fieldName].real_type === "arbitrary_state_object") {
-                        inputType = "state";
-                    } else if (schema.properties[fieldName].real_type === "arbitrary_property_object") {
-                        inputType = "property";
-                    } else if (schema.properties[fieldName].real_type === "arbitrary_object") {
-                        inputType = "arbitrary";
-                    } else if (schema.properties[fieldName].real_type === "not_known_state_string") {
-                        inputType = "not_known_state";
-                    } else if (schema.properties[fieldName].real_type === "for_properties_input") {
-                        inputType = "for_properties_input";
-                    } else if (schema.properties[fieldName].real_type === "arbitrary_emotion_object") {
-                        inputType = "emotion";
-                    }
-                    return `<non-repeat-taglist
-                                class="${fieldName}"
-                                label="${escapeHTML(schema.properties[fieldName].title)}"
-                                title="${escapeHTML(schema.properties[fieldName].description || '')}"
-                                input-data-location="${fieldName}"
-                                input-data-file="${this.currentCharacterFile}"
-                                input-data-type="character"
-                                input-type="${inputType}"
-                                children-schema='${schema.properties[fieldName].additionalProperties ? escapeHTML(JSON.stringify(schema.properties[fieldName].additionalProperties.properties)) : ""}'
-                                input-default-value='${escapeHTML(JSON.stringify(schema.properties[fieldName].default || {}))}'
-                            >
-                            </non-repeat-taglist>`;
-                }
-            }).join('');
+        // const fields = sectionToDisplay.fields;
+        // const fieldsAsHTML = fields.map(fieldGroup => {
+        //     const fieldName = fieldGroup[0];
+        //     const groupFields = fieldGroup[1];
+        //     const fieldsHTML = groupFields.map(fieldName => {
+        //         if (schema.properties[fieldName].type === "string" || schema.properties[fieldName].code_language) {
+        //             if (schema.properties[fieldName].enum) {
+        //                 // It's a select input
+        //                 return `<app-overlay-select
+        //                             class="${fieldName}"
+        //                             label="${escapeHTML(schema.properties[fieldName].title)}" 
+        //                             title="${escapeHTML(schema.properties[fieldName].description || '')}"
+        //                             input-data-location="${fieldName}"
+        //                             input-data-file="${this.currentCharacterFile}"
+        //                             input-data-type="character"
+        //                             input-options='${JSON.stringify(schema.properties[fieldName].enum)}'
+        //                             input-options-descriptions='${JSON.stringify(schema.properties[fieldName].enumDescriptions || [])}'
+        //                             input-default-value="${escapeHTML(schema.properties[fieldName].default || '')}"
+        //                         >
+        //                         </app-overlay-select>`;
+        //             } else {
+        //                 // It's a text input
+        //                 const isMultiline = schema.properties[fieldName].multiline || false;
+        //                 return `<app-overlay-input
+        //                             class="${fieldName}"
+        //                             label="${escapeHTML(schema.properties[fieldName].title)}" 
+        //                             title="${escapeHTML(schema.properties[fieldName].description || '')}" 
+        //                             input-data-location="${fieldName}"
+        //                             input-data-file="${this.currentCharacterFile}"
+        //                             input-data-type="character"
+        //                             input-minlength="${schema.properties[fieldName].minLength !== undefined ? schema.properties[fieldName].minLength : ''}"
+        //                             input-maxlength="${schema.properties[fieldName].maxLength !== undefined ? schema.properties[fieldName].maxLength : ''}"
+        //                             input-placeholder="${escapeHTML(schema.properties[fieldName].placeholder || '')}"
+        //                             input-default-value="${escapeHTML(schema.properties[fieldName].default || '')}"
+        //                             input-placeholder-ts="${escapeHTML(schema.properties[fieldName].placeholder_ts || '')}"
+        //                             input-allows-imports-from="${schema.properties[fieldName].code_context || ''}"
+        //                             ${isMultiline ? 'multiline="true"' + (schema.properties[fieldName].code_language ? ' input-is-codemirror="' + (schema.properties[fieldName].code_language) + '"' : '') : ''}
+        //                         >
+        //                         </app-overlay-input>`;
+        //             }
+        //         } else if (schema.properties[fieldName].type === "number" || schema.properties[fieldName].type === "integer") {
+        //             return `<app-overlay-input
+        //                             class="${fieldName}"
+        //                             label="${escapeHTML(schema.properties[fieldName].title)}" 
+        //                             title="${escapeHTML(schema.properties[fieldName].description || '')}"
+        //                             input-is-integer="${schema.properties[fieldName].type === 'integer' ? 'true' : ''}"
+        //                             input-type="number"
+        //                             input-number-min="${schema.properties[fieldName].minimum !== undefined ? schema.properties[fieldName].minimum : ''}"
+        //                             input-number-max="${schema.properties[fieldName].maximum !== undefined ? schema.properties[fieldName].maximum : ''}"
+        //                             input-data-location="${fieldName}"
+        //                             input-data-file="${this.currentCharacterFile}"
+        //                             input-data-type="character"
+        //                             input-placeholder="${escapeHTML(schema.properties[fieldName].placeholder || '')}"
+        //                             input-default-value="${escapeHTML(schema.properties[fieldName].default)}"
+        //                             input-is-percentage="${schema.properties[fieldName].percentage ? 'true' : ''}"
+        //                             input-number-unit="${schema.properties[fieldName].unit || ''}"
+        //                         >
+        //                         </app-overlay-input>`;
+        //         } else if (
+        //             schema.properties[fieldName].real_type === "arbitrary_property_object" ||
+        //             schema.properties[fieldName].real_type === "arbitrary_state_object" ||
+        //             schema.properties[fieldName].real_type === "known_state_string" ||
+        //             schema.properties[fieldName].real_type === "arbitrary_object" ||
+        //             schema.properties[fieldName].real_type === "for_properties_input" ||
+        //             schema.properties[fieldName].real_type === "arbitrary_emotion_object" ||
+        //             schema.properties[fieldName].real_type === "not_known_state_string"
+        //         ) {
+        //             let inputType = "";
+        //             if (schema.properties[fieldName].real_type === "known_state_string") {
+        //                 inputType = "known_state";
+        //             } else if (schema.properties[fieldName].real_type === "arbitrary_state_object") {
+        //                 inputType = "state";
+        //             } else if (schema.properties[fieldName].real_type === "arbitrary_property_object") {
+        //                 inputType = "property";
+        //             } else if (schema.properties[fieldName].real_type === "arbitrary_object") {
+        //                 inputType = "arbitrary";
+        //             } else if (schema.properties[fieldName].real_type === "not_known_state_string") {
+        //                 inputType = "not_known_state";
+        //             } else if (schema.properties[fieldName].real_type === "for_properties_input") {
+        //                 inputType = "for_properties_input";
+        //             } else if (schema.properties[fieldName].real_type === "arbitrary_emotion_object") {
+        //                 inputType = "emotion";
+        //             }
+        //             return `<non-repeat-taglist
+        //                         class="${fieldName}"
+        //                         label="${escapeHTML(schema.properties[fieldName].title)}"
+        //                         title="${escapeHTML(schema.properties[fieldName].description || '')}"
+        //                         input-data-location="${fieldName}"
+        //                         input-data-file="${this.currentCharacterFile}"
+        //                         input-data-type="character"
+        //                         input-type="${inputType}"
+        //                         children-schema='${schema.properties[fieldName].additionalProperties ? escapeHTML(JSON.stringify(schema.properties[fieldName].additionalProperties.properties)) : ""}'
+        //                         input-default-value='${escapeHTML(JSON.stringify(schema.properties[fieldName].default || {}))}'
+        //                     >
+        //                     </non-repeat-taglist>`;
+        //         }
+        //     }).join('');
 
-            return `<app-overlay-section section-title="${escapeHTML(fieldName)}">${fieldsHTML}</app-overlay-section>`;
-        }).join('');
+        //     return `<app-overlay-section section-title="${escapeHTML(fieldName)}">${fieldsHTML}</app-overlay-section>`;
+        // }).join('');
 
         // @ts-expect-error
         this.root.querySelector('app-overlay-tabs').innerHTML = fieldsAsHTML;

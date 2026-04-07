@@ -109,14 +109,14 @@ declare interface DEMinimalCharacterReference {
     powerGrowthRate: number;
 }
 
-declare interface DEActionPromptInjection {
+declare interface DEActionPromptInjection<TemplateType> {
     /**
      * The template to inject into the character's action reasoning
      * remember this applies every inference cycle while the state is active
      * So be careful check actionPromptInjection documentation description for more details
      * on a proper use case
      */
-    action?: DEStringTemplate;
+    action?: TemplateType;
     /**
      * An optional narrive effect for the action, suppose for example the action is
      * {{char}} begins to cry
@@ -130,7 +130,7 @@ declare interface DEActionPromptInjection {
      * 
      * Narrative effects should be subtle
      */
-    narrativeEffect?: DEStringTemplate;
+    narrativeEffect?: TemplateType;
     /**
      * A narrative action that gets applied in narration instead of in the character dialogue
      * 
@@ -141,7 +141,7 @@ declare interface DEActionPromptInjection {
      * 
      * Now I will describe {{char}}'s tears flowing down their face and their body shaking as they cry
      */
-    narrativeAction?: DEStringTemplate;
+    narrativeAction?: TemplateType;
     /**
      * The probability (0 to 1) that the action will be even checked for execution, if say
      * the probability is only 0.5 then the action will only be considered for execution half the time
@@ -248,21 +248,21 @@ declare interface DECharacterStateDefinition {
      * {{/if}}
      * """
      */
-    general: DEStringTemplate;
+    general: DEStringTemplateCausantsAndCauses;
     /**
      * Description of the state after being relieved, used for reasoning about the state
      */
-    generalAfterRelief?: DEStringTemplate;
+    generalAfterRelief?: DEStringTemplateCausantsAndCauses;
     /**
      * Used for descriptions of the character general state
      * get applied at system prompt level
      */
-    generalCharacterDescriptionInjection?: DEStringTemplate;
+    generalCharacterDescriptionInjection?: DEStringTemplateCausantsAndCauses;
     /**
      * Make sure it is one line only, as this gets injected into the short
      * description of the character that represents the external perception of the character
      */
-    generalCharacterExternalDescriptionInjection?: DEStringTemplate;
+    generalCharacterExternalDescriptionInjection?: DEStringTemplateCausantsAndCauses;
     /**
      * Very strong, used for instructions that the character must follow
      * make sure that it is not kept every inference cycle unless intended
@@ -295,21 +295,21 @@ declare interface DECharacterStateDefinition {
      * The injection can have intensity levels as well to allow for different instructions
      * allowing it to be more dynamic
      */
-    actionPromptInjection: DEActionPromptInjection[];
+    actionPromptInjection: DEActionPromptInjection<DEStringTemplateCausantsAndCauses>[];
     /**
      * Description of the state, used for reasoning about the state
      */
-    relieving?: DEStringTemplate;
+    relieving?: DEStringTemplateCausantsAndCauses;
     /**
      * Used for descriptions of the character general state
      * get applied at system prompt level when relieving the state
      */
-    relievingGeneralCharacterDescriptionInjection?: DEStringTemplate;
+    relievingGeneralCharacterDescriptionInjection?: DEStringTemplateCausantsAndCauses;
     /**
      * Make sure it is one line only, as this gets injected into the short
      * description of the character that represents the external perception of the character when relieving the state
      */
-    relievingGeneralCharacterExternalDescriptionInjection?: DEStringTemplate;
+    relievingGeneralCharacterExternalDescriptionInjection?: DEStringTemplateCausantsAndCauses;
     /**
      * Very strong, used for instructions that the character must follow
      * make sure that it is not kept every inference cycle unless intended
@@ -326,12 +326,12 @@ declare interface DECharacterStateDefinition {
      * 
      * Check the actionPromptInjection description for an example use case
      */
-    relievingActionPromptInjection?: DEActionPromptInjection[];
+    relievingActionPromptInjection?: DEActionPromptInjection<DEStringTemplateCausantsAndCauses>[];
     /**
      * Whether this state triggers a dead end that causes the character to be permanently removed from the story
      * use this for the description of the dead end scenario
      */
-    triggersDeadEnd?: DEStringTemplate;
+    triggersDeadEnd?: DEStringTemplateCausantsAndCauses;
     /**
      * Whether the dead end scenario is a death scenario
      */
@@ -420,7 +420,7 @@ declare interface DECharacterStateDefinition {
          * 
          * TODO this hasn't been implemented in getsysprompt
          */
-        negativeDescription?: DEStringTemplate;
+        negativeDescription?: DEStringTemplateCharAndOther;
         /**
          * An instruction that gets added to the character description where a potential causant that fits
          * the criteria is set, for example, say the state is HUGGING, and the character has a high bond level, the
@@ -429,7 +429,7 @@ declare interface DECharacterStateDefinition {
          * 
          * TODO this hasn't been implemented in getsysprompt
          */
-        positiveDescription?: DEStringTemplate;
+        positiveDescription?: DEStringTemplateCharAndOther;
         /**
          * Minimum bond level required for a potential character causant to be considered
          */
@@ -559,7 +559,7 @@ declare interface DECharacterStateDefinition {
      * the state description as general, preNarration also affects the user, so if it is user that has the preNarration
      * it will also act upon the user
      */
-    preNarration?: DENarrationInstruction;
+    preNarration?: DENarrationInstruction<DEStringTemplateCausantsAndCauses>;
     /**
      * TODO implement
      * 
@@ -567,12 +567,12 @@ declare interface DECharacterStateDefinition {
      * 
      * check preNarration for more details, it is basically the same but it happens after the character turn
      */
-    postNarration?: DENarrationInstruction;
+    postNarration?: DENarrationInstruction<DEStringTemplateCausantsAndCauses>;
 }
 
-declare interface DENarrationInstruction {
-    narration?: DEStringTemplate;
-    afterRelief?: DEStringTemplate;
+declare interface DENarrationInstruction<TemplateType> {
+    narration?: TemplateType;
+    afterRelief?: TemplateType;
     onlyOnce?: boolean;
     likelihood?: number;
 };
@@ -637,7 +637,7 @@ declare interface DEBondDeclaration {
      * 
      * can leave empty if the relationship does not exist, eg. strangers, or if the relationship name is not important for the bond declaration 
      */
-    relationshipName: DEStringTemplate | null;
+    relationshipName: DEStringTemplateCharAndOther | null;
     /**
      * Whether it is a stranger bond or not, stranger bonds are used
      * when characters have just met and have no prior relationship
@@ -677,12 +677,12 @@ declare interface DEBondDeclaration {
      * You need to be explicit in each bond declaration if no sexual or romantic interactions should happen
      * in the bond description, otherwise the LLM may assume romantic/sexual interactions are allowed
      */
-    description: DEStringTemplate;
+    description: DEStringTemplateCharAndOther;
     /**
      * An additional description that gets injected into the general description by the bond system
      * this is used for reasoning about the character relationships and what is possible
      */
-    bondAdditionalDescription?: DEStringTemplate;
+    bondAdditionalDescription?: DEStringTemplateCharAndOther;
     /**
      * Used for descriptions of the character general bond state
      * get applied at system prompt level, per character that has this bond with this character
@@ -690,7 +690,7 @@ declare interface DEBondDeclaration {
      * 
      * {{char}} trusts {{other}} a lot and would do anything for {{format_object_pronoun other}}.
      */
-    generalCharacterDescriptionInjection?: DEStringTemplate;
+    generalCharacterDescriptionInjection?: DEStringTemplateCharAndOther;
     /**
      * Used for descriptions of the character general bond state when the bond is an ex bond
      * for the character has been removed from the story but the other character still exists
@@ -699,7 +699,7 @@ declare interface DEBondDeclaration {
      * 
      * {{char}} used to trust {{other}} a lot and be best friends but now {{other}} is gone and they feel sad about it.
      */
-    generalCharacterDescriptionInjectionEx?: DEStringTemplate;
+    generalCharacterDescriptionInjectionEx?: DEStringTemplateCharAndOther;
 }
 
 declare interface DEEmotionDefinition {
@@ -801,7 +801,7 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
      * Now if forceDominant is set to false for this one, this way the character may have a tic sometimes but it won't override other more important states that are
      * keeping them busy and their behaviour in check
      */
-    actionPromptInjection: DEActionPromptInjection[];
+    actionPromptInjection: DEActionPromptInjection<DEStringTemplateCharOnly>[];
 
     /**
      * Just the general description of the character and the base of the system prompt,
@@ -821,7 +821,7 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
      * When roleplaying as {{char}}, make sure to embody {{format_object_pronoun char}} adventurous spirit and insatiable curiosity. Embrace {{format_object_pronoun char}} love for exploration and discovery, and let that drive your interactions and decisions.
      * """
      */
-    general: DEStringTemplate;
+    general: DEStringTemplateCharOnly;
     /**
      * An initiative score from 0 to 1 that determines how likely the character is to participate in conversations
      * they are not being directly addressed in, higher means more likely to participate, the character must be in a conversation
@@ -915,7 +915,7 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
      * 
      * If schizophrenia is given, but no voice description is provided, a default one will be used
      */
-    schizophrenicVoiceDescription: DEStringTemplate;
+    schizophrenicVoiceDescription: DEStringTemplateCharOnly;
     /**
      * The crux of the engine, the states that define the character's behaviours
      * and how they react to different situations, the more states a character has
@@ -931,7 +931,7 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
      * You may want to create custom states for specific behaviours and you can add them
      * to many characters via their spawn script
      */
-    states: Record<string, DECharacterStateDefinition>;
+    stateDefinitions: Record<string, DECharacterStateDefinition>;
     /**
      * The bonds this character develops towards other characters in the world and how
      * it evolves.
@@ -1099,7 +1099,7 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
          * 
          * "{{char}} is very cautious and takes time to build trust with others."
          */
-        descriptionGeneralInjection: DEStringTemplate | null;
+        descriptionGeneralInjection: DEStringTemplateCharOnly | null;
     };
 
     /**
@@ -1218,7 +1218,7 @@ declare interface DECharacterQuestionBase {
     /**
      * The question to run
      */
-    question: DEStringTemplate;
+    question: DEStringTemplateCharOnly | DEStringTemplateCharAndOther;
     /**
      * Now the question has access to {{other}} and {{other_family_relation}}
      */
@@ -1237,9 +1237,10 @@ declare interface DECharacterQuestionBase {
     runIf?: (character: DECompleteCharacterReference, otherChar: DECompleteCharacterReference | null, otherFamilyRelation: DEFamilyRelation | null) => boolean | Promise<boolean>;
 }
 
-declare type DECharacterQuestionWithAskPer = Omit<DECharacterQuestionBase, 'runIf' | 'askPer'> & {
+declare type DECharacterQuestionWithAskPer = Omit<DECharacterQuestionBase, 'runIf' | 'askPer' | 'question'> & {
+    question: DEStringTemplateCharAndOther;
     askPer: DEAskPerType;
-    runIf?: (character: DECompleteCharacterReference, otherChar: DECompleteCharacterReference, otherFamilyRelation: DEFamilyRelation | null) => boolean | Promise<boolean>;
+    runIf?: (character: DECompleteCharacterReference, otherChar: DECompleteCharacterReference | null, otherFamilyRelation: DEFamilyRelation | null) => boolean | Promise<boolean>;
 };
 
 declare type DECharacterYesNoQuestion =
@@ -1247,7 +1248,7 @@ declare type DECharacterYesNoQuestion =
         type: "yes_no"; onValue: (
             answer: boolean,
             character: DECompleteCharacterReference,
-            otherChar: DECompleteCharacterReference,
+            otherChar: DECompleteCharacterReference | null,
             otherFamilyRelation: DEFamilyRelation | null,
             otherRelationship: string | null,
         ) => Promise<void> | void;
@@ -1267,7 +1268,7 @@ declare type DECharacterNumericQuestion =
         type: "numeric"; onNumber: (
             answer: number,
             character: DECompleteCharacterReference,
-            otherChar: DECompleteCharacterReference,
+            otherChar: DECompleteCharacterReference | null,
             otherFamilyRelation: DEFamilyRelation | null,
             otherRelationship: string | null,
         ) => Promise<void> | void;
@@ -1287,7 +1288,7 @@ declare type DECharacterTextQuestion =
         type: "text"; grammar?: string; onText: (
             answer: string,
             character: DECompleteCharacterReference,
-            otherChar: DECompleteCharacterReference,
+            otherChar: DECompleteCharacterReference | null,
             otherFamilyRelation: DEFamilyRelation | null,
             otherRelationship: string | null,
         ) => Promise<void> | void;
@@ -1475,6 +1476,7 @@ declare interface DECommunicationContact {
     alias: string | null;
 }
 
+// TODO
 declare interface DEDisableCommunicationDeviceQuestionWithReason {
     question: DEStringTemplate;
     reason: string;
@@ -1709,6 +1711,8 @@ declare interface DEItem {
     /**
      * Interactions that can happen with this item that
      * have a narrative effect or action
+     * 
+     * TODO implement
      */
     interactions?: Record<string, DEItemInteraction> | null;
 }
@@ -1790,11 +1794,11 @@ declare interface DEItemInteraction {
     /**
      * A question template to ask about the interaction, for example "did {{char}} open the chest?" or "did {{char}} eat the apple?"
      */
-    action: DEStringTemplate;
+    action: DEStringTemplateCharOnly;
     /**
      * An effect template to describe the effect of the interaction, for example "the chest creaks open revealing a hidden treasure inside" or "the apple poisons {{char}}, causing them to feel sick"
      */
-    effect: DEStringTemplate;
+    effect: DEStringTemplateCharOnly;
     /**
      * States that it applied towards the character as a result of the interaction
      */
@@ -1810,7 +1814,7 @@ declare interface DEStateForCharacterWithHistory extends DEStateForCharacter {
 }
 
 declare interface DELocationSlot {
-    description: DEStringTemplate;
+    description: DEStringTemplateCharOnly;
     /**
      * Maximum height in centimeters that can fit in this slot
      * will override location-based max height if specified
@@ -1893,7 +1897,7 @@ declare interface DEWeatherSystem {
      * 
      * eg. "{{#if (and (< (get_weight char) 20) (is_outdoors char))}}{{char}} is drenched by the relentless rain, shivering as the cold water soaks through their light clothing.{{else}}...{{/if}}"
      */
-    fullEffectDescription: DEStringTemplate;
+    fullEffectDescription: DEStringTemplateCharOnly;
     /**
      * Description of the weather system's partial effects on a partially sheltered location
      * 
@@ -1903,15 +1907,15 @@ declare interface DEWeatherSystem {
      * 
      * eg. "{{#if (and (< (get_weight char) 20) (is_outdoors char))}}{{char}} is drenched by the relentless rain, shivering as the cold water soaks through their light clothing.{{else}}...{{/if}}"
      */
-    partialEffectDescription: DEStringTemplate;
+    partialEffectDescription: DEStringTemplateCharOnly;
     /**
      * Description when there is no effect on a fully sheltered location
      */
-    noEffectDescription: DEStringTemplate;
+    noEffectDescription: DEStringTemplateCharOnly;
     /**
      * Description of the weather system effects when it is having an extra negative effect on the character
      */
-    negativelyExposedDescription: DEStringTemplate;
+    negativelyExposedDescription: DEStringTemplateCharOnly;
     /**
      * If a character is in this state, they are fully protected from the weather system's effects
      * eg. "WEARING_RAINCOAT" "WEARING_FULL_BODY_ARMOR" "WEARING_SPACE_SUIT"
@@ -2025,21 +2029,23 @@ declare interface DEWeatherSystem {
     applyStatesInOrder: boolean;
 }
 
+// TODO
 declare interface DEUnlockCondition {
     /**
      * Description of the unlock condition, this will be inferenced with llm
      * eg. {{char}} inputs the code "1234" into the keypad
      */
-    opensIf: DEStringTemplate;
+    opensIf: DEStringTemplateCharOnly;
     /**
      * Mostly meant for the user to check if the condition is met
      * eg. has {{char}} input "1234" into the keypad?
      * The answer should be yes for the condition to be considered met
      * and the entrance to be unlocked
      */
-    yesNoQuestion: DEStringTemplate;
+    yesNoQuestion: DEStringTemplateCharOnly;
 }
 
+// TODO
 declare interface DEEntrances {
     /**
      * Name of the entrance, eg. "front door", "keypad door", "bridge", "garage door"
@@ -2048,7 +2054,7 @@ declare interface DEEntrances {
     /**
      * Description of the entrance
      */
-    description: DEStringTemplate;
+    description: DEStringTemplateVoid;
     /**
      * Maximum height in centimeters that can fit through this entrance
      */
@@ -2104,7 +2110,7 @@ declare interface DELocationDefinition {
     /**
      * Description of the location
      */
-    description: DEStringTemplate;
+    description: DEStringTemplateCharOnly;
     /**
      * Type of vehicle the location is, yes a location can be a vehicle too
      * eg. "car", "spaceship", "boat", etc...
@@ -2304,19 +2310,19 @@ declare interface DEStatefulLocationDefinition extends DELocationDefinition {
         /**
          * Either the location-specific full effect description or the general weather full effect description
          */
-        currentWeatherFullEffectDescription: DEStringTemplate;
+        currentWeatherFullEffectDescription: DEStringTemplateCharOnly;
         /**
          * Either the location-specific partial effect description or the general weather partial effect description
          */
-        currentWeatherPartialEffectDescription: DEStringTemplate;
+        currentWeatherPartialEffectDescription: DEStringTemplateCharOnly;
         /**
          * Either the location-specific no effect description or the general weather no effect description
          */
-        currentWeatherNoEffectDescription: DEStringTemplate;
+        currentWeatherNoEffectDescription: DEStringTemplateCharOnly;
         /**
          * Either the location-specific negative effect description or the general weather negative effect description
          */
-        currentWeatherNegativelyExposedDescription: DEStringTemplate;
+        currentWeatherNegativelyExposedDescription: DEStringTemplateCharOnly;
     }
 }
 
@@ -2557,46 +2563,92 @@ declare interface DEConversation {
     pseudoConversationSummary?: string | null;
 }
 
-declare interface DEStringTemplateInfo {
+declare interface DEStringTemplateInfoCharOnly {
     /**
      * Available the character invoking the template
      * Usually available, but in rare cases like in narration
      * it may not be
      */
-    char?: DECompleteCharacterReference,
-
+    char: DECompleteCharacterReference,
+}
+declare interface DEStringTemplateInfoCharAndOther {
     /**
-     * Only available in likes and dislikes description templates
+     * Available the character invoking the template
+     * Usually available, but in rare cases like in narration
+     * it may not be
      */
-    chars?: DECompleteCharacterReference[],
+    char: DECompleteCharacterReference,
 
     /**
      * Only available in bond description templates
      */
-    other?: DECompleteCharacterReference,
+    other: DECompleteCharacterReference,
     /**
      * The relationship that the bond description has, usually this is for family only
      * as it otherwise defaults to "friend" for positive bond or "foe" for negative
      */
-    otherFamilyRelation?: DEFamilyRelation,
+    otherFamilyRelation: DEFamilyRelation | null,
     /**
      * The relationship with the other
      */
-    otherRelationship?: string,
+    otherRelationship: string | null,
+}
+
+declare interface DEStringTemplateInfoCausantsAndCauses {
+    /**
+     * Available the character invoking the template
+     * Usually available, but in rare cases like in narration
+     * it may not be
+     */
+    char: DECompleteCharacterReference,
 
     /**
      * Only available in state description templates, these are the causants of a given state
      */
-    causants?: DEStateCausant[],
-    causes?: DEStateCause[],
+    causants: DEStateCausant[] | null,
+    causes: DEStateCause[] | null,
 }
 
-declare type DEStringTemplate = string | ((
+declare interface DEStringTemplateInfoManyChars {
+    /**
+     * Only available in likes and dislikes description templates
+     */
+    chars?: DECompleteCharacterReference[],
+}
+
+declare type DEStringTemplateCharOnly = string | ((
     /**
      * Always available the DE object representing the whole simulation
      */
     DE: DEObject,
-    info: DEStringTemplateInfo
+    info: DEStringTemplateInfoBase
+) => Promise<string> | string);
+
+declare type DEStringTemplateCharAndOther = string | ((
+    /**
+     * Always available the DE object representing the whole simulation
+     * this is useful for checking the current state of the world, the characters, etc... to generate dynamic descriptions based on the current situation
+     */
+    DE: DEObject,
+    info: DEStringTemplateInfoCharAndOther
+) => Promise<string> | string);
+
+declare type DEStringTemplateCausantsAndCauses = string | ((
+    /**
+     * Always available the DE object representing the whole simulation
+     *  this is useful for checking the current state of the world, the characters, etc... to generate dynamic descriptions based on the current situation
+     */
+    DE: DEObject,
+    info: DEStringTemplateInfoCausantsAndCauses
+) => Promise<string> | string);
+
+declare type DEStringTemplateManyChars = string | ((
+    /**
+     * Always available the DE object representing the whole simulation
+     * this is useful for checking the current state of the world, the characters, etc... to generate dynamic descriptions based on the current situation
+     */
+    DE: DEObject,
+    info: DEStringTemplateInfoManyChars
 ) => Promise<string> | string);
 
 declare interface DEScene {
@@ -2611,7 +2663,7 @@ declare interface DEScene {
     /**
      * The narration that sets up the initial scene
      */
-    narration: DEStringTemplate;
+    narration: DEStringTemplateCharOnly;
     /**
      * Characters that will be engaged with the user at the start of the scene
      * these characters will be in a conversation with the user right away
@@ -2752,13 +2804,11 @@ declare interface DENarrationStyle {
 }
 
 declare interface DEUtils {
-    runHandlebarsTemplate(DE: DEObject, template: DEStringTemplate, info: DEStringTemplateInfo): string;
-    newHandlebarsTemplate(DE: DEObject, source: string): DEStringTemplate;
     newLocation(DE: DEObject, name: string, definition: DELocationDefinition): DELocationDefinition;
     newCharacter(DE: DEObject, definition: DECompleteCharacterReference): DECompleteCharacterReference;
     newConnection(DE: DEObject, definition: DEConnection): DEConnection;
     createStateInAllCharacters(DE: DEObject, stateName: string, stateDefinition: DECharacterStateDefinition): DECharacterStateDefinition;
-    createStateInCharacter(DE: DEObject, character: string | DECompleteCharacterReference | null, stateName: string, stateDefinition: DECharacterStateDefinition): DECharacterStateDefinition | null;
+    defineStateInCharacter(DE: DEObject, character: string | DECompleteCharacterReference | null, stateName: string, stateDefinition: DECharacterStateDefinition): DECharacterStateDefinition | null;
     newBond(DE: DEObject, char1: string | DECompleteCharacterReference | null, towards: string | DECompleteCharacterReference | null, bondDefinition: Omit<DESingleBondDescription, "towards">): DESingleBondDescription | null;
     newMutualBond(DE: DEObject, char1: string | DECompleteCharacterReference | null, char2: string | DECompleteCharacterReference | null, bondDefinition: Omit<DESingleBondDescription, "towards">): [DESingleBondDescription | null, DESingleBondDescription | null];
     newFamilyRelation(DE: DEObject, char1: string | DECompleteCharacterReference | null, towards: string | DECompleteCharacterReference | null, relation: DEFamilyRelation): [DEFamilyTie | null, DEFamilyTie | null];
@@ -2830,6 +2880,312 @@ declare interface DEUtils {
 
     charHasState(DE: DEObject, character: string | DECompleteCharacterReference, stateName: string): boolean;
     charIsRelievingState(DE: DEObject, character: string | DECompleteCharacterReference, stateName: string): boolean;
+
+    templateUtils: {
+        /**
+         * The list of all characters available in the world, including the user
+         * @returns eg. [Arya, Thalon, Mira, Dorian, Luna, Kiro]
+         */
+        allWorldCharacters(DE: DEObject): DECompleteCharacterReference[];
+        /**
+         * The list of all characters available in the world, excluding the user
+         * @returns eg. [Arya, Thalon, Mira, Dorian, Luna, Kiro]
+         */
+        allWorldCharactersButUser(DE: DEObject): DECompleteCharacterReference[];
+        /**
+         * The name of the character current location
+         * @returns eg. Eldoria, Shadowfen
+         */
+        currentLocation(DE: DEObject): string;
+        /**
+         * Boolean indicating if character is in a vehicle at the current location
+         * @returns true or false
+         */
+        currentLocationIsInVehicle(DE: DEObject): boolean;
+        /**
+         * Boolean indicating if the character is in a safe location at the current location
+         * @returns true or false
+         */
+        currentLocationIsSafe(DE: DEObject): boolean;
+        /**
+         * The list of all characters available in the current location of the world, including the user
+         * @returns eg. [Luna, Kiro]
+         */
+        allCharactersAtLocation(DE: DEObject, locationName: string): DECompleteCharacterReference[];
+        /**
+         * Boolean indicating if the provided location is a vehicle
+         * @returns true or false
+         */
+        locationIsVehicle(DE: DEObject, locationName: string): boolean;
+        /**
+         * Boolean indicating if the provided location is a safe location
+         * @returns true or false
+         */
+        locationIsSafe(DE: DEObject, locationName: string): boolean;
+        /**
+         * TODO does this work?
+         * The name of the characters/users/objects that activated the state last, it is available everywhere but it needs track_causants enabled for the state to work
+         * @returns eg. ["Aria", "Thalon", "Player", "The Ancient Sword"]
+         */
+        getLastStateCausants(DE: DEObject, char: DECompleteCharacterReference, stateName: string): string[];
+        /**
+         * TODO does this work?
+         * The name of the characters only that activated the state last, it is available everywhere but it needs track_causants enabled for the state to work
+         * @returns eg. ["Aria", "Thalon", "Player"]
+         */
+        getLastStateCharacterCausants(DE: DEObject, char: DECompleteCharacterReference, stateName: string): string[];
+        /**
+         * TODO does this work?
+         * The name of the characters only that activated the state last, it is available everywhere but it needs track_causants enabled for the state to work
+         * @returns eg. ["Aria", "Thalon", "Player"]
+         */
+        getLastStateObjectCausants(DE: DEObject, char: DECompleteCharacterReference, stateName: string): string[];
+        /**
+         * Get the list of active states for the current character
+         * @returns eg. [ANGRY, TIRED, HAPPY]
+         */
+        getStates(DE: DEObject, char: DECompleteCharacterReference): string[];
+        /**
+         * Get the intensity of the specified active state for the current character, intensities are integer numbers from 0 to 4
+         * @returns eg. 0, 1, 2, 3, 4
+         */
+        getStateIntensity(DE: DEObject, char: DECompleteCharacterReference, stateName: string): number;
+        /**
+         * Check if the current character has the specified active state
+         * @returns eg. true or false
+         */
+        hasState(DE: DEObject, char: DECompleteCharacterReference, stateName: string): boolean;
+        /**
+         * Check if the current character has just activated the specified state in this interaction
+         * @returns eg. true or false
+         */
+        stateHasJustActivated(DE: DEObject, char: DECompleteCharacterReference, stateName: string): boolean;
+        /**
+         * Get how many inference cycles ago the state was activated for the provided character
+         * @returns eg. 3, it will return -1 if the state is not found ever
+         */
+        getStateActivationCyclesAgo(DE: DEObject, char: DECompleteCharacterReference, stateName: string): number;
+        /**
+         * Get the list of social group members for the current character
+         * @returns eg. [Arya, Thalon, Mira]
+         */
+        getSocialGroup(DE: DEObject, char: DECompleteCharacterReference, minBondLevel: number, maxBondLevel: number, min2BondLevel: number, max2BondLevel: number): string[];
+        /**
+         * Get the list of social group members for the current character that are present at the same location as our character
+         * @returns eg. [Arya, Thalon, Mira]
+         */
+        getPresentSocialGroup(DE: DEObject, char: DECompleteCharacterReference, minBondLevel: number, maxBondLevel: number, min2BondLevel: number, max2BondLevel: number): string[];
+        /**
+         * Get the list of social group members for the current character, that are not only present but also in a conversation with our character
+         * @returns eg. [Thalon, Mira]
+         */
+        getPresentConversingSocialGroup(DE: DEObject, char: DECompleteCharacterReference, minBondLevel: number, maxBondLevel: number, min2BondLevel: number, max2BondLevel: number): string[];
+        /**
+         * Get the difference between the provided list and the present social group members
+         * @returns eg. [Arya, Thalon]
+         */
+        getDifferenceOfPresentSocialGroup(DE: DEObject, char: DECompleteCharacterReference, list: string[]): string[];
+        /**
+         * Get the list of social group members that are gone forever (most likely dead) for the current character
+         * @returns eg. [Thalon, Mira]
+         */
+        getExSocialGroup(DE: DEObject, char: DECompleteCharacterReference, minBondLevel: number, maxBondLevel: number, min2BondLevel: number, max2BondLevel: number): string[];
+        /**
+         * Get the currently carrying weight of the character
+         * @returns eg. 70
+         */
+        getCarryWeight(DE: DEObject, char: DECompleteCharacterReference): number;
+        /**
+         * Get the currently carrying volume of the character
+         * @returns eg. 70
+         */
+        getCarryVolume(DE: DEObject, char: DECompleteCharacterReference): number;
+        /**
+         * Get the power level of the specified character, a number that can be used to compare the strength of characters in a very general way
+         * @returns eg. 50
+         */
+        getPowerLevel(DE: DEObject, char: DECompleteCharacterReference): number;
+        /**
+         * Get the tier of the specified character, representing their overall power level
+         * @returns eg. human
+         */
+        getTier(DE: DEObject, char: DECompleteCharacterReference): string;
+        /**
+         * Get the numeric value of the specified character's tier, representing their power level within the tier
+         * @returns eg. 85
+         */
+        getTierValue(DE: DEObject, char: DECompleteCharacterReference): number;
+        /**
+         * Boolean indicating if the character is dead
+         * @returns true or false
+         */
+        isDead(DE: DEObject, char: DECompleteCharacterReference): boolean;
+        /**
+         * Boolean indicating if the string given is a character, this will give true to the user as well
+         * @returns true or false
+         */
+        getChar(DE: DEObject, potentialCharacter: string): DECompleteCharacterReference | null;
+        /**
+         * Boolean indicating if the character is the user
+         * @returns true or false
+         */
+        isUser(DE: DEObject, char: DECompleteCharacterReference): boolean;
+        /**
+         * Boolean indicating if the character is a present member of the social
+         * @returns true or false
+         */
+        isPresentMember(DE: DEObject, char: DECompleteCharacterReference): boolean;
+        /**
+         * Boolean indicating if the character is not present in the location
+         * @returns true or false
+         */
+        isNotPresent(DE: DEObject, char: DECompleteCharacterReference): boolean;
+        /**
+         * Boolean indicating if the character is gone forever (most likely dead)
+         * @returns true or false
+         */
+        isGone(DE: DEObject, char: DECompleteCharacterReference): boolean;
+        /**
+         * Boolean indicating if the character is currently in a conversation with our character
+         * @returns true or false
+         */
+        isInConversation(DE: DEObject, char: DECompleteCharacterReference): boolean;
+        /**
+         * Boolean indicating if the character is currently indoors
+         * @returns true or false
+         */
+        isIndoors(DE: DEObject, char: DECompleteCharacterReference): boolean;
+        /**
+         * Boolean indicating if the character is currently outdoors
+         * @returns true or false
+         */
+        isOutdoors(DE: DEObject, char: DECompleteCharacterReference): boolean;
+        /**
+         * Boolean indicating if the character has the specified item in their inventory
+         * @returns true or false
+         */
+        hasItem(DE: DEObject, char: DECompleteCharacterReference, itemName: string): boolean;
+        /**
+         * String indicating the current posture of the character
+         * @returns "standing" | "crawling" | "climbing" | "sitting" | "lying_down" | "crouching" | "kneeling" | "hanging" | "floating" | "flying" | "swimming"
+         */
+        getPosture(DE: DEObject, char: DECompleteCharacterReference): DEPosture;
+        /**
+         * String indicating a location where another character should be at according to the character's knowledge
+         * @returns eg. Eldoria, Shadowfen, or empty string if they have no idea
+         */
+        lastSaw(DE: DEObject, char: DECompleteCharacterReference): string;
+        /**
+         * Boolean indicating if the character is a member that got lost after being left behind (known to this member)
+         * @returns true or false
+         */
+        hasNoIdeaWhereIs(DE: DEObject, char: DECompleteCharacterReference): boolean;
+        /**
+         * Boolean indicating if the character does not know the questioned character and does not have a bond with them
+         * @returns true or false
+         */
+        doesNotKnow(DE: DEObject, char: DECompleteCharacterReference): boolean;
+        /**
+         * Boolean indicating if the character has a stranger relationship with the questioned character
+         * @returns true or false
+         */
+        isStrangersWith(DE: DEObject, char: DECompleteCharacterReference, towardsChar: DECompleteCharacterReference): boolean;
+        /**
+         * Get the bond value of our character towards the questioned character
+         * @returns eg. 50
+         */
+        getBondTowards(DE: DEObject, char: DECompleteCharacterReference, towardsChar: DECompleteCharacterReference): number;
+        /**
+         * Get the secondary bond value of our character towards the questioned character
+         * @returns eg. 30
+         */
+        getSecondaryBondTowards(DE: DEObject, char: DECompleteCharacterReference, towardsChar: DECompleteCharacterReference): number;
+        /**
+         * Boolean indicating if our character is at the same location of the questioned character
+         * @returns true or false
+         */
+        isAtSameLocation(DE: DEObject, char: DECompleteCharacterReference, char2: DECompleteCharacterReference): boolean;
+        /**
+         * Boolean indicating if our character is with the questioned character, taking the same slot
+         * @returns true or false
+         */
+        isAtSameSlot(DE: DEObject, char: DECompleteCharacterReference, char2: DECompleteCharacterReference): boolean;
+        /**
+         * Boolean indicating if the character is at the current location of the world
+         * @returns true or false
+         */
+        isHere(DE: DEObject, char: DECompleteCharacterReference): boolean;
+        /**
+         * Formats a list with commas and 'and', do not use this for formatting causants use formatCommaList
+         * @returns eg. Arya, Thalon, and Mira
+         */
+        formatAnd(DE: DEObject, list: string[]): string;
+        /**
+         * Formats a list with commas only, do not use this for formatting causants use formatCommaList
+         * @returns eg. Arya, Thalon, Mira
+         */
+        formatCommaList(DE: DEObject, list: string[]): string;
+        /**
+         * Formats a list with commas and 'or'
+         * @returns eg. Arya, Thalon, or Mira
+         */
+        formatOr(DE: DEObject, list: string[]): string;
+        /**
+         * Formats the object pronoun for a list of characters or a single character
+         * @returns eg. are, is
+         */
+        formatVerbToBe(DE: DEObject, chars: Array<DECompleteCharacterReference | string>): string;
+        /**
+         * Formats the plural or singular form based on the list of characters or a single character
+         * @returns eg. sword, swords
+         */
+        formatPluralOrSingular(DE: DEObject, chars: Array<DECompleteCharacterReference | string>, plural, singular): string;
+        /**
+         * Formats the object pronoun for a list of characters or a single character
+         * @returns eg. him, her, them
+         */
+        formatObjectPronoun(DE: DEObject, chars: Array<DECompleteCharacterReference | string>): string;
+        /**
+         * Formats the possessive pronoun for a list of characters or a single character
+         * @returns eg. his, her, their
+         */
+        formatPossessive(DE: DEObject, chars: Array<DECompleteCharacterReference | string>): string;
+        /**
+         * Formats the reflexive pronoun for a list of characters or a single character
+         * @returns eg. himself, herself, themself
+         */
+        formatReflexive(DE: DEObject, chars: Array<DECompleteCharacterReference | string>): string;
+        /**
+         * Formats the pronoun for a list of characters or a single character
+         * @returns eg. he, she, they
+         */
+        formatPronoun(DE: DEObject, chars: Array<DECompleteCharacterReference | string>): string;
+        /**
+         * Formats the ownership pronoun for a list of characters or a single character
+         * @returns eg. his, hers, theirs
+         */
+        formatOwnershipPronoun(DE: DEObject, chars: Array<DECompleteCharacterReference | string>): string;
+        /**
+         * Generates a random seed integer from a string input for this specific character, the range will be from 0 to optionsNumber - 1, useful for creating random character traits for instantiable characters that will get a random name
+         * @returns integer
+         */
+        getRandomSeedFromString(DE: DEObject, optionsNumber: number, inputString: string): number;
+        /**
+         * Generates a random seed based on the current world time, the range will be from 0 to optionsNumber - 1, useful for creating random events that change over time
+         * @returns integer
+         */
+        getRandomSeedFromTime(DE: DEObject, optionsNumber: number): number;
+        /**
+         * Provides one of the random options by using the time as the seed
+         * @returns string
+         */
+        getRandomOption(DE: DEObject, options: string[]): string;
+        /**
+         * Provides one of the random options by using the character name and time as the seed, useful for generating consistent random choices per character that change over time
+         * @returns string
+         */
+        getRandomOptionFixedCharacter(DE: DEObject, char: DECompleteCharacterReference, options: string[]): string;
+    }
 }
 
 declare interface DEWorldRule {
@@ -2837,7 +3193,7 @@ declare interface DEWorldRule {
      * Description of the rule being enforced
      * eg. "Magic does not exist in this world, so {{char}} cannot use magic."
      */
-    rule: DEStringTemplate;
+    rule: DEStringTemplateCharOnly;
 }
 
 declare interface DEObject {
@@ -2910,18 +3266,6 @@ declare type DE = DEObject;
 declare interface DEScript {
     type: "world" | "characters" | "world-mechanic" | "character-mechanic" | "misc";
     description?: string;
-    /**
-     * Exposes properties that serve as configuration, these are set by the UI
-     * and are meant to be used by the UI
-     */
-    exposeProperties?: Record<string, {
-        type: "template" | "string" | "number" | "boolean" | "json";
-        description?: string;
-        propertyLocation: "world" | "characters" | "items";
-        filter?: {
-            name?: string;
-        }
-    }>;
 
     /**
      * Initialize gets called when the script is loaded, before the world is initialized, this is useful for setting up any necessary properties, functions, or other things that need to be in place before the world starts

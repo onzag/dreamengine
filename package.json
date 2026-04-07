@@ -34,15 +34,10 @@
     "@electron-forge/plugin-auto-unpack-natives": "^7.10.2",
     "@electron-forge/plugin-fuses": "^7.10.2",
     "@electron/fuses": "^1.8.0",
-    "@typescript/vfs": "^1.6.2",
-    "@xiechao/codemirror-lang-handlebars": "^1.0.4",
-    "codemirror": "^6.0.2",
-    "electron": "^39.2.7",
-    "esbuild": "^0.27.2",
-    "typescript": "^5.9.3"
+    "electron": "^39.2.7"
   },
   "dependencies": {
     "electron-squirrel-startup": "^1.0.1",
-    "handlebars": "^4.7.8"
+    "typescript": "^6.0.2"
   }
 }

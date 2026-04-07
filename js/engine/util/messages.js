@@ -122,15 +122,15 @@ export function parseMessageInComponentsAsText(author, message) {
 }
 
 /**
- * @param {DEngine} engine
+ * @param {DEObject} deObject
  * @param {DETimeDescription | null} time
  * @param {boolean} includeNowLabel
  */
-export function makeTimestamp(engine, time, includeNowLabel = true) {
+export function makeTimestamp(deObject, time, includeNowLabel = true) {
     if (!time) {
         return "Now";
     }
-    if (includeNowLabel && engine.deObject?.currentTime.time === time.time) {
+    if (includeNowLabel && deObject?.currentTime.time === time.time) {
         return "Now";
     }
     // We want something like; Monday, June 5th, 2023 at 3:45 PM
@@ -197,7 +197,8 @@ export async function* getHistoryForCharacter(engine, character, options) {
     const consumeAccumulatedStatesAndLocations = (fromTime) => {
         // because we are looping from newest to oldest, lastConversationStartTime is actually before
         // thisConversationEndTime
-        let message = `From ${makeTimestamp(engine, fromTime)} to ${makeTimestamp(engine, statesAccumulatedFromTime)}, ` + character.name;
+        // @ts-ignore typescript is wrong, deObject has been null checked at the beginning of the function
+        let message = `From ${makeTimestamp(engine.deObject, fromTime)} to ${makeTimestamp(engine.deObject, statesAccumulatedFromTime)}, ` + character.name;
         if (statesAccumulated.size > 0) {
             message += ` finds ${engine.deObject?.functions.format_reflexive(engine.deObject, character, character.name)} in the following states: `;
             let statesList = "";
@@ -270,7 +271,7 @@ export async function* getHistoryForCharacter(engine, character, options) {
                     );
                 }
                 const participantsExcludingCharacter = currentConversationObject.participants.filter(p => p !== character.name);
-                const timeMark = makeTimestamp(engine, conversationStartTime);
+                const timeMark = makeTimestamp(engine.deObject, conversationStartTime);
                 const withOrAlone = participantsExcludingCharacter.length === 0 ? "on their own" : "with " + engine.deObject.functions.format_and(engine.deObject, null, participantsExcludingCharacter);
 
                 const expectedId = `story-master-${state.conversationId}-summary`;
@@ -313,7 +314,7 @@ export async function* getHistoryForCharacter(engine, character, options) {
 
                 if (!firstMessageIsStoryMaster) {
                     const participantsExcludingCharacter = currentConversationObject.participants.filter(p => p !== character.name);
-                    const timeMark = makeTimestamp(engine, conversationStartTime);
+                    const timeMark = makeTimestamp(engine.deObject, conversationStartTime);
                     const timeMarkDetailed = timeMark === "Now" ? "right now" : "at " + timeMark;
                     const withOrAlone = participantsExcludingCharacter.length === 0 ? "on their own" : "with " + engine.deObject.functions.format_and(engine.deObject, null, participantsExcludingCharacter);
                     const keepgoing = yield {

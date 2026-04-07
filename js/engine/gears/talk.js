@@ -10,7 +10,7 @@ import { mergeVocabularyLimits } from "../util/vocabulary.js";
  * @param {DECompleteCharacterReference} character
  * @param {{
  *   doNotMove: boolean, // if true, the character will not be allowed to change location
- *   injectedActions: Array<DEActionPromptInjection>,
+ *   injectedActions: Array<DEActionPromptInjection<DEStringTemplateCharOnly>>,
  * }} options
  */
 export async function talk(engine, character, options) {
@@ -37,7 +37,7 @@ export async function talk(engine, character, options) {
     let hasDied = false;
 
     const characterSystemPrompt = await getSysPromptForCharacter(engine, character.name);
-    const characterCanSee = await getCharacterCanSee(engine, character.name);
+    const characterCanSee = await getCharacterCanSee(engine.deObject, character.name);
 
     let actions = (await Promise.all(characterSystemPrompt.internalDescription.actions.map(async (action) => {
         if (action.action.action) {
@@ -49,8 +49,8 @@ export async function talk(engine, character, options) {
                 engine.deObject,
                 {
                     char: character,
-                    causants: action.applyingState?.causants || undefined,
-                    causes: action.applyingState?.causes || undefined,
+                    causants: action.applyingState?.causants,
+                    causes: action.applyingState?.causes,
                 }
             );
             const narrativeAction = typeof action.action.narrativeAction === "string" ? action.action.narrativeAction : (action.action.narrativeAction ? await action.action.narrativeAction(
@@ -58,8 +58,8 @@ export async function talk(engine, character, options) {
                 engine.deObject,
                 {
                     char: character,
-                    causants: action.applyingState?.causants || undefined,
-                    causes: action.applyingState?.causes || undefined,
+                    causants: action.applyingState?.causants,
+                    causes: action.applyingState?.causes,
                 },
             ) : null);
             const narrativeActionTrimmed = narrativeAction ? narrativeAction.trim() : null;
@@ -85,17 +85,12 @@ export async function talk(engine, character, options) {
                 char: character,
             }) : null,
             action: {
-                /**
-                 * @type {DEApplyingState | null}
-                 */
                 applyingState: null,
                 action: a,
-                /**
-                 * @type {DECharacterStateDefinition | null}
-                 */
                 stateInfo: null,
             }
         })))).filter((action) => !!action.text || !!action.narrativeAction);
+        // @ts-ignore typescript doesn't know how to merge these two types of actions, but we know they are compatible
         actions = injectedActionsProcessed.concat(actions);
     }
 
@@ -214,15 +209,15 @@ export async function talk(engine, character, options) {
             if (action.action.action.narrativeEffect && narrativeEffectsDominance < stateDominance) {
                 narrativeEffects.push(typeof action.action.action.narrativeEffect === "string" ? action.action.action.narrativeEffect : await action.action.action.narrativeEffect(engine.deObject, {
                     char: character,
-                    causants: action.action.applyingState?.causants || undefined,
-                    causes: action.action.applyingState?.causes || undefined,
+                    causants: action.action.applyingState?.causants || null,
+                    causes: action.action.applyingState?.causes || null,
                 }));
                 narrativeEffectsDominance = stateDominance;
             } else if (action.action.action.narrativeEffect && narrativeEffectsDominance === stateDominance) {
                 narrativeEffects.push(typeof action.action.action.narrativeEffect === "string" ? action.action.action.narrativeEffect : await action.action.action.narrativeEffect(engine.deObject, {
                     char: character,
-                    causants: action.action.applyingState?.causants || undefined,
-                    causes: action.action.applyingState?.causes || undefined,
+                    causants: action.action.applyingState?.causants || null,
+                    causes: action.action.applyingState?.causes || null,
                 }));
             }
         }
@@ -392,8 +387,8 @@ export async function talk(engine, character, options) {
                 if (preNarrationOrigin) {
                     const preNarrationText = typeof preNarrationOrigin === "string" ? preNarrationOrigin : await preNarrationOrigin(engine.deObject, {
                         char: character,
-                        causants: state.applyingState.causants || undefined,
-                        causes: state.applyingState.causes || undefined,
+                        causants: state.applyingState.causants || null,
+                        causes: state.applyingState.causes || null,
                     });
                     const trimmed = preNarrationText.trim();
                     if (trimmed) {
@@ -417,8 +412,8 @@ export async function talk(engine, character, options) {
                 if (postNarrationOrigin) {
                     const postNarrationText = typeof postNarrationOrigin === "string" ? postNarrationOrigin : await postNarrationOrigin(engine.deObject, {
                         char: character,
-                        causants: state.applyingState.causants || undefined,
-                        causes: state.applyingState.causes || undefined,
+                        causants: state.applyingState.causants || null,
+                        causes: state.applyingState.causes || null,
                     });
                     const trimmed = postNarrationText.trim();
                     if (trimmed) {

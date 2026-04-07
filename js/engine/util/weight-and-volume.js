@@ -1,29 +1,28 @@
-import { DEngine } from "../index.js";
 
 /**
- * @param {DEngine} engine 
+ * @param {DEObject} deObject
  * @param {string} characterName 
  */
-export function getCharacterWeight(engine, characterName) {
-    if (!engine.deObject?.characters?.[characterName]) {
+export function getCharacterWeight(deObject, characterName) {
+    if (!deObject.characters?.[characterName]) {
         throw new Error(`Character ${characterName} not found in engine`);
     }
     let singularWeight = 0;
 
-    const character = engine.deObject.characters[characterName];
-    const charState = engine.deObject.stateFor[characterName];
+    const character = deObject.characters[characterName];
+    const charState = deObject.stateFor[characterName];
     singularWeight += character.weightKg;
 
     for (const childItem of charState.wearing) {
-        const results = getItemWeight(engine, childItem);
+        const results = getItemWeight(deObject, childItem);
         singularWeight += results.completeWeight;
     }
     for (const childItem of charState.carrying) {
-        const results = getItemWeight(engine, childItem);
+        const results = getItemWeight(deObject, childItem);
         singularWeight += results.completeWeight;
     }
     for (const directlyCarried of charState.carryingCharactersDirectly) {
-        const results = getCharacterWeight(engine, directlyCarried);
+        const results = getCharacterWeight(deObject, directlyCarried);
         singularWeight += results.weight;
     }
     return {
@@ -32,17 +31,17 @@ export function getCharacterWeight(engine, characterName) {
 }
 
 /**
- * @param {DEngine} engine 
+ * @param {DEObject} deObject
  * @param {string} characterName 
  */
-export function getCharacterVolume(engine, characterName) {
-    if (!engine.deObject?.characters?.[characterName]) {
+export function getCharacterVolume(deObject, characterName) {
+    if (!deObject.characters?.[characterName]) {
         throw new Error(`Character ${characterName} not found in engine`);
     }
     let singularVolume = 0;
 
-    const character = engine.deObject.characters[characterName];
-    const charState = engine.deObject.stateFor[characterName];
+    const character = deObject.characters[characterName];
+    const charState = deObject.stateFor[characterName];
     singularVolume += character.weightKg; // assume water density, so same as weight in kg
 
     for (const childItem of charState.wearing) {
@@ -51,11 +50,11 @@ export function getCharacterVolume(engine, characterName) {
         }
     }
     for (const childItem of charState.carrying) {
-        const results = getItemVolume(engine, childItem);
+        const results = getItemVolume(deObject, childItem);
         singularVolume += results.completeVolume;
     }
     for (const directlyCarried of charState.carryingCharactersDirectly) {
-        const results = getCharacterVolume(engine, directlyCarried);
+        const results = getCharacterVolume(deObject, directlyCarried);
         singularVolume += results.volume;
     }
     return {
@@ -64,10 +63,10 @@ export function getCharacterVolume(engine, characterName) {
 }
 
 /**
- * @param {DEngine} engine
+ * @param {DEObject} deObject
  * @param {DEItem} item 
  */
-export function getItemWeight(engine, item) {
+export function getItemWeight(deObject, item) {
     let singularWeight = 0;
 
     if (item.amount === 0) {
@@ -97,23 +96,23 @@ export function getItemWeight(engine, item) {
     const allCharactersInvolved = [];
 
     for (const childItem of item.containing) {
-        const results = getItemWeight(engine, childItem);
+        const results = getItemWeight(deObject, childItem);
         allCharactersInvolved.push(...results.allCharactersInvolved, ...results.charactersOnlyDirectlyInside, ...results.charactersOnlyDirectlyOnTop);
         singularWeight += results.completeWeight;
     }
     for (const childItem of item.ontop) {
-        const results = getItemWeight(engine, childItem);
+        const results = getItemWeight(deObject, childItem);
         allCharactersInvolved.push(...results.allCharactersInvolved, ...results.charactersOnlyDirectlyInside, ...results.charactersOnlyDirectlyOnTop);
         singularWeight += results.completeWeight;
     }
     for (const character of item.ontopCharacters) {
-        const results = getCharacterWeight(engine, character);
+        const results = getCharacterWeight(deObject, character);
         charactersOnlyDirectlyOnTop.push(character);
         allCharactersInvolved.push(character);
         singularWeight += results.weight;
     }
     for (const character of item.containingCharacters) {
-        const results = getCharacterWeight(engine, character);
+        const results = getCharacterWeight(deObject, character);
         charactersOnlyDirectlyInside.push(character);
         allCharactersInvolved.push(character);
         singularWeight += results.weight;
@@ -130,10 +129,10 @@ export function getItemWeight(engine, item) {
 }
 
 /**
- * @param {DEngine} engine
+ * @param {DEObject} deObject
  * @param {DEItem} item 
  */
-export function getItemVolume(engine, item) {
+export function getItemVolume(deObject, item) {
     let singularVolume = 0;
 
     if (item.amount === 0) {
@@ -163,14 +162,14 @@ export function getItemVolume(engine, item) {
     singularVolume += item.volumeLiters;
     const isRigid = item.containerProperties ? item.containerProperties.structure === "rigid" : true;
     for (const childItem of item.containing) {
-        const results = getItemVolume(engine, childItem);
+        const results = getItemVolume(deObject, childItem);
         allCharactersInvolved.push(...results.allCharactersInvolved, ...results.charactersOnlyDirectlyInside, ...results.charactersOnlyDirectlyOnTop);
         if (!isRigid) {
             singularVolume += results.completeVolume;
         }
     }
     for (const character of item.containingCharacters) {
-        const results = getCharacterVolume(engine, character);
+        const results = getCharacterVolume(deObject, character);
         allCharactersInvolved.push(character);
         charactersOnlyDirectlyInside.push(character);
         if (!isRigid) {
@@ -178,14 +177,14 @@ export function getItemVolume(engine, item) {
         }
     }
     for (const childItem of item.ontop) {
-        const results = getItemVolume(engine, childItem);
+        const results = getItemVolume(deObject, childItem);
         allCharactersInvolved.push(...results.allCharactersInvolved, ...results.charactersOnlyDirectlyInside, ...results.charactersOnlyDirectlyOnTop);
         singularVolume += results.completeVolume;
     }
     for (const character of item.ontopCharacters) {
         allCharactersInvolved.push(character);
         charactersOnlyDirectlyOnTop.push(character);
-        const results = getCharacterVolume(engine, character);
+        const results = getCharacterVolume(deObject, character);
         singularVolume += results.volume;
     }
 
@@ -201,19 +200,19 @@ export function getItemVolume(engine, item) {
 
 /**
  * 
- * @param {DEngine} engine 
+ * @param {DEObject} deObject 
  * @param {string} characterName 
  */
-export function getCharacterCarryingCapacity(engine, characterName) {
-    if (!engine.deObject?.characters?.[characterName]) {
+export function getCharacterCarryingCapacity(deObject, characterName) {
+    if (!deObject.characters?.[characterName]) {
         throw new Error(`Character ${characterName} not found in engine`);
     }
 
-    const character = engine.deObject.characters[characterName];
+    const character = deObject.characters[characterName];
     let carryingCapacityKg = character.carryingCapacityKg;
     let carryingCapacityLiters = character.carryingCapacityLiters;
 
-    const wearableItems = engine.deObject.stateFor[characterName].wearing;
+    const wearableItems = deObject.stateFor[characterName].wearing;
     for (const item of wearableItems) {
         if (item.wearableProperties) {
             carryingCapacityKg += item.wearableProperties.addedCarryingCapacityKg;
@@ -231,10 +230,10 @@ export function getCharacterCarryingCapacity(engine, characterName) {
  * For a given item, it returns the characters/items that are on top or inside it
  * that are in excess of the item capacity, either weight or volume, and that would cause the item to break or fall down, along with the reason and style of the break if it breaks
  * 
- * @param {DEngine} engine 
+ * @param {DEObject} deObject 
  * @param {DEItem} item 
  */
-export function getItemExcessElements(engine, item) {
+export function getItemExcessElements(deObject, item) {
     const capacityInVolume = item.containerProperties ? item.containerProperties.capacityKg : 0;
     const capacityInWeight = item.containerProperties ? item.containerProperties.capacityLiters : 0;
 
@@ -266,7 +265,7 @@ export function getItemExcessElements(engine, item) {
      */
     const breakReasonsItemsAndCharacters = [];
     for (const childItem of sortedByJustPlacedContaining) {
-        const results = getItemWeight(engine, childItem);
+        const results = getItemWeight(deObject, childItem);
         if (carriedWeight + results.completeWeight > capacityInWeight) {
             isOverweightAndBreaks = true;
             breakReasonsItemsAndCharacters.push(childItem);
@@ -276,7 +275,7 @@ export function getItemExcessElements(engine, item) {
     }
 
     for (const childCharacter of item.containingCharacters) {
-        const results = getCharacterWeight(engine, childCharacter);
+        const results = getCharacterWeight(deObject, childCharacter);
         if (carriedWeight + results.weight > capacityInWeight) {
             isOverweightAndBreaks = true;
             breakReasonsItemsAndCharacters.push(childCharacter);
@@ -285,11 +284,11 @@ export function getItemExcessElements(engine, item) {
         }
     }
 
-    const itemNameForText = utilItemCount(engine, null, item.owner, item.amount, item.name, false, true);
+    const itemNameForText = utilItemCount(deObject, null, item.owner, item.amount, item.name, false, true);
 
     if (isOverweightAndBreaks) {
-        const breakList = breakReasonsItemsAndCharacters.map((i, ind) => typeof i === "string" ? i : utilItemCount(engine, null, i.owner, i.amount, i.name, false, true));
-        const listOfItems = engine.deObject?.functions.format_and(engine.deObject, null, breakList);
+        const breakList = breakReasonsItemsAndCharacters.map((i, ind) => typeof i === "string" ? i : utilItemCount(deObject, null, i.owner, i.amount, i.name, false, true));
+        const listOfItems = deObject?.utils.templateUtils.formatAnd(deObject, breakList);
         const overweightReasons = [
             `${listOfItems} causes ${itemNameForText} to be overweight and break`,
             `${itemNameForText} bursts apart from the sheer amount of ${listOfItems} stuffed inside`,
@@ -317,7 +316,7 @@ export function getItemExcessElements(engine, item) {
     }
 
     for (const childItem of sortedByJustPlacedOntop) {
-        const results = getItemWeight(engine, childItem);
+        const results = getItemWeight(deObject, childItem);
         if (capacityOnTopWeight !== null && ontopWeight + results.completeWeight > capacityOnTopWeight) {
             isOverweightAndBreaks = true;
             breakReasonsItemsAndCharacters.push(childItem);
@@ -327,7 +326,7 @@ export function getItemExcessElements(engine, item) {
     }
 
     for (const childCharacter of item.ontopCharacters) {
-        const results = getCharacterWeight(engine, childCharacter);
+        const results = getCharacterWeight(deObject, childCharacter);
         if (capacityOnTopWeight !== null && ontopWeight + results.weight > capacityOnTopWeight) {
             isOverweightAndBreaks = true;
             breakReasonsItemsAndCharacters.push(childCharacter);
@@ -337,8 +336,8 @@ export function getItemExcessElements(engine, item) {
     }
 
     if (isOverweightAndBreaks) {
-        const breakList = breakReasonsItemsAndCharacters.map((i, ind) => typeof i === "string" ? i : utilItemCount(engine, null, i.owner, i.amount, i.name, false, true));
-        const listOfItems = engine.deObject?.functions.format_and(engine.deObject, null, breakList);
+        const breakList = breakReasonsItemsAndCharacters.map((i, ind) => typeof i === "string" ? i : utilItemCount(deObject, null, i.owner, i.amount, i.name, false, true));
+        const listOfItems = deObject?.utils.templateUtils.formatAnd(deObject, breakList);
         const crushedReasons = [
             `${listOfItems} causes ${itemNameForText} to be overloaded and it breaks under the weight`,
             `${itemNameForText} collapses under the crushing weight of ${listOfItems}`,
@@ -376,7 +375,7 @@ export function getItemExcessElements(engine, item) {
     let ontopVolume = 0;
 
     for (const childItem of sortedByJustPlacedContaining) {
-        const results = getItemVolume(engine, childItem);
+        const results = getItemVolume(deObject, childItem);
         const remainingCapacity = capacityInVolume - carriedVolume;
         const howManyCanFit = Math.floor(remainingCapacity / (results.completeVolume / (results.amount || 1)));
         if (howManyCanFit <= 0) {
@@ -396,7 +395,7 @@ export function getItemExcessElements(engine, item) {
     }
 
     for (const childCharacter of item.containingCharacters) {
-        const results = getCharacterVolume(engine, childCharacter);
+        const results = getCharacterVolume(deObject, childCharacter);
         if (carriedVolume + results.volume > capacityInVolume) {
             expelledContainedCharacters.push(childCharacter);
         } else {
@@ -405,7 +404,7 @@ export function getItemExcessElements(engine, item) {
     }
 
     for (const childItem of sortedByJustPlacedOntop) {
-        const results = getItemVolume(engine, childItem);
+        const results = getItemVolume(deObject, childItem);
         const remainingCapacity = capacityOnTopVolume !== null ? capacityOnTopVolume - ontopVolume : Infinity;
         const howManyCanFit = Math.floor(remainingCapacity / (results.completeVolume / (results.amount || 1)));
         if (howManyCanFit <= 0) {
@@ -425,7 +424,7 @@ export function getItemExcessElements(engine, item) {
     }
 
     for (const childCharacter of item.ontopCharacters) {
-        const results = getCharacterVolume(engine, childCharacter);
+        const results = getCharacterVolume(deObject, childCharacter);
         if (capacityOnTopVolume !== null && ontopVolume + results.volume > capacityOnTopVolume) {
             expelledOntopCharacters.push(childCharacter);
         } else {
@@ -445,7 +444,7 @@ export function getItemExcessElements(engine, item) {
 }
 
 /** 
- * @param {DEngine} engine 
+ * @param {DEObject} deObject 
  * @param {DEItem} item 
  * @param {string} character
  * @param {boolean} [isNotBeingCurrentlyWorn] this is used for example when we want to check the fitment of an item that is currently being worn, in that case we want to ignore the extra body volume that it provides, because it is already being worn, so it is not providing that extra body volume to itself
@@ -456,10 +455,7 @@ export function getItemExcessElements(engine, item) {
  *       breakReason: string|null,
  *    }}
  */
-export function getWearableFitment(engine, item, character, isNotBeingCurrentlyWorn = false) {
-    if (!engine.deObject) {
-        throw new Error("DEngine not initialized");
-    }
+export function getWearableFitment(deObject, item, character, isNotBeingCurrentlyWorn = false) {
     if (item.wearableProperties) {
         let extraAddedExtraTraitsAtTheEnd = []
         for (const trait of item.wearableProperties.otherFitmentTraitsAny || []) {
@@ -467,8 +463,8 @@ export function getWearableFitment(engine, item, character, isNotBeingCurrentlyW
         }
 
         let removeBodyVolume = item.wearableProperties.extraBodyVolumeWhenWornLiters || 0;
-        let totalBodyVolume = engine.deObject.characters[character].weightKg; // assume water density, so same as weight in kg
-        const currentlyWornItems = engine.deObject.stateFor[character].wearing;
+        let totalBodyVolume = deObject.characters[character].weightKg; // assume water density, so same as weight in kg
+        const currentlyWornItems = deObject.stateFor[character].wearing;
         for (const wornItem of currentlyWornItems) {
             if (wornItem.wearableProperties) {
                 totalBodyVolume += wornItem.wearableProperties.extraBodyVolumeWhenWornLiters || 0;
@@ -487,7 +483,7 @@ export function getWearableFitment(engine, item, character, isNotBeingCurrentlyW
                 extraAddedExtraTraitsAtTheEnd.push(trait);
             }
             return {
-                fitment: engine.deObject.functions.format_and(engine.deObject, null, ["fits perfectly", ...extraAddedExtraTraitsAtTheEnd]),
+                fitment: deObject.utils.templateUtils.formatAnd(deObject, ["fits perfectly", ...extraAddedExtraTraitsAtTheEnd]),
                 shouldFallDown: false,
                 shouldBreak: false,
                 breakReason: null,
@@ -505,10 +501,10 @@ export function getWearableFitment(engine, item, character, isNotBeingCurrentlyW
                 fitmentDescription = "fits extremely tightly";
             }
 
-            const itemNameForText = utilItemCount(engine, null, item.owner, item.amount, item.name, false, true);
+            const itemNameForText = utilItemCount(deObject, null, item.owner, item.amount, item.name, false, true);
 
             return {
-                fitment: engine.deObject.functions.format_and(engine.deObject, null, [fitmentDescription, ...extraAddedExtraTraitsAtTheEnd]),
+                fitment: deObject.utils.templateUtils.formatAnd(deObject, [fitmentDescription, ...extraAddedExtraTraitsAtTheEnd]),
                 shouldFallDown: false,
                 shouldBreak: totalBodyVolume > largestSizeItCanFit,
                 breakReason: totalBodyVolume > largestSizeItCanFit ? (() => {
@@ -535,7 +531,7 @@ export function getWearableFitment(engine, item, character, isNotBeingCurrentlyW
             }
 
             return {
-                fitment: engine.deObject.functions.format_and(engine.deObject, null, [fitmentDescription, ...extraAddedExtraTraitsAtTheEnd]),
+                fitment: deObject.utils.templateUtils.formatAnd(deObject, [fitmentDescription, ...extraAddedExtraTraitsAtTheEnd]),
                 shouldFallDown: totalBodyVolume < smallestSizeItCanFit,
                 shouldBreak: false,
                 breakReason: null,
@@ -648,7 +644,7 @@ const irregularPlurals = {
 };
 
 /**
- * @param {DEngine} engine
+ * @param {DEObject} deObject
  * @param {string|null} location
  * @param {string|null} owner
  * @param {number} amount 
@@ -656,11 +652,7 @@ const irregularPlurals = {
  * @param {boolean} [capitalize] whether to capitalize the first letter of the item, this is used for example when the item is at the beginning of a sentence, so we want to make sure the message looks good
  * @param {boolean} [forceThe] whether to force "the" in front of the item, this is used for example when we want to refer to a specific item that we know is present, so we want to make sure the message reflects that, even if there is only one of that item, for example "the apple" instead of just "an apple"
  */
-export function utilItemCount(engine, location, owner, amount, item, capitalize = false, forceThe = false) {
-    if (!engine.deObject) {
-        throw new Error("DEngine not initialized");
-    }
-
+export function utilItemCount(deObject, location, owner, amount, item, capitalize = false, forceThe = false) {
     const itemTrimmedLower = item.trim().toLowerCase();
     const itemIsAlreadyPlural = isAlreadyPlural(itemTrimmedLower);
     const itemIsSingularOfPlural = isSingularOfPlural(itemTrimmedLower);
@@ -677,7 +669,7 @@ export function utilItemCount(engine, location, owner, amount, item, capitalize 
     } else if (amount === 1) {
         if (itemIsSingularOfPlural) {
             // "pair of glasses" -> "the pair of glasses" or "a pair of glasses"
-            const isOneOfAKind = !location ? false : checkItemIsOneOfAKindAtLocation(engine, location, item);
+            const isOneOfAKind = !location ? false : checkItemIsOneOfAKindAtLocation(deObject, location, item);
             if (forceThe || isOneOfAKind) {
                 toReturn = `the ${item}`;
             } else {
@@ -687,7 +679,7 @@ export function utilItemCount(engine, location, owner, amount, item, capitalize 
             // "glasses" -> "the glasses" (can't say "a glasses")
             toReturn = `the ${item}`;
         } else {
-            const isOneOfAKind = !location ? false : checkItemIsOneOfAKindAtLocation(engine, location, item);
+            const isOneOfAKind = !location ? false : checkItemIsOneOfAKindAtLocation(deObject, location, item);
             if (forceThe || isOneOfAKind) {
                 toReturn = `the ${item}`;
             } else if (itemTrimmedLower.startsWith("a")) {
@@ -789,14 +781,11 @@ export function utilItemCount(engine, location, owner, amount, item, capitalize 
 
 /**
  * 
- * @param {DEngine} engine
+ * @param {DEObject} deObject
  * @param {string} location
  * @param {string} item
  */
-export function checkItemIsOneOfAKindAtLocation(engine, location, item) {
-    if (!engine.deObject) {
-        throw new Error("DEngine not initialized");
-    }
+export function checkItemIsOneOfAKindAtLocation(deObject, location, item) {
     let totalCount = 0;
     const itemTrimmedLower = item.trim().toLowerCase();
 
@@ -830,14 +819,14 @@ export function checkItemIsOneOfAKindAtLocation(engine, location, item) {
     }
 
     const allCharactersToCheck = [];
-    for (const charName in engine.deObject.characters) {
-        const charState = engine.deObject.stateFor[charName];
+    for (const charName in deObject.characters) {
+        const charState = deObject.stateFor[charName];
         if (charState.location === location) {
             allCharactersToCheck.push(charName);
         }
     }
     for (const charName of allCharactersToCheck) {
-        const characterState = engine.deObject.stateFor[charName];
+        const characterState = deObject.stateFor[charName];
         countInList(characterState.carrying);
         if (totalCount > 1) {
             return;
@@ -847,7 +836,7 @@ export function checkItemIsOneOfAKindAtLocation(engine, location, item) {
             return;
         }
     }
-    for (const [slotName, slot] of Object.entries(engine.deObject.world.locations[location].slots)) {
+    for (const [slotName, slot] of Object.entries(deObject.world.locations[location].slots)) {
         countInList(slot.items);
         if (totalCount > 1) {
             return;
@@ -858,14 +847,14 @@ export function checkItemIsOneOfAKindAtLocation(engine, location, item) {
 }
 
 /**
- * @param {DEngine} engine
+ * @param {DEObject} deObject
  * @param {string} characterName
  * @param {string} currentLocation
  * @param {Array<string | number>} locationPath
  * @param {boolean} [ignoreCarrierWearer] whether to ignore the carrier/wearer in the message, this is used for example when we are trying to figure out if an item is being worn by a character, as the LLM may refer to the item in a different way than how it is named in the world state, for example it may say "hat" instead of "red hat", so we want to ignore case and also check if the item name includes the name we are looking for instead of checking for an exact match, this is just to increase the chances of finding the item and thus accepting feasible changes even if they are not perfectly formatted
  */
-export function locationPathToMessageWithoutItemName(engine, characterName, currentLocation, locationPath, ignoreCarrierWearer = false) {
-    if (!engine.deObject) {
+export function locationPathToMessageWithoutItemName(deObject, characterName, currentLocation, locationPath, ignoreCarrierWearer = false) {
+    if (!deObject) {
         throw new Error("DEngine not initialized");
     }
     // make a copy of the path
@@ -876,18 +865,18 @@ export function locationPathToMessageWithoutItemName(engine, characterName, curr
         pathCopy.pop();
     }
 
-    return locationPathToMessage(engine, characterName, currentLocation, pathCopy, ignoreCarrierWearer);
+    return locationPathToMessage(deObject, characterName, currentLocation, pathCopy, ignoreCarrierWearer);
 }
 
 /**
- * @param {DEngine} engine
+ * @param {DEObject} deObject
  * @param {string} characterName
  * @param {string} currentLocation
  * @param {Array<string | number>} locationPath
  * @param {boolean} [ignoreCarrierWearer] whether to ignore the carrier/wearer in the message, this is used for example when we are trying to figure out if an item is being worn by a character, as the LLM may refer to the item in a different way than how it is named in the world state, for example it may say "hat" instead of "red hat", so we want to ignore case and also check if the item name includes the name we are looking for instead of checking for an exact match, this is just to increase the chances of finding the item and thus accepting feasible changes even if they are not perfectly formatted
  */
-export function locationPathToMessage(engine, characterName, currentLocation, locationPath, ignoreCarrierWearer = false) {
-    if (!engine.deObject) {
+export function locationPathToMessage(deObject, characterName, currentLocation, locationPath, ignoreCarrierWearer = false) {
+    if (!deObject) {
         throw new Error("DEngine not initialized");
     }
     let base = "";
@@ -905,7 +894,7 @@ export function locationPathToMessage(engine, characterName, currentLocation, lo
             locationSlotNameToUse = "the " + locationSlotNameToUse;
         }
         base = `in ${locationSlotNameToUse}`;
-        elementToFollow = engine.deObject.world.locations[currentLocation].slots[locationPath[1]].items;
+        elementToFollow = deObject.world.locations[currentLocation].slots[locationPath[1]].items;
     }
 
     for (let i = 3; i < locationPath.length; i += 2) {
@@ -914,7 +903,7 @@ export function locationPathToMessage(engine, characterName, currentLocation, lo
 
         let itemNameToUse = elementToFollow[itemId].name;
         if (!itemNameToUse.toLowerCase().startsWith("a ") && !itemNameToUse.toLowerCase().startsWith("an ") && !itemNameToUse.toLowerCase().startsWith("the ")) {
-            if (checkItemIsOneOfAKindAtLocation(engine, engine.deObject.stateFor[characterName].location, elementToFollow[itemId].name)) {
+            if (checkItemIsOneOfAKindAtLocation(deObject, deObject.stateFor[characterName].location, elementToFollow[itemId].name)) {
                 itemNameToUse = "the " + itemNameToUse;
             } else if (itemNameToUse.toLowerCase().startsWith("a")) {
                 itemNameToUse = "an " + itemNameToUse;
@@ -936,7 +925,7 @@ export function locationPathToMessage(engine, characterName, currentLocation, lo
 }
 
 /**
- * @param {DEngine} engine
+ * @param {DEObject} deObject
  * @param {string} currentLocation
  * @param {Array<string | number>} path
  * @return {{
@@ -944,14 +933,11 @@ export function locationPathToMessage(engine, characterName, currentLocation, lo
  *   pathToResolved: Array<string | number>
  * }}
  */
-export function resolvePath(engine, currentLocation, path) {
-    if (!engine.deObject) {
-        throw new Error("DEngine not initialized");
-    }
+export function resolvePath(deObject, currentLocation, path) {
     /**
      * @type {*}
      */
-    let current = path[0] === "slots" ? engine.deObject.world.locations[currentLocation].slots[path[1]] : engine.deObject.stateFor[path[1]];
+    let current = path[0] === "slots" ? deObject.world.locations[currentLocation].slots[path[1]] : deObject.stateFor[path[1]];
     const startIndex = 2;
     for (let i = startIndex; i < path.length; i++) {
         // console.log(current)
@@ -960,7 +946,7 @@ export function resolvePath(engine, currentLocation, path) {
         current = current[part];
     }
     if (current._moved_to) {
-        return resolvePath(engine, currentLocation, current._moved_to);
+        return resolvePath(deObject, currentLocation, current._moved_to);
     }
     return {
         resolved: current,

@@ -79,14 +79,14 @@ export default async function testWorldRulesOn(engine, character) {
      * @type {Array<{name: string, description: string}>}
      */
     const characters = [];
-    const characterSurroundInfo = getSurroundingCharacters(engine, character.name);
+    const characterSurroundInfo = getSurroundingCharacters(engine.deObject, character.name);
     for (const characterName of characterSurroundInfo.totalStrangers) {
         if (characterName === character.name) {
             continue;
         }
         const characterInfo = engine.deObject.characters[characterName];
         if (characterInfo) {
-            characters.push({ name: characterName, description: await getExternalDescriptionOfCharacter(engine, characterName, true) });
+            characters.push({ name: characterName, description: await getExternalDescriptionOfCharacter(engine.deObject, characterName, true) });
         }
     }
     for (const characterName of characterSurroundInfo.nonStrangers) {
@@ -95,7 +95,7 @@ export default async function testWorldRulesOn(engine, character) {
         }
         const characterInfo = engine.deObject.characters[characterName];
         if (characterInfo) {
-            characters.push({ name: characterName, description: await getExternalDescriptionOfCharacter(engine, characterName, true) });
+            characters.push({ name: characterName, description: await getExternalDescriptionOfCharacter(engine.deObject, characterName, true) });
         }
     }
 

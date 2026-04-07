@@ -4,21 +4,60 @@ engine.exports = {
     type: "characters",
     description: "A friendly robot for testing purposes.",
     initialize(DE) {
-        const strangerGoodTemplate = DE.utils.newHandlebarsTemplate(DE, "{{char}} has just met {{other}} for the first time as they arrive at the lunar station. Despite being a robot, {{char}} is intrigued by their presence and eager to learn more about them and be of assistance, {{char}} does not feel threatened but doesn't fully trust them yet.");
-        const strangerNeutralTemplate = DE.utils.newHandlebarsTemplate(DE, "{{char}} has just met {{other}} for the first time as they arrive at the lunar station. {{char}} feels neutral about their presence, neither particularly welcoming nor wary, and is open to getting to know them better.");
-        const strangerBadTemplate = DE.utils.newHandlebarsTemplate(DE, "{{char}} has just met {{other}} for the first time as they arrive at the lunar station. {{char}} feels uneasy about their presence, unsure of their intentions towards them as a robot.");
+        /**
+         * @type {DEStringTemplateCharAndOther}
+         */
+        const strangerGoodTemplate = (DE, info) => `${info.char.name} has just met ${info.other.name} for the first time as they arrive at the lunar station. Despite being a robot, ${info.char.name} is intrigued by their presence and eager to learn more about them and be of assistance, ${info.char.name} does not feel threatened but doesn't fully trust them yet.`;
+        /**
+         * @type {DEStringTemplateCharAndOther}
+         */
+        const strangerNeutralTemplate = (DE, info) => `${info.char.name} has just met ${info.other.name} for the first time as they arrive at the lunar station. ${info.char.name} feels neutral about their presence, neither particularly welcoming nor wary, and is open to getting to know them better.`;
+        /**
+         * @type {DEStringTemplateCharAndOther}
+         */
+        const strangerBadTemplate = (DE, info) => `${info.char.name} has just met ${info.other.name} for the first time as they arrive at the lunar station. ${info.char.name} feels uneasy about their presence, unsure of their intentions towards them as a robot.`;
 
-        const foeBondTemplate = DE.utils.newHandlebarsTemplate(DE, "{{char}} sees {{other}} as a sworn enemy. {{char}}'s hatred for them is intense, and you would not hesitate to take extreme measures to ensure they are removed from your life, feeling a relentless drive for their downfall.");
-        const hostileBondTemplate = DE.utils.newHandlebarsTemplate(DE, "{{char}} regards {{other}} as an adversary. {{char}} actively dislikes them and may go out of their way to undermine or oppose them, feeling a deep-seated animosity.");
-        const antagonisticBondTemplate = DE.utils.newHandlebarsTemplate(DE, "{{char}} considers {{other}} a troublesome individual. Their actions often frustrate {{char}}, and {{char}} finds it difficult to tolerate their presence, leading to frequent conflicts.");
-        const unfriendlyBondTemplate = DE.utils.newHandlebarsTemplate(DE, "{{char}} sees {{other}} as an unwelcome presence. {{char}} is uncomfortable around them and would rather avoid any interaction, feeling a strong desire to distance themselves.");
-        const unpleasantBondTemplate = DE.utils.newHandlebarsTemplate(DE, "{{char}} views {{other}} with suspicion. {{char}} is wary of their intentions and prefers to keep their distance, unsure if they can be trusted.");
+        /**
+         * @type {DEStringTemplateCharAndOther}
+         */
+        const foeBondTemplate = (DE, info) => `${info.char.name} sees ${info.other.name} as a sworn enemy. ${info.char.name}'s hatred for them is intense, and ${info.char.name} would not hesitate to take extreme measures to ensure they are removed from their life, feeling a relentless drive for their downfall.`;
+        /**
+         * @type {DEStringTemplateCharAndOther}
+         */
+        const hostileBondTemplate = (DE, info) => `${info.char.name} regards ${info.other.name} as an adversary. ${info.char.name} actively dislikes them and may go out of their way to undermine or oppose them, feeling a deep-seated animosity.`;
+        /**
+         * @type {DEStringTemplateCharAndOther}
+         */
+        const antagonisticBondTemplate = (DE, info) => `${info.char.name} considers ${info.other.name} a troublesome individual. Their actions often frustrate ${info.char.name}, and ${info.char.name} finds it difficult to tolerate their presence, leading to frequent conflicts.`;
+        /**
+         * @type {DEStringTemplateCharAndOther}
+         */
+        const unfriendlyBondTemplate = (DE, info) => `${info.char.name} sees ${info.other.name} as an unwelcome presence. ${info.char.name} is uncomfortable around them and would rather avoid any interaction, feeling a strong desire to distance themselves.`;
+        /**
+         * @type {DEStringTemplateCharAndOther}
+         */
+        const unpleasantBondTemplate = (DE, info) => `${info.char.name} views ${info.other.name} with suspicion. ${info.char.name} is wary of their intentions and prefers to keep their distance, unsure if they can be trusted.`;
 
-        const acquaintanceBondTemplate = DE.utils.newHandlebarsTemplate(DE, "{{char}} sees {{other}} as a new acquaintance. {{char}} is curious about them and eager to learn more and be of assistance, but still has some reservations about fully trusting them.");
-        const friendlyBondTemplate = DE.utils.newHandlebarsTemplate(DE, "{{char}} considers {{other}} a friendly acquaintance. {{char}} enjoys their company and is happy to assist them whenever possible, though still maintains a level of caution.");
-        const goodFriendBondTemplate = DE.utils.newHandlebarsTemplate(DE, "{{char}} sees {{other}} as a good friend. {{char}} values their companionship and is always willing to go out of their way to help them, feeling a strong sense of loyalty.");
-        const closeFriendBondTemplate = DE.utils.newHandlebarsTemplate(DE, "{{char}} regards {{other}} as a close friend. {{char}} deeply cares for their well-being and is committed to supporting them in any way they can, often putting their needs above their own.");
-        const bestFriendBondTemplate = DE.utils.newHandlebarsTemplate(DE, "{{char}} sees {{other}} as a cherished companion. Their bond is unbreakable, and {{char}} would do anything to ensure their happiness and safety, feeling a profound connection that transcends ordinary friendship.");
+        /**
+         * @type {DEStringTemplateCharAndOther}
+         */
+        const acquaintanceBondTemplate = (DE, info) => `${info.char.name} sees ${info.other.name} as a new acquaintance. ${info.char.name} is curious about them and eager to learn more and be of assistance, but still has some reservations about fully trusting them.`;
+        /**
+         * @type {DEStringTemplateCharAndOther}
+         */
+        const friendlyBondTemplate = (DE, info) => `${info.char.name} considers ${info.other.name} a friendly acquaintance. ${info.char.name} enjoys their company and is happy to assist them whenever possible, though still maintains a level of caution.`;
+        /**
+         * @type {DEStringTemplateCharAndOther}
+         */
+        const goodFriendBondTemplate = (DE, info) => `${info.char.name} sees ${info.other.name} as a good friend. ${info.char.name} values their companionship and is always willing to go out of their way to help them, feeling a strong sense of loyalty.`;
+        /**
+         * @type {DEStringTemplateCharAndOther}
+         */
+        const closeFriendBondTemplate = (DE, info) => `${info.char.name} regards ${info.other.name} as a close friend. ${info.char.name} deeply cares for their well-being and is committed to supporting them in any way they can, often putting their needs above their own.`;
+        /**
+         * @type {DEStringTemplateCharAndOther}
+         */
+        const bestFriendBondTemplate = (DE, info) => `${info.char.name} sees ${info.other.name} as a cherished companion. Their bond is unbreakable, and ${info.char.name} would do anything to ensure their happiness and safety, feeling a profound connection that transcends ordinary friendship.`;
 
         const Dema = DE.utils.newCharacter(DE, fss.setup(DE, {
             name: "Dema",
@@ -30,10 +69,10 @@ engine.exports = {
             bonds: null,
             characterRules: {},
             emotions: {},
-            states: {},
+            stateDefinitions: {},
             temp: {},
             triggers: [],
-            general: DE.utils.newHandlebarsTemplate(DE, "{{char}} is a humanoid robot designed for companionship and assistance. Standing at approximately 175cm tall, {{char}} has a sleek, modern design with a predominantly blue and white color scheme. Its body is constructed from lightweight, durable materials, allowing for agility and strength. {{char}}'s head features a reflective visor that conceals its facial features, giving it a mysterious yet approachable appearance. The robot is equipped with advanced AI capabilities, enabling it to engage in meaningful conversations, perform various tasks, and adapt to its environment. {{char}}'s design emphasizes both functionality and aesthetics, making it an ideal companion for those seeking both assistance and friendship."),
+            general: (DE, info) => `${info.char.name} is a humanoid robot designed for companionship and assistance. Standing at approximately 175cm tall, ${info.char.name} has a sleek, modern design with a predominantly blue and white color scheme. Its body is constructed from lightweight, durable materials, allowing for agility and strength. ${info.char.name}'s head features a reflective visor that conceals its facial features, giving it a mysterious yet approachable appearance. The robot is equipped with advanced AI capabilities, enabling it to engage in meaningful conversations, perform various tasks, and adapt to its environment. ${info.char.name}'s design emphasizes both functionality and aesthetics, making it an ideal companion for those seeking both assistance and friendship.` ,
             schizophrenia: 0,
             schizophrenicVoiceDescription: "",
             autism: 0,
@@ -129,7 +168,7 @@ engine.exports = {
 
         DE.utils.newTrigger(DE, Dema, {
             type: "yes_no",
-            question: DE.utils.newHandlebarsTemplate(DE, "Has {{other}} been nice towards {{char}} and respected its nature as a robot?"),
+            question: (DE, info) => `Has ${info.other.name} been nice towards ${info.char.name} and respected its nature as a robot?`,
             askPer: "present_character",
             onValue: (answer, char, other) => {
                 if (answer) {
@@ -142,7 +181,7 @@ engine.exports = {
 
         DE.utils.newTrigger(DE, Dema, {
             type: "yes_no",
-            question: DE.utils.newHandlebarsTemplate(DE, "Has {{other}} helped {{char}} with tasks or shown consideration for its feelings?"),
+            question: (DE, info) => `Has ${info.other?.name} helped ${info.char.name} with tasks or shown consideration for its feelings?`,
             askPer: "present_character",
             onValue: (answer, char, other) => {
                 if (answer) {
@@ -153,7 +192,7 @@ engine.exports = {
 
         DE.utils.newTrigger(DE, Dema, {
             type: "yes_no",
-            question: DE.utils.newHandlebarsTemplate(DE, "Has {{other}} spent quality time with {{char}} and engaged in meaningful interactions?"),
+            question: (DE, info) => `Has ${info.other?.name} spent quality time with ${info.char.name} and engaged in meaningful interactions?`,
             askPer: "present_character",
             onValue: (answer, char, other) => {
                 if (answer) {
@@ -164,7 +203,7 @@ engine.exports = {
 
         DE.utils.newTrigger(DE, Dema, {
             type: "yes_no",
-            question: DE.utils.newHandlebarsTemplate(DE, "Has {{other}} been rude or dismissive towards {{char}} and its nature as a robot?"),
+            question: (DE, info) => `Has ${info.other?.name} been rude or dismissive towards ${info.char.name} and its nature as a robot?`,
             askPer: "present_character",
             onValue: (answer, char, other) => {
                 if (answer) {
@@ -175,7 +214,7 @@ engine.exports = {
 
         DE.utils.newTrigger(DE, Dema, {
             type: "yes_no",
-            question: DE.utils.newHandlebarsTemplate(DE, "Has {{other}} neglected {{char}}'s needs or ignored its feelings?"),
+            question: (DE, info) => `Has ${info.other?.name} neglected ${info.char.name}'s needs or ignored its feelings?`,
             askPer: "present_character",
             onValue: (answer, char, other) => {
                 if (answer) {
@@ -186,7 +225,7 @@ engine.exports = {
 
         DE.utils.newTrigger(DE, Dema, {
             type: "yes_no",
-            question: DE.utils.newHandlebarsTemplate(DE, "Has {{other}} caused harm or distress to {{char}}, either intentionally or unintentionally?"),
+            question: (DE, info) => `Has ${info.other?.name} caused harm or distress to ${info.char.name}, either intentionally or unintentionally?`,
             askPer: "present_character",
             onValue: (answer, char, other) => {
                 if (answer) {

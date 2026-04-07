@@ -4,7 +4,7 @@ import { getCharacterCarryingCapacity, getCharacterVolume, getCharacterWeight, g
 import { getWeatherSystemForLocationAndWeather } from "./world.js";
 
 /**
- * @param {DEngine} engine 
+ * @param {DEObject} deObject 
  * @param {string} characterName
  * @return {{
  *    carrierName: string,
@@ -16,16 +16,13 @@ import { getWeatherSystemForLocationAndWeather } from "./world.js";
  *    item: DEItem | null,
  * } | null}
  */
-export function getBeingCarriedByCharacter(engine, characterName) {
-    if (!engine.deObject) {
-        throw new Error("DEngine not initialized");
-    }
-    const charState = engine.deObject.stateFor[characterName];
+export function getBeingCarriedByCharacter(deObject, characterName) {
+    const charState = deObject.stateFor[characterName];
     if (!charState) {
         throw new Error(`Character ${characterName} not found in engine state.`);
     }
-    for (const otherCharName in engine.deObject.stateFor) {
-        const otherCharState = engine.deObject.stateFor[otherCharName];
+    for (const otherCharName in deObject.stateFor) {
+        const otherCharState = deObject.stateFor[otherCharName];
         if (otherCharName === characterName || charState.location !== otherCharState.location || otherCharState.deadEnded) {
             continue;
         }
@@ -152,7 +149,7 @@ export function findLocationOfAnyCharInsideOrAtopItemRecursive(list, pathSoFar, 
 
 /**
  * 
- * @param {DEngine} engine 
+ * @param {DEObject} deObject 
  * @param {string} characterName 
  * @returns {{
  *   location: string,
@@ -162,15 +159,12 @@ export function findLocationOfAnyCharInsideOrAtopItemRecursive(list, pathSoFar, 
  *   itemPathEnd: "containingCharacters" | "ontopCharacters" | null,
  * }}
  */
-export function getCharacterExactLocation(engine, characterName) {
-    if (!engine.deObject) {
-        throw new Error("DEngine not initialized");
-    }
-    const charState = engine.deObject.stateFor[characterName];
+export function getCharacterExactLocation(deObject, characterName) {
+    const charState = deObject.stateFor[characterName];
     if (!charState) {
         throw new Error(`Character ${characterName} not found in engine state.`);
     }
-    const beingCarriedInfo = getBeingCarriedByCharacter(engine, characterName);
+    const beingCarriedInfo = getBeingCarriedByCharacter(deObject, characterName);
     if (beingCarriedInfo) {
         return {
             location: beingCarriedInfo.carrierLocation,
@@ -181,8 +175,8 @@ export function getCharacterExactLocation(engine, characterName) {
         };
     }
     const location = charState.location;
-    for (const slot in engine.deObject.world.locations[location].slots) {
-        const slotInfo = engine.deObject.world.locations[location].slots[slot];
+    for (const slot in deObject.world.locations[location].slots) {
+        const slotInfo = deObject.world.locations[location].slots[slot];
         const foundChar = findLocationOfCharInsideOrAtopItemRecursive(characterName, slotInfo.items, ["slots", slot, "items"]);
         if (foundChar) {
             return {
@@ -205,15 +199,11 @@ export function getCharacterExactLocation(engine, characterName) {
 
 /**
  * 
- * @param {DEngine} engine 
+ * @param {DEObject} deObject 
  * @param {string} characterName 
  */
-export function getAllItemsCharacterIsInsideOf(engine, characterName) {
-    if (!engine.deObject) {
-        throw new Error("DEngine not initialized");
-    }
-
-    const exactLocation = getCharacterExactLocation(engine, characterName);
+export function getAllItemsCharacterIsInsideOf(deObject, characterName) {
+    const exactLocation = getCharacterExactLocation(deObject, characterName);
     if (!exactLocation.itemPath) {
         return [];
     }
@@ -223,8 +213,8 @@ export function getAllItemsCharacterIsInsideOf(engine, characterName) {
      */
     const items = [];
 
-    const characterLocationInfo = engine.deObject.stateFor[characterName].location;
-    const locationState = engine.deObject.world.locations[characterLocationInfo];
+    const characterLocationInfo = deObject.stateFor[characterName].location;
+    const locationState = deObject.world.locations[characterLocationInfo];
 
     const expectedPath = [...exactLocation.itemPath, exactLocation.itemPathEnd]
 
@@ -235,7 +225,7 @@ export function getAllItemsCharacterIsInsideOf(engine, characterName) {
     if (exactLocation.itemPath[0] === "slots") {
         base = locationState.slots[exactLocation.itemPath[1]].items;
     } else if (exactLocation.itemPath[0] === "characters") {
-        base = engine.deObject.stateFor[exactLocation.itemPath[1]].carrying;
+        base = deObject.stateFor[exactLocation.itemPath[1]].carrying;
     } else {
         throw new Error(`Invalid item path for character ${characterName}: ${exactLocation.itemPath}`);
     }
@@ -256,7 +246,7 @@ export function getAllItemsCharacterIsInsideOf(engine, characterName) {
 
 /**
  * 
- * @param {DEngine} engine 
+ * @param {DEObject} deObject 
  * @param {string} characterName
  * @returns {Array<{
  *   carriedName: string,
@@ -265,15 +255,11 @@ export function getAllItemsCharacterIsInsideOf(engine, characterName) {
  *   itemPathEnd: "containingCharacters" | "ontopCharacters" | null,
  * }>}
  */
-export function getListOfCarriedCharactersByCharacter(engine, characterName) {
-    if (!engine.deObject) {
-        throw new Error("DEngine not initialized");
-    }
+export function getListOfCarriedCharactersByCharacter(deObject, characterName) {
+    const results1 = findLocationOfAnyCharInsideOrAtopItemRecursive(deObject.stateFor[characterName].carrying, ["characters", characterName, "carrying"], []);
+    findLocationOfAnyCharInsideOrAtopItemRecursive(deObject.stateFor[characterName].wearing, ["characters", characterName, "wearing"], results1);
 
-    const results1 = findLocationOfAnyCharInsideOrAtopItemRecursive(engine.deObject.stateFor[characterName].carrying, ["characters", characterName, "carrying"], []);
-    findLocationOfAnyCharInsideOrAtopItemRecursive(engine.deObject.stateFor[characterName].wearing, ["characters", characterName, "wearing"], results1);
-
-    return (engine.deObject.stateFor[characterName].carryingCharactersDirectly).map((carriedCharName) => ({
+    return (deObject.stateFor[characterName].carryingCharactersDirectly).map((carriedCharName) => ({
         carriedName: carriedCharName,
         itemPath: null,
         item: null,
@@ -288,16 +274,12 @@ export function getListOfCarriedCharactersByCharacter(engine, characterName) {
 }
 
 /**
- * @param {DEngine} engine
+ * @param {DEObject} deObject
  * @param {string} characterName
  * @returns {boolean}
  */
-export function isTopNaked(engine, characterName) {
-    if (!engine.deObject) {
-        throw new Error("DEngine not initialized");
-    }
-
-    const charState = engine.deObject.stateFor[characterName];
+export function isTopNaked(deObject, characterName) {
+    const charState = deObject.stateFor[characterName];
     if (!charState) {
         throw new Error(`Character ${characterName} not found in engine state.`);
     }
@@ -315,16 +297,12 @@ export function isTopNaked(engine, characterName) {
 }
 
 /**
- * @param {DEngine} engine
+ * @param {DEObject} deObject
  * @param {string} characterName
  * @returns {boolean}
  */
-export function isBottomNaked(engine, characterName) {
-    if (!engine.deObject) {
-        throw new Error("DEngine not initialized");
-    }
-
-    const charState = engine.deObject.stateFor[characterName];
+export function isBottomNaked(deObject, characterName) {
+    const charState = deObject.stateFor[characterName];
     if (!charState) {
         throw new Error(`Character ${characterName} not found in engine state.`);
     }
@@ -342,7 +320,7 @@ export function isBottomNaked(engine, characterName) {
 }
 
 /**
- * @param {DEngine} engine
+ * @param {DEObject} deObject
  * @param {string} characterName
  * @returns {{
  *   location: string,
@@ -352,28 +330,24 @@ export function isBottomNaked(engine, characterName) {
  *   deadTotalStrangers: string[],
  * }}
  */
-export function getSurroundingCharacters(engine, characterName) {
-    if (!engine.deObject) {
-        throw new Error("DEngine not initialized");
-    }
-
-    const charState = engine.deObject.stateFor[characterName];
+export function getSurroundingCharacters(deObject, characterName) {
+    const charState = deObject.stateFor[characterName];
     if (!charState) {
         throw new Error(`Character ${characterName} not found in engine state.`);
     }
 
     const location = charState.location;
-    const locationState = engine.deObject.world.locations[location];
+    const locationState = deObject.world.locations[location];
     const nonStrangers = [];
     const totalStrangers = [];
     const deadNonStrangers = [];
     const deadTotalStrangers = [];
-    for (const charToCheck in engine.deObject.stateFor) {
-        const charStateToCheck = engine.deObject.stateFor[charToCheck];
+    for (const charToCheck in deObject.stateFor) {
+        const charStateToCheck = deObject.stateFor[charToCheck];
         if (charStateToCheck.location !== location || charToCheck === characterName) {
             continue;
         }
-        if (engine.deObject.bonds[characterName].active.find(b => b.towards === charToCheck) || engine.deObject.bonds[characterName].ex.find(b => b.towards === charToCheck)) {
+        if (deObject.bonds[characterName].active.find(b => b.towards === charToCheck) || deObject.bonds[characterName].ex.find(b => b.towards === charToCheck)) {
             if (charStateToCheck.dead) {
                 deadNonStrangers.push(charToCheck);
             } else {
@@ -398,15 +372,12 @@ export function getSurroundingCharacters(engine, characterName) {
 }
 
 /**
- * @param {DEngine} engine 
+ * @param {DEObject} deObject 
  * @param {string} characterName 
  */
-export function getCurrentlyInteractingCharacters(engine, characterName) {
-    if (!engine.deObject) {
-        throw new Error("DEngine not initialized");
-    }
+export function getCurrentlyInteractingCharacters(deObject, characterName) {
     // find the current conversation the character is engaging at
-    const charState = engine.deObject.stateFor[characterName];
+    const charState = deObject.stateFor[characterName];
 
     if (!charState) {
         throw new Error(`Character ${characterName} not found in engine state.`);
@@ -418,7 +389,7 @@ export function getCurrentlyInteractingCharacters(engine, characterName) {
         return [];
     }
 
-    const conversation = engine.deObject.conversations[convId];
+    const conversation = deObject.conversations[convId];
     if (!conversation) {
         return [];
     }
@@ -427,14 +398,11 @@ export function getCurrentlyInteractingCharacters(engine, characterName) {
 }
 
 /**
- * @param {DEngine} engine 
+ * @param {DEObject} deObject 
  * @param {string} characterName 
  */
-export function getPowerLevel(engine, characterName) {
-    if (!engine.deObject) {
-        throw new Error("DEngine not initialized");
-    }
-    const character = engine.deObject.characters[characterName];
+export function getPowerLevel(deObject, characterName) {
+    const character = deObject.characters[characterName];
     if (!character) {
         throw new Error(`Character ${characterName} not found in engine.`);
     }
@@ -600,21 +568,18 @@ export function getPowerLevelFromCharacter(character) {
 }
 
 /**
- * @param {DEngine} engine
+ * @param {DEObject} deObject 
  * @param {string} characterName 
  * @param {boolean} onlyBasics
  * @param {boolean} hideCurrentPosture
  * @returns {Promise<string>}
  */
-export async function getExternalDescriptionOfCharacter(engine, characterName, onlyBasics = false, hideCurrentPosture = false) {
-    if (!engine.deObject) {
-        throw new Error("DEngine not initialized");
-    }
-    const character = engine.deObject.characters[characterName];
+export async function getExternalDescriptionOfCharacter(deObject, characterName, onlyBasics = false, hideCurrentPosture = false) {
+    const character = deObject.characters[characterName];
     if (!character) {
         throw new Error(`Character ${characterName} not found.`);
     }
-    const characterState = engine.deObject.stateFor[characterName];
+    const characterState = deObject.stateFor[characterName];
     if (!characterState) {
         throw new Error(`Character state for ${characterName} not found.`);
     }
@@ -625,7 +590,7 @@ export async function getExternalDescriptionOfCharacter(engine, characterName, o
 
     let maxStateDominance = 0;
     for (const state of characterState.states) {
-        const stateInfo = character.states[state.state];
+        const stateInfo = character.stateDefinitions[state.state];
         let dominanceOfThisState = stateInfo.dominance;
         if (state.relieving && typeof stateInfo.dominanceAfterRelief === "number") {
             dominanceOfThisState = stateInfo.dominanceAfterRelief;
@@ -636,7 +601,7 @@ export async function getExternalDescriptionOfCharacter(engine, characterName, o
     }
 
     for (const state of characterState.states) {
-        const stateInfo = character.states[state.state];
+        const stateInfo = character.stateDefinitions[state.state];
 
         let dominanceOfThisState = stateInfo.dominance;
         if (state.relieving && typeof stateInfo.dominanceAfterRelief === "number") {
@@ -653,10 +618,10 @@ export async function getExternalDescriptionOfCharacter(engine, characterName, o
                 if (typeof stateInfo.relievingGeneralCharacterExternalDescriptionInjection === "string") {
                     toAdd = stateInfo.relievingGeneralCharacterExternalDescriptionInjection;
                 } else {
-                    toAdd = await stateInfo.relievingGeneralCharacterExternalDescriptionInjection(engine.deObject, {
+                    toAdd = await stateInfo.relievingGeneralCharacterExternalDescriptionInjection(deObject, {
                         char: character,
-                        causants: state.causants || undefined,
-                        causes: state.causes || undefined,
+                        causants: state.causants,
+                        causes: state.causes,
                     });
                 }
             }
@@ -665,10 +630,10 @@ export async function getExternalDescriptionOfCharacter(engine, characterName, o
                 if (typeof stateInfo.generalCharacterExternalDescriptionInjection === "string") {
                     toAdd = stateInfo.generalCharacterExternalDescriptionInjection;
                 } else {
-                    toAdd = await stateInfo.generalCharacterExternalDescriptionInjection(engine.deObject, {
+                    toAdd = await stateInfo.generalCharacterExternalDescriptionInjection(deObject, {
                         char: character,
-                        causants: state.causants || undefined,
-                        causes: state.causes || undefined,
+                        causants: state.causants,
+                        causes: state.causes,
                     });
                 }
             }
@@ -684,8 +649,8 @@ export async function getExternalDescriptionOfCharacter(engine, characterName, o
         }
     }
 
-    const topNaked = isTopNaked(engine, characterName);
-    const bottomNaked = isBottomNaked(engine, characterName);
+    const topNaked = isTopNaked(deObject, characterName);
+    const bottomNaked = isBottomNaked(deObject, characterName);
 
     const hasItemsCoveringTopNakedness = !topNaked;
     if (!hasItemsCoveringTopNakedness && character.shortDescriptionTopNakedAdd) {
@@ -702,16 +667,16 @@ export async function getExternalDescriptionOfCharacter(engine, characterName, o
         }
     }
     if (characterState.wearing.length > 0) {
-        finalDescription += " Wearing " + engine.deObject.functions.format_and(engine.deObject, null, characterState.wearing.map(item => item.amount >= 2 ? item.amount + " of " + item.description + " (" + getWearableFitment(engine, item, characterName).fitment + ")" : item.description + " (" + getWearableFitment(engine, item, characterName).fitment + ")")) + ".";
+        finalDescription += " Wearing " + deObject.functions.format_and(deObject, null, characterState.wearing.map(item => item.amount >= 2 ? item.amount + " of " + item.description + " (" + getWearableFitment(deObject, item, characterName).fitment + ")" : item.description + " (" + getWearableFitment(deObject, item, characterName).fitment + ")")) + ".";
     } else {
         finalDescription += " Not wearing any clothes or accessories.";
     }
 
-    const characterExactLocation = getCharacterExactLocation(engine, characterName);
+    const characterExactLocation = getCharacterExactLocation(deObject, characterName);
 
     if (!onlyBasics) {
         if (characterState.carrying.length > 0) {
-            finalDescription += " Carrying " + engine.deObject.functions.format_and(engine.deObject, null, characterState.carrying.map(item => item.amount >= 2 ? item.amount + " of " + item.description : item.description)) + ".";
+            finalDescription += " Carrying " + deObject.functions.format_and(deObject, null, characterState.carrying.map(item => item.amount >= 2 ? item.amount + " of " + item.description : item.description)) + ".";
         } else {
             finalDescription += " Not carrying any items.";
         }
@@ -720,33 +685,29 @@ export async function getExternalDescriptionOfCharacter(engine, characterName, o
             finalDescription += ` Being carried by ${characterExactLocation.beingCarriedBy}.`;
         }
 
-        const carriedCharacters = getListOfCarriedCharactersByCharacter(engine, characterName);
+        const carriedCharacters = getListOfCarriedCharactersByCharacter(deObject, characterName);
         if (carriedCharacters.length > 0) {
-            finalDescription += ` Carrying characters: ` + engine.deObject.functions.format_and(engine.deObject, null, carriedCharacters.map((v) => v.carriedName)) + ".";
+            finalDescription += ` Carrying characters: ` + deObject.functions.format_and(deObject, null, carriedCharacters.map((v) => v.carriedName)) + ".";
         }
     }
 
-    finalDescription += " " + getExternalDescriptionOfCharacterPostureOnly(engine, characterName, hideCurrentPosture);
+    finalDescription += " " + getExternalDescriptionOfCharacterPostureOnly(deObject, characterName, hideCurrentPosture);
 
     return finalDescription;
 }
 
 /**
- * @param {DEngine} engine
+ * @param {DEObject} deObject 
  * @param {string} characterName 
  * @param {boolean} hideCurrentPosture
  * @returns {string}
  */
-export function getExternalDescriptionOfCharacterPostureOnly(engine, characterName, hideCurrentPosture = false) {
-    if (!engine.deObject) {
-        throw new Error("DEngine not initialized");
-    }
-
-    const character = engine.deObject.characters[characterName];
+export function getExternalDescriptionOfCharacterPostureOnly(deObject, characterName, hideCurrentPosture = false) {
+    const character = deObject.characters[characterName];
     if (!character) {
         throw new Error(`Character ${characterName} not found.`);
     }
-    const characterState = engine.deObject.stateFor[characterName];
+    const characterState = deObject.stateFor[characterName];
     if (!characterState) {
         throw new Error(`Character state for ${characterName} not found.`);
     }
@@ -758,13 +719,13 @@ export function getExternalDescriptionOfCharacterPostureOnly(engine, characterNa
         "swimming",
     ]
 
-    const characterExactLocation = getCharacterExactLocation(engine, characterName);
+    const characterExactLocation = getCharacterExactLocation(deObject, characterName);
 
     let postureAppliedOnDescription = (posturesThatDoNotSpecifyGround.includes(characterState.posture)) ? "at the " + characterState.locationSlot : "on the ground at the " + characterState.locationSlot;
     if (characterExactLocation.itemPathEnd === "ontopCharacters" && characterExactLocation.itemPath) {
-        postureAppliedOnDescription = locationPathToMessage(engine, characterName, characterState.location, [...characterExactLocation.itemPath, characterExactLocation.itemPathEnd]);
+        postureAppliedOnDescription = locationPathToMessage(deObject, characterName, characterState.location, [...characterExactLocation.itemPath, characterExactLocation.itemPathEnd]);
     } else if (characterExactLocation.itemPathEnd === "containingCharacters" && characterExactLocation.itemPath) {
-        postureAppliedOnDescription = locationPathToMessage(engine, characterName, characterState.location, [...characterExactLocation.itemPath, characterExactLocation.itemPathEnd]);
+        postureAppliedOnDescription = locationPathToMessage(deObject, characterName, characterState.location, [...characterExactLocation.itemPath, characterExactLocation.itemPathEnd]);
     }
 
     if (!hideCurrentPosture) {
@@ -845,25 +806,25 @@ export function humanReadablePostureToPosture(humanReadable) {
 }
 
 /**
- * @param {DEngine} engine
+ * @param {DEObject} deObject 
  * @param {string} characterName 
  */
-export async function getCharacterCanSee(engine, characterName) {
-    if (!engine.deObject) {
+export async function getCharacterCanSee(deObject, characterName) {
+    if (!deObject) {
         throw new Error("DEngine not initialized");
     }
 
-    const character = engine.deObject.characters[characterName];
+    const character = deObject.characters[characterName];
     if (!character) {
         throw new Error(`Character ${characterName} not found.`);
     }
 
-    const characterState = engine.deObject.stateFor[characterName];
+    const characterState = deObject.stateFor[characterName];
     if (!characterState) {
         throw new Error(`Character state for ${characterName} not found.`);
     }
 
-    const location = engine.deObject.world.locations[characterState.location];
+    const location = deObject.world.locations[characterState.location];
     if (!location) {
         throw new Error(`Location ${characterState.location} not found.`);
     }
@@ -892,13 +853,13 @@ export async function getCharacterCanSee(engine, characterName) {
 
     let finalDescription = `# Items at the current location (${characterState.location}):\n\n`;
 
-    const carryingCapacity = getCharacterCarryingCapacity(engine, characterName);
+    const carryingCapacity = getCharacterCarryingCapacity(deObject, characterName);
 
     /**
      * @param {DEItem} item 
      */
     const getTagsForItem = (item) => {
-        if (!engine.deObject) {
+        if (!deObject) {
             throw new Error("DEngine not initialized");
         }
         const tags = [];
@@ -927,21 +888,21 @@ export async function getCharacterCanSee(engine, characterName) {
             tags.push(`wearing this exposes to weather: ${item.wearableProperties.negativelyExposesToWeathers.join(", ")}`);
         }
 
-        const realItemWeight = getItemWeight(engine, item);
-        const realItemVolume = getItemVolume(engine, item);
+        const realItemWeight = getItemWeight(deObject, item);
+        const realItemVolume = getItemVolume(deObject, item);
         if (character.carryingCapacityKg < item.weightKg) {
             tags.push(`too heavy for ${character.name}`);
         } else if (character.carryingCapacityLiters < item.volumeLiters) {
             tags.push(`too big for ${character.name} to carry`);
         } else if (character.carryingCapacityKg < realItemWeight.singularWeight) {
             if (realItemWeight.allCharactersInvolved.length) {
-                tags.push(`too heavy for ${character.name} (contents include ${engine.deObject.functions.format_and(engine.deObject, null, realItemWeight.allCharactersInvolved)})`);
+                tags.push(`too heavy for ${character.name} (contents include ${deObject.functions.format_and(deObject, null, realItemWeight.allCharactersInvolved)})`);
             } else {
                 tags.push(`too heavy for ${character.name} (due to contents)`);
             }
         } else if (character.carryingCapacityLiters < realItemVolume.singularVolume) {
             if (realItemVolume.allCharactersInvolved.length) {
-                tags.push(`too big for ${character.name} to carry (contents include ${engine.deObject.functions.format_and(engine.deObject, null, realItemVolume.allCharactersInvolved)})`);
+                tags.push(`too big for ${character.name} to carry (contents include ${deObject.functions.format_and(deObject, null, realItemVolume.allCharactersInvolved)})`);
             } else {
                 tags.push(`too big for ${character.name} to carry (due to contents)`);
             }
@@ -964,7 +925,7 @@ export async function getCharacterCanSee(engine, characterName) {
         }
 
         if (item.wearableProperties) {
-            const fitment = getWearableFitment(engine, item, characterName);
+            const fitment = getWearableFitment(deObject, item, characterName);
             if (fitment.shouldBreak) {
                 tags.push(`too tight for ${character.name}, would break`);
             } else if (fitment.shouldFallDown) {
@@ -1066,14 +1027,14 @@ export async function getCharacterCanSee(engine, characterName) {
     }
 
     // now let's check each character excluding our own for now
-    for (const otherCharName in engine.deObject.stateFor) {
+    for (const otherCharName in deObject.stateFor) {
         if (otherCharName === characterName) continue;
-        const otherCharState = engine.deObject.stateFor[otherCharName];
+        const otherCharState = deObject.stateFor[otherCharName];
         if (otherCharState.deadEnded) continue;
         if (otherCharState.location === characterState.location) {
             finalDescription += `# Character: ${otherCharName}:\n\n`;
 
-            const bondToOtherChar = engine.deObject.bonds[characterName].active.find(b => b.towards === otherCharName) || engine.deObject.bonds[characterName].ex.find(b => b.towards === otherCharName);
+            const bondToOtherChar = deObject.bonds[characterName].active.find(b => b.towards === otherCharName) || deObject.bonds[characterName].ex.find(b => b.towards === otherCharName);
             if (!bondToOtherChar) {
                 finalDescription += `${otherCharName} is a complete stranger to ${characterName}, ${characterName} does not know their name or any details about them.\n\n`;
             } else if (!bondToOtherChar.knowsName && bondToOtherChar.stranger) {
@@ -1087,7 +1048,7 @@ export async function getCharacterCanSee(engine, characterName) {
             }
 
             // how many times bigger/smaller is the other character compared to the character
-            const otherCharacter = engine.deObject.characters[otherCharName];
+            const otherCharacter = deObject.characters[otherCharName];
             const ratioByHeight = character.heightCm / otherCharacter.heightCm;
             const reverseRatioByHeight = otherCharacter.heightCm / character.heightCm;
             if (ratioByHeight >= 100) {
@@ -1184,8 +1145,8 @@ export async function getCharacterCanSee(engine, characterName) {
                 finalDescription += `${otherCharName} is a bit smaller compared to ${characterName} who is slightly larger.\n\n`;
             }
 
-            const otherCharacterWeight = getCharacterWeight(engine, otherCharName);
-            const otherCharacterVolume = getCharacterVolume(engine, otherCharName);
+            const otherCharacterWeight = getCharacterWeight(deObject, otherCharName);
+            const otherCharacterVolume = getCharacterVolume(deObject, otherCharName);
 
             if (character.carryingCapacityKg < otherCharacter.weightKg) {
                 finalDescription += `${otherCharName} is too heavy for ${characterName} to carry.\n\n`;
@@ -1211,7 +1172,7 @@ export async function getCharacterCanSee(engine, characterName) {
                 }
             }
 
-            const externalDescription = await getExternalDescriptionOfCharacter(engine, otherCharName, true, false);
+            const externalDescription = await getExternalDescriptionOfCharacter(deObject, otherCharName, true, false);
             if (externalDescription) {
                 finalDescription += `## ${otherCharName} Appearance:\n\n${externalDescription}\n\n`;
             }
@@ -1225,14 +1186,14 @@ export async function getCharacterCanSee(engine, characterName) {
                 }
                 finalDescription += `\n`;
             }
-            const carriedChars = getListOfCarriedCharactersByCharacter(engine, otherCharName);
+            const carriedChars = getListOfCarriedCharactersByCharacter(deObject, otherCharName);
             if (carriedChars.length > 0) {
                 finalDescription += `## Characters carried by ${otherCharName}:\n\n`;
                 for (const carriedChar of carriedChars) {
                     if (carriedChar.itemPathEnd === "containingCharacters" && carriedChar.itemPath) {
-                        finalDescription += `${otherCharName} is carrying ${carriedChar.carriedName} ${locationPathToMessage(engine, otherCharName, otherCharState.location, [...carriedChar.itemPath, carriedChar.itemPathEnd], true)}.\n\n`;
+                        finalDescription += `${otherCharName} is carrying ${carriedChar.carriedName} ${locationPathToMessage(deObject, otherCharName, otherCharState.location, [...carriedChar.itemPath, carriedChar.itemPathEnd], true)}.\n\n`;
                     } else if (carriedChar.itemPathEnd === "ontopCharacters" && carriedChar.itemPath) {
-                        finalDescription += `${otherCharName} is carrying ${carriedChar.carriedName} ${locationPathToMessage(engine, otherCharName, otherCharState.location, [...carriedChar.itemPath, carriedChar.itemPathEnd], true)}.\n\n`;
+                        finalDescription += `${otherCharName} is carrying ${carriedChar.carriedName} ${locationPathToMessage(deObject, otherCharName, otherCharState.location, [...carriedChar.itemPath, carriedChar.itemPathEnd], true)}.\n\n`;
                     } else {
                         finalDescription += `${otherCharName} is carrying ${carriedChar.carriedName}.\n\n`;
                     }
@@ -1248,7 +1209,7 @@ export async function getCharacterCanSee(engine, characterName) {
                 finalDescription += `\n`;
             }
 
-            const exactLocation = getCharacterExactLocation(engine, otherCharName);
+            const exactLocation = getCharacterExactLocation(deObject, otherCharName);
             if (exactLocation.beingCarriedBy) {
                 finalDescription += `## ${otherCharName} is being carried by another character:\n\n`;
                 finalDescription += `${otherCharName} is being carried by character: ${exactLocation.beingCarriedBy}.\n\n`;
@@ -1256,12 +1217,12 @@ export async function getCharacterCanSee(engine, characterName) {
 
             if (exactLocation.itemPathEnd === "containingCharacters" && exactLocation.itemPath) {
                 finalDescription += `## ${otherCharName} is inside an item:\n\n`;
-                finalDescription += `${otherCharName} is ${locationPathToMessage(engine, otherCharName, otherCharState.location, [...exactLocation.itemPath, exactLocation.itemPathEnd])}.\n\n`;
+                finalDescription += `${otherCharName} is ${locationPathToMessage(deObject, otherCharName, otherCharState.location, [...exactLocation.itemPath, exactLocation.itemPathEnd])}.\n\n`;
             }
 
             if (exactLocation.itemPathEnd === "ontopCharacters" && exactLocation.itemPath) {
                 finalDescription += `## ${otherCharName} is on top of an item:\n\n`;
-                finalDescription += `${otherCharName} is ${locationPathToMessage(engine, otherCharName, otherCharState.location, [...exactLocation.itemPath, exactLocation.itemPathEnd])}.\n\n`;
+                finalDescription += `${otherCharName} is ${locationPathToMessage(deObject, otherCharName, otherCharState.location, [...exactLocation.itemPath, exactLocation.itemPathEnd])}.\n\n`;
             }
         }
     }
@@ -1277,14 +1238,14 @@ export async function getCharacterCanSee(engine, characterName) {
         finalDescription += `\n`;
     }
 
-    const carriedChars = getListOfCarriedCharactersByCharacter(engine, characterName);
+    const carriedChars = getListOfCarriedCharactersByCharacter(deObject, characterName);
     if (carriedChars.length > 0) {
         finalDescription += `## Characters carried by ${characterName}:\n\n`;
         for (const carriedChar of carriedChars) {
             if (carriedChar.itemPathEnd === "containingCharacters" && carriedChar.itemPath) {
-                finalDescription += `${characterName} is carrying ${carriedChar.carriedName} ${locationPathToMessage(engine, characterName, characterState.location, [...carriedChar.itemPath, carriedChar.itemPathEnd], true)}.\n\n`;
+                finalDescription += `${characterName} is carrying ${carriedChar.carriedName} ${locationPathToMessage(deObject, characterName, characterState.location, [...carriedChar.itemPath, carriedChar.itemPathEnd], true)}.\n\n`;
             } else if (carriedChar.itemPathEnd === "ontopCharacters" && carriedChar.itemPath) {
-                finalDescription += `${characterName} is carrying ${carriedChar.carriedName} ${locationPathToMessage(engine, characterName, characterState.location, [...carriedChar.itemPath, carriedChar.itemPathEnd], true)}.\n\n`;
+                finalDescription += `${characterName} is carrying ${carriedChar.carriedName} ${locationPathToMessage(deObject, characterName, characterState.location, [...carriedChar.itemPath, carriedChar.itemPathEnd], true)}.\n\n`;
             } else {
                 finalDescription += `${characterName} is carrying ${carriedChar.carriedName}.\n\n`;
             }
@@ -1301,7 +1262,7 @@ export async function getCharacterCanSee(engine, characterName) {
         finalDescription += `\n`;
     }
 
-    const exactLocation = getCharacterExactLocation(engine, characterName);
+    const exactLocation = getCharacterExactLocation(deObject, characterName);
     if (exactLocation.beingCarriedBy) {
         finalDescription += `## ${characterName} is being carried by another character:\n\n`;
         finalDescription += `${characterName} is being carried by character: ${exactLocation.beingCarriedBy}.\n\n`;
@@ -1309,31 +1270,31 @@ export async function getCharacterCanSee(engine, characterName) {
 
     if (exactLocation.itemPathEnd === "containingCharacters" && exactLocation.itemPath) {
         finalDescription += `## ${characterName} is inside an item:\n\n`;
-        finalDescription += `${characterName} is ${locationPathToMessage(engine, characterName, characterState.location, [...exactLocation.itemPath, exactLocation.itemPathEnd])}.\n\n`;
+        finalDescription += `${characterName} is ${locationPathToMessage(deObject, characterName, characterState.location, [...exactLocation.itemPath, exactLocation.itemPathEnd])}.\n\n`;
     }
 
     if (exactLocation.itemPathEnd === "ontopCharacters" && exactLocation.itemPath) {
         finalDescription += `## ${characterName} is on top of an item:\n\n`;
-        finalDescription += `${characterName} is ${locationPathToMessage(engine, characterName, characterState.location, [...exactLocation.itemPath, exactLocation.itemPathEnd])}.\n\n`;
+        finalDescription += `${characterName} is ${locationPathToMessage(deObject, characterName, characterState.location, [...exactLocation.itemPath, exactLocation.itemPathEnd])}.\n\n`;
     }
 
-    const characterPowerLevel = getPowerLevel(engine, characterName);
+    const characterPowerLevel = getPowerLevel(deObject, characterName);
 
     finalDescription += `# ${characterName} Power Level Interactions:\n\n`;
 
     const characterTier = character.tier.replace("_", " ") + " tier";
-    for (const otherCharName in engine.deObject.stateFor) {
+    for (const otherCharName in deObject.stateFor) {
         if (otherCharName === characterName) continue;
-        const otherCharState = engine.deObject.stateFor[otherCharName];
+        const otherCharState = deObject.stateFor[otherCharName];
         if (otherCharState.deadEnded) {
             continue;
         }
-        const otherChar = engine.deObject.characters[otherCharName];
+        const otherChar = deObject.characters[otherCharName];
         if (otherCharState.location === characterState.location) {
-            const otherCharacterPowerLevel = getPowerLevel(engine, otherCharName);
+            const otherCharacterPowerLevel = getPowerLevel(deObject, otherCharName);
             const powerLevelRatio = characterPowerLevel / otherCharacterPowerLevel;
             const reversePowerLevelRatio = otherCharacterPowerLevel / characterPowerLevel;
-            const otherCharacterTier = engine.deObject.characters[otherCharName].tier.replace("_", " ") + " tier";
+            const otherCharacterTier = deObject.characters[otherCharName].tier.replace("_", " ") + " tier";
             if (powerLevelRatio >= 100) {
                 finalDescription += `- ${characterName} (${characterTier}) is overwhelmingly more powerful than ${otherCharName} (${otherCharacterTier}), who is a complete non-threat.\n`;
             } else if (powerLevelRatio >= 10) {
@@ -1396,12 +1357,12 @@ export async function getCharacterCanSee(engine, characterName) {
         finalDescription += `- ${characterName} embodies the perfection of '${characterTier}', ${whatCanTheySolo}`;
     }
 
-    const surroundingChars = getSurroundingCharacters(engine, characterName);
+    const surroundingChars = getSurroundingCharacters(deObject, characterName);
     const deadBodies = [surroundingChars.deadNonStrangers, surroundingChars.deadTotalStrangers].flat();
     if (deadBodies.length > 0) {
         finalDescription += `\n\n# Dead bodies at the location:\n\n`;
         for (const deadBody of deadBodies) {
-            const externalDescription = await getExternalDescriptionOfCharacter(engine, deadBody, true, false);
+            const externalDescription = await getExternalDescriptionOfCharacter(deObject, deadBody, true, false);
             finalDescription += `- ${deadBody} (Deceased): ${externalDescription}\n`;
         }
     }
@@ -1413,30 +1374,30 @@ export async function getCharacterCanSee(engine, characterName) {
 }
 
 /**
- * @param {DEngine} engine
+ * @param {DEObject} deObject 
  * @param {string} characterName 
  */
-export async function getInternalDescriptionOfCharacter(engine, characterName) {
-    if (!engine.deObject) {
+export async function getInternalDescriptionOfCharacter(deObject, characterName) {
+    if (!deObject) {
         throw new Error("DEngine not initialized");
     }
 
-    const character = engine.deObject.characters[characterName];
+    const character = deObject.characters[characterName];
     if (!character) {
         throw new Error(`Character ${characterName} not found.`);
     }
 
-    const characterState = engine.deObject.stateFor[characterName];
+    const characterState = deObject.stateFor[characterName];
     if (!characterState) {
         throw new Error(`Character state for ${characterName} not found.`);
     }
 
-    let general = typeof character.general === "string" ? character.general : await character.general(engine.deObject, {
+    let general = typeof character.general === "string" ? character.general : await character.general(deObject, {
         char: character,
     });
 
     for (const injectable of Object.values(character.generalCharacterDescriptionInjection)) {
-        const injectableV = typeof injectable === "string" ? injectable : await injectable(engine.deObject, {
+        const injectableV = typeof injectable === "string" ? injectable : await injectable(deObject, {
             char: character,
         });
         if (injectableV) {
@@ -1449,7 +1410,7 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
 
     let maxStateDominance = 0;
     for (const state of characterState.states) {
-        const stateInfo = character.states[state.state];
+        const stateInfo = character.stateDefinitions[state.state];
         let dominanceOfThisState = stateInfo.dominance;
         if (state.relieving && typeof stateInfo.dominanceAfterRelief === "number") {
             dominanceOfThisState = stateInfo.dominanceAfterRelief;
@@ -1469,9 +1430,13 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
     const stateInjections = [];
     /**
      * @type {Array<{
-     *   applyingState: DEApplyingState | null,
-     *   action: DEActionPromptInjection,
-     *   stateInfo: DECharacterStateDefinition | null,
+     *   applyingState: DEApplyingState,
+     *   action: DEActionPromptInjection<DEStringTemplateCausantsAndCauses>,
+     *   stateInfo: DECharacterStateDefinition,
+     * } | {
+     *   applyingState: null,
+     *   action: DEActionPromptInjection<DEStringTemplateCharOnly>,
+     *   stateInfo: null,
      * }>}
      */
     const actions = [];
@@ -1490,7 +1455,7 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
         });
     }
     for (const state of characterState.states) {
-        const stateInfo = character.states[state.state];
+        const stateInfo = character.stateDefinitions[state.state];
 
         let dominanceOfThisState = stateInfo.dominance;
         if (state.relieving && typeof stateInfo.dominanceAfterRelief === "number") {
@@ -1544,10 +1509,10 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
 
             const generalDescriptionOrigin = !state.relieving ? stateInfo.general : stateInfo.generalAfterRelief;
             if (generalDescriptionOrigin) {
-                const generalDescription = typeof generalDescriptionOrigin === "string" ? generalDescriptionOrigin : await generalDescriptionOrigin(engine.deObject, {
+                const generalDescription = typeof generalDescriptionOrigin === "string" ? generalDescriptionOrigin : await generalDescriptionOrigin(deObject, {
                     char: character,
-                    causants: state.causants || undefined,
-                    causes: state.causes || undefined,
+                    causants: state.causants,
+                    causes: state.causes,
                 });
                 const trimmed = generalDescription.trim();
                 if (trimmed) {
@@ -1586,8 +1551,10 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
             }
 
             if (stateInfo.relievingGeneralCharacterDescriptionInjection) {
-                const relievingInjection = typeof stateInfo.relievingGeneralCharacterDescriptionInjection === "string" ? stateInfo.relievingGeneralCharacterDescriptionInjection : (await stateInfo.relievingGeneralCharacterDescriptionInjection(engine.deObject, {
+                const relievingInjection = typeof stateInfo.relievingGeneralCharacterDescriptionInjection === "string" ? stateInfo.relievingGeneralCharacterDescriptionInjection : (await stateInfo.relievingGeneralCharacterDescriptionInjection(deObject, {
                     char: character,
+                    causants: state.causants,
+                    causes: state.causes,
                 })).trim();
                 if (relievingInjection) {
                     if (!general.endsWith("\n\n")) {
@@ -1610,8 +1577,10 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
             }
 
             if (stateInfo.generalCharacterDescriptionInjection) {
-                const injection = typeof stateInfo.generalCharacterDescriptionInjection === "string" ? stateInfo.generalCharacterDescriptionInjection : (await stateInfo.generalCharacterDescriptionInjection(engine.deObject, {
+                const injection = typeof stateInfo.generalCharacterDescriptionInjection === "string" ? stateInfo.generalCharacterDescriptionInjection : (await stateInfo.generalCharacterDescriptionInjection(deObject, {
                     char: character,
+                    causants: state.causants,
+                    causes: state.causes,
                 })).trim();
                 if (injection) {
                     if (!general.endsWith("\n\n")) {
@@ -1627,7 +1596,7 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
         }
     }
 
-    const bonds = engine.deObject.bonds[characterName];
+    const bonds = deObject.bonds[characterName];
 
     /**
      * @type {string[]}
@@ -1640,17 +1609,19 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
             continue;
         }
         const bondDeclaration = character.bonds.declarations.find(bondDecl => bondDecl.strangerBond === activeBond.stranger && bondDecl.minBondLevel <= activeBond.bond && activeBond.bond < (bondDecl.maxBondLevel === 100 ? 200 : bondDecl.maxBondLevel) && bondDecl.min2BondLevel <= activeBond.bond2 && activeBond.bond2 < (bondDecl.max2BondLevel === 100 ? 200 : bondDecl.max2BondLevel));
-        const otherCharacter = engine.deObject.characters[activeBond.towards];
+        const otherCharacter = deObject.characters[activeBond.towards];
         if (!otherCharacter) {
             console.warn(`Other character ${activeBond.towards} not found for bond with ${characterName}.`);
             continue;
         }
         const familyRelationship = getFamilyBondRelation(character, otherCharacter);
+        const generalRelationship = await getRelationship(deObject, character, otherCharacter);
         if (bondDeclaration) {
-            let result = typeof bondDeclaration.description === "string" ? bondDeclaration.description : (await bondDeclaration.description(engine.deObject, {
+            let result = typeof bondDeclaration.description === "string" ? bondDeclaration.description : (await bondDeclaration.description(deObject, {
                 char: character,
-                other: engine.deObject.characters[activeBond.towards],
-                otherFamilyRelation: familyRelationship || undefined,
+                other: deObject.characters[activeBond.towards],
+                otherFamilyRelation: familyRelationship,
+                otherRelationship: generalRelationship,
             })).trim();
             if (bondDeclaration.bondAdditionalDescription) {
                 if (!result.endsWith(". ")) {
@@ -1658,10 +1629,11 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
                 } else if (!result.endsWith(" ")) {
                     result += " ";
                 }
-                result += typeof bondDeclaration.bondAdditionalDescription === "string" ? bondDeclaration.bondAdditionalDescription : (await bondDeclaration.bondAdditionalDescription(engine.deObject, {
+                result += typeof bondDeclaration.bondAdditionalDescription === "string" ? bondDeclaration.bondAdditionalDescription : (await bondDeclaration.bondAdditionalDescription(deObject, {
                     char: character,
-                    other: engine.deObject.characters[activeBond.towards],
-                    otherFamilyRelation: familyRelationship || undefined,
+                    other: deObject.characters[activeBond.towards],
+                    otherFamilyRelation: familyRelationship,
+                    otherRelationship: generalRelationship,
                 })).trim();
             }
 
@@ -1682,10 +1654,11 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
             relationships.push(result);
 
             if (bondDeclaration.generalCharacterDescriptionInjection) {
-                const injection = typeof bondDeclaration.generalCharacterDescriptionInjection === "string" ? bondDeclaration.generalCharacterDescriptionInjection : (await bondDeclaration.generalCharacterDescriptionInjection(engine.deObject, {
+                const injection = typeof bondDeclaration.generalCharacterDescriptionInjection === "string" ? bondDeclaration.generalCharacterDescriptionInjection : (await bondDeclaration.generalCharacterDescriptionInjection(deObject, {
                     char: character,
-                    other: engine.deObject.characters[activeBond.towards],
-                    otherFamilyRelation: familyRelationship || undefined,
+                    other: deObject.characters[activeBond.towards],
+                    otherFamilyRelation: familyRelationship,
+                    otherRelationship: generalRelationship,
                 })).trim();
                 if (injection) {
                     if (!general.endsWith("\n\n")) {
@@ -1703,14 +1676,16 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
         if (!character.bonds) {
             throw new Error(`Character ${characterName} has no bonds defined.`);
         }
-        const bondDeclaration = getBondDeclarationFromBondDescription(engine, character, exBond);
+        const bondDeclaration = getBondDeclarationFromBondDescription(deObject, character, exBond);
+        const generalRelationship = await getRelationship(deObject, character, deObject.characters[exBond.towards]);
         if (bondDeclaration) {
             if (bondDeclaration.generalCharacterDescriptionInjectionEx) {
-                const familyRelationship = getFamilyBondRelation(character, engine.deObject.characters[exBond.towards]);
-                const injection = typeof bondDeclaration.generalCharacterDescriptionInjectionEx === "string" ? bondDeclaration.generalCharacterDescriptionInjectionEx : (await bondDeclaration.generalCharacterDescriptionInjectionEx(engine.deObject, {
+                const familyRelationship = getFamilyBondRelation(character, deObject.characters[exBond.towards]);
+                const injection = typeof bondDeclaration.generalCharacterDescriptionInjectionEx === "string" ? bondDeclaration.generalCharacterDescriptionInjectionEx : (await bondDeclaration.generalCharacterDescriptionInjectionEx(deObject, {
                     char: character,
-                    other: engine.deObject.characters[exBond.towards],
-                    otherFamilyRelation: familyRelationship || undefined,
+                    other: deObject.characters[exBond.towards],
+                    otherFamilyRelation: familyRelationship,
+                    otherRelationship: generalRelationship,
                 })).trim();
                 if (injection) {
                     if (!general.endsWith("\n\n")) {
@@ -1727,15 +1702,15 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
         throw new Error(`Character ${characterName} has no bonds defined.`);
     }
 
-    const surroundingChars = getSurroundingCharacters(engine, characterName);
+    const surroundingChars = getSurroundingCharacters(deObject, characterName);
 
 
     // these do apply to all the total strangers
     const allSurroundingTotalStrangers = surroundingChars.totalStrangers;
     for (const strangerName of allSurroundingTotalStrangers) {
-        const strangerCharacter = engine.deObject.characters[strangerName];
+        const strangerCharacter = deObject.characters[strangerName];
 
-        const strangerBondDeclaration = getBondDeclarationFromBondDescription(engine, character, {
+        const strangerBondDeclaration = getBondDeclarationFromBondDescription(deObject, character, {
             stranger: true,
             bond: 0,
             bond2: 0,
@@ -1752,10 +1727,12 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
 
         if (strangerCharacter) {
             const familyRelationship = getFamilyBondRelation(character, strangerCharacter);
-            let result = typeof strangerBondDeclaration.description === "string" ? strangerBondDeclaration.description : (await strangerBondDeclaration.description(engine.deObject, {
+            const generalRelationship = await getRelationship(deObject, character, strangerCharacter);
+            let result = typeof strangerBondDeclaration.description === "string" ? strangerBondDeclaration.description : (await strangerBondDeclaration.description(deObject, {
                 char: character,
                 other: strangerCharacter,
-                otherFamilyRelation: familyRelationship || undefined,
+                otherFamilyRelation: familyRelationship,
+                otherRelationship: generalRelationship,
             })).trim();
             if (strangerBondDeclaration.bondAdditionalDescription) {
                 if (!result.endsWith(". ")) {
@@ -1763,10 +1740,11 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
                 } else if (!result.endsWith(" ")) {
                     result += " ";
                 }
-                result += typeof strangerBondDeclaration.bondAdditionalDescription === "string" ? strangerBondDeclaration.bondAdditionalDescription : (await strangerBondDeclaration.bondAdditionalDescription(engine.deObject, {
+                result += typeof strangerBondDeclaration.bondAdditionalDescription === "string" ? strangerBondDeclaration.bondAdditionalDescription : (await strangerBondDeclaration.bondAdditionalDescription(deObject, {
                     char: character,
                     other: strangerCharacter,
-                    otherFamilyRelation: familyRelationship || undefined,
+                    otherFamilyRelation: familyRelationship,
+                    otherRelationship: generalRelationship,
                 })).trim();
             }
             result += ` ${strangerName} is a total stranger to ${characterName} and ${characterName} does not know their name.`;
@@ -1778,10 +1756,11 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
         }
 
         if (strangerBondDeclaration.generalCharacterDescriptionInjection) {
-            const injection = typeof strangerBondDeclaration.generalCharacterDescriptionInjection === "string" ? strangerBondDeclaration.generalCharacterDescriptionInjection : (await strangerBondDeclaration.generalCharacterDescriptionInjection(engine.deObject, {
+            const injection = typeof strangerBondDeclaration.generalCharacterDescriptionInjection === "string" ? strangerBondDeclaration.generalCharacterDescriptionInjection : (await strangerBondDeclaration.generalCharacterDescriptionInjection(deObject, {
                 char: character,
                 other: strangerCharacter,
-                otherFamilyRelation: getFamilyBondRelation(character, strangerCharacter) || undefined,
+                otherFamilyRelation: getFamilyBondRelation(character, strangerCharacter),
+                otherRelationship: await getRelationship(deObject, character, strangerCharacter),
             })).trim();
             if (injection) {
                 if (!general.endsWith("\n\n")) {
@@ -1799,7 +1778,7 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
     const dislikes = [];
 
     for (const like of character.socialSimulation.likes) {
-        const globalInterest = engine.deObject.interests[like];
+        const globalInterest = deObject.interests[like];
         if (globalInterest) {
             likes.push(globalInterest.simple);
         } else {
@@ -1807,7 +1786,7 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
         }
     }
     for (const dislike of character.socialSimulation.dislikes) {
-        const globalInterest = engine.deObject.interests[dislike];
+        const globalInterest = deObject.interests[dislike];
         if (globalInterest) {
             dislikes.push(globalInterest.simple);
         } else {
@@ -1829,18 +1808,18 @@ export async function getInternalDescriptionOfCharacter(engine, characterName) {
 }
 
 /**
- * @param {DEngine} engine
+ * @param {DEObject} deObject 
  * @param {DECompleteCharacterReference} character 
  * @param {DESingleBondDescription} bond 
  */
-export function getBondDeclarationFromBondDescription(engine, character, bond) {
+export function getBondDeclarationFromBondDescription(deObject, character, bond) {
     if (!character.bonds || !character.bonds.declarations) {
         return null;
-    } else if (!engine.deObject) {
+    } else if (!deObject) {
         throw new Error("DEngine not initialized");
     }
 
-    const towardsCharacter = engine.deObject.characters[bond.towards];
+    const towardsCharacter = deObject.characters[bond.towards];
 
     const isFamily = getFamilyBondRelation(character, towardsCharacter);
 
@@ -1883,8 +1862,8 @@ export async function getSysPromptForCharacter(engine, characterName) {
         throw new Error(`No state found for character "${characterName}".`);
     }
 
-    const externalDescription = await getExternalDescriptionOfCharacter(engine, characterName, true);
-    const internalDescription = await getInternalDescriptionOfCharacter(engine, characterName);
+    const externalDescription = await getExternalDescriptionOfCharacter(engine.deObject, characterName, true);
+    const internalDescription = await getInternalDescriptionOfCharacter(engine.deObject, characterName);
 
     /**
      * @type {string|null}
@@ -1896,6 +1875,7 @@ export async function getSysPromptForCharacter(engine, characterName) {
         lore = typeof engine.deObject.world.lore === "string" ? engine.deObject.world.lore : await engine.deObject.world.lore(engine.deObject, {
             char: character,
         });
+        // @ts-ignore
         if (lore.trim().length === 0) {
             lore = null;
         }
@@ -1957,9 +1937,9 @@ export async function getSysPromptForCharacter(engine, characterName) {
         }));
     }
 
-    scenario += `\n\n## Weather:\n\n${await whatIsWeatherLikeForCharacter(engine, characterName)}`;
+    scenario += `\n\n## Weather:\n\n${await whatIsWeatherLikeForCharacter(engine.deObject, characterName)}`;
 
-    scenario += `\n\n## Current time and date in the world:\n\n${makeTimestamp(engine, engine.deObject.currentTime, false)}`;
+    scenario += `\n\n## Current time and date in the world:\n\n${makeTimestamp(engine.deObject, engine.deObject.currentTime, false)}`;
 
     const sysprompt = engine.inferenceAdapter.buildSystemPromptForCharacter(
         character,
@@ -1991,35 +1971,35 @@ export async function getSysPromptForCharacter(engine, characterName) {
 }
 
 /**
- * @param {DEngine} engine 
+ * @param {DEObject} deObject 
  * @param {string} characterName 
  * @returns 
  */
-export async function whatIsWeatherLikeForCharacter(engine, characterName) {
-    if (!engine.deObject) {
+export async function whatIsWeatherLikeForCharacter(deObject, characterName) {
+    if (!deObject) {
         throw new Error("DEngine not initialized");
     }
-    if (!engine.deObject.stateFor[characterName]) {
+    if (!deObject.stateFor[characterName]) {
         throw new Error(`No state found for character "${characterName}".`);
     }
-    const character = engine.deObject.characters[characterName];
-    const characterState = engine.deObject.stateFor[characterName];
+    const character = deObject.characters[characterName];
+    const characterState = deObject.stateFor[characterName];
     const characterLocation = characterState.location;
     const characterLocationSlot = characterState.locationSlot;
-    const location = engine.deObject.world.locations[characterLocation];
+    const location = deObject.world.locations[characterLocation];
     const weatherThere = location.internalState.currentWeather;
-    const isSheltered = await isCharacterShelteredFromWeather(engine, characterName, weatherThere, characterLocation, characterLocationSlot);
+    const isSheltered = await isCharacterShelteredFromWeather(deObject, characterName, weatherThere, characterLocation, characterLocationSlot);
     if (isSheltered.fullySheltered) {
-        const noEffectDescription = typeof location.internalState.currentWeatherNoEffectDescription === "string" ? location.internalState.currentWeatherNoEffectDescription : await location.internalState.currentWeatherNoEffectDescription(engine.deObject, { char: character });
+        const noEffectDescription = typeof location.internalState.currentWeatherNoEffectDescription === "string" ? location.internalState.currentWeatherNoEffectDescription : await location.internalState.currentWeatherNoEffectDescription(deObject, { char: character });
         return `The current weather where "${characterName}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}". However, "${characterName}" is fully sheltered from its effects. ${isSheltered.reason || ""}, therefore ${noEffectDescription || "no weather effects apply to them."}`;
     } else if (isSheltered.partiallySheltered) {
-        const partialEffectDescription = typeof location.internalState.currentWeatherPartialEffectDescription === "string" ? location.internalState.currentWeatherPartialEffectDescription : await location.internalState.currentWeatherPartialEffectDescription(engine.deObject, { char: character });
+        const partialEffectDescription = typeof location.internalState.currentWeatherPartialEffectDescription === "string" ? location.internalState.currentWeatherPartialEffectDescription : await location.internalState.currentWeatherPartialEffectDescription(deObject, { char: character });
         return `The current weather where "${characterName}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}". "${characterName}" is partially sheltered from its effects. ${isSheltered.reason || ""}, therefore ${partialEffectDescription || "some weather effects may apply to them."}`;
     } else if (isSheltered.negativelyExposed) {
-        const negativeEffectsDescription = typeof location.internalState.currentWeatherNegativelyExposedDescription === "string" ? location.internalState.currentWeatherNegativelyExposedDescription : await location.internalState.currentWeatherNegativelyExposedDescription(engine.deObject, { char: character });
+        const negativeEffectsDescription = typeof location.internalState.currentWeatherNegativelyExposedDescription === "string" ? location.internalState.currentWeatherNegativelyExposedDescription : await location.internalState.currentWeatherNegativelyExposedDescription(deObject, { char: character });
         return `The current weather where "${characterName}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}". "${characterName}" is negatively exposed to its effects. ${isSheltered.reason || ""}, therefore ${negativeEffectsDescription || "strongly negative weather effects apply to them."}`;
     } else {
-        const effectDescription = typeof location.internalState.currentWeatherFullEffectDescription === "string" ? location.internalState.currentWeatherFullEffectDescription : await location.internalState.currentWeatherFullEffectDescription(engine.deObject, { char: character });
+        const effectDescription = typeof location.internalState.currentWeatherFullEffectDescription === "string" ? location.internalState.currentWeatherFullEffectDescription : await location.internalState.currentWeatherFullEffectDescription(deObject, { char: character });
         return `The current weather where "${characterName}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}". ${isSheltered.reason || ""}, therefore ${effectDescription || "all weather effects apply to them."}`;
     }
 }
@@ -2027,14 +2007,14 @@ export async function whatIsWeatherLikeForCharacter(engine, characterName) {
 /**
  * Determines if a character is fully or partially sheltered from a certain weather condition
  * by their current location or surroundings, or by an item they are carrying or wearing.
- * @param {DEngine} engine
+ * @param {DEObject} deObject 
  * @param {string} characterName 
  * @param {string} weatherName
  * @param {string} locationName
  * @param {string} slotName
  */
-export async function isCharacterShelteredFromWeather(engine, characterName, weatherName, locationName, slotName) {
-    if (!engine.deObject) {
+export async function isCharacterShelteredFromWeather(deObject, characterName, weatherName, locationName, slotName) {
+    if (!deObject) {
         throw new Error("DEngine not initialized");
     }
     const returnInformation = {
@@ -2044,14 +2024,14 @@ export async function isCharacterShelteredFromWeather(engine, characterName, wea
         reason: `${characterName} is fully exposed to the weather condition "${weatherName}"`,
     }
 
-    const weatherSystem = getWeatherSystemForLocationAndWeather(engine, locationName, weatherName);
+    const weatherSystem = getWeatherSystemForLocationAndWeather(deObject, locationName, weatherName);
 
-    const character = engine.deObject.characters[characterName];
+    const character = deObject.characters[characterName];
     if (!character) {
         throw new Error(`Character ${characterName} not found in world.`);
     }
 
-    const locationInfo = engine.deObject.world.locations[locationName];
+    const locationInfo = deObject.world.locations[locationName];
     if (!locationInfo) {
         throw new Error(`Location ${locationName} not found in world.`);
     }
@@ -2061,7 +2041,7 @@ export async function isCharacterShelteredFromWeather(engine, characterName, wea
         throw new Error(`Slot ${slotName} not found in location ${locationName}.`);
     }
 
-    const characterState = engine.deObject.stateFor[characterName];
+    const characterState = deObject.stateFor[characterName];
     if (!characterState) {
         throw new Error(`Character state for ${characterName} not found.`);
     }
@@ -2069,7 +2049,7 @@ export async function isCharacterShelteredFromWeather(engine, characterName, wea
     /**
      * @type {DEItem[]}
      */
-    const potentiallyProtectingItemsCharacterIsInsideOf = getAllItemsCharacterIsInsideOf(engine, characterName);
+    const potentiallyProtectingItemsCharacterIsInsideOf = getAllItemsCharacterIsInsideOf(deObject, characterName);
 
     // FULLY PROTECTED CHECKS
     // check for location based sheltering
@@ -2137,7 +2117,7 @@ export async function isCharacterShelteredFromWeather(engine, characterName, wea
         }
     }
     if (weatherSystem.fullyProtectedTemplate) {
-        const hasFullProtect = typeof weatherSystem.fullyProtectedTemplate === "string" ? weatherSystem.fullyProtectedTemplate : await weatherSystem.fullyProtectedTemplate(engine.deObject, { char: character });
+        const hasFullProtect = typeof weatherSystem.fullyProtectedTemplate === "string" ? weatherSystem.fullyProtectedTemplate : await weatherSystem.fullyProtectedTemplate(deObject, { char: character });
         if (hasFullProtect) {
             returnInformation.fullySheltered = true;
             returnInformation.reason = `Because ${hasFullProtect}, ${characterName} is immune to the weather condition "${weatherName}"`;
@@ -2217,7 +2197,7 @@ export async function isCharacterShelteredFromWeather(engine, characterName, wea
     }
 
     if (weatherSystem.partiallyProtectedTemplate) {
-        const hasPartialEffect = typeof weatherSystem.partiallyProtectedTemplate === "string" ? weatherSystem.partiallyProtectedTemplate : await weatherSystem.partiallyProtectedTemplate(engine.deObject, { char: character });
+        const hasPartialEffect = typeof weatherSystem.partiallyProtectedTemplate === "string" ? weatherSystem.partiallyProtectedTemplate : await weatherSystem.partiallyProtectedTemplate(deObject, { char: character });
         if (hasPartialEffect) {
             returnInformation.partiallySheltered = true;
             returnInformation.reason = `Because ${hasPartialEffect}, ${characterName} is partially protected from the weather condition "${weatherName}".`;
@@ -2299,7 +2279,7 @@ export async function isCharacterShelteredFromWeather(engine, characterName, wea
     }
 
     if (weatherSystem.negativelyAffectedTemplate) {
-        const hasNegativeEffect = typeof weatherSystem.negativelyAffectedTemplate === "string" ? weatherSystem.negativelyAffectedTemplate : await weatherSystem.negativelyAffectedTemplate(engine.deObject, { char: character });
+        const hasNegativeEffect = typeof weatherSystem.negativelyAffectedTemplate === "string" ? weatherSystem.negativelyAffectedTemplate : await weatherSystem.negativelyAffectedTemplate(deObject, { char: character });
         if (hasNegativeEffect) {
             returnInformation.negativelyExposed = true;
             returnInformation.reason = `Because ${hasNegativeEffect}, ${characterName} is negatively exposed to the weather condition "${weatherName}"`;
@@ -2312,25 +2292,25 @@ export async function isCharacterShelteredFromWeather(engine, characterName, wea
 
 
 /**
- * @param {DEngine} engine
+ * @param {DEObject} deObject 
  * @param {string} characterName 
  * @param {string} towards
  * @returns {Promise<[boolean, DESingleBondDescription, DEBondDeclaration, string]>} bond description and bond info
  */
-export async function getRelationshipBetweenCharacters(engine, characterName, towards) {
-    if (!engine.deObject) {
+export async function getRelationshipBetweenCharacters(deObject, characterName, towards) {
+    if (!deObject) {
         throw new Error("DEngine not initialized");
     }
-    const character = engine.deObject.characters[characterName];
+    const character = deObject.characters[characterName];
     if (!character) {
         throw new Error(`Character ${characterName} not found.`);
     }
-    const towardsCharacter = engine.deObject.characters[towards];
+    const towardsCharacter = deObject.characters[towards];
     if (!towardsCharacter) {
         throw new Error(`Character ${towards} not found.`);
     }
     // @ts-ignore
-    let bond = engine.deObject.bonds[characterName].active.find(bond => bond.towards === towards);
+    let bond = deObject.bonds[characterName].active.find(bond => bond.towards === towards);
     let bondInfo = "";
     let pseudoBond = false;
     if (!bond) {
@@ -2340,7 +2320,7 @@ export async function getRelationshipBetweenCharacters(engine, characterName, to
             bond2: 0,
             stranger: true,
             towards: towards,
-            createdAt: engine.deObject.currentTime,
+            createdAt: deObject.currentTime,
             knowsName: false,
         }
         pseudoBond = true;
@@ -2356,11 +2336,11 @@ export async function getRelationshipBetweenCharacters(engine, characterName, to
     }
 
     // @ts-ignore
-    bondInfo += await bondDecl.description.execute(engine.deObject, character, towardsCharacter);
+    bondInfo += await bondDecl.description.execute(deObject, character, towardsCharacter);
 
     if (character.bonds.descriptionGeneralInjection) {
         // @ts-ignore
-        const value = await character.bonds.descriptionGeneralInjection.execute(engine.deObject, character, towardsCharacter);
+        const value = await character.bonds.descriptionGeneralInjection.execute(deObject, character, towardsCharacter);
         bondInfo += `\n\n${value}`;
     }
 
@@ -2378,19 +2358,19 @@ export function getFamilyBondRelation(character, towards) {
 }
 
 /**
- * @param {DEngine} engine
+ * @param {DEObject} deObject 
  * @param {DECompleteCharacterReference} character 
  * @param {DECompleteCharacterReference} towards
  * @return {Promise<string|null>}
  */
-export async function getRelationship(engine, character, towards) {
-    if (!engine.deObject) {
+export async function getRelationship(deObject, character, towards) {
+    if (!deObject) {
         throw new Error("DEngine not initialized");
     }
     if (!character.bonds || !character.bonds.declarations) {
         return null;
     }
-    const activeBond = engine.deObject?.bonds[character.name]?.active.find(bond => bond.towards === towards.name);
+    const activeBond = deObject?.bonds[character.name]?.active.find(bond => bond.towards === towards.name);
     if (!activeBond) {
         return null;
     }
@@ -2403,5 +2383,7 @@ export async function getRelationship(engine, character, towards) {
         return null;
     }
 
-    return typeof bondDecl.relationshipName === "string" ? bondDecl.relationshipName : await bondDecl.relationshipName(engine.deObject, { char: character, other: towards });
+    const familyRelationship = getFamilyBondRelation(character, towards);
+
+    return typeof bondDecl.relationshipName === "string" ? bondDecl.relationshipName : await bondDecl.relationshipName(deObject, { char: character, other: towards, otherFamilyRelation: familyRelationship, otherRelationship: null });
 }

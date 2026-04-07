@@ -5,7 +5,8 @@
     "strict": true,
     "moduleResolution": "node",
     "target": "es2020",
-    "moduleDetection": "force"
+    "moduleDetection": "force",
+    "ignoreDeprecations": "6.0"
   },
   "typeAcquisition": {"enable": true},
   "include": ["js/**/*.js", "js/types/**/*.d.ts", "js/schema/functions.js", "js/util/internal-make-function-types.js"]

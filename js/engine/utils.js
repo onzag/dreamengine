@@ -1,4 +1,67 @@
-import Handlebars from "handlebars";
+import { getSurroundingCharacters, getPowerLevelFromCharacter } from "./util/character-info.js";
+import { generateIntSeedFromString, weightedRandomByLikelihood } from "../util/random.js";
+import { getCharacterVolume, getCharacterWeight } from "./util/weight-and-volume.js";
+
+/**
+ * @param {string[]} list
+ * @returns {string}
+ */
+function formatAndHelper(list) {
+    if (!list || !Array.isArray(list)) return "";
+    if (list.length === 0) return "";
+    if (list.length === 1) return list[0];
+    if (list.length === 2) return `${list[0]} and ${list[1]}`;
+    return `${list.slice(0, -1).join(', ')}, and ${list[list.length - 1]}`;
+}
+
+/**
+ * @param {DEObject} DE
+ * @param {Array<DECompleteCharacterReference | string>} charsOrig
+ * @param {string} they
+ * @param {string} he
+ * @param {string} she
+ * @param {string} theySingular
+ * @returns {string}
+ */
+function getPronounHelperLocal(DE, charsOrig, they, he, she, theySingular) {
+    const chars = charsOrig.map(c => typeof c === "string" ? DE.characters[c] : c);
+
+    if (!chars || chars.length === 0) return they;
+    if (chars.length > 1) return they;
+    const charRef = chars[0];
+    if (!charRef) return theySingular;
+    const gender = charRef.gender.toLowerCase();
+    if (gender === "male") return he;
+    if (gender === "female") return she;
+    return theySingular;
+}
+
+/**
+ * @param {DEObject} DE
+ * @param {DECompleteCharacterReference} character
+ * @param {string} stateName
+ * @returns {DEStateCausant[]}
+ */
+function getCausantsHelperLocal(DE, character, stateName) {
+    const actualStateName = stateName.trim().toUpperCase().replace(/\s+/, "_");
+    const characterHistoryAndCurrent = [...DE.stateFor[character.name].history, DE.stateFor[character.name]];
+    /** @type {DEStateForCharacter | null} */
+    let lastEntryWithActivation = null;
+    for (let i = characterHistoryAndCurrent.length - 1; i >= 0; i--) {
+        const entry = characterHistoryAndCurrent[i];
+        if (entry.type === "INTERACTING" && entry.states.find(s => s.state === actualStateName)) {
+            lastEntryWithActivation = entry;
+            break;
+        }
+    }
+    if (!lastEntryWithActivation) return [];
+    const stateEntry = lastEntryWithActivation.states.find(s => s.state === actualStateName);
+    if (stateEntry?.causants === null) {
+        console.warn(`State ${actualStateName} does not track causants for character ${character.name}`);
+        return [];
+    }
+    return stateEntry?.causants || [];
+}
 
 /**
  * @type {DEUtils}
@@ -8,68 +71,16 @@ export const deEngineUtils = {
         if (DE.interests[interest.id]) {
             console.warn(`Interest with id ${interest.id} already exists, mixing it.`);
             if (!Array.isArray(DE.interests[interest.id].template)) {
-                // @ts-ignore
                 DE.interests[interest.id].template = [DE.interests[interest.id].template];
             }
             if (Array.isArray(interest.template)) {
-                // @ts-ignore
                 DE.interests[interest.id].template.push(...interest.template);
             } else {
-                // @ts-ignore
                 DE.interests[interest.id].template.push(interest.template);
             }
         } else {
             DE.interests[interest.id] = interest;
         }
-    },
-    newHandlebarsTemplate(DE, source) {
-        const compiled = Handlebars.compile(source);
-        return (DE, info) => {
-            const obj = {
-                user: DE.user.name,
-                char: info.char?.name || "",
-                other: info.other?.name || "",
-                other_family_relation: info.otherFamilyRelation || "none",
-                other_relationship: info.otherRelationship || "none",
-                causants: info.causants?.map(c => c.name) || [],
-                causes: info.causes?.map(c => c.characterCausant ? c.description + " by " + c.characterCausant : c.description) || [],
-                chars: info.chars?.map(c => c.name) || [],
-            };
-            Object.keys(DE.functions).forEach((key) => {
-                // @ts-ignore
-                if (!obj[key]) {
-                    // @ts-ignore
-                    obj[key] = (...args) => {
-                        // @ts-ignore
-                        return DE.functions[key](DE, info.char, ...args);
-                    };
-                }
-            });
-            return compiled(obj);
-        }
-    },
-    runHandlebarsTemplate(DE, template, info) {
-        const obj = {
-            user: DE.user.name,
-            char: info.char?.name || "",
-            other: info.other?.name || "",
-            other_family_relation: info.otherFamilyRelation || "none",
-            other_relationship: info.otherRelationship || "none",
-            causants: info.causants?.map(c => c.name) || [],
-            causes: info.causes?.map(c => c.characterCausant ? c.description + " by " + c.characterCausant : c.description) || [],
-            chars: info.chars?.map(c => c.name) || [],
-        };
-        Object.keys(DE.functions).forEach((key) => {
-            // @ts-ignore
-            if (!obj[key]) {
-                // @ts-ignore
-                obj[key] = (...args) => {
-                    // @ts-ignore
-                    return DE.functions[key](DE, info.char, ...args);
-                };
-            }
-        });
-        return Handlebars.compile(template)(obj);
     },
     newLocation(DE, name, locationDef) {
         /**
@@ -158,11 +169,11 @@ export const deEngineUtils = {
     },
     createStateInAllCharacters(DE, stateName, stateDefinition) {
         Object.values(DE.characters).forEach((character) => {
-            createStateInCharacter(DE, character, stateName, stateDefinition);
+            defineStateInCharacter(DE, character, stateName, stateDefinition);
         });
         return stateDefinition;
     },
-    createStateInCharacter(DE, character, stateName, stateDefinition) {
+    defineStateInCharacter(DE, character, stateName, stateDefinition) {
         const characterRef = typeof character === "string" ? DE.characters[character] : character;
         if (!characterRef) {
             if (typeof character === "string") {
@@ -172,7 +183,7 @@ export const deEngineUtils = {
             }
             return null;
         }
-        return createStateInCharacter(DE, characterRef, stateName, stateDefinition);
+        return defineStateInCharacter(DE, characterRef, stateName, stateDefinition);
     },
     newBond(DE, char1, towards, bondDefinition) {
         const char1Ref = typeof char1 === "string" ? DE.characters[char1] : char1;
@@ -382,7 +393,7 @@ export const deEngineUtils = {
                 console.warn(`Received null as character reference when trying to shift state ${stateName}`);
             }
             return;
-        } else if (!characterRef.states[stateName]) {
+        } else if (!characterRef.stateDefinitions[stateName]) {
             console.warn(`Character ${characterRef.name} does not have state ${stateName} when trying to shift it by ${shiftAmount}`);
             return;
         }
@@ -404,7 +415,7 @@ export const deEngineUtils = {
             }
         }
 
-        const stateRef = characterRef.states[stateName];
+        const stateRef = characterRef.stateDefinitions[stateName];
 
         if (!stateRef) {
             console.warn(`Character ${characterRef.name} does not have state ${stateName}`);
@@ -413,7 +424,7 @@ export const deEngineUtils = {
 
         let activeState = DE.stateFor[characterRef.name].states.find(s => s.state === stateName);
 
-        const conflictingActiveStates = DE.stateFor[characterRef.name].states.filter(s => s.intensity > 0 && DE.characters[characterRef.name].states[s.state].conflictStates.includes(stateName));
+        const conflictingActiveStates = DE.stateFor[characterRef.name].states.filter(s => s.intensity > 0 && DE.characters[characterRef.name].stateDefinitions[s.state].conflictStates.includes(stateName));
 
         if (conflictingActiveStates.length > 0) {
             const defaultDominance = stateRef.dominance;
@@ -421,7 +432,7 @@ export const deEngineUtils = {
 
             const currentDominance = activeState ? (activeState.relieving ? defaultDominanceAfterRelief : defaultDominance) : -Infinity;
             const conflictingStateMaxDominance = Math.max(...conflictingActiveStates.map(s => {
-                const sRef = DE.characters[characterRef.name].states[s.state];
+                const sRef = DE.characters[characterRef.name].stateDefinitions[s.state];
                 const sDominance = sRef.dominance;
                 const sDominanceAfterRelief = sRef.dominanceAfterRelief || sDominance;
                 return s.relieving ? sDominanceAfterRelief : sDominance;
@@ -624,6 +635,303 @@ export const deEngineUtils = {
         }
         return stateInfo.relieving;
     },
+
+    templateUtils: {
+        allWorldCharacters(DE) {
+            return Object.keys(DE.stateFor).filter((charName) => !DE.stateFor[charName].deadEnded).map(name => DE.characters[name]);
+        },
+        allWorldCharactersButUser(DE) {
+            return Object.keys(DE.stateFor).filter(name => name !== DE.user.name && !DE.stateFor[name].deadEnded).map(name => DE.characters[name]);
+        },
+        currentLocation(DE) {
+            return DE.world.currentLocation;
+        },
+        currentLocationIsInVehicle(DE) {
+            return !!DE.world.locations[DE.world.currentLocation]?.vehicleType || false;
+        },
+        currentLocationIsSafe(DE) {
+            return DE.world.locations[DE.world.currentLocation]?.isSafe || false;
+        },
+        allCharactersAtLocation(DE, locationName) {
+            const result = [];
+            for (const member of Object.keys(DE.stateFor)) {
+                if (DE.stateFor[member].location === locationName) {
+                    const charRef = DE.characters[member];
+                    if (charRef) result.push(charRef);
+                }
+            }
+            return result;
+        },
+        locationIsVehicle(DE, locationName) {
+            return !!DE.world.locations[locationName]?.vehicleType || false;
+        },
+        locationIsSafe(DE, locationName) {
+            return DE.world.locations[locationName]?.isSafe || false;
+        },
+        getLastStateCausants(DE, char, stateName) {
+            return getCausantsHelperLocal(DE, char, stateName).map(c => c.name);
+        },
+        getLastStateCharacterCausants(DE, char, stateName) {
+            return getCausantsHelperLocal(DE, char, stateName).filter(c => c.type === "character").map(c => c.name);
+        },
+        getLastStateObjectCausants(DE, char, stateName) {
+            return getCausantsHelperLocal(DE, char, stateName).filter(c => c.type === "object").map(c => c.name);
+        },
+        getStates(DE, char) {
+            return DE.stateFor[char.name].states.map(s => s.state);
+        },
+        getStateIntensity(DE, char, stateName) {
+            const stateObject = DE.stateFor[char.name].states.find(s => s.state === stateName);
+            return stateObject ? stateObject.intensity : 0;
+        },
+        hasState(DE, char, stateName) {
+            return DE.stateFor[char.name].states.some(s => s.state === stateName);
+        },
+        stateHasJustActivated(DE, char, stateName) {
+            const stateObject = DE.stateFor[char.name].states.find(s => s.state === stateName);
+            if (!stateObject) return false;
+            return stateObject.contiguousStartActivationCyclesAgo === 0;
+        },
+        getStateActivationCyclesAgo(DE, char, stateName) {
+            const stateObject = DE.stateFor[char.name].states.find(s => s.state === stateName);
+            if (!stateObject) {
+                const stateHistory = [...DE.stateFor[char.name].history, DE.stateFor[char.name]];
+                let cycle = -1;
+                for (let i = stateHistory.length - 1; i >= 0; i--) {
+                    cycle++;
+                    const entry = stateHistory[i];
+                    const historicalStateObject = entry.states.find(s => s.state === stateName);
+                    if (historicalStateObject) {
+                        return cycle + historicalStateObject.contiguousStartActivationCyclesAgo;
+                    }
+                }
+                return -1;
+            }
+            return stateObject.contiguousStartActivationCyclesAgo;
+        },
+        getSocialGroup(DE, char, minBondLevel, maxBondLevel, min2BondLevel, max2BondLevel) {
+            return DE.bonds[char.name].active.filter(bond => {
+                return bond.bond >= minBondLevel && bond.bond <= maxBondLevel && bond.bond2 >= min2BondLevel && bond.bond2 <= max2BondLevel;
+            }).map(bond => bond.towards);
+        },
+        getPresentSocialGroup(DE, char, minBondLevel, maxBondLevel, min2BondLevel, max2BondLevel) {
+            const currentLocation = DE.world.currentLocation;
+            const socialGroup = DE.bonds[char.name].active.filter(bond => {
+                return bond.bond >= minBondLevel && bond.bond <= maxBondLevel && bond.bond2 >= min2BondLevel && bond.bond2 <= max2BondLevel;
+            }).map(bond => bond.towards);
+            return socialGroup.filter(memberName => DE.stateFor[memberName].location === currentLocation);
+        },
+        getPresentConversingSocialGroup(DE, char, minBondLevel, maxBondLevel, min2BondLevel, max2BondLevel) {
+            if (minBondLevel === -100 && maxBondLevel === 100 && min2BondLevel === 0 && max2BondLevel === 100) {
+                const conversationId = DE.stateFor[char.name].conversationId;
+                if (!conversationId) return [];
+                return DE.conversations[conversationId].participants.filter(memberName => memberName !== char.name);
+            }
+            const conversationId = DE.stateFor[char.name].conversationId;
+            if (!conversationId) return [];
+            const socialGroup = DE.bonds[char.name].active.filter(bond => {
+                return bond.bond >= minBondLevel && bond.bond <= maxBondLevel && bond.bond2 >= min2BondLevel && bond.bond2 <= max2BondLevel;
+            }).map(bond => bond.towards);
+            return DE.conversations[conversationId].participants.filter(memberName => socialGroup.includes(memberName));
+        },
+        getDifferenceOfPresentSocialGroup(DE, char, list) {
+            const currentLocation = DE.world.currentLocation;
+            const socialGroup = DE.bonds[char.name].active.map(bond => bond.towards);
+            const presentSocialGroup = socialGroup.filter(memberName => DE.stateFor[memberName].location === currentLocation);
+            return list.filter(name => !presentSocialGroup.includes(name));
+        },
+        getExSocialGroup(DE, char, minBondLevel, maxBondLevel, min2BondLevel, max2BondLevel) {
+            return DE.bonds[char.name].ex.filter(bond => {
+                return bond.bond >= minBondLevel && bond.bond <= maxBondLevel && bond.bond2 >= min2BondLevel && bond.bond2 <= max2BondLevel;
+            }).map(bond => bond.towards);
+        },
+        getCarryWeight(DE, char) {
+            return getCharacterWeight(DE, char.name).weight;
+        },
+        getCarryVolume(DE, char) {
+            return getCharacterVolume(DE, char.name).volume;
+        },
+        getPowerLevel(DE, char) {
+            return getPowerLevelFromCharacter(char);
+        },
+        getTier(DE, char) {
+            return char.tier;
+        },
+        getTierValue(DE, char) {
+            return char.tierValue;
+        },
+        isDead(DE, char) {
+            return DE.stateFor[char.name].dead;
+        },
+        getChar(DE, potentialCharacter) {
+            return DE.characters[potentialCharacter] || null;
+        },
+        isUser(DE, char) {
+            return DE.user.name === char.name;
+        },
+        isPresentMember(DE, char) {
+            const currentLocation = DE.world.currentLocation;
+            return DE.stateFor[char.name].location === currentLocation;
+        },
+        isNotPresent(DE, char) {
+            const currentLocation = DE.world.currentLocation;
+            return DE.stateFor[char.name].location !== currentLocation;
+        },
+        isGone(DE, char) {
+            const exbonds = DE.bonds[char.name]?.ex;
+            if (!exbonds) return false;
+            return exbonds.length > 0;
+        },
+        isInConversation(DE, char) {
+            const conversationId = DE.stateFor[char.name].conversationId;
+            return !!conversationId;
+        },
+        isIndoors(DE, char) {
+            const locationOfChar = DE.stateFor[char.name].location;
+            const locationInfo = DE.world.locations[locationOfChar];
+            return locationInfo ? locationInfo.isIndoors : false;
+        },
+        isOutdoors(DE, char) {
+            const locationOfChar = DE.stateFor[char.name].location;
+            const locationInfo = DE.world.locations[locationOfChar];
+            return locationInfo ? !locationInfo.isIndoors : false;
+        },
+        hasItem(DE, char, itemName) {
+            return DE.stateFor[char.name].carrying.find(item => item.name === itemName) !== undefined;
+        },
+        getPosture(DE, char) {
+            return DE.stateFor[char.name].posture;
+        },
+        lastSaw(DE, char) {
+            const surroundingCharacters = getSurroundingCharacters(DE, char.name);
+            if (surroundingCharacters.nonStrangers.length > 0) {
+                return DE.stateFor[char.name].location;
+            }
+            const charHistory = DE.stateFor[char.name].history;
+            for (let i = charHistory.length - 1; i >= 0; i--) {
+                const entry = charHistory[i];
+                if (entry.surroundingNonStrangers.length > 0) {
+                    return entry.location;
+                }
+            }
+            return "";
+        },
+        hasNoIdeaWhereIs(DE, char) {
+            const surroundingCharacters = getSurroundingCharacters(DE, char.name);
+            if (surroundingCharacters.nonStrangers.length > 0) {
+                return false;
+            }
+            let shouldBeAt = null;
+            const charHistory = DE.stateFor[char.name].history;
+            let foundAtIndex = -1;
+            for (let i = charHistory.length - 1; i >= 0; i--) {
+                const entry = charHistory[i];
+                if (entry.surroundingNonStrangers.length > 0) {
+                    shouldBeAt = entry.location;
+                    foundAtIndex = i;
+                    break;
+                }
+            }
+            if (!shouldBeAt) return false;
+            if (DE.stateFor[char.name].location === shouldBeAt) return true;
+            for (let j = foundAtIndex + 1; j < charHistory.length; j++) {
+                if (charHistory[j].location === shouldBeAt) return true;
+            }
+            return false;
+        },
+        doesNotKnow(DE, char) {
+            const bonds = DE.bonds[char.name].active;
+            return bonds.length === 0;
+        },
+        isStrangersWith(DE, char, towardsChar) {
+            const bonds = DE.bonds[char.name].active;
+            for (const bond of bonds) {
+                if (bond.towards === towardsChar.name && bond.stranger) {
+                    return true;
+                }
+            }
+            return false;
+        },
+        getBondTowards(DE, char, towardsChar) {
+            const bonds = DE.bonds[char.name].active;
+            for (const bond of bonds) {
+                if (bond.towards === towardsChar.name) {
+                    return bond.bond;
+                }
+            }
+            return 0;
+        },
+        getSecondaryBondTowards(DE, char, towardsChar) {
+            const bonds = DE.bonds[char.name].active;
+            for (const bond of bonds) {
+                if (bond.towards === towardsChar.name) {
+                    return bond.bond2;
+                }
+            }
+            return 0;
+        },
+        isAtSameLocation(DE, char, char2) {
+            return DE.stateFor[char.name].location === DE.stateFor[char2.name].location;
+        },
+        isAtSameSlot(DE, char, char2) {
+            return DE.stateFor[char.name].location === DE.stateFor[char2.name].location &&
+                DE.stateFor[char.name].locationSlot === DE.stateFor[char2.name].locationSlot;
+        },
+        isHere(DE, char) {
+            return DE.stateFor[char.name].location === DE.world.currentLocation;
+        },
+        formatAnd(DE, list) {
+            return formatAndHelper(list);
+        },
+        formatCommaList(DE, list) {
+            if (!list || !Array.isArray(list)) return "";
+            return list.join(', ');
+        },
+        formatOr(DE, list) {
+            if (!list || !Array.isArray(list)) return "";
+            if (list.length === 0) return "";
+            if (list.length === 1) return list[0];
+            if (list.length === 2) return `${list[0]} or ${list[1]}`;
+            return `${list.slice(0, -1).join(', ')}, or ${list[list.length - 1]}`;
+        },
+        formatVerbToBe(DE, chars) {
+            return getPronounHelperLocal(DE, chars, "are", "is", "is", "is");
+        },
+        formatPluralOrSingular(DE, chars, plural, singular) {
+            if (chars.length === 1) return singular;
+            return plural;
+        },
+        formatObjectPronoun(DE, chars) {
+            return getPronounHelperLocal(DE, chars, "them", "him", "her", "them");
+        },
+        formatPossessive(DE, chars) {
+            return getPronounHelperLocal(DE, chars, "their", "his", "her", "their");
+        },
+        formatReflexive(DE, chars) {
+            return getPronounHelperLocal(DE, chars, "themselves", "himself", "herself", "themself");
+        },
+        formatPronoun(DE, chars) {
+            return getPronounHelperLocal(DE, chars, "they", "he", "she", "they");
+        },
+        formatOwnershipPronoun(DE, chars) {
+            return getPronounHelperLocal(DE, chars, "theirs", "his", "hers", "theirs");
+        },
+        getRandomSeedFromString(DE, optionsNumber, inputString) {
+            return generateIntSeedFromString(optionsNumber, inputString);
+        },
+        getRandomSeedFromTime(DE, optionsNumber) {
+            const currentTimeString = DE.currentTime.time.toString();
+            return generateIntSeedFromString(optionsNumber, currentTimeString);
+        },
+        getRandomOption(DE, options) {
+            const result = weightedRandomByLikelihood(options.map(option => ({ item: option, likelihood: 1 })), generateIntSeedFromString(1000000, DE.currentTime.time.toString()));
+            return result ? result.item : options[0];
+        },
+        getRandomOptionFixedCharacter(DE, char, options) {
+            const result = weightedRandomByLikelihood(options.map(option => ({ item: option, likelihood: 1 })), generateIntSeedFromString(1000000, char.name));
+            return result ? result.item : options[0];
+        },
+    }
 };
 
 /**
@@ -634,12 +942,12 @@ export const deEngineUtils = {
  * @param {DECharacterStateDefinition} stateDefinition
  * @return {DECharacterStateDefinition}
  */
-function createStateInCharacter(DE, character, stateName, stateDefinition) {
-    if (character.states[stateName]) {
+function defineStateInCharacter(DE, character, stateName, stateDefinition) {
+    if (character.stateDefinitions[stateName]) {
         console.warn(`Character ${character.name} already has a state named ${stateName}`);
     }
-    character.states[stateName] = stateDefinition;
-    return character.states[stateName];
+    character.stateDefinitions[stateName] = stateDefinition;
+    return character.stateDefinitions[stateName];
 }
 
 /**
@@ -684,18 +992,17 @@ async function onStateTriggeredOnCharacter(deObject, character, stateName) {
         throw new Error(`Character ${character.name} does not have state ${stateName} active.`);
     }
 
-    const characterStateDescription = character.states[stateName];
+    const characterStateDescription = character.stateDefinitions[stateName];
     if (!characterStateDescription) {
         throw new Error(`Character ${character.name} does not have state description for ${stateName}.`);
     }
 
     // if the new state triggered is from the user, make a message about it
     if (deObject.user && deObject.user.name === character.name) {
-        // @ts-ignore
         let stateDescriptionText = typeof characterStateDescription.general === "string" ? characterStateDescription.general : await characterStateDescription.general(deObject, {
             char: character,
-            causants: characterStateInfo.causants || undefined,
-            causes: characterStateInfo.causes || undefined,
+            causants: characterStateInfo.causants,
+            causes: characterStateInfo.causes,
         });
         if (!stateDescriptionText.endsWith(".")) {
             stateDescriptionText += ".";
@@ -749,7 +1056,7 @@ async function onStateTriggeredOnCharacter(deObject, character, stateName) {
             if (!alreadyActivatedInfo) {
                 console.log(`State ${toModifyState} not active on character ${character.name}, cannot modify.`);
             } else {
-                const stateDescriptionSpecific = character.states[toModifyState];
+                const stateDescriptionSpecific = character.stateDefinitions[toModifyState];
 
                 // modify intensity
                 alreadyActivatedInfo.intensity += withIntensity;
@@ -784,6 +1091,8 @@ async function onStateTriggeredOnCharacter(deObject, character, stateName) {
     const deadEndPotential = !characterStateDescription.triggersDeadEnd ? "" : (typeof characterStateDescription.triggersDeadEnd === "string" ? characterStateDescription.triggersDeadEnd :
         (await characterStateDescription.triggersDeadEnd(deObject, {
             char: character,
+            causants: characterStateInfo.causants,
+            causes: characterStateInfo.causes,
         })).trim());
     if (deadEndPotential) {
         console.log(`State ${stateName} on character ${character.name} triggers dead-end, the character will now be removed from the story.`);
@@ -826,7 +1135,7 @@ export async function onStateRemovedOnCharacter(deObject, character, stateName) 
     if (!characterStateInfo) {
         throw new Error(`Character ${character.name} does not have state ${stateName} active.`);
     }
-    const characterStateDescription = character.states[stateName];
+    const characterStateDescription = character.stateDefinitions[stateName];
     if (!characterStateDescription) {
         throw new Error(`Character ${character.name} does not have state description for ${stateName}.`);
     }
@@ -873,7 +1182,7 @@ export async function onStateRemovedOnCharacter(deObject, character, stateName) 
             if (!alreadyActivatedInfo) {
                 console.log(`State ${toModifyState} not active on character ${character.name}, cannot modify.`);
             } else {
-                const stateDescriptionSpecific = character.states[toModifyState];
+                const stateDescriptionSpecific = character.stateDefinitions[toModifyState];
 
                 alreadyActivatedInfo.intensity += withIntensity;
                 if (alreadyActivatedInfo.intensity > 4) {
@@ -914,22 +1223,20 @@ export async function onStateRelievedOnCharacter(deObject, character, stateName)
     if (!characterStateInfo) {
         throw new Error(`Character ${character.name} does not have state ${stateName} active.`);
     }
-    const characterStateDescription = character.states[stateName];
+    const characterStateDescription = character.stateDefinitions[stateName];
     if (!characterStateDescription) {
         throw new Error(`Character ${character.name} does not have state description for ${stateName}.`);
     }
 
     // if the new state triggered is from the user, make a message about it
     if (deObject.user && deObject.user.name === character.name) {
-        // @ts-ignore
         let stateDescriptionText = ".\n";
 
         if (characterStateDescription.relieving && stateDescriptionText) {
-            // @ts-ignore
             stateDescriptionText += typeof characterStateDescription.relieving === "string" ? characterStateDescription.relieving : (await characterStateDescription.relieving(deObject, {
                 char: character,
-                causants: characterStateInfo.causants || undefined,
-                causes: characterStateInfo.causes || undefined,
+                causants: characterStateInfo.causants,
+                causes: characterStateInfo.causes,
             })).trim();
             if (!stateDescriptionText.endsWith(".")) {
                 stateDescriptionText += ".";
@@ -980,7 +1287,7 @@ export async function onStateRelievedOnCharacter(deObject, character, stateName)
             if (!alreadyActivatedInfo) {
                 console.log(`State ${toModifyState} not active on character ${character.name}, cannot modify.`);
             } else {
-                const stateDescriptionSpecific = character.states[toModifyState];
+                const stateDescriptionSpecific = character.stateDefinitions[toModifyState];
 
                 alreadyActivatedInfo.intensity += withIntensity;
                 if (alreadyActivatedInfo.intensity > 4) {

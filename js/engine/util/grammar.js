@@ -190,6 +190,8 @@ export function isYes(answer) {
 export function generateGrammarForVocabulary(engine, vocabulary, charName) {
     if (!engine.inferenceAdapter) {
         throw new Error("Inference adapter is required to create grammar");
+    } else if (!engine.deObject) {
+        throw new Error("DEngine must be initialized to create grammar");
     }
 
     const defaultEverythingGoes = `[^*:\n—]+`;
@@ -248,7 +250,7 @@ export function generateGrammarForVocabulary(engine, vocabulary, charName) {
         }
 
         if (vocabulary.includeCharacterNames) {
-            const surroundingCharacters = getSurroundingCharacters(engine, charName);
+            const surroundingCharacters = getSurroundingCharacters(engine.deObject, charName);
             if (surroundingCharacters.nonStrangers.length > 0) {
                 for (const character of surroundingCharacters.nonStrangers) {
                     allGrammar.add(wordForGrammar(character, vocabulary.intensityEffect || "NONE", "none", true));

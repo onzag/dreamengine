@@ -26,7 +26,7 @@ export default async function calculatePostureChange(engine, character, knownCha
         character,
         {
             // hide the posture in the description, so the agent needs to find it out by itself
-            description: await getExternalDescriptionOfCharacter(engine, character.name, true, true),
+            description: await getExternalDescriptionOfCharacter(engine.deObject, character.name, true, true),
             externalDescription: null,
             relationships: [],
             expressiveStates: [],
@@ -245,7 +245,7 @@ export default async function calculatePostureChange(engine, character, knownCha
 
     if (foundAPostureChange) {
         return [
-            getExternalDescriptionOfCharacterPostureOnly(engine, character.name, false),
+            getExternalDescriptionOfCharacterPostureOnly(engine.deObject, character.name, false),
         ]
     };
 

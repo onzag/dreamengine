@@ -270,7 +270,7 @@ export default async function calculateItemChanges(engine, character) {
 
         const nextQuestion = `In the last story fragment, was the character "${charName}" mentioned or interacted with in any way (talked to, looked at, thought about, mentioned, described, etc.)? Answer yes if "${charName}" was mentioned or interacted with, or no if they were not.`;
 
-        const charDescription = await getExternalDescriptionOfCharacter(engine, charName);
+        const charDescription = await getExternalDescriptionOfCharacter(engine.deObject, charName);
         const charDescriptionContextInfo = engine.inferenceAdapter.buildContextInfoCharacterDescription(
             engine.deObject.characters[charName],
             charDescription,
@@ -1420,7 +1420,7 @@ export default async function calculateItemChanges(engine, character) {
             let isAtopItem = false;
 
             const canBeInside = allPotentialItemsForItem.some((itemOptions) => itemOptions.some((it) => it.containerProperties && it.containerProperties.capacityKg && it.containerProperties.capacityKg > 0));
-            const charExactLocation = getCharacterExactLocation(engine, charName);
+            const charExactLocation = getCharacterExactLocation(engine.deObject, charName);
             const alreadyInside = charExactLocation.item && charExactLocation.item.name === item && charExactLocation.itemPathEnd === "containingCharacters";
             if (canBeInside && !alreadyInside) {
                 const nextQuestion = `By the end of the last story fragment, is ${charName} inside ${item}? Answer "yes" ONLY if ${charName} got inside ${item} by entering it, climbing into it, or being put into it. If ${charName} is near ${item} but not inside it, or if it's not clear if they are inside it, answer "no".`;
@@ -1513,7 +1513,7 @@ export default async function calculateItemChanges(engine, character) {
                 continue;
             }
 
-            const beingCarriedInfo = getBeingCarriedByCharacter(engine, charName);
+            const beingCarriedInfo = getBeingCarriedByCharacter(engine.deObject, charName);
             const alreadyBeingCarriedBy = beingCarriedInfo && beingCarriedInfo.carrierName === otherCharName;
 
             if (alreadyBeingCarriedBy) {
@@ -1523,7 +1523,7 @@ export default async function calculateItemChanges(engine, character) {
                 continue;
             }
 
-            const otherCharCarriedInfo = getBeingCarriedByCharacter(engine, otherCharName);
+            const otherCharCarriedInfo = getBeingCarriedByCharacter(engine.deObject, otherCharName);
             const carryingThatCharacterInsteadAndItIsEstablished = otherCharCarriedInfo && otherCharCarriedInfo.carrierName === charName && charactersWithAEstablishedPositionSoFar.includes(otherCharName);
 
             if (carryingThatCharacterInsteadAndItIsEstablished) {
@@ -1622,7 +1622,7 @@ export default async function calculateItemChanges(engine, character) {
         }
 
         const charState = engine.deObject.stateFor[charName];
-        const charExactLocation = getCharacterExactLocation(engine, charName);
+        const charExactLocation = getCharacterExactLocation(engine.deObject, charName);
         if (charExactLocation.itemPathEnd === "containingCharacters") {
             const nextQuestion = `By the end of the last story fragment, did ${charName} get out of ${charExactLocation.item?.name} (the item they were inside)? Answer "yes" ONLY if ${charName} got out of ${charExactLocation.item?.name} by exiting it, climbing out of it, or being taken out of it. If ${charName} is still inside ${charExactLocation.item?.name}, or if it's not clear if they got out of it, answer "no".`;
             const outsideQuestion = await interactionGenerator.next({
@@ -2006,7 +2006,7 @@ function moveItems(
         // first we will see if the item was used before to place new things and prefer one of those paths if they exist
         const preferrablePaths = [];
         for (const potentialToPath of toPathsNotAtTheSameSlot) {
-            const resolveInfo = resolvePath(engine, charState.location, potentialToPath);
+            const resolveInfo = resolvePath(engine.deObject, charState.location, potentialToPath);
             if (resolveInfo.resolved._just_placed) {
                 preferrablePaths.push(potentialToPath);
             }
@@ -2026,7 +2026,8 @@ function moveItems(
     const countAmount = (paths) => {
         let total = 0;
         for (const path of paths) {
-            const resolveInfo = resolvePath(engine, charState.location, path);
+            // @ts-ignore typescript is wrong here deObject is guaranteed to be defined in this function
+            const resolveInfo = resolvePath(engine.deObject, charState.location, path);
             total += resolveInfo.resolved.amount || 1;
         }
         return total;
@@ -2072,7 +2073,7 @@ function moveItems(
 
     // this is guaranteed to be either a character, a slot, or another item
     const resolveInfo = resolvePath(
-        engine,
+        engine.deObject,
         charState.location,
         toPath
     );
@@ -2090,7 +2091,8 @@ function moveItems(
             break;
         }
         const componentFromPathsSorted = fromPath.map((path) => {
-            const resolveInfo = resolvePath(engine, charState.location, path);
+            // @ts-ignore typescript is wrong here deObject is guaranteed to be defined in this function
+            const resolveInfo = resolvePath(engine.deObject, charState.location, path);
             return { path, item: resolveInfo.resolved, amount: resolveInfo.resolved.amount || 1 };
         }).sort((a, b) => {
             return b.amount - a.amount;
@@ -2158,10 +2160,10 @@ function moveItems(
             // given to a character directly or indirectly (eg. put in a bag that they are carrying or wearing)
             if (actualEndingPath[0] === "characters" && (actualEndingPath[2] === "carrying" || (actualEndingPath[2] === "wearing" && actualEndingPath.length > 4))) {
                 // A character picked up or received an item
-                const messageSoFar = `${thrownAddition}${actualEndingPath[1]}${thrown ? caughtAndIs : ""}${nowCarrying} ${utilItemCount(engine, charState.location, null, amountToTransfer, item)}${whichPreviously} ${amountToTransfer === 1 ? "was" : "were"} ${locationPathToMessageWithoutItemName(engine, characterName, charState.location, componentFromPath.path)}`;
+                const messageSoFar = `${thrownAddition}${actualEndingPath[1]}${thrown ? caughtAndIs : ""}${nowCarrying} ${utilItemCount(engine.deObject, charState.location, null, amountToTransfer, item)}${whichPreviously} ${amountToTransfer === 1 ? "was" : "were"} ${locationPathToMessageWithoutItemName(engine.deObject, characterName, charState.location, componentFromPath.path)}`;
                 if (actualEndingPath.length > 4) {
                     // eg. ["characters", "Alice", "carrying", 0, "containing", 1] we check above 4 to avoid the index of where the item is located in the carrying list
-                    addedMessagesForStoryMaster.push(messageSoFar + `, and is now specifically ${locationPathToMessageWithoutItemName(engine, characterName, charState.location, actualEndingPath, true)}`);
+                    addedMessagesForStoryMaster.push(messageSoFar + `, and is now specifically ${locationPathToMessageWithoutItemName(engine.deObject, characterName, charState.location, actualEndingPath, true)}`);
                 } else {
                     addedMessagesForStoryMaster.push(messageSoFar);
                 }
@@ -2169,18 +2171,18 @@ function moveItems(
                 // wearing directly on the body
             } else if (actualEndingPath[0] === "characters" && actualEndingPath[2] === "wearing" && actualEndingPath.length <= 4) {
                 // A character picked up or received an item
-                const messageSoFar = `${thrownAddition}${actualEndingPath[1]}${thrown ? caughtAndIs : ""}${nowWearing} ${utilItemCount(engine, charState.location, null, amountToTransfer, item)}${whichPreviously} ${amountToTransfer === 1 ? "was" : "were"} ${locationPathToMessageWithoutItemName(engine, characterName, charState.location, componentFromPath.path)}`;
+                const messageSoFar = `${thrownAddition}${actualEndingPath[1]}${thrown ? caughtAndIs : ""}${nowWearing} ${utilItemCount(engine.deObject, charState.location, null, amountToTransfer, item)}${whichPreviously} ${amountToTransfer === 1 ? "was" : "were"} ${locationPathToMessageWithoutItemName(engine.deObject, characterName, charState.location, componentFromPath.path)}`;
                 addedMessagesForStoryMaster.push(messageSoFar);
             } else if (actualEndingPath[0] === "slots" && actualEndingPath[2] === "items" && actualEndingPath.length <= 4) {
                 // an item was dropped on the ground
-                const messageSoFar = `${thrownAddition}${utilItemCount(engine, charState.location, null, amountToTransfer, item, true)}${thrown ? "" : amountToTransfer === 1 ? " is" : " are"}${droppedOnTheGround} at ${actualEndingPath[1]},${whichPreviously} ${amountToTransfer === 1 ? "was" : "were"} ${locationPathToMessageWithoutItemName(engine, characterName, charState.location, componentFromPath.path)}`;
+                const messageSoFar = `${thrownAddition}${utilItemCount(engine.deObject, charState.location, null, amountToTransfer, item, true)}${thrown ? "" : amountToTransfer === 1 ? " is" : " are"}${droppedOnTheGround} at ${actualEndingPath[1]},${whichPreviously} ${amountToTransfer === 1 ? "was" : "were"} ${locationPathToMessageWithoutItemName(engine.deObject, characterName, charState.location, componentFromPath.path)}`;
                 addedMessagesForStoryMaster.push(messageSoFar);
             } else {
                 if (thrown) {
-                    const messageSoFar = `${thrownAddition}${utilItemCount(engine, charState.location, null, amountToTransfer, item, true)} drops ${locationPathToMessageWithoutItemName(engine, characterName, charState.location, actualEndingPath)},${whichPreviously} ${amountToTransfer === 1 ? "was" : "were"} ${locationPathToMessageWithoutItemName(engine, characterName, charState.location, componentFromPath.path)}.`;
+                    const messageSoFar = `${thrownAddition}${utilItemCount(engine.deObject, charState.location, null, amountToTransfer, item, true)} drops ${locationPathToMessageWithoutItemName(engine.deObject, characterName, charState.location, actualEndingPath)},${whichPreviously} ${amountToTransfer === 1 ? "was" : "were"} ${locationPathToMessageWithoutItemName(engine.deObject, characterName, charState.location, componentFromPath.path)}.`;
                     addedMessagesForStoryMaster.push(messageSoFar);
                 } else {
-                    const messageSoFar = `${utilItemCount(engine, charState.location, null, amountToTransfer, item, true)}${amountToTransfer === 1 ? isMoved : areMoved} from ${locationPathToMessageWithoutItemName(engine, characterName, charState.location, componentFromPath.path)} to be ${locationPathToMessageWithoutItemName(engine, characterName, charState.location, actualEndingPath)}.`;
+                    const messageSoFar = `${utilItemCount(engine.deObject, charState.location, null, amountToTransfer, item, true)}${amountToTransfer === 1 ? isMoved : areMoved} from ${locationPathToMessageWithoutItemName(engine.deObject, characterName, charState.location, componentFromPath.path)} to be ${locationPathToMessageWithoutItemName(engine.deObject, characterName, charState.location, actualEndingPath)}.`;
                     addedMessagesForStoryMaster.push(messageSoFar);
                 }
             }
@@ -2262,7 +2264,7 @@ function moveCharacters(
         // first we will see if the item was used before to place new things and prefer one of those paths if they exist
         const preferrablePaths = [];
         for (const potentialToPath of toPathsNotAtTheSameSlot) {
-            const resolveInfo = resolvePath(engine, charState.location, potentialToPath);
+            const resolveInfo = resolvePath(engine.deObject, charState.location, potentialToPath);
             if (resolveInfo.resolved._just_placed) {
                 preferrablePaths.push(potentialToPath);
             }
@@ -2277,7 +2279,7 @@ function moveCharacters(
 
     // this is guaranteed to be either a character, a slot, or another item
     const resolveInfo = resolvePath(
-        engine,
+        engine.deObject,
         charState.location,
         toPath
     );
@@ -2302,14 +2304,14 @@ function moveCharacters(
         // @ts-ignore
         charState.locationSlot = resolveInfo.pathToResolved[1];
         if (isPureSlot) {
-            addedMessagesForStoryMaster.push(`${characterName} is now on the ground at ${locationPathToMessage(engine, characterName, charState.location, resolveInfo.pathToResolved)}.`);
+            addedMessagesForStoryMaster.push(`${characterName} is now on the ground at ${locationPathToMessage(engine.deObject, characterName, charState.location, resolveInfo.pathToResolved)}.`);
         }
     }
 
     if (finalPath === "containingCharacters" && !isPureCharacter && !isPureSlot) {
-        addedMessagesForStoryMaster.push(`${characterName} is now ${locationPathToMessage(engine, characterName, charState.location, [...resolveInfo.pathToResolved, "containing"])}.`);
+        addedMessagesForStoryMaster.push(`${characterName} is now ${locationPathToMessage(engine.deObject, characterName, charState.location, [...resolveInfo.pathToResolved, "containing"])}.`);
     } else if (finalPath === "ontopCharacters" && !isPureCharacter && !isPureSlot) {
-        addedMessagesForStoryMaster.push(`${characterName} is now ${locationPathToMessage(engine, characterName, charState.location, [...resolveInfo.pathToResolved, "ontop"])}.`);
+        addedMessagesForStoryMaster.push(`${characterName} is now ${locationPathToMessage(engine.deObject, characterName, charState.location, [...resolveInfo.pathToResolved, "ontop"])}.`);
     }
 }
 
@@ -2431,15 +2433,15 @@ function informStolen(
     if (witnesses.length <= 0) {
         message += " with no witnesses, so none notice the theft.";
     } else {
-        message += ` and this is witnessed by ${engine.deObject?.functions.format_and(engine.deObject, null, witnesses)}`;
+        message += ` and this is witnessed by ${engine.deObject?.utils.templateUtils.formatAnd(engine.deObject, witnesses)}`;
         if (ignorers.length > 0) {
-            message += `, while ${engine.deObject?.functions.format_and(engine.deObject, null, ignorers)} are nearby but do not notice the theft`;
+            message += `, while ${engine.deObject?.utils.templateUtils.formatAnd(engine.deObject, ignorers)} are nearby but do not notice the theft`;
         }
         if (witnessesThatIgnoredTheft.length > 0) {
-            message += `. Out of the witnesses, ${engine.deObject?.functions.format_and(engine.deObject, null, witnessesThatIgnoredTheft)} decide to ignore the theft and not intervene`;
+            message += `. Out of the witnesses, ${engine.deObject?.utils.templateUtils.formatAnd(engine.deObject, witnessesThatIgnoredTheft)} decide to ignore the theft and not intervene`;
         }
         if (witnessesThatTurnHeroes.length > 0) {
-            message += `. Out of the witnesses, ${engine.deObject?.functions.format_and(engine.deObject, null, witnessesThatTurnHeroes)} decide to call out the thief and intervene`;
+            message += `. Out of the witnesses, ${engine.deObject?.utils.templateUtils.formatAnd(engine.deObject, witnessesThatTurnHeroes)} decide to call out the thief and intervene`;
         }
     }
 
@@ -2573,7 +2575,7 @@ async function cleanDirtyItemTree(
 
     // this is where items would fall down if they are expelled from containers or fall from on top of other items, we will add them to the slot as if they fell on the ground, we will also add a message for the story master about what fell down and why
     const expectedPathForFallenItems = path[0] === "slots" ? ["slots", path[1]] : ["slots", locationSlot];
-    const resolvedFallenItems = resolvePath(engine, location, expectedPathForFallenItems);
+    const resolvedFallenItems = resolvePath(engine.deObject, location, expectedPathForFallenItems);
 
     /**
      * We use this helper function to expell items to the fallen list
@@ -2615,7 +2617,7 @@ async function cleanDirtyItemTree(
     // the path length being greater than 3 means we are on an item that is inside or on top another item
     if (path.length > 3) {
         for (const item of list) {
-            const excess = getItemExcessElements(engine, item);
+            const excess = getItemExcessElements(engine.deObject, item);
             if (excess.breaks) {
                 const fallsDownList = [];
                 for (const expelledFromOnTopItem of excess.expelledOntopItems) {
@@ -2624,7 +2626,7 @@ async function cleanDirtyItemTree(
 
                     expellItemToFallen(expelledFromOnTopItem.item, amountExpelled);
 
-                    fallsDownList.push(utilItemCount(engine, location, expelledFromOnTopItem.item.owner, amountExpelled, expelledFromOnTopItem.item.name));
+                    fallsDownList.push(utilItemCount(engine.deObject, location, expelledFromOnTopItem.item.owner, amountExpelled, expelledFromOnTopItem.item.name));
                 }
                 for (const expelledFromInsideItem of excess.expelledContainedItems) {
                     const amountExpelled = (expelledFromInsideItem.amount || 1) * (item.amount || 1);
@@ -2632,7 +2634,7 @@ async function cleanDirtyItemTree(
 
                     expellItemToFallen(expelledFromInsideItem.item, amountExpelled);
 
-                    fallsDownList.push(utilItemCount(engine, location, expelledFromInsideItem.item.owner, amountExpelled, expelledFromInsideItem.item.name));
+                    fallsDownList.push(utilItemCount(engine.deObject, location, expelledFromInsideItem.item.owner, amountExpelled, expelledFromInsideItem.item.name));
                 }
                 for (const expelledOnTopCharacter of excess.expelledOntopCharacters) {
                     item.ontopCharacters = item.ontopCharacters.filter((v) => v !== expelledOnTopCharacter);
@@ -2647,7 +2649,7 @@ async function cleanDirtyItemTree(
                     // @ts-ignore
                     addedMessagesForStoryMaster.push(excess.breakReason);
                 } else {
-                    const listOfItemsFallingDown = engine.deObject?.functions.format_and(engine.deObject, null, fallsDownList);
+                    const listOfItemsFallingDown = engine.deObject?.utils.templateUtils.formatAnd(engine.deObject, fallsDownList);
                     const fallVariations = [
                         `${excess.breakReason}, this causes ${listOfItemsFallingDown} to fall down onto the ground at the ${expectedPathForFallenItems[1]}.`,
                         `${excess.breakReason}, sending ${listOfItemsFallingDown} tumbling to the ground at the ${expectedPathForFallenItems[1]}.`,
@@ -2682,11 +2684,11 @@ async function cleanDirtyItemTree(
                     const amountExpelled = (expelledFromOnTopItem.amount || 1) * (item.amount || 1);
                     expelledFromOnTopItem.amount -= expelledFromOnTopItem.amount;
 
-                    const expelledItemVolume = getItemVolume(engine, expelledFromOnTopItem.item);
+                    const expelledItemVolume = getItemVolume(engine.deObject, expelledFromOnTopItem.item);
 
                     expellItemToFallen(expelledFromOnTopItem.item, amountExpelled);
 
-                    const elementsExpelled = utilItemCount(engine, location, expelledFromOnTopItem.item.owner, amountExpelled, expelledFromOnTopItem.item.name, false);
+                    const elementsExpelled = utilItemCount(engine.deObject, location, expelledFromOnTopItem.item.owner, amountExpelled, expelledFromOnTopItem.item.name, false);
                     if (item.maxVolumeOnTopLiters !== null && expelledItemVolume.singularVolume > item.maxVolumeOnTopLiters) {
                         const tooLargeOnTopVariations = [
                             `${elementsExpelled} ${amountExpelled === 1 ? "is" : "are"} far too large to be on top of ${item.name} and ${amountExpelled === 1 ? "falls" : "fall"} off onto the ground in the ${expectedPathForFallenItems[1]}`,
@@ -2714,11 +2716,11 @@ async function cleanDirtyItemTree(
                     const amountExpelled = (expelledFromInsideItem.amount || 1) * (item.amount || 1);
                     expelledFromInsideItem.amount -= expelledFromInsideItem.amount;
 
-                    const expelledItemVolume = getItemVolume(engine, expelledFromInsideItem.item);
+                    const expelledItemVolume = getItemVolume(engine.deObject, expelledFromInsideItem.item);
 
                     expellItemToFallen(expelledFromInsideItem.item, amountExpelled);
 
-                    const elementsExpelled = utilItemCount(engine, location, expelledFromInsideItem.item.owner, amountExpelled, expelledFromInsideItem.item.name, false);
+                    const elementsExpelled = utilItemCount(engine.deObject, location, expelledFromInsideItem.item.owner, amountExpelled, expelledFromInsideItem.item.name, false);
                     if (item.containerProperties && expelledItemVolume.singularVolume > item.containerProperties.capacityLiters) {
                         const tooLargeInsideVariations = [
                             `${elementsExpelled} ${amountExpelled === 1 ? "is" : "are"} far too large to fit inside ${item.name} and ${amountExpelled === 1 ? "falls" : "fall"} out onto the ground in the ${expectedPathForFallenItems[1]}`,
@@ -2745,7 +2747,7 @@ async function cleanDirtyItemTree(
                     // a character is only one so that is easier to handle
                     item.ontopCharacters = item.ontopCharacters.filter((v) => v !== expelledOnTopCharacter);
 
-                    const charVolume = getCharacterVolume(engine, expelledOnTopCharacter);
+                    const charVolume = getCharacterVolume(engine.deObject, expelledOnTopCharacter);
 
                     if (path[0] === "characters") {
                         const characterCarryingOrWearingTheItem = path[1];
@@ -2792,7 +2794,7 @@ async function cleanDirtyItemTree(
                     item.containingCharacters = item.containingCharacters.filter((v) => v !== expelledInsideCharacter);
                     const charState = engine.deObject.stateFor[expelledInsideCharacter];
 
-                    const charVolume = getCharacterVolume(engine, expelledInsideCharacter);
+                    const charVolume = getCharacterVolume(engine.deObject, expelledInsideCharacter);
 
                     if (path[0] === "characters") {
                         const characterCarryingOrWearingTheItem = path[1];
@@ -2843,7 +2845,7 @@ async function cleanDirtyItemTree(
     } else if (path.length === 3 && path[0] === "characters") {
         // now for items on characters
         const carryingCapacity = getCharacterCarryingCapacity(
-            engine,
+            engine.deObject,
             // @ts-ignore
             path[1],
         );
@@ -2854,13 +2856,13 @@ async function cleanDirtyItemTree(
             let totalCarriedVolume = 0;
             const charState = engine.deObject.stateFor[path[1]];
             for (const wornItem of charState.wearing) {
-                const wornItemWeight = getItemWeight(engine, wornItem);
+                const wornItemWeight = getItemWeight(engine.deObject, wornItem);
                 totalCarriedWeight += wornItemWeight.completeWeight;
             }
             for (const carriedCharacter of charState.carryingCharactersDirectly) {
-                const carriedCharacterVolume = getCharacterVolume(engine, carriedCharacter);
+                const carriedCharacterVolume = getCharacterVolume(engine.deObject, carriedCharacter);
                 totalCarriedVolume += carriedCharacterVolume.volume;
-                const carriedCharacterWeight = getCharacterWeight(engine, carriedCharacter);
+                const carriedCharacterWeight = getCharacterWeight(engine.deObject, carriedCharacter);
                 totalCarriedWeight += carriedCharacterWeight.weight;
             }
             const listResortedByJustPlaced = [...list].sort((a, b) => {
@@ -2871,7 +2873,7 @@ async function cleanDirtyItemTree(
                 return bJustPlaced - aJustPlaced;
             });
             for (const carriedItem of listResortedByJustPlaced) {
-                const carriedItemWeight = getItemWeight(engine, carriedItem);
+                const carriedItemWeight = getItemWeight(engine.deObject, carriedItem);
                 if (carriedItemWeight.completeWeight + totalCarriedWeight > carryingCapacity.carryingCapacityKg) {
                     // the item is too heavy to be carried, so it will fall on the ground
                     const amountThatCanBeCarried = Math.floor((carryingCapacity.carryingCapacityKg - totalCarriedWeight) / carriedItemWeight.singularWeight);
@@ -2891,7 +2893,7 @@ async function cleanDirtyItemTree(
                         expellItemToFallen(carriedItem, amountThatWillFall);
 
                         const couldCarryEvenOneInOptimalConditions = carriedItemWeight.singularWeight <= carryingCapacity.carryingCapacityKg;
-                        let storyMasterMessageSoFar = `${utilItemCount(engine, charState.location, carriedItem.owner, amountThatWillFall, carriedItem.name, true)} ${amountThatWillFall === 1 ? "is" : "are"} too heavy to be carried by ${path[1]}${!couldCarryEvenOneInOptimalConditions ? "" : " who is already carrying too much weight,"} and ${amountThatWillFall === 1 ? "it falls" : "they fall"} on the ground at the ${expectedPathForFallenItems[1]}.`;
+                        let storyMasterMessageSoFar = `${utilItemCount(engine.deObject, charState.location, carriedItem.owner, amountThatWillFall, carriedItem.name, true)} ${amountThatWillFall === 1 ? "is" : "are"} too heavy to be carried by ${path[1]}${!couldCarryEvenOneInOptimalConditions ? "" : " who is already carrying too much weight,"} and ${amountThatWillFall === 1 ? "it falls" : "they fall"} on the ground at the ${expectedPathForFallenItems[1]}.`;
                         if (!couldCarryEvenOneInOptimalConditions) {
                             let exceedCapacityBy = carriedItemWeight.singularWeight / carryingCapacity.carryingCapacityKg;
                             if (exceedCapacityBy > 5) {
@@ -2901,7 +2903,7 @@ async function cleanDirtyItemTree(
                             const hasFallen = Math.random() < chanceOfFalling;
                             if (hasFallen) {
                                 userHasFallen = true;
-                                const itemIsPotentiallyBiggerThanCharacter = getItemVolume(engine, carriedItem).singularVolume > engine.deObject.characters[path[1]].weightKg; // rough check
+                                const itemIsPotentiallyBiggerThanCharacter = getItemVolume(engine.deObject, carriedItem).singularVolume > engine.deObject.characters[path[1]].weightKg; // rough check
                                 const fallingVariations = itemIsPotentiallyBiggerThanCharacter ? [
                                     ` Since the item is so heavy, ${path[1]} also falls down while trying to carry it, crumbling under its weight and hitting the ground next to it.`,
                                     ` The sheer weight of the item drags ${path[1]} down, and they collapse to the ground beside it, unable to bear the load.`,
@@ -2931,8 +2933,8 @@ async function cleanDirtyItemTree(
                                 if (willExpellInside) {
                                     expelledCharacters.push(...carriedItemWeight.charactersOnlyDirectlyInside);
                                 }
-                                const insideNames = engine.deObject.functions.format_and(engine.deObject, null, carriedItemWeight.charactersOnlyDirectlyInside);
-                                const insideItemName = utilItemCount(engine, charState.location, carriedItem.owner, 1, carriedItem.name, false, true);
+                                const insideNames = engine.deObject.utils.templateUtils.formatAnd(engine.deObject, carriedItemWeight.charactersOnlyDirectlyInside);
+                                const insideItemName = utilItemCount(engine.deObject, charState.location, carriedItem.owner, 1, carriedItem.name, false, true);
                                 const insidePlural = carriedItemWeight.charactersOnlyDirectlyInside.length === 1;
                                 const insideVariations = willExpellInside ? (
                                     userHasFallen ? [
@@ -2953,7 +2955,7 @@ async function cleanDirtyItemTree(
                                         ` ${capitalizeFirstLetter(insideNames)} ${insidePlural ? "is" : "are"} jolted hard inside ${insideItemName} as its weight slams it into the ground, but ${insidePlural ? "stays" : "stay"} within.`,
                                         ` Still inside ${insideItemName}, ${insideNames} ${insidePlural ? "feels" : "feel"} the full force as the item's weight brings it crashing down, though ${insidePlural ? "they don't" : "they don't"} come out.`,
                                     ] : [
-                                        ` Since ${insideNames} ${insidePlural ? "is" : "are"} inside of ${insideItemName}, ${engine.getDEObject().functions.format_pronoun(engine.getDEObject(), null, carriedItemWeight.charactersOnlyDirectlyInside)} also fall${insidePlural ? "s" : ""} down while remaining inside the object as it drops from the weight.`,
+                                        ` Since ${insideNames} ${insidePlural ? "is" : "are"} inside of ${insideItemName}, ${engine.getDEObject().utils.templateUtils.formatPronoun(engine.getDEObject(), carriedItemWeight.charactersOnlyDirectlyInside)} also fall${insidePlural ? "s" : ""} down while remaining inside the object as it drops from the weight.`,
                                         ` ${capitalizeFirstLetter(insideNames)}, tucked inside ${insideItemName}, ${insidePlural ? "goes" : "go"} down with it as the weight pulls it to the ground, staying inside.`,
                                         ` ${capitalizeFirstLetter(insideNames)} ${insidePlural ? "remains" : "remain"} inside ${insideItemName} as the heavy item falls to the ground.`,
                                         ` Still inside ${insideItemName}, ${insideNames} go${insidePlural ? "es" : ""} down with it.`,
@@ -2965,8 +2967,8 @@ async function cleanDirtyItemTree(
                                 if (willExpellOnTop) {
                                     expelledCharacters.push(...carriedItemWeight.charactersOnlyDirectlyOnTop);
                                 }
-                                const onTopNames = engine.deObject.functions.format_and(engine.deObject, null, carriedItemWeight.charactersOnlyDirectlyOnTop);
-                                const onTopItemName = utilItemCount(engine, charState.location, carriedItem.owner, 1, carriedItem.name, false, true);
+                                const onTopNames = engine.deObject.utils.templateUtils.formatAnd(engine.deObject, carriedItemWeight.charactersOnlyDirectlyOnTop);
+                                const onTopItemName = utilItemCount(engine.deObject, charState.location, carriedItem.owner, 1, carriedItem.name, false, true);
                                 const onTopPlural = carriedItemWeight.charactersOnlyDirectlyOnTop.length === 1;
                                 const onTopVariations = willExpellOnTop ? (
                                     userHasFallen ? [
@@ -3000,8 +3002,8 @@ async function cleanDirtyItemTree(
                                 if (willExpellAnyRemainingCharacters) {
                                     expelledCharacters.push(...remainingCharacters);
                                 }
-                                const remainNames = engine.deObject.functions.format_and(engine.deObject, null, remainingCharacters);
-                                const remainItemName = utilItemCount(engine, charState.location, carriedItem.owner, 1, carriedItem.name, false, true);
+                                const remainNames = engine.deObject.utils.templateUtils.formatAnd(engine.deObject, remainingCharacters);
+                                const remainItemName = utilItemCount(engine.deObject, charState.location, carriedItem.owner, 1, carriedItem.name, false, true);
                                 const remainPlural = remainingCharacters.length === 1;
                                 const remainVariations = willExpellAnyRemainingCharacters ? (
                                     userHasFallen ? [
@@ -3040,7 +3042,7 @@ async function cleanDirtyItemTree(
                 }
             }
             for (const carriedItem of listResortedByJustPlaced) {
-                const carriedItemVolume = getItemVolume(engine, carriedItem);
+                const carriedItemVolume = getItemVolume(engine.deObject, carriedItem);
                 if (carriedItemVolume.completeVolume + totalCarriedVolume > carryingCapacity.carryingCapacityLiters) {
                     // the item is too large to be carried, so it will fall on the ground
                     const amountThatCanBeCarried = Math.floor((carryingCapacity.carryingCapacityLiters - totalCarriedVolume) / carriedItemVolume.singularVolume);
@@ -3052,7 +3054,7 @@ async function cleanDirtyItemTree(
                         expellItemToFallen(carriedItem, amountThatWillFall);
 
                         const couldCarryEvenOneInOptimalConditions = carriedItemVolume.singularVolume <= carryingCapacity.carryingCapacityLiters;
-                        let storyMasterMessageSoFar = `${utilItemCount(engine, charState.location, carriedItem.owner, amountThatWillFall, carriedItem.name, true)} ${amountThatWillFall === 1 ? "is" : "are"} too large to be carried by ${path[1]}${!couldCarryEvenOneInOptimalConditions ? "" : " who is already carrying too many items,"} and ${amountThatWillFall === 1 ? "it falls" : "they fall"} on the ground at the ${expectedPathForFallenItems[1]}.`;
+                        let storyMasterMessageSoFar = `${utilItemCount(engine.deObject, charState.location, carriedItem.owner, amountThatWillFall, carriedItem.name, true)} ${amountThatWillFall === 1 ? "is" : "are"} too large to be carried by ${path[1]}${!couldCarryEvenOneInOptimalConditions ? "" : " who is already carrying too many items,"} and ${amountThatWillFall === 1 ? "it falls" : "they fall"} on the ground at the ${expectedPathForFallenItems[1]}.`;
 
                         let expellInsideLikelihood = 0.25;
                         let expellOnTopLikelihood = 0.5;
@@ -3100,8 +3102,8 @@ async function cleanDirtyItemTree(
                                 if (willExpellInside) {
                                     expelledCharacters.push(...carriedItemVolume.charactersOnlyDirectlyInside);
                                 }
-                                const insideNames = engine.deObject.functions.format_and(engine.deObject, null, carriedItemVolume.charactersOnlyDirectlyInside);
-                                const insideItemName = utilItemCount(engine, charState.location, carriedItem.owner, 1, carriedItem.name, false, true);
+                                const insideNames = engine.deObject.utils.templateUtils.formatAnd(engine.deObject, carriedItemVolume.charactersOnlyDirectlyInside);
+                                const insideItemName = utilItemCount(engine.deObject, charState.location, carriedItem.owner, 1, carriedItem.name, false, true);
                                 const insidePlural = carriedItemVolume.charactersOnlyDirectlyInside.length === 1;
                                 const insideVariations = willExpellInside ? (
                                     userHasFallen ? [
@@ -3134,8 +3136,8 @@ async function cleanDirtyItemTree(
                                 if (willExpellOnTop) {
                                     expelledCharacters.push(...carriedItemVolume.charactersOnlyDirectlyOnTop);
                                 }
-                                const onTopNames = engine.deObject.functions.format_and(engine.deObject, null, carriedItemVolume.charactersOnlyDirectlyOnTop);
-                                const onTopItemName = utilItemCount(engine, charState.location, carriedItem.owner, 1, carriedItem.name, false, true);
+                                const onTopNames = engine.deObject.utils.templateUtils.formatAnd(engine.deObject, carriedItemVolume.charactersOnlyDirectlyOnTop);
+                                const onTopItemName = utilItemCount(engine.deObject, charState.location, carriedItem.owner, 1, carriedItem.name, false, true);
                                 const onTopPlural = carriedItemVolume.charactersOnlyDirectlyOnTop.length === 1;
                                 const onTopVariations = willExpellOnTop ? (
                                     userHasFallen ? [
@@ -3169,8 +3171,8 @@ async function cleanDirtyItemTree(
                                 if (willExpellAnyRemainingCharacters) {
                                     expelledCharacters.push(...remainingCharacters);
                                 }
-                                const remainNames = engine.deObject.functions.format_and(engine.deObject, null, remainingCharacters);
-                                const remainItemName = utilItemCount(engine, charState.location, carriedItem.owner, 1, carriedItem.name, false, true);
+                                const remainNames = engine.deObject.utils.templateUtils.formatAnd(engine.deObject, remainingCharacters);
+                                const remainItemName = utilItemCount(engine.deObject, charState.location, carriedItem.owner, 1, carriedItem.name, false, true);
                                 const remainPlural = remainingCharacters.length === 1;
                                 const remainVariations = willExpellAnyRemainingCharacters ? (
                                     userHasFallen ? [
@@ -3219,11 +3221,11 @@ async function cleanDirtyItemTree(
             let totalCarriedWeight = 0;
             const charState = engine.deObject.stateFor[path[1]];
             for (const carriedItem of charState.carrying) {
-                const carriedItemWeight = getItemWeight(engine, carriedItem);
+                const carriedItemWeight = getItemWeight(engine.deObject, carriedItem);
                 totalCarriedWeight += carriedItemWeight.completeWeight;
             }
             for (const carriedCharacter of charState.carryingCharactersDirectly) {
-                const carriedCharacterWeight = getCharacterWeight(engine, carriedCharacter);
+                const carriedCharacterWeight = getCharacterWeight(engine.deObject, carriedCharacter);
                 totalCarriedWeight += carriedCharacterWeight.weight;
             }
 
@@ -3236,10 +3238,10 @@ async function cleanDirtyItemTree(
             });
             let totalWornWeight = 0;
             for (const wornItem of listResortedByJustPlaced) {
-                const wornItemWeight = getItemWeight(engine, wornItem);
+                const wornItemWeight = getItemWeight(engine.deObject, wornItem);
 
                 const wearableFitment = getWearableFitment(
-                    engine,
+                    engine.deObject,
                     wornItem,
                     // @ts-ignore
                     path[1],
@@ -3297,7 +3299,7 @@ async function cleanDirtyItemTree(
                     expellItemToFallen(wornItem, wornItem.amount || 1);
                     wornItem.amount = 0;
                     if (wornItem.wearableProperties) {
-                        const wearItemDesc = utilItemCount(engine, charState.location, wornItem.owner, wornItem.amount || 1, wornItem.name, true, true);
+                        const wearItemDesc = utilItemCount(engine.deObject, charState.location, wornItem.owner, wornItem.amount || 1, wornItem.name, true, true);
                         const wearSingular = wornItem.amount === 1;
                         const tooLargeWearVariations = [
                             `${wearItemDesc} ${wearSingular ? "is" : "are"} too large to fit on ${path[1]} and ${wearSingular ? "falls" : "fall"} down from it onto the ground at the ${expectedPathForFallenItems[1]}.`,
@@ -3307,7 +3309,7 @@ async function cleanDirtyItemTree(
                         ];
                         addedMessagesForStoryMaster.push(tooLargeWearVariations[Math.floor(Math.random() * tooLargeWearVariations.length)]);
                     } else {
-                        const wearItemDesc = utilItemCount(engine, charState.location, wornItem.owner, wornItem.amount || 1, wornItem.name, true, true);
+                        const wearItemDesc = utilItemCount(engine.deObject, charState.location, wornItem.owner, wornItem.amount || 1, wornItem.name, true, true);
                         const wearSingular = wornItem.amount === 1;
                         const notWearableVariations = [
                             `${wearItemDesc} ${wearSingular ? "is" : "are"} not possible to wear by ${path[1]} and ${wearSingular ? "falls" : "fall"} down from it onto the ground at the ${expectedPathForFallenItems[1]}.`,
@@ -3323,7 +3325,7 @@ async function cleanDirtyItemTree(
                     if (wornItem._just_placed && cycle === "first") {
                         // only on the first cycle because this will keep appearing over and over otherwise
                         const fitmentInfo = `${wornItem.amount === 1 ? "it" : "they"} ${wearableFitment.fitment}`;
-                        const wornDesc = utilItemCount(engine, charState.location, wornItem.owner, wornItem.amount || 1, wornItem.name, true, true);
+                        const wornDesc = utilItemCount(engine.deObject, charState.location, wornItem.owner, wornItem.amount || 1, wornItem.name, true, true);
                         const wornVariations = [
                             `${wornDesc} is now worn by ${path[1]}, ${fitmentInfo}.`,
                             `${path[1]} is now wearing ${wornDesc}, ${fitmentInfo}.`,
@@ -3348,8 +3350,8 @@ async function cleanDirtyItemTree(
                             if (willExpellInside) {
                                 expelledCharacters.push(...wornItemWeight.charactersOnlyDirectlyInside);
                             }
-                            const insideNames = engine.deObject.functions.format_and(engine.deObject, null, wornItemWeight.charactersOnlyDirectlyInside);
-                            const insideItemName = utilItemCount(engine, charState.location, wornItem.owner, 1, wornItem.name, false, true);
+                            const insideNames = engine.deObject.utils.templateUtils.formatAnd(engine.deObject, wornItemWeight.charactersOnlyDirectlyInside);
+                            const insideItemName = utilItemCount(engine.deObject, charState.location, wornItem.owner, 1, wornItem.name, false, true);
                             const insidePlural = wornItemWeight.charactersOnlyDirectlyInside.length === 1;
                             const insideVariations = willExpellInside ? [
                                 `${insideNames}, who ${insidePlural ? "was" : "were"} inside ${insideItemName}, ${insidePlural ? "tumbles" : "tumble"} out as the oversized garment slides off and hits the ground at ${expectedPathForFallenItems[1]}.`,
@@ -3369,8 +3371,8 @@ async function cleanDirtyItemTree(
                             if (willExpellOnTop) {
                                 expelledCharacters.push(...wornItemWeight.charactersOnlyDirectlyOnTop);
                             }
-                            const onTopNames = engine.deObject.functions.format_and(engine.deObject, null, wornItemWeight.charactersOnlyDirectlyOnTop);
-                            const onTopItemName = utilItemCount(engine, charState.location, wornItem.owner, 1, wornItem.name, false, true);
+                            const onTopNames = engine.deObject.utils.templateUtils.formatAnd(engine.deObject, wornItemWeight.charactersOnlyDirectlyOnTop);
+                            const onTopItemName = utilItemCount(engine.deObject, charState.location, wornItem.owner, 1, wornItem.name, false, true);
                             const onTopPlural = wornItemWeight.charactersOnlyDirectlyOnTop.length === 1;
                             const onTopVariations = willExpellOnTop ? [
                                 `${onTopNames}, who ${onTopPlural ? "was" : "were"} on top of ${onTopItemName}, ${onTopPlural ? "slides" : "slide"} off as the loose garment falls away, ending up on the ground at ${expectedPathForFallenItems[1]}.`,
@@ -3392,8 +3394,8 @@ async function cleanDirtyItemTree(
                                 if (willExpellAnyRemainingCharacters) {
                                     expelledCharacters.push(...remainingCharacters);
                                 }
-                                const remainNames = engine.deObject.functions.format_and(engine.deObject, null, remainingCharacters);
-                                const remainItemName = utilItemCount(engine, charState.location, wornItem.owner, 1, wornItem.name, false, true);
+                                const remainNames = engine.deObject.utils.templateUtils.formatAnd(engine.deObject, remainingCharacters);
+                                const remainItemName = utilItemCount(engine.deObject, charState.location, wornItem.owner, 1, wornItem.name, false, true);
                                 const remainPlural = remainingCharacters.length === 1;
                                 const remainVariations = willExpellAnyRemainingCharacters ? [
                                     `${remainNames}, also involved with ${remainItemName}, ${remainPlural ? "is" : "are"} shaken loose as the oversized garment falls off and ${remainPlural ? "ends" : "end"} up on the ground at ${expectedPathForFallenItems[1]}.`,
@@ -3419,10 +3421,10 @@ async function cleanDirtyItemTree(
                 if (wearableFitment.shouldBreak) {
                     if (wornItemWeight.allCharactersInvolved.length > 0) {
                         if (wornItemWeight.charactersOnlyDirectlyInside.length > 0) {
-                            const insideNames = engine.deObject.functions.format_and(engine.deObject, null, wornItemWeight.charactersOnlyDirectlyInside);
+                            const insideNames = engine.deObject.utils.templateUtils.formatAnd(engine.deObject, wornItemWeight.charactersOnlyDirectlyInside);
                             const insidePlural = wornItemWeight.charactersOnlyDirectlyInside.length === 1;
                             const insideVariations = [
-                                `Since ${insideNames} ${insidePlural ? "was" : "were"} inside the item that just broke, ${insidePlural ? engine.deObject.functions.format_pronoun(engine.deObject, null, wornItemWeight.charactersOnlyDirectlyInside[0]) : "they"} fall${insidePlural ? "s" : ""} out from it onto the ground at the ${expectedPathForFallenItems[1]}.`,
+                                `Since ${insideNames} ${insidePlural ? "was" : "were"} inside the item that just broke, ${insidePlural ? engine.deObject.utils.templateUtils.formatPronoun(engine.deObject, [wornItemWeight.charactersOnlyDirectlyInside[0]]) : "they"} fall${insidePlural ? "s" : ""} out from it onto the ground at the ${expectedPathForFallenItems[1]}.`,
                                 `${insideNames}, who ${insidePlural ? "was" : "were"} squeezed inside the tight garment, ${insidePlural ? "is" : "are"} finally freed as it tears apart, tumbling onto the ground at ${expectedPathForFallenItems[1]}.`,
                                 `The garment rips open and ${insideNames}, compressed inside it, ${insidePlural ? "spills" : "spill"} out onto the ground at ${expectedPathForFallenItems[1]}, no longer squeezed.`,
                                 `As the overly tight clothing snaps apart, ${insideNames} ${insidePlural ? "is" : "are"} expelled from inside, having been squished within it, and ${insidePlural ? "lands" : "land"} on the ground at ${expectedPathForFallenItems[1]}.`,
@@ -3430,10 +3432,10 @@ async function cleanDirtyItemTree(
                             addedMessagesForStoryMaster.push(insideVariations[Math.floor(Math.random() * insideVariations.length)]);
                         }
                         if (wornItemWeight.charactersOnlyDirectlyOnTop.length > 0) {
-                            const onTopNames = engine.deObject.functions.format_and(engine.deObject, null, wornItemWeight.charactersOnlyDirectlyOnTop);
+                            const onTopNames = engine.deObject.utils.templateUtils.formatAnd(engine.deObject, wornItemWeight.charactersOnlyDirectlyOnTop);
                             const onTopPlural = wornItemWeight.charactersOnlyDirectlyOnTop.length === 1;
                             const onTopVariations = [
-                                `Since ${onTopNames} ${onTopPlural ? "was" : "were"} on top of the item that just broke, ${onTopPlural ? engine.deObject.functions.format_pronoun(engine.deObject, null, wornItemWeight.charactersOnlyDirectlyOnTop[0]) : "they"} fall${onTopPlural ? "s" : ""} down from it onto the ground at the ${expectedPathForFallenItems[1]}.`,
+                                `Since ${onTopNames} ${onTopPlural ? "was" : "were"} on top of the item that just broke, ${onTopPlural ? engine.deObject.utils.templateUtils.formatPronoun(engine.deObject, [wornItemWeight.charactersOnlyDirectlyOnTop[0]]) : "they"} fall${onTopPlural ? "s" : ""} down from it onto the ground at the ${expectedPathForFallenItems[1]}.`,
                                 `${onTopNames}, who ${onTopPlural ? "was" : "were"} perched on top of the garment, ${onTopPlural ? "tumbles" : "tumble"} off as it tears apart and ${onTopPlural ? "lands" : "land"} on the ground at ${expectedPathForFallenItems[1]}.`,
                                 `As the clothing rips open, ${onTopNames} ${onTopPlural ? "loses" : "lose"} ${onTopPlural ? "their" : "their"} footing on top of it and ${onTopPlural ? "drops" : "drop"} to the ground at ${expectedPathForFallenItems[1]}.`,
                                 `The garment breaks apart beneath ${onTopNames}, and ${onTopPlural ? "they slide" : "they slide"} off the top, ending up on the ground at ${expectedPathForFallenItems[1]}.`,
@@ -3443,10 +3445,10 @@ async function cleanDirtyItemTree(
                         if (wornItemWeight.allCharactersInvolved.length > 0) {
                             const remainingCharacters = wornItemWeight.allCharactersInvolved.filter((char) => !wornItemWeight.charactersOnlyDirectlyInside.includes(char) && !wornItemWeight.charactersOnlyDirectlyOnTop.includes(char));
                             if (remainingCharacters.length > 0) {
-                                const remainNames = engine.deObject.functions.format_and(engine.deObject, null, remainingCharacters);
+                                const remainNames = engine.deObject.utils.templateUtils.formatAnd(engine.deObject, remainingCharacters);
                                 const remainPlural = remainingCharacters.length === 1;
                                 const remainVariations = [
-                                    `Since ${remainNames} ${remainPlural ? "was" : "were"} also involved with the item that just broke, ${remainPlural ? engine.deObject.functions.format_pronoun(engine.deObject, null, remainingCharacters[0]) : "they"} fall${remainPlural ? "s" : ""} down with it onto the ground at the ${expectedPathForFallenItems[1]}.`,
+                                    `Since ${remainNames} ${remainPlural ? "was" : "were"} also involved with the item that just broke, ${remainPlural ? engine.deObject.utils.templateUtils.formatPronoun(engine.deObject, [remainingCharacters[0]]) : "they"} fall${remainPlural ? "s" : ""} down with it onto the ground at the ${expectedPathForFallenItems[1]}.`,
                                     `${remainNames}, also associated with the garment that just tore apart, ${remainPlural ? "ends" : "end"} up on the ground at ${expectedPathForFallenItems[1]}.`,
                                     `As the clothing breaks, ${remainNames} ${remainPlural ? "is" : "are"} brought down with it, landing on the ground at ${expectedPathForFallenItems[1]}.`,
                                     `The garment's destruction takes ${remainNames} down as well, and ${remainPlural ? "they end" : "they end"} up on the ground at ${expectedPathForFallenItems[1]}.`,
@@ -3751,16 +3753,18 @@ async function updateItemAfterHappenance(
     const originalAmount = item.amount || 1;
     item.amount *= brokeInPieces ? brokeInPiecesCount : 1;
 
-    const originalThing = utilItemCount(engine, null, item.owner, originalAmount, originalName, false, true);
+    const originalThing = utilItemCount(engine.deObject, null, item.owner, originalAmount, originalName, false, true);
     // no owner to say more clearly eg. it is now a broken phone
-    const newThing = utilItemCount(engine, null, null, item.amount || 1, item.name, true, false);
+    const newThing = utilItemCount(engine.deObject, null, null, item.amount || 1, item.name, true, false);
 
-    const droppedContentInside = engine.deObject.functions.format_and(engine.deObject, null, item.containing.map((containedItem) => {
-        const containedItemName = utilItemCount(engine, null, containedItem.owner, containedItem.amount || 1, containedItem.name, true, true);
+    const droppedContentInside = engine.deObject.utils.templateUtils.formatAnd(engine.deObject, item.containing.map((containedItem) => {
+        // @ts-ignore typescript is wrong here, deObject is not null because it is checked
+        const containedItemName = utilItemCount(engine.deObject, null, containedItem.owner, containedItem.amount || 1, containedItem.name, true, true);
         return containedItemName;
     }));
-    const droppedContentOnTop = engine.deObject.functions.format_and(engine.deObject, null, item.ontop.map((onTopItem) => {
-        const containedItemName = utilItemCount(engine, null, onTopItem.owner, onTopItem.amount || 1, onTopItem.name, true, true);
+    const droppedContentOnTop = engine.deObject.utils.templateUtils.formatAnd(engine.deObject, item.ontop.map((onTopItem) => {
+        // @ts-ignore typescript is wrong here, deObject is not null because it is checked
+        const containedItemName = utilItemCount(engine.deObject, null, onTopItem.owner, onTopItem.amount || 1, onTopItem.name, true, true);
         return containedItemName;
     }));
 
@@ -3856,21 +3860,25 @@ function checkDirectlyCarriedCharacters(engine, characterName, charState, addedM
         return;
     }
 
-    const carryingCapacity = getCharacterCarryingCapacity(engine, characterName);
+    const carryingCapacity = getCharacterCarryingCapacity(engine.deObject, characterName);
     const currentCarriedItemsWeight = charState.carrying.reduce((total, item) => {
-        const itemWeight = getItemWeight(engine, item);
+        // @ts-ignore typescript is wrong here, deObject is not null because it is checked
+        const itemWeight = getItemWeight(engine.deObject, item);
         return total + itemWeight.completeWeight;
     }, 0);
     const currentWornItemsWeight = charState.wearing.reduce((total, item) => {
-        const itemWeight = getItemWeight(engine, item);
+        // @ts-ignore typescript is wrong here, deObject is not null because it is checked
+        const itemWeight = getItemWeight(engine.deObject, item);
         return total + itemWeight.completeWeight;
     }, 0);
     const currentCarriedItemsVolume = charState.carrying.reduce((total, item) => {
-        const itemVolume = getItemVolume(engine, item);
+        // @ts-ignore typescript is wrong here, deObject is not null because it is checked
+        const itemVolume = getItemVolume(engine.deObject, item);
         return total + itemVolume.completeVolume;
     }, 0);
     const currentWornItemsVolume = charState.wearing.reduce((total, item) => {
-        const itemVolume = getItemVolume(engine, item);
+        // @ts-ignore typescript is wrong here, deObject is not null because it is checked
+        const itemVolume = getItemVolume(engine.deObject, item);
         return total + itemVolume.completeVolume;
     }, 0);
 
@@ -3878,8 +3886,8 @@ function checkDirectlyCarriedCharacters(engine, characterName, charState, addedM
     let totalCarriedVolume = currentCarriedItemsVolume + currentWornItemsVolume;
     let carrierHasFallenDown = false;
     for (const carriedCharName of charState.carryingCharactersDirectly) {
-        const carriedCharWeight = getCharacterWeight(engine, carriedCharName);
-        const carriedCharVolume = getCharacterVolume(engine, carriedCharName);
+        const carriedCharWeight = getCharacterWeight(engine.deObject, carriedCharName);
+        const carriedCharVolume = getCharacterVolume(engine.deObject, carriedCharName);
 
         if (totalCarriedWeight + carriedCharWeight.weight > carryingCapacity.carryingCapacityKg) {
             // the character is too heavy to be carried, so it will fall on the ground

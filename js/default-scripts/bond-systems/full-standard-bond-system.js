@@ -4,11 +4,11 @@
 
 /**
  * @typedef {Object} FSSBase
- * @property {DEStringTemplate} description The template to use for this bond definition, should include {{char}} and {{other}} as placeholders and {{other_family_relation}} if family ties are relevant
- * @property {DEStringTemplate|null} relationshipName The relationship name, should be one word, eg. friend, lover, colleague, etc... this is used for reasoning about the relationship and for the character to refer to the other character in the relationship, for example, if the relationship name is "friend", the character may refer to the other character as "my friend" or just "friend" when talking about them
- * @property {DEStringTemplate} [bondAdditionalDescription] additional description to be added to the bond description
- * @property {DEStringTemplate} [generalCharacterDescriptionInjection] A template that can be injected into the general character description when this bond declaration is active, it will have access to the same variables as the description, but it is meant to be a smaller piece of text that can be added to the general description when relevant, instead of being the main description of the bond level.
- * @property {DEStringTemplate} [generalCharacterDescriptionInjectionEx] Similar to generalCharacterDescriptionInjection but it will only be injected in the general character description and not in the bond description, this is useful for cases where the information is relevant for the character description but not for the bond description, for example if you want to add a sentence about how the character's family relationship with the other character affects their behavior towards them, you might want that to be in the general description injection but not in the bond description, since the bond description might be focused on romantic feelings and the family relationship might not be relevant for that.
+ * @property {DEStringTemplateCharAndOther} description The template to use for this bond definition, should include {{char}} and {{other}} as placeholders and {{other_family_relation}} if family ties are relevant
+ * @property {DEStringTemplateCharAndOther|null} relationshipName The relationship name, should be one word, eg. friend, lover, colleague, etc... this is used for reasoning about the relationship and for the character to refer to the other character in the relationship, for example, if the relationship name is "friend", the character may refer to the other character as "my friend" or just "friend" when talking about them
+ * @property {DEStringTemplateCharAndOther} [bondAdditionalDescription] additional description to be added to the bond description
+ * @property {DEStringTemplateCharAndOther} [generalCharacterDescriptionInjection] A template that can be injected into the general character description when this bond declaration is active, it will have access to the same variables as the description, but it is meant to be a smaller piece of text that can be added to the general description when relevant, instead of being the main description of the bond level.
+ * @property {DEStringTemplateCharAndOther} [generalCharacterDescriptionInjectionEx] Similar to generalCharacterDescriptionInjection but it will only be injected in the general character description and not in the bond description, this is useful for cases where the information is relevant for the character description but not for the bond description, for example if you want to add a sentence about how the character's family relationship with the other character affects their behavior towards them, you might want that to be in the general description injection but not in the bond description, since the bond description might be focused on romantic feelings and the family relationship might not be relevant for that.
  */
 
 /**
@@ -115,7 +115,7 @@
  * 
  * This is a special preset for asexual and aromantic characters, it will make the character react negatively to any bond attempts and will not form romantic or sexual bonds with anyone, but it can still have the regular bonds of the standard system, just with negative reactions to any attempts to increase them.
  * 
- * @property {string} [asexualAromanticDescriptionTemplate] A template for describing the character's asexual and aromantic nature, it is injected in the description of the character and only includes {{char}}
+ * @property {DEStringTemplateCharOnly} [asexualAromanticDescriptionTemplate] A template for describing the character's asexual and aromantic nature, it is injected in the description of the character and only includes {{char}}
  * 
  * @property {FSSByFamilyTie} foe_n100_n50
  * @property {FSSByFamilyTie} hostile_n50_n35
@@ -176,7 +176,7 @@
  * 
  * This is a special preset for asexual and aromantic characters, it will make the character react negatively to any bond attempts and will not form romantic or sexual bonds with anyone, but it can still have the regular bonds of the standard system, just with negative reactions to any attempts to increase them.
  * 
- * @property {string} [asexualAromanticDescriptionTemplate] A template for describing the character's asexual and aromantic nature, it is injected in the description of the character and only includes {{char}}
+ * @property {DEStringTemplateCharOnly} [asexualAromanticDescriptionTemplate] A template for describing the character's asexual and aromantic nature, it is injected in the description of the character and only includes {{char}}
  *
  * @property {FSSBase} foe_n100_n50
  * @property {FSSBase} hostile_n50_n35
@@ -208,7 +208,7 @@
  * 
  * This is a special preset for asexual and aromantic characters, it will make the character react negatively to any bond attempts and will not form romantic or sexual bonds with anyone, but it can still have the regular bonds of the standard system, just with negative reactions to any attempts to increase them.
  * 
- * @property {string} [asexualAromanticDescriptionTemplate] A template for describing the character's asexual and aromantic nature, it is injected in the description of the character and only includes {{char}}
+ * @property {DEStringTemplateCharOnly} [asexualAromanticDescriptionTemplate] A template for describing the character's asexual and aromantic nature, it is injected in the description of the character and only includes {{char}}
  *
  * @property {FSSBase} foe_n100_n50
  * @property {FSSBase} hostile_n50_n35
@@ -390,7 +390,7 @@ engine.exports = {
             strangerNegativeMultiplier: valueOrDefault(options.strangerNegativeMultiplier, 1.5),
             strangerPositiveMultiplier: valueOrDefault(options.strangerPositiveMultiplier, 1.0),
             descriptionGeneralInjection: options.type === "1d_ace_no_strangers_no_family" || options.type === "2d_ace_no_family" || options.type === "3d_ace" ? (
-                DE.utils.newHandlebarsTemplate(DE, options.asexualAromanticDescriptionTemplate || "{{char}} is an asexual and aromantic individual and does not form romantic or sexual bonds with others, {{char}} will react negatively to any attempts to form or force such bonds.")
+                options.asexualAromanticDescriptionTemplate || ((DE, info) => `${info.char.name} is an asexual and aromantic individual and does not form romantic or sexual bonds with others, ${info.char.name} will react negatively to any attempts to form or force such bonds.`)
             ) : null,
         };
 

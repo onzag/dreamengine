@@ -22,7 +22,7 @@ export default async function calculateStateChange(engine, character, interacted
     const activateStates = characterState.states;
 
     for (const alreadyActivatedInfo of activateStates) {
-        const stateDescription = character.states[alreadyActivatedInfo.state];
+        const stateDescription = character.stateDefinitions[alreadyActivatedInfo.state];
         const stateName = alreadyActivatedInfo.state;
         const intensityChangeRatePerInferenceCycle = (alreadyActivatedInfo.relieving ? stateDescription.intensityChangeRatePerInferenceCycleAfterRelief : stateDescription.intensityChangeRatePerInferenceCycle);
 
@@ -61,7 +61,7 @@ export default async function calculateStateChange(engine, character, interacted
             for (const conflictState of stateDescription.conflictStates) {
                 const conflictStateInfo = engine.deObject.stateFor[character.name].states.find(s => s.state === conflictState);
                 if (conflictStateInfo) {
-                    const conflictingStateDescription = character.states[conflictStateInfo.state];
+                    const conflictingStateDescription = character.stateDefinitions[conflictStateInfo.state];
                     const dominanceOfConflictingState = conflictingStateDescription.usesReliefDynamic ? (conflictStateInfo.relieving ? conflictingStateDescription.dominanceAfterRelief || 0 : conflictingStateDescription.dominance) : conflictingStateDescription.dominance;
                     const whichStateToRemove = dominanceOfThisState > dominanceOfConflictingState ? conflictState : stateName;
                     console.log(`State ${stateName} on character ${character.name} conflicts with state ${conflictState}. Dominance of this state: ${dominanceOfThisState}, dominance of conflicting state: ${dominanceOfConflictingState}. Removing state ${whichStateToRemove}.`);

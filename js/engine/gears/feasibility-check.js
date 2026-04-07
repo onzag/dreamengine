@@ -771,17 +771,17 @@ async function testMessageFeasibilityForce(engine, character) {
      * @type {Array<{name: string, description: string}>}
      */
     const characters = [];
-    const surroundingCharactersInfo = getSurroundingCharacters(engine, character.name);
+    const surroundingCharactersInfo = getSurroundingCharacters(engine.deObject, character.name);
     for (const characterName of surroundingCharactersInfo.totalStrangers) {
         const characterInfo = engine.deObject.characters[characterName];
         if (characterInfo) {
-            characters.push({ name: characterName, description: await getExternalDescriptionOfCharacter(engine, characterName, true) });
+            characters.push({ name: characterName, description: await getExternalDescriptionOfCharacter(engine.deObject, characterName, true) });
         }
     }
     for (const characterName of surroundingCharactersInfo.nonStrangers) {
         const characterInfo = engine.deObject.characters[characterName];
         if (characterInfo) {
-            characters.push({ name: characterName, description: await getExternalDescriptionOfCharacter(engine, characterName, true) });
+            characters.push({ name: characterName, description: await getExternalDescriptionOfCharacter(engine.deObject, characterName, true) });
         }
     }
 
@@ -884,7 +884,7 @@ async function testMessageFeasibilityForce(engine, character) {
 
         await generator.next(null); // finish the generator
 
-        const internalDescriptionInfo = await getInternalDescriptionOfCharacter(engine, character.name);
+        const internalDescriptionInfo = await getInternalDescriptionOfCharacter(engine.deObject, character.name);
 
         // 2. For each forced character, check if the action is feasible
         for (const forcedCharacterName of forcedCharacters) {
@@ -906,12 +906,12 @@ async function testMessageFeasibilityForce(engine, character) {
 
             let ownCharacterDescription = "";
             try {
-                const [, , , relationshipOfOwnCharacterTowardsForcedCharacter] = await getRelationshipBetweenCharacters(engine, character.name, forcedCharacterName);
+                const [, , , relationshipOfOwnCharacterTowardsForcedCharacter] = await getRelationshipBetweenCharacters(engine.deObject, character.name, forcedCharacterName);
                 ownCharacterDescription = engine.inferenceAdapter.buildSystemCharacterDescription(
                     character,
                     {
                         description: internalDescriptionInfo.general,
-                        externalDescription: await getExternalDescriptionOfCharacter(engine, character.name, true),
+                        externalDescription: await getExternalDescriptionOfCharacter(engine.deObject, character.name, true),
                         relationships: [
                             relationshipOfOwnCharacterTowardsForcedCharacter,
                         ],
@@ -925,7 +925,7 @@ async function testMessageFeasibilityForce(engine, character) {
                     character,
                     {
                         description: internalDescriptionInfo.general,
-                        externalDescription: await getExternalDescriptionOfCharacter(engine, character.name, true),
+                        externalDescription: await getExternalDescriptionOfCharacter(engine.deObject, character.name, true),
                         relationships: [],
                         expressiveStates: internalDescriptionInfo.expressiveStates,
                         scenario: null,
@@ -937,13 +937,13 @@ async function testMessageFeasibilityForce(engine, character) {
             let forcedCharacterDescription = "";
 
             try {
-                const [, , , relationshipOfForcedCharacterTowardsOwnCharacter] = await getRelationshipBetweenCharacters(engine, forcedCharacterName, character.name);
-                const internalDescriptionInfoForcedCharacter = await getInternalDescriptionOfCharacter(engine, forcedCharacterName);
+                const [, , , relationshipOfForcedCharacterTowardsOwnCharacter] = await getRelationshipBetweenCharacters(engine.deObject, forcedCharacterName, character.name);
+                const internalDescriptionInfoForcedCharacter = await getInternalDescriptionOfCharacter(engine.deObject, forcedCharacterName);
                 forcedCharacterDescription = engine.inferenceAdapter.buildSystemCharacterDescription(
                     forcedCharacter,
                     {
                         description: internalDescriptionInfoForcedCharacter.general,
-                        externalDescription: await getExternalDescriptionOfCharacter(engine, forcedCharacterName, true),
+                        externalDescription: await getExternalDescriptionOfCharacter(engine.deObject, forcedCharacterName, true),
                         relationships: [
                             relationshipOfForcedCharacterTowardsOwnCharacter,
                         ],
@@ -953,12 +953,12 @@ async function testMessageFeasibilityForce(engine, character) {
                     },
                 );
             } catch (e) {
-                const internalDescriptionInfoForcedCharacter = await getInternalDescriptionOfCharacter(engine, forcedCharacterName);
+                const internalDescriptionInfoForcedCharacter = await getInternalDescriptionOfCharacter(engine.deObject, forcedCharacterName);
                 forcedCharacterDescription = engine.inferenceAdapter.buildSystemCharacterDescription(
                     forcedCharacter,
                     {
                         description: internalDescriptionInfoForcedCharacter.general,
-                        externalDescription: await getExternalDescriptionOfCharacter(engine, forcedCharacterName, true),
+                        externalDescription: await getExternalDescriptionOfCharacter(engine.deObject, forcedCharacterName, true),
                         relationships: [],
                         expressiveStates: internalDescriptionInfoForcedCharacter.expressiveStates,
                         scenario: null,
