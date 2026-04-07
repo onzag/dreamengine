@@ -2,15 +2,18 @@ import { DEngine } from '../engine/index.js';
 import { TextOnlyUI } from '../textonlyapp/ui.js';
 import { InferenceAdapterLlamaUncensored } from "../engine/inference/adapter-de-server-uncensored.js";
 import { DEJSEngine } from '../jsengine/index.js';
-import { localResolver } from '../jsengine/local-resolver.js';
+import { localResolver, localListResolver } from '../jsengine/local-resolver.js';
 
 if (typeof process !== "undefined" && process.versions && process.versions.node) {
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 }
 
 const engine = new DEngine();
-const jsEngine = new DEJSEngine(engine, localResolver);
-await jsEngine.addScripts([
+const jsEngine = new DEJSEngine(engine, {
+    resolver: localResolver,
+    listResolver: localListResolver,
+});
+await jsEngine.importScripts([
     { namespace: "worlds", id: "simple-lunar-station" },
     { namespace: "characters", id: "dema-basic" },
     { namespace: "testing", id: "states" },

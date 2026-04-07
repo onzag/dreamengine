@@ -37,3 +37,43 @@ export async function localResolver(namespace, id) {
 
     throw new Error(`Script '${namespace}/${id}' not found in any of the search paths, searched at ${localDEPath} and ${defaultScriptsPath}`);
 }
+
+/**
+ * @returns {Promise<Array<{namespace: string, id: string}>>}
+ */
+export async function localListResolver() {
+    const thisFileDir = path.dirname(fileURLToPath(import.meta.url));
+    const defaultScriptsDir = path.join(thisFileDir, '..', 'default-scripts');
+    const localDEScriptsDir = path.join(localDEPathAtHomeDir, 'scripts');
+    /**
+     * @type {Array<{namespace: string, id: string}>}
+     */
+    const scripts = [];
+
+    // helper function to recursively list all .js files in a directory and add them to the scripts array
+    /**
+     * @param {string} dir 
+     * @param {string} namespacePrefix 
+     * @returns {Promise<void>}
+     */
+    async function listScriptsInDir(dir, namespacePrefix = '') {
+        if (!fs.existsSync(dir)) {
+            return;
+        }
+        const entries = await fsPromises.readdir(dir, { withFileTypes: true });
+        for (const entry of entries) {
+            if (entry.isDirectory()) {
+                await listScriptsInDir(path.join(dir, entry.name), namespacePrefix + entry.name + '/');
+            } else if (entry.isFile() && entry.name.endsWith('.js')) {
+                const newEntry = { namespace: namespacePrefix.slice(0, -1), id: entry.name.slice(0, -3) };
+                if (!scripts.some(s => s.namespace === newEntry.namespace && s.id === newEntry.id)) {
+                    scripts.push(newEntry);
+                }
+            }
+        }
+    }
+
+    await listScriptsInDir(defaultScriptsDir);
+    await listScriptsInDir(localDEScriptsDir);
+    return scripts;
+}

@@ -3263,9 +3263,28 @@ declare interface DEObject {
 
 declare type DE = DEObject;
 
+declare type DEScriptExposeProperties = Record<string, {
+    type: "template" | "string" | "number" | "boolean" | "json";
+    description?: string;
+    propertyLocation: "world" | "characters" | "items";
+    filter?: {
+        name?: string;
+    }
+}>;
+
 declare interface DEScript {
     type: "world" | "characters" | "world-mechanic" | "character-mechanic" | "misc";
+
+    /**
+     * Description for the script
+     */
     description?: string;
+
+    /**
+     * Exposes properties that serve as configuration, these are set by the UI
+     * and are meant to be used by the UI
+     */
+    exposeProperties?: DEScriptExposeProperties;
 
     /**
      * Initialize gets called when the script is loaded, before the world is initialized, this is useful for setting up any necessary properties, functions, or other things that need to be in place before the world starts
