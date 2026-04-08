@@ -11,10 +11,11 @@ engine.exports = {
         DE.world.scenes["Default Scene"] = /** @type {DEScene} */ ({
             location: "Lunar Station",
             locationSlot: "Common Area",
-            narration: DE.utils.newHandlebarsTemplate(
-                DE,
-                "{{user}} is a visitor to the Lunar Station, eager to explore this small outpost in space, yet {{format_pronoun user}} didn't expect to find someone else here, but it so happens that {{format_and (all_world_characters_but_user)}} {{format_verb_to_be (all_world_characters_but_user)}} also visiting the station at this time, now they face each other in the common area near the airlock"
-            ),
+            narration: (DE, info) => {
+                const others = DE.utils.templateUtils.allWorldCharactersButUser(DE);
+                const user = DE.user;
+                return `${user.name} is a visitor to the Lunar Station, eager to explore this small outpost in space, yet ${DE.utils.templateUtils.formatPronoun(DE, [user.name])} didn't expect to find someone else here, but it so happens that ${DE.utils.templateUtils.formatAnd(DE, others.map((n) => n.name))} ${DE.utils.templateUtils.formatVerbToBe(DE, others)} also visiting the station at this time, now they face each other in the common area near the airlock`;
+            },
             charactersStart: true,
             engagedCharacters: ["Dema"],
         });
@@ -43,14 +44,8 @@ engine.exports = {
             ],
             applyingStatesDuringNoEffect: [],
             applyStatesInOrder: false,
-            fullEffectDescription: DE.utils.newHandlebarsTemplate(
-                DE,
-                "The lack of atmosphere asphixiates and freezes {{char}}"
-            ),
-            partialEffectDescription: DE.utils.newHandlebarsTemplate(
-                DE,
-                "The lack of atmosphere asphixiates and freezes {{char}}"
-            ),
+            fullEffectDescription: (DE, info) => `The lack of atmosphere asphixiates and freezes ${info.char.name}`,
+            partialEffectDescription: (DE, info) => `The lack of atmosphere asphixiates and freezes ${info.char.name}`,
             maxDurationInHours: 0,
             minDurationInHours: 0,
             negativelyAffectingStates: [],
@@ -69,14 +64,8 @@ engine.exports = {
             },
             partiallyProtectingWornItems: [],
             negativelyAffectingCarriedItems: [],
-            noEffectDescription: DE.utils.newHandlebarsTemplate(
-                DE,
-                "{{char}} is safe from the vaccuum"
-            ),
-            negativelyExposedDescription: DE.utils.newHandlebarsTemplate(
-                DE,
-                "The lack of atmosphere specially asphixiates and freezes {{char}} very quickly",
-            ),
+            noEffectDescription: (DE, info) => `${info.char.name} is safe from the vaccuum`,
+            negativelyExposedDescription: (DE, info) => `The lack of atmosphere specially asphixiates and freezes ${info.char.name} very quickly`,
 
             applyingStatesDuringFullEffect: [
                 {
@@ -649,10 +638,7 @@ engine.exports = {
     onWorldInitialized(DE) {
         DE.utils.newTriggerInAllCharacters(DE, {
             type: "yes_no",
-            question: DE.utils.newHandlebarsTemplate(
-                DE,
-                "has {{char}} returned to a pressurized environment successfully?"
-            ),
+            question: (DE, info) => `has ${info.char.name} returned to a pressurized environment successfully?`,
             runIf: (char) => {
                 return DE.utils.charHasState(DE, char, "Asphyxiating in the Vaccuum")
             },
@@ -666,10 +652,7 @@ engine.exports = {
 
         DE.utils.newTriggerInAllCharacters(DE, {
             type: "yes_no",
-            question: DE.utils.newHandlebarsTemplate(
-                DE,
-                "has {{char}} put on a space suit?"
-            ),
+            question: (DE, info) => `has ${info.char.name} put on a space suit?`,
             runIf: (char) => {
                 return DE.utils.charHasState(DE, char, "Asphyxiating in the Vaccuum") || DE.utils.charHasState(DE, char, "Freezing in the Vaccuum");
             },
@@ -683,10 +666,7 @@ engine.exports = {
 
         DE.utils.newTriggerInAllCharacters(DE, {
             type: "yes_no",
-            question: DE.utils.newHandlebarsTemplate(
-                DE,
-                "has {{char}} taken a hot shower or used a heater?"
-            ),
+            question: (DE, info) => `has ${info.char.name} taken a hot shower or used a heater?`,
             runIf: (char) => {
                 return DE.utils.charIsRelievingState(DE, char, "Freezing in the Vaccuum");
             },
@@ -699,10 +679,7 @@ engine.exports = {
 
         DE.utils.newTriggerInAllCharacters(DE, {
             type: "yes_no",
-            question: DE.utils.newHandlebarsTemplate(
-                DE,
-                "has {{char}} put on a blanket, warm clothes or similar?"
-            ),
+            question: (DE, info) => `has ${info.char.name} put on a blanket, warm clothes or similar?`,
             runIf: (char) => {
                 return DE.utils.charIsRelievingState(DE, char, "Freezing in the Vaccuum");
             },
@@ -728,10 +705,7 @@ engine.exports = {
             // what else could it be?
             actionPromptInjection: [
                 {
-                    action: DE.utils.newHandlebarsTemplate(
-                        DE,
-                        "{{char}} has an urgent need to return to the airlock and into the lunar station to avoid asphyxiation"
-                    ),
+                    action: (DE, info) => `${info.char.name} has an urgent need to return to the airlock and into the lunar station to avoid asphyxiation`,
                     isDeadEndScenario: false,
                     deadEndIsDeath: false,
                     primaryEmotion: "fearful",
@@ -743,16 +717,10 @@ engine.exports = {
             deadEndIsDeath: true,
             // 30 seconds to death by asphyxiation
             deadEndByTimeInMinutes: 0.5,
-            triggersDeadEnd: DE.utils.newHandlebarsTemplate(
-                DE,
-                "{{char}} has run out of air and has asphyxiated in the vacuum of space"
-            ),
+            triggersDeadEnd: (DE, info) => `${info.char.name} has run out of air and has asphyxiated in the vacuum of space`,
             intensityChangeRatePerInferenceCycle: 0,
             dominance: 10,
-            general: DE.utils.newHandlebarsTemplate(
-                DE,
-                "{{char}} is struggling to breathe in the vacuum of space"
-            ),
+            general: (DE, info) => `${info.char.name} is struggling to breathe in the vacuum of space`,
         });
 
         DE.utils.createStateInAllCharacters(DE, "Freezing in the Vaccuum", {
@@ -765,10 +733,7 @@ engine.exports = {
             requiresPosture: null,
             injuryAndDeath: true,
             usesReliefDynamic: true,
-            relieving: DE.utils.newHandlebarsTemplate(
-                DE,
-                "{{char}} is recovering from the severe freezing effects of the vacuum of space and should look for warmth"
-            ),
+            relieving: (DE, info) => `${info.char.name} is recovering from the severe freezing effects of the vacuum of space and should look for warmth`,
             intensityChangeRatePerInferenceCycleAfterRelief: -0.1,
             // need no triggers, the weather system will apply the state
             triggersStates: {},
@@ -778,17 +743,11 @@ engine.exports = {
             deadEndIsDeath: true,
             // 5 minutes to death by freezing
             deadEndByTimeInMinutes: 5,
-            triggersDeadEnd: DE.utils.newHandlebarsTemplate(
-                DE,
-                "{{char}} has succumbed to the extreme cold of the vacuum of space"
-            ),
+            triggersDeadEnd: (DE, info) => `${info.char.name} has succumbed to the extreme cold of the vacuum of space`,
             intensityChangeRatePerInferenceCycle: 0,
             dominance: 10,
             dominanceAfterRelief: 1,
-            general: DE.utils.newHandlebarsTemplate(
-                DE,
-                "{{char}} is freezing in the vacuum of space"
-            ),
+            general: (DE, info) => `${info.char.name} is freezing in the vacuum of space`,
         });
     }
 }

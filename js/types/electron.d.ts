@@ -2,43 +2,27 @@
 // This file lets VS Code/TypeScript language service provide IntelliSense
 // for JavaScript files without converting the project to TypeScript.
 
+import { EngineWorkerClient } from "../worker-sandbox/client";
+
 declare interface ElectronAPI {
   toggleFullScreen(): void | Promise<void>;
   openDevTools(): void;
   closeApp(): void;
 
-  loadValueFromUserData(key: string, cacheFile?: {fileType: string; fileName: string}): Promise<any>;
-  setValueIntoUserData(key: string, cacheFile: {fileType: string; fileName: string} | null, value: any): Promise<void>;
-  saveSettingsToDisk(): void;
+  listScriptFiles(): Promise<Array<{ id: string; namespace: string;}>>;
 
-  createEmptyCharacterFile(): Promise<{ group: string; characterFile: string }>; 
-  createEmptyScriptFile(): Promise<{scriptFile: string}>;
-  createEmptyWorldFile(): Promise<{worldFile: string}>;
-  checkCharacterFileExists(characterFile: string): Promise<boolean>;
-  updateCharacterFileFromCache(characterFile: string): Promise<any>;
-  deleteCharacterFile(characterFile: string): Promise<boolean>;
-  updateScriptFileFromCache(scriptFile: string): Promise<any>;
-  deleteScriptFile(scriptFile: string): Promise<boolean>;
-  updateWorldFileFromCache(worldFile: string): Promise<any>;
-  deleteWorldFile(worldFile: string): Promise<boolean>;
-  listScriptFiles(context: string): Promise<Array<{ file: string; name: string;}>>;
-  listScriptContexts(): Promise<string[]>;
-  listCharacterFiles(group: string): Promise<Array<{ file: string; name: string;}>>;
-  listCharacterGroups(): Promise<string[]>;
-  listWorldFiles(): Promise<string[]>;
-  listStatesForCharacterFile(characterFile: string): Promise<Array<{name: string, frozen: boolean}>>;
-  listScriptStatesForCharacterFile(characterFile: string): Promise<Array<{name: string, frozen: boolean}>>;
-  areBondsFrozenForCharacterFile(characterFile: string): Promise<boolean>;
-  getScriptManagedPropertiesForCharacterFile(characterFile: string): Promise<Array<{property: string; default_value: string; frozen: boolean; configurable: boolean}>>;
+  getConfigValue(key: string): Promise<any>;
+  setConfigValue(key: string, value: any): Promise<void>;
 
-  getDreamEnginePath(): Promise<string>;
-  uploadFileToDEPath(dePath: string, file: File | Blob): Promise<boolean>;
+  getDreamEnginePaths(): Promise<string[]>;
 }
 
 declare global {
   interface Window {
-    electronAPI: ElectronAPI;
-    DREAMENGINE_INFO_HOME?: string;
+    API: ElectronAPI;
+    DREAMENGINE_HOME?: string;
+    DREAMENGINE_DEFAULT_SCRIPTS_HOME?: string;
+    ENGINE_WORKER_CLIENT?: EngineWorkerClient;
   }
 }
 

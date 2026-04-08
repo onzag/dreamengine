@@ -6,6 +6,7 @@
 
 import { DEngine } from "../engine/index.js";
 import { DEJSEngine } from "../jsengine/index.js";
+import { InferenceAdapterLlamaUncensored } from "../engine/inference/adapter-de-server-uncensored.js";
 
 // ── Script path resolvers (using file:// fetch) ────────────────────
 // The main thread sends the absolute paths via the "setScriptPaths" RPC.
@@ -124,6 +125,11 @@ const handlers = {
 
     async enableSchizophreniaModeForUser() {
         engine.enableSchizophreniaModeForUser();
+        return { ok: true };
+    },
+
+    async setupInferenceAdapter({ host, secret }) {
+        engine.setInferenceAdapter(new InferenceAdapterLlamaUncensored(engine, { host, secret }));
         return { ok: true };
     },
 

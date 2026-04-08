@@ -155,6 +155,13 @@ export class EngineWorkerClient {
     jsEngineGetInfoMap() { return this.#call("jsEngineGetInfoMap"); }
     /** @param {{ scripts: Array<{namespace: string, id: string}> }} args */
     jsEngineGetInfoMapForScripts(args) { return this.#call("jsEngineGetInfoMapForScripts", args); }
+    /**
+     * @param {{
+     *    host: string,
+     *    secret: string,
+     * }} args
+     */
+    setupInferenceAdapter(args) { return this.#call("setupInferenceAdapter", args); }
 
     // ── deObject partial query ──────────────────────────────────
 

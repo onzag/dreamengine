@@ -51,6 +51,48 @@ export async function buildDreamEngineHome() {
     const assetsDir = path.join(localDEPathAtHomeDir, 'assets');
     await fsPromises.mkdir(assetsDir, { recursive: true });
     console.log(`Ensured assets/ exists at ${assetsDir}`);
+
+    const configPath = path.join(localDEPathAtHomeDir, 'config.json');
+    try {
+        await fsPromises.access(configPath);
+    } catch {
+        await fsPromises.writeFile(configPath, JSON.stringify({
+            fullscreen: false,
+            host: "wss://localhost:8765",
+            secret: "",
+        }));
+    }
+
+    return localDEPathAtHomeDir;
+}
+
+export function buildDreamEngineHomeSync() {
+    // Ensure the home directory exists
+    fs.mkdirSync(localDEPathAtHomeDir, { recursive: true });
+
+    // 1. Write jsconfig.json
+    const jsconfigPath = path.join(localDEPathAtHomeDir, 'jsconfig.json');
+    fs.writeFileSync(jsconfigPath, jsConfig.trim(), 'utf-8');
+    console.log(`Wrote jsconfig.json to ${jsconfigPath}`);
+
+    // 2. Create scripts/ folder
+    const scriptsDir = path.join(localDEPathAtHomeDir, 'scripts');
+    fs.mkdirSync(scriptsDir, { recursive: true });
+    console.log(`Ensured scripts/ exists at ${scriptsDir}`);
+    // 3. Create assets/ folder
+    const assetsDir = path.join(localDEPathAtHomeDir, 'assets');
+    fs.mkdirSync(assetsDir, { recursive: true });
+    console.log(`Ensured assets/ exists at ${assetsDir}`);
+    
+    if (!fs.existsSync(path.join(localDEPathAtHomeDir, 'config.json'))) {
+        fs.writeFileSync(path.join(localDEPathAtHomeDir, 'config.json'), JSON.stringify({
+            fullscreen: false,
+            host: "wss://localhost:8765",
+            secret: "",
+        }));
+    }
+
+    return localDEPathAtHomeDir;
 }
 
 // Allow running directly from CLI

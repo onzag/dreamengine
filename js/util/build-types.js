@@ -54,8 +54,8 @@ export default async function build(options = { doNotBuildLocals: false, doNotWr
             console.warn(`Could not write ${scriptName}: ${err.message}`);
         }
 
-        // default de-server config
-        const deServerConfigPath = path.join(localDEPathAtHomeDir, 'de-server-config.json');
+        // default config
+        const deServerConfigPath = path.join(localDEPathAtHomeDir, 'config.json');
         if (!fs.existsSync(deServerConfigPath)) {
             const defaultConfig = JSON.stringify({
                 host: 'wss://localhost:8765',
@@ -63,10 +63,10 @@ export default async function build(options = { doNotBuildLocals: false, doNotWr
             }, null, 4) + '\n';
             try {
                 await fsPromises.writeFile(deServerConfigPath, defaultConfig, 'utf8');
-                console.log(`Wrote de-server-config.json to ${deServerConfigPath}`);
+                console.log(`Wrote config.json to ${deServerConfigPath}`);
             } catch (err) {
                 // @ts-ignore
-                console.warn(`Could not write de-server-config.json: ${err.message}`);
+                console.warn(`Could not write config.json: ${err.message}`);
             }
         }
 

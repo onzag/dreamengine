@@ -1,56 +1,39 @@
 import { app, BrowserWindow, ipcMain, session } from 'electron';
 import path from 'path';
 import fs from 'fs';
-import os from 'os';
 import { fileURLToPath } from 'url';
+import { buildDreamEngineHomeSync } from './util/build-dreamengine-home.js';
+import buildTypes from './util/build-types.js';
 
 // @ts-ignore
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-/**
- * @type any
- */
-const CHARACTER_CACHE = {};
-/**
- * @type any
- */
-const SCRIPT_CACHE = {};
-/**
- * @type any
- */
-const WORLD_CACHE = {};
-
-const DREAMENGINE_INFO_HOME = path.join(app.getPath('home'), '.dreamengine');
-if (!fs.existsSync(DREAMENGINE_INFO_HOME)) {
-    fs.mkdirSync(DREAMENGINE_INFO_HOME);
-}
-
-if (!fs.existsSync(path.join(DREAMENGINE_INFO_HOME, 'init-config.json'))) {
-    fs.writeFileSync(path.join(DREAMENGINE_INFO_HOME, 'init-config.json'), JSON.stringify({
-        fullscreen: false
-    }));
-}
+const DREAMENGINE_HOME = buildDreamEngineHomeSync();
+(async () => {
+    try {
+        await buildTypes({
+            doNotBuildLocals: true,
+            doNotWriteHomeScript: false,
+        });
+    } catch (err) {
+        console.error('Failed to build types:', err);
+    }
+})();
 
 // @ts-ignore
-const initconfig = JSON.parse(fs.readFileSync(path.join(DREAMENGINE_INFO_HOME, 'init-config.json')));
+const config = JSON.parse(fs.readFileSync(path.join(DREAMENGINE_HOME, 'config.json')));
 
-async function saveInitConfig() {
-    await fs.promises.writeFile(path.join(DREAMENGINE_INFO_HOME, 'init-config.json'), JSON.stringify(initconfig));
+async function saveConfig() {
+    await fs.promises.writeFile(path.join(DREAMENGINE_HOME, 'config.json'), JSON.stringify(config));
 }
-
-let userData = {};
-try {
-    userData = JSON.parse(fs.readFileSync(path.join(DREAMENGINE_INFO_HOME, 'settings.json'), 'utf-8'));
-} catch (e) { }
-
 
 const createWindow = () => {
     const win = new BrowserWindow({
         width: 1200,
         height: 800,
         fullscreenable: true,
-        fullscreen: initconfig.fullscreen || false,
+        fullscreen: config.fullscreen || false,
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true,
@@ -67,9 +50,9 @@ const createWindow = () => {
 }
 
 const ALLOWED_BASE_PATHS = [
-    "file://" + DREAMENGINE_INFO_HOME.replace(/\\/g, "/"),
+    "file://" + DREAMENGINE_HOME.replace(/\\/g, "/"),
     "file://" + __dirname.replace(/\\/g, "/"),
-    "file:///" + DREAMENGINE_INFO_HOME.replace(/\\/g, "/"),
+    "file:///" + DREAMENGINE_HOME.replace(/\\/g, "/"),
     "file:///" + __dirname.replace(/\\/g, "/"),
     "http://",
     "https://",
@@ -110,70 +93,14 @@ ipcMain.handle('toggleFullScreen', () => {
         const target = !win.isFullScreen();
         if (win && target) {
             win.setFullScreen(target);
-            initconfig.fullscreen = true;
-            saveInitConfig();
+            config.fullscreen = true;
+            saveConfig();
         } else if (win) {
             win.setFullScreen(target);
-            initconfig.fullscreen = false;
-            saveInitConfig();
+            config.fullscreen = false;
+            saveConfig();
         }
     }
-});
-
-ipcMain.handle("areBondsFrozenForCharacterFile", async (event, characterFile) => {
-    const characterData = CHARACTER_CACHE[characterFile];
-    if (!characterData) {
-        return false;
-    }
-    const includedScripts = characterData.advanced_spawn_script?.imports || [];
-    let freezeBonds = false;
-    // @ts-ignore
-    includedScripts.forEach(scriptName => {
-        const scriptData = SCRIPT_CACHE[scriptName];
-        if (scriptData && scriptData.freeze_bonds) {
-            freezeBonds = true;
-        }
-    });
-    return freezeBonds;
-});
-
-ipcMain.handle("getScriptManagedPropertiesForCharacterFile", async (event, characterFile) => {
-    const characterData = CHARACTER_CACHE[characterFile];
-    if (!characterData) {
-        return [];
-    }
-    const includedScripts = characterData.advanced_spawn_script?.imports || [];
-    /**
-     * @type Array<{property: string, default_value: string, frozen: boolean, configurable: boolean}>
-     */
-    const managedProperties = [];
-    // @ts-ignore
-    includedScripts.forEach(scriptName => {
-        const scriptData = SCRIPT_CACHE[scriptName];
-        if (scriptData && scriptData.configurable_properties) {
-            const props = scriptData.configurable_properties;
-            Object.entries(props).forEach(([propName, propData]) => {
-                managedProperties.push({
-                    property: propName,
-                    default_value: propData.default || "",
-                    frozen: ((scriptData.freeze_root_properties || []).includes(propName) || false),
-                    configurable: true,
-                });
-            });
-        }
-        for (const property of scriptData.freeze_root_properties || []) {
-            if (managedProperties.find(p => p.property === property)) {
-                continue;
-            }
-            managedProperties.push({
-                property: property,
-                default_value: characterData[property] || "",
-                frozen: true,
-                configurable: false,
-            });
-        }
-    });
-    return managedProperties;
 });
 
 ipcMain.on('openDevTools', () => {
@@ -187,435 +114,52 @@ ipcMain.on('closeApp', () => {
     app.quit();
 });
 
-ipcMain.handle('loadValueFromUserData', async (event, key, cacheFile) => {
-    const splitted = key.split(".");
-    let current = userData;
-    if (cacheFile) {
-        /**
-         * @type any
-         */
-        let cacheToUse = null;
-        if (cacheFile.fileType === 'character') {
-            cacheToUse = CHARACTER_CACHE;
-        } else if (cacheFile.fileType === 'script') {
-            cacheToUse = SCRIPT_CACHE;
-        } else if (cacheFile.fileType === 'world') {
-            cacheToUse = WORLD_CACHE;
-        }
-        let notFoundInCache = false;
-        if (!cacheToUse[cacheFile.fileName]) {
-            cacheToUse[cacheFile.fileName] = {};
-            notFoundInCache = true;
-        }
-        if (notFoundInCache) {
-            const CACHE_FOLDER = path.join(app.getPath('home'), '.dreamengine', cacheToUse === CHARACTER_CACHE ? 'characters' : cacheToUse === SCRIPT_CACHE ? 'scripts' : 'worlds');
-            const filePath = path.join(CACHE_FOLDER, cacheFile.fileName);
-            if (fs.existsSync(filePath)) {
-                const data = await fs.promises.readFile(filePath, 'utf-8');
-                cacheToUse[cacheFile.fileName] = JSON.parse(data);
-            }
-        }
-        current = cacheToUse[cacheFile.fileName] || {};
-    }
-    for (let i = 0; i < splitted.length; i++) {
-        // @ts-ignore
-        if (current[splitted[i]] === undefined) {
-            return null;
-        }
-        // @ts-ignore
-        current = current[splitted[i]];
-    }
-    return current || null;
-});
-
-ipcMain.handle('setValueIntoUserData', (event, key, cacheFile, value) => {
-    const splitted = key.split(".");
-    let current = userData;
-    if (cacheFile) {
-        /**
-         * @type any
-         */
-        let cacheToUse = null;
-        if (cacheFile.fileType === 'character') {
-            cacheToUse = CHARACTER_CACHE;
-        } else if (cacheFile.fileType === 'script') {
-            cacheToUse = SCRIPT_CACHE;
-        } else if (cacheFile.fileType === 'world') {
-            cacheToUse = WORLD_CACHE;
-        }
-        current = cacheToUse[cacheFile.fileName];
-    }
-    for (let i = 0; i < splitted.length - 1; i++) {
-        // @ts-ignore
-        if (current[splitted[i]] === undefined) {
-            // @ts-ignore
-            current[splitted[i]] = {};
-        }
-        // @ts-ignore
-        current = current[splitted[i]];
-    }
-    // @ts-ignore
-    current[splitted[splitted.length - 1]] = value;
-});
-
-ipcMain.on('saveSettingsToDisk', () => {
-    if (!fs.existsSync(DREAMENGINE_INFO_HOME)) {
-        fs.mkdirSync(DREAMENGINE_INFO_HOME, { recursive: true });
-    }
-    fs.writeFileSync(path.join(DREAMENGINE_INFO_HOME, 'settings.json'), JSON.stringify(userData, null, 2), 'utf-8');
-});
-
-const CHARACTER_FOLDER = path.join(DREAMENGINE_INFO_HOME, 'characters');
-if (!fs.existsSync(CHARACTER_FOLDER)) {
-    fs.mkdirSync(CHARACTER_FOLDER, { recursive: true });
-}
-const CHARACTER_ASSETS_FOLDER = path.join(DREAMENGINE_INFO_HOME, 'characters-assets');
-if (!fs.existsSync(CHARACTER_ASSETS_FOLDER)) {
-    fs.mkdirSync(CHARACTER_ASSETS_FOLDER, { recursive: true });
-}
-const SCRIPT_FOLDER = path.join(DREAMENGINE_INFO_HOME, 'scripts');
+const SCRIPT_FOLDER = path.join(DREAMENGINE_HOME, 'scripts');
 if (!fs.existsSync(SCRIPT_FOLDER)) {
     fs.mkdirSync(SCRIPT_FOLDER, { recursive: true });
 }
-const WORLD_FOLDER = path.join(DREAMENGINE_INFO_HOME, 'worlds');
-if (!fs.existsSync(WORLD_FOLDER)) {
-    fs.mkdirSync(WORLD_FOLDER, { recursive: true });
-}
-const WORLD_ASSETS_FOLDER = path.join(DREAMENGINE_INFO_HOME, 'worlds-assets');
-if (!fs.existsSync(WORLD_ASSETS_FOLDER)) {
-    fs.mkdirSync(WORLD_ASSETS_FOLDER, { recursive: true });
-}
 
-// let's load every single chracter file into cache on startup
-// they are relatively small so this should be fine
-const chars = fs.readdirSync(CHARACTER_FOLDER);
-chars.forEach(file => {
-    if (file.endsWith('.json')) {
-        const filePath = path.join(CHARACTER_FOLDER, file);
-        const data = fs.readFileSync(filePath, 'utf-8');
-        CHARACTER_CACHE[file] = JSON.parse(data);
-    }
-});
-
-const scripts = fs.readdirSync(SCRIPT_FOLDER);
-scripts.forEach(file => {
-    if (file.endsWith('.json')) {
-        const filePath = path.join(SCRIPT_FOLDER, file);
-        const data = fs.readFileSync(filePath, 'utf-8');
-        SCRIPT_CACHE[file] = JSON.parse(data);
-    }
-});
-
-const worlds = fs.readdirSync(WORLD_FOLDER);
-worlds.forEach(file => {
-    if (file.endsWith('.json')) {
-        const filePath = path.join(WORLD_FOLDER, file);
-        const data = fs.readFileSync(filePath, 'utf-8');
-        WORLD_CACHE[file] = JSON.parse(data);
-    }
-});
-
-// Character file management IPC handlers
-ipcMain.handle('createEmptyCharacterFile', async () => {
-    // find a potentially existing unsaved character file first
-    for (const [fileName, data] of Object.entries(CHARACTER_CACHE)) {
-        if (data.__unsaved) {
-            return { group: data.group || "", characterFile: fileName };
-        }
-    }
-    const filePath = path.join(CHARACTER_FOLDER, `character_${Date.now()}.json`);
-    CHARACTER_CACHE[path.basename(filePath)] = {
-        __unsaved: true
-    };
-    return { group: '', characterFile: path.basename(filePath) };
-});
-
-ipcMain.handle('createEmptyScriptFile', async () => {
-    // find a potentially existing unsaved script file first
-    for (const [fileName, data] of Object.entries(SCRIPT_CACHE)) {
-        if (data.__unsaved) {
-            return { scriptFile: fileName };
-        }
-    }
-    const filePath = path.join(SCRIPT_FOLDER, `script_${Date.now()}.json`);
-    SCRIPT_CACHE[path.basename(filePath)] = {
-        __unsaved: true
-    };
-    return { scriptFile: path.basename(filePath) };
-});
-
-ipcMain.handle('createEmptyWorldFile', async () => {
-    // find a potentially existing unsaved world file first
-    for (const [fileName, data] of Object.entries(WORLD_CACHE)) {
-        if (data.__unsaved) {
-            return { worldFile: fileName };
-        }
-    }
-    const filePath = path.join(WORLD_FOLDER, `world_${Date.now()}.json`);
-    WORLD_CACHE[path.basename(filePath)] = {
-        __unsaved: true
-    };
-    return { worldFile: path.basename(filePath) };
-});
-
-ipcMain.handle('checkCharacterFileExists', async (event, characterFile) => {
-    return !!CHARACTER_CACHE[characterFile];
-});
-
-ipcMain.handle('checkScriptFileExists', async (event, scriptFile) => {
-    return !!SCRIPT_CACHE[scriptFile];
-});
-
-ipcMain.handle('checkWorldFileExists', async (event, worldFile) => {
-    return !!WORLD_CACHE[worldFile];
-});
-
-ipcMain.handle('updateCharacterFileFromCache', async (event, characterFile) => {
-    const currentData = CHARACTER_CACHE[characterFile];
-    if (!currentData) {
-        return null;
-    }
-    if (currentData.__unsaved) {
-        delete currentData.__unsaved;
-    }
-    const filePath = path.join(CHARACTER_FOLDER, characterFile);
-    await fs.promises.writeFile(filePath, JSON.stringify(currentData, null, 2), 'utf-8');
-    return currentData;
-});
-
-ipcMain.handle('updateScriptFileFromCache', async (event, scriptFile) => {
-    const currentData = SCRIPT_CACHE[scriptFile];
-    if (!currentData) {
-        return null;
-    }
-    if (currentData.__unsaved) {
-        delete currentData.__unsaved;
-    }
-    const filePath = path.join(SCRIPT_FOLDER, scriptFile);
-    await fs.promises.writeFile(filePath, JSON.stringify(currentData, null, 2), 'utf-8');
-    return currentData;
-});
-
-ipcMain.handle('updateWorldFileFromCache', async (event, worldFile) => {
-    const currentData = WORLD_CACHE[worldFile];
-    if (!currentData) {
-        return null;
-    }
-    if (currentData.__unsaved) {
-        delete currentData.__unsaved;
-    }
-    const filePath = path.join(WORLD_FOLDER, worldFile);
-    await fs.promises.writeFile(filePath, JSON.stringify(currentData, null, 2), 'utf-8');
-    return currentData;
-});
-
-ipcMain.handle("deleteCharacterFile", async (event, characterFile) => {
-    const filePath = path.join(CHARACTER_FOLDER, characterFile);
-    const assetsFolderPath = path.join(CHARACTER_ASSETS_FOLDER, characterFile.replace('.json', ''));
-    delete CHARACTER_CACHE[characterFile];
-    if (fs.existsSync(filePath)) {
-        await fs.promises.unlink(filePath);
-        return true;
-    }
-    if (fs.existsSync(assetsFolderPath)) {
-        fs.rmdirSync(assetsFolderPath, { recursive: true });
-    }
-
-    return false;
-});
-
-ipcMain.handle("deleteScriptFile", async (event, scriptFile) => {
-    const filePath = path.join(SCRIPT_FOLDER, scriptFile);
-    delete SCRIPT_CACHE[scriptFile];
-    if (fs.existsSync(filePath)) {
-        await fs.promises.unlink(filePath);
-        return true;
-    }
-    return false;
-});
-
-ipcMain.handle("deleteWorldFile", async (event, worldFile) => {
-    const filePath = path.join(WORLD_FOLDER, worldFile);
-    const assetsFolderPath = path.join(WORLD_ASSETS_FOLDER, worldFile.replace('.json', ''));
-    delete WORLD_CACHE[worldFile];
-    if (fs.existsSync(filePath)) {
-        await fs.promises.unlink(filePath);
-        if (fs.existsSync(assetsFolderPath)) {
-            fs.rmdirSync(assetsFolderPath, { recursive: true });
-        }
-        return true;
-    }
-    return false;
-});
-
-ipcMain.handle('listCharacterFiles', async (event, group) => {
-    return Object.keys(CHARACTER_CACHE).filter(fileName => {
-        const data = CHARACTER_CACHE[fileName];
-        if (data.__unsaved) {
-            return false;
-        }
-        return (data.group || "Ungrouped") === group;
-    }).map(fileName => {
-        const data = CHARACTER_CACHE[fileName];
-        return { file: fileName, name: data.name || "Unnamed Character" };
-    });
-});
-
-ipcMain.handle("listStatesForCharacterFile", async (event, characterFile) => {
-    const data = CHARACTER_CACHE[characterFile];
-    if (!data) {
-        return [];
-    }
-    const givenStates = new Set(Object.keys(data.states || {}));
-    const frozenStates = new Set();
-    const includedScripts = data.advanced_spawn_script?.imports || [];
-    // @ts-ignore
-    includedScripts.forEach(scriptName => {
-        const scriptData = SCRIPT_CACHE[scriptName];
-        if (scriptData && scriptData.freeze_states) {
-            // @ts-ignore
-            scriptData.freeze_states.forEach(stateName => {
-                frozenStates.add(stateName);
-            });
-        }
-    });
-    const combinedStates = new Set([...givenStates, ...frozenStates]);
+ipcMain.handle('listScriptFiles', async (event) => {
+    // Scripts are organized as scripts/<namespace>/<id>.js
     /**
-     * @type {Array<{name: string, frozen: boolean}>}
+     * @type {Array<{namespace: string, id: string}>}
      */
-    const finalStates = [];
-    combinedStates.forEach(stateName => {
-        finalStates.push({
-            name: stateName,
-            frozen: frozenStates.has(stateName),
-        });
-    });
-    return finalStates;
-});
-
-ipcMain.handle("listScriptStatesForCharacterFile", async (event, characterFile) => {
-    const data = CHARACTER_CACHE[characterFile];
-    if (!data) {
-        return [];
-    }
-    const frozenStates = new Set();
-    const includedScripts = data.advanced_spawn_script?.imports || [];
-    // @ts-ignore
-    includedScripts.forEach(scriptName => {
-        const scriptData = SCRIPT_CACHE[scriptName];
-        if (scriptData && scriptData.freeze_states) {
-            // @ts-ignore
-            scriptData.freeze_states.forEach(stateName => {
-                frozenStates.add(stateName);
-            });
+    const results = [];
+    const folders = [SCRIPT_FOLDER, path.join(__dirname, 'default-scripts')];
+    for (const folder of folders) {
+        if (!fs.existsSync(folder)) continue;
+        const entries = fs.readdirSync(folder, { withFileTypes: true });
+        for (const entry of entries) {
+            if (entry.isDirectory()) {
+                const namespace = entry.name;
+                const nsPath = path.join(folder, namespace);
+                for (const file of fs.readdirSync(nsPath)) {
+                    if (file.endsWith('.js')) {
+                        const id = file.replace(/\.js$/, '');
+                        if (!results.some(r => r.namespace === namespace && r.id === id)) {
+                            results.push({ id, namespace });
+                        }
+                    }
+                }
+            }
         }
-    });
-    /**
-     * @type {Array<{name: string, frozen: boolean}>}
-     */
-    const finalStates = [];
-    frozenStates.forEach(stateName => {
-        finalStates.push({
-            name: stateName,
-            frozen: true,
-        });
-    });
-    return finalStates;
+    }
+
+    return results;
 });
 
-ipcMain.handle('listScriptContexts', async (event) => {
-    const contexts = new Set();
-    Object.values(SCRIPT_CACHE).forEach(scriptData => {
-        if (!scriptData['__unsaved']) {
-            contexts.add(scriptData.context || "Character Spawn");
-        }
-    });
-    return Array.from(contexts);
+ipcMain.handle('getConfigValue', async (event, key) => {
+    return config[key] ?? null;
 });
 
-ipcMain.handle('listScriptFiles', async (event, context) => {
-    return Object.keys(SCRIPT_CACHE).filter(fileName => {
-        const data = SCRIPT_CACHE[fileName];
-        if (data.__unsaved) {
-            return false;
-        }
-        if ((data.context || "Character Spawn") !== context) {
-            return false;
-        }
-        return true;
-    }).map(fileName => {
-        const data = SCRIPT_CACHE[fileName];
-        return { file: fileName, name: data.name || "Unnamed Script" };
-    });
+ipcMain.handle('setConfigValue', async (event, key, value) => {
+    config[key] = value;
+    await saveConfig();
 });
 
-ipcMain.handle('listWorldFiles', async (event) => {
-    return Object.keys(WORLD_CACHE).filter(fileName => {
-        const data = WORLD_CACHE[fileName];
-        if (data.__unsaved) {
-            return false;
-        }
-        return true;
-    }).map(fileName => {
-        const data = WORLD_CACHE[fileName];
-        return { file: fileName, name: data.name || "Unnamed World" };
-    });
-});
-
-ipcMain.handle('listCharacterGroups', async (event) => {
-    const groups = new Set();
-    Object.values(CHARACTER_CACHE).forEach(charData => {
-        if (!charData['__unsaved']) {
-            groups.add(charData.group || "Ungrouped");
-        }
-    });
-    return Array.from(groups);
-});
-
-ipcMain.handle('getDreamEnginePath', () => {
-    return DREAMENGINE_INFO_HOME;
-});
-
-ipcMain.handle('uploadFileToDEPath', async (event, dePath, file) => {
-    if (!file) {
-        throw new Error("No file provided for upload");
-    }
-    // ensure no directory traversal
-    if (dePath.includes('..')) {
-        throw new Error("Invalid path");
-    }
-    const destPath = path.join(DREAMENGINE_INFO_HOME, dePath);
-    const arrayBuffer = await file.arrayBuffer();
-    await fs.promises.writeFile(destPath, Buffer.from(arrayBuffer));
-    return true;
-});
-
-// Accept raw bytes (ArrayBuffer or Uint8Array) from renderer and persist to DreamEngine path
-ipcMain.handle('uploadBytesToDEPath', async (event, dePath, bytes) => {
-    if (!bytes) {
-        throw new Error('No byte data provided for upload');
-    }
-    if (typeof dePath !== 'string' || dePath.length === 0) {
-        throw new Error('Invalid destination path');
-    }
-    if (dePath.includes('..')) {
-        throw new Error('Invalid path');
-    }
-    if (dePath !== "profile" && !dePath.startsWith("characters-assets/")) {
-        throw new Error('Unauthorized path for upload');
-    }
-    if (dePath.endsWith(".json") || dePath.endsWith(".js")) {
-        throw new Error('Uploading JSON or JS files is not allowed');
-    }
-    const destPath = path.join(DREAMENGINE_INFO_HOME, dePath);
-    let buffer;
-    if (bytes instanceof Uint8Array) {
-        buffer = Buffer.from(bytes);
-    } else if (bytes instanceof ArrayBuffer) {
-        buffer = Buffer.from(new Uint8Array(bytes));
-    } else {
-        throw new Error('Unsupported byte payload type');
-    }
-    await fs.promises.writeFile(destPath, buffer);
-    return true;
+ipcMain.handle('getDreamEnginePaths', () => {
+    return [
+        DREAMENGINE_HOME,
+        path.join(__dirname, 'default-scripts'),
+    ];
 });

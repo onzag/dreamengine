@@ -758,7 +758,7 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
      * every inference cycle, these get applied at a system prompt level
      * so it should be writte in 3rd person format
      */
-    generalCharacterDescriptionInjection: Record<string, DEStringTemplate>;
+    generalCharacterDescriptionInjection: Record<string, DEStringTemplateCharOnly>;
 
     /**
      * These are rules that the character must follow at all times,
@@ -1216,14 +1216,6 @@ declare type DEAskPerType = "present_character" | "conversing_character" | "pote
 
 declare interface DECharacterQuestionBase {
     /**
-     * The question to run
-     */
-    question: DEStringTemplateCharOnly | DEStringTemplateCharAndOther;
-    /**
-     * Now the question has access to {{other}} and {{other_family_relation}}
-     */
-    askPer?: DEAskPerType;
-    /**
      * Used in combination with askPer: "potential_character_causants_of_state" or "causants_of_state" or "character_causants_of_state" or "object_causants_of_state" to specify the state that the question should be asked for each potential causant of it, this way the question can be asked for each potential causant of a specific state and have access to {{other}} and {{other_family_relation}} in the question template, which refer to the potential causant character and their family relation to the character respectively
      */
     askPerState?: string;
@@ -1237,14 +1229,28 @@ declare interface DECharacterQuestionBase {
     runIf?: (character: DECompleteCharacterReference, otherChar: DECompleteCharacterReference | null, otherFamilyRelation: DEFamilyRelation | null) => boolean | Promise<boolean>;
 }
 
-declare type DECharacterQuestionWithAskPer = Omit<DECharacterQuestionBase, 'runIf' | 'askPer' | 'question'> & {
+declare type DECharacterQuestionWithAskPer = DECharacterQuestionBase & {
+    /**
+     * The question to run, has access to {{other}} and {{other_family_relation}}
+     */
     question: DEStringTemplateCharAndOther;
+    /**
+     * Now the question has access to {{other}} and {{other_family_relation}}
+     */
     askPer: DEAskPerType;
-    runIf?: (character: DECompleteCharacterReference, otherChar: DECompleteCharacterReference | null, otherFamilyRelation: DEFamilyRelation | null) => boolean | Promise<boolean>;
+};
+
+declare type DECharacterQuestionWithoutAskPer = DECharacterQuestionBase & {
+    /**
+     * The question to run
+     */
+    question: DEStringTemplateCharOnly;
+    askPer?: undefined;
 };
 
 declare type DECharacterYesNoQuestion =
     | (DECharacterQuestionWithAskPer & {
+        question: DEStringTemplateCharAndOther;
         type: "yes_no"; onValue: (
             answer: boolean,
             character: DECompleteCharacterReference,
@@ -1253,7 +1259,7 @@ declare type DECharacterYesNoQuestion =
             otherRelationship: string | null,
         ) => Promise<void> | void;
     })
-    | (DECharacterQuestionBase & { type: "yes_no"; askPer?: undefined; onValue: DEYesNoQuestionCallback; });
+    | (DECharacterQuestionWithoutAskPer & { type: "yes_no"; onValue: DEYesNoQuestionCallback; });
 
 declare type DEYesNoQuestionCallback = (
     answer: boolean,
@@ -1265,6 +1271,7 @@ declare type DEYesNoQuestionCallback = (
 
 declare type DECharacterNumericQuestion =
     | (DECharacterQuestionWithAskPer & {
+        question: DEStringTemplateCharAndOther;
         type: "numeric"; onNumber: (
             answer: number,
             character: DECompleteCharacterReference,
@@ -1273,7 +1280,7 @@ declare type DECharacterNumericQuestion =
             otherRelationship: string | null,
         ) => Promise<void> | void;
     })
-    | (DECharacterQuestionBase & { type: "numeric"; askPer?: undefined; onNumber: DENumericQuestionCallback; });
+    | (DECharacterQuestionWithoutAskPer & { type: "numeric"; onNumber: DENumericQuestionCallback; });
 
 declare type DENumericQuestionCallback = (
     answer: number,
@@ -1285,6 +1292,7 @@ declare type DENumericQuestionCallback = (
 
 declare type DECharacterTextQuestion =
     | (DECharacterQuestionWithAskPer & {
+        question: DEStringTemplateCharAndOther;
         type: "text"; grammar?: string; onText: (
             answer: string,
             character: DECompleteCharacterReference,
@@ -1293,7 +1301,7 @@ declare type DECharacterTextQuestion =
             otherRelationship: string | null,
         ) => Promise<void> | void;
     })
-    | (DECharacterQuestionBase & { type: "text"; grammar?: string; askPer?: undefined; onText: DETextQuestionCallback; });
+    | (DECharacterQuestionWithoutAskPer & { type: "text"; grammar?: string; onText: DETextQuestionCallback; });
 
 declare type DETextQuestionCallback = (
     answer: string,
@@ -1945,7 +1953,7 @@ declare interface DEWeatherSystem {
      * 
      * You should return a string value indicating whether the script handled the full effect logic
      */
-    fullyProtectedTemplate?: DEStringTemplate | null;
+    fullyProtectedTemplate?: DEStringTemplateCharOnly | null;
     /**
      * If a character is in this state, they are partially protected from the weather system's effects
      * eg. "HOLDING_UMBRELLA" "WEARING_LIGHT_JACKET"
@@ -2621,7 +2629,7 @@ declare type DEStringTemplateCharOnly = string | ((
      * Always available the DE object representing the whole simulation
      */
     DE: DEObject,
-    info: DEStringTemplateInfoBase
+    info: DEStringTemplateInfoCharOnly
 ) => Promise<string> | string);
 
 declare type DEStringTemplateCharAndOther = string | ((

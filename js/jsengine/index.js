@@ -86,12 +86,16 @@ export class DEJSEngine {
      */
     async importScript(namespace, id, options) {
         const key = `${namespace}/${id}`;
+
         if (this.scriptCache[key]) {
             if (!this.__panthomImports && !this.scriptOrder.includes(key)) {
+                console.log("Adding cached script to execution order:", key);
                 this.scriptOrder.push(key);
             }
             return this.scriptCache[key];
         }
+
+        console.log(`Importing script ${key}...`);
 
         /**
          * @type {{src: string, srcUrl: string}}
@@ -136,6 +140,7 @@ export class DEJSEngine {
         // @ts-ignore
         this.scriptCache[key] = engine.exports;
         if (!this.__panthomImports) {
+            console.log("Adding script to execution order:", key);
             this.scriptOrder.push(key);
         }
 
@@ -156,6 +161,7 @@ export class DEJSEngine {
 
     async unload() {
         this.scriptOrder = [];
+        console.log("Unloaded all scripts from the script execution order. Script cache is unchanged.");
     }
 
     /**

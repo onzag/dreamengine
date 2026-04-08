@@ -14,9 +14,8 @@ const jsEngine = new DEJSEngine(engine, {
     listResolver: localListResolver,
 });
 await jsEngine.importScripts([
-    { namespace: "worlds", id: "simple-lunar-station" },
-    { namespace: "characters", id: "dema-basic" },
-    { namespace: "testing", id: "states" },
+    { namespace: "@worlds", id: "simple-lunar-station" },
+    { namespace: "@characters", id: "dema-basic" },
 ]);
 
 const inferenceAdapter = new InferenceAdapterLlamaUncensored(engine, {

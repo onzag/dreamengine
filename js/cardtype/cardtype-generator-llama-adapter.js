@@ -18,7 +18,7 @@ if (typeof process !== "undefined" && process.versions && process.versions.node)
 
 const initCwd = process.env.INIT_CWD || process.cwd();
 const localDEPathAtHomeDir = join(process.env.HOME || process.env.USERPROFILE || '.', '.dreamengine');
-const defaultConfigPath = join(localDEPathAtHomeDir, 'de-server-config.json');
+const defaultConfigPath = join(localDEPathAtHomeDir, 'config.json');
 
 const args = process.argv.slice(2);
 
@@ -114,7 +114,6 @@ const config = configPath ? JSON.parse(readFileSync(configPath, 'utf-8')) : {};
 const sourceContent = readFileSync(inputPath, 'utf-8');
 
 const engine = new DEngine();
-new DEJSEngine(engine, localResolver);
 new InferenceAdapterLlamaUncensored(engine, {
     host: config.host || "wss://localhost:8765",
     secret: config.secret || "dev-secret-12345678900abcdef",

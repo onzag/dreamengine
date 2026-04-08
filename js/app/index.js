@@ -11,9 +11,10 @@ import { playConfirmSound, playHoverSound, toggleAmbience,
     toggleFX, isAmbienceEnabled, isFXEnabled, startAmbienceWithFade } from './sound.js';
 
 const initialPromise = new Promise((resolve) => {
-    window.electronAPI.getDreamEnginePath().then((path) => {
-        window.DREAMENGINE_INFO_HOME = path;
-        resolve(path);
+    window.API.getDreamEnginePaths().then((paths) => {
+        window.DREAMENGINE_HOME = paths[0];
+        window.DREAMENGINE_DEFAULT_SCRIPTS_HOME = paths[1];
+        resolve(paths);
     });
 });
 
@@ -26,7 +27,7 @@ function exitGame() {
     dialog.setAttribute("confirm-text", "Exit");
     dialog.setAttribute("cancel-text", "Cancel");
     dialog.addEventListener('confirm', () => {
-        window.electronAPI.closeApp();
+        window.API.closeApp();
     });
     dialog.addEventListener('cancel', () => {
         document.body.removeChild(dialog);
@@ -52,7 +53,7 @@ const newCharacterBtn = document.getElementById('new-character-btn');
 newCharacterBtn?.addEventListener('click', async () => {
     HAS_ACTIVE_DIALOG = true;
     await initialPromise;
-    const rs = await window.electronAPI.createEmptyCharacterFile();
+    const rs = await window.API.createEmptyCharacterFile();
     const overlay = document.createElement("app-character");
     overlay.setAttribute("character-group", rs.group);
     overlay.setAttribute("character-file", rs.characterFile);
@@ -106,12 +107,12 @@ footerLinks.forEach(link => {
 // Toggle full screen on alt+Enter
 document.addEventListener("keydown", async (e) => {
     if (e.key === "Enter" && e.altKey) {
-        window.electronAPI.toggleFullScreen();
+        window.API.toggleFullScreen();
         // Force focus on body to trigger repaint
         
     }
     if (e.key === "F12") {
-        window.electronAPI.openDevTools();
+        window.API.openDevTools();
     }
     if (e.key === "Escape" && !HAS_ACTIVE_DIALOG) {
         exitGame();
@@ -199,12 +200,27 @@ function removeLoadingBlur() {
 console.log("Loading worker...");
 const worker = new Worker('../worker-sandbox/index.js', { type: "module" });
 const client = new EngineWorkerClient(worker);
-client.ready.then(() => {
+client.ready.then(async () => {
     console.log("Worker is ready");
+
+    await initialPromise;
+
+    const scriptFiles = await window.API.listScriptFiles();
+
+    await client.setScriptPaths(
+        {
+            // @ts-ignore
+            defaultScriptsPath: window.DREAMENGINE_DEFAULT_SCRIPTS_HOME,
+            userScriptsPath: window.DREAMENGINE_HOME + "/scripts",
+        },
+    );
+    await client.setScriptList({
+        scripts: scriptFiles,
+    });
+    await client.jsEnginePreloadAllScripts();
 }).catch((err) => {
     console.error("Worker failed to initialize:", err);
 });
 
-// For debugging: expose client on window
-// @ts-ignore
-window.engineClient = client;
+// Expose client on window
+window.ENGINE_WORKER_CLIENT = client;

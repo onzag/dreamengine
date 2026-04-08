@@ -1,4 +1,4 @@
-const fss = await importScript("bond-systems", "full-standard-bond-system");
+const fss = await importScript("@bond-systems", "full-standard-bond-system");
 
 engine.exports = {
     type: "characters",
