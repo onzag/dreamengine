@@ -113,7 +113,10 @@ export class DEJSEngine {
         }
 
         const insecureFn = loadFunctionInsecure("importScript, engine", file.src, file.srcUrl);
-        const engine = { exports: {} };
+        /**
+         * @type {{ exports: any }} The module object that the script will populate
+         */
+        const engine = { exports: undefined };
 
         /**
          * 
@@ -136,6 +139,11 @@ export class DEJSEngine {
         }
 
         await insecureFn(importScriptOverride, engine);
+
+        if (typeof engine.exports === "undefined" || engine.exports === null) {
+            console.warn(`Script ${key} did not set exports, defaulting to empty object`);
+            engine.exports = {};
+        }
 
         // @ts-ignore
         this.scriptCache[key] = engine.exports;

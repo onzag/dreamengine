@@ -9,7 +9,7 @@ declare interface ElectronAPI {
   openDevTools(): void;
   closeApp(): void;
 
-  listScriptFiles(): Promise<Array<{ id: string; namespace: string;}>>;
+  listScriptFiles(): Promise<Array<{ id: string; namespace: string; }>>;
 
   getConfigValue(key: string): Promise<any>;
   setConfigValue(key: string, value: any): Promise<void>;

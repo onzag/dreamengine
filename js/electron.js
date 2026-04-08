@@ -121,18 +121,43 @@ if (!fs.existsSync(SCRIPT_FOLDER)) {
 
 ipcMain.handle('listScriptFiles', async (event) => {
     // Scripts are organized as scripts/<namespace>/<id>.js
+    // Default scripts must have namespaces starting with @, user scripts must not.
     /**
      * @type {Array<{namespace: string, id: string}>}
      */
     const results = [];
-    const folders = [SCRIPT_FOLDER, path.join(__dirname, 'default-scripts')];
-    for (const folder of folders) {
-        if (!fs.existsSync(folder)) continue;
-        const entries = fs.readdirSync(folder, { withFileTypes: true });
-        for (const entry of entries) {
+
+    // List user scripts (namespaces must NOT start with @)
+    if (fs.existsSync(SCRIPT_FOLDER)) {
+        for (const entry of fs.readdirSync(SCRIPT_FOLDER, { withFileTypes: true })) {
             if (entry.isDirectory()) {
                 const namespace = entry.name;
-                const nsPath = path.join(folder, namespace);
+                if (namespace.startsWith('@')) {
+                    console.warn(`Warning: local script namespace '${namespace}' starts with '@', skipping`);
+                    continue;
+                }
+                const nsPath = path.join(SCRIPT_FOLDER, namespace);
+                for (const file of fs.readdirSync(nsPath)) {
+                    if (file.endsWith('.js')) {
+                        const id = file.replace(/\.js$/, '');
+                        results.push({ id, namespace });
+                    }
+                }
+            }
+        }
+    }
+
+    // List default scripts (namespaces must start with @)
+    const defaultScriptsDir = path.join(__dirname, 'default-scripts');
+    if (fs.existsSync(defaultScriptsDir)) {
+        for (const entry of fs.readdirSync(defaultScriptsDir, { withFileTypes: true })) {
+            if (entry.isDirectory()) {
+                const namespace = entry.name;
+                if (!namespace.startsWith('@')) {
+                    console.warn(`Warning: default script namespace '${namespace}' does not start with '@', skipping`);
+                    continue;
+                }
+                const nsPath = path.join(defaultScriptsDir, namespace);
                 for (const file of fs.readdirSync(nsPath)) {
                     if (file.endsWith('.js')) {
                         const id = file.replace(/\.js$/, '');

@@ -5,16 +5,3 @@
  * This script can be applied to the user character as well, making the user character get hungry and need to eat and drink.
  * and if they don't eat or drink, they will eventually starve to death.
  */
-
-/**
- * @param {DEObject} DE 
- * @param {DECompleteCharacterReference} character 
- */
-export default function hungerScript(DE, character) {
-    
-}
-
-// because the way this works, we need to convert this function to json
-const stringified = {
-
-}

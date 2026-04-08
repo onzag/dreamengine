@@ -22,21 +22,23 @@ const resolver = async (namespace, id) => {
     if (!userScriptsBase || !defaultScriptsBase) {
         throw new Error("Script paths not set. Call setScriptPaths first.");
     }
-    // Try user home first, then bundled default-scripts
-    const userUrl = `${userScriptsBase}/${namespace}/${id}.js`;
-    const defaultUrl = `${defaultScriptsBase}/${namespace}/${id}.js`;
-
-    let resp = await fetch(userUrl).catch(() => null);
-    if (resp && resp.ok) {
-        return { src: await resp.text(), srcUrl: userUrl };
+    // Namespaces starting with "@" load from bundled default-scripts,
+    // all others load from the user's local scripts folder.
+    if (namespace.startsWith('@')) {
+        const defaultUrl = `${defaultScriptsBase}/${namespace}/${id}.js`;
+        const resp = await fetch(defaultUrl).catch(() => null);
+        if (resp && resp.ok) {
+            return { src: await resp.text(), srcUrl: defaultUrl };
+        }
+        throw new Error(`Default script '${namespace}/${id}' not found at ${defaultUrl}`);
+    } else {
+        const userUrl = `${userScriptsBase}/${namespace}/${id}.js`;
+        const resp = await fetch(userUrl).catch(() => null);
+        if (resp && resp.ok) {
+            return { src: await resp.text(), srcUrl: userUrl };
+        }
+        throw new Error(`Local script '${namespace}/${id}' not found at ${userUrl}`);
     }
-
-    resp = await fetch(defaultUrl).catch(() => null);
-    if (resp && resp.ok) {
-        return { src: await resp.text(), srcUrl: defaultUrl };
-    }
-
-    throw new Error(`Script '${namespace}/${id}' not found at ${userUrl} or ${defaultUrl}`);
 };
 
 /**

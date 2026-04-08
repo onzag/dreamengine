@@ -164,6 +164,9 @@ document.querySelector(".ambience")?.addEventListener("click", () => {
     }
 });
 
+let WORKER_READY = false;
+let DOM_READY = false;
+
 // Initialize sound icons based on settings
 window.addEventListener('DOMContentLoaded', () => {
     if (isFXEnabled()) {
@@ -179,12 +182,20 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 
     setTimeout(async () => {
+        DOM_READY = true;
         await startAmbienceWithFade(['./sounds/dream-ambience.mp3'], 2000, 3);
-        removeLoadingBlur();
+        if (WORKER_READY && DOM_READY) {
+            removeLoadingBlur();
+        }
     }, 500);
 });
 
+let LOADING_BLUR_OPEN = true;
 function removeLoadingBlur() {
+    if (!LOADING_BLUR_OPEN) {
+        return;
+    }
+    LOADING_BLUR_OPEN = false;
     const loadingOverlay = document.getElementById('loading-overlay');
     if (loadingOverlay) {
         loadingOverlay.style.transition = 'opacity 1s ease';
@@ -218,6 +229,13 @@ client.ready.then(async () => {
         scripts: scriptFiles,
     });
     await client.jsEnginePreloadAllScripts();
+
+    // Engine is ready to be used at this point
+    WORKER_READY = true;
+
+    if (WORKER_READY && DOM_READY) {
+        removeLoadingBlur();
+    }
 }).catch((err) => {
     console.error("Worker failed to initialize:", err);
 });
