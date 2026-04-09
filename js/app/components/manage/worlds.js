@@ -58,7 +58,12 @@ class AppManageWorlds extends HTMLElement {
         }
 
         this.root.querySelector('app-overlay-button')?.addEventListener('click', async () => {
-            // TODO new world
+            const overlay = document.createElement("app-world");
+            document.body.appendChild(overlay);
+            overlay.addEventListener('close', () => {
+                document.body.removeChild(overlay);
+                this.reloadCurrentLocation();
+            });
         });
         // @ts-expect-error
         this.root.querySelector('.go-back-button-container').addEventListener('click', () => {
@@ -216,7 +221,15 @@ class AppManageWorlds extends HTMLElement {
         const worldFile = e.currentTarget.dataset.worldFile;
         // @ts-expect-error
         const worldNamespace = e.currentTarget.dataset.worldNamespace;
-        // TODO open world overlay when app-world component exists
+        const overlay = document.createElement("app-world");
+        overlay.setAttribute("world-namespace", worldNamespace);
+        overlay.setAttribute("world-id", worldFile.split('/').pop());
+        document.body.appendChild(overlay);
+        playConfirmSound();
+        overlay.addEventListener('close', () => {
+            document.body.removeChild(overlay);
+            this.reloadCurrentLocation();
+        });
     }
 
     render() {

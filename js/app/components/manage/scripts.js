@@ -62,7 +62,12 @@ class AppManageScripts extends HTMLElement {
         }
 
         this.root.querySelector('app-overlay-button')?.addEventListener('click', async () => {
-            // TODO new script
+            const overlay = document.createElement("app-script");
+            document.body.appendChild(overlay);
+            overlay.addEventListener('close', () => {
+                document.body.removeChild(overlay);
+                this.reloadCurrentLocation();
+            });
         });
         // @ts-expect-error
         this.root.querySelector('.go-back-button-container').addEventListener('click', () => {
@@ -231,9 +236,13 @@ class AppManageScripts extends HTMLElement {
         }
         // @ts-expect-error
         const scriptFile = e.currentTarget.dataset.scriptFile;
+        // @ts-expect-error
+        const scriptNamespace = e.currentTarget.dataset.scriptNamespace;
         const overlay = document.createElement("app-script");
-        overlay.setAttribute("script-file", scriptFile);
+        overlay.setAttribute("script-namespace", scriptNamespace);
+        overlay.setAttribute("script-id", scriptFile.split('/').pop());
         document.body.appendChild(overlay);
+        playConfirmSound();
         overlay.addEventListener('close', () => {
             document.body.removeChild(overlay);
             this.reloadCurrentLocation();

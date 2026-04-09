@@ -3,6 +3,7 @@ import './components/dialog.js';
 import './components/overlay.js';
 import './components/settings.js';
 import './components/character.js';
+import './components/world.js';
 import './components/manage.js';
 import './components/license.js';
 import './components/other-attributions.js';
@@ -59,6 +60,21 @@ newCharacterBtn?.addEventListener('click', async () => {
     await initialPromise;
 
     const overlay = document.createElement("app-character");
+    document.body.appendChild(overlay);
+    overlay.addEventListener('close', () => {
+        document.body.removeChild(overlay);
+        setTimeout(() => {
+            HAS_ACTIVE_DIALOG = false;
+        }, 300);
+    });
+});
+
+const newWorldBtn = document.getElementById('new-world-btn');
+newWorldBtn?.addEventListener('click', async () => {
+    HAS_ACTIVE_DIALOG = true;
+    await initialPromise;
+
+    const overlay = document.createElement("app-world");
     document.body.appendChild(overlay);
     overlay.addEventListener('close', () => {
         document.body.removeChild(overlay);

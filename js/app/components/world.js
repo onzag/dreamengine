@@ -1,24 +1,24 @@
 import { playCancelSound, playConfirmSound, playHoverSound, playPauseSound, setTempSoundDisable } from '../sound.js';
 
-class CharacterOverlay extends HTMLElement {
+class WorldOverlay extends HTMLElement {
     constructor() {
         super();
         this.root = this.attachShadow({ mode: 'open' });
 
-        this.currentCharacterId = "";
-        this.currentCharacterNamespace = "";
+        this.currentWorldId = "";
+        this.currentWorldNamespace = "";
     }
 
     async connectedCallback() {
-        this.currentCharacterId = this.getAttribute("character-id") || "";
-        this.currentCharacterNamespace = this.getAttribute("character-namespace") || "";
+        this.currentWorldId = this.getAttribute("world-id") || "";
+        this.currentWorldNamespace = this.getAttribute("world-namespace") || "";
 
-        if (!this.currentCharacterId || !this.currentCharacterNamespace) {
+        if (!this.currentWorldId || !this.currentWorldNamespace) {
             await this.createNewFile();
         }
 
-        if (!this.currentCharacterId || !this.currentCharacterNamespace) {
-            // User cancelled character creation, close the overlay
+        if (!this.currentWorldId || !this.currentWorldNamespace) {
+            // User cancelled world creation, close the overlay
             this.dispatchEvent(new CustomEvent('close'));
             return;
         }
@@ -34,8 +34,6 @@ class CharacterOverlay extends HTMLElement {
 
         // @ts-expect-error
         this.root.querySelector("app-overlay").addEventListener('confirm', () => {
-            // Here you would typically gather any changes made in the UI and save them back to the script file
-            // For this example, we'll just close the overlay
             playConfirmSound();
             setTempSoundDisable();
             this.remove();
@@ -43,18 +41,18 @@ class CharacterOverlay extends HTMLElement {
     }
 
     async createNewFile() {
-        const lastNamespace = localStorage.getItem('lastCharacterNamespace') || '';
+        const lastNamespace = localStorage.getItem('lastWorldNamespace') || '';
 
         return new Promise((resolve) => {
             const dialog = document.createElement('app-dialog');
-            dialog.setAttribute('dialog-title', 'Create New Character Script');
+            dialog.setAttribute('dialog-title', 'Create New World Script');
             dialog.setAttribute('confirmation', 'true');
             dialog.setAttribute('confirm-text', 'Create');
             dialog.setAttribute('cancel-text', 'Cancel');
             dialog.innerHTML = `
                 <app-overlay-input
-                    label="Character Name"
-                    input-placeholder="e.g. my-character"
+                    label="World Name"
+                    input-placeholder="e.g. my-world"
                     input-data-location="name"
                 ></app-overlay-input>
                 <app-overlay-input
@@ -83,11 +81,11 @@ class CharacterOverlay extends HTMLElement {
                 }
 
                 try {
-                    await window.API.newScriptFile(namespace, name, "//@placeholder\n\nengine.exports = {type: \"characters\"}");
+                    await window.API.newScriptFile(namespace, name, "//@placeholder\n\nengine.exports = {type: \"worlds\"}");
                     document.dispatchEvent(new CustomEvent("jsEngineRecreate"));
-                    localStorage.setItem('lastCharacterNamespace', namespace);
-                    this.currentCharacterId = name;
-                    this.currentCharacterNamespace = namespace;
+                    localStorage.setItem('lastWorldNamespace', namespace);
+                    this.currentWorldId = name;
+                    this.currentWorldNamespace = namespace;
                     playConfirmSound();
                 } catch (err) {
                     console.error('Failed to create script file:', err);
@@ -125,10 +123,10 @@ class CharacterOverlay extends HTMLElement {
     render() {
         this.root.innerHTML = `
             <style>
-                @import "./components/character.css";
+                @import "./components/world.css";
             </style>
             <app-overlay
-                overlay-title="Working on: ${(this.currentCharacterNamespace.replace("@", "(System|ReadOnly) ") + " / " + this.currentCharacterId).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}"
+                overlay-title="Working on: ${(this.currentWorldNamespace.replace("@", "(System|ReadOnly) ") + " / " + this.currentWorldId).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}"
                 confirm-text="Apply Changes"
                 cancel-text="Go Back"
             >
@@ -138,4 +136,4 @@ class CharacterOverlay extends HTMLElement {
     }
 }
 
-customElements.define('app-character', CharacterOverlay);
+customElements.define('app-world', WorldOverlay);
