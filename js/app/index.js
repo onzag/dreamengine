@@ -7,6 +7,7 @@ import './components/world.js';
 import './components/manage.js';
 import './components/license.js';
 import './components/other-attributions.js';
+import './components/play.js';
 
 import { EngineWorkerClient } from "../worker-sandbox/client.js";
 
@@ -98,6 +99,20 @@ openSettingsBtn?.addEventListener('click', async () => {
     });
 });
 
+
+const playBtn = document.getElementById('play-btn');
+playBtn?.addEventListener('click', async () => {
+    HAS_ACTIVE_DIALOG = true;
+    await initialPromise;
+    const overlay = document.createElement('app-play');
+    document.body.appendChild(overlay);
+    overlay.addEventListener('cancel', () => {
+        document.body.removeChild(overlay);
+        setTimeout(() => {
+            HAS_ACTIVE_DIALOG = false;
+        }, 300);
+    });
+});
 
 const manageBtn = document.getElementById('manage-btn');
 manageBtn?.addEventListener('click', async () => {
