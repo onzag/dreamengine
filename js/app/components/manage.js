@@ -6,7 +6,7 @@ import "./manage/scripts.js";
 const MANAGE_SECTIONS = [
     { title: 'Characters' },
     { title: 'Worlds' },
-    { title: 'Custom Scripts' },
+    { title: 'Other Scripts' },
 ];
 
 class ManageOverlay extends HTMLElement {

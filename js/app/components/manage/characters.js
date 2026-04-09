@@ -1,41 +1,68 @@
 import { playCancelSound, playConfirmSound, playHoverSound } from '../../sound.js';
+import "../profile-image.js";
+
+/**
+ * @param {string} namespace 
+ * @returns {string}
+ */
+function namespaceDisplayer(namespace) {
+    if (namespace.startsWith('@')) {
+        return namespace.slice(1);
+    }
+    return namespace;
+}
+
+/**
+ * @param {string} namespace
+ * @returns {string}
+ */
+function namespaceHeaderDisplay(namespace) {
+    if (!namespace) return '';
+    const isSystem = namespace.startsWith('@');
+    const name = namespaceDisplayer(namespace);
+    return isSystem ? `/ (System) ${name}` : `/ ${name}`;
+}
+
+/**
+ * @param {string} name
+ * @returns {string}
+ */
+function formatName(name) {
+    return name.replace(/[-_]/g, match => `<wbr><span class="separator">${match}</span>`);
+}
 
 class AppManageCharacters extends HTMLElement {
     constructor() {
         super();
         this.root = this.attachShadow({ mode: 'open' });
 
-        this.currentCharacterGroup = localStorage.getItem('lastCharacterGroup') || "";
+        this.currentNamespace = localStorage.getItem('lastCharacterNamespace') || "";
     }
 
     connectedCallback() {
         this.render();
 
-        if (this.currentCharacterGroup) {
+        if (this.currentNamespace) {
+            // @ts-expect-error
+            this.root.querySelector('.namespace-name').textContent = namespaceHeaderDisplay(this.currentNamespace);
+        }
+
+        if (this.currentNamespace) {
             this.reloadCharacters();
             // @ts-expect-error
             this.root.querySelector('.go-back-button-container').classList.remove('hidden');
         } else {
-            this.reloadCharacterGroups();
+            this.reloadCharacterNamespaces();
             // @ts-expect-error
             this.root.querySelector('.go-back-button-container').classList.add('hidden');
         }
 
-        // @ts-expect-error
-        this.root.querySelector('app-overlay-button').addEventListener('click', async () => {
-            const rs = await window.electronAPI.createEmptyCharacterFile();
-            const overlay = document.createElement("app-character");
-            overlay.setAttribute("character-group", rs.group);
-            overlay.setAttribute("character-file", rs.characterFile);
-            document.body.appendChild(overlay);
-            overlay.addEventListener('close', () => {
-                document.body.removeChild(overlay);
-                this.reloadCurrentLocation();
-            });
+        this.root.querySelector('app-overlay-button')?.addEventListener('click', async () => {
+            // TODO new character
         });
         // @ts-expect-error
         this.root.querySelector('.go-back-button-container').addEventListener('click', () => {
-            this.onGoBackCharacterGroups();
+            this.onGoBackCharacterNamespaces();
         });
         // @ts-expect-error
         this.root.querySelector('.go-back-button-container').addEventListener('mouseenter', () => {
@@ -44,41 +71,44 @@ class AppManageCharacters extends HTMLElement {
     }
 
     reloadCurrentLocation() {
-        if (this.currentCharacterGroup) {
+        if (this.currentNamespace) {
             this.reloadCharacters();
         } else {
-            this.reloadCharacterGroups();
+            this.reloadCharacterNamespaces();
         }
     }
 
     async reloadCharacters() {
         // Logic to reload character list can be added here
-        const charactersForGroup = await window.electronAPI.listCharacterFiles(this.currentCharacterGroup);
-        
-        const characterElements = charactersForGroup.map(characterFile => `
-                <div class="character-item" data-character-file="${characterFile.file}" data-character-group="${this.currentCharacterGroup}">
+        const infoMap = await window.ENGINE_WORKER_CLIENT.jsEngineGetInfoMap();
+
+        const infoMapForNamespace = Object.values(infoMap).filter(info => info.namespace === this.currentNamespace && info.type === "characters");
+
+        const characterElements = infoMapForNamespace.map(characterFile => `
+                <div class="character-item" data-character-file="${characterFile.id}" data-character-group="${this.currentNamespace}">
                     <div class="character-icon">
-                        <app-profile-image image-url="character-assets/${characterFile.file}/profile"></app-profile-image>
+                        <app-profile-image image-url="assets/${this.currentNamespace}/${characterFile.id}/profile"></app-profile-image>
                     </div>
                     <div class="character-name">
-                        ${characterFile.name}
+                        ${formatName(characterFile.id)}
                     </div>
                 </div>
             `).join('');
-            // @ts-expect-error
-            this.root.querySelector('.character-list').innerHTML = characterElements;
-            this.root.querySelectorAll('.character-item').forEach(item => {
-                item.addEventListener('click', (e) => this.onCharacterSelected(e));
-                item.addEventListener('mouseenter', (e) => {
-                    playHoverSound();
-                });
+        // @ts-expect-error
+        this.root.querySelector('.character-list').innerHTML = characterElements;
+        this.root.querySelectorAll('.character-item').forEach(item => {
+            item.addEventListener('click', (e) => this.onCharacterSelected(e));
+            item.addEventListener('mouseenter', (e) => {
+                playHoverSound();
             });
+        });
     }
 
-    async reloadCharacterGroups() {
+    async reloadCharacterNamespaces() {
         // Logic to reload character groups can be added here
-        const groups = await window.electronAPI.listCharacterGroups();
-        if (groups.length === 0) {
+        const infoMap = await window.ENGINE_WORKER_CLIENT.jsEngineGetInfoMap();
+        const allNamespaces = Array.from(new Set(Object.values(infoMap).filter(info => info.type === "characters").map(info => info.namespace)));
+        if (allNamespaces.length === 0) {
             const hasNewButton = this.getAttribute("no-new-button") !== "true";
 
             // @ts-expect-error
@@ -89,23 +119,24 @@ class AppManageCharacters extends HTMLElement {
             `;
             return;
         } else {
-            const groupElements = groups.map(group => `
-                <div class="character-group-item" data-character-group="${group}">
+            const namespaceElements = allNamespaces.map(namespace => `
+                <div class="character-group-item" data-character-group="${namespace}">
                     <div class="character-group-icon">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640">
                             <path fill="#ccc" d="M128 464L512 464C520.8 464 528 456.8 528 448L528 208C528 199.2 520.8 192 512 192L362.7 192C345.4 192 328.5 186.4 314.7 176L276.3 147.2C273.5 145.1 270.2 144 266.7 144L128 144C119.2 144 112 151.2 112 160L112 448C112 456.8 119.2 464 128 464zM512 512L128 512C92.7 512 64 483.3 64 448L64 160C64 124.7 92.7 96 128 96L266.7 96C280.5 96 294 100.5 305.1 108.8L343.5 137.6C349 141.8 355.8 144 362.7 144L512 144C547.3 144 576 172.7 576 208L576 448C576 483.3 547.3 512 512 512z"/>
                         </svg>
                     </div>
+                    ${namespace.startsWith('@') ? '<div class="system-label">System</div>' : ''}
                     <div class="character-group-name">
-                        ${group}
+                        ${namespaceDisplayer(namespace)}
                     </div>
                 </div>
             `).join('');
             // @ts-expect-error
-            this.root.querySelector('.character-list').innerHTML = groupElements;
+            this.root.querySelector('.character-list').innerHTML = namespaceElements;
 
             this.root.querySelectorAll('.character-group-item').forEach(item => {
-                item.addEventListener('click', (e) => this.onCharacterGroupSelected(e));
+                item.addEventListener('click', (e) => this.onCharacterNamespaceSelected(e));
                 item.addEventListener('mouseenter', (e) => {
                     playHoverSound();
                     // @ts-expect-error
@@ -123,23 +154,27 @@ class AppManageCharacters extends HTMLElement {
      * 
      * @param {Event} e 
      */
-    onCharacterGroupSelected(e) {
+    onCharacterNamespaceSelected(e) {
         // @ts-expect-error
         this.root.querySelector('.go-back-button-container').classList.remove('hidden');
         // @ts-expect-error
-        this.currentCharacterGroup = e.currentTarget.dataset.characterGroup;
-        localStorage.setItem('lastCharacterGroup', this.currentCharacterGroup);
+        this.currentNamespace = e.currentTarget.dataset.characterGroup;
+        // @ts-expect-error
+        this.root.querySelector('.namespace-name').textContent = namespaceHeaderDisplay(this.currentNamespace);
+        localStorage.setItem('lastCharacterNamespace', this.currentNamespace);
         playConfirmSound();
         this.reloadCharacters();
     }
 
-    onGoBackCharacterGroups() {
+    onGoBackCharacterNamespaces() {
         // @ts-expect-error
         this.root.querySelector('.go-back-button-container').classList.add('hidden');
-        this.currentCharacterGroup = "";
-        localStorage.removeItem('lastCharacterGroup');
+        this.currentNamespace = "";
+        localStorage.removeItem('lastCharacterNamespace');
         playCancelSound();
-        this.reloadCharacterGroups();
+        this.reloadCharacterNamespaces();
+        // @ts-expect-error
+        this.root.querySelector('.namespace-name').textContent = "";
     }
 
     /**
@@ -199,9 +234,20 @@ class AppManageCharacters extends HTMLElement {
                 }
                 .character-group-name, .character-name {
                     font-size: 4vh;
+                    overflow-wrap: break-word;
+                    word-break: break-word;
+                    max-width: 30vh;
+                    text-align: center;
                 }
-                .character-group-item:hover .character-group-name, .character-item:hover .character-name {
+                .separator {
+                    opacity: 0.2;
+                }
+                .character-group-item:hover .character-group-name, .character-item:hover .character-name, .character-group-item:hover .system-label {
                     color: #FF6B6B;
+                }
+                .system-label {
+                    font-size: 2vh;
+                    opacity: 0.7;
                 }
                 .character-item:hover app-profile-image::part(profile-image-container) {
                     box-shadow: 0 0 2vh #FF6B6B;
@@ -221,8 +267,8 @@ class AppManageCharacters extends HTMLElement {
             </style>
             ${hasNewButton ? '<app-overlay-button play-sound-on-click="false">New Character</app-overlay-button>' : ''}
             <div class="characters-container">
-                <h2>Your Characters</h2>
-                <div class="go-back-button-container">&lt; Back to Groups</div>
+                <h2><span>Characters</span>&nbsp;<span class="namespace-name"></span></h2>
+                <div class="go-back-button-container">&lt; Back to Namespaces</div>
                 <div class="character-list">
                     <div class="no-characters-placeholder">
                         You have no characters yet.${hasNewButton ? ' Click "New Character" to create one.' : ''}

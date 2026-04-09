@@ -22,9 +22,9 @@ declare interface ElectronAPI {
 declare global {
   interface Window {
     API: ElectronAPI;
-    DREAMENGINE_HOME?: string;
-    DREAMENGINE_DEFAULT_SCRIPTS_HOME?: string;
-    ENGINE_WORKER_CLIENT?: EngineWorkerClient;
+    DREAMENGINE_HOME: string;
+    DREAMENGINE_DEFAULT_SCRIPTS_HOME: string;
+    ENGINE_WORKER_CLIENT: EngineWorkerClient;
   }
 }
 

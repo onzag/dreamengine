@@ -3,7 +3,7 @@ import './components/dialog.js';
 import './components/overlay.js';
 import './components/settings.js';
 // import './components/character.js';
-// import './components/manage.js';
+import './components/manage.js';
 import './components/license.js';
 import './components/other-attributions.js';
 

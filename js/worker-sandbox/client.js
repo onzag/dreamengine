@@ -152,9 +152,20 @@ export class EngineWorkerClient {
     jsEngineUnload() { return this.#call("jsEngineUnload"); }
     /** @param {{ characterName: string }} args */
     jsEngineOnInferenceExecuted(args) { return this.#call("jsEngineOnInferenceExecuted", args); }
-    jsEngineGetInfoMap() { return this.#call("jsEngineGetInfoMap"); }
-    /** @param {{ scripts: Array<{namespace: string, id: string}> }} args */
-    jsEngineGetInfoMapForScripts(args) { return this.#call("jsEngineGetInfoMapForScripts", args); }
+    /**
+     * 
+     * @returns {Promise<Record<string, { id: string, namespace: string, description: string, type: string, exposeProperties: DEScriptExposeProperties }>>}
+     */
+    jsEngineGetInfoMap() {
+        return this.#call("jsEngineGetInfoMap");
+    }
+    /**
+     * @param {{ scripts: Array<{namespace: string, id: string}> }} args
+     * @returns {Promise<Record<string, { id: string, namespace: string, description: string, type: string, exposeProperties: DEScriptExposeProperties }>>}
+     */
+    jsEngineGetInfoMapForScripts(args) {
+        return this.#call("jsEngineGetInfoMapForScripts", args);
+    }
     /**
      * @param {{
      *    host: string,
