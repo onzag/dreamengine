@@ -1,4 +1,4 @@
-import { playCancelSound, playConfirmSound, playHoverSound } from '../sound.js';
+import { playCancelSound, playConfirmSound, playHoverSound, startAmbienceWithFade, stopAmbienceWithFade } from '../sound.js';
 
 class PlayOverlay extends HTMLElement {
     constructor() {
@@ -7,7 +7,7 @@ class PlayOverlay extends HTMLElement {
         this.onDocumentKeydown = this.onDocumentKeydown.bind(this);
     }
 
-    connectedCallback() {
+    async connectedCallback() {
         this.render();
 
         // hide stars when overlay is active (delayed to avoid flicker)
@@ -36,6 +36,9 @@ class PlayOverlay extends HTMLElement {
                 this.close();
             });
         }
+
+        await stopAmbienceWithFade(1000, 3);
+        await startAmbienceWithFade(['./sounds/awakening-ambience.mp3'], 1000, 1);
     }
 
     /**
@@ -59,10 +62,13 @@ class PlayOverlay extends HTMLElement {
         this.dispatchEvent(new CustomEvent('cancel'));
     }
 
-    disconnectedCallback() {
+    async disconnectedCallback() {
         document.removeEventListener('keydown', this.onDocumentKeydown);
         // @ts-expect-error
         document.querySelector('.sky').style.display = 'block';
+
+        await stopAmbienceWithFade(1000, 1);
+        await startAmbienceWithFade(['./sounds/dream-ambience.mp3'], 1000, 3);
     }
 
     render() {
