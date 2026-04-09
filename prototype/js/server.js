@@ -70,10 +70,10 @@ async function generateCompletion(data, onToken, onDone, onError) {
     let completion = null;
     try {
         // Create context and completion for raw text
-        // context = await MODEL.createContext({
-        //     //contextSize: 1024 * 8,
-        // });
-        context = await MODEL.createContext();
+        context = await MODEL.createContext({
+            contextSize: 1024 * 8,
+        });
+        //context = await MODEL.createContext();
         completion = new LlamaCompletion({
             contextSequence: context.getSequence()
         });

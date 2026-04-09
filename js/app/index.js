@@ -1,9 +1,11 @@
 // import dialog
 import './components/dialog.js';
 import './components/overlay.js';
-import './components/settings.js';
-import './components/character.js';
-import './components/manage.js';
+// import './components/settings.js';
+// import './components/character.js';
+// import './components/manage.js';
+import './components/license.js';
+import './components/other-attributions.js';
 
 import { EngineWorkerClient } from "../worker-sandbox/client.js";
 
@@ -102,6 +104,34 @@ footerLinks.forEach(link => {
   link.addEventListener('click', function() {
     playConfirmSound();
   });
+});
+
+const licenseLink = document.getElementById('license-link');
+licenseLink?.addEventListener('click', async () => {
+    HAS_ACTIVE_DIALOG = true;
+    await initialPromise;
+    const overlay = document.createElement("app-license");
+    document.body.appendChild(overlay);
+    overlay.addEventListener('close', () => {
+        document.body.removeChild(overlay);
+        setTimeout(() => {
+            HAS_ACTIVE_DIALOG = false;
+        }, 300);
+    });
+});
+
+const otherAttributionsLink = document.getElementById('attributions-link');
+otherAttributionsLink?.addEventListener('click', async () => {
+    HAS_ACTIVE_DIALOG = true;
+    await initialPromise;
+    const overlay = document.createElement("app-other-attributions");
+    document.body.appendChild(overlay);
+    overlay.addEventListener('close', () => {
+        document.body.removeChild(overlay);
+        setTimeout(() => {
+            HAS_ACTIVE_DIALOG = false;
+        }, 300);
+    });
 });
 
 // Toggle full screen on alt+Enter
