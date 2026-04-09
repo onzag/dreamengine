@@ -195,6 +195,13 @@ export class DEJSEngine {
         }
     }
 
+    async recreate() {
+        console.log("Recreating JS engine...");
+        const newCache = {};
+        const newOrder = [];
+        const newDependencyTree = {};
+    }
+
     async preloadAllScripts() {
         const scripts = await this.listResolver();
         this.__panthomImports = true;

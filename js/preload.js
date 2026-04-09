@@ -21,6 +21,33 @@ contextBridge.exposeInMainWorld('API', {
         return result;
     },
     /**
+     * @param {string} namespace
+     * @param {string} id
+     * @param {string} [header]
+     * @returns {Promise<void>}
+     */
+    newScriptFile: (namespace, id, header) => {
+        return ipcRenderer.invoke('newScriptFile', namespace, id, header);
+    },
+    /**
+     * @param {string} oldNamespace
+     * @param {string} oldId
+     * @param {string} newNamespace
+     * @param {string} newId
+     * @returns {Promise<void>}
+     */
+    moveScriptFile: (oldNamespace, oldId, newNamespace, newId) => {
+        return ipcRenderer.invoke('moveScriptFile', oldNamespace, oldId, newNamespace, newId);
+    },
+    /**
+     * @param {string} namespace
+     * @param {string} id
+     * @returns {Promise<void>}
+     */
+    deleteScriptFile: (namespace, id) => {
+        return ipcRenderer.invoke('deleteScriptFile', namespace, id);
+    },
+    /**
      * 
      * @param {string} key 
      * @returns {Promise<any>}

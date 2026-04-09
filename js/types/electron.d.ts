@@ -10,6 +10,9 @@ declare interface ElectronAPI {
   closeApp(): void;
 
   listScriptFiles(): Promise<Array<{ id: string; namespace: string; }>>;
+  newScriptFile(namespace: string, id: string, header?: string): Promise<void>;
+  moveScriptFile(oldNamespace: string, oldId: string, newNamespace: string, newId: string): Promise<void>;
+  deleteScriptFile(namespace: string, id: string): Promise<void>;
 
   getConfigValue(key: string): Promise<any>;
   setConfigValue(key: string, value: any): Promise<void>;

@@ -1,4 +1,4 @@
-import { playCancelSound, playConfirmSound, playHoverSound, playPauseSound } from '../sound.js';
+import { playCancelSound, playConfirmSound, playHoverSound } from '../sound.js';
 
 class Overlay extends HTMLElement {
     constructor() {
@@ -49,6 +49,16 @@ class Overlay extends HTMLElement {
      */
     onDocumentKeydown(e) {
         if (e.key === "Escape") {
+            if (document.querySelector('app-dialog')) return;
+            // Find the host element that contains this overlay in its shadow DOM
+            let host = this;
+            while (host.getRootNode() !== document) {
+                // @ts-ignore
+                host = host.getRootNode().host;
+            }
+            // Check if this host is the last child of body (topmost overlay)
+            const bodyChildren = Array.from(document.body.children);
+            if (bodyChildren[bodyChildren.length - 1] !== host) return;
             this.onCloseOverlay();
         }
     }

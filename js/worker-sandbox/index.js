@@ -180,6 +180,11 @@ const handlers = {
         return { ok: true };
     },
 
+    async jsEngineRecreate() {
+        await jsEngine.recreate();
+        return { ok: true };
+    },
+
     async jsEngineOnInferenceExecuted({ characterName }) {
         await jsEngine.onInferenceExecuted(characterName);
         return { ok: true };

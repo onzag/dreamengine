@@ -2,7 +2,7 @@
 import './components/dialog.js';
 import './components/overlay.js';
 import './components/settings.js';
-// import './components/character.js';
+import './components/character.js';
 import './components/manage.js';
 import './components/license.js';
 import './components/other-attributions.js';
@@ -57,6 +57,15 @@ const newCharacterBtn = document.getElementById('new-character-btn');
 newCharacterBtn?.addEventListener('click', async () => {
     HAS_ACTIVE_DIALOG = true;
     await initialPromise;
+
+    const overlay = document.createElement("app-character");
+    document.body.appendChild(overlay);
+    overlay.addEventListener('close', () => {
+        document.body.removeChild(overlay);
+        setTimeout(() => {
+            HAS_ACTIVE_DIALOG = false;
+        }, 300);
+    });
 });
 
 const openSettingsBtn = document.getElementById('open-settings-btn');
@@ -339,6 +348,15 @@ client.ready.then(async () => {
         scripts: scriptFiles,
     });
     await client.jsEnginePreloadAllScripts();
+
+    document.addEventListener("jsEngineRecreate", async () => {
+        const scriptFiles = await window.API.listScriptFiles();
+        await client.jsEngineRecreate();
+        await client.setScriptList({
+            scripts: scriptFiles,
+        });
+        await client.jsEnginePreloadAllScripts();
+    });
 
     // Engine is ready to be used at this point
     WORKER_READY = true;

@@ -6,25 +6,36 @@ const confirmSound = /** @type {HTMLAudioElement} */ (document.getElementById('c
 let fxEnabled = (localStorage.getItem('fxEnabled') || "true") === 'true';
 let ambienceEnabled = (localStorage.getItem('ambienceEnabled') || "true") === 'true';
 
+let TEMP_SOUND_DISABLE = false;
+
+/**
+ */
+function setTempSoundDisable() {
+  TEMP_SOUND_DISABLE = true;
+  setTimeout(() => {
+    TEMP_SOUND_DISABLE = false;
+  }, 300);
+}
+
 /**
  * @type Array<string> | null
  */
 let currentAmbience = null;
 
 function playCancelSound() {
-  if (!fxEnabled) return;
+  if (!fxEnabled || TEMP_SOUND_DISABLE) return;
   cancelSound.currentTime = 0;
   cancelSound.play().catch(err => console.log('Cancel sound play failed:', err));
 }
 
 function playPauseSound() {
-  if (!fxEnabled) return;
+  if (!fxEnabled || TEMP_SOUND_DISABLE) return;
   pauseSound.currentTime = 0;
   pauseSound.play().catch(err => console.log('Pause sound play failed:', err));
 }
 
 function playHoverSound() {
-  if (!fxEnabled) return;
+  if (!fxEnabled || TEMP_SOUND_DISABLE) return;
   // check if confirm, pause or cancel sound is playing and is just
   const unpausedSound = [confirmSound, pauseSound, cancelSound].find(sound => !sound.paused);
   if (unpausedSound) {
@@ -38,7 +49,7 @@ function playHoverSound() {
 }
 
 function playConfirmSound() {
-  if (!fxEnabled) return;
+  if (!fxEnabled || TEMP_SOUND_DISABLE) return;
   confirmSound.currentTime = 0;
   confirmSound.play().catch(err => console.log('Confirm sound play failed:', err));
 }
@@ -220,5 +231,5 @@ async function startAmbienceWithFade(src, durationMs, volume = 0.75) {
 export {
   playCancelSound, playPauseSound, playHoverSound, playConfirmSound, toggleFX,
   toggleAmbience, isFXEnabled, isAmbienceEnabled, playAmbience, stopAmbience,
-  stopAmbienceWithFade, startAmbienceWithFade
+  stopAmbienceWithFade, startAmbienceWithFade, setTempSoundDisable
 };

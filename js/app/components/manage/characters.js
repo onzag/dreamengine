@@ -58,7 +58,12 @@ class AppManageCharacters extends HTMLElement {
         }
 
         this.root.querySelector('app-overlay-button')?.addEventListener('click', async () => {
-            // TODO new character
+            const overlay = document.createElement("app-character");
+            document.body.appendChild(overlay);
+            overlay.addEventListener('close', () => {
+                document.body.removeChild(overlay);
+                this.reloadCurrentLocation();
+            });
         });
         // @ts-expect-error
         this.root.querySelector('.go-back-button-container').addEventListener('click', () => {
@@ -85,7 +90,7 @@ class AppManageCharacters extends HTMLElement {
         const infoMapForNamespace = Object.values(infoMap).filter(info => info.namespace === this.currentNamespace && info.type === "characters");
 
         const characterElements = infoMapForNamespace.map(characterFile => `
-                <div class="character-item" data-character-file="${characterFile.id}" data-character-group="${this.currentNamespace}">
+                <div class="character-item" data-character-id="${characterFile.id}" data-character-namespace="${this.currentNamespace}">
                     <div class="character-icon">
                         <app-profile-image image-url="assets/${this.currentNamespace}/${characterFile.id}/profile"></app-profile-image>
                     </div>
@@ -187,9 +192,9 @@ class AppManageCharacters extends HTMLElement {
             this.dispatchEvent(new CustomEvent('character-selected', {
                 detail: {
                     // @ts-expect-error
-                    characterGroup: e.currentTarget.dataset.characterGroup,
+                    characterNamespace: e.currentTarget.dataset.characterNamespace,
                     // @ts-expect-error
-                    characterFile: e.currentTarget.dataset.characterFile,
+                    characterId: e.currentTarget.dataset.characterId,
                 },
                 bubbles: true,
                 composed: true
@@ -197,13 +202,14 @@ class AppManageCharacters extends HTMLElement {
             return;
         }
         // @ts-expect-error
-        const characterFile = e.currentTarget.dataset.characterFile;
+        const characterId = e.currentTarget.dataset.characterId;
         // @ts-expect-error
-        const characterGroup = e.currentTarget.dataset.characterGroup;
+        const characterNamespace = e.currentTarget.dataset.characterNamespace;
         const overlay = document.createElement("app-character");
-        overlay.setAttribute("character-group", characterGroup);
-        overlay.setAttribute("character-file", characterFile);
+        overlay.setAttribute("character-namespace", characterNamespace);
+        overlay.setAttribute("character-id", characterId);
         document.body.appendChild(overlay);
+        playConfirmSound();
         overlay.addEventListener('close', () => {
             document.body.removeChild(overlay);
             this.reloadCurrentLocation();

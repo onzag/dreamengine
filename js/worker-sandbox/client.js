@@ -148,6 +148,7 @@ export class EngineWorkerClient {
     /** @param {{ scripts: Array<{namespace: string, id: string}> }} args */
     jsEngineImportScripts(args) { return this.#call("jsEngineImportScripts", args); }
     jsEnginePreloadAllScripts() { return this.#call("jsEnginePreloadAllScripts"); }
+    jsEngineRecreate() { return this.#call("jsEngineRecreate"); }
     jsEngineInitialize() { return this.#call("jsEngineInitialize"); }
     jsEngineUnload() { return this.#call("jsEngineUnload"); }
     /** @param {{ characterName: string }} args */

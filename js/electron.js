@@ -174,6 +174,61 @@ ipcMain.handle('listScriptFiles', async (event) => {
     return results;
 });
 
+ipcMain.handle('newScriptFile', async (event, namespace, id, header) => {
+    if (!namespace || !id) {
+        throw new Error("Namespace and ID are required");
+    }
+
+    if (namespace.startsWith('@')) {
+        throw new Error("Namespace cannot start with '@'");
+    }
+
+    const scriptPath = path.join(SCRIPT_FOLDER, namespace, `${id}.js`);
+    if (fs.existsSync(scriptPath)) {
+        throw new Error("Script file already exists");
+    }
+
+    fs.mkdirSync(path.dirname(scriptPath), { recursive: true });
+    fs.writeFileSync(scriptPath, header || ""); // create script with header or empty
+});
+
+ipcMain.handle('moveScriptFile', async (event, oldNamespace, oldId, newNamespace, newId) => {
+    if (!oldNamespace || !oldId || !newNamespace || !newId) {
+        throw new Error("Old namespace, old ID, new namespace, and new ID are required");
+    }
+
+    if (oldNamespace.startsWith('@') || newNamespace.startsWith('@')) {
+        throw new Error("Namespace cannot start with '@'");
+    }
+
+    const oldPath = path.join(SCRIPT_FOLDER, oldNamespace, `${oldId}.js`);
+    const newPath = path.join(SCRIPT_FOLDER, newNamespace, `${newId}.js`);
+    if (!fs.existsSync(oldPath)) {
+        throw new Error("Original script file does not exist");
+    }
+    if (fs.existsSync(newPath)) {
+        throw new Error("New script file already exists");
+    }
+    fs.renameSync(oldPath, newPath);
+});
+
+ipcMain.handle('deleteScriptFile', async (event, namespace, id) => {
+    if (!namespace || !id) {
+        throw new Error("Namespace and ID are required");
+    }
+
+    if (namespace.startsWith('@')) {
+        throw new Error("Namespace cannot start with '@'");
+    }
+
+    const scriptPath = path.join(SCRIPT_FOLDER, namespace, `${id}.js`);
+    if (!fs.existsSync(scriptPath)) {
+        throw new Error("Script file does not exist");
+    }
+
+    fs.unlinkSync(scriptPath);
+});
+
 ipcMain.handle('getConfigValue', async (event, key) => {
     const keys = key.split('.');
     let current = config;
