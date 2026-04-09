@@ -25,6 +25,7 @@ const DREAMENGINE_HOME = buildDreamEngineHomeSync();
 const config = JSON.parse(fs.readFileSync(path.join(DREAMENGINE_HOME, 'config.json')));
 
 async function saveConfig() {
+    console.log("Saving config at", path.join(DREAMENGINE_HOME, 'config.json'));
     await fs.promises.writeFile(path.join(DREAMENGINE_HOME, 'config.json'), JSON.stringify(config));
 }
 
@@ -174,11 +175,28 @@ ipcMain.handle('listScriptFiles', async (event) => {
 });
 
 ipcMain.handle('getConfigValue', async (event, key) => {
-    return config[key] ?? null;
+    const keys = key.split('.');
+    let current = config;
+    for (const k of keys) {
+        if (current == null || typeof current !== 'object') return null;
+        current = current[k];
+    }
+    return current ?? null;
 });
 
 ipcMain.handle('setConfigValue', async (event, key, value) => {
-    config[key] = value;
+    const keys = key.split('.');
+    let current = config;
+    for (let i = 0; i < keys.length - 1; i++) {
+        if (current[keys[i]] == null || typeof current[keys[i]] !== 'object') {
+            current[keys[i]] = {};
+        }
+        current = current[keys[i]];
+    }
+    current[keys[keys.length - 1]] = value;
+});
+
+ipcMain.handle('saveConfig', async () => {
     await saveConfig();
 });
 
@@ -187,4 +205,47 @@ ipcMain.handle('getDreamEnginePaths', () => {
         DREAMENGINE_HOME,
         path.join(__dirname, 'default-scripts'),
     ];
+});
+
+ipcMain.handle('uploadFileToDEPath', async (event, dePath, file) => {
+    if (!file) {
+        throw new Error("No file provided for upload");
+    }
+    // ensure no directory traversal
+    if (dePath.includes('..')) {
+        throw new Error("Invalid path");
+    }
+    const destPath = path.join(DREAMENGINE_HOME, dePath);
+    const arrayBuffer = await file.arrayBuffer();
+    await fs.promises.writeFile(destPath, Buffer.from(arrayBuffer));
+    return true;
+});
+
+ipcMain.handle('uploadBytesToDEPath', async (event, dePath, bytes) => {
+    if (!bytes) {
+        throw new Error('No byte data provided for upload');
+    }
+    if (typeof dePath !== 'string' || dePath.length === 0) {
+        throw new Error('Invalid destination path');
+    }
+    if (dePath.includes('..')) {
+        throw new Error('Invalid path');
+    }
+    if (dePath !== "profile" && !dePath.startsWith("characters-assets/")) {
+        throw new Error('Unauthorized path for upload');
+    }
+    if (dePath.endsWith(".json") || dePath.endsWith(".js")) {
+        throw new Error('Uploading JSON or JS files is not allowed');
+    }
+    const destPath = path.join(DREAMENGINE_HOME, dePath);
+    let buffer;
+    if (bytes instanceof Uint8Array) {
+        buffer = Buffer.from(bytes);
+    } else if (bytes instanceof ArrayBuffer) {
+        buffer = Buffer.from(new Uint8Array(bytes));
+    } else {
+        throw new Error('Unsupported byte payload type');
+    }
+    await fs.promises.writeFile(destPath, buffer);
+    return true;
 });

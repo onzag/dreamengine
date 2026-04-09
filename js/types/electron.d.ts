@@ -13,8 +13,10 @@ declare interface ElectronAPI {
 
   getConfigValue(key: string): Promise<any>;
   setConfigValue(key: string, value: any): Promise<void>;
+  saveConfig(): Promise<void>;
 
   getDreamEnginePaths(): Promise<string[]>;
+  uploadFileToDEPath(dePath: string, file: File | Blob): Promise<boolean>;
 }
 
 declare global {

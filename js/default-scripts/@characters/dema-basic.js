@@ -99,16 +99,18 @@ engine.exports = {
             state: {
                 IS_ROBOT: true,
             },
+            attractions: [],
+            species: "robot",
+            speciesType: "humanoid",
+            race: null,
+            groupBelonging: [],
             socialSimulation: {
-                attractions: [],
                 attractiveness: 0.5,
                 charisma: 0.3,
                 gossipTendency: 0.5,
                 familyTies: {},
                 dislikes: [],
                 likes: [],
-                species: "robot",
-                speciesType: "humanoid",
             },
         }, {
             type: "2d_ace_no_family",

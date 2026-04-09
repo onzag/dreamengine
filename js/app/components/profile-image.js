@@ -63,7 +63,7 @@ class ProfileImage extends HTMLElement {
             return;
         }
         const imageUrl = this.getAttribute('image-url') || '';
-        await window.electronAPI.uploadFileToDEPath(imageUrl, this.currentFileObject);
+        await window.API.uploadFileToDEPath(imageUrl, this.currentFileObject);
     }
 
     render() {

@@ -107,6 +107,23 @@ declare interface DEMinimalCharacterReference {
      * 0.5 to 1 is recommended for characters that grow fast, like shonen manga protagonists
      */
     powerGrowthRate: number;
+
+    /**
+     * Species of the character, used for social simulation to determine interactions and preferences based on species, for example, a human character may have different preferences and interactions with other human characters compared to non-human characters, this can also be used to create interesting dynamics and relationships between characters of different species
+     */
+    species: string;
+    /**
+     * Type of species of the character
+     */
+    speciesType: "humanoid" | "feral" | "animal";
+    /**
+     * The race of the character, used for social simulation to determine interactions and preferences based on race
+     */
+    race: string | null;
+    /**
+     * List of groups or social categories that this characters belongs to
+     */
+    groupBelonging: string[];
 }
 
 declare interface DEActionPromptInjection<TemplateType> {
@@ -1132,8 +1149,28 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
      */
     heroism: number;
 
+    // TODO implement all these from social simulation in bonds and talk to generate the internal description
+    // currently it is not done, also species, speciesType, groupBelonging and race are taken to the MinimalCharacterReference too
     /**
-     * Mostly relevant for the non-LLM powered social simulation system
+     * List of things this character is attracted to
+     */
+    attractions: DEAttraction[];
+    /**
+     * List of species that this character dislikes
+     */
+    dislikesSpecies?: string[] | null;
+    /**
+     * List of races that this character dislikes,
+     * yes you can make the character racist
+     */
+    dislikesRaces?: string[] | null;
+    /**
+     * List of groups or social categories that this character dislikes
+     */
+    dislikesGroups?: string[] | null;
+
+    /**
+     * Relevant only for the non-LLM powered social simulation system
      * which uses more basic rules and mechanics to simulate social interactions and relationships between characters in a more deterministic way, without relying on LLM reasoning for every single interaction
      * 
      * It may also inject extra information into the character's general description to help the LLM reason about their social preferences and attractions
@@ -1156,39 +1193,6 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
          * A number from 0 to 1 that represents how charismatic the character is, higher means more charismatic and more likely to influence other characters and have strong social interactions, this is useful for characters that are meant to be leaders or have a strong social presence, it can also affect how other characters perceive them and interact with them in social situations
          */
         charisma: number;
-        /**
-         * List of things this character is attracted to
-         */
-        attractions: DEAttraction[];
-        /**
-         * Species of the character, used for social simulation to determine interactions and preferences based on species, for example, a human character may have different preferences and interactions with other human characters compared to non-human characters, this can also be used to create interesting dynamics and relationships between characters of different species
-         */
-        species: string;
-        /**
-         * Type of species of the character
-         */
-        speciesType: "humanoid" | "feral" | "animal";
-        /**
-         * List of species that this character dislikes
-         */
-        dislikesSpecies?: string[] | null;
-        /**
-         * The race of the character, used for social simulation to determine interactions and preferences based on race
-         */
-        race?: string;
-        /**
-         * List of races that this character dislikes,
-         * yes you can make the character racist
-         */
-        dislikesRaces?: string[] | null;
-        /**
-         * List of groups or social categories that this characters belongs to
-         */
-        groupBelonging?: string[] | null;
-        /**
-         * List of groups or social categories that this character dislikes
-         */
-        dislikesGroups?: string[] | null;
         /**
          * Allows characters to have sex with each other once they reach a certain bond 2 level
          */

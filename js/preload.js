@@ -40,4 +40,18 @@ contextBridge.exposeInMainWorld('API', {
     getDreamEnginePaths: () => {
         return ipcRenderer.invoke('getDreamEnginePaths');
     },
+    saveConfig: () => {
+        return ipcRenderer.invoke('saveConfig');
+    },
+    /**
+     * 
+     * @param {string} dePath 
+     * @param {File} file 
+     * @returns 
+     */
+    uploadFileToDEPath: async (dePath, file) => {
+        const arrayBuffer = await file.arrayBuffer();
+        const uint8Array = new Uint8Array(arrayBuffer);
+        return ipcRenderer.invoke('uploadBytesToDEPath', dePath, uint8Array);
+    },
 });

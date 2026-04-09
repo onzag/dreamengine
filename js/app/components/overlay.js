@@ -289,10 +289,13 @@ class OverlayInput extends HTMLElement {
 
         const inputElement = this.root.querySelector('input, textarea');
 
+        const dataLocation = this.getAttribute('input-data-location');
+        const dataValue = dataLocation ? await window.API.getConfigValue(dataLocation) : null;
+
         // @ts-expect-error
         inputElement.addEventListener('input', this.checkValue);
 
-        if (this.getAttribute("input-default-value")) {
+        if (dataValue === null && this.getAttribute("input-default-value")) {
             if (isNumber) {
                 // @ts-expect-error
                 const numericValue = parseFloat(this.getAttribute("input-default-value"));
@@ -312,6 +315,24 @@ class OverlayInput extends HTMLElement {
             }
             // @ts-expect-error
             this.originalValue = this.getAttribute("input-default-value");
+        } else if (dataValue !== null) {
+            if (isNumber) {
+                if (isPercentage) {
+                    // @ts-expect-error
+                    inputElement.value = (dataValue * 100).toString();
+                } else if (isInteger) {
+                    // @ts-expect-error
+                    inputElement.value = Math.round(numericValue).toString();
+                } else {
+                    // @ts-expect-error
+                    inputElement.value = dataValue.toString();
+                }
+            } else {
+                // @ts-expect-error
+                inputElement.value = dataValue.toString();
+            }
+
+            this.originalValue = dataValue;
         }
 
         const textarea = this.root.querySelector('textarea');
@@ -332,6 +353,14 @@ class OverlayInput extends HTMLElement {
 
         const input = this.root.querySelector('input');
         if (input) {
+            if (this.getAttribute('input-enforce-lowercase') === 'true') {
+                input.addEventListener('input', () => {
+                    const pos = input.selectionStart;
+                    input.value = input.value.toLowerCase();
+                    input.selectionStart = pos;
+                    input.selectionEnd = pos;
+                });
+            }
             input.addEventListener('input', () => {
                 this.dispatchEvent(new Event('input-detected', { bubbles: true }));
             });
@@ -435,6 +464,31 @@ class OverlayInput extends HTMLElement {
             return value !== (parseFloat(this.originalValue) || 0);
         }
         return currentValue.trim() !== this.originalValue.trim();
+    }
+
+    async saveValueToUserData() {
+        if (!this.hasBeenModified()) {
+            return;
+        }
+        const dataLocation = this.getAttribute('input-data-location');
+        if (!dataLocation) {
+            return;
+        }
+        // @ts-expect-error
+        const currentValue = this.root.querySelector('input, textarea').value;
+        let actualValue = currentValue.trim();
+        if (this.getAttribute('input-type') === 'number') {
+            const isPercentage = this.getAttribute('input-is-percentage') === 'true';
+            let value = parseFloat(currentValue);
+            if (isNaN(value)) {
+                value = 0;
+            }
+            if (isPercentage) {
+                value = value / 100;
+            }
+            actualValue = value;
+        }
+        await window.API.setConfigValue(dataLocation, actualValue);
     }
 
     render() {
@@ -555,6 +609,18 @@ input {
   content: 'Liters';
 }
 
+.input-wrapper.kcal-input::after {
+  content: 'kcal';
+}
+
+.input-wrapper.aura-input::after {
+  content: 'aura';
+}
+
+.input-wrapper.mps-input::after {
+  content: 'm/s';
+}
+
 .input-wrapper.kg-input::after {
   content: 'kg';
 }
@@ -617,7 +683,7 @@ class OverlayInputSelect extends HTMLElement {
         return;
     }
 
-    connectedCallback() {
+    async connectedCallback() {
         this.render();
 
         if (this.getAttribute("input-default-value")) {
@@ -637,6 +703,30 @@ class OverlayInputSelect extends HTMLElement {
             this._resolveReady();
             return;
         }
+
+        const dataValue = await window.API.getConfigValue(dataLocation);
+        if (dataValue !== null && dataValue !== undefined) {
+            const selectElement = this.root.querySelector('select');
+            // @ts-expect-error
+            selectElement.value = dataValue.toString();
+            this.originalValue = dataValue.toString();
+        }
+
+        // @ts-ignore
+        this._resolveReady();
+    }
+
+    async saveValueToUserData() {
+        if (!this.hasBeenModified()) {
+            return;
+        }
+        const dataLocation = this.getAttribute('input-data-location');
+        if (!dataLocation) {
+            return;
+        }
+        // @ts-expect-error
+        const currentValue = this.root.querySelector('select').value;
+        await window.API.setConfigValue(dataLocation, currentValue);
     }
 
     getValue() {
@@ -705,7 +795,7 @@ class OverlayInputSelect extends HTMLElement {
       <div class="overlay-input">
         <label>${label}</label>
         <select value="">
-            ${options.map((opt, index) => `<option value="${opt}" title="${optionsDescriptions[index] || ''}">${opt[0].toUpperCase() + opt.slice(1)}</option>`).join('')}
+            ${options.map((opt, index) => `<option value="${opt}" title="${optionsDescriptions[index] || ''}">${opt.split("_").map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(" ")}</option>`).join('')}
         </select>
         <div class="error-message"></div>
       </div>
@@ -750,6 +840,231 @@ customElements.define('app-overlay-select', OverlayInputSelect);
 customElements.define('app-overlay-input-warning', OverlayInputWarning);
 customElements.define('app-overlay-input', OverlayInput);
 customElements.define('app-overlay-section', OverlaySection);
+
+class OverlayListInput extends HTMLElement {
+    constructor() {
+        super();
+        /**
+         * @type {ShadowRoot}
+         */
+        this.root = this.attachShadow({ mode: 'open' });
+        /**
+         * @type {string[]}
+         */
+        this.items = [];
+        /**
+         * @type {string[]}
+         */
+        this.originalItems = [];
+    }
+
+    async connectedCallback() {
+        const dataLocation = this.getAttribute('input-data-location');
+        const dataValue = dataLocation ? await window.API.getConfigValue(dataLocation) : null;
+
+        if (dataValue !== null && Array.isArray(dataValue)) {
+            this.items = [...dataValue];
+        } else if (this.getAttribute('input-default-value')) {
+            try {
+                // @ts-ignore
+                this.items = JSON.parse(this.getAttribute('input-default-value'));
+            } catch (e) {
+                this.items = [];
+            }
+        }
+
+        this.originalItems = [...this.items];
+        this.render();
+    }
+
+    hasErrorsPresent() {
+        return false;
+    }
+
+    getValue() {
+        return [...this.items];
+    }
+
+    hasBeenModified() {
+        if (this.items.length !== this.originalItems.length) return true;
+        return this.items.some((item, i) => item !== this.originalItems[i]);
+    }
+
+    async saveValueToUserData() {
+        if (!this.hasBeenModified()) {
+            return;
+        }
+        const dataLocation = this.getAttribute('input-data-location');
+        if (!dataLocation) {
+            return;
+        }
+        await window.API.setConfigValue(dataLocation, [...this.items]);
+    }
+
+    addItem() {
+        const input = this.root.querySelector('.new-item-input');
+        // @ts-expect-error
+        const value = input.value.trim();
+        if (!value) return;
+
+        const enforceLowercase = this.getAttribute('input-enforce-lowercase') === 'true';
+        this.items.push(enforceLowercase ? value.toLowerCase() : value);
+        // @ts-expect-error
+        input.value = '';
+        this.renderItems();
+        this.dispatchEvent(new Event('input-detected', { bubbles: true }));
+    }
+
+    /**
+     * 
+     * @param {number} index 
+     */
+    removeItem(index) {
+        this.items.splice(index, 1);
+        this.renderItems();
+        this.dispatchEvent(new Event('input-detected', { bubbles: true }));
+    }
+
+    renderItems() {
+        const list = this.root.querySelector('.list-items');
+        if (!list) return;
+        list.innerHTML = this.items.map((item, index) => `
+            <div class="list-item">
+                <span class="list-item-text">${item}</span>
+                <button class="remove-btn" data-index="${index}">✕</button>
+            </div>
+        `).join('');
+
+        list.querySelectorAll('.remove-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                // @ts-expect-error
+                const index = parseInt(e.target.dataset.index);
+                this.removeItem(index);
+            });
+        });
+    }
+
+    render() {
+        const label = this.getAttribute('label') || 'List Input';
+        const placeholder = this.getAttribute('input-placeholder') || 'Add item...';
+
+        this.root.innerHTML = `
+      <style>
+        .overlay-input {
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 2vh;
+            margin-top: 2vh;
+            font-size: 4vh;
+        }
+        .overlay-input label {
+            font-size: 4vh;
+            margin-bottom: 1vh;
+        }
+        .overlay-input input {
+            font-size: 4vh;
+            padding: 1vh;
+            border-radius: 0.5vh;
+            border: solid 1px #ccc;
+            font-family: 'Cabin Sketch', sans-serif;
+            font-weight: bold;
+            box-shadow: inset 0 0 10px rgba(100,0,200,0.3);
+            background-color: rgba(0, 0, 0, 0.9);
+            color: white;
+            resize: none;
+            flex: 1;
+            min-width: 0;
+        }
+        .add-row {
+            display: flex;
+            gap: 1vh;
+            align-items: center;
+        }
+        .add-btn, .remove-btn {
+            font-size: 3vh;
+            padding: 0.5vh 1.5vh;
+            border-radius: 0.5vh;
+            border: solid 1px #ccc;
+            font-family: 'Cabin Sketch', sans-serif;
+            font-weight: bold;
+            background-color: rgba(0, 0, 0, 0.9);
+            color: white;
+            cursor: pointer;
+            box-shadow: inset 0 0 10px rgba(100,0,200,0.3);
+        }
+        .add-btn:hover, .remove-btn:hover {
+            background-color: rgba(100, 0, 200, 0.3);
+        }
+        .list-items {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5vh;
+            margin-top: 1vh;
+        }
+        .list-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.8vh 1vh;
+            border-radius: 0.5vh;
+            border: solid 1px #555;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            font-size: 3.5vh;
+        }
+        .list-item-text {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .remove-btn {
+            font-size: 2.5vh;
+            padding: 0.3vh 1vh;
+            margin-left: 1vh;
+            color: #FF6B6B;
+            border-color: #FF6B6B;
+            flex-shrink: 0;
+        }
+      </style>
+      <div class="overlay-input">
+        <label>${label}</label>
+        <div class="add-row">
+            <input class="new-item-input" type="text" placeholder="${placeholder}" />
+            <button class="add-btn">+</button>
+        </div>
+        <div class="list-items"></div>
+      </div>
+    `;
+
+        this.root.querySelector('.add-btn')?.addEventListener('click', () => this.addItem());
+        this.root.querySelector('.new-item-input')?.addEventListener('keydown', (e) => {
+            // @ts-expect-error
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                this.addItem();
+            }
+        });
+
+        if (this.getAttribute('input-enforce-lowercase') === 'true') {
+            const input = this.root.querySelector('.new-item-input');
+            input?.addEventListener('input', () => {
+                // @ts-expect-error
+                const pos = input.selectionStart;
+                // @ts-expect-error
+                input.value = input.value.toLowerCase();
+                // @ts-expect-error
+                input.selectionStart = pos;
+                // @ts-expect-error
+                input.selectionEnd = pos;
+            });
+        }
+
+        this.renderItems();
+    }
+}
+
+customElements.define('app-overlay-list-input', OverlayListInput);
 
 class OverlayTabs extends HTMLElement {
     constructor() {

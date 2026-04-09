@@ -1,7 +1,7 @@
 // import dialog
 import './components/dialog.js';
 import './components/overlay.js';
-// import './components/settings.js';
+import './components/settings.js';
 // import './components/character.js';
 // import './components/manage.js';
 import './components/license.js';
@@ -9,8 +9,10 @@ import './components/other-attributions.js';
 
 import { EngineWorkerClient } from "../worker-sandbox/client.js";
 
-import { playConfirmSound, playHoverSound, toggleAmbience,
-    toggleFX, isAmbienceEnabled, isFXEnabled, startAmbienceWithFade } from './sound.js';
+import {
+    playConfirmSound, playHoverSound, toggleAmbience,
+    toggleFX, isAmbienceEnabled, isFXEnabled, startAmbienceWithFade
+} from './sound.js';
 
 const initialPromise = new Promise((resolve) => {
     window.API.getDreamEnginePaths().then((paths) => {
@@ -43,11 +45,11 @@ function exitGame() {
 // Get all menu buttons and add event listeners
 const buttons = document.querySelectorAll('.menu-btn');
 buttons.forEach(button => {
-  button.addEventListener('mouseenter', playHoverSound);
+    button.addEventListener('mouseenter', playHoverSound);
 });
 
 const exitBtn = document.getElementById('exit-btn');
-exitBtn?.addEventListener('click', function() {
+exitBtn?.addEventListener('click', function () {
     exitGame();
 });
 
@@ -55,17 +57,6 @@ const newCharacterBtn = document.getElementById('new-character-btn');
 newCharacterBtn?.addEventListener('click', async () => {
     HAS_ACTIVE_DIALOG = true;
     await initialPromise;
-    const rs = await window.API.createEmptyCharacterFile();
-    const overlay = document.createElement("app-character");
-    overlay.setAttribute("character-group", rs.group);
-    overlay.setAttribute("character-file", rs.characterFile);
-    document.body.appendChild(overlay);
-    overlay.addEventListener('close', () => {
-        document.body.removeChild(overlay);
-        setTimeout(() => {
-            HAS_ACTIVE_DIALOG = false;
-        }, 300);
-    });
 });
 
 const openSettingsBtn = document.getElementById('open-settings-btn');
@@ -100,10 +91,10 @@ manageBtn?.addEventListener('click', async () => {
 // Get all footer links and add event listeners
 const footerLinks = document.querySelectorAll('.footer a');
 footerLinks.forEach(link => {
-  link.addEventListener('mouseenter', playHoverSound);
-  link.addEventListener('click', function() {
-    playConfirmSound();
-  });
+    link.addEventListener('mouseenter', playHoverSound);
+    link.addEventListener('click', function () {
+        playConfirmSound();
+    });
 });
 
 const licenseLink = document.getElementById('license-link');
@@ -139,7 +130,7 @@ document.addEventListener("keydown", async (e) => {
     if (e.key === "Enter" && e.altKey) {
         window.API.toggleFullScreen();
         // Force focus on body to trigger repaint
-        
+
     }
     if (e.key === "F12") {
         window.API.openDevTools();
@@ -234,7 +225,96 @@ function removeLoadingBlur() {
             if (loadingOverlay.parentNode) {
                 loadingOverlay.parentNode.removeChild(loadingOverlay);
             }
+
+            setTimeout(() => {
+                initialChecks();
+            }, 100);
         }, 1000);
+    }
+}
+
+async function initialChecks() {
+    // Check if the engine has any API keys configured, if not show the settings overlay
+    const apiKey = await window.API.getConfigValue('secret');
+    if (!apiKey) {
+        HAS_ACTIVE_DIALOG = true;
+        const dialog = document.createElement('app-dialog');
+        dialog.setAttribute('dialog-title', 'No API Key Configured');
+        dialog.innerHTML = `<p>You have not configured an API key yet. You can enter your API key in the settings. Please note that you will need an API key to use the application even using local self-hosted mode.</p>`;
+        dialog.setAttribute("confirmation", "true");
+        dialog.setAttribute("confirm-text", "Open Settings");
+        dialog.setAttribute("cancel-text", "Ignore");
+        dialog.addEventListener('confirm', () => {
+            const settingsOverlay = document.createElement('app-settings');
+            settingsOverlay.setAttribute("initial-section", "1");
+            document.body.appendChild(settingsOverlay);
+            settingsOverlay.addEventListener('close', () => {
+                document.body.removeChild(settingsOverlay);
+                setTimeout(() => {
+                    HAS_ACTIVE_DIALOG = false;
+                    secondChecks();
+                }, 300);
+            });
+            document.body.removeChild(dialog);
+        });
+        dialog.addEventListener('cancel', () => {
+            document.body.removeChild(dialog);
+            setTimeout(() => {
+                HAS_ACTIVE_DIALOG = false;
+                secondChecks();
+            }, 300);
+        });
+        document.body.appendChild(dialog);
+    } else {
+        secondChecks();
+    }
+}
+
+async function secondChecks() {
+    // Check that all necessary user properties are set, if not show the settings overlay
+    const requiredProperties = [
+        'user.name', 'user.shortDescription',
+        'user.heightCm', 'user.weightKg', 'user.ageYears',
+        'user.carryingCapacityKg', 'user.carryingCapacityLiters',
+        'user.maintenanceCaloriesPerDay', 'user.maintenanceHydrationLitersPerDay',
+        'user.rangeMeters', 'user.locomotionSpeedMetersPerSecond',
+        'user.stealth', 'user.perception', 'user.tierValue', 'user.powerGrowthRate'
+    ];
+    const missingProperties = [];
+    for (const prop of requiredProperties) {
+        const value = await window.API.getConfigValue(prop);
+        if (!value) {
+            missingProperties.push(prop);
+            break;
+        }
+    }
+    if (missingProperties.length > 0) {
+        HAS_ACTIVE_DIALOG = true;
+        const dialog = document.createElement('app-dialog');
+        dialog.setAttribute('dialog-title', 'Missing User Information');
+        dialog.innerHTML = `<p>Some required user information is missing. Please enter it in the settings to ensure the best experience.</p>`;
+        dialog.setAttribute("confirmation", "true");
+        dialog.setAttribute("confirm-text", "Open Settings");
+        dialog.setAttribute("cancel-text", "Ignore");
+        dialog.addEventListener('confirm', () => {
+            const settingsOverlay = document.createElement('app-settings');
+            settingsOverlay.setAttribute("initial-section", "0");
+            document.body.appendChild(settingsOverlay);
+            settingsOverlay.addEventListener('close', () => {
+                document.body.removeChild(settingsOverlay);
+                setTimeout(() => {
+                    HAS_ACTIVE_DIALOG = false;
+                }, 300);
+            });
+            document.body.removeChild(dialog);
+        });
+        dialog.addEventListener('cancel', () => {
+            document.body.removeChild(dialog);
+            setTimeout(() => {
+                HAS_ACTIVE_DIALOG = false;
+            }, 300);
+        });
+        document.body.appendChild(dialog);
     }
 }
 
