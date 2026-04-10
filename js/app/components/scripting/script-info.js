@@ -133,7 +133,7 @@ class ScriptInfo extends HTMLElement {
 
         this.root.getElementById('view-btn')?.addEventListener('button-click', async () => {
             try {
-                const { srcUrl } = await window.ENGINE_WORKER_CLIENT.getScriptSource({ namespace: this.scriptNamespace, id: this.scriptId });
+                const { srcUrl } = await window.ENGINE_WORKER_CLIENT.getScriptSourceURL({ namespace: this.scriptNamespace, id: this.scriptId });
                 await window.API.viewSource(srcUrl);
             } catch (err) {
                 console.error('Failed to view source:', err);

@@ -65,6 +65,20 @@ export function createCardStructureFrom(jsContent) {
 }
 
 /**
+ * 
+ * @param {string} jsContent 
+ * @returns {boolean}
+ */
+export function isCardTypeFile(jsContent) {
+    const splittedLines = jsContent.split('\n');
+    const basicChecksPass = splittedLines.length > 2 && splittedLines[0].startsWith('//@config:') && splittedLines[1].startsWith('//@card:');
+    if (!basicChecksPass) return false;
+    // check for imports, head, body or foot comments
+    const trimmedLines = splittedLines.map(line => line.trim());
+    return trimmedLines.includes('//@imports') || trimmedLines.includes('//@head') || trimmedLines.includes('//@body') || trimmedLines.includes('//@foot');
+}
+
+/**
  * @param {CardTypeCard} base
  * @returns {string}
  */

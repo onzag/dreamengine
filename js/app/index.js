@@ -3,6 +3,7 @@ import './components/dialog.js';
 import './components/overlay.js';
 import './components/settings.js';
 import './components/character.js';
+import './components/wizard/cardtype-wizard.js';
 import './components/world.js';
 import './components/manage.js';
 import './components/license.js';

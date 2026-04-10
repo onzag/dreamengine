@@ -217,10 +217,15 @@ const handlers = {
 
     /**
      * @param {{ namespace: string, id: string }} args
-     * @returns {Promise<{ srcUrl: string }>} The script source and its URL (for error reporting)
+     * @returns {Promise<{ srcUrl: string }>} The script URL (for error reporting)
      */
-    async getScriptSource({ namespace, id }) {
+    async getScriptSourceURL({ namespace, id }) {
         return await resolverUrlOnly(namespace, id);
+    },
+
+    async getRawScriptSource({ namespace, id }) {
+        const { src } = await resolver(namespace, id);
+        return { src };
     },
 
     // ─── deObject partial query ─────────────────────────────────

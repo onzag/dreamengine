@@ -155,9 +155,14 @@ export class EngineWorkerClient {
     jsEngineOnInferenceExecuted(args) { return this.#call("jsEngineOnInferenceExecuted", args); }
     /**
      * @param {{ namespace: string, id: string }} args
-     * @returns {Promise<{ srcUrl: string }>} The script source URL (for error reporting)
+     * @returns {Promise<{ srcUrl: string }>} The script source URL
      */
-    getScriptSource(args) { return this.#call("getScriptSource", args); }
+    getScriptSourceURL(args) { return this.#call("getScriptSourceURL", args); }
+    /**
+     * @param {{ namespace: string, id: string }} args
+     * @returns {Promise<{ src: string }>} The raw script source
+     */
+    getRawScriptSource(args) { return this.#call("getRawScriptSource", args); }
     /**
      * @returns {Promise<Record<string, { id: string, namespace: string, description: string, type: string, exposeProperties: DEScriptExposeProperties }>>}
      */

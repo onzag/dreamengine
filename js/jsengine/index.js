@@ -198,6 +198,21 @@ export class DEJSEngine {
         }
     }
 
+    /**
+     * 
+     * @param {string} namespace 
+     * @param {string} id 
+     * @returns {Promise<string>} The raw source code of the script
+     */
+    async getRawSource(namespace, id) {
+        const key = `${namespace}/${id}`;
+        if (this.scriptCache[key]) {
+            return this.scriptCache[key].__source;
+        }
+        const file = await this.resolver(namespace, id);
+        return file.src;
+    }
+
     async recreate() {
         console.log("Recreating JS engine...");
         this.scriptCache = {};
