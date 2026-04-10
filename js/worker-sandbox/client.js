@@ -30,6 +30,12 @@ export class EngineWorkerClient {
     onCycleInform = null;
     /** @type {((deObject: any, data: any) => void) | null} */
     onInferringOverConversationMessage = null;
+    /** @type {((data: {qid: number, questionType: string, question: string, options?: string[], defaultValue?: any}) => void) | null} */
+    onCardTypeGuiderQuestion = null;
+    /** @type {((data: {sid: number, currentCard: any, jsContent: string}) => void) | null} */
+    onCardTypeAutosave = null;
+    /** @type {((data: {currentCard: any}) => void) | null} */
+    onCardTypeWizardComplete = null;
 
     /** @type {Promise<void>} resolves when the worker signals ready */
     ready;
@@ -92,6 +98,15 @@ export class EngineWorkerClient {
                         break;
                     case "inferringOverConversationMessage":
                         this.onInferringOverConversationMessage?.(msg.data.deObject, msg.data.data);
+                        break;
+                    case "cardTypeGuiderQuestion":
+                        this.onCardTypeGuiderQuestion?.(msg.data);
+                        break;
+                    case "cardTypeAutosave":
+                        this.onCardTypeAutosave?.(msg.data);
+                        break;
+                    case "cardTypeWizardComplete":
+                        this.onCardTypeWizardComplete?.(msg.data);
                         break;
                 }
                 return;
@@ -197,6 +212,35 @@ export class EngineWorkerClient {
      * @returns {Promise<any>}
      */
     queryDEObject(args) { return this.#call("queryDEObject", args); }
+
+    // ── CardType Wizard ─────────────────────────────────────────────
+
+    /**
+     * Start or continue cardtype generation on the worker.
+     * @param {{ currentCard: import('../cardtype/base.js').CardTypeCard, guided: boolean }} args
+     */
+    continueCardTypeWizard(args) { return this.#call("continueCardTypeWizard", args); }
+
+    /**
+     * Cancel any in-progress cardtype wizard generation.
+     */
+    cancelCardTypeGeneration() { return this.#call("cancelCardTypeGeneration"); }
+
+    /**
+     * Send an answer to a guider question on the worker.
+     * @param {{ qid: number, value: any }} args
+     */
+    sendGuiderAnswer({ qid, value }) {
+        this.#worker.postMessage({ type: "cardTypeGuiderAnswer", qid, value });
+    }
+
+    /**
+     * Acknowledge an autosave event from the worker.
+     * @param {{ sid: number }} args
+     */
+    sendAutosaveAck({ sid }) {
+        this.#worker.postMessage({ type: "cardTypeAutosaveAck", sid });
+    }
 
     // ── Lifecycle ───────────────────────────────────────────────────
 

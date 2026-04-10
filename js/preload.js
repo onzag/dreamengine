@@ -111,4 +111,15 @@ contextBridge.exposeInMainWorld('API', {
     onScriptsChanged: (callback) => {
         ipcRenderer.on('scripts-changed', () => callback());
     },
+
+    /**
+     * 
+     * @param {string} namespace 
+     * @param {string} id 
+     * @param {string} content 
+     * @returns {Promise<void>}
+     */
+    updateScriptFile: (namespace, id, content) => {
+        return ipcRenderer.invoke('updateScriptFile', namespace, id, content);
+    }
 });

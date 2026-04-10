@@ -10,6 +10,8 @@ class CardTypeWizard extends HTMLElement {
         this._overlayTimer = null;
         /** @type {number | null} */
         this._autosaveHideTimer = null;
+        /** @type {(() => void) | null} */
+        this._wizardCleanup = null;
     }
 
     connectedCallback() {
@@ -132,11 +134,11 @@ class CardTypeWizard extends HTMLElement {
                     }
                     parsedCard.card = cardText;
                     if (mode === 'automatic') {
-                        parsedCard.config.automaticWizardInProgress = false;
-                        parsedCard.config.automaticWizardCompleted = true;
+                        parsedCard.config.automaticWizardInProgress = true;
+                        parsedCard.config.automaticWizardCompleted = false;
                     } else {
-                        parsedCard.config.guidedWizardInProgress = false;
-                        parsedCard.config.guidedWizardCompleted = true;
+                        parsedCard.config.guidedWizardInProgress = true;
+                        parsedCard.config.guidedWizardCompleted = false;
                     }
                     this.continueProcess(parsedCard, mode);
                 });
@@ -151,42 +153,112 @@ class CardTypeWizard extends HTMLElement {
      * @param {"automatic" | "guided"} mode
      */
     async continueProcess(parsedCard, mode) {
-        /** @type {import('../../../cardtype/base.js').CardTypeGuider | null} */
-        const guider = mode === 'guided' ? this.createUIGuider() : null;
+        const guided = mode === 'guided';
+        const guider = guided ? this.createUIGuider() : null;
+        const client = window.ENGINE_WORKER_CLIENT;
 
-        const autosave = {
-            save: async () => {
+        const characterId = this.getAttribute('character-id');
+        const characterNamespace = this.getAttribute('character-namespace');
 
-                if (!parsedCard) return;
-                const jsContent = getJsCard(parsedCard);
-                this.showAutosaveStatus();
-                await window.API.updateScriptFile(parsedCard.config.namespace, parsedCard.config.id, jsContent);
-                this.hideAutosaveStatus();
-            }
+        if (!characterId || !characterNamespace) {
+            console.error('Character ID or namespace is missing.');
+            return;
         }
 
-        if (guider) {
-            const wait = () => new Promise(r => setTimeout(r, 5000));
-            
-            // Dummy questions to test each type
-            const optionResult = await guider.askOption('What is the character archetype?', ['Hero', 'Villain', 'Anti-Hero', 'Mentor', 'Trickster'], 'Hero');
-            console.log('askOption result:', optionResult);
-            await wait();
 
-            const openResult = await guider.askOpen('Describe the character in a few words', 'A brave adventurer');
-            console.log('askOpen result:', openResult);
-            await wait();
+        // Wire up guider questions from worker → UI → answer back
+        /** @param {any} data */
+        const onGuiderQuestion = async (data) => {
+            if (!guider) return;
+            const { qid, questionType, question, options, defaultValue } = data;
+            /** @type {{value: any}} */
+            let result;
+            switch (questionType) {
+                case 'askOption':
+                    result = await guider.askOption(question, options, defaultValue);
+                    break;
+                case 'askOpen':
+                    result = await guider.askOpen(question, defaultValue);
+                    break;
+                case 'askNumber':
+                    result = await guider.askNumber(question, defaultValue);
+                    break;
+                case 'askBoolean':
+                    result = await guider.askBoolean(question, defaultValue);
+                    break;
+                case 'askList':
+                    result = await guider.askList(question, defaultValue);
+                    break;
+                default:
+                    result = { value: defaultValue };
+            }
+            client.sendGuiderAnswer({ qid, value: result.value });
+        };
 
-            const numberResult = await guider.askNumber('How old is the character?', 25);
-            console.log('askNumber result:', numberResult);
-            await wait();
+        let lastCard = parsedCard;
 
-            const booleanResult = await guider.askBoolean('Is the character a leader?', true);
-            console.log('askBoolean result:', booleanResult);
-            await wait();
+        // Wire up autosave from worker → save file → ack back
+        /** @param {any} data */
+        const onAutosave = async (data) => {
+            const { sid, currentCard } = data;
+            const jsContent = getJsCard(currentCard);
+            this.showAutosaveStatus();
+            lastCard = currentCard;
+            await window.API.updateScriptFile(
+                characterNamespace,
+                characterId,
+                jsContent
+            );
+            this.hideAutosaveStatus();
+            client.sendAutosaveAck({ sid });
+        };
 
-            const listResult = await guider.askList('What are the character\'s hobbies?', ['Reading', 'Swordfighting']);
-            console.log('askList result:', listResult);
+        /** @param {any} data */
+        const onComplete = (data) => {
+            this.endOverlay();
+            cleanup();
+        };
+
+        const cleanup = () => {
+            client.onCardTypeGuiderQuestion = null;
+            client.onCardTypeAutosave = null;
+            client.onCardTypeWizardComplete = null;
+        };
+
+        // Store cleanup so disconnectedCallback can call it
+        this._wizardCleanup = () => {
+            cleanup();
+            client.cancelCardTypeGeneration();
+        };
+
+        client.onCardTypeGuiderQuestion = onGuiderQuestion;
+        client.onCardTypeAutosave = onAutosave;
+        client.onCardTypeWizardComplete = onComplete;
+
+        this.initOverlay();
+        await client.continueCardTypeWizard({ currentCard: parsedCard, guided });
+
+        console.log('CardTypeWizard process complete for character:', characterId);
+
+        lastCard.config.automaticWizardInProgress = false;
+        lastCard.config.guidedWizardInProgress = false;
+        lastCard.config.automaticWizardCompleted = true;
+        lastCard.config.guidedWizardCompleted = true;
+        const finalJsContent = getJsCard(lastCard);
+        await window.API.updateScriptFile(
+            characterNamespace,
+            characterId,
+            finalJsContent,
+        );
+
+        this.showDone();
+    }
+
+    showDone() {
+        this.endOverlay();
+        const contentArea = this.root.querySelector('.wizard-content');
+        if (contentArea) {
+            contentArea.innerHTML = '<div class="guider-label" style="text-align:center;margin-top:6vh;">Done!</div>';
         }
     }
 
@@ -485,7 +557,12 @@ class CardTypeWizard extends HTMLElement {
             clearTimeout(this._autosaveHideTimer);
             this._autosaveHideTimer = null;
         }
+        if (this._wizardCleanup) {
+            this._wizardCleanup();
+            this._wizardCleanup = null;
+        }
         document.removeEventListener('keydown', this.onDocumentKeydown);
+        this.dispatchEvent(new CustomEvent('wizard-closed'));
     }
 
     /** @param {KeyboardEvent} e */

@@ -12,6 +12,7 @@ import { generateBonds } from "../cardtype/generate-bonds.js";
 import { generateActivities } from "../cardtype/generate-activities.js";
 import { generateBondTriggers } from "../cardtype/generate-bond-triggers.js";
 import { generateBasicStates } from "../cardtype/generate-basic-states.js";
+import { getJsCard } from "../cardtype/base.js";
 
 // ── Script path resolvers (using file:// fetch) ────────────────────
 // The main thread sends the absolute paths via the "setScriptPaths" RPC.
@@ -324,25 +325,228 @@ const handlers = {
     },
 
     // cardtype-wizard RPCs
+
     /**
      * @param {object} args
      * @param {import('../cardtype/base.js').CardTypeCard} args.currentCard
      * @param {boolean} args.guided - whether to run the guider questions or skip straight to generation 
      */
     async continueCardTypeWizard({ currentCard, guided }) {
-        
+        // Cancel any previous wizard run
+        cancelCurrentWizard();
 
-        await generateBase(engine, currentCard, guider, autosave);
-        await generateBonds(engine, currentCard, guider, autosave);
-        await generateActivities(engine, currentCard, guider, autosave);
-        await generateBondTriggers(engine, currentCard, guider, autosave);
-        await generateBasicStates(engine, currentCard, guider, autosave);
+        const { promise: cancelPromise, cancel } = createCancelToken();
+        currentWizardCancel = cancel;
+
+        /** @type {import('../cardtype/base.js').CardTypeGuider | null} */
+        const guider = guided ? createWorkerGuider(cancelPromise) : null;
+
+        const autosave = createWorkerAutosave(currentCard, cancelPromise);
+
+        try {
+            await generateBase(engine, currentCard, guider, autosave);
+            await generateBonds(engine, currentCard, guider, autosave);
+            await generateActivities(engine, currentCard, guider, autosave);
+            await generateBondTriggers(engine, currentCard, guider, autosave);
+            await generateBasicStates(engine, currentCard, guider, autosave);
+
+            // ── Testing: dummy questions + autosave ──
+            // @ts-ignore
+            // const wait = (ms) => Promise.race([new Promise(r => setTimeout(r, ms)), cancelPromise]);
+
+            // if (guider) {
+            //     const q1 = await guider.askOption('What combat style does this character prefer?', ['Melee', 'Ranged', 'Magic', 'Stealth'], 'Melee');
+            //     console.log('[wizard-test] askOption result:', q1);
+
+            //     await wait(3000);
+
+            //     currentCard.imports.push("// TEST IMPORT " + Math.random());
+
+            //     await autosave.save();
+
+            //     const q2 = await guider.askBoolean('Does the character have a dark past?', false);
+            //     console.log('[wizard-test] askBoolean result:', q2);
+
+            //     await wait(3000);
+
+            //     currentCard.imports.push("// TEST IMPORT " + Math.random());
+
+            //     await autosave.save();
+
+            //     const q3 = await guider.askOpen('Describe the character\'s main motivation', 'Seeking revenge');
+            //     console.log('[wizard-test] askOpen result:', q3);
+
+            //     await wait(2000);
+
+            //     currentCard.imports.push("// TEST IMPORT " + Math.random());
+
+            //     await autosave.save();
+            // }
+
+            self.postMessage({ type: "event", event: "cardTypeWizardComplete", data: { currentCard } });
+        } catch (err) {
+            if (err instanceof WizardCancelledError) {
+                return;
+            }
+            throw err;
+        } finally {
+            if (currentWizardCancel === cancel) {
+                currentWizardCancel = null;
+            }
+        }
+    },
+
+    /**
+     * Cancel any in-progress cardtype wizard generation.
+     */
+    async cancelCardTypeGeneration() {
+        cancelCurrentWizard();
+        return { ok: true };
     }
 };
+
+// ── CardType Wizard infrastructure ──────────────────────────────────
+
+class WizardCancelledError extends Error {
+    constructor() { super("Wizard cancelled"); }
+}
+
+/** @type {(() => void) | null} */
+let currentWizardCancel = null;
+
+function cancelCurrentWizard() {
+    if (currentWizardCancel) {
+        currentWizardCancel();
+        currentWizardCancel = null;
+    }
+}
+
+/**
+ * @returns {{ promise: Promise<never>, cancel: () => void }}
+ */
+function createCancelToken() {
+    /** @type {() => void} */
+    let cancel;
+    const promise = new Promise((_, reject) => {
+        cancel = () => reject(new WizardCancelledError());
+    });
+    // @ts-ignore
+    return { promise, cancel };
+}
+
+/** @type {number} */
+let guiderQuestionId = 0;
+
+/** @type {Map<number, (answer: any) => void>} */
+const pendingGuiderAnswers = new Map();
+
+/**
+ * Creates a guider that sends questions to the main thread via postMessage
+ * and waits for answers (or cancellation).
+ * @param {Promise<never>} cancelPromise
+ * @returns {import('../cardtype/base.js').CardTypeGuider}
+ */
+function createWorkerGuider(cancelPromise) {
+    /**
+     * @param {string} questionType
+     * @param {string} question
+     * @param {any} extra
+     * @returns {Promise<{value: any}>}
+     */
+    function ask(questionType, question, extra) {
+        const qid = ++guiderQuestionId;
+
+        self.postMessage({
+            type: "event",
+            event: "cardTypeGuiderQuestion",
+            data: { qid, questionType, question, ...extra }
+        });
+
+        const answerPromise = new Promise((resolve) => {
+            pendingGuiderAnswers.set(qid, resolve);
+        });
+
+        return /** @type {Promise<{value: any}>} */ (Promise.race([
+            answerPromise,
+            cancelPromise
+        ]));
+    }
+
+    return {
+        async askOption(question, options, defaultValue) {
+            return ask("askOption", question, { options, defaultValue });
+        },
+        async askOpen(question, defaultValue) {
+            return ask("askOpen", question, { defaultValue });
+        },
+        async askNumber(question, defaultValue) {
+            return ask("askNumber", question, { defaultValue });
+        },
+        async askBoolean(question, defaultValue) {
+            return ask("askBoolean", question, { defaultValue });
+        },
+        async askList(question, defaultValue) {
+            return ask("askList", question, { defaultValue });
+        }
+    };
+}
+
+/** @type {Map<number, (ack: any) => void>} */
+const pendingAutosaveAcks = new Map();
+let autosaveId = 0;
+
+/**
+ * Creates an autosave object that sends the currentCard to the main thread
+ * and waits for acknowledgement (or cancellation).
+ * @param {import('../cardtype/base.js').CardTypeCard} currentCard
+ * @param {Promise<never>} cancelPromise
+ * @returns {import('../cardtype/base.js').CardTypeAutoSave}
+ */
+function createWorkerAutosave(currentCard, cancelPromise) {
+    return {
+        async save() {
+            const sid = ++autosaveId;
+
+            self.postMessage({
+                type: "event",
+                event: "cardTypeAutosave",
+                data: { sid, currentCard }
+            });
+
+            const ackPromise = new Promise((resolve) => {
+                pendingAutosaveAcks.set(sid, resolve);
+            });
+
+            await Promise.race([ackPromise, cancelPromise]);
+        }
+    };
+}
 
 // ── Message listener ────────────────────────────────────────────────
 self.onmessage = async (e) => {
     const msg = e.data;
+
+    // Handle guider answer from main thread
+    if (msg.type === "cardTypeGuiderAnswer") {
+        const { qid, value } = msg;
+        const resolve = pendingGuiderAnswers.get(qid);
+        if (resolve) {
+            pendingGuiderAnswers.delete(qid);
+            resolve({ value });
+        }
+        return;
+    }
+
+    // Handle autosave acknowledgement from main thread
+    if (msg.type === "cardTypeAutosaveAck") {
+        const { sid } = msg;
+        const resolve = pendingAutosaveAcks.get(sid);
+        if (resolve) {
+            pendingAutosaveAcks.delete(sid);
+            resolve({ ok: true });
+        }
+        return;
+    }
 
     // Handle RPC calls
     if (msg.type === "rpc") {

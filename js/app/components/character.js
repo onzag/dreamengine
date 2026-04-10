@@ -219,6 +219,7 @@ class CharacterOverlay extends HTMLElement {
                 wizard.setAttribute('character-namespace', this.currentCharacterNamespace);
                 wizard.setAttribute('character-id', this.currentCharacterId);
                 wizard.setAttribute('wizard-expectation', "guided");
+                wizard.addEventListener('wizard-closed', () => this.renderSection());
                 document.body.appendChild(wizard);
             });
             tabsContainer.querySelector('#auto-wizard-btn')?.addEventListener('button-click', () => {
@@ -226,6 +227,7 @@ class CharacterOverlay extends HTMLElement {
                 wizard.setAttribute('character-namespace', this.currentCharacterNamespace);
                 wizard.setAttribute('character-id', this.currentCharacterId);
                 wizard.setAttribute('wizard-expectation', "automatic");
+                wizard.addEventListener('wizard-closed', () => this.renderSection());
                 document.body.appendChild(wizard);
             });
         } else if (this.currentSectionIndex === 1) {
