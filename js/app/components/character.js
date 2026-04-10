@@ -214,7 +214,11 @@ class CharacterOverlay extends HTMLElement {
 
             tabsContainer.innerHTML = `${cardtypeWizardContent}`;
 
-            tabsContainer.querySelector('#guided-wizard-btn, #auto-wizard-btn')?.addEventListener('button-click', () => {
+            tabsContainer.querySelector('#guided-wizard-btn')?.addEventListener('button-click', () => {
+                const wizard = document.createElement('app-cardtype-wizard');
+                document.body.appendChild(wizard);
+            });
+            tabsContainer.querySelector('#auto-wizard-btn')?.addEventListener('button-click', () => {
                 const wizard = document.createElement('app-cardtype-wizard');
                 document.body.appendChild(wizard);
             });
