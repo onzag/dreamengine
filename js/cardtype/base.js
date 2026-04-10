@@ -15,6 +15,10 @@ export function createCardStructureFrom(jsContent) {
         foot: [],
     };
 
+    if (jsContent.startsWith("//@placeholder")) {
+        return baseFile;
+    }
+
     const splittedLines = jsContent.split('\n');
     const config = splittedLines[0] ? splittedLines[0].startsWith('//@config:') ? JSON.parse(splittedLines[0].replace('//@config:', '').trim()) : {} : {};
     const card = splittedLines[1] ? splittedLines[1].startsWith('//@card:') ? JSON.parse(splittedLines[1].replace('//@card:', '').trim()) : '' : '';
@@ -70,6 +74,9 @@ export function createCardStructureFrom(jsContent) {
  * @returns {boolean}
  */
 export function isCardTypeFile(jsContent) {
+    if (jsContent.startsWith("//@placeholder")) {
+        return true;
+    }
     const splittedLines = jsContent.split('\n');
     const basicChecksPass = splittedLines.length > 2 && splittedLines[0].startsWith('//@config:') && splittedLines[1].startsWith('//@card:');
     if (!basicChecksPass) return false;

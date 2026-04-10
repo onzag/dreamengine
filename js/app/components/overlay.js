@@ -83,9 +83,12 @@ class Overlay extends HTMLElement {
 
     disconnectedCallback() {
         document.removeEventListener("keydown", this.onDocumentKeydown);
-        // show stars when overlay is inactive
-        // @ts-expect-error
-        document.querySelector('.sky').style.display = 'block';
+        // only show stars if no other overlay is still active
+        const remainingOverlays = document.querySelectorAll('app-character, app-world, app-settings, app-play, app-manage, app-license, app-other-attributions, app-cardtype-wizard');
+        if (remainingOverlays.length === 0) {
+            // @ts-expect-error
+            document.querySelector('.sky').style.display = 'block';
+        }
     }
 
     /**

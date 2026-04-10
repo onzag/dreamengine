@@ -216,10 +216,16 @@ class CharacterOverlay extends HTMLElement {
 
             tabsContainer.querySelector('#guided-wizard-btn')?.addEventListener('button-click', () => {
                 const wizard = document.createElement('app-cardtype-wizard');
+                wizard.setAttribute('character-namespace', this.currentCharacterNamespace);
+                wizard.setAttribute('character-id', this.currentCharacterId);
+                wizard.setAttribute('wizard-expectation', "guided");
                 document.body.appendChild(wizard);
             });
             tabsContainer.querySelector('#auto-wizard-btn')?.addEventListener('button-click', () => {
                 const wizard = document.createElement('app-cardtype-wizard');
+                wizard.setAttribute('character-namespace', this.currentCharacterNamespace);
+                wizard.setAttribute('character-id', this.currentCharacterId);
+                wizard.setAttribute('wizard-expectation', "automatic");
                 document.body.appendChild(wizard);
             });
         } else if (this.currentSectionIndex === 1) {
