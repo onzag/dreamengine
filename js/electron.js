@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, session } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { execFile } from 'child_process';
 import { buildDreamEngineHomeSync } from './util/build-dreamengine-home.js';
 import buildTypes from './util/build-types.js';
 
@@ -218,6 +219,24 @@ if (!fs.existsSync(SCRIPT_FOLDER)) {
     fs.mkdirSync(SCRIPT_FOLDER, { recursive: true });
 }
 
+// Watch the scripts folder for changes and notify the renderer
+/**
+ * @type {NodeJS.Timeout|null}
+ */
+let scriptChangeTimeout = null;
+fs.watch(SCRIPT_FOLDER, { recursive: true }, (eventType, filename) => {
+    if (!filename || !filename.endsWith('.js')) return;
+    // Debounce to avoid rapid-fire events
+    if (scriptChangeTimeout) clearTimeout(scriptChangeTimeout);
+    scriptChangeTimeout = setTimeout(() => {
+        scriptChangeTimeout = null;
+        const wins = BrowserWindow.getAllWindows();
+        for (const win of wins) {
+            win.webContents.send('scripts-changed');
+        }
+    }, 500);
+});
+
 ipcMain.handle('listScriptFiles', async (event) => {
     // Scripts are organized as scripts/<namespace>/<id>.js
     // Default scripts must have namespaces starting with @, user scripts must not.
@@ -401,4 +420,67 @@ ipcMain.handle('uploadBytesToDEPath', async (event, dePath, bytes) => {
     }
     await fs.promises.writeFile(destPath, buffer);
     return true;
+});
+
+ipcMain.handle('detectEditors', async () => {
+    const { shell } = await import('electron');
+    const isWin = process.platform === 'win32';
+    const isMac = process.platform === 'darwin';
+
+    const editors = [
+        { id: 'code', name: 'Visual Studio Code', cmd: 'code' },
+        { id: 'codium', name: 'VSCodium', cmd: 'codium' },
+        { id: 'cursor', name: 'Cursor', cmd: 'cursor' },
+        { id: 'subl', name: 'Sublime Text', cmd: 'subl' },
+        { id: 'atom', name: 'Atom', cmd: 'atom' },
+        { id: 'notepad++', name: 'Notepad++', cmd: isWin ? 'notepad++' : null },
+        { id: 'nano', name: 'Nano', cmd: !isWin ? 'nano' : null },
+        { id: 'vim', name: 'Vim', cmd: !isWin ? 'vim' : null },
+    ];
+
+    const available = [];
+    for (const editor of editors) {
+        if (!editor.cmd) continue;
+        try {
+            const which = isWin ? 'where' : 'which';
+            await new Promise((resolve, reject) => {
+                // @ts-ignore
+                execFile(which, [editor.cmd], (err) => err ? reject(err) : resolve(true));
+            });
+            available.push({ id: editor.id, name: editor.name, cmd: editor.cmd });
+        } catch {
+            // not found
+        }
+    }
+
+    // Always add system default as last option
+    available.push({ id: 'system', name: 'System Default', cmd: '__system__' });
+
+    return available;
+});
+
+ipcMain.handle('openInEditor', async (event, filePath, editorCmd) => {
+    if (typeof filePath !== 'string' || filePath.includes('..')) {
+        throw new Error('Invalid file path');
+    }
+    if (!fs.existsSync(filePath)) {
+        throw new Error('File does not exist');
+    }
+
+    // Validate the file is within allowed directories
+    const normalizedPath = path.resolve(filePath);
+    const inScripts = normalizedPath.startsWith(path.resolve(SCRIPT_FOLDER));
+    const inDefaults = normalizedPath.startsWith(path.resolve(path.join(__dirname, 'default-scripts')));
+    if (!inScripts && !inDefaults) {
+        throw new Error('File is outside allowed directories');
+    }
+
+    if (!editorCmd || editorCmd === '__system__') {
+        const { shell } = await import('electron');
+        await shell.openPath(normalizedPath);
+    } else {
+        execFile(editorCmd, [normalizedPath], (err) => {
+            if (err) console.error('Failed to open editor:', err);
+        });
+    }
 });

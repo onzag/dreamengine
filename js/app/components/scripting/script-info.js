@@ -20,9 +20,11 @@ class ScriptInfo extends HTMLElement {
 
     async refresh() {
         try {
+            await window.JS_ENGINE_RECREATE();
             this.infoMap = await window.ENGINE_WORKER_CLIENT.jsEngineGetInfoMapForScripts({
                 scripts: [{ namespace: this.scriptNamespace, id: this.scriptId }]
             });
+            console.log(this.infoMap);
         } catch (err) {
             console.error("Failed to fetch script info:", err);
             this.infoMap = null;
@@ -54,7 +56,8 @@ class ScriptInfo extends HTMLElement {
             <div class="script-info">
                 <div class="toolbar">
                     <app-overlay-button id="refresh-btn">Refresh</app-overlay-button>
-                    ${isReadOnly ? '<app-overlay-button id="view-btn">View Source</app-overlay-button>' : '<app-overlay-button id="open-btn">Open File</app-overlay-button>'}
+                    <app-overlay-button id="view-btn">View Source</app-overlay-button>
+                    ${isReadOnly ? '' : '<app-overlay-button id="open-btn">Edit File</app-overlay-button>'}
                 </div>
                 ${info ? `
                     <div class="section">
@@ -112,11 +115,19 @@ class ScriptInfo extends HTMLElement {
         });
 
         this.root.getElementById('open-btn')?.addEventListener('button-click', async () => {
+            const isSystem = this.scriptNamespace.startsWith('@');
+            const basePath = isSystem
+                ? window.DREAMENGINE_DEFAULT_SCRIPTS_HOME
+                : window.DREAMENGINE_HOME + "/scripts";
+            const filePath = basePath + "/" + this.scriptNamespace + "/" + this.scriptId + ".js";
+
             try {
-                const { srcUrl } = await window.ENGINE_WORKER_CLIENT.getScriptSource({ namespace: this.scriptNamespace, id: this.scriptId });
-                await window.API.viewSource(srcUrl);
+                const editorCmd = await this.#pickEditor();
+                if (!editorCmd) return; // user cancelled
+
+                await window.API.openInEditor(filePath, editorCmd);
             } catch (err) {
-                console.error('Failed to open file:', err);
+                console.error('Failed to open in editor:', err);
             }
         });
 
@@ -140,6 +151,52 @@ class ScriptInfo extends HTMLElement {
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;');
+    }
+
+    /**
+     * Show a dialog to pick a preferred code editor. Detects installed editors.
+     * @returns {Promise<string|null>} The chosen editor command, or null if cancelled.
+     */
+    async #pickEditor() {
+        const editors = await window.API.detectEditors();
+
+        return new Promise((resolve) => {
+            const dialog = document.createElement('app-dialog');
+            dialog.setAttribute('dialog-title', 'Choose Code Editor');
+            dialog.setAttribute('confirmation', 'true');
+            dialog.setAttribute('confirm-text', 'Use Selected');
+            dialog.setAttribute('cancel-text', 'Cancel');
+
+            const optionsJson = JSON.stringify(editors.map(e => e.name));
+
+            dialog.innerHTML = `
+                <app-overlay-select
+                    label="Editor"
+                    input-options='${optionsJson.replace(/'/g, "&#39;")}'
+                    input-data-location="editor"
+                    input-default-value="${this.#esc(editors[0]?.name || 'System Default')}"
+                ></app-overlay-select>
+            `;
+
+            dialog.addEventListener('confirm', async () => {
+                // @ts-ignore
+                const select = dialog.querySelector('app-overlay-select');
+                // @ts-ignore
+                const selectedName = select?.getValue?.() || '';
+                const selected = editors.find(e => e.name === selectedName);
+                const cmd = selected?.cmd || '__system__';
+
+                document.body.removeChild(dialog);
+                resolve(cmd);
+            });
+
+            dialog.addEventListener('cancel', () => {
+                document.body.removeChild(dialog);
+                resolve(null);
+            });
+
+            document.body.appendChild(dialog);
+        });
     }
 
     static get styles() {

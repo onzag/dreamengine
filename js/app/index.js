@@ -380,15 +380,6 @@ client.ready.then(async () => {
     });
     await client.jsEnginePreloadAllScripts();
 
-    document.addEventListener("jsEngineRecreate", async () => {
-        const scriptFiles = await window.API.listScriptFiles();
-        await client.jsEngineRecreate();
-        await client.setScriptList({
-            scripts: scriptFiles,
-        });
-        await client.jsEnginePreloadAllScripts();
-    });
-
     // Engine is ready to be used at this point
     WORKER_READY = true;
 
@@ -401,3 +392,26 @@ client.ready.then(async () => {
 
 // Expose client on window
 window.ENGINE_WORKER_CLIENT = client;
+
+let callingRecreate = false;
+window.JS_ENGINE_RECREATE = async () => {
+    if (callingRecreate) return;
+    callingRecreate = true;
+
+    const scriptFiles = await window.API.listScriptFiles();
+    await client.jsEngineRecreate();
+    await client.setScriptList({
+        scripts: scriptFiles,
+    });
+    await client.jsEnginePreloadAllScripts();
+
+    document.dispatchEvent(new CustomEvent('jsEngineRecreated'));
+
+    callingRecreate = false;
+};
+
+// Auto-reload scripts when files change on disk
+window.API.onScriptsChanged(() => {
+    console.log('Scripts changed on disk, recreating engine...');
+    window.JS_ENGINE_RECREATE();
+});

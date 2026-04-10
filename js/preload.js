@@ -17,6 +17,22 @@ contextBridge.exposeInMainWorld('API', {
     viewSource: (fileUrl) => {
         return ipcRenderer.invoke('viewSource', fileUrl);
     },
+    /**
+     * Detect available code editors on the system.
+     * @returns {Promise<Array<{id: string, name: string, cmd: string}>>}
+     */
+    detectEditors: () => {
+        return ipcRenderer.invoke('detectEditors');
+    },
+    /**
+     * Open a file in an external editor.
+     * @param {string} filePath - Absolute OS path to the file
+     * @param {string} [editorCmd] - Editor command to use, or '__system__' for OS default
+     * @returns {Promise<void>}
+     */
+    openInEditor: (filePath, editorCmd) => {
+        return ipcRenderer.invoke('openInEditor', filePath, editorCmd);
+    },
     closeApp: () => {
         ipcRenderer.send('closeApp');
     },
@@ -87,5 +103,12 @@ contextBridge.exposeInMainWorld('API', {
         const arrayBuffer = await file.arrayBuffer();
         const uint8Array = new Uint8Array(arrayBuffer);
         return ipcRenderer.invoke('uploadBytesToDEPath', dePath, uint8Array);
+    },
+    /**
+     * Register a callback for when script files change on disk.
+     * @param {() => void} callback
+     */
+    onScriptsChanged: (callback) => {
+        ipcRenderer.on('scripts-changed', () => callback());
     },
 });

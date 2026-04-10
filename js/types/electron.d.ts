@@ -8,6 +8,8 @@ declare interface ElectronAPI {
   toggleFullScreen(): void | Promise<void>;
   openDevTools(): void;
   viewSource(fileUrl: string): Promise<void>;
+  detectEditors(): Promise<Array<{id: string, name: string, cmd: string}>>;
+  openInEditor(filePath: string, editorCmd?: string): Promise<void>;
   closeApp(): void;
 
   listScriptFiles(): Promise<Array<{ id: string; namespace: string; }>>;
@@ -21,6 +23,7 @@ declare interface ElectronAPI {
 
   getDreamEnginePaths(): Promise<string[]>;
   uploadFileToDEPath(dePath: string, file: File | Blob): Promise<boolean>;
+  onScriptsChanged(callback: () => void): void;
 }
 
 declare global {
@@ -29,6 +32,7 @@ declare global {
     DREAMENGINE_HOME: string;
     DREAMENGINE_DEFAULT_SCRIPTS_HOME: string;
     ENGINE_WORKER_CLIENT: EngineWorkerClient;
+    JS_ENGINE_RECREATE: () => Promise<void>;
   }
 }
 

@@ -92,7 +92,7 @@ class WorldOverlay extends HTMLElement {
 
                 try {
                     await window.API.newScriptFile(namespace, name, "//@placeholder\n\nengine.exports = {type: \"worlds\"}");
-                    document.dispatchEvent(new CustomEvent("jsEngineRecreate"));
+                    await window.
                     localStorage.setItem('lastWorldNamespace', namespace);
                     this.currentWorldId = name;
                     this.currentWorldNamespace = namespace;

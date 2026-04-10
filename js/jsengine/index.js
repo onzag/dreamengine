@@ -145,6 +145,9 @@ export class DEJSEngine {
             engine.exports = {};
         }
 
+        engine.exports.__source = file.src;
+        engine.exports.__sourceURL = file.srcUrl;
+
         // @ts-ignore
         this.scriptCache[key] = engine.exports;
         if (!this.__panthomImports) {
@@ -197,9 +200,9 @@ export class DEJSEngine {
 
     async recreate() {
         console.log("Recreating JS engine...");
-        const newCache = {};
-        const newOrder = [];
-        const newDependencyTree = {};
+        this.scriptCache = {};
+        this.scriptOrder = [];
+        this.dependencyTree = {};
     }
 
     async preloadAllScripts() {

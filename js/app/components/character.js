@@ -94,7 +94,7 @@ class CharacterOverlay extends HTMLElement {
 
                 try {
                     await window.API.newScriptFile(namespace, name, "//@placeholder\n\nengine.exports = {type: \"characters\"}");
-                    document.dispatchEvent(new CustomEvent("jsEngineRecreate"));
+                    await window.JS_ENGINE_RECREATE();
                     localStorage.setItem('lastCharacterNamespace', namespace);
                     this.currentCharacterId = name;
                     this.currentCharacterNamespace = namespace;
