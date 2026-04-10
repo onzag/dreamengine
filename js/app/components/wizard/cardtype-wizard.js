@@ -419,7 +419,7 @@ class CardTypeWizard extends HTMLElement {
 
         const overlay = document.createElement('div');
         overlay.className = 'wizard-loading-overlay';
-        overlay.innerHTML = '<div class="wizard-spinner"></div>';
+        overlay.innerHTML = '<div class="wizard-spinner"></div><div class="wizard-loading-text">Running inference...</div>';
         this.root.querySelector('.wizard-content')?.appendChild(overlay);
 
         this._overlayTimer = window.setTimeout(() => {
@@ -870,6 +870,8 @@ class CardTypeWizard extends HTMLElement {
             height: 100%;
             z-index: 30;
             display: flex;
+            flex-direction: column;
+            gap: 2vh;
             align-items: center;
             justify-content: center;
             background: transparent;
@@ -887,13 +889,24 @@ class CardTypeWizard extends HTMLElement {
         }
 
         .wizard-spinner {
-            width: 5vh;
-            height: 5vh;
-            border: 3px solid rgba(80, 180, 220, 0.15);
-            border-top: 3px solid rgba(100, 200, 255, 0.7);
+            width: 8vh;
+            height: 8vh;
+            border: 4px solid rgba(80, 180, 220, 0.15);
+            border-top: 4px solid rgba(100, 200, 255, 0.7);
             border-radius: 50%;
             opacity: 0;
             transition: opacity 0.2s ease;
+        }
+
+        .wizard-loading-text {
+            font-size: 3vh;
+            color: rgba(160, 210, 240, 0.7);
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+
+        .wizard-loading-overlay.visible .wizard-loading-text {
+            opacity: 1;
         }
 
         .wizard-loading-overlay.visible .wizard-spinner {
