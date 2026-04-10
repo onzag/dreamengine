@@ -7,6 +7,11 @@
 import { DEngine } from "../engine/index.js";
 import { DEJSEngine } from "../jsengine/index.js";
 import { InferenceAdapterLlamaUncensored } from "../engine/inference/adapter-de-server-uncensored.js";
+import { generateBase } from "../cardtype/generate-base.js";
+import { generateBonds } from "../cardtype/generate-bonds.js";
+import { generateActivities } from "../cardtype/generate-activities.js";
+import { generateBondTriggers } from "../cardtype/generate-bond-triggers.js";
+import { generateBasicStates } from "../cardtype/generate-basic-states.js";
 
 // ── Script path resolvers (using file:// fetch) ────────────────────
 // The main thread sends the absolute paths via the "setScriptPaths" RPC.
@@ -317,6 +322,22 @@ const handlers = {
         }
         return result;
     },
+
+    // cardtype-wizard RPCs
+    /**
+     * @param {object} args
+     * @param {import('../cardtype/base.js').CardTypeCard} args.currentCard
+     * @param {boolean} args.guided - whether to run the guider questions or skip straight to generation 
+     */
+    async continueCardTypeWizard({ currentCard, guided }) {
+        
+
+        await generateBase(engine, currentCard, guider, autosave);
+        await generateBonds(engine, currentCard, guider, autosave);
+        await generateActivities(engine, currentCard, guider, autosave);
+        await generateBondTriggers(engine, currentCard, guider, autosave);
+        await generateBasicStates(engine, currentCard, guider, autosave);
+    }
 };
 
 // ── Message listener ────────────────────────────────────────────────

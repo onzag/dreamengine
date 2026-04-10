@@ -346,6 +346,22 @@ ipcMain.handle('deleteScriptFile', async (event, namespace, id) => {
     fs.unlinkSync(scriptPath);
 });
 
+ipcMain.handle('updateScriptFile', async (event, namespace, id, content) => {
+    if (!namespace || !id) {
+        throw new Error("Namespace and ID are required");
+    }
+
+    if (namespace.startsWith('@')) {
+        throw new Error("Namespace cannot start with '@'");
+    }
+
+    const scriptPath = path.join(SCRIPT_FOLDER, namespace, `${id}.js`);
+    if (!fs.existsSync(scriptPath)) {
+        throw new Error("Script file does not exist");
+    }
+    fs.writeFileSync(scriptPath, content, 'utf-8');
+});
+
 ipcMain.handle('getConfigValue', async (event, key) => {
     const keys = key.split('.');
     let current = config;

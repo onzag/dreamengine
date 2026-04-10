@@ -11,7 +11,7 @@ const deTypesDir = path.join(localDEPathAtHomeDir, 'types');
  * Builds the type environment for both:
  * - The local repo (`js/types/script-registry.d.ts`) — default-scripts only
  * - The `.dreamengine` dev folder (`~/.dreamengine/types/`) — all search paths,
- *   plus copies of DE.d.ts, electron.d.ts
+ *   plus copies of DE.d.ts, api.d.ts
  * @param {{doNotBuildLocals: boolean, doNotWriteHomeScript: boolean}} options
  */
 export default async function build(options = { doNotBuildLocals: false, doNotWriteHomeScript: false }) {
@@ -30,7 +30,7 @@ export default async function build(options = { doNotBuildLocals: false, doNotWr
     console.log(`Wrote script-registry.d.ts to ${deTypesDir}`);
 
     // Copy the core type files to .dreamengine
-    const filesToCopy = ['DE.d.ts', 'electron.d.ts'];
+    const filesToCopy = ['DE.d.ts', 'api.d.ts'];
     for (const file of filesToCopy) {
         const src = path.join(typesSourceDir, file);
         const dest = path.join(deTypesDir, file);

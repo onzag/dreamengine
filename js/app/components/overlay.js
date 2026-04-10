@@ -1305,42 +1305,32 @@ class OverlayInputBoolean extends HTMLElement {
     checkValue() {
         return;
     }
-    connectedCallback() {
+    async connectedCallback() {
         this.render();
+
+        const dataLocation = this.getAttribute('input-data-location');
+        const dataValue = dataLocation ? await window.API.getConfigValue(dataLocation) : null;
+
         const inputElement = this.root.querySelector('input[type="checkbox"]');
-        if (this.getAttribute("input-default-value") === "true") {
+        if (dataValue !== null) {
             // @ts-expect-error
-            inputElement.checked = true;
-            this.originalValue = true;
+            inputElement.checked = Boolean(dataValue);
+            this.originalValue = Boolean(dataValue);
+        } else {
+            if (this.getAttribute("input-default-value") === "true") {
+                // @ts-expect-error
+                inputElement.checked = true;
+                this.originalValue = true;
+            } else {
+                // @ts-expect-error
+                inputElement.checked = false;
+                this.originalValue = false;
+            }
         }
         // @ts-expect-error
         inputElement.addEventListener('change', () => {
             this.onCheckboxChange();
             this.dispatchEvent(new Event('input-detected', { bubbles: true }));
-        });
-
-        const dataLocation = this.getAttribute('input-data-location');
-        if (!dataLocation) {
-            // @ts-ignore
-            this._resolveReady();
-            return;
-        }
-
-        const cacheFile = this.getAttribute("input-data-file") ? {
-            fileName: this.getAttribute("input-data-file"),
-            fileType: this.getAttribute("input-data-type"),
-        } : null;
-
-        // @ts-ignore
-        window.electronAPI.loadValueFromUserData(dataLocation, cacheFile).then((value) => {
-            if (value !== null) {
-                const boolValue = value === true || value === "true";
-                // @ts-expect-error
-                inputElement.checked = boolValue;
-                this.originalValue = boolValue;
-            }
-            // @ts-ignore
-            this._resolveReady();
         });
     }
     onCheckboxChange() {

@@ -1,4 +1,4 @@
-import { createCardStructureFrom, isCardTypeFile } from '../../../cardtype/base.js';
+import { createCardStructureFrom, getJsCard, isCardTypeFile } from '../../../cardtype/base.js';
 import { playCancelSound, playConfirmSound, playHoverSound, setTempSoundDisable } from '../../sound.js';
 
 class CardTypeWizard extends HTMLElement {
@@ -8,6 +8,8 @@ class CardTypeWizard extends HTMLElement {
         this.onDocumentKeydown = this.onDocumentKeydown.bind(this);
         /** @type {number | null} */
         this._overlayTimer = null;
+        /** @type {number | null} */
+        this._autosaveHideTimer = null;
     }
 
     connectedCallback() {
@@ -70,9 +72,9 @@ class CardTypeWizard extends HTMLElement {
 
             if (isAutomaticInProgress || isGuidedInProgress) {
                 const titleName = isAutomaticInProgress ? 'Automatic Wizard' : 'Guided Wizard';
-                const contentTitle = this.root.querySelector('.wizard-title');
-                if (contentTitle) {
-                    contentTitle.textContent = `${titleName}`;
+                const titleText = this.root.querySelector('.wizard-title span:first-child');
+                if (titleText) {
+                    titleText.textContent = titleName;
                 }
 
                 if (isAutomaticInProgress) {
@@ -152,9 +154,20 @@ class CardTypeWizard extends HTMLElement {
         /** @type {import('../../../cardtype/base.js').CardTypeGuider | null} */
         const guider = mode === 'guided' ? this.createUIGuider() : null;
 
+        const autosave = {
+            save: async () => {
+
+                if (!parsedCard) return;
+                const jsContent = getJsCard(parsedCard);
+                this.showAutosaveStatus();
+                await window.API.updateScriptFile(parsedCard.config.namespace, parsedCard.config.id, jsContent);
+                this.hideAutosaveStatus();
+            }
+        }
+
         if (guider) {
             const wait = () => new Promise(r => setTimeout(r, 5000));
-
+            
             // Dummy questions to test each type
             const optionResult = await guider.askOption('What is the character archetype?', ['Hero', 'Villain', 'Anti-Hero', 'Mentor', 'Trickster'], 'Hero');
             console.log('askOption result:', optionResult);
@@ -439,8 +452,39 @@ class CardTypeWizard extends HTMLElement {
         this.root.querySelector('.wizard-loading-overlay')?.remove();
     }
 
+    /**
+     * Shows the autosave indicator in the title bar.
+     */
+    showAutosaveStatus() {
+        if (this._autosaveHideTimer) {
+            clearTimeout(this._autosaveHideTimer);
+            this._autosaveHideTimer = null;
+        }
+        const el = this.root.querySelector('.wizard-autosave');
+        if (el) {
+            el.classList.add('visible');
+        }
+    }
+
+    /**
+     * Fades out the autosave indicator after a short delay.
+     */
+    hideAutosaveStatus() {
+        this._autosaveHideTimer = window.setTimeout(() => {
+            const el = this.root.querySelector('.wizard-autosave');
+            if (el) {
+                el.classList.remove('visible');
+            }
+            this._autosaveHideTimer = null;
+        }, 1500);
+    }
+
     disconnectedCallback() {
         this.endOverlay();
+        if (this._autosaveHideTimer) {
+            clearTimeout(this._autosaveHideTimer);
+            this._autosaveHideTimer = null;
+        }
         document.removeEventListener('keydown', this.onDocumentKeydown);
     }
 
@@ -519,6 +563,21 @@ class CardTypeWizard extends HTMLElement {
             box-sizing: border-box;
             letter-spacing: 0.1em;
             text-shadow: 0 0 12px rgba(60, 160, 220, 0.15);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .wizard-autosave {
+            font-size: 2vh;
+            color: rgba(100, 200, 240, 0.7);
+            opacity: 0;
+            transition: opacity 0.4s ease;
+            white-space: nowrap;
+        }
+
+        .wizard-autosave.visible {
+            opacity: 1;
         }
 
         .wizard-content {
@@ -919,7 +978,10 @@ class CardTypeWizard extends HTMLElement {
         }
       </style>
       <div class="wizard-overlay">
-        <div class="wizard-title">CardType Wizard</div>
+        <div class="wizard-title">
+            <span>CardType Wizard</span>
+            <span class="wizard-autosave">Saving...</span>
+        </div>
         <div class="wizard-content">
             <slot></slot>
         </div>

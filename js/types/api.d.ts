@@ -4,7 +4,7 @@
 
 import { EngineWorkerClient } from "../worker-sandbox/client";
 
-declare interface ElectronAPI {
+declare interface DEAPI {
   toggleFullScreen(): void | Promise<void>;
   openDevTools(): void;
   viewSource(fileUrl: string): Promise<void>;
@@ -16,6 +16,7 @@ declare interface ElectronAPI {
   newScriptFile(namespace: string, id: string, header?: string): Promise<void>;
   moveScriptFile(oldNamespace: string, oldId: string, newNamespace: string, newId: string): Promise<void>;
   deleteScriptFile(namespace: string, id: string): Promise<void>;
+  updateScriptFile(namespace: string, id: string, content: string): Promise<void>;
 
   getConfigValue(key: string): Promise<any>;
   setConfigValue(key: string, value: any): Promise<void>;
@@ -28,7 +29,7 @@ declare interface ElectronAPI {
 
 declare global {
   interface Window {
-    API: ElectronAPI;
+    API: DEAPI;
     DREAMENGINE_HOME: string;
     DREAMENGINE_DEFAULT_SCRIPTS_HOME: string;
     ENGINE_WORKER_CLIENT: EngineWorkerClient;
