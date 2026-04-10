@@ -154,7 +154,11 @@ export class EngineWorkerClient {
     /** @param {{ characterName: string }} args */
     jsEngineOnInferenceExecuted(args) { return this.#call("jsEngineOnInferenceExecuted", args); }
     /**
-     * 
+     * @param {{ namespace: string, id: string }} args
+     * @returns {Promise<{ srcUrl: string }>} The script source URL (for error reporting)
+     */
+    getScriptSource(args) { return this.#call("getScriptSource", args); }
+    /**
      * @returns {Promise<Record<string, { id: string, namespace: string, description: string, type: string, exposeProperties: DEScriptExposeProperties }>>}
      */
     jsEngineGetInfoMap() {

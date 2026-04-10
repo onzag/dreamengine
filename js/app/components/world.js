@@ -7,6 +7,7 @@ class WorldOverlay extends HTMLElement {
 
         this.currentWorldId = "";
         this.currentWorldNamespace = "";
+        this.currentSectionIndex = 0;
     }
 
     async connectedCallback() {
@@ -37,6 +38,15 @@ class WorldOverlay extends HTMLElement {
             playConfirmSound();
             setTempSoundDisable();
             this.remove();
+        });
+
+        this.renderSection();
+
+        // @ts-expect-error
+        this.root.querySelector('app-overlay-tabs').addEventListener('tab-change', (e) => {
+            // @ts-ignore
+            this.currentSectionIndex = e.detail.newIndex;
+            this.renderSection();
         });
     }
 
@@ -120,6 +130,23 @@ class WorldOverlay extends HTMLElement {
         });
     }
 
+    renderSection() {
+        const tabsContainer = this.root.querySelector('app-overlay-tabs');
+        if (!tabsContainer) return;
+
+        if (this.currentSectionIndex === 0) {
+            tabsContainer.innerHTML = `<app-overlay-section section-title="Configure">
+            </app-overlay-section>`;
+        } else if (this.currentSectionIndex === 1) {
+            tabsContainer.innerHTML = `<app-overlay-section section-title="Script Info">
+                <app-script-info
+                    script-id="${this.currentWorldId.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')}"
+                    script-namespace="${this.currentWorldNamespace.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')}"
+                ></app-script-info>
+            </app-overlay-section>`;
+        }
+    }
+
     render() {
         this.root.innerHTML = `
             <style>
@@ -130,7 +157,8 @@ class WorldOverlay extends HTMLElement {
                 confirm-text="Apply Changes"
                 cancel-text="Go Back"
             >
-                
+                <app-overlay-tabs current="${this.currentSectionIndex}" sections='["Configure", "Script Info"]'>
+                </app-overlay-tabs>
             </app-overlay>
         `;
     }

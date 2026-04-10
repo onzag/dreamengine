@@ -41,6 +41,23 @@ const resolver = async (namespace, id) => {
     }
 };
 
+/** @type {(namespace: string, id: string) => Promise<{srcUrl: string}>} */
+const resolverUrlOnly = async (namespace, id) => {
+    if (!userScriptsBase || !defaultScriptsBase) {
+        throw new Error("Script paths not set. Call setScriptPaths first.");
+    }
+    const result = await resolver(namespace, id);
+    // Namespaces starting with "@" load from bundled default-scripts,
+    // all others load from the user's local scripts folder.
+    if (namespace.startsWith('@')) {
+        const defaultUrl = `${defaultScriptsBase}/${namespace}/${id}.js`;
+        return { srcUrl: defaultUrl };
+    } else {
+        const userUrl = `${userScriptsBase}/${namespace}/${id}.js`;
+        return { srcUrl: userUrl };
+    }
+}
+
 /**
  * @type {Array<{namespace: string, id: string}> | null}
  * The full list of available scripts, provided by the main thread since file:// can't list directories. Used for bulk imports and preloading all scripts.
@@ -198,6 +215,14 @@ const handlers = {
         return jsEngine.getInfoMapForScripts(scripts);
     },
 
+    /**
+     * @param {{ namespace: string, id: string }} args
+     * @returns {Promise<{ srcUrl: string }>} The script source and its URL (for error reporting)
+     */
+    async getScriptSource({ namespace, id }) {
+        return await resolverUrlOnly(namespace, id);
+    },
+
     // ─── deObject partial query ─────────────────────────────────
     /**
      * Walk into engine.deObject along `path` (dot-separated or array),
@@ -256,9 +281,9 @@ const handlers = {
                     if (typeof v === "function") return acc;
                     // @ts-ignore
                     acc[k] = v === null ? null
-                           : Array.isArray(v) ? `[Array(${v.length})]`
-                           : typeof v === "object" ? `{${Object.keys(v).length} keys}`
-                           : v;
+                        : Array.isArray(v) ? `[Array(${v.length})]`
+                            : typeof v === "object" ? `{${Object.keys(v).length} keys}`
+                                : v;
                     return acc;
                 }, {});
             }

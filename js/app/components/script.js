@@ -1,4 +1,5 @@
 import { playCancelSound, playConfirmSound, playHoverSound, playPauseSound, setTempSoundDisable } from '../sound.js';
+import './scripting/script-info.js';
 
 class ScriptOverlay extends HTMLElement {
     constructor() {
@@ -118,10 +119,15 @@ class ScriptOverlay extends HTMLElement {
                 @import "./components/script.css";
             </style>
             <app-overlay
-                overlay-title="Script: ${(this.currentScriptNamespace.replace("@", "(System|ReadOnly) ") + " / " + this.currentScriptId).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}"
+                overlay-title="Script: ${(this.currentScriptNamespace.replace("@", "(System|ReadOnly) ") + " / " + this.currentScriptId).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')}"
                 cancel-text="Go Back"
             >
-                
+                <div class="internal-content-area">
+                    <app-script-info
+                        script-id="${this.currentScriptId.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')}"
+                        script-namespace="${this.currentScriptNamespace.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')}"
+                    ></app-script-info>
+                </div>
             </app-overlay>
         `;
     }

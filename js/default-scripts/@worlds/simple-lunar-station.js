@@ -5,6 +5,7 @@ engine.exports = {
         "IS_ROBOT": {
             propertyLocation: "characters",
             type: "boolean",
+            description: "Whether the character is a robot or not. Robots are impervious to the vaccuum of space weather system",
         }
     },
     initialize(DE) {

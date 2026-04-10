@@ -10,6 +10,13 @@ contextBridge.exposeInMainWorld('API', {
     openDevTools: () => {
         ipcRenderer.send('openDevTools');
     },
+    /**
+     * @param {string} fileUrl - A file:// URL to view source of
+     * @returns {Promise<void>}
+     */
+    viewSource: (fileUrl) => {
+        return ipcRenderer.invoke('viewSource', fileUrl);
+    },
     closeApp: () => {
         ipcRenderer.send('closeApp');
     },

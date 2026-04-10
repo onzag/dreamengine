@@ -3279,9 +3279,6 @@ declare type DEScriptExposeProperties = Record<string, {
     type: "template" | "string" | "number" | "boolean" | "json";
     description?: string;
     propertyLocation: "world" | "characters" | "items";
-    filter?: {
-        name?: string;
-    }
 }>;
 
 declare interface DEScript {

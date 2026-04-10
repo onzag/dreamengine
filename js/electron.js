@@ -64,6 +64,57 @@ const ALLOWED_BASE_PATHS = [
     "devtools://",
 ];
 
+/**
+ * Simple JS syntax highlighter that returns HTML with span classes.
+ * @param {string} code
+ * @returns {string}
+ */
+function highlightJS(code) {
+    const esc = (/** @type {string} */ s) => s
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+    const tokens = [];
+    const re = /(\/\/.*$|\/\*[\s\S]*?\*\/)|(`(?:[^`\\]|\\[\s\S])*`)|('(?:[^'\\]|\\[\s\S])*'|"(?:[^"\\]|\\[\s\S])*")|(\/(?![*\/])(?:[^\[\/\\]|\\.|\[(?:[^\]\\]|\\.)*\])+\/[gimsuy]*)|(\b(?:async|await|break|case|catch|class|const|continue|debugger|default|delete|do|else|export|extends|finally|for|from|function|if|import|in|instanceof|let|new|of|return|static|super|switch|this|throw|try|typeof|var|void|while|with|yield)\b)|(\b(?:true|false|null|undefined|NaN|Infinity)\b)|(\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b)|(\b[a-zA-Z_$][\w$]*(?=\s*\())|([\n])/gm;
+
+    let lastIndex = 0;
+    let match;
+    while ((match = re.exec(code)) !== null) {
+        if (match.index > lastIndex) {
+            tokens.push(esc(code.slice(lastIndex, match.index)));
+        }
+        const [full, comment, template, str, regex, kw, cnst, num, fn, nl] = match;
+        if (nl) {
+            tokens.push(nl);
+        } else if (comment) {
+            tokens.push(`<span class="cmt">${esc(comment)}</span>`);
+        } else if (template) {
+            tokens.push(`<span class="tpl">${esc(template)}</span>`);
+        } else if (str) {
+            tokens.push(`<span class="str">${esc(str)}</span>`);
+        } else if (regex) {
+            tokens.push(`<span class="reg">${esc(regex)}</span>`);
+        } else if (kw) {
+            tokens.push(`<span class="kw">${esc(kw)}</span>`);
+        } else if (cnst) {
+            tokens.push(`<span class="cnst">${esc(cnst)}</span>`);
+        } else if (num) {
+            tokens.push(`<span class="num">${esc(num)}</span>`);
+        } else if (fn) {
+            tokens.push(`<span class="fn">${esc(fn)}</span>`);
+        }
+        lastIndex = re.lastIndex;
+    }
+    if (lastIndex < code.length) {
+        tokens.push(esc(code.slice(lastIndex)));
+    }
+
+    // Add line numbers
+    const highlighted = tokens.join('');
+    const lines = highlighted.split('\n');
+    return lines.map((line, i) => `<span class="ln">${i + 1}</span>${line}`).join('\n');
+}
+
 app.whenReady().then(() => {
     createWindow()
     
@@ -109,6 +160,53 @@ ipcMain.on('openDevTools', () => {
     if (win) {
         win.webContents.openDevTools();
     }
+});
+
+ipcMain.handle('viewSource', async (event, fileUrl) => {
+    if (typeof fileUrl !== 'string' || !fileUrl.startsWith('file:///')) {
+        throw new Error('Invalid URL');
+    }
+    const isAllowed = ALLOWED_BASE_PATHS.some(base => fileUrl.startsWith(base));
+    if (!isAllowed) {
+        throw new Error('URL not allowed');
+    }
+
+    // Convert file:// URL back to OS path
+    const { fileURLToPath: toPath } = await import('url');
+    const filePath = toPath(fileUrl);
+    if (filePath.includes('..')) {
+        throw new Error('Invalid path');
+    }
+    const source = await fs.promises.readFile(filePath, 'utf-8');
+    const fileName = path.basename(filePath);
+
+    const esc = (/** @type {string} */ s) => s
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(fileName)}</title>
+<style>
+body { margin:0; background:#1e1e1e; color:#d4d4d4; font-family:Consolas,'Courier New',monospace; font-size:14px; }
+pre { margin:0; padding:16px; line-height:1.5; white-space:pre-wrap; word-wrap:break-word; tab-size:4; }
+.ln { color:#858585; user-select:none; display:inline-block; min-width:3em; text-align:right; padding-right:1.5em; }
+.kw { color:#569cd6; } .str { color:#ce9178; } .num { color:#b5cea8; }
+.cmt { color:#6a9955; } .fn { color:#dcdcaa; } .reg { color:#d16969; }
+.cnst { color:#4fc1ff; } .op { color:#d4d4d4; } .tpl { color:#ce9178; }
+</style></head><body><pre>${highlightJS(source)}</pre></body></html>`;
+
+    const sourceWin = new BrowserWindow({
+        width: 900,
+        height: 700,
+        title: fileName + ' — View Source',
+        autoHideMenuBar: true,
+        webPreferences: {
+            contextIsolation: true,
+            sandbox: true,
+            webSecurity: true,
+            javascript: false,
+        },
+    });
+    sourceWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
 });
 
 ipcMain.on('closeApp', () => {

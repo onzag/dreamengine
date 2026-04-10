@@ -7,6 +7,7 @@ import { EngineWorkerClient } from "../worker-sandbox/client";
 declare interface ElectronAPI {
   toggleFullScreen(): void | Promise<void>;
   openDevTools(): void;
+  viewSource(fileUrl: string): Promise<void>;
   closeApp(): void;
 
   listScriptFiles(): Promise<Array<{ id: string; namespace: string; }>>;

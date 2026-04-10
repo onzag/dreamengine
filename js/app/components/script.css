@@ -1,3 +1,7 @@
 .none {
     color: #FF6B6B;
 }
+
+.internal-content-area {
+    padding: 4vh;
+}
