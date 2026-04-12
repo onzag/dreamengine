@@ -259,6 +259,9 @@ class CardTypeWizard extends HTMLElement {
             return;
         }
 
+        // If the element was removed (user clicked Go Back / cancelled), stop here
+        if (!this.isConnected) return;
+
         console.log('CardTypeWizard process complete for character:', characterId);
 
         lastCard.config.automaticWizardInProgress = false;

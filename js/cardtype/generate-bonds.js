@@ -14,6 +14,8 @@ if (typeof process !== "undefined" && process.versions && process.versions.node)
  */
 export async function generateBonds(engine, card, guider, autosave) {
 
+    throw new Error("Currently disabled");
+
     const inferenceAdapter = engine.inferenceAdapter;
     if (!inferenceAdapter) {
         throw new Error("No inference adapter found on engine");

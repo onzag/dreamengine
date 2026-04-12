@@ -413,11 +413,13 @@ client.ready.then(async () => {
 
     const host = await window.API.getConfigValue('host');
     const secret = await window.API.getConfigValue('secret');
+    const allowSelfSigned = await window.API.getConfigValue('allowSelfSigned');
 
     if (host && secret) {
         await client.setupInferenceAdapter({
             host,
             secret,
+            allowSelfSigned,
         });
 
         try {

@@ -120,14 +120,14 @@ export function isCardTypeFile(jsContent) {
 /**
  * @param {CardTypeCard} base
  * @param {number} baseTabCount
- * @param {boolean} noImports
+ * @param {boolean} noImportsNorCardAndConfig
  * @returns {string}
  */
-export function getJsCard(base, baseTabCount = 0, noImports = false) {
-    let endResult = `//@config: ${JSON.stringify(base.config)}` +
+export function getJsCard(base, baseTabCount = 0, noImportsNorCardAndConfig = false) {
+    let endResult = noImportsNorCardAndConfig ? "" : `//@config: ${JSON.stringify(base.config)}` +
         `\n//@card: ${JSON.stringify(base.card)}` + "\n\n";
 
-    const elementsInOrder = noImports ? [
+    const elementsInOrder = noImportsNorCardAndConfig ? [
         "//@head",
         ...base.head,
         "//@body",
@@ -280,4 +280,34 @@ export function getSection(lines, commentId) {
     });
     // @ts-ignore
     return found || null;
+}
+
+/**
+ * Converts a plain string with {{placeholder}} syntax into a backtick-wrapped
+ * template literal string with specific replacements:
+ *   {{char}}        → ${info.char.name}
+ *   {{char.x}}      → ${info.char.x}
+ *   {{other}}       → ${info.other.name}
+ *   {{other.x}}     → ${info.other.x}
+ *   {{chars}}       → ${DE.utils.templateUtils.formatAnd(DE, info.chars.map((c) => c.name))}
+ *   anything else   → ${"???"}
+ *
+ * Escapes existing backticks and $ signs so the result is safe
+ * to embed directly as a JS template literal.
+ * @param {string} str
+ * @returns {string}
+ */
+export function toTemplateLiteral(str) {
+    // Escape backticks and lone ${} that aren't our placeholders
+    let escaped = str.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$\{/g, '\\${');
+    // Replace {{...}} with specific expansions
+    escaped = escaped.replace(/\{\{(.+?)\}\}/g, (_, key) => {
+        if (key === 'char') return '${info.char.name}';
+        if (key.startsWith('char.')) return '${info.' + key + '}';
+        if (key === 'other') return '${info.other.name}';
+        if (key.startsWith('other.')) return '${info.' + key + '}';
+        if (key === 'chars') return '${DE.utils.templateUtils.formatAnd(DE, info.chars.map((c) => c.name))}';
+        return '${"???"}';
+    });
+    return '`' + escaped + '`';
 }

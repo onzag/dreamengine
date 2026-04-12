@@ -196,7 +196,7 @@ const handlers = {
         return { ok: true };
     },
 
-    async setupInferenceAdapter({ host, secret }) {
+    async setupInferenceAdapter({ host, secret, allowSelfSigned }) {
         engine.setInferenceAdapter(new InferenceAdapterLlamaUncensored(engine, { host, secret }));
         return { ok: true };
     },

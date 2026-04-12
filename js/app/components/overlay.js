@@ -1346,6 +1346,16 @@ class OverlayInputBoolean extends HTMLElement {
         // @ts-expect-error
         return inputElement.checked !== this.originalValue;
     }
+    async saveValueToUserData() {
+        if (!this.hasBeenModified()) {
+            return;
+        }
+        const dataLocation = this.getAttribute('input-data-location');
+        if (!dataLocation) {
+            return;
+        }
+        await window.API.setConfigValue(dataLocation, this.getValue());
+    }
     hasErrorsPresent() {
         return false;
     }

@@ -1,7 +1,7 @@
 import { DEngine } from '../engine/index.js';
 import { emotions } from '../engine/util/emotions.js';
 import { createGrammarListFromList } from '../engine/util/grammar.js';
-import { insertSection, getSection, insertSpecialComment, hasSpecialComment } from './base.js';
+import { insertSection, getSection, insertSpecialComment, hasSpecialComment, toTemplateLiteral } from './base.js';
 
 if (typeof process !== "undefined" && process.versions && process.versions.node) {
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
@@ -90,7 +90,7 @@ export async function generateBase(engine, card, guider, autosave) {
     const newCharacterSection = insertSection(initializeSection.body, "new-character");
 
     let name = "";
-    if (!hasSpecialComment(newCharacterSection.body, "base-basics")) {
+    if (!hasSpecialComment(card.head, "base-basics")) {
         await prime();
         const answer = await generator.next({
             maxCharacters: 50,
@@ -132,19 +132,18 @@ export async function generateBase(engine, card, guider, autosave) {
             throw new Error("Generator finished without producing output");
         }
 
-
         insertSpecialComment(card.head, "base-basics");
 
         card.head.push(`description: ${JSON.stringify(answerSmallOneSentenceDescription.value.trim())},`);
 
-        
         initializeSection.head.push(`initialize(DE) {`);
 
         newCharacterSection.head.push(`DE.utils.newCharacter(DE, fss.setup(DE, {`);
         newCharacterSection.body.push(`name: ${JSON.stringify(name)},`);
-
-        newCharacterSection.foot.push(`}),`); // close newCharacter
-
+        newCharacterSection.foot.push(`},{`); // close newCharacter
+        // we will need to get this sections when generating the bonds
+        insertSection(newCharacterSection.foot, "options");
+        newCharacterSection.foot.push(`}));`); // close setup
         initializeSection.foot.push(`},`); // close initialize
 
         await autosave?.save();
@@ -153,30 +152,45 @@ export async function generateBase(engine, card, guider, autosave) {
     }
 
     if (!hasSpecialComment(newCharacterSection.body, "base-description")) {
-        let specialInstructions = guider ? (await guider.askOpen("Provide any special focus instructions for defining " + name + "'s appearance, personality, or abilities, what to focus on (do not talk about clothing the description is about the character's inherent traits and features)")).value : null;
-        if (specialInstructions) {
-            specialInstructions = ". " + specialInstructions.trim();
+        let accepted = true;
+        let description = "";
+
+        while (true) {
+            let specialInstructions = guider ? (await guider.askOpen("Provide any special focus instructions for defining " + name + "'s appearance, personality, or abilities, what to focus on (do not talk about clothing the description is about the character's inherent traits and features)")).value : null;
+            if (specialInstructions) {
+                specialInstructions = ". IMPORTANT INSTRUCTIONS: " + specialInstructions.trim();
+            }
+
+            await prime();
+            const answerDescription = await generator.next({
+                maxCharacters: 3000,
+                maxSafetyCharacters: 0,
+                maxParagraphs: 10,
+                nextQuestion: "Describe " + name + "'s appearance, personality, and any special traits or abilities they have.",
+                stopAfter: [],
+                stopAt: [],
+                instructions: "Be creative, answer with a detailed description of " + name +
+                    "'s general appearance, personality, and any special traits or abilities they have. Use multiple paragraphs and sentences. Do not include items of clothing or specific equipment, just the character's inherent traits and features. Make at least 3 paragraphs" + (specialInstructions || ""),
+            });
+
+            if (answerDescription.done) {
+                throw new Error("Generator finished without producing output");
+            }
+
+            description = replaceAllCharNameWithPlaceholder(answerDescription.value.trim(), name);
+
+            if (guider) {
+                let acceptedResponse = await guider.askOpenWithTryAgain("Is the following description okay?", description);
+                accepted = acceptedResponse.accepted;
+                description = acceptedResponse.value;
+            }
+
+            if (accepted) {
+                break;
+            }
         }
-
-        await prime();
-        const answerDescription = await generator.next({
-            maxCharacters: 3000,
-            maxSafetyCharacters: 0,
-            maxParagraphs: 10,
-            nextQuestion: "Describe " + name + "'s appearance, personality, and any special traits or abilities they have.",
-            stopAfter: [],
-            stopAt: [],
-            instructions: "Be creative, answer with a detailed description of " + name +
-                "'s general appearance, personality, and any special traits or abilities they have. Use multiple paragraphs and sentences. Do not include items of clothing or specific equipment, just the character's inherent traits and features. Make at least 3 paragraphs" + (specialInstructions || ""),
-        });
-
-        if (answerDescription.done) {
-            throw new Error("Generator finished without producing output");
-        }
-
-        const description = replaceAllCharNameWithPlaceholder(answerDescription.value.trim(), name);
         insertSpecialComment(newCharacterSection.body, "base-description");
-        newCharacterSection.body.push(`general: DE.utils.newHandlebarsTemplate(DE, ${JSON.stringify(description)}),`);
+        newCharacterSection.body.push(`general: (DE, info) => ${toTemplateLiteral(description)}),`);
         await autosave?.save();
     }
 
@@ -184,7 +198,7 @@ export async function generateBase(engine, card, guider, autosave) {
     if (!hasSpecialComment(newCharacterSection.body, "base-short-description")) {
         let specialInstructionsForShortDescription = guider ? (await guider.askOpen("Provide any special focus instructions for defining " + name + "'s external and physical description, what to focus on (do not talk about clothing the description is about the character's inherent traits and features)")).value : null;
         if (specialInstructionsForShortDescription) {
-            specialInstructionsForShortDescription = ". " + specialInstructionsForShortDescription.trim();
+            specialInstructionsForShortDescription = ". IMPORTANT INSTRUCTIONS: " + specialInstructionsForShortDescription.trim();
         }
 
         await prime();
@@ -278,18 +292,20 @@ export async function generateBase(engine, card, guider, autosave) {
         newCharacterSection.body.push(`states: {},`);
         newCharacterSection.body.push(`state: {`);
         newCharacterSection.body.push(`BOND_SYSTEM_FORGIVENESS_RATE_PER_DAY: 0.5,`),
-        newCharacterSection.body.push(`},`)
+            newCharacterSection.body.push(`},`)
         newCharacterSection.body.push("triggers: [],");
         newCharacterSection.body.push("temp: {},"); // Temporary properties to use during inference cycles, they do not persist
-
-        newCharacterSection.body.push(`emotions: {`);
         await autosave?.save();
     }
 
 
     const emotionsGrammar = createGrammarListFromList(engine, emotions, 7);
 
-    if (!hasSpecialComment(newCharacterSection.body, "base-emotions")) {
+    const emotionsSection = insertSection(newCharacterSection.body, "emotions");
+    emotionsSection.head.push(`emotions: {`);
+    emotionsSection.foot.push(`},`);
+
+    if (!hasSpecialComment(emotionsSection.body, "base-emotions")) {
         await prime();
         const commonEmotions = await generator.next({
             maxCharacters: 200,
@@ -318,19 +334,19 @@ export async function generateBase(engine, card, guider, autosave) {
             }
         }
 
-        insertSpecialComment(newCharacterSection.body, "base-emotions");
+        insertSpecialComment(emotionsSection.body, "base-emotions");
 
         for (const emotion of commonEmotionsList) {
-            newCharacterSection.body.push(`${emotion}: {`);
-            newCharacterSection.body.push(`common: true,`);
-            newCharacterSection.body.push(`},`);
+            emotionsSection.body.push(`${emotion}: {`);
+            emotionsSection.body.push(`common: true,`);
+            emotionsSection.body.push(`},`);
         }
 
         card.config.commonEmotions = commonEmotionsList;
         await autosave?.save();
     }
 
-    if (!hasSpecialComment(newCharacterSection.body, "base-emotions-uncommon")) {
+    if (!hasSpecialComment(emotionsSection.body, "base-emotions-uncommon")) {
         await prime();
         const uncommonEmotions = await generator.next({
             maxCharacters: 200,
@@ -359,18 +375,17 @@ export async function generateBase(engine, card, guider, autosave) {
             }
         }
 
-        insertSpecialComment(newCharacterSection.body, "base-emotions-uncommon");
+        insertSpecialComment(emotionsSection.body, "base-emotions-uncommon");
 
         const commonEmotionsList = card.config.commonEmotions || [];
 
         for (const emotion of uncommonEmotionsList) {
             if (commonEmotionsList.includes(emotion)) continue;
-            newCharacterSection.body.push(`${emotion}: {`);
-            newCharacterSection.body.push(`uncommon: true,`);
-            newCharacterSection.body.push(`},`);
+            emotionsSection.body.push(`${emotion}: {`);
+            emotionsSection.body.push(`uncommon: true,`);
+            emotionsSection.body.push(`},`);
         }
 
-        newCharacterSection.body.push(`},`);
         await autosave?.save();
     }
 
@@ -1240,7 +1255,7 @@ export async function generateBase(engine, card, guider, autosave) {
         }
 
         insertSpecialComment(newCharacterSection.body, "base-heroism");
-        card.body.push(`heroism: ${parseInt(heroismValue.value.trim()) / 10},`);
+        newCharacterSection.body.push(`heroism: ${parseInt(heroismValue.value.trim()) / 10},`);
         await autosave?.save();
     }
 
@@ -1274,14 +1289,8 @@ export async function generateBase(engine, card, guider, autosave) {
 
         insertSpecialComment(newCharacterSection.body, "base-mute");
         if (isMuteValue) {
-            card.body.push(`vocabularyLimit: {mute: true},`);
+            newCharacterSection.body.push(`vocabularyLimit: {mute: true},`);
         }
-        await autosave?.save();
-    }
-
-    if (!hasSpecialComment(newCharacterSection.body, "base-social-simulation")) {
-        insertSpecialComment(newCharacterSection.body, "base-social-simulation");
-        card.body.push(`socialSimulation: {`);
         await autosave?.save();
     }
 
@@ -1315,7 +1324,7 @@ export async function generateBase(engine, card, guider, autosave) {
         }
 
         insertSpecialComment(newCharacterSection.body, "base-attractiveness");
-        card.body.push(`attractiveness: ${attractivenessValueNum / 10},`);
+        newCharacterSection.body.push(`attractiveness: ${attractivenessValueNum / 10},`);
         await autosave?.save();
     }
 
@@ -1349,40 +1358,7 @@ export async function generateBase(engine, card, guider, autosave) {
         }
 
         insertSpecialComment(newCharacterSection.body, "base-charisma");
-        card.body.push(`charisma: ${charismaValueNum / 10},`);
-        await autosave?.save();
-    }
-
-    if (!hasSpecialComment(newCharacterSection.body, "base-gossip")) {
-        await prime();
-        const gossipValue = await generator.next({
-            maxCharacters: 5,
-            maxSafetyCharacters: 0,
-            maxParagraphs: 1,
-            nextQuestion: "From 1 to 10 how much does " + name + " like gossip and talking about others? with 10 being loving gossip and always talking about others, and 1 being hating gossip and never talking about others",
-            stopAfter: [],
-            stopAt: [],
-            grammar: "root ::= [1-9] | \"10\"",
-        });
-
-        if (gossipValue.done) {
-            throw new Error("Generator finished without producing output");
-        }
-
-        let gossipValueNum = parseInt(gossipValue.value.trim());
-
-        if (guider) {
-            const gossipValueAsked = await guider.askNumber(
-                "From 1 to 10 how much does " + name + " like gossip and talking about others? with 10 being loving gossip and always talking about others, and 1 being hating gossip and never talking about others",
-                gossipValueNum,
-            );
-            if (gossipValueAsked) {
-                gossipValueNum = gossipValueAsked.value;
-            }
-        }
-
-        insertSpecialComment(newCharacterSection.body, "base-gossip");
-        card.body.push(`gossipTendency: ${gossipValueNum / 10},`);
+        newCharacterSection.body.push(`charisma: ${charismaValueNum / 10},`);
         await autosave?.save();
     }
 
@@ -1406,13 +1382,13 @@ export async function generateBase(engine, card, guider, autosave) {
                 }
             } while (nextFamilyMemberToAdd !== "no");
             insertSpecialComment(newCharacterSection.body, "base-family-ties");
-            card.body.push(`familyTies: ${JSON.stringify(collectedTies)},`);
+            newCharacterSection.body.push(`familyTies: ${JSON.stringify(collectedTies)},`);
             await autosave?.save();
 
             // TODO ask to pre-create bond towards other characters
         } else {
             insertSpecialComment(newCharacterSection.body, "base-family-ties");
-            card.body.push(`familyTies: {}, // Not covered in cardtype`);
+            newCharacterSection.body.push(`familyTies: {}, // Not covered in cardtype`);
             await autosave?.save();
         }
     }
@@ -1444,7 +1420,7 @@ export async function generateBase(engine, card, guider, autosave) {
         }
 
         insertSpecialComment(newCharacterSection.body, "base-likes");
-        card.body.push(`likes: ${JSON.stringify(likesListParsedAndDeduped)}, // These are ids that need to be specified for the social simulation`);
+        newCharacterSection.body.push(`likes: ${JSON.stringify(likesListParsedAndDeduped)}, // These are ids that need to be specified for the social simulation`);
 
         if (!card.config.globalInterests) {
             card.config.globalInterests = likesListParsedAndDeduped;
@@ -1484,7 +1460,7 @@ export async function generateBase(engine, card, guider, autosave) {
         }
 
         insertSpecialComment(newCharacterSection.body, "base-dislikes");
-        card.body.push(`dislikes: ${JSON.stringify(dislikesListParsedAndDeduped)}, // These are ids that need to be specified for the social simulation`);
+        newCharacterSection.body.push(`dislikes: ${JSON.stringify(dislikesListParsedAndDeduped)}, // These are ids that need to be specified for the social simulation`);
 
         if (!card.config.globalInterests) {
             card.config.globalInterests = dislikesListParsedAndDeduped;
@@ -1569,8 +1545,8 @@ export async function generateBase(engine, card, guider, autosave) {
         }
 
         insertSpecialComment(newCharacterSection.body, "base-species");
-        card.body.push(`species: ${JSON.stringify(actualSpecies)},`);
-        card.body.push(`speciesType: "${speciesType}",`);
+        newCharacterSection.body.push(`species: ${JSON.stringify(actualSpecies)},`);
+        newCharacterSection.body.push(`speciesType: "${speciesType}",`);
 
         card.config.characterSpecies = actualSpecies;
         card.config.characterSpeciesType = speciesType;
@@ -1610,7 +1586,7 @@ export async function generateBase(engine, card, guider, autosave) {
             raceValue = null;
         }
         insertSpecialComment(newCharacterSection.body, "base-race");
-        card.body.push(`race: ${JSON.stringify(raceValue)},`);
+        newCharacterSection.body.push(`race: ${JSON.stringify(raceValue)},`);
         await autosave?.save();
     }
 
@@ -1641,9 +1617,9 @@ export async function generateBase(engine, card, guider, autosave) {
 
         insertSpecialComment(newCharacterSection.body, "base-group-belonging");
         if (finalGroupBelongingValue.length > 0) {
-            card.body.push(`groupBelonging: null,`);
+            newCharacterSection.body.push(`groupBelonging: null,`);
         } else {
-            card.body.push(`groupBelonging: ${JSON.stringify(finalGroupBelongingValue)},`);
+            newCharacterSection.body.push(`groupBelonging: ${JSON.stringify(finalGroupBelongingValue)},`);
         }
         await autosave?.save();
     }
@@ -1654,14 +1630,14 @@ export async function generateBase(engine, card, guider, autosave) {
             insertSpecialComment(newCharacterSection.body, "base-prejudices-species");
             if (dislikeSpeciesPrejudice) {
                 const dislikeSpeciesPrejudiceValue = dislikeSpeciesPrejudice.value.map(item => item.trim().toLowerCase()).filter(item => item !== "" && item !== "none" && item !== "n/a");
-                card.body.push(`dislikesSpecies: ${JSON.stringify(dislikeSpeciesPrejudiceValue)}, // Up to you to make the character prejudiced against certain species`);
+                newCharacterSection.body.push(`dislikesSpecies: ${JSON.stringify(dislikeSpeciesPrejudiceValue)}, // Up to you to make the character prejudiced against certain species`);
             } else {
-                card.body.push(`dislikesSpecies: [], // Up to you to make the character prejudiced against certain species`);
+                newCharacterSection.body.push(`dislikesSpecies: [], // Up to you to make the character prejudiced against certain species`);
             }
             await autosave?.save();
         } else {
             insertSpecialComment(newCharacterSection.body, "base-prejudices-species");
-            card.body.push(`dislikesSpecies: [], // Up to you to make the character prejudiced against certain species`);
+            newCharacterSection.body.push(`dislikesSpecies: [], // Up to you to make the character prejudiced against certain species`);
             await autosave?.save();
         }
     }
@@ -1672,14 +1648,14 @@ export async function generateBase(engine, card, guider, autosave) {
             insertSpecialComment(newCharacterSection.body, "base-prejudices-races");
             if (dislikeRacesPrejudice) {
                 const dislikeRacesPrejudiceValue = dislikeRacesPrejudice.value.map(item => item.trim().toLowerCase()).filter(item => item !== "" && item !== "none" && item !== "n/a");
-                card.body.push(`dislikesRaces: ${JSON.stringify(dislikeRacesPrejudiceValue)}, // Up to you to make the character racist`);
+                newCharacterSection.body.push(`dislikesRaces: ${JSON.stringify(dislikeRacesPrejudiceValue)}, // Up to you to make the character racist`);
             } else {
-                card.body.push(`dislikesRaces: [], // Up to you to make the character racist`);
+                newCharacterSection.body.push(`dislikesRaces: [], // Up to you to make the character racist`);
             }
             await autosave?.save();
         } else {
             insertSpecialComment(newCharacterSection.body, "base-prejudices-races");
-            card.body.push(`dislikesRaces: [], // Up to you to make the character racist`);
+            newCharacterSection.body.push(`dislikesRaces: [], // Up to you to make the character racist`);
             await autosave?.save();
         }
     }
@@ -1690,14 +1666,14 @@ export async function generateBase(engine, card, guider, autosave) {
             insertSpecialComment(newCharacterSection.body, "base-prejudices-groups");
             if (dislikeGroupsPrejudice) {
                 const dislikeGroupsPrejudiceValue = dislikeGroupsPrejudice.value.map(item => item.trim().toLowerCase()).filter(item => item !== "" && item !== "none" && item !== "n/a");
-                card.body.push(`dislikesGroups: ${JSON.stringify(dislikeGroupsPrejudiceValue)}, // Up to you to make the character prejudiced against certain groups`);
+                newCharacterSection.body.push(`dislikesGroups: ${JSON.stringify(dislikeGroupsPrejudiceValue)}, // Up to you to make the character prejudiced against certain groups`);
             } else {
-                card.body.push(`dislikesGroups: [], // Up to you to make the character prejudiced against certain groups`);
+                newCharacterSection.body.push(`dislikesGroups: [], // Up to you to make the character prejudiced against certain groups`);
             }
             await autosave?.save();
         } else {
             insertSpecialComment(newCharacterSection.body, "base-prejudices-groups");
-            card.body.push(`dislikesGroups: [], // Up to you to make the character prejudiced against certain groups`);
+            newCharacterSection.body.push(`dislikesGroups: [], // Up to you to make the character prejudiced against certain groups`);
             await autosave?.save();
         }
     }
@@ -1760,7 +1736,7 @@ export async function generateBase(engine, card, guider, autosave) {
         if (isAsexualValue) {
             // no attractions
             insertSpecialComment(newCharacterSection.body, "base-attractions");
-            card.body.push(`attractions: [`);
+            newCharacterSection.body.push(`attractions: [`);
         } else {
             await prime();
             const findsAmbiguousGendersSexuallyAttractive = await generator.next({
@@ -1790,16 +1766,16 @@ export async function generateBase(engine, card, guider, autosave) {
 
             if (findsAmbiguousGendersSexuallyAttractiveValue) {
                 insertSpecialComment(newCharacterSection.body, "base-attractions");
-                card.body.push(`attractions: [`);
-                card.body.push(`// You can make these far more specific if needed, but these are for the social simulation and wander heuristics`);
+                newCharacterSection.body.push(`attractions: [`);
+                newCharacterSection.body.push(`// You can make these far more specific if needed, but these are for the social simulation and wander heuristics`);
                 if (card.config.speciesType === "humanoid") {
-                    card.body.push(`{towards: "ambiguous", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], "speciesType": "${card.config.speciesType}"},`);
-                    card.body.push(`{towards: "male", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], "speciesType": "${card.config.speciesType}"},`);
-                    card.body.push(`{towards: "female", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], "speciesType": "${card.config.speciesType}"},`);
+                    newCharacterSection.body.push(`{towards: "ambiguous", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], "speciesType": "${card.config.speciesType}"},`);
+                    newCharacterSection.body.push(`{towards: "male", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], "speciesType": "${card.config.speciesType}"},`);
+                    newCharacterSection.body.push(`{towards: "female", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], "speciesType": "${card.config.speciesType}"},`);
                 } else {
-                    card.body.push(`{towards: "ambiguous", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], "species": "${card.config.characterSpecies}"},`);
-                    card.body.push(`{towards: "male", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], "species": "${card.config.characterSpecies}"},`);
-                    card.body.push(`{towards: "female", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], "species": "${card.config.characterSpecies}"},`);
+                    newCharacterSection.body.push(`{towards: "ambiguous", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], "species": "${card.config.characterSpecies}"},`);
+                    newCharacterSection.body.push(`{towards: "male", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], "species": "${card.config.characterSpecies}"},`);
+                    newCharacterSection.body.push(`{towards: "female", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], "species": "${card.config.characterSpecies}"},`);
                 }
                 attractions.push("ambiguous");
                 attractions.push("male");
@@ -1857,23 +1833,23 @@ export async function generateBase(engine, card, guider, autosave) {
                 }
 
                 insertSpecialComment(newCharacterSection.body, "base-attractions");
-                card.body.push(`attractions: [`);
-                card.body.push(`// You can make these far more specific if needed, but these are for the social simulation and wander heuristics`);
+                newCharacterSection.body.push(`attractions: [`);
+                newCharacterSection.body.push(`// You can make these far more specific if needed, but these are for the social simulation and wander heuristics`);
 
                 if (findsMalesSexuallyAttractiveValue) {
                     if (card.config.speciesType === "humanoid") {
-                        card.body.push(`{towards: "male", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], "speciesType": "${card.config.speciesType}"},`);
+                        newCharacterSection.body.push(`{towards: "male", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], "speciesType": "${card.config.speciesType}"},`);
                     } else {
-                        card.body.push(`{towards: "male", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], "species": "${card.config.characterSpecies}"},`);
+                        newCharacterSection.body.push(`{towards: "male", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], "species": "${card.config.characterSpecies}"},`);
                     }
                     attractions.push("male");
                 }
 
                 if (findsFemalesSexuallyAttractiveValue) {
                     if (card.config.speciesType === "humanoid") {
-                        card.body.push(`{towards: "female", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], "speciesType": "${card.config.speciesType}"},`);
+                        newCharacterSection.body.push(`{towards: "female", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], "speciesType": "${card.config.speciesType}"},`);
                     } else {
-                        card.body.push(`{towards: "female", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], "species": "${card.config.characterSpecies}"},`);
+                        newCharacterSection.body.push(`{towards: "female", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], "species": "${card.config.characterSpecies}"},`);
                     }
                     attractions.push("female");
                 }
@@ -1888,10 +1864,44 @@ export async function generateBase(engine, card, guider, autosave) {
         await autosave?.save();
     }
 
-    if (!hasSpecialComment(newCharacterSection.body, "base-end")) {
-        insertSpecialComment(newCharacterSection.body, "base-end");
-        card.body.push(`},`);
-        card.body.push(`}, {`);
+    const socialSimulationSection = insertSection(newCharacterSection.body, "social-simulation");
+    if (!hasSpecialComment(socialSimulationSection.head, "base-social-simulation")) {
+        insertSpecialComment(socialSimulationSection.head, "base-social-simulation");
+        socialSimulationSection.head.push(`socialSimulation: {`);
+        socialSimulationSection.foot.push(`},`);
+        await autosave?.save();
+    }
+
+    if (!hasSpecialComment(socialSimulationSection.body, "base-gossip")) {
+        await prime();
+        const gossipValue = await generator.next({
+            maxCharacters: 5,
+            maxSafetyCharacters: 0,
+            maxParagraphs: 1,
+            nextQuestion: "From 1 to 10 how much does " + name + " like gossip and talking about others? with 10 being loving gossip and always talking about others, and 1 being hating gossip and never talking about others",
+            stopAfter: [],
+            stopAt: [],
+            grammar: "root ::= [1-9] | \"10\"",
+        });
+
+        if (gossipValue.done) {
+            throw new Error("Generator finished without producing output");
+        }
+
+        let gossipValueNum = parseInt(gossipValue.value.trim());
+
+        if (guider) {
+            const gossipValueAsked = await guider.askNumber(
+                "From 1 to 10 how much does " + name + " like gossip and talking about others? with 10 being loving gossip and always talking about others, and 1 being hating gossip and never talking about others",
+                gossipValueNum,
+            );
+            if (gossipValueAsked) {
+                gossipValueNum = gossipValueAsked.value;
+            }
+        }
+
+        insertSpecialComment(socialSimulationSection.body, "base-gossip");
+        socialSimulationSection.body.push(`gossipTendency: ${gossipValueNum / 10},`);
         await autosave?.save();
     }
 

@@ -34,7 +34,7 @@ class Settings extends HTMLElement {
         // @ts-expect-error
         this.root.querySelector('app-overlay').addEventListener('confirm', () => {
             // check everything is valid
-            const someInvalid = Array.from(this.root.querySelectorAll('app-overlay-input, app-overlay-select, non-repeat-taglist')).some(inputComponent => {
+            const someInvalid = Array.from(this.root.querySelectorAll('app-overlay-input, app-overlay-select')).some(inputComponent => {
                 // @ts-expect-error
                 return inputComponent.hasErrorsPresent();
             });
@@ -316,7 +316,12 @@ class Settings extends HTMLElement {
                     title="This is the API secret used by the AI inference DreamServer"
                     input-data-location="secret"
                 ></app-overlay-input>
-                <div style="margin-top:1vh;color:#ff6b6b;font-size:3vh;">&#9888; The app must be restarted after changing the inference host or secret.</div>
+                <app-overlay-input-boolean
+                    label="Allow self-signed SSL certificates"
+                    title="Allow connecting to inference servers with self-signed SSL certificates, only enable this if you are connecting to a trusted server with a self-signed certificate, enabling this will make your connection less secure and vulnerable"
+                    input-data-location="allowSelfSigned"
+                ></app-overlay-input-boolean>
+                <div style="margin-top:1vh;color:#ff6b6b;font-size:3vh;">&#9888; The app must be restarted after changing the inference host, secret or self-signed SSL certificate settings.</div>
             </app-overlay-section>`;
         };
     }
@@ -332,7 +337,7 @@ class Settings extends HTMLElement {
      */
     onCheckForUnsavedChanges(onceDoneFn, onceDoneFnNoResistance, resistanceAppliedFn, onAllowFn, onceCancelFn) {
         let hasUnsavedChanges = false;
-        this.root.querySelectorAll('app-overlay-input, app-overlay-select, app-profile-image, app-overlay-list-input').forEach(inputComponent => {
+        this.root.querySelectorAll('app-overlay-input, app-overlay-select, app-profile-image, app-overlay-list-input, app-overlay-input-boolean').forEach(inputComponent => {
             // @ts-ignore
             if (inputComponent.hasBeenModified()) {
                 hasUnsavedChanges = true;
@@ -372,7 +377,7 @@ class Settings extends HTMLElement {
         this.closeSettings();
         playConfirmSound();
 
-        await Promise.all(Array.from(this.root.querySelectorAll('app-overlay-input, app-overlay-select, app-profile-image, app-overlay-list-input')).map(inputComponent =>
+        await Promise.all(Array.from(this.root.querySelectorAll('app-overlay-input, app-overlay-select, app-profile-image, app-overlay-list-input, app-overlay-input-boolean')).map(inputComponent =>
             // @ts-ignore
             inputComponent.saveValueToUserData()
         ));

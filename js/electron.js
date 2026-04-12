@@ -31,6 +31,7 @@ async function saveConfig() {
 }
 
 const createWindow = () => {
+    // Allow self-signed certificates for wss:// connections (including from Workers)
     const win = new BrowserWindow({
         width: 1200,
         height: 800,
@@ -43,6 +44,23 @@ const createWindow = () => {
             webSecurity: true,
         },
     })
+
+    // Also handle at session level for WebSocket connections from Workers
+    win.webContents.session.setCertificateVerifyProc((request, callback) => {
+        if (config.allowSelfSigned) {
+            const inferenceHost = config.host || '';
+            try {
+                const hostUrl = new URL(inferenceHost);
+                if (request.hostname === hostUrl.hostname) {
+                    callback(0); // trust self-signed cert for inference server
+                    return;
+                }
+            } catch {
+                // invalid or empty host config, fall through to default
+            }
+        }
+        callback(-3); // -3 = use default Chromium verification
+    });
 
     win.setMenuBarVisibility(false)
     win.loadFile('./js/app/index.html')

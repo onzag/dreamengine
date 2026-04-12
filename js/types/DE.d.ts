@@ -1168,6 +1168,29 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
      * List of groups or social categories that this character dislikes
      */
     dislikesGroups?: string[] | null;
+    /**
+     * list of ids for likes, must be available in interests object
+     */
+    likes: string[];
+    /**
+     * list of ids for dislikes, must be available in interests object
+     */
+    dislikes: string[];
+    /**
+     * A number from 0 to 1 that represents how attractive the character is, higher means more attractive and more likely to be approached by other characters and have romantic interactions, this is useful for characters that are meant to be charming or have a strong romantic appeal, it can also affect how other characters perceive them and interact with them in social situations
+     */
+    attractiveness: number;
+    /**
+     * A number from 0 to 1 that represents how charismatic the character is, higher means more charismatic and more likely to influence other characters and have strong social interactions, this is useful for characters that are meant to be leaders or have a strong social presence, it can also affect how other characters perceive them and interact with them in social situations
+     */
+    charisma: number;
+    /**
+     * Family ties with other characters
+     * keeps those characters together and prevents them from building romantic or sexual bonds
+     * 
+     * Make sure to create a bond for this
+     */
+    familyTies: Record<string, DEFamilyTie>;
 
     /**
      * Relevant only for the non-LLM powered social simulation system
@@ -1178,32 +1201,9 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
      */
     socialSimulation: {
         /**
-         * list of ids for likes, must be available in interests object
-         */
-        likes: string[];
-        /**
-         * list of ids for dislikes, must be available in interests object
-         */
-        dislikes: string[];
-        /**
-         * A number from 0 to 1 that represents how attractive the character is, higher means more attractive and more likely to be approached by other characters and have romantic interactions, this is useful for characters that are meant to be charming or have a strong romantic appeal, it can also affect how other characters perceive them and interact with them in social situations
-         */
-        attractiveness: number;
-        /**
-         * A number from 0 to 1 that represents how charismatic the character is, higher means more charismatic and more likely to influence other characters and have strong social interactions, this is useful for characters that are meant to be leaders or have a strong social presence, it can also affect how other characters perceive them and interact with them in social situations
-         */
-        charisma: number;
-        /**
          * Allows characters to have sex with each other once they reach a certain bond 2 level
          */
         sexUnlocksAtBond2?: number;
-        /**
-         * Family ties with other characters
-         * keeps those characters together and prevents them from building romantic or sexual bonds
-         * 
-         * Make sure to create a bond for this
-         */
-        familyTies: Record<string, DEFamilyTie>;
         /**
          * A number from 0 to 1 that represents how much the character likes to gossip and talk about other characters, higher means more likely to gossip and talk about others, this is useful for characters that are nosy or enjoy social interactions that involve talking about others, it can also affect how they interact with other characters and how they perceive them based on the gossip they hear and spread
          */

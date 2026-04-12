@@ -1,6 +1,19 @@
 import { createCardStructureFrom, isCardTypeFile } from '../../cardtype/base.js';
 import { playCancelSound, playConfirmSound, playHoverSound, playPauseSound, setTempSoundDisable } from '../sound.js';
 
+/**
+ * 
+ * @param {string} str 
+ * @returns 
+ */
+function escapeHTML(str) {
+    return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+}
+
 class CharacterOverlay extends HTMLElement {
     constructor() {
         super();
@@ -143,6 +156,9 @@ class CharacterOverlay extends HTMLElement {
             const isNewFile = scriptSource.src.startsWith("//@placeholder");
             const isCardType = isCardTypeFile(scriptSource.src);
 
+            const infoMap = await window.ENGINE_WORKER_CLIENT.jsEngineGetInfoMap();
+            const thisFileInfo = infoMap[this.currentCharacterNamespace + "/" + this.currentCharacterId];
+
             let cardtypeWizardContent = '';
 
             if (isNewFile) {
@@ -212,7 +228,14 @@ class CharacterOverlay extends HTMLElement {
                 }
             }
 
-            tabsContainer.innerHTML = `${cardtypeWizardContent}`;
+            const description = thisFileInfo?.description || "No description available";
+
+            tabsContainer.innerHTML = `
+                <app-overlay-section section-title="Description">
+                    <p>${escapeHTML(description)}</p>
+                </app-overlay-section>
+                ${cardtypeWizardContent}
+            `;
 
             tabsContainer.querySelector('#guided-wizard-btn')?.addEventListener('button-click', () => {
                 const wizard = document.createElement('app-cardtype-wizard');
