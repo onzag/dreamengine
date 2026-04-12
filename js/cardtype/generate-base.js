@@ -345,7 +345,7 @@ export async function generateBase(engine, card, guider, autosave) {
         newCharacterSection.body.push(`stateDefinitions: {},`);
         newCharacterSection.body.push(`state: {`);
         newCharacterSection.body.push(`BOND_SYSTEM_FORGIVENESS_RATE_PER_DAY: 0.5,`),
-        newCharacterSection.body.push(`},`)
+            newCharacterSection.body.push(`},`)
         newCharacterSection.body.push("triggers: [],");
         newCharacterSection.body.push("temp: {},"); // Temporary properties to use during inference cycles, they do not persist
         await autosave?.save();
@@ -354,9 +354,10 @@ export async function generateBase(engine, card, guider, autosave) {
 
     const emotionsGrammar = createGrammarListFromList(engine, emotions, 7);
 
-    const emotionsSection = insertSection(newCharacterSection.body, "emotions");
-    emotionsSection.head.push(`emotions: {`);
-    emotionsSection.foot.push(`},`);
+    const emotionsSection = insertSection(newCharacterSection.body, "emotions", (s) => {
+        s.head.push(`emotions: {`);
+        s.foot.push(`},`);
+    });
 
     if (!hasSpecialComment(emotionsSection.body, "base-emotions")) {
         await prime();
@@ -469,7 +470,7 @@ export async function generateBase(engine, card, guider, autosave) {
 
         if (guider) {
             const isActuallySchizophrenic = await guider.askBoolean("Does " + name + " have schizophrenia?", schizophrenia === 1);
-            if (!isActuallySchizophrenic) {
+            if (!isActuallySchizophrenic.value) {
                 schizophrenia = 0;
             } else {
                 schizophrenia = 1;
@@ -541,13 +542,13 @@ export async function generateBase(engine, card, guider, autosave) {
             const voiceDescription = replaceAllCharNameWithPlaceholder(schizophrenicVoiceDescription.value.trim(), name);
 
             insertSpecialComment(newCharacterSection.body, "base-schizo-details");
-            card.body.push(`schizophrenia: ${severity},`);
-            card.body.push(`schizophrenicVoiceDescription: DE.utils.newHandlebarTemplate(${JSON.stringify(voiceDescription)}),`);
+            newCharacterSection.body.push(`schizophrenia: ${severity},`);
+            newCharacterSection.body.push(`schizophrenicVoiceDescription: DE.utils.newHandlebarTemplate(${JSON.stringify(voiceDescription)}),`);
             await autosave?.save();
         } else {
             insertSpecialComment(newCharacterSection.body, "base-schizo-details");
-            card.body.push(`schizophrenia: 0,`);
-            card.body.push(`schizophrenicVoiceDescription: "",`);
+            newCharacterSection.body.push(`schizophrenia: 0,`);
+            newCharacterSection.body.push(`schizophrenicVoiceDescription: "",`);
             await autosave?.save();
         }
     }
@@ -936,7 +937,7 @@ export async function generateBase(engine, card, guider, autosave) {
         let isBabyOrWeakened = answerIsBabyOrWeakened.value.trim().toLowerCase() === "yes";
 
         if (guider) {
-            const isActuallyBabyOrWeakened = await guider.askBoolean(name + " seems to be a baby/cub or in a weakened state that makes them as weak as a baby in their power, is that correct?", isBabyOrWeakened);
+            const isActuallyBabyOrWeakened = await guider.askBoolean("is " + name + " a baby/cub or in a weakened state that makes them as weak as a baby in their power?", isBabyOrWeakened);
             if (!isActuallyBabyOrWeakened.value) {
                 isBabyOrWeakened = false;
             } else {
@@ -965,7 +966,7 @@ export async function generateBase(engine, card, guider, autosave) {
 
             let isYoungOrWeakened = answerIsYoungOrWeakened.value.trim().toLowerCase() === "yes";
             if (guider) {
-                const isActuallyYoungOrWeakened = await guider.askBoolean(name + " seems to be a child or in a weakened state (old, sick) that makes them as weak as a child in their power, is that correct?", isYoungOrWeakened);
+                const isActuallyYoungOrWeakened = await guider.askBoolean("is " + name + " a child or in a weakened state (old, sick) that makes them as weak as a child in their power?", isYoungOrWeakened);
                 if (!isActuallyYoungOrWeakened.value) {
                     isYoungOrWeakened = false;
                 } else {
@@ -994,7 +995,7 @@ export async function generateBase(engine, card, guider, autosave) {
 
                 let isInPrime = answerIsInPrime.value.trim().toLowerCase() === "yes";
                 if (guider) {
-                    const isActuallyInPrime = await guider.askBoolean(name + " seems to be in their prime state posessing incredible athletic features, is that correct?", isInPrime);
+                    const isActuallyInPrime = await guider.askBoolean("is " + name + " in their prime state posessing incredible athletic features?", isInPrime);
                     if (!isActuallyInPrime.value) {
                         isInPrime = false;
                     } else {
@@ -1047,6 +1048,7 @@ export async function generateBase(engine, card, guider, autosave) {
 
         insertSpecialComment(newCharacterSection.body, "base-age");
         newCharacterSection.body.push(`ageYears: ${howOldYears},`);
+        card.config.characterAge = howOldYears;
         await autosave?.save();
     }
 
@@ -1116,7 +1118,7 @@ export async function generateBase(engine, card, guider, autosave) {
             initiative = 0.5;
             strangerInitiative = 0.1;
             strangerRejection = 0;
-        } else {
+
             await prime();
             const annoyinglySocial = await generator.next({
                 maxCharacters: 5,
@@ -1147,79 +1149,79 @@ export async function generateBase(engine, card, guider, autosave) {
                 initiative = 0.75;
                 strangerInitiative = 0.3;
                 strangerRejection = 0;
+            }
+        } else {
+            await prime();
+            const shy = await generator.next({
+                maxCharacters: 5,
+                maxSafetyCharacters: 0,
+                maxParagraphs: 1,
+                nextQuestion: "Is " + name + " shy and reserved, preferring to stay in the background and avoid social interactions?",
+                stopAfter: [],
+                stopAt: [],
+                grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
+            });
+
+            if (shy.done) {
+                throw new Error("Generator finished without producing output");
+            }
+
+            let shyValue = shy.value.trim().toLowerCase() === "yes";
+
+            if (guider) {
+                const isActuallyShy = await guider.askBoolean("Is " + name + " shy and reserved, preferring to stay in the background and avoid social interactions?", shyValue);
+                if (!isActuallyShy.value) {
+                    shyValue = false;
+                } else {
+                    shyValue = true;
+                }
+            }
+
+            if (shyValue) {
+                initiative = 0.1;
+                strangerInitiative = 0;
+                strangerRejection = 0.2;
             } else {
                 await prime();
-                const shy = await generator.next({
+                const completelyAsocial = await generator.next({
                     maxCharacters: 5,
                     maxSafetyCharacters: 0,
                     maxParagraphs: 1,
-                    nextQuestion: "Is " + name + " shy and reserved, preferring to stay in the background and avoid social interactions?",
+                    nextQuestion: "Is " + name + " completely asocial, having no interest in interacting with others at all and preferring complete isolation?",
                     stopAfter: [],
                     stopAt: [],
                     grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
                 });
 
-                if (shy.done) {
+                if (completelyAsocial.done) {
                     throw new Error("Generator finished without producing output");
                 }
 
-                let shyValue = shy.value.trim().toLowerCase() === "yes";
+                let completelyAsocialValue = completelyAsocial.value.trim().toLowerCase() === "yes";
 
                 if (guider) {
-                    const isActuallyShy = await guider.askBoolean("Is " + name + " shy and reserved, preferring to stay in the background and avoid social interactions?", shyValue);
-                    if (!isActuallyShy.value) {
-                        shyValue = false;
+                    const isActuallyCompletelyAsocial = await guider.askBoolean("Is " + name + " completely asocial, having no interest in interacting with others at all and preferring complete isolation?", completelyAsocialValue);
+                    if (!isActuallyCompletelyAsocial.value) {
+                        completelyAsocialValue = false;
                     } else {
-                        shyValue = true;
+                        completelyAsocialValue = true;
                     }
                 }
 
-                if (shyValue) {
-                    initiative = 0.1;
+                if (completelyAsocialValue) {
+                    initiative = 0;
                     strangerInitiative = 0;
-                    strangerRejection = 0.2;
-                } else {
-                    await prime();
-                    const completelyAsocial = await generator.next({
-                        maxCharacters: 5,
-                        maxSafetyCharacters: 0,
-                        maxParagraphs: 1,
-                        nextQuestion: "Is " + name + " completely asocial, having no interest in interacting with others at all and preferring complete isolation?",
-                        stopAfter: [],
-                        stopAt: [],
-                        grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
-                    });
-
-                    if (completelyAsocial.done) {
-                        throw new Error("Generator finished without producing output");
-                    }
-
-                    let completelyAsocialValue = completelyAsocial.value.trim().toLowerCase() === "yes";
-
-                    if (guider) {
-                        const isActuallyCompletelyAsocial = await guider.askBoolean("Is " + name + " completely asocial, having no interest in interacting with others at all and preferring complete isolation?", completelyAsocialValue);
-                        if (!isActuallyCompletelyAsocial.value) {
-                            completelyAsocialValue = false;
-                        } else {
-                            completelyAsocialValue = true;
-                        }
-                    }
-
-                    if (completelyAsocialValue) {
-                        initiative = 0;
-                        strangerInitiative = 0;
-                        strangerRejection = 0.5;
-                    }
+                    strangerRejection = 0.5;
                 }
             }
         }
 
         insertSpecialComment(newCharacterSection.body, "base-initiative");
-        card.body.push(`initiative: ${initiative},`);
-        card.body.push(`strangerInitiative: ${strangerInitiative},`);
-        card.body.push(`strangerRejection: ${strangerRejection},`);
-        card.body.push(`maintenanceCaloriesPerDay: 2000,`);
-        card.body.push(`maintenanceHydrationLitersPerDay: 2,`);
+        newCharacterSection.body.push(`initiative: ${initiative},`);
+        newCharacterSection.body.push(`strangerInitiative: ${strangerInitiative},`);
+        newCharacterSection.body.push(`strangerRejection: ${strangerRejection},`);
+        newCharacterSection.body.push(`maintenanceCaloriesPerDay: 2000,`);
+        newCharacterSection.body.push(`maintenanceHydrationLitersPerDay: 2,`);
         await autosave?.save();
     }
 
@@ -1250,7 +1252,7 @@ export async function generateBase(engine, card, guider, autosave) {
         }
 
         insertSpecialComment(newCharacterSection.body, "base-stealth");
-        card.body.push(`stealth: ${parseInt(stealthValue.value.trim()) / 10},`);
+        newCharacterSection.body.push(`stealth: ${parseInt(stealthValue.value.trim()) / 10},`);
         await autosave?.save();
     }
 
@@ -1281,7 +1283,7 @@ export async function generateBase(engine, card, guider, autosave) {
         }
 
         insertSpecialComment(newCharacterSection.body, "base-perception");
-        card.body.push(`perception: ${parseInt(perceptionValue.value.trim()) / 10},`);
+        newCharacterSection.body.push(`perception: ${parseInt(perceptionValue.value.trim()) / 10},`);
         await autosave?.save();
     }
 
@@ -1460,7 +1462,7 @@ export async function generateBase(engine, card, guider, autosave) {
             stopAfter: [],
             stopAt: [],
             instructions: "Answer with a comma-separated list of single lowercase words representing concrete hobbies, activities, subjects, or things that " + name + " likes. Each entry must be a noun or activity like: swimming, reading, cats, magic, cooking, astronomy, horses, painting, archery. Do NOT include emotional states, interpersonal situations, or multi-word phrases. Just single-word nouns or activities separated by commas.",
-            grammar: "root ::= item moreItems\nmoreItems ::= \", \" item moreItems | \"\"\nitem ::= [a-z]+"
+            grammar: "root ::= item moreItems\nmoreItems ::= \", \" item moreItems | \"\"\nitem ::= [A-Za-z ]+"
         });
 
         if (likesList.done) {
@@ -1472,7 +1474,7 @@ export async function generateBase(engine, card, guider, autosave) {
         if (guider) {
             const likesListAsked = await guider.askList("List some hobbies, activities, interests, or conversation topics that " + name + " enjoys. Examples: swimming, cooking, cats, astronomy, music, gardening, chess", null, likesListParsedAndDeduped);
             if (likesListAsked) {
-                likesListParsedAndDeduped = likesListAsked.value.map(item => item.trim().toLowerCase()).filter(item => item !== "").filter((item, index, self) => self.indexOf(item) === index);
+                likesListParsedAndDeduped = likesListAsked.value.map(item => item.trim().toLowerCase().split(" ").map(word => word.trim()).filter(word => word !== "").join(" ")).filter(item => item !== "").filter((item, index, self) => self.indexOf(item) === index);
             }
         }
 
@@ -1512,7 +1514,7 @@ export async function generateBase(engine, card, guider, autosave) {
         if (guider) {
             const dislikesListAsked = await guider.askList("List some hobbies, activities, interests, or conversation topics that " + name + " dislikes. Examples: swimming, cooking, cats, politics, math, spiders, crowds", null, dislikesListParsedAndDeduped);
             if (dislikesListAsked) {
-                dislikesListParsedAndDeduped = dislikesListAsked.value.map(item => item.trim().toLowerCase()).filter(item => item !== "").filter((item, index, self) => self.indexOf(item) === index).filter(item => !card.config.globalInterests.includes(item));
+                dislikesListParsedAndDeduped = dislikesListAsked.value.map(item => item.trim().toLowerCase().split(" ").map(word => word.trim()).filter(word => word !== "").join(" ")).filter(item => item !== "").filter((item, index, self) => self.indexOf(item) === index).filter(item => !card.config.globalInterests.includes(item));
             }
         }
 
@@ -1597,7 +1599,7 @@ export async function generateBase(engine, card, guider, autosave) {
 
             const guidedSpeciesType = await guider.askOption("What species type is " + name + "?", ["humanoid", "feral", "animal"], speciesType);
             if (guidedSpeciesType) {
-                speciesType = guidedSpeciesType.value;
+                speciesType = guidedSpeciesType.value.trim().toLowerCase();
             }
         }
 
@@ -1612,6 +1614,14 @@ export async function generateBase(engine, card, guider, autosave) {
 
     if (!hasSpecialComment(newCharacterSection.body, "base-race")) {
         await prime();
+
+        let speciesCantBe = card.config.characterSpecies;
+        if (speciesCantBe.split(" ").length > 1) {
+            const lastWord = speciesCantBe.split(" ").slice(-1)[0];
+            speciesCantBe = lastWord;
+        }
+
+
         const race = await generator.next({
             maxCharacters: 50,
             maxSafetyCharacters: 0,
@@ -1620,7 +1630,7 @@ export async function generateBase(engine, card, guider, autosave) {
             stopAfter: [],
             stopAt: [],
             grammar: "root ::= [a-z ]+",
-            instructions: "If the character has no racial identity answer with none",
+            instructions: "If the character has no racial identity answer with none, IMPORTANT: the racial identity cannot be " + JSON.stringify(speciesCantBe) + ", answer with none if no further known.",
         });
 
         if (race.done) {
@@ -1826,9 +1836,9 @@ export async function generateBase(engine, card, guider, autosave) {
                 newCharacterSection.body.push(`attractions: [`);
                 newCharacterSection.body.push(`// You can make these far more specific if needed, but these are for the social simulation and wander heuristics`);
                 if (card.config.speciesType === "humanoid") {
-                    newCharacterSection.body.push(`{towards: "ambiguous", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], "speciesType": "${card.config.speciesType}"},`);
-                    newCharacterSection.body.push(`{towards: "male", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], "speciesType": "${card.config.speciesType}"},`);
-                    newCharacterSection.body.push(`{towards: "female", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], "speciesType": "${card.config.speciesType}"},`);
+                    newCharacterSection.body.push(`{towards: "ambiguous", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], "speciesType": "${card.config.characterSpeciesType}"},`);
+                    newCharacterSection.body.push(`{towards: "male", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], "speciesType": "${card.config.characterSpeciesType}"},`);
+                    newCharacterSection.body.push(`{towards: "female", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], "speciesType": "${card.config.characterSpeciesType}"},`);
                 } else {
                     newCharacterSection.body.push(`{towards: "ambiguous", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], "species": "${card.config.characterSpecies}"},`);
                     newCharacterSection.body.push(`{towards: "male", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], "species": "${card.config.characterSpecies}"},`);
@@ -1891,11 +1901,11 @@ export async function generateBase(engine, card, guider, autosave) {
 
                 insertSpecialComment(newCharacterSection.body, "base-attractions");
                 newCharacterSection.body.push(`attractions: [`);
-                newCharacterSection.body.push(`// You can make these far more specific if needed, but these are for the social simulation and wander heuristics`);
+                newCharacterSection.body.push(`// You can make these far more specific if needed`);
 
                 if (findsMalesSexuallyAttractiveValue) {
-                    if (card.config.speciesType === "humanoid") {
-                        newCharacterSection.body.push(`{towards: "male", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], "speciesType": "${card.config.speciesType}"},`);
+                    if (card.config.characterSpeciesType === "humanoid") {
+                        newCharacterSection.body.push(`{towards: "male", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], "speciesType": "${card.config.characterSpeciesType}"},`);
                     } else {
                         newCharacterSection.body.push(`{towards: "male", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], "species": "${card.config.characterSpecies}"},`);
                     }
@@ -1903,8 +1913,8 @@ export async function generateBase(engine, card, guider, autosave) {
                 }
 
                 if (findsFemalesSexuallyAttractiveValue) {
-                    if (card.config.speciesType === "humanoid") {
-                        newCharacterSection.body.push(`{towards: "female", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], "speciesType": "${card.config.speciesType}"},`);
+                    if (card.config.characterSpeciesType === "humanoid") {
+                        newCharacterSection.body.push(`{towards: "female", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], "speciesType": "${card.config.characterSpeciesType}"},`);
                     } else {
                         newCharacterSection.body.push(`{towards: "female", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], "species": "${card.config.characterSpecies}"},`);
                     }
@@ -1913,7 +1923,7 @@ export async function generateBase(engine, card, guider, autosave) {
             }
         }
 
-        card.body.push(`],`);
+        newCharacterSection.body.push(`],`);
 
         card.config.isAsexual = isAsexualValue;
         card.config.attractions = attractions;
@@ -1921,13 +1931,10 @@ export async function generateBase(engine, card, guider, autosave) {
         await autosave?.save();
     }
 
-    const socialSimulationSection = insertSection(newCharacterSection.body, "social-simulation");
-    if (!hasSpecialComment(socialSimulationSection.head, "base-social-simulation")) {
-        insertSpecialComment(socialSimulationSection.head, "base-social-simulation");
-        socialSimulationSection.head.push(`socialSimulation: {`);
-        socialSimulationSection.foot.push(`},`);
-        await autosave?.save();
-    }
+    const socialSimulationSection = insertSection(newCharacterSection.body, "social-simulation", (s) => {
+        s.head.push(`socialSimulation: {`);
+        s.foot.push(`},`);
+    });
 
     if (!hasSpecialComment(socialSimulationSection.body, "base-gossip")) {
         await prime();

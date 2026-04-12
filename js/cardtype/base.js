@@ -35,7 +35,7 @@ export function createCardStructureFrom(jsContent) {
     let sectionId = null;
     for (const line of splittedLines) {
         const trimmedLine = line.trim();
-        if (trimmedLine === '//@placeholder') {
+        if (trimmedLine === '//@placeholder' || !trimmedLine) {
             // skip
         } else if (trimmedLine.startsWith('//@config:') && !sectionId) {
             baseFile.config = JSON.parse(line.replace('//@config:', '').trim());
@@ -223,8 +223,9 @@ export function getJsCard(base, baseTabCount = 0, noImportsNorCardAndConfig = fa
  * 
  * @param {Array<CardTypeCardSection | string>} lines 
  * @param {string} commentId 
+ * @param {(section: CardTypeCardSection) => void} [defaultCreateFn] - Optional function to initialize the section
  */
-export function insertSection(lines, commentId) {
+export function insertSection(lines, commentId, defaultCreateFn) {
     const existingSection = getSection(lines, commentId);
     if (existingSection) {
         return existingSection;
@@ -236,6 +237,9 @@ export function insertSection(lines, commentId) {
         body: [],
         foot: [],
     };
+    if (defaultCreateFn) {
+        defaultCreateFn(newSection);
+    }
     lines.push(newSection);
     return newSection;
 }

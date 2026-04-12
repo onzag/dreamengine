@@ -1395,7 +1395,7 @@ declare interface DEAttraction {
     /**
      * The type of species that this attraction applies to, for example, a character may be attracted to anthropomorphic characters, but not feral or animal characters, etc...
      */
-    speciesType?: "anthropomorphic" | "feral" | "animal";
+    speciesType?: "humanoid" | "feral" | "animal";
     /**
      * The age range that this attraction applies to
      */

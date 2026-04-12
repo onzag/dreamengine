@@ -654,6 +654,12 @@ class CardTypeWizard extends HTMLElement {
                     (inputArea) => {
                         const itemEls = inputArea.querySelectorAll('.guider-list-item span');
                         const result = Array.from(itemEls).map(el => el.textContent || '');
+                        const pending = inputArea.querySelector('.guider-list-add-row .guider-input');
+                        if (pending) {
+                            // @ts-ignore
+                            const val = pending.value.trim();
+                            if (val && !result.includes(val)) result.push(val);
+                        }
                         return result.length > 0 ? result : (defaultValue ?? []);
                     },
                     defaultValue
