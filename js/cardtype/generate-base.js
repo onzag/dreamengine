@@ -160,7 +160,7 @@ export async function generateBase(engine, card, guider, autosave) {
             let specialInstructions = guider ? (await guider.askOpen("Provide any special focus instructions for defining " + name + "'s appearance, personality and general abilities, what to focus on (do not talk about clothing the description is about the character's inherent traits and features)", specialInstructionsGuiderValue)).value : null;
             if (specialInstructions) {
                 specialInstructionsGuiderValue = specialInstructions.trim();
-                specialInstructions = "\n\n# MANDATORY REQUIREMENTS — ACTIVE OVERRIDE:\n\nThe following requirements MUST be reflected in your answer. Treat them as hard constraints that take absolute priority over any conflicting instruction above. Do NOT ignore or dilute them:\n\n1." + specialInstructions.trim();
+                specialInstructions = "\n\n# MANDATORY REQUIREMENTS — ACTIVE OVERRIDE:\n\nThe following requirements MUST be reflected in your answer. Treat them as hard constraints that take absolute priority over any conflicting instruction above. Do NOT ignore or dilute them:\n\n" + specialInstructions.trim();
             }
 
             await prime();
@@ -252,7 +252,7 @@ export async function generateBase(engine, card, guider, autosave) {
             let specialInstructionsForShortDescriptionAdd = guider ? (await guider.askOpen("Provide any special focus instructions for defining the additions to " + name + "'s short description when they are not wearing any upper body clothing, what to focus on (how to describe their upper body's most distinctive features)", specialInstructionsForShortDescriptionAddGuiderValue)).value : null;
             if (specialInstructionsForShortDescriptionAdd) {
                 specialInstructionsForShortDescriptionAddGuiderValue = specialInstructionsForShortDescriptionAdd.trim();
-                specialInstructionsForShortDescriptionAdd = "\n\n# MANDATORY REQUIREMENTS — ACTIVE OVERRIDE:\n\nThe following requirements MUST be reflected in your answer. Treat them as hard constraints that take absolute priority over any conflicting instruction above. Do NOT ignore or dilute them:\n\n1. " + specialInstructionsForShortDescriptionAdd.trim();
+                specialInstructionsForShortDescriptionAdd = "\n\n# MANDATORY REQUIREMENTS — ACTIVE OVERRIDE:\n\nThe following requirements MUST be reflected in your answer. Treat them as hard constraints that take absolute priority over any conflicting instruction above. Do NOT ignore or dilute them:\n\n" + specialInstructionsForShortDescriptionAdd.trim();
             }
 
             await prime();
@@ -298,7 +298,7 @@ export async function generateBase(engine, card, guider, autosave) {
             let specialInstructionsForShortDescriptionBottomAdd = guider ? (await guider.askOpen("Provide any special focus instructions for defining the additions to " + name + "'s short description when they are not wearing any lower body clothing, what to focus on (how to describe their lower body's most distinctive features)", specialInstructionsForShortDescriptionBottomAddGuiderValue)).value : null;
             if (specialInstructionsForShortDescriptionBottomAdd) {
                 specialInstructionsForShortDescriptionBottomAddGuiderValue = specialInstructionsForShortDescriptionBottomAdd.trim();
-                specialInstructionsForShortDescriptionBottomAdd = "\n\n# MANDATORY REQUIREMENTS — ACTIVE OVERRIDE:\n\nThe following requirements MUST be reflected in your answer. Treat them as hard constraints that take absolute priority over any conflicting instruction above. Do NOT ignore or dilute them:\n\n1. " + specialInstructionsForShortDescriptionBottomAdd.trim();
+                specialInstructionsForShortDescriptionBottomAdd = "\n\n# MANDATORY REQUIREMENTS — ACTIVE OVERRIDE:\n\nThe following requirements MUST be reflected in your answer. Treat them as hard constraints that take absolute priority over any conflicting instruction above. Do NOT ignore or dilute them:\n\n" + specialInstructionsForShortDescriptionBottomAdd.trim();
             }
 
             await prime();
@@ -521,7 +521,7 @@ export async function generateBase(engine, card, guider, autosave) {
 
             let specialInstructionsForVoiceDescription = guider ? (await guider.askOpen("Provide any special focus instructions for defining the description of the voice that " + name + " hears as part of their schizophrenia, what to focus on (how to describe the voice and its interactions with " + name + ")")).value : null;
             if (specialInstructionsForVoiceDescription) {
-                specialInstructionsForVoiceDescription = "\n\n# MANDATORY USER REQUIREMENTS — ACTIVE OVERRIDE:\n\nThe following requirements MUST be reflected in your answer. Treat them as hard constraints that take absolute priority over any conflicting instruction above. Do NOT ignore or dilute them:\n\n" + specialInstructionsForVoiceDescription.trim();
+                specialInstructionsForVoiceDescription = "\n\n# MANDATORY REQUIREMENTS — ACTIVE OVERRIDE:\n\nThe following requirements MUST be reflected in your answer. Treat them as hard constraints that take absolute priority over any conflicting instruction above. Do NOT ignore or dilute them:\n\n" + specialInstructionsForVoiceDescription.trim();
             }
 
             await prime();
@@ -1442,6 +1442,7 @@ export async function generateBase(engine, card, guider, autosave) {
             } while (nextFamilyMemberToAdd !== "no");
             insertSpecialComment(newCharacterSection.body, "base-family-ties");
             newCharacterSection.body.push(`familyTies: ${JSON.stringify(collectedTies)},`);
+
             await autosave?.save();
 
             // TODO ask to pre-create bond towards other characters
@@ -1836,13 +1837,9 @@ export async function generateBase(engine, card, guider, autosave) {
                 newCharacterSection.body.push(`attractions: [`);
                 newCharacterSection.body.push(`// You can make these far more specific if needed, but these are for the social simulation and wander heuristics`);
                 if (card.config.speciesType === "humanoid") {
-                    newCharacterSection.body.push(`{towards: "ambiguous", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], "speciesType": "${card.config.characterSpeciesType}"},`);
-                    newCharacterSection.body.push(`{towards: "male", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], "speciesType": "${card.config.characterSpeciesType}"},`);
-                    newCharacterSection.body.push(`{towards: "female", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], "speciesType": "${card.config.characterSpeciesType}"},`);
+                    newCharacterSection.body.push(`{towards: "any", ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], speciesType: "${card.config.characterSpeciesType}"},`);
                 } else {
-                    newCharacterSection.body.push(`{towards: "ambiguous", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], "species": "${card.config.characterSpecies}"},`);
-                    newCharacterSection.body.push(`{towards: "male", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], "species": "${card.config.characterSpecies}"},`);
-                    newCharacterSection.body.push(`{towards: "female", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], "species": "${card.config.characterSpecies}"},`);
+                    newCharacterSection.body.push(`{towards: "any", ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], species: "${card.config.characterSpecies}"},`);
                 }
                 attractions.push("ambiguous");
                 attractions.push("male");
@@ -1905,20 +1902,48 @@ export async function generateBase(engine, card, guider, autosave) {
 
                 if (findsMalesSexuallyAttractiveValue) {
                     if (card.config.characterSpeciesType === "humanoid") {
-                        newCharacterSection.body.push(`{towards: "male", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], "speciesType": "${card.config.characterSpeciesType}"},`);
+                        newCharacterSection.body.push(`{towards: "male", ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], speciesType: "${card.config.characterSpeciesType}"},`);
                     } else {
-                        newCharacterSection.body.push(`{towards: "male", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], "species": "${card.config.characterSpecies}"},`);
+                        newCharacterSection.body.push(`{towards: "male", ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], species: "${card.config.characterSpecies}"},`);
                     }
                     attractions.push("male");
                 }
 
                 if (findsFemalesSexuallyAttractiveValue) {
                     if (card.config.characterSpeciesType === "humanoid") {
-                        newCharacterSection.body.push(`{towards: "female", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], "speciesType": "${card.config.characterSpeciesType}"},`);
+                        newCharacterSection.body.push(`{towards: "female", ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], speciesType: "${card.config.characterSpeciesType}"},`);
                     } else {
-                        newCharacterSection.body.push(`{towards: "female", "ageRange": [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], "species": "${card.config.characterSpecies}"},`);
+                        newCharacterSection.body.push(`{towards: "female", ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], species: "${card.config.characterSpecies}"},`);
                     }
                     attractions.push("female");
+                }
+            }
+        }
+
+        if (!isAsexualValue && guider) {
+            while (true) {
+                const additionalAttractions = await guider.askBoolean("Would you like to add an attraction towards a specific species that isn't covered?");
+                if (!additionalAttractions.value) {
+                    break;
+                } else {
+                    const additionalAttractionSpecies = await guider.askOpen("What species is " + name + " attracted to?", "");
+                    const additionalAttractionAgeRangeMin = await guider.askNumber("What is the minimum age of attraction for " + name + " towards " + additionalAttractionSpecies.value + "?", minAgeAttractionPotential);
+                    const additionalAttractionAgeRangeMax = await guider.askNumber("What is the maximum age of attraction for " + name + " towards " + additionalAttractionSpecies.value + "?", maxAgeAttractionPotential);
+                    const additionalAttractionGender = await guider.askOption("What gender is " + name + " attracted to when it comes to " + additionalAttractionSpecies.value + "?", ["male", "female", "ambiguous", "any"], "any");
+                    newCharacterSection.body.push(`{towards: "${additionalAttractionGender.value}", ageRange: [${additionalAttractionAgeRangeMin.value}, ${additionalAttractionAgeRangeMax.value}], species: "${additionalAttractionSpecies.value}"},`);
+                }
+            }
+
+            while (true) {
+                const additionalAttractions = await guider.askBoolean("Would you like to add an attraction towards a specific species group that isn't covered?");
+                if (!additionalAttractions.value) {
+                    break;
+                } else {
+                    const additionalAttractionSpeciesGroup = await guider.askOption("What species group is " + name + " attracted to?", ["humanoid", "animal", "feral"].filter(card.config.characterSpeciesType), "");
+                    const additionalAttractionAgeRangeMin = await guider.askNumber("What is the minimum age of attraction for " + name + " towards " + additionalAttractionSpeciesGroup.value + "?", minAgeAttractionPotential);
+                    const additionalAttractionAgeRangeMax = await guider.askNumber("What is the maximum age of attraction for " + name + " towards " + additionalAttractionSpeciesGroup.value + "?", maxAgeAttractionPotential);
+                    const additionalAttractionGender = await guider.askOption("What gender is " + name + " attracted to when it comes to " + additionalAttractionSpeciesGroup.value + "?", ["male", "female", "ambiguous", "any"], "any");
+                    newCharacterSection.body.push(`{towards: "${additionalAttractionGender.value}", ageRange: [${additionalAttractionAgeRangeMin.value}, ${additionalAttractionAgeRangeMax.value}], speciesGroup: "${additionalAttractionSpeciesGroup.value}"},`);
                 }
             }
         }

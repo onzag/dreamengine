@@ -245,7 +245,6 @@ export function insertSection(lines, commentId, defaultCreateFn) {
 }
 
 /**
- * 
  * @param {Array<CardTypeCardSection | string>} lines 
  * @param {string} commentId 
  */
@@ -257,11 +256,24 @@ export function insertSpecialComment(lines, commentId) {
 }
 
 // TODO remove this is for the buggy mess of web workers
-export function hasSpecialComent(){
+/**
+ * 
+ * @param {*} body 
+ * @param {*} p0 
+ */
+export function hasSpecialComent(body, p0){
 
 }
 
-export function unshiftSpecialComment() {
+/**
+ * @param {Array<CardTypeCardSection | string>} lines 
+ * @param {string} commentId 
+ */
+export function unshiftSpecialComment(lines, commentId) {
+    const comment = `//@#${commentId}`;
+    if (!lines.find(line => typeof line === 'string' && line.trim() === comment.trim())) {
+        lines.unshift(comment);
+    }
 }
 
 /**

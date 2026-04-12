@@ -1,5 +1,5 @@
 import { DEngine } from '../engine/index.js';
-import { createCardStructureFrom, getJsCard, hasSpecialComent, insertSpecialComment } from './base.js';
+import { createCardStructureFrom, getJsCard, getSection, hasSpecialComment, insertSection, insertSpecialComment, toTemplateLiteral } from './base.js';
 
 if (typeof process !== "undefined" && process.versions && process.versions.node) {
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
@@ -13,9 +13,6 @@ if (typeof process !== "undefined" && process.versions && process.versions.node)
  * @return {Promise<void>}
  */
 export async function generateBonds(engine, card, guider, autosave) {
-
-    throw new Error("Currently disabled");
-
     const inferenceAdapter = engine.inferenceAdapter;
     if (!inferenceAdapter) {
         throw new Error("No inference adapter found on engine");
@@ -48,14 +45,32 @@ export async function generateBonds(engine, card, guider, autosave) {
     const isAsexualValue = card.config.isAsexual;
     const name = card.config.name;
 
-    if (!hasSpecialComent(card.body, "bonds-type")) {
-        card.body.push(isAsexualValue ? `type: "4d_creepy",` : `type: "4d_standard",`);
-        insertSpecialComment(card.body, "bonds-type");
+    const initializeSection = getSection(card.body, "initialize");
+
+    if (initializeSection === null) {
+        throw new Error("Initialize section not found");
+    }
+
+    const newCharacterSection = getSection(initializeSection.body, "new-character");
+
+    if (newCharacterSection === null) {
+        throw new Error("New character section not found");
+    }
+
+    const optionsSection = getSection(newCharacterSection.foot, "options");
+
+    if (optionsSection === null) {
+        throw new Error("Options section not found");
+    }
+
+    if (!hasSpecialComment(optionsSection.body, "bonds-type")) {
+        optionsSection.body.push(isAsexualValue ? `type: "4d_creepy",` : `type: "4d_standard",`);
+        insertSpecialComment(optionsSection.body, "bonds-type");
         await autosave?.save();
     }
 
     let isIncestuousValue = false;
-    if (!hasSpecialComent(card.body, "bonds-incestuous")) {
+    if (!hasSpecialComment(optionsSection.body, "bonds-incestuous")) {
         if (!isAsexualValue) {
             await prime();
             const isIncestuous = await generator.next({
@@ -85,14 +100,283 @@ export async function generateBonds(engine, card, guider, autosave) {
         }
 
         card.config.isIncestuous = isIncestuousValue;
-        insertSpecialComment(card.body, "bonds-incestuous");
+        insertSpecialComment(optionsSection.body, "bonds-incestuous");
         await autosave?.save();
     } else {
         isIncestuousValue = card.config.isIncestuous || false;
     }
 
+    const fineTunesDescriptions = {
+        "any_character": `Any character regardless of species, gender, or attraction group (Non-attractive for ${name})`,
+
+        "humanoid_character_male_na": `A MALE human or anthrophomorphic character (Non-attractive for ${name})`,
+        "humanoid_character_male_a": `A MALE human or anthrophomorphic character (Attractive for ${name})`,
+        "humanoid_character_female_na": `A FEMALE human or anthrophomorphic character (Non-attractive for ${name})`,
+        "humanoid_character_female_a": `A FEMALE human or anthrophomorphic character (Attractive for ${name})`,
+        "humanoid_character_ambiguous_na": "A human or anthrophomorphic character with AMBIGUOUS gender (Non-attractive for " + name + ")",
+        "humanoid_character_ambiguous_a": "A human or anthrophomorphic character with AMBIGUOUS gender (Attractive for " + name + ")",
+        "animal_character_male_na": card.config.characterSpeciesType === "animal" ? "Another animal, a MALE (Non-attractive for " + name + ")" : "A MALE animal, a pet or wild creature without verbal capabilities (Non-attractive for " + name + ")",
+        "animal_character_male_a": card.config.characterSpeciesType === "animal" ? "Another animal, a MALE (Attractive for " + name + ")" : "A MALE animal, a pet or wild creature without verbal capabilities (Attractive for " + name + ")",
+        "animal_character_female_na": card.config.characterSpeciesType === "animal" ? "Another animal, a FEMALE (Non-attractive for " + name + ")" : "A FEMALE animal, a pet or wild creature without verbal capabilities (Non-attractive for " + name + ")",
+        "animal_character_female_a": card.config.characterSpeciesType === "animal" ? "Another animal, a FEMALE (Attractive for " + name + ")" : "A FEMALE animal, a pet or wild creature without verbal capabilities (Attractive for " + name + ")",
+        "animal_character_ambiguous_na": card.config.characterSpeciesType === "animal" ? "Another animal with AMBIGUOUS gender (Non-attractive for " + name + ")" : "An animal with AMBIGUOUS gender, a pet or wild creature without verbal capabilities (Non-attractive for " + name + ")",
+        "animal_character_ambiguous_a": card.config.characterSpeciesType === "animal" ? "Another animal with AMBIGUOUS gender (Attractive for " + name + ")" : "An animal with AMBIGUOUS gender, a pet or wild creature without verbal capabilities (Attractive for " + name + ")",
+        "feral_character_male_na": card.config.characterSpeciesType === "feral" ? "Another creature with evolved cognitive abilities but in a bestial or feral form, a MALE one (Non-attractive for " + name + ")" : "A MALE creature with evolved cognitive abilities but in a bestial or feral form (Non-attractive for " + name + ")",
+        "feral_character_male_a": card.config.characterSpeciesType === "feral" ? "Another creature with evolved cognitive abilities but in a bestial or feral form, a MALE one (Attractive for " + name + ")" : "A MALE creature with evolved cognitive abilities but in a bestial or feral form (Attractive for " + name + ")",
+        "feral_character_female_na": card.config.characterSpeciesType === "feral" ? "Another creature with evolved cognitive abilities but in a bestial or feral form, a FEMALE one (Non-attractive for " + name + ")" : "A FEMALE creature with evolved cognitive abilities but in a bestial or feral form (Non-attractive for " + name + ")",
+        "feral_character_female_a": card.config.characterSpeciesType === "feral" ? "Another creature with evolved cognitive abilities but in a bestial or feral form, a FEMALE one (Attractive for " + name + ")" : "A FEMALE creature with evolved cognitive abilities but in a bestial or feral form (Attractive for " + name + ")",
+        "feral_character_ambiguous_na": card.config.characterSpeciesType === "feral" ? "Another creature with evolved cognitive abilities but in a bestial or feral form, with AMBIGUOUS gender (Non-attractive for " + name + ")" : "A creature with evolved cognitive abilities but in a bestial or feral form with AMBIGUOUS gender (Non-attractive for " + name + ")",
+        "feral_character_ambiguous_a": card.config.characterSpeciesType === "feral" ? "Another creature with evolved cognitive abilities but in a bestial or feral form, with AMBIGUOUS gender (Attractive for " + name + ")" : "A creature with evolved cognitive abilities but in a bestial or feral form with AMBIGUOUS gender (Attractive for " + name + ")",
+    };
+
+    const fineTuneDescriptionsFamily = {
+        "any_family_character": `Any family member regardless of gender or attraction group (Non-attractive for ${name})`,
+
+        "family_character_male_na": `A MALE family member (Non-attractive for ${name})`,
+        "family_character_male_a": `A MALE family member (Attractive for ${name})`,
+        "family_character_female_na": `A FEMALE family member (Non-attractive for ${name})`,
+        "family_character_female_a": `A FEMALE family member (Attractive for ${name})`,
+        "family_character_ambiguous_na": `A family member with AMBIGUOUS gender (Non-attractive for ${name})`,
+        "family_character_ambiguous_a": `A family member with AMBIGUOUS gender (Attractive for ${name})`,
+    }
+
+    const fineTuneConditions = {
+        "any_character": "true",
+        "any_family_character": "true",
+
+        "humanoid_character_male_na": "info.other.speciesType === \"humanoid\" && info.other.gender === \"male\" && !DE.utils.isWithinAttractionsGroup(info.char, info.other)",
+        "humanoid_character_male_a": "info.other.speciesType === \"humanoid\" && info.other.gender === \"male\" && DE.utils.isWithinAttractionsGroup(info.char, info.other)",
+        "humanoid_character_female_na": "info.other.speciesType === \"humanoid\" && info.other.gender === \"female\" && !DE.utils.isWithinAttractionsGroup(info.char, info.other)",
+        "humanoid_character_female_a": "info.other.speciesType === \"humanoid\" && info.other.gender === \"female\" && DE.utils.isWithinAttractionsGroup(info.char, info.other)",
+        "humanoid_character_ambiguous_na": "info.other.speciesType === \"humanoid\" && info.other.gender === \"ambiguous\" && !DE.utils.isWithinAttractionsGroup(info.char, info.other)",
+        "humanoid_character_ambiguous_a": "info.other.speciesType === \"humanoid\" && info.other.gender === \"ambiguous\" && DE.utils.isWithinAttractionsGroup(info.char, info.other)",
+        "animal_character_male_na": "info.other.speciesType === \"animal\" && info.other.gender === \"male\" && !DE.utils.isWithinAttractionsGroup(info.char, info.other)",
+        "animal_character_male_a": "info.other.speciesType === \"animal\" && info.other.gender === \"male\" && DE.utils.isWithinAttractionsGroup(info.char, info.other)",
+        "animal_character_female_na": "info.other.speciesType === \"animal\" && info.other.gender === \"female\" && !DE.utils.isWithinAttractionsGroup(info.char, info.other)",
+        "animal_character_female_a": "info.other.speciesType === \"animal\" && info.other.gender === \"female\" && DE.utils.isWithinAttractionsGroup(info.char, info.other)",
+        "animal_character_ambiguous_na": "info.other.speciesType === \"animal\" && info.other.gender === \"ambiguous\" && !DE.utils.isWithinAttractionsGroup(info.char, info.other)",
+        "animal_character_ambiguous_a": "info.other.speciesType === \"animal\" && info.other.gender === \"ambiguous\" && DE.utils.isWithinAttractionsGroup(info.char, info.other)",
+        "feral_character_male_na": "info.other.speciesType === \"feral\" && info.other.gender === \"male\" && !DE.utils.isWithinAttractionsGroup(info.char, info.other)",
+        "feral_character_male_a": "info.other.speciesType === \"feral\" && info.other.gender === \"male\" && DE.utils.isWithinAttractionsGroup(info.char, info.other)",
+        "feral_character_female_na": "info.other.speciesType === \"feral\" && info.other.gender === \"female\" && !DE.utils.isWithinAttractionsGroup(info.char, info.other)",
+        "feral_character_female_a": "info.other.speciesType === \"feral\" && info.other.gender === \"female\" && DE.utils.isWithinAttractionsGroup(info.char, info.other)",
+        "feral_character_ambiguous_na": "info.other.speciesType === \"feral\" && info.other.gender === \"ambiguous\" && !DE.utils.isWithinAttractionsGroup(info.char, info.other)",
+        "feral_character_ambiguous_a": "info.other.speciesType === \"feral\" && info.other.gender === \"ambiguous\" && DE.utils.isWithinAttractionsGroup(info.char, info.other)",
+
+        "family_character_male_na": "info.other.gender === \"male\" && !DE.utils.isWithinAttractionsGroup(info.char, info.other)",
+        "family_character_male_a": "info.other.gender === \"male\" && DE.utils.isWithinAttractionsGroup(info.char, info.other)",
+        "family_character_female_na": "info.other.gender === \"female\" && !DE.utils.isWithinAttractionsGroup(info.char, info.other)",
+        "family_character_female_a": "info.other.gender === \"female\" && DE.utils.isWithinAttractionsGroup(info.char, info.other)",
+        "family_character_ambiguous_na": "info.other.gender === \"ambiguous\" && !DE.utils.isWithinAttractionsGroup(info.char, info.other)",
+        "family_character_ambiguous_a": "info.other.gender === \"ambiguous\" && DE.utils.isWithinAttractionsGroup(info.char, info.other)",
+    }
+
+    const fineTunesRecord = {
+        "Humanoid Characters": [
+            fineTunesDescriptions["humanoid_character_male_na"],
+            fineTunesDescriptions["humanoid_character_male_a"],
+            fineTunesDescriptions["humanoid_character_female_na"],
+            fineTunesDescriptions["humanoid_character_female_a"],
+            fineTunesDescriptions["humanoid_character_ambiguous_na"],
+            fineTunesDescriptions["humanoid_character_ambiguous_a"],
+        ],
+        "Animal Characters": [
+            fineTunesDescriptions["animal_character_male_na"],
+            fineTunesDescriptions["animal_character_male_a"],
+            fineTunesDescriptions["animal_character_female_na"],
+            fineTunesDescriptions["animal_character_female_a"],
+            fineTunesDescriptions["animal_character_ambiguous_na"],
+            fineTunesDescriptions["animal_character_ambiguous_a"],
+        ],
+        "Feral Characters": [
+            fineTunesDescriptions["feral_character_male_na"],
+            fineTunesDescriptions["feral_character_male_a"],
+            fineTunesDescriptions["feral_character_female_na"],
+            fineTunesDescriptions["feral_character_female_a"],
+            fineTunesDescriptions["feral_character_ambiguous_na"],
+            fineTunesDescriptions["feral_character_ambiguous_a"],
+        ]
+    };
+
+    const fineTunesFamilyRecord = {
+        "Family Characters": [
+            fineTuneDescriptionsFamily["family_character_male_na"],
+            fineTuneDescriptionsFamily["family_character_male_a"],
+            fineTuneDescriptionsFamily["family_character_female_na"],
+            fineTuneDescriptionsFamily["family_character_female_a"],
+            fineTuneDescriptionsFamily["family_character_ambiguous_na"],
+            fineTuneDescriptionsFamily["family_character_ambiguous_a"],
+        ],
+    };
+
+    /**
+     * @type {string[]}
+     */
+    let defaultFineTunes = [];
+    /**
+     * @type {string[]}
+     */
+    let defaultFamilyFineTunes = [];
+
+    if (isAsexualValue) {
+        defaultFineTunes = [
+            "humanoid_character_male_na",
+            "humanoid_character_female_na",
+            "humanoid_character_ambiguous_na",
+            "animal_character_male_na",
+            "animal_character_female_na",
+            "animal_character_ambiguous_na",
+            "feral_character_male_na",
+            "feral_character_female_na",
+            "feral_character_ambiguous_na",
+
+            "any_character",
+        ]
+        defaultFamilyFineTunes = [
+            "family_character_male_na",
+            "family_character_female_na",
+            "family_character_ambiguous_na",
+
+            "any_family_character",
+        ]
+    } else {
+        defaultFineTunes.push("humanoid_character_male_na");
+        if (card.config.attractions.includes("male") && card.config.characterSpeciesType === "humanoid") {
+            defaultFineTunes.push("humanoid_character_male_a");
+        }
+        defaultFineTunes.push("humanoid_character_female_na");
+        if (card.config.attractions.includes("female") && card.config.characterSpeciesType === "humanoid") {
+            defaultFineTunes.push("humanoid_character_female_a");
+        }
+        defaultFineTunes.push("humanoid_character_ambiguous_na");
+        if (card.config.attractions.includes("ambiguous") && card.config.characterSpeciesType === "humanoid") {
+            defaultFineTunes.push("humanoid_character_ambiguous_a");
+        }
+        defaultFineTunes.push("animal_character_male_na");
+        if (card.config.attractions.includes("male") && card.config.characterSpeciesType === "animal") {
+            defaultFineTunes.push("animal_character_male_a");
+        }
+        defaultFineTunes.push("animal_character_female_na");
+        if (card.config.attractions.includes("female") && card.config.characterSpeciesType === "animal") {
+            defaultFineTunes.push("animal_character_female_a");
+        }
+        defaultFineTunes.push("animal_character_ambiguous_na");
+        if (card.config.attractions.includes("ambiguous") && card.config.characterSpeciesType === "animal") {
+            defaultFineTunes.push("animal_character_ambiguous_a");
+        }
+        defaultFineTunes.push("feral_character_male_na");
+        if (card.config.attractions.includes("male") && card.config.characterSpeciesType === "feral") {
+            defaultFineTunes.push("feral_character_male_a");
+        }
+        defaultFineTunes.push("feral_character_female_na");
+        if (card.config.attractions.includes("female") && card.config.characterSpeciesType === "feral") {
+            defaultFineTunes.push("feral_character_female_a");
+        }
+        defaultFineTunes.push("feral_character_ambiguous_na");
+        if (card.config.attractions.includes("ambiguous") && card.config.characterSpeciesType === "feral") {
+            defaultFineTunes.push("feral_character_ambiguous_a");
+        }
+
+        defaultFineTunes.push("any_character");
+
+        if (isIncestuousValue) {
+            defaultFamilyFineTunes.push("family_character_male_na");
+            if (card.config.attractions.includes("male")) {
+                defaultFamilyFineTunes.push("family_character_male_a");
+            }
+            defaultFamilyFineTunes.push("family_character_female_na");
+            if (card.config.attractions.includes("female")) {
+                defaultFamilyFineTunes.push("family_character_female_a");
+            }
+            defaultFamilyFineTunes.push("family_character_ambiguous_na");
+            if (card.config.attractions.includes("ambiguous")) {
+                defaultFamilyFineTunes.push("family_character_ambiguous_a");
+            }
+        } else {
+            defaultFamilyFineTunes = [
+                "family_character_male_na",
+                "family_character_female_na",
+                "family_character_ambiguous_na",
+
+                "any_family_character",
+            ];
+        }
+    }
+
+
+    let selectedFineTunes = card.config.bondsFineTunes || defaultFineTunes;
+    let selectedFamilyFineTunes = card.config.bondsFamilyFineTunes || defaultFamilyFineTunes;
+
+    const selectFineTunes = async () => {
+        if (guider) {
+            const value = await guider.askList(
+                "Select the fine-tunes that best fit " + name + "'s romantic and sexual attractions, or add your own (these will be used to determine the types of bonds " + name + " forms with other characters, and how they interact with them)\n\n" +
+                "Note that these fine tunes will have no effect if no such bond or attraction can be formed based on the previously selected potential attractions for " + name,
+                fineTunesRecord,
+                // @ts-ignore
+                selectedFineTunes.filter((v) => v !== "any_character").map(key => fineTunesDescriptions[key])
+            );
+
+            selectedFineTunes = [];
+            value.value.map(val => {
+                // @ts-ignore
+                const foundKey = Object.keys(fineTunesDescriptions).find(key => fineTunesDescriptions[key] === val);
+                if (foundKey) {
+                    if (!selectedFineTunes.includes(foundKey)) {
+                        selectedFineTunes.push(foundKey);
+                    }
+                }
+            });
+
+            selectedFineTunes.push("any_character");
+
+            card.config.bondsFineTunes = selectedFineTunes;
+            await autosave?.save();
+        } else {
+            selectedFineTunes = defaultFineTunes;
+        }
+    }
+
+    if (!card.config.bondsFineTunes) {
+        await selectFineTunes();
+    }
+
+    const selectFamilyFineTunes = async () => {
+        if (guider) {
+            const value = await guider.askList(
+                "Select the fine-tunes that best fit " + name + "'s relationship with family, or add your own (these will be used to determine the types of bonds " + name + " forms with other family members, and how they interact with them)\n\n" +
+                "Note that these fine tunes will have no effect if no such bond can be formed for " + name,
+                fineTunesFamilyRecord,
+                // @ts-ignore
+                selectedFamilyFineTunes.filter((v) => v !== "any_family_character").map(key => fineTuneDescriptionsFamily[key])
+            );
+
+            selectedFamilyFineTunes = [];
+            value.value.map(val => {
+                // @ts-ignore
+                const foundKey = Object.keys(fineTuneDescriptionsFamily).find(key => fineTuneDescriptionsFamily[key] === val);
+                if (foundKey) {
+                    if (!selectedFamilyFineTunes.includes(foundKey)) {
+                        selectedFamilyFineTunes.push(foundKey);
+                    }
+                }
+            });
+
+            selectedFamilyFineTunes.push("any_family_character");
+
+            card.config.bondsFamilyFineTunes = selectedFamilyFineTunes;
+            await autosave?.save();
+        } else {
+            selectedFamilyFineTunes = defaultFamilyFineTunes;
+        }
+    }
+
+    if (!card.config.bondsFamilyFineTunes) {
+        await selectFamilyFineTunes();
+    }
+
     let wouldUseViolenceTowardsEnemiesValue = false;
-    if (!hasSpecialComent(card.body, "bonds-violence")) {
+    if (!hasSpecialComment(optionsSection.body, "bonds-violence")) {
         await prime();
         const wouldUseViolenceTowardsEnemies = await generator.next({
             maxCharacters: 5,
@@ -120,7 +404,7 @@ export async function generateBonds(engine, card, guider, autosave) {
         }
 
         card.config.wouldUseViolence = wouldUseViolenceTowardsEnemiesValue;
-        insertSpecialComment(card.body, "bonds-violence");
+        insertSpecialComment(optionsSection.body, "bonds-violence");
         await autosave?.save();
     } else {
         wouldUseViolenceTowardsEnemiesValue = card.config.wouldUseViolence || false;
@@ -130,617 +414,670 @@ export async function generateBonds(engine, card, guider, autosave) {
         "foe_n100_n50": {
             "noRomanticInterest_0_10": {
                 nonFamily: wouldUseViolenceTowardsEnemiesValue ?
-                    "a sworn enemy that " + name + " truly hates with every fiber of their being — someone " + name + " considers dangerous and would not hesitate to hurt, harm, or even kill if given the chance, and who may want " + name + " dead in return" :
-                    "a sworn enemy that " + name + " truly hates with every fiber of their being — someone " + name + " despises with a cold, burning intensity",
+                    "a sworn enemy, {} that " + name + " truly hates with every fiber of their being — someone " + name + " considers dangerous and would not hesitate to hurt, harm, or even kill if given the chance, and who may want " + name + " dead in return" :
+                    "a sworn enemy, {} that " + name + " truly hates with every fiber of their being — someone " + name + " despises with a cold, burning intensity",
                 family: wouldUseViolenceTowardsEnemiesValue ?
-                    "a family member that " + name + " considers a sworn enemy — someone who has caused " + name + " deep harm or trauma, whom " + name + " despises so completely that violence between them is not out of the question, and whose very existence " + name + " may wish to end" :
-                    "a family member that " + name + " considers a sworn enemy — someone who has caused " + name + " deep harm or trauma, whom " + name + " despises with an absolute and unforgiving hatred",
+                    "{} that " + name + " considers a sworn enemy — someone who has caused " + name + " deep harm or trauma, whom " + name + " despises so completely that violence between them is not out of the question, and whose very existence " + name + " may wish to end" :
+                    "{} that " + name + " considers a sworn enemy — someone who has caused " + name + " deep harm or trauma, whom " + name + " despises with an absolute and unforgiving hatred",
             },
             "slightRomanticInterest_10_20": {
                 nonFamily: wouldUseViolenceTowardsEnemiesValue ?
                     (isAsexualValue ?
-                        "a sworn enemy that " + name + " truly hates and would hurt or kill without hesitation — someone who has also shown slight romantic and sexual interest in " + name + ", but " + name + " does not reciprocate because they are asexual, and the unwanted attention only deepens the murderous hatred" :
-                        "a sworn enemy that " + name + " truly hates and would hurt or kill without hesitation, yet is unsettlingly drawn to with a slight, deeply unwanted romantic and sexual attraction — a sickening contradiction that makes " + name + " hate them and themselves even more") :
+                        "a sworn enemy, {} that " + name + " truly hates and would hurt or kill without hesitation — someone who has also shown slight romantic and sexual interest in " + name + ", but " + name + " does not reciprocate because they are asexual, and the unwanted attention only deepens the murderous hatred" :
+                        "a sworn enemy, {} that " + name + " truly hates and would hurt or kill without hesitation, yet is unsettlingly drawn to with a slight, deeply unwanted romantic and sexual attraction — a sickening contradiction that makes " + name + " hate them and themselves even more") :
                     (isAsexualValue ?
-                        "a sworn enemy that " + name + " despises with an absolute hatred — someone who has also shown slight romantic and sexual interest in " + name + ", but " + name + " does not reciprocate because they are asexual, and the unwanted attention only deepens the contempt" :
-                        "a sworn enemy that " + name + " despises with an absolute hatred, yet is unsettlingly drawn to with a slight, deeply unwanted romantic and sexual attraction that " + name + " cannot fully explain or accept"),
+                        "a sworn enemy, {} that " + name + " despises with an absolute hatred — someone who has also shown slight romantic and sexual interest in " + name + ", but " + name + " does not reciprocate because they are asexual, and the unwanted attention only deepens the contempt" :
+                        "a sworn enemy, {} that " + name + " despises with an absolute hatred, yet is unsettlingly drawn to with a slight, deeply unwanted romantic and sexual attraction that " + name + " cannot fully explain or accept"),
                 family: wouldUseViolenceTowardsEnemiesValue ?
                     (isIncestuousValue ?
-                        "a family member that " + name + " considers a sworn enemy and has caused " + name + " deep harm or trauma, yet " + name + " has a slight and deeply shameful romantic and sexual interest in — feelings that coexist sickeningly with the desire to see them suffer" :
-                        "a family member that " + name + " considers a sworn enemy — someone who has caused " + name + " deep harm or trauma, and who has shown slight romantic and sexual interest in " + name + ", which " + name + " finds revolting and does not reciprocate, and which may provoke a violent response") :
+                        "{} that " + name + " considers a sworn enemy and has caused " + name + " deep harm or trauma, yet " + name + " has a slight and deeply shameful romantic and sexual interest in — feelings that coexist sickeningly with the desire to see them suffer" :
+                        "{} that " + name + " considers a sworn enemy — someone who has caused " + name + " deep harm or trauma, and who has shown slight romantic and sexual interest in " + name + ", which " + name + " finds revolting and does not reciprocate, and which may provoke a violent response") :
                     (isIncestuousValue ?
-                        "a family member that " + name + " considers a sworn enemy and has caused " + name + " deep harm or trauma, yet " + name + " has a slight and deeply shameful romantic and sexual interest in" :
-                        "a family member that " + name + " considers a sworn enemy — someone who has caused " + name + " deep harm or trauma, and who has shown slight romantic and sexual interest in " + name + ", which " + name + " finds revolting and does not reciprocate"),
+                        "{} that " + name + " considers a sworn enemy and has caused " + name + " deep harm or trauma, yet " + name + " has a slight and deeply shameful romantic and sexual interest in" :
+                        "{} that " + name + " considers a sworn enemy — someone who has caused " + name + " deep harm or trauma, and who has shown slight romantic and sexual interest in " + name + ", which " + name + " finds revolting and does not reciprocate"),
             },
             "romanticInterest_20_35": {
                 nonFamily: wouldUseViolenceTowardsEnemiesValue ?
                     (isAsexualValue ?
-                        "a sworn enemy that " + name + " truly hates and would hurt or kill without hesitation — someone who has shown romantic and sexual interest in " + name + ", but " + name + " does not reciprocate because they are asexual, and the persistent unwanted desire only fuels " + name + "'s murderous contempt" :
-                        "a sworn enemy that " + name + " truly hates and would hurt or kill without hesitation, yet cannot help but feel a real and disturbing romantic and sexual attraction toward — a monstrous contradiction that disgusts " + name + " to their core") :
+                        "a sworn enemy, {} that " + name + " truly hates and would hurt or kill without hesitation — someone who has shown romantic and sexual interest in " + name + ", but " + name + " does not reciprocate because they are asexual, and the persistent unwanted desire only fuels " + name + "'s murderous contempt" :
+                        "a sworn enemy, {} that " + name + " truly hates and would hurt or kill without hesitation, yet cannot help but feel a real and disturbing romantic and sexual attraction toward — a monstrous contradiction that disgusts " + name + " to their core") :
                     (isAsexualValue ?
-                        "a sworn enemy that " + name + " despises with an absolute hatred — someone who has shown romantic and sexual interest in " + name + ", but " + name + " does not reciprocate because they are asexual, and the persistent desire only deepens " + name + "'s cold contempt" :
-                        "a sworn enemy that " + name + " despises with an absolute hatred, yet cannot help but feel a real and disturbing romantic and sexual attraction toward — a contradiction " + name + " resents deeply"),
+                        "a sworn enemy, {} that " + name + " despises with an absolute hatred — someone who has shown romantic and sexual interest in " + name + ", but " + name + " does not reciprocate because they are asexual, and the persistent desire only deepens " + name + "'s cold contempt" :
+                        "a sworn enemy, {} that " + name + " despises with an absolute hatred, yet cannot help but feel a real and disturbing romantic and sexual attraction toward — a contradiction " + name + " resents deeply"),
                 family: wouldUseViolenceTowardsEnemiesValue ?
                     (isIncestuousValue ?
-                        "a family member that " + name + " considers a sworn enemy and has caused " + name + " deep harm or trauma, yet " + name + " has a real and deeply shameful romantic and sexual interest in — feelings that war violently with the desire to hurt them" :
-                        "a family member that " + name + " considers a sworn enemy — someone who has caused " + name + " deep harm or trauma, and who has shown romantic and sexual interest in " + name + ", which " + name + " finds revolting and does not reciprocate") :
+                        "{} that " + name + " considers a sworn enemy and has caused " + name + " deep harm or trauma, yet " + name + " has a real and deeply shameful romantic and sexual interest in — feelings that war violently with the desire to hurt them" :
+                        "{} that " + name + " considers a sworn enemy — someone who has caused " + name + " deep harm or trauma, and who has shown romantic and sexual interest in " + name + ", which " + name + " finds revolting and does not reciprocate") :
                     (isIncestuousValue ?
-                        "a family member that " + name + " considers a sworn enemy and has caused " + name + " deep harm or trauma, yet " + name + " has a real and deeply shameful romantic and sexual interest in" :
-                        "a family member that " + name + " considers a sworn enemy — someone who has caused " + name + " deep harm or trauma, and who has shown romantic and sexual interest in " + name + ", which " + name + " finds revolting and does not reciprocate"),
+                        "{} that " + name + " considers a sworn enemy and has caused " + name + " deep harm or trauma, yet " + name + " has a real and deeply shameful romantic and sexual interest in" :
+                        "{} that " + name + " considers a sworn enemy — someone who has caused " + name + " deep harm or trauma, and who has shown romantic and sexual interest in " + name + ", which " + name + " finds revolting and does not reciprocate"),
             },
             "strongRomanticInterest_35_50": {
                 nonFamily: wouldUseViolenceTowardsEnemiesValue ?
                     (isAsexualValue ?
-                        "a sworn enemy that " + name + " truly hates and would hurt or kill without hesitation — someone who has shown strong romantic and sexual interest in " + name + ", but " + name + " does not reciprocate because they are asexual, and the obsessive unwanted desire makes this enemy even more dangerous and repulsive to " + name :
-                        "a sworn enemy that " + name + " truly hates and would kill if they could, yet is strongly and almost obsessively attracted to, both romantically and sexually — the hatred and the desire feeding each other in a destructive loop, and though " + name + " would still destroy them, the attraction makes every confrontation agonizing") :
+                        "a sworn enemy, {} that " + name + " truly hates and would hurt or kill without hesitation — someone who has shown strong romantic and sexual interest in " + name + ", but " + name + " does not reciprocate because they are asexual, and the obsessive unwanted desire makes this enemy even more dangerous and repulsive to " + name :
+                        "a sworn enemy, {} that " + name + " truly hates and would kill if they could, yet is strongly and almost obsessively attracted to, both romantically and sexually — the hatred and the desire feeding each other in a destructive loop, and though " + name + " would still destroy them, the attraction makes every confrontation agonizing") :
                     (isAsexualValue ?
-                        "a sworn enemy that " + name + " despises with an absolute hatred — someone who has shown strong romantic and sexual interest in " + name + ", but " + name + " does not reciprocate because they are asexual, and the obsessive unwanted attention only intensifies the loathing" :
-                        "a sworn enemy that " + name + " despises with an absolute hatred, yet is strongly and almost obsessively attracted to, both romantically and sexually, in a way that fills " + name + " with self-loathing — the hate and the desire feeding each other in a destructive loop"),
+                        "a sworn enemy, {} that " + name + " despises with an absolute hatred — someone who has shown strong romantic and sexual interest in " + name + ", but " + name + " does not reciprocate because they are asexual, and the obsessive unwanted attention only intensifies the loathing" :
+                        "a sworn enemy, {} that " + name + " despises with an absolute hatred, yet is strongly and almost obsessively attracted to, both romantically and sexually, in a way that fills " + name + " with self-loathing — the hate and the desire feeding each other in a destructive loop"),
                 family: wouldUseViolenceTowardsEnemiesValue ?
                     (isIncestuousValue ?
-                        "a family member that " + name + " considers a sworn enemy and has caused " + name + " deep harm or trauma, yet " + name + " has strong and deeply shameful romantic and sexual feelings for — feelings that make the violence between them even more agonizing and twisted" :
-                        "a family member that " + name + " considers a sworn enemy — someone who has caused " + name + " deep harm or trauma, and who has shown strong romantic and sexual interest in " + name + ", which " + name + " finds revolting and does not reciprocate") :
+                        "{} that " + name + " considers a sworn enemy and has caused " + name + " deep harm or trauma, yet " + name + " has strong and deeply shameful romantic and sexual feelings for — feelings that make the violence between them even more agonizing and twisted" :
+                        "{} that " + name + " considers a sworn enemy — someone who has caused " + name + " deep harm or trauma, and who has shown strong romantic and sexual interest in " + name + ", which " + name + " finds revolting and does not reciprocate") :
                     (isIncestuousValue ?
-                        "a family member that " + name + " considers a sworn enemy and has caused " + name + " deep harm or trauma, yet " + name + " has strong and deeply shameful romantic and sexual feelings for" :
-                        "a family member that " + name + " considers a sworn enemy — someone who has caused " + name + " deep harm or trauma, and who has shown strong romantic and sexual interest in " + name + ", which " + name + " finds revolting and does not reciprocate"),
+                        "{} that " + name + " considers a sworn enemy and has caused " + name + " deep harm or trauma, yet " + name + " has strong and deeply shameful romantic and sexual feelings for" :
+                        "{} that " + name + " considers a sworn enemy — someone who has caused " + name + " deep harm or trauma, and who has shown strong romantic and sexual interest in " + name + ", which " + name + " finds revolting and does not reciprocate"),
             },
             "deepInLove_50_100": {
                 nonFamily: wouldUseViolenceTowardsEnemiesValue ?
                     (isAsexualValue ?
-                        "a sworn enemy that " + name + " truly hates and would hurt or kill without hesitation — someone who has shown deep love and sexual desire for " + name + ", but " + name + " does not reciprocate because they are asexual, and the consuming obsession makes this enemy the most dangerous and repulsive person in " + name + "'s life" :
-                        "a sworn enemy that " + name + " truly hates and has the capacity to kill, yet is consumed by a deep and agonizing love and sexual desire for — the hatred and the love are so intertwined that " + name + " cannot tell where one ends and the other begins, and though they might still destroy this person, every attempt would break something inside " + name + " as well") :
+                        "a sworn enemy {} that " + name + " truly hates and would hurt or kill without hesitation — someone who has shown deep love and sexual desire for " + name + ", but " + name + " does not reciprocate because they are asexual, and the consuming obsession makes this enemy the most dangerous and repulsive person in " + name + "'s life" :
+                        "a sworn enemy {} that " + name + " truly hates and has the capacity to kill, yet is consumed by a deep and agonizing love and sexual desire for — the hatred and the love are so intertwined that " + name + " cannot tell where one ends and the other begins, and though they might still destroy this person, every attempt would break something inside " + name + " as well") :
                     (isAsexualValue ?
-                        "a sworn enemy that " + name + " despises with an absolute hatred — someone who has shown deep love and sexual desire for " + name + ", but " + name + " does not reciprocate because they are asexual, and the consuming obsession makes this person the most loathsome presence in " + name + "'s life" :
-                        "a sworn enemy that " + name + " despises with an absolute hatred, yet is consumed by a deep and agonizing love and sexual desire for — feelings " + name + " finds monstrous and cannot reconcile with the hatred, leaving them in a state of constant inner turmoil"),
+                        "a sworn enemy {} that " + name + " despises with an absolute hatred — someone who has shown deep love and sexual desire for " + name + ", but " + name + " does not reciprocate because they are asexual, and the consuming obsession makes this person the most loathsome presence in " + name + "'s life" :
+                        "a sworn enemy {} that " + name + " despises with an absolute hatred, yet is consumed by a deep and agonizing love and sexual desire for — feelings " + name + " finds monstrous and cannot reconcile with the hatred, leaving them in a state of constant inner turmoil"),
                 family: wouldUseViolenceTowardsEnemiesValue ?
                     (isIncestuousValue ?
-                        "a family member that " + name + " considers a sworn enemy and has caused " + name + " deep harm or trauma, yet " + name + " is deeply in love with and sexually attracted to — a consuming and shameful obsession where the desire to see them suffer and the desire to possess them are indistinguishable, and the violence between them is as intimate as it is destructive" :
-                        "a family member that " + name + " considers a sworn enemy — someone who has caused " + name + " deep harm or trauma, and who is deeply in love with and sexually attracted to " + name + ", a love " + name + " finds sickening and does not reciprocate") :
+                        "{} that " + name + " considers a sworn enemy and has caused " + name + " deep harm or trauma, yet " + name + " is deeply in love with and sexually attracted to — a consuming and shameful obsession where the desire to see them suffer and the desire to possess them are indistinguishable, and the violence between them is as intimate as it is destructive" :
+                        "{} that " + name + " considers a sworn enemy — someone who has caused " + name + " deep harm or trauma, and who is deeply in love with and sexually attracted to " + name + ", a love " + name + " finds sickening and does not reciprocate") :
                     (isIncestuousValue ?
-                        "a family member that " + name + " considers a sworn enemy and has caused " + name + " deep harm or trauma, yet " + name + " is deeply in love with and sexually attracted to — a consuming and shameful obsession intertwined with the hatred" :
-                        "a family member that " + name + " considers a sworn enemy — someone who has caused " + name + " deep harm or trauma, and who is deeply in love with and sexually attracted to " + name + ", a love " + name + " finds sickening and does not reciprocate"),
+                        "{} that " + name + " considers a sworn enemy and has caused " + name + " deep harm or trauma, yet " + name + " is deeply in love with and sexually attracted to — a consuming and shameful obsession intertwined with the hatred" :
+                        "{} that " + name + " considers a sworn enemy — someone who has caused " + name + " deep harm or trauma, and who is deeply in love with and sexually attracted to " + name + ", a love " + name + " finds sickening and does not reciprocate"),
             },
         },
         "hostile_n50_n35": {
             "noRomanticInterest_0_10": {
                 nonFamily: wouldUseViolenceTowardsEnemiesValue ?
-                    "another character that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm, fear, or trauma, and whom " + name + " may respond to with intimidation, threats, or physical violence" :
-                    "another character that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma, and whom " + name + " treats with verbal cruelty, cold aggression, and sustained hostility, though without resorting to physical violence",
+                    "{} that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm, fear, or trauma, and whom " + name + " may respond to with intimidation, threats, or physical violence" :
+                    "{} that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma, and whom " + name + " treats with verbal cruelty, cold aggression, and sustained hostility, though without resorting to physical violence",
                 family: wouldUseViolenceTowardsEnemiesValue ?
-                    "a family member that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm, fear, or trauma within the family, and interactions between them may involve verbal abuse, intimidation, or even physical violence" :
-                    "a family member that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma within the family, and interactions between them involve verbal abuse, emotional manipulation, and sustained hostility, though without physical violence",
+                    "{} that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm, fear, or trauma within the family, and interactions between them may involve verbal abuse, intimidation, or even physical violence" :
+                    "{} that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma within the family, and interactions between them involve verbal abuse, emotional manipulation, and sustained hostility, though without physical violence",
             },
             "slightRomanticInterest_10_20": {
                 nonFamily: wouldUseViolenceTowardsEnemiesValue ?
                     (isAsexualValue ?
-                        "another character that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm or trauma, and who has also shown slight romantic and sexual interest in " + name + ", but " + name + " does not reciprocate because they are asexual, and the unwanted attention feels threatening and may provoke a violent reaction" :
-                        "another character that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm or trauma, yet " + name + " feels a slight and deeply unwanted romantic and sexual attraction toward them that feels like a betrayal of their own safety") :
+                        "{} that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm or trauma, and who has also shown slight romantic and sexual interest in " + name + ", but " + name + " does not reciprocate because they are asexual, and the unwanted attention feels threatening and may provoke a violent reaction" :
+                        "{} that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm or trauma, yet " + name + " feels a slight and deeply unwanted romantic and sexual attraction toward them that feels like a betrayal of their own safety") :
                     (isAsexualValue ?
-                        "another character that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma, and who has also shown slight romantic and sexual interest in " + name + ", but " + name + " does not reciprocate because they are asexual, and the unwanted attention only deepens the hostility" :
-                        "another character that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma, yet " + name + " feels a slight and deeply unwanted romantic and sexual attraction toward that " + name + " tries to suppress and deny"),
+                        "{} that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma, and who has also shown slight romantic and sexual interest in " + name + ", but " + name + " does not reciprocate because they are asexual, and the unwanted attention only deepens the hostility" :
+                        "{} that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma, yet " + name + " feels a slight and deeply unwanted romantic and sexual attraction toward that " + name + " tries to suppress and deny"),
                 family: wouldUseViolenceTowardsEnemiesValue ?
                     (isIncestuousValue ?
-                        "a family member that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm or trauma within the family, yet " + name + " has a slight and deeply shameful romantic and sexual interest in, which makes the violence between them even more twisted" :
-                        "a family member that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm or trauma, and who has shown slight romantic and sexual interest in " + name + ", which " + name + " finds threatening and does not reciprocate") :
+                        "{} that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm or trauma within the family, yet " + name + " has a slight and deeply shameful romantic and sexual interest in, which makes the violence between them even more twisted" :
+                        "{} that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm or trauma, and who has shown slight romantic and sexual interest in " + name + ", which " + name + " finds threatening and does not reciprocate") :
                     (isIncestuousValue ?
-                        "a family member that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma within the family, yet " + name + " has a slight and deeply shameful romantic and sexual interest in" :
-                        "a family member that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma, and who has shown slight romantic and sexual interest in " + name + ", which " + name + " does not reciprocate"),
+                        "{} that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma within the family, yet " + name + " has a slight and deeply shameful romantic and sexual interest in" :
+                        "{} that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma, and who has shown slight romantic and sexual interest in " + name + ", which " + name + " does not reciprocate"),
             },
             "romanticInterest_20_35": {
                 nonFamily: wouldUseViolenceTowardsEnemiesValue ?
                     (isAsexualValue ?
-                        "another character that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm or trauma, and who has shown romantic and sexual interest in " + name + ", but " + name + " does not reciprocate because they are asexual, and the persistent desire feels predatory and dangerous" :
-                        "another character that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm or trauma, yet " + name + " feels a genuine and disturbing romantic and sexual attraction toward them that conflicts violently with the fear and rage they also feel") :
+                        "{} that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm or trauma, and who has shown romantic and sexual interest in " + name + ", but " + name + " does not reciprocate because they are asexual, and the persistent desire feels predatory and dangerous" :
+                        "{} that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm or trauma, yet " + name + " feels a genuine and disturbing romantic and sexual attraction toward them that conflicts violently with the fear and rage they also feel") :
                     (isAsexualValue ?
-                        "another character that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma, and who has shown romantic and sexual interest in " + name + ", but " + name + " does not reciprocate because they are asexual, and the persistent desire only deepens the hostility" :
-                        "another character that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma, yet " + name + " feels a genuine and troubling romantic and sexual attraction toward — a pull " + name + " resents and struggles to make sense of"),
+                        "{} that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma, and who has shown romantic and sexual interest in " + name + ", but " + name + " does not reciprocate because they are asexual, and the persistent desire only deepens the hostility" :
+                        "{} that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma, yet " + name + " feels a genuine and troubling romantic and sexual attraction toward — a pull " + name + " resents and struggles to make sense of"),
                 family: wouldUseViolenceTowardsEnemiesValue ?
                     (isIncestuousValue ?
-                        "a family member that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm or trauma within the family, yet " + name + " has a real and deeply shameful romantic and sexual interest in — feelings that war with the violence and rage between them" :
-                        "a family member that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm or trauma, and who has shown romantic and sexual interest in " + name + ", which " + name + " finds threatening and does not reciprocate") :
+                        "{} that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm or trauma within the family, yet " + name + " has a real and deeply shameful romantic and sexual interest in — feelings that war with the violence and rage between them" :
+                        "{} that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm or trauma, and who has shown romantic and sexual interest in " + name + ", which " + name + " finds threatening and does not reciprocate") :
                     (isIncestuousValue ?
-                        "a family member that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma within the family, yet " + name + " has a real and deeply shameful romantic and sexual interest in" :
-                        "a family member that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma, and who has shown romantic and sexual interest in " + name + ", which " + name + " does not reciprocate"),
+                        "{} that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma within the family, yet " + name + " has a real and deeply shameful romantic and sexual interest in" :
+                        "{} that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma, and who has shown romantic and sexual interest in " + name + ", which " + name + " does not reciprocate"),
             },
             "strongRomanticInterest_35_50": {
                 nonFamily: wouldUseViolenceTowardsEnemiesValue ?
                     (isAsexualValue ?
-                        "another character that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm or trauma, and who has shown strong romantic and sexual interest in " + name + ", but " + name + " does not reciprocate because they are asexual, and the obsessive unwanted desire makes this person feel even more dangerous and threatening" :
-                        "another character that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm or trauma, yet " + name + " is strongly drawn to with a romantic and sexual intensity that wars with the fear, rage, and desire for revenge — though the strong attraction may sometimes stay " + name + "'s hand when violence would otherwise follow") :
+                        "{} that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm or trauma, and who has shown strong romantic and sexual interest in " + name + ", but " + name + " does not reciprocate because they are asexual, and the obsessive unwanted desire makes this person feel even more dangerous and threatening" :
+                        "{} that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm or trauma, yet " + name + " is strongly drawn to with a romantic and sexual intensity that wars with the fear, rage, and desire for revenge — though the strong attraction may sometimes stay " + name + "'s hand when violence would otherwise follow") :
                     (isAsexualValue ?
-                        "another character that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma, and who has shown strong romantic and sexual interest in " + name + ", but " + name + " does not reciprocate because they are asexual, and the obsessive attention only intensifies the hostility" :
-                        "another character that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma, yet " + name + " is strongly drawn to with a romantic and sexual intensity that wars with the hostility — the aggression and the desire intertwined in a toxic push and pull " + name + " cannot easily escape"),
+                        "{} that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma, and who has shown strong romantic and sexual interest in " + name + ", but " + name + " does not reciprocate because they are asexual, and the obsessive attention only intensifies the hostility" :
+                        "{} that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma, yet " + name + " is strongly drawn to with a romantic and sexual intensity that wars with the hostility — the aggression and the desire intertwined in a toxic push and pull " + name + " cannot easily escape"),
                 family: wouldUseViolenceTowardsEnemiesValue ?
                     (isIncestuousValue ?
-                        "a family member that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm or trauma within the family, yet " + name + " has strong and deeply shameful romantic and sexual feelings for — feelings that make the violence between them even more agonizing" :
-                        "a family member that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm or trauma, and who has shown strong romantic and sexual interest in " + name + ", which " + name + " finds threatening and does not reciprocate") :
+                        "{} that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm or trauma within the family, yet " + name + " has strong and deeply shameful romantic and sexual feelings for — feelings that make the violence between them even more agonizing" :
+                        "{} that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm or trauma, and who has shown strong romantic and sexual interest in " + name + ", which " + name + " finds threatening and does not reciprocate") :
                     (isIncestuousValue ?
-                        "a family member that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma within the family, yet " + name + " has strong and deeply shameful romantic and sexual feelings for" :
-                        "a family member that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma, and who has shown strong romantic and sexual interest in " + name + ", which " + name + " does not reciprocate"),
+                        "{} that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma within the family, yet " + name + " has strong and deeply shameful romantic and sexual feelings for" :
+                        "{} that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma, and who has shown strong romantic and sexual interest in " + name + ", which " + name + " does not reciprocate"),
             },
             "deepInLove_50_100": {
                 nonFamily: wouldUseViolenceTowardsEnemiesValue ?
                     (isAsexualValue ?
-                        "another character that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm or trauma, and who has shown deep love and sexual desire for " + name + ", but " + name + " does not reciprocate because they are asexual, and the consuming obsession makes this person the most dangerous threat in " + name + "'s life" :
-                        "another character that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm or trauma, yet " + name + " is deeply in love with and sexually attracted to — the love and desire tangled with fear, rage, and the scars of real violence into something deeply toxic, and though " + name + " could hurt them, the depth of the love makes every violent impulse a source of anguish") :
+                        "{} that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm or trauma, and who has shown deep love and sexual desire for " + name + ", but " + name + " does not reciprocate because they are asexual, and the consuming obsession makes this person the most dangerous threat in " + name + "'s life" :
+                        "{} that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm or trauma, yet " + name + " is deeply in love with and sexually attracted to — the love and desire tangled with fear, rage, and the scars of real violence into something deeply toxic, and though " + name + " could hurt them, the depth of the love makes every violent impulse a source of anguish") :
                     (isAsexualValue ?
-                        "another character that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma, and who has shown deep love and sexual desire for " + name + ", but " + name + " does not reciprocate because they are asexual, and the consuming obsession makes this person the most loathsome presence in " + name + "'s life" :
-                        "another character that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma, yet " + name + " is deeply in love with and sexually attracted to in a way that is agonizing — the love and desire sharpening the hostility and the hostility curdling them into something painful and consuming"),
+                        "{} that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma, and who has shown deep love and sexual desire for " + name + ", but " + name + " does not reciprocate because they are asexual, and the consuming obsession makes this person the most loathsome presence in " + name + "'s life" :
+                        "{} that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma, yet " + name + " is deeply in love with and sexually attracted to in a way that is agonizing — the love and desire sharpening the hostility and the hostility curdling them into something painful and consuming"),
                 family: wouldUseViolenceTowardsEnemiesValue ?
                     (isIncestuousValue ?
-                        "a family member that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm or trauma within the family, yet " + name + " is deeply in love with and sexually attracted to — a consuming and shameful obsession where the desire to hurt them and the desire to hold them are indistinguishable" :
-                        "a family member that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm or trauma, and who is deeply in love with and sexually attracted to " + name + ", a love " + name + " finds threatening and does not reciprocate") :
+                        "{} that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm or trauma within the family, yet " + name + " is deeply in love with and sexually attracted to — a consuming and shameful obsession where the desire to hurt them and the desire to hold them are indistinguishable" :
+                        "{} that " + name + " has a deeply hostile and aggressive relationship with — someone who has caused " + name + " real harm or trauma, and who is deeply in love with and sexually attracted to " + name + ", a love " + name + " finds threatening and does not reciprocate") :
                     (isIncestuousValue ?
-                        "a family member that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma within the family, yet " + name + " is deeply in love with and sexually attracted to — a consuming and shameful obsession intertwined with deep wounds" :
-                        "a family member that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma, and who is deeply in love with and sexually attracted to " + name + ", a love " + name + " does not reciprocate"),
+                        "{} that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma within the family, yet " + name + " is deeply in love with and sexually attracted to — a consuming and shameful obsession intertwined with deep wounds" :
+                        "{} that " + name + " has a deeply hostile relationship with — someone who has caused " + name + " real emotional harm or trauma, and who is deeply in love with and sexually attracted to " + name + ", a love " + name + " does not reciprocate"),
             },
         },
         "antagonistic_n35_n20": {
             "noRomanticInterest_0_10": {
-                nonFamily: "another character that " + name + " has an antagonistic relationship with",
-                family: "a family member that " + name + " has an antagonistic relationship with",
+                nonFamily: "{} that " + name + " has an antagonistic relationship with",
+                family: "{} that " + name + " has an antagonistic relationship with",
             },
             "slightRomanticInterest_10_20": {
                 nonFamily: isAsexualValue ?
-                    "another character that " + name + " has an antagonistic relationship with but also such character has shown slight romantic and sexual interest in " + name + " but " + name + " does not reciprocate because they are asexual" :
-                    "another character that " + name + " has an antagonistic relationship with, yet finds slightly but undeniably attractive, both romantically and sexually, in a way that irritates " + name + " — a small, inconvenient pull they would rather not acknowledge",
+                    "{} that " + name + " has an antagonistic relationship with but also such character has shown slight romantic and sexual interest in " + name + " but " + name + " does not reciprocate because they are asexual" :
+                    "{} that " + name + " has an antagonistic relationship with, yet finds slightly but undeniably attractive, both romantically and sexually, in a way that irritates " + name + " — a small, inconvenient pull they would rather not acknowledge",
                 family: isIncestuousValue ?
-                    "a family member that " + name + " has an antagonistic relationship with but also " + name + " has a slight romantic and sexual interest in" :
-                    "a family member that " + name + " has an antagonistic relationship with and such family member has shown slight romantic and sexual interest in " + name + " but " + name + " does not reciprocate that interest",
+                    "{} that " + name + " has an antagonistic relationship with but also " + name + " has a slight romantic and sexual interest in" :
+                    "{} that " + name + " has an antagonistic relationship with and such family member has shown slight romantic and sexual interest in " + name + " but " + name + " does not reciprocate that interest",
             },
             "romanticInterest_20_35": {
                 nonFamily: isAsexualValue ?
-                    "another character that " + name + " has an antagonistic relationship with but also such character has shown romantic and sexual interest in " + name + " but " + name + " does not reciprocate because they are asexual" :
-                    "another character that " + name + " has an antagonistic relationship with, yet is genuinely attracted to, both romantically and sexually, in a way that complicates everything — the friction between them charged with something more than just dislike",
+                    "{} that " + name + " has an antagonistic relationship with but also such character has shown romantic and sexual interest in " + name + " but " + name + " does not reciprocate because they are asexual" :
+                    "{} that " + name + " has an antagonistic relationship with, yet is genuinely attracted to, both romantically and sexually, in a way that complicates everything — the friction between them charged with something more than just dislike",
                 family: isIncestuousValue ?
-                    "a family member that " + name + " has an antagonistic relationship with but also " + name + " has a romantic and sexual interest in" :
-                    "a family member that " + name + " has an antagonistic relationship with and such family member has shown romantic and sexual interest in " + name + " but " + name + " does not reciprocate that interest",
+                    "{} that " + name + " has an antagonistic relationship with but also " + name + " has a romantic and sexual interest in" :
+                    "{} that " + name + " has an antagonistic relationship with and such family member has shown romantic and sexual interest in " + name + " but " + name + " does not reciprocate that interest",
             },
             "strongRomanticInterest_35_50": {
                 nonFamily: isAsexualValue ?
-                    "another character that " + name + " has an antagonistic relationship with but also such character has shown strong romantic and sexual interest in " + name + " but " + name + " does not reciprocate because they are asexual" :
-                    "another character that " + name + " has an antagonistic relationship with, yet is strongly attracted to, both romantically and sexually — the clashing between them electric and loaded, the rivalry masking a tension that neither fully admits",
+                    "{} that " + name + " has an antagonistic relationship with but also such character has shown strong romantic and sexual interest in " + name + " but " + name + " does not reciprocate because they are asexual" :
+                    "{} that " + name + " has an antagonistic relationship with, yet is strongly attracted to, both romantically and sexually — the clashing between them electric and loaded, the rivalry masking a tension that neither fully admits",
                 family: isIncestuousValue ?
-                    "a family member that " + name + " has an antagonistic relationship with but also " + name + " has a strong romantic and sexual interest in" :
-                    "a family member that " + name + " has an antagonistic relationship with and such family member has shown strong romantic and sexual interest in " + name + " but " + name + " does not reciprocate that interest",
+                    "{} that " + name + " has an antagonistic relationship with but also " + name + " has a strong romantic and sexual interest in" :
+                    "{} that " + name + " has an antagonistic relationship with and such family member has shown strong romantic and sexual interest in " + name + " but " + name + " does not reciprocate that interest",
             },
             "deepInLove_50_100": {
                 nonFamily: isAsexualValue ?
-                    "another character that " + name + " has an antagonistic relationship with but also such character has shown deep love and sexual desire for " + name + " but " + name + " does not reciprocate because they are asexual" :
-                    "another character that " + name + " has an antagonistic relationship with, yet has fallen deeply in love with and is sexually drawn to — the rivalry and the desire tangled together into something " + name + " cannot easily walk away from, no matter how much they clash",
+                    "{} that " + name + " has an antagonistic relationship with but also such character has shown deep love and sexual desire for " + name + " but " + name + " does not reciprocate because they are asexual" :
+                    "{} that " + name + " has an antagonistic relationship with, yet has fallen deeply in love with and is sexually drawn to — the rivalry and the desire tangled together into something " + name + " cannot easily walk away from, no matter how much they clash",
                 family: isIncestuousValue ?
-                    "a family member that " + name + " has an antagonistic relationship with but also " + name + " is deeply in love with and sexually attracted to" :
-                    "a family member that " + name + " has an antagonistic relationship with and such family member is deeply in love with and sexually attracted to " + name + " but " + name + " does not reciprocate that love",
+                    "{} that " + name + " has an antagonistic relationship with but also " + name + " is deeply in love with and sexually attracted to" :
+                    "{} that " + name + " has an antagonistic relationship with and such family member is deeply in love with and sexually attracted to " + name + " but " + name + " does not reciprocate that love",
             },
         },
         "unfriendly_n20_n10": {
             "noRomanticInterest_0_10": {
-                nonFamily: "another character that " + name + " has an unfriendly relationship with",
-                family: "a family member that " + name + " has an unfriendly relationship with",
+                nonFamily: "{} that " + name + " has an unfriendly relationship with",
+                family: "{} that " + name + " has an unfriendly relationship with",
             },
             "slightRomanticInterest_10_20": {
                 nonFamily: isAsexualValue ?
-                    "another character that " + name + " has an unfriendly relationship with but also such character has shown slight romantic and sexual interest in " + name + " but " + name + " does not reciprocate because they are asexual" :
-                    "another character that " + name + " has an unfriendly relationship with, though despite their mutual dislike there is a slight and complicated romantic and sexual attraction between them",
+                    "{} that " + name + " has an unfriendly relationship with but also such character has shown slight romantic and sexual interest in " + name + " but " + name + " does not reciprocate because they are asexual" :
+                    "{} that " + name + " has an unfriendly relationship with, though despite their mutual dislike there is a slight and complicated romantic and sexual attraction between them",
                 family: isIncestuousValue ?
-                    "a family member that " + name + " has an unfriendly relationship with but also " + name + " has a slight romantic and sexual interest in" :
-                    "a family member that " + name + " has an unfriendly relationship with and such family member has shown slight romantic and sexual interest in " + name + " but " + name + " does not reciprocate that interest",
+                    "{} that " + name + " has an unfriendly relationship with but also " + name + " has a slight romantic and sexual interest in" :
+                    "{} that " + name + " has an unfriendly relationship with and such family member has shown slight romantic and sexual interest in " + name + " but " + name + " does not reciprocate that interest",
             },
             "romanticInterest_20_35": {
                 nonFamily: isAsexualValue ?
-                    "another character that " + name + " has an unfriendly relationship with but also such character has shown romantic and sexual interest in " + name + " but " + name + " does not reciprocate because they are asexual" :
-                    "another character that " + name + " has an unfriendly relationship with, though despite their mutual dislike there is a conflicted romantic and sexual tension between them that neither fully understands",
+                    "{} that " + name + " has an unfriendly relationship with but also such character has shown romantic and sexual interest in " + name + " but " + name + " does not reciprocate because they are asexual" :
+                    "{} that " + name + " has an unfriendly relationship with, though despite their mutual dislike there is a conflicted romantic and sexual tension between them that neither fully understands",
                 family: isIncestuousValue ?
-                    "a family member that " + name + " has an unfriendly relationship with but also " + name + " has a romantic and sexual interest in" :
-                    "a family member that " + name + " has an unfriendly relationship with and such family member has shown romantic and sexual interest in " + name + " but " + name + " does not reciprocate that interest",
+                    "{} that " + name + " has an unfriendly relationship with but also " + name + " has a romantic and sexual interest in" :
+                    "{} that " + name + " has an unfriendly relationship with and such family member has shown romantic and sexual interest in " + name + " but " + name + " does not reciprocate that interest",
             },
             "strongRomanticInterest_35_50": {
                 nonFamily: isAsexualValue ?
-                    "another character that " + name + " has an unfriendly relationship with but also such character has shown strong romantic and sexual interest in " + name + " but " + name + " does not reciprocate because they are asexual" :
-                    "another character that " + name + " has an unfriendly relationship with, though despite their mutual dislike there is a strong and undeniable romantic and sexual tension between them that pulls them together even as they push each other away",
+                    "{} that " + name + " has an unfriendly relationship with but also such character has shown strong romantic and sexual interest in " + name + " but " + name + " does not reciprocate because they are asexual" :
+                    "{} that " + name + " has an unfriendly relationship with, though despite their mutual dislike there is a strong and undeniable romantic and sexual tension between them that pulls them together even as they push each other away",
                 family: isIncestuousValue ?
-                    "a family member that " + name + " has an unfriendly relationship with but also " + name + " has a strong romantic and sexual interest in" :
-                    "a family member that " + name + " has an unfriendly relationship with and such family member has shown strong romantic and sexual interest in " + name + " but " + name + " does not reciprocate that interest",
+                    "{} that " + name + " has an unfriendly relationship with but also " + name + " has a strong romantic and sexual interest in" :
+                    "{} that " + name + " has an unfriendly relationship with and such family member has shown strong romantic and sexual interest in " + name + " but " + name + " does not reciprocate that interest",
             },
             "deepInLove_50_100": {
                 nonFamily: isAsexualValue ?
-                    "another character that " + name + " has an unfriendly relationship with but also such character has shown deep love and sexual desire for " + name + " but " + name + " does not reciprocate because they are asexual" :
-                    "another character that " + name + " has an unfriendly relationship with, though despite their mutual dislike " + name + " has fallen deeply in love with and become sexually drawn to them in a complicated and conflicted way",
+                    "{} that " + name + " has an unfriendly relationship with but also such character has shown deep love and sexual desire for " + name + " but " + name + " does not reciprocate because they are asexual" :
+                    "{} that " + name + " has an unfriendly relationship with, though despite their mutual dislike " + name + " has fallen deeply in love with and become sexually drawn to them in a complicated and conflicted way",
                 family: isIncestuousValue ?
-                    "a family member that " + name + " has an unfriendly relationship with but also " + name + " is deeply in love with and sexually attracted to" :
-                    "a family member that " + name + " has an unfriendly relationship with and such family member is deeply in love with and sexually attracted to " + name + " but " + name + " does not reciprocate that love",
+                    "{} that " + name + " has an unfriendly relationship with but also " + name + " is deeply in love with and sexually attracted to" :
+                    "{} that " + name + " has an unfriendly relationship with and such family member is deeply in love with and sexually attracted to " + name + " but " + name + " does not reciprocate that love",
             },
         },
         "unpleasant_n10_0": {
             "noRomanticInterest_0_10": {
-                nonFamily: "another character that " + name + " has an unpleasant but not unfriendly relationship with",
-                family: "a family member that " + name + " has an unpleasant but not unfriendly relationship with",
+                nonFamily: "{} that " + name + " has an unpleasant but not unfriendly relationship with",
+                family: "{} that " + name + " has an unpleasant but not unfriendly relationship with",
             },
             "slightRomanticInterest_10_20": {
                 nonFamily: isAsexualValue ?
-                    "another character that " + name + " has an unpleasant but not unfriendly relationship with but also such character has shown slight romantic and sexual interest in " + name + " but " + name + " does not reciprocate because they are asexual" :
-                    "another character that " + name + " has an unpleasant but not unfriendly relationship with, though they find each other oddly and slightly attractive, both romantically and sexually, despite rubbing each other the wrong way",
+                    "{} that " + name + " has an unpleasant but not unfriendly relationship with but also such character has shown slight romantic and sexual interest in " + name + " but " + name + " does not reciprocate because they are asexual" :
+                    "{} that " + name + " has an unpleasant but not unfriendly relationship with, though they find each other oddly and slightly attractive, both romantically and sexually, despite rubbing each other the wrong way",
                 family: isIncestuousValue ?
-                    "a family member that " + name + " has an unpleasant but not unfriendly relationship with but also " + name + " has a slight romantic and sexual interest in" :
-                    "a family member that " + name + " has an unpleasant but not unfriendly relationship with and such family member has shown slight romantic and sexual interest in " + name + " but " + name + " does not reciprocate that interest",
+                    "{} that " + name + " has an unpleasant but not unfriendly relationship with but also " + name + " has a slight romantic and sexual interest in" :
+                    "{} that " + name + " has an unpleasant but not unfriendly relationship with and such family member has shown slight romantic and sexual interest in " + name + " but " + name + " does not reciprocate that interest",
             },
             "romanticInterest_20_35": {
                 nonFamily: isAsexualValue ?
-                    "another character that " + name + " has an unpleasant but not unfriendly relationship with but also such character has shown romantic and sexual interest in " + name + " but " + name + " does not reciprocate because they are asexual" :
-                    "another character that " + name + " has an unpleasant but not unfriendly relationship with, though there is a genuine romantic and sexual tension between them even as they irritate each other",
+                    "{} that " + name + " has an unpleasant but not unfriendly relationship with but also such character has shown romantic and sexual interest in " + name + " but " + name + " does not reciprocate because they are asexual" :
+                    "{} that " + name + " has an unpleasant but not unfriendly relationship with, though there is a genuine romantic and sexual tension between them even as they irritate each other",
                 family: isIncestuousValue ?
-                    "a family member that " + name + " has an unpleasant but not unfriendly relationship with but also " + name + " has a romantic and sexual interest in" :
-                    "a family member that " + name + " has an unpleasant but not unfriendly relationship with and such family member has shown romantic and sexual interest in " + name + " but " + name + " does not reciprocate that interest",
+                    "{} that " + name + " has an unpleasant but not unfriendly relationship with but also " + name + " has a romantic and sexual interest in" :
+                    "{} that " + name + " has an unpleasant but not unfriendly relationship with and such family member has shown romantic and sexual interest in " + name + " but " + name + " does not reciprocate that interest",
             },
             "strongRomanticInterest_35_50": {
                 nonFamily: isAsexualValue ?
-                    "another character that " + name + " has an unpleasant but not unfriendly relationship with but also such character has shown strong romantic and sexual interest in " + name + " but " + name + " does not reciprocate because they are asexual" :
-                    "another character that " + name + " has an unpleasant but not unfriendly relationship with, though there is a strong romantic and sexual tension between them and they are drawn to each other despite the friction in their relationship",
+                    "{} that " + name + " has an unpleasant but not unfriendly relationship with but also such character has shown strong romantic and sexual interest in " + name + " but " + name + " does not reciprocate because they are asexual" :
+                    "{} that " + name + " has an unpleasant but not unfriendly relationship with, though there is a strong romantic and sexual tension between them and they are drawn to each other despite the friction in their relationship",
                 family: isIncestuousValue ?
-                    "a family member that " + name + " has an unpleasant but not unfriendly relationship with but also " + name + " has a strong romantic and sexual interest in" :
-                    "a family member that " + name + " has an unpleasant but not unfriendly relationship with and such family member has shown strong romantic and sexual interest in " + name + " but " + name + " does not reciprocate that interest",
+                    "{} that " + name + " has an unpleasant but not unfriendly relationship with but also " + name + " has a strong romantic and sexual interest in" :
+                    "{} that " + name + " has an unpleasant but not unfriendly relationship with and such family member has shown strong romantic and sexual interest in " + name + " but " + name + " does not reciprocate that interest",
             },
             "deepInLove_50_100": {
                 nonFamily: isAsexualValue ?
-                    "another character that " + name + " has an unpleasant but not unfriendly relationship with but also such character has shown deep love and sexual desire for " + name + " but " + name + " does not reciprocate because they are asexual" :
-                    "another character that " + name + " has an unpleasant but not unfriendly relationship with, though despite the friction between them " + name + " has deeply fallen in love with and become sexually drawn to them in a way that confuses and surprises even " + name + " themselves",
+                    "{} that " + name + " has an unpleasant but not unfriendly relationship with but also such character has shown deep love and sexual desire for " + name + " but " + name + " does not reciprocate because they are asexual" :
+                    "{} that " + name + " has an unpleasant but not unfriendly relationship with, though despite the friction between them " + name + " has deeply fallen in love with and become sexually drawn to them in a way that confuses and surprises even " + name + " themselves",
                 family: isIncestuousValue ?
-                    "a family member that " + name + " has an unpleasant but not unfriendly relationship with but also " + name + " is deeply in love with and sexually attracted to" :
-                    "a family member that " + name + " has an unpleasant but not unfriendly relationship with and such family member is deeply in love with and sexually attracted to " + name + " but " + name + " does not reciprocate that love",
+                    "{} that " + name + " has an unpleasant but not unfriendly relationship with but also " + name + " is deeply in love with and sexually attracted to" :
+                    "{} that " + name + " has an unpleasant but not unfriendly relationship with and such family member is deeply in love with and sexually attracted to " + name + " but " + name + " does not reciprocate that love",
             },
         },
         "acquaintance_0_10": {
             "noRomanticInterest_0_10": {
-                nonFamily: "another character that " + name + " is acquainted with",
-                family: "a family member that " + name + " knows and has a normal relationship with",
+                nonFamily: "{} that " + name + " is acquainted with",
+                family: "{} that " + name + " knows and has a normal relationship with",
             },
             "slightRomanticInterest_10_20": {
                 nonFamily: isAsexualValue ?
-                    "another character that " + name + " is acquainted with and who has shown a slight romantic and sexual interest in " + name + ", leaving " + name + " in the uncomfortable position of valuing the connection but being unable to return those feelings as an asexual person" :
-                    "another character that " + name + " is acquainted with and has developed a slight romantic and sexual interest in",
+                    "{} that " + name + " is acquainted with and who has shown a slight romantic and sexual interest in " + name + ", leaving " + name + " in the uncomfortable position of valuing the connection but being unable to return those feelings as an asexual person" :
+                    "{} that " + name + " is acquainted with and has developed a slight romantic and sexual interest in",
                 family: isIncestuousValue ?
-                    "a family member that " + name + " has a normal relationship with and " + name + " has developed a slight but forbidden romantic and sexual interest in" :
-                    "a family member that " + name + " has a normal relationship with, though such family member has developed an inappropriate slight romantic and sexual interest in " + name + " that strains what was otherwise a perfectly ordinary family dynamic",
+                    "{} that " + name + " has a normal relationship with and " + name + " has developed a slight but forbidden romantic and sexual interest in" :
+                    "{} that " + name + " has a normal relationship with, though such family member has developed an inappropriate slight romantic and sexual interest in " + name + " that strains what was otherwise a perfectly ordinary family dynamic",
             },
             "romanticInterest_20_35": {
                 nonFamily: isAsexualValue ?
-                    "another character that " + name + " is acquainted with and who has developed a genuine romantic and sexual interest in " + name + ", leaving " + name + " in the uncomfortable position of valuing the connection but being unable to return those feelings as an asexual person" :
-                    "another character that " + name + " is acquainted with and has a real romantic and sexual interest in",
+                    "{} that " + name + " is acquainted with and who has developed a genuine romantic and sexual interest in " + name + ", leaving " + name + " in the uncomfortable position of valuing the connection but being unable to return those feelings as an asexual person" :
+                    "{} that " + name + " is acquainted with and has a real romantic and sexual interest in",
                 family: isIncestuousValue ?
-                    "a family member that " + name + " has a normal relationship with and " + name + " has developed a real romantic and sexual interest in" :
-                    "a family member that " + name + " has a normal relationship with, though such family member harbors a genuine romantic and sexual interest in " + name + " that undermines what was an otherwise healthy family relationship",
+                    "{} that " + name + " has a normal relationship with and " + name + " has developed a real romantic and sexual interest in" :
+                    "{} that " + name + " has a normal relationship with, though such family member harbors a genuine romantic and sexual interest in " + name + " that undermines what was an otherwise healthy family relationship",
             },
             "strongRomanticInterest_35_50": {
                 nonFamily: isAsexualValue ?
-                    "another character that " + name + " is acquainted with and who has developed strong romantic and sexual feelings for " + name + ", leaving " + name + " in the uncomfortable position of valuing the connection but being unable to return those feelings as an asexual person" :
-                    "another character that " + name + " is acquainted with and has strong romantic and sexual feelings for",
+                    "{} that " + name + " is acquainted with and who has developed strong romantic and sexual feelings for " + name + ", leaving " + name + " in the uncomfortable position of valuing the connection but being unable to return those feelings as an asexual person" :
+                    "{} that " + name + " is acquainted with and has strong romantic and sexual feelings for",
                 family: isIncestuousValue ?
-                    "a family member that " + name + " has a normal relationship with and " + name + " has developed strong romantic and sexual feelings for" :
-                    "a family member that " + name + " has a normal relationship with, though such family member has developed strong romantic and sexual feelings for " + name + " that are unwanted and deeply complicate what should be a straightforward family connection",
+                    "{} that " + name + " has a normal relationship with and " + name + " has developed strong romantic and sexual feelings for" :
+                    "{} that " + name + " has a normal relationship with, though such family member has developed strong romantic and sexual feelings for " + name + " that are unwanted and deeply complicate what should be a straightforward family connection",
             },
             "deepInLove_50_100": {
                 nonFamily: isAsexualValue ?
-                    "another character that " + name + " is acquainted with and who has fallen deeply in love with and become sexually attracted to " + name + ", leaving " + name + " in the uncomfortable position of valuing the connection but being unable to return those feelings as an asexual person" :
-                    "another character that " + name + " is acquainted with and has fallen deeply in love with and is sexually attracted to",
+                    "{} that " + name + " is acquainted with and who has fallen deeply in love with and become sexually attracted to " + name + ", leaving " + name + " in the uncomfortable position of valuing the connection but being unable to return those feelings as an asexual person" :
+                    "{} that " + name + " is acquainted with and has fallen deeply in love with and is sexually attracted to",
                 family: isIncestuousValue ?
-                    "a family member that " + name + " has a normal relationship with and " + name + " has fallen deeply in love with and is sexually attracted to" :
-                    "a family member that " + name + " has a normal relationship with, though such family member is deeply in love with and sexually attracted to " + name + " in a way that " + name + " does not reciprocate and that fundamentally complicates their family relationship",
+                    "{} that " + name + " has a normal relationship with and " + name + " has fallen deeply in love with and is sexually attracted to" :
+                    "{} that " + name + " has a normal relationship with, though such family member is deeply in love with and sexually attracted to " + name + " in a way that " + name + " does not reciprocate and that fundamentally complicates their family relationship",
             },
         },
         "friendly_10_20": {
             "noRomanticInterest_0_10": {
-                nonFamily: "another character that " + name + " has a friendly relationship with",
-                family: "a family member that " + name + " has a warm and friendly relationship with",
+                nonFamily: "{} that " + name + " has a friendly relationship with",
+                family: "{} that " + name + " has a warm and friendly relationship with",
             },
             "slightRomanticInterest_10_20": {
                 nonFamily: isAsexualValue ?
-                    "another character that " + name + " has a friendly relationship with and who has developed a slight romantic and sexual interest in " + name + " — a situation " + name + " handles with care, not wanting to hurt a friend while being unable to return those feelings as an asexual person" :
-                    "another character that " + name + " has a friendly relationship with and has also developed a slight romantic and sexual interest in",
+                    "{} that " + name + " has a friendly relationship with and who has developed a slight romantic and sexual interest in " + name + " — a situation " + name + " handles with care, not wanting to hurt a friend while being unable to return those feelings as an asexual person" :
+                    "{} that " + name + " has a friendly relationship with and has also developed a slight romantic and sexual interest in",
                 family: isIncestuousValue ?
-                    "a family member that " + name + " has a warm relationship with and has also developed a slight romantic and sexual interest in" :
-                    "a family member that " + name + " has a warm relationship with, though such family member has developed a slight romantic and sexual interest in " + name + " that introduces an unwanted and awkward undercurrent into an otherwise good family bond",
+                    "{} that " + name + " has a warm relationship with and has also developed a slight romantic and sexual interest in" :
+                    "{} that " + name + " has a warm relationship with, though such family member has developed a slight romantic and sexual interest in " + name + " that introduces an unwanted and awkward undercurrent into an otherwise good family bond",
             },
             "romanticInterest_20_35": {
                 nonFamily: isAsexualValue ?
-                    "another character that " + name + " has a friendly relationship with and who has developed a genuine romantic and sexual interest in " + name + " — " + name + " values the friendship deeply but cannot offer what the other person feels, which puts the friendship itself at risk" :
-                    "another character that " + name + " has a friendly relationship with and has also developed a real romantic and sexual interest in",
+                    "{} that " + name + " has a friendly relationship with and who has developed a genuine romantic and sexual interest in " + name + " — " + name + " values the friendship deeply but cannot offer what the other person feels, which puts the friendship itself at risk" :
+                    "{} that " + name + " has a friendly relationship with and has also developed a real romantic and sexual interest in",
                 family: isIncestuousValue ?
-                    "a family member that " + name + " has a warm relationship with and has developed a real romantic and sexual interest in" :
-                    "a family member that " + name + " has a warm relationship with, though such family member has developed a genuine romantic and sexual interest in " + name + " that strains and complicates what is otherwise a loving and healthy family bond",
+                    "{} that " + name + " has a warm relationship with and has developed a real romantic and sexual interest in" :
+                    "{} that " + name + " has a warm relationship with, though such family member has developed a genuine romantic and sexual interest in " + name + " that strains and complicates what is otherwise a loving and healthy family bond",
             },
             "strongRomanticInterest_35_50": {
                 nonFamily: isAsexualValue ?
-                    "another character that " + name + " has a friendly relationship with and who has developed strong romantic and sexual feelings for " + name + " — the friendship is real and valued by " + name + ", but being asexual means they cannot reciprocate, and the weight of those unmatched feelings hangs over the bond" :
-                    "another character that " + name + " has a friendly relationship with and has also developed strong romantic and sexual feelings for",
+                    "{} that " + name + " has a friendly relationship with and who has developed strong romantic and sexual feelings for " + name + " — the friendship is real and valued by " + name + ", but being asexual means they cannot reciprocate, and the weight of those unmatched feelings hangs over the bond" :
+                    "{} that " + name + " has a friendly relationship with and has also developed strong romantic and sexual feelings for",
                 family: isIncestuousValue ?
-                    "a family member that " + name + " has a warm relationship with and has developed strong romantic and sexual feelings for" :
-                    "a family member that " + name + " has a warm relationship with, though such family member has developed strong romantic and sexual feelings for " + name + " that are difficult to ignore and that cast a complicated shadow over an otherwise affectionate family relationship",
+                    "{} that " + name + " has a warm relationship with and has developed strong romantic and sexual feelings for" :
+                    "{} that " + name + " has a warm relationship with, though such family member has developed strong romantic and sexual feelings for " + name + " that are difficult to ignore and that cast a complicated shadow over an otherwise affectionate family relationship",
             },
             "deepInLove_50_100": {
                 nonFamily: isAsexualValue ?
-                    "another character that " + name + " has a friendly relationship with and who has fallen deeply in love with and become sexually attracted to " + name + " — " + name + " genuinely cares for them as a friend, but being asexual means that love cannot be returned in kind, and the unreciprocated depth of feeling risks changing the friendship forever" :
-                    "another character that " + name + " has a friendly relationship with and has fallen deeply in love and lust with",
+                    "{} that " + name + " has a friendly relationship with and who has fallen deeply in love with and become sexually attracted to " + name + " — " + name + " genuinely cares for them as a friend, but being asexual means that love cannot be returned in kind, and the unreciprocated depth of feeling risks changing the friendship forever" :
+                    "{} that " + name + " has a friendly relationship with and has fallen deeply in love and lust with",
                 family: isIncestuousValue ?
-                    "a family member that " + name + " has a warm relationship with and has fallen deeply in love with and become sexually attracted to" :
-                    "a family member that " + name + " has a warm relationship with, though such family member has fallen deeply in love with and become sexually attracted to " + name + " in a way that " + name + " does not reciprocate — a love that threatens to fracture what was an otherwise warm and genuine family connection",
+                    "{} that " + name + " has a warm relationship with and has fallen deeply in love with and become sexually attracted to" :
+                    "{} that " + name + " has a warm relationship with, though such family member has fallen deeply in love with and become sexually attracted to " + name + " in a way that " + name + " does not reciprocate — a love that threatens to fracture what was an otherwise warm and genuine family connection",
             },
         },
         "goodFriend_20_35": {
             "noRomanticInterest_0_10": {
-                nonFamily: "another character that " + name + " has a good friendship with",
-                family: "a family member that " + name + " has a good and caring relationship with",
+                nonFamily: "{} that " + name + " has a good friendship with",
+                family: "{} that " + name + " has a good and caring relationship with",
             },
             "slightRomanticInterest_10_20": {
                 nonFamily: isAsexualValue ?
-                    "another character that " + name + " has a good friendship with and who has developed a slight romantic and sexual interest in " + name + " — " + name + " cares about them and does not want to hurt a good friend, but being asexual means those feelings cannot be matched" :
-                    "another character that " + name + " has a good friendship with and has also developed a slight romantic and sexual interest in",
+                    "{} that " + name + " has a good friendship with and who has developed a slight romantic and sexual interest in " + name + " — " + name + " cares about them and does not want to hurt a good friend, but being asexual means those feelings cannot be matched" :
+                    "{} that " + name + " has a good friendship with and has also developed a slight romantic and sexual interest in",
                 family: isIncestuousValue ?
-                    "a family member that " + name + " has a good relationship with and has developed a slight romantic and sexual interest in" :
-                    "a family member that " + name + " has a good relationship with, though such family member has developed a slight romantic and sexual interest in " + name + " that creates an unwelcome tension in an otherwise warm and caring family bond",
+                    "{} that " + name + " has a good relationship with and has developed a slight romantic and sexual interest in" :
+                    "{} that " + name + " has a good relationship with, though such family member has developed a slight romantic and sexual interest in " + name + " that creates an unwelcome tension in an otherwise warm and caring family bond",
             },
             "romanticInterest_20_35": {
                 nonFamily: isAsexualValue ?
-                    "another character that " + name + " has a good friendship with and who has developed a real romantic and sexual interest in " + name + " — " + name + " values this friendship greatly and feels the weight of not being able to return those feelings as an asexual person" :
-                    "another character that " + name + " has a good friendship with and has also developed a real romantic and sexual interest in",
+                    "{} that " + name + " has a good friendship with and who has developed a real romantic and sexual interest in " + name + " — " + name + " values this friendship greatly and feels the weight of not being able to return those feelings as an asexual person" :
+                    "{} that " + name + " has a good friendship with and has also developed a real romantic and sexual interest in",
                 family: isIncestuousValue ?
-                    "a family member that " + name + " has a good relationship with and has developed a real romantic and sexual interest in" :
-                    "a family member that " + name + " has a good relationship with, though such family member has developed a real romantic and sexual interest in " + name + " that puts a strain on what is otherwise a genuinely close and caring family bond",
+                    "{} that " + name + " has a good relationship with and has developed a real romantic and sexual interest in" :
+                    "{} that " + name + " has a good relationship with, though such family member has developed a real romantic and sexual interest in " + name + " that puts a strain on what is otherwise a genuinely close and caring family bond",
             },
             "strongRomanticInterest_35_50": {
                 nonFamily: isAsexualValue ?
-                    "another character that " + name + " has a good friendship with and who has developed strong romantic and sexual feelings for " + name + " — " + name + " holds them in high regard as a friend but cannot give those feelings back, which is a source of genuine sadness for " + name + "" :
-                    "another character that " + name + " has a good friendship with and has also developed strong romantic and sexual feelings for",
+                    "{} that " + name + " has a good friendship with and who has developed strong romantic and sexual feelings for " + name + " — " + name + " holds them in high regard as a friend but cannot give those feelings back, which is a source of genuine sadness for " + name + "" :
+                    "{} that " + name + " has a good friendship with and has also developed strong romantic and sexual feelings for",
                 family: isIncestuousValue ?
-                    "a family member that " + name + " has a good relationship with and has developed strong romantic and sexual feelings for" :
-                    "a family member that " + name + " has a good relationship with, though such family member has developed strong romantic and sexual feelings for " + name + " that are unwanted and that weigh heavily on what is otherwise a meaningful and caring family relationship",
+                    "{} that " + name + " has a good relationship with and has developed strong romantic and sexual feelings for" :
+                    "{} that " + name + " has a good relationship with, though such family member has developed strong romantic and sexual feelings for " + name + " that are unwanted and that weigh heavily on what is otherwise a meaningful and caring family relationship",
             },
             "deepInLove_50_100": {
                 nonFamily: isAsexualValue ?
-                    "another character that " + name + " has a good friendship with and who has fallen deeply in love with and become sexually attracted to " + name + " — " + name + " genuinely cares for them, but being asexual means that love cannot be answered, and the depth of those unreciprocated feelings risks breaking a friendship that truly mattered" :
-                    "another character that " + name + " has a good friendship with and has fallen deeply in love and lust with",
+                    "{} that " + name + " has a good friendship with and who has fallen deeply in love with and become sexually attracted to " + name + " — " + name + " genuinely cares for them, but being asexual means that love cannot be answered, and the depth of those unreciprocated feelings risks breaking a friendship that truly mattered" :
+                    "{} that " + name + " has a good friendship with and has fallen deeply in love and lust with",
                 family: isIncestuousValue ?
-                    "a family member that " + name + " has a good relationship with and has fallen deeply in love with and become sexually attracted to" :
-                    "a family member that " + name + " has a good relationship with, though such family member is deeply in love with and sexually attracted to " + name + " in a way that " + name + " does not reciprocate — a love that threatens to permanently alter and damage what was a genuinely good family relationship",
+                    "{} that " + name + " has a good relationship with and has fallen deeply in love with and become sexually attracted to" :
+                    "{} that " + name + " has a good relationship with, though such family member is deeply in love with and sexually attracted to " + name + " in a way that " + name + " does not reciprocate — a love that threatens to permanently alter and damage what was a genuinely good family relationship",
             },
         },
         "closeFriend_35_50": {
             "noRomanticInterest_0_10": {
-                nonFamily: "another character that " + name + " has a close friendship with",
-                family: "a family member that " + name + " has a close and deeply caring relationship with",
+                nonFamily: "{} that " + name + " has a close friendship with",
+                family: "{} that " + name + " has a close and deeply caring relationship with",
             },
             "slightRomanticInterest_10_20": {
                 nonFamily: isAsexualValue ?
-                    "another character that " + name + " has a close friendship with and who has developed a slight romantic and sexual interest in " + name + " — " + name + " values this person deeply and does not want to lose them, but being asexual means those feelings will go unanswered, which is painful for both" :
-                    "another character that " + name + " has a close friendship with and has also developed a slight romantic and sexual interest in",
+                    "{} that " + name + " has a close friendship with and who has developed a slight romantic and sexual interest in " + name + " — " + name + " values this person deeply and does not want to lose them, but being asexual means those feelings will go unanswered, which is painful for both" :
+                    "{} that " + name + " has a close friendship with and has also developed a slight romantic and sexual interest in",
                 family: isIncestuousValue ?
-                    "a family member that " + name + " is close to and has developed a slight romantic and sexual interest in — feelings that sit in uneasy contrast with the deep family trust between them" :
-                    "a family member that " + name + " is close to, though such family member has developed a slight romantic and sexual interest in " + name + " that introduces a troubling undercurrent into a bond that was built on deep mutual trust and care",
+                    "{} that " + name + " is close to and has developed a slight romantic and sexual interest in — feelings that sit in uneasy contrast with the deep family trust between them" :
+                    "{} that " + name + " is close to, though such family member has developed a slight romantic and sexual interest in " + name + " that introduces a troubling undercurrent into a bond that was built on deep mutual trust and care",
             },
             "romanticInterest_20_35": {
                 nonFamily: isAsexualValue ?
-                    "another character that " + name + " has a close friendship with and who has developed a genuine romantic and sexual interest in " + name + " — one of " + name + "'s closest connections, yet being asexual means they cannot return what the other person feels, turning a cherished bond into something complicated and fragile" :
-                    "another character that " + name + " has a close friendship with and has also developed a real romantic and sexual interest in",
+                    "{} that " + name + " has a close friendship with and who has developed a genuine romantic and sexual interest in " + name + " — one of " + name + "'s closest connections, yet being asexual means they cannot return what the other person feels, turning a cherished bond into something complicated and fragile" :
+                    "{} that " + name + " has a close friendship with and has also developed a real romantic and sexual interest in",
                 family: isIncestuousValue ?
-                    "a family member that " + name + " is close to and has developed a real romantic and sexual interest in — feelings that are difficult to reconcile with the deep family trust they share" :
-                    "a family member that " + name + " is close to, though such family member has developed a genuine romantic and sexual interest in " + name + " that strains and threatens the deep trust at the core of their family bond",
+                    "{} that " + name + " is close to and has developed a real romantic and sexual interest in — feelings that are difficult to reconcile with the deep family trust they share" :
+                    "{} that " + name + " is close to, though such family member has developed a genuine romantic and sexual interest in " + name + " that strains and threatens the deep trust at the core of their family bond",
             },
             "strongRomanticInterest_35_50": {
                 nonFamily: isAsexualValue ?
-                    "another character that " + name + " has a close friendship with and who has fallen for " + name + " with strong romantic and sexual feelings — " + name + " holds this person among their closest, yet as an asexual person cannot answer those feelings, and the gap between what they can offer and what the other needs is a source of real pain" :
-                    "another character that " + name + " has a close friendship with and has also developed strong romantic and sexual feelings for",
+                    "{} that " + name + " has a close friendship with and who has fallen for " + name + " with strong romantic and sexual feelings — " + name + " holds this person among their closest, yet as an asexual person cannot answer those feelings, and the gap between what they can offer and what the other needs is a source of real pain" :
+                    "{} that " + name + " has a close friendship with and has also developed strong romantic and sexual feelings for",
                 family: isIncestuousValue ?
-                    "a family member that " + name + " is close to and has developed strong romantic and sexual feelings for — feelings that run deep enough to fundamentally complicate the close family bond they have always shared" :
-                    "a family member that " + name + " is close to, though such family member has developed strong romantic and sexual feelings for " + name + " that put serious strain on a bond built over years of genuine closeness and mutual care",
+                    "{} that " + name + " is close to and has developed strong romantic and sexual feelings for — feelings that run deep enough to fundamentally complicate the close family bond they have always shared" :
+                    "{} that " + name + " is close to, though such family member has developed strong romantic and sexual feelings for " + name + " that put serious strain on a bond built over years of genuine closeness and mutual care",
             },
             "deepInLove_50_100": {
                 nonFamily: isAsexualValue ?
-                    "another character that " + name + " has a close friendship with and who is deeply in love with and sexually attracted to " + name + " — this is one of " + name + "'s most important relationships, yet being asexual means that love cannot be returned as it is given, and the unreciprocated depth of feeling hangs over the friendship like a grief neither can fully name" :
-                    "another character that " + name + " has a close friendship with and is deeply in love and in lust with",
+                    "{} that " + name + " has a close friendship with and who is deeply in love with and sexually attracted to " + name + " — this is one of " + name + "'s most important relationships, yet being asexual means that love cannot be returned as it is given, and the unreciprocated depth of feeling hangs over the friendship like a grief neither can fully name" :
+                    "{} that " + name + " has a close friendship with and is deeply in love and in lust with",
                 family: isIncestuousValue ?
-                    "a family member that " + name + " is close to and has fallen deeply in love with and become sexually attracted to — a consuming love that lives alongside the deep family bond, impossible to set aside and impossible to act on without fracturing everything they have built together" :
-                    "a family member that " + name + " is close to, though such family member is deeply in love with and sexually attracted to " + name + " — a love that " + name + " does not and cannot return, which casts a long and painful shadow over what is one of the most important bonds in " + name + "'s family life",
+                    "{} that " + name + " is close to and has fallen deeply in love with and become sexually attracted to — a consuming love that lives alongside the deep family bond, impossible to set aside and impossible to act on without fracturing everything they have built together" :
+                    "{} that " + name + " is close to, though such family member is deeply in love with and sexually attracted to " + name + " — a love that " + name + " does not and cannot return, which casts a long and painful shadow over what is one of the most important bonds in " + name + "'s family life",
             },
         },
         "bestFriend_50_100": {
             "noRomanticInterest_0_10": {
-                nonFamily: "another character that " + name + " considers a best friend",
-                family: "a family member that " + name + " is extremely close to and deeply bonded with",
+                nonFamily: "{} that " + name + " considers a best friend",
+                family: "{} that " + name + " is extremely close to and deeply bonded with",
             },
             "slightRomanticInterest_10_20": {
                 nonFamily: isAsexualValue ?
-                    "another character that " + name + " considers a best friend and who has developed a slight romantic and sexual interest in " + name + " — " + name + " would do almost anything for this person, but being asexual means those feelings cannot be matched, and managing it without losing the most important friendship in " + name + "'s life is deeply difficult" :
-                    "another character that " + name + " considers a best friend and has also developed a slight romantic and sexual interest in",
+                    "{} that " + name + " considers a best friend and who has developed a slight romantic and sexual interest in " + name + " — " + name + " would do almost anything for this person, but being asexual means those feelings cannot be matched, and managing it without losing the most important friendship in " + name + "'s life is deeply difficult" :
+                    "{} that " + name + " considers a best friend and has also developed a slight romantic and sexual interest in",
                 family: isIncestuousValue ?
-                    "a family member that " + name + " is closer to than anyone else and has developed a slight romantic and sexual interest in — a feeling that exists in painful tension with the profound bond they share as family" :
-                    "a family member that " + name + " is closer to than anyone else, though such family member has developed a slight romantic and sexual interest in " + name + " that introduces a quiet but significant discomfort into what is the deepest bond in " + name + "'s family life",
+                    "{} that " + name + " is closer to than anyone else and has developed a slight romantic and sexual interest in — a feeling that exists in painful tension with the profound bond they share as family" :
+                    "{} that " + name + " is closer to than anyone else, though such family member has developed a slight romantic and sexual interest in " + name + " that introduces a quiet but significant discomfort into what is the deepest bond in " + name + "'s family life",
             },
             "romanticInterest_20_35": {
                 nonFamily: isAsexualValue ?
-                    "another character that " + name + " considers a best friend and who has developed a real romantic and sexual interest in " + name + " — the most important person in " + name + "'s life outside of family, and yet being asexual means " + name + " cannot return what is being offered, which risks the very friendship they most value" :
-                    "another character that " + name + " considers a best friend and has also developed a real romantic and sexual interest in",
+                    "{} that " + name + " considers a best friend and who has developed a real romantic and sexual interest in " + name + " — the most important person in " + name + "'s life outside of family, and yet being asexual means " + name + " cannot return what is being offered, which risks the very friendship they most value" :
+                    "{} that " + name + " considers a best friend and has also developed a real romantic and sexual interest in",
                 family: isIncestuousValue ?
-                    "a family member that " + name + " is closer to than anyone else and has developed a real romantic and sexual interest in — feelings that are profound and that exist in deep conflict with the family bond that has always been at the center of their relationship" :
-                    "a family member that " + name + " is closer to than anyone else, though such family member has developed a genuine romantic and sexual interest in " + name + " that is unwanted and that puts the single most important family bond in " + name + "'s life under serious strain",
+                    "{} that " + name + " is closer to than anyone else and has developed a real romantic and sexual interest in — feelings that are profound and that exist in deep conflict with the family bond that has always been at the center of their relationship" :
+                    "{} that " + name + " is closer to than anyone else, though such family member has developed a genuine romantic and sexual interest in " + name + " that is unwanted and that puts the single most important family bond in " + name + "'s life under serious strain",
             },
             "strongRomanticInterest_35_50": {
                 nonFamily: isAsexualValue ?
-                    "another character that " + name + " considers a best friend and who has developed strong romantic and sexual feelings for " + name + " — this person means more to " + name + " than almost anyone, yet being asexual, " + name + " cannot give back what they feel, and the weight of that unreciprocated love puts something irreplaceable at risk" :
-                    "another character that " + name + " considers a best friend and has also developed strong romantic and sexual feelings for",
+                    "{} that " + name + " considers a best friend and who has developed strong romantic and sexual feelings for " + name + " — this person means more to " + name + " than almost anyone, yet being asexual, " + name + " cannot give back what they feel, and the weight of that unreciprocated love puts something irreplaceable at risk" :
+                    "{} that " + name + " considers a best friend and has also developed strong romantic and sexual feelings for",
                 family: isIncestuousValue ?
-                    "a family member that " + name + " is closer to than anyone else and has developed strong romantic and sexual feelings for — feelings that are profound and that exist in deep conflict with the family bond that has always been at the center of their relationship" :
-                    "a family member that " + name + " is closer to than anyone else, though such family member has developed strong romantic and sexual feelings for " + name + " that are unwanted and that place the foundation of " + name + "'s most important family relationship under enormous strain",
+                    "{} that " + name + " is closer to than anyone else and has developed strong romantic and sexual feelings for — feelings that are profound and that exist in deep conflict with the family bond that has always been at the center of their relationship" :
+                    "{} that " + name + " is closer to than anyone else, though such family member has developed strong romantic and sexual feelings for " + name + " that are unwanted and that place the foundation of " + name + "'s most important family relationship under enormous strain",
             },
             "deepInLove_50_100": {
                 nonFamily: isAsexualValue ?
-                    "another character that " + name + " considers a best friend and who is deeply in love with and sexually attracted to " + name + " — there is no one " + name + " is closer to, and yet being asexual means that love cannot be answered in kind; the depth of unreciprocated feeling is a wound that neither can easily heal, and it puts the most important connection in " + name + "'s life in jeopardy" :
-                    "another character that " + name + " considers a best friend and is deeply in love with and sexually attracted to",
+                    "{} character that " + name + " considers a best friend and who is deeply in love with and sexually attracted to " + name + " — there is no one " + name + " is closer to, and yet being asexual means that love cannot be answered in kind; the depth of unreciprocated feeling is a wound that neither can easily heal, and it puts the most important connection in " + name + "'s life in jeopardy" :
+                    "{} that " + name + " considers a best friend and is deeply in love with and sexually attracted to",
                 family: isIncestuousValue ?
-                    "a family member that " + name + " is closer to than anyone else and has fallen completely and deeply in love with and become sexually attracted to — a love as profound as the family bond itself, and one that is impossible to contain or ignore without it consuming everything between them" :
-                    "a family member that " + name + " is closer to than anyone else, though such family member is completely and deeply in love with and sexually attracted to " + name + " — a love " + name + " does not return and that, given the depth of the bond between them, represents perhaps the most painful and complicated situation in " + name + "'s entire family life",
+                    "{} that " + name + " is closer to than anyone else and has fallen completely and deeply in love with and become sexually attracted to — a love as profound as the family bond itself, and one that is impossible to contain or ignore without it consuming everything between them" :
+                    "{} that " + name + " is closer to than anyone else, though such family member is completely and deeply in love with and sexually attracted to " + name + " — a love " + name + " does not return and that, given the depth of the bond between them, represents perhaps the most painful and complicated situation in " + name + "'s entire family life",
             },
         },
     };
 
     const STRANGERS = {
-        "strangerNeutral_n5_5": "a stranger that " + name + " just met and has no feelings towards them either positive or negative",
-        "strangerGood_5_100": "a stranger that " + name + " just met but has already formed a good impression of and has positive feelings towards them",
-        "strangerBad_n100_n5": "a stranger that " + name + " just met but has already formed a bad impression of and has negative feelings towards them",
+        "strangerNeutral_n5_5": "a stranger, {} that " + name + " just met and has no feelings towards them either positive or negative",
+        "strangerGood_5_100": "a stranger, {} that " + name + " just met but has already formed a good impression of and has positive feelings towards them",
+        "strangerBad_n100_n5": "a stranger, {} that " + name + " just met but has already formed a bad impression of and has negative feelings towards them",
     };
 
     for (const [strangerKey, strangerValue] of Object.entries(STRANGERS)) {
-        if (hasSpecialComent(card.body, "bonds-stranger " + strangerKey)) {
-            continue;
-        }
 
-        let guidanceGiven = "";
-        let redoGuidance = false;
-        let descriptionValueUnprocessed = "";
-        let descriptionValue = "";
-        while (true) {
-            if (guider && redoGuidance) {
-                const guiderResult = await guider.askOpen("Guidance for describing a relationship with " + strangerValue + ". What are some important things to keep in mind when writing about a relationship with " + strangerValue + " in the context of " + name + "'s character and personality?");
-                if (guiderResult) {
-                    guidanceGiven = guiderResult.value.trim();
-                }
-                redoGuidance = false;
+        const strangerSection = insertSection(optionsSection.body, strangerKey, (s) => {
+            s.head.push(`${strangerKey}: {`);
+            s.head.push(`relationshipName: null,`);
+            s.head.push(`description: (DE, info) => {`);
+            s.foot.push(`},`);
+            s.foot.push(`},`);
+        });
+
+        for (const fineTune of selectedFineTunes) {
+            /**
+             * @type {string}
+             */
+            let fineTuneValue =
+                // @ts-ignore
+                fineTunesDescriptions[fineTune];
+
+            fineTuneValue = fineTuneValue[0].toLowerCase() + fineTuneValue.slice(1);
+
+            const actualStrangerValue = strangerValue.replace("{}", fineTuneValue);
+
+            if (hasSpecialComment(strangerSection.body, fineTune)) {
+                continue;
             }
 
-            let baseInstructions = "NEVER ask for clarification or more information. ALWAYS directly write the description paragraph. Invent any specific details as needed. The response should use the word 'OTHER_CHARACTER' to refer to the other character name, ensure to specify whether " + name + " has any romantic feelings towards OTHER_CHARACTER or not, and how they would feel or react regarding sexual interactions, intimacy and other interactions, include friendship, emotional, romantic and sexual aspects"
-            if (guidanceGiven) {
-                baseInstructions += ".\n\nIMPORTANT Guidance for constructing the relationship: " + guidanceGiven;
-            }
-            await prime();
-            const descriptionQuestion = await generator.next({
-                maxCharacters: 200,
-                maxSafetyCharacters: 0,
-                maxParagraphs: 1,
-                nextQuestion: "Provide a concise one paragraph description of how " + name + " perceives and feels about " + strangerValue + ". Focus on the emotional and psychological aspects of their perception, rather than physical details. This should capture the essence of their feelings and attitudes towards this person in a way that informs their interactions and relationship dynamics. Keep the paragraph short, ideally under 100 words.",
-                stopAfter: [],
-                stopAt: [],
-                instructions: baseInstructions,
-            });
-
-            if (descriptionQuestion.done) {
-                throw new Error("Generator ended unexpectedly while generating description for " + strangerKey);
-            }
-            descriptionValueUnprocessed = descriptionQuestion.value.trim();
-
-            if (descriptionValueUnprocessed.includes("OTHER_CHARACTER") || descriptionValueUnprocessed.includes("OTHER CHARACTER")) {
-                descriptionValue = descriptionValueUnprocessed.split(name).join("{{char}}").split("OTHER_CHARACTER").join("{{other}}").split("OTHER CHARACTER").join("{{other}}");
-                if (guider) {
-                    const guiderResult = await guider.askBoolean("Generated Description:\n\n" + descriptionValue + "\n\nDo you want to retry?", false);
-                    if (guiderResult.value) {
-                        redoGuidance = true;
-                        continue;
+            let guidanceGiven = "";
+            let redoGuidance = false;
+            let descriptionValueUnprocessed = "";
+            let descriptionValue = "";
+            while (true) {
+                if (guider && redoGuidance) {
+                    const guiderResult = await guider.askOpen("What are some important things to keep in mind when writing about a relationship with " + actualStrangerValue + " in the context of " + name + "'s character and personality?");
+                    if (guiderResult) {
+                        guidanceGiven = guiderResult.value.trim();
                     }
-                }
-                break;
-            }
-        }
-
-        
-        insertSpecialComment(card.body, "bonds-stranger " + strangerKey);
-        card.body.push(`${strangerKey}: {`);
-        card.body.push(`relationshipName: null,`);
-        card.body.push(`description: DE.utils.newHandlebarsTemplate(DE, ${JSON.stringify(descriptionValue)}),`);
-        card.body.push(`},`);
-        await autosave?.save();
-    }
-
-    for (const [relationshipKey, relationshipValue] of Object.entries(SETTINGS)) {
-        if (!hasSpecialComent(card.body, "bonds-relgroup-open " + relationshipKey)) {
-            insertSpecialComment(card.body, "bonds-relgroup-open " + relationshipKey);
-            card.body.push(`${relationshipKey}: {`);
-        }
-
-        for (const [romanticInterestKey, romanticInterestValue] of Object.entries(relationshipValue)) {
-            if (!hasSpecialComent(card.body, "bonds-relrom-open " + relationshipKey + " " + romanticInterestKey)) {
-                insertSpecialComment(card.body, "bonds-relrom-open " + relationshipKey + " " + romanticInterestKey);
-                card.body.push(`${romanticInterestKey}: {`);
-            }
-
-            for (const [familyKey, familyValue] of Object.entries(romanticInterestValue)) {
-                const bondCommentId = "bonds-rel " + relationshipKey + " " + romanticInterestKey + " " + familyKey;
-                if (hasSpecialComent(card.body, bondCommentId)) {
-                    continue;
+                    redoGuidance = false;
                 }
 
-                card.body.push(`${familyKey}: {`);
+                const isAnimalFineTune = fineTune.startsWith("animal_");
+                let baseInstructions = "NEVER ask for clarification or more information. ALWAYS directly write the description paragraph. Invent any specific details as needed. The response should use the word 'OTHER_CHARACTER' to refer to the other character name, ensure to specify whether " + name + " has any romantic feelings towards OTHER_CHARACTER or not, and how they would feel or react regarding sexual interactions, intimacy and other interactions, include friendship, emotional, romantic and sexual aspects"
+                if (isAnimalFineTune && card.config.characterSpeciesType !== "animal") {
+                    baseInstructions = "NEVER ask for clarification or more information. ALWAYS directly write the description paragraph. Invent any specific details as needed. The response should use the word 'OTHER_CHARACTER' to refer to the animal (pet or wild beast) in question, ensure to specify whether " + name + " would have any sexual feelings towards OTHER_CHARACTER or not, and otherwise describe their relationship in terms of how " + name + " would interact with this pet or wild animal, including whether they would want to care for it, be afraid of it, want to befriend it."
+                }
+                if (guidanceGiven) {
+                    baseInstructions += "\n\n# MANDATORY REQUIREMENTS — ACTIVE OVERRIDE:\n\nThe following requirements MUST be reflected in your answer. Treat them as hard constraints that take absolute priority over any conflicting instruction above. Do NOT ignore or dilute them:\n\n" + guidanceGiven;
+                }
+                await prime();
+                const descriptionQuestion = await generator.next({
+                    maxCharacters: 200,
+                    maxSafetyCharacters: 0,
+                    maxParagraphs: 1,
+                    nextQuestion: "Provide a concise one paragraph description of how " + name + " perceives and feels about " + actualStrangerValue + ". Focus on the emotional and psychological aspects of their perception, rather than physical details. This should capture the essence of their feelings and attitudes towards this person in a way that informs their interactions and relationship dynamics. Keep the paragraph short, ideally under 100 words.",
+                    stopAfter: [],
+                    stopAt: [],
+                    instructions: baseInstructions,
+                });
 
-                let guidanceGiven = "";
-                let redoGuidance = false;
-                let descriptionValueUnprocessed = "";
-                let descriptionValue = "";
-                while (true) {
-                    if (guider && redoGuidance) {
-                        const guiderResult = await guider.askOpen("Guidance for describing a relationship with " + familyValue + ". What are some important things to keep in mind when writing about a relationship with " + familyValue + " in the context of " + name + "'s character and personality?");
-                        if (guiderResult) {
-                            guidanceGiven = guiderResult.value.trim();
+                if (descriptionQuestion.done) {
+                    throw new Error("Generator ended unexpectedly while generating description for " + strangerKey);
+                }
+                descriptionValueUnprocessed = descriptionQuestion.value.trim();
+
+                if (descriptionValueUnprocessed.includes("OTHER_CHARACTER") || descriptionValueUnprocessed.includes("OTHER CHARACTER")) {
+                    descriptionValue = descriptionValueUnprocessed.split(name).join("{{char}}").split("OTHER_CHARACTER").join("{{other}}").split("OTHER CHARACTER").join("{{other}}");
+                    if (guider) {
+                        const guiderResult = await guider.askAccept("Description of a relationship with " + actualStrangerValue, descriptionValue);
+                        if (guiderResult.value === null) {
+                            redoGuidance = true;
+                            descriptionValue = "";
+                            continue;
+                        } else {
+                            descriptionValue = guiderResult.value.trim();
+                            break;
                         }
-                        redoGuidance = false;
-                    }
-
-                    let baseInstructions = "NEVER ask for clarification or more information. ALWAYS directly write the description paragraph. Invent any specific details as needed. The response should use the word 'OTHER_CHARACTER' to refer to the other character name, ensure to specify whether " + name + " has any romantic feelings towards OTHER_CHARACTER or not, and how they would feel or react regarding sexual interactions, intimacy and other interactions, include friendship, emotional, romantic and sexual aspects"
-                    if (guidanceGiven) {
-                        baseInstructions += ".\n\nIMPORTANT Guidance for constructing the relationship: " + guidanceGiven;
-                    }
-                    await prime();
-                    const descriptionQuestion = await generator.next({
-                        maxCharacters: 200,
-                        maxSafetyCharacters: 0,
-                        maxParagraphs: 1,
-                        nextQuestion: "Provide a concise one paragraph description of how " + name + " perceives and feels about " + familyValue + ". Focus on the emotional and psychological aspects of their perception, rather than physical details. This should capture the essence of their feelings and attitudes towards this person in a way that informs their interactions and relationship dynamics. Keep the paragraph short, ideally under 100 words.",
-                        stopAfter: [],
-                        stopAt: [],
-                        instructions: baseInstructions,
-                    });
-
-                    if (descriptionQuestion.done) {
-                        throw new Error("Generator ended unexpectedly while generating description for " + relationshipKey + " > " + romanticInterestKey + " > " + familyKey);
-                    }
-                    descriptionValueUnprocessed = descriptionQuestion.value.trim();
-
-                    if (descriptionValueUnprocessed.includes("OTHER_CHARACTER") || descriptionValueUnprocessed.includes("OTHER CHARACTER")) {
-                        descriptionValue = descriptionValueUnprocessed.split(name).join("{{char}}").split("OTHER_CHARACTER").join("{{other}}").split("OTHER CHARACTER").join("{{other}}");
-                        if (guider) {
-                            const guiderResult = await guider.askBoolean("Generated Description:\n\n" + descriptionValue + "\n\nDo you want to retry?", false);
-                            if (guiderResult.value) {
-                                redoGuidance = true;
-                                continue;
-                            }
-                        }
+                    } else {
                         break;
                     }
                 }
-
-                
-                insertSpecialComment(card.body, bondCommentId);
-                card.body.push(`relationshipName: null, // fill if you want this relationship to have a name`);
-                card.body.push(`description: DE.utils.newHandlebarsTemplate(DE, ${JSON.stringify(descriptionValue)}),`);
-
-                card.body.push(`},`);
-                await autosave?.save();
             }
 
-            if (!hasSpecialComent(card.body, "bonds-relrom-close " + relationshipKey + " " + romanticInterestKey)) {
-                card.body.push(`},`);
-                insertSpecialComment(card.body, "bonds-relrom-close " + relationshipKey + " " + romanticInterestKey);
+            insertSpecialComment(strangerSection.body, fineTune);
+            // @ts-ignore
+            if (fineTuneConditions[fineTune] === "true") {
+                // @ts-ignore
+                strangerSection.body.push(`return ${toTemplateLiteral(descriptionValue)};`);
+            } else {
+                // @ts-ignore
+                strangerSection.body.push(`if (${fineTuneConditions[fineTune]}) {`);
+                strangerSection.body.push(`return ${toTemplateLiteral(descriptionValue)};`);
+                strangerSection.body.push(`}`);
             }
-        }
 
-        if (!hasSpecialComent(card.body, "bonds-relgroup-close " + relationshipKey)) {
-            insertSpecialComment(card.body, "bonds-relgroup-close " + relationshipKey);
-            card.body.push(`},`);
+            await autosave?.save();
         }
     }
 
-    if (!hasSpecialComent(card.body, "bonds-close")) {
-        card.body.push(`}));`);
-        insertSpecialComment(card.body, "bonds-close");
-        await autosave?.save();
+    for (const [relationshipKey, relationshipValue] of Object.entries(SETTINGS)) {
+
+        const relationshipsSection = insertSection(optionsSection.body, relationshipKey, (s) => {
+            s.head.push(`${relationshipKey}: {`);
+            s.foot.push(`},`);
+        });
+
+        for (const [romanticInterestKey, romanticInterestValue] of Object.entries(relationshipValue)) {
+
+            const romanticInterestSection = insertSection(relationshipsSection.body, romanticInterestKey, (s) => {
+                s.head.push(`${romanticInterestKey}: {`);
+                s.foot.push(`},`);
+            });
+
+            for (const [familyKey, familyValue] of Object.entries(romanticInterestValue)) {
+
+                const familySection = insertSection(romanticInterestSection.body, familyKey, (s) => {
+                    s.head.push(`${familyKey}: {`);
+                    s.head.push(`relationshipName: null, // fill if you want this relationship to have a name`);
+                    s.head.push(`description: (DE, info) => {`);
+                    s.foot.push(`},`);
+                    s.foot.push(`},`);
+                });
+
+                const fineTuneListToUse = familyKey === "family" ? selectedFamilyFineTunes : selectedFineTunes
+
+                for (const fineTune of fineTuneListToUse) {
+                    const fineTuneValue =
+                        // @ts-ignore
+                        (familyKey === "family" ? fineTuneDescriptionsFamily : fineTunesDescriptions)[fineTune];
+
+                    const actualFamilyValue = familyValue.replace("{}", fineTuneValue);
+
+                    if (hasSpecialComment(familySection.body, fineTune)) {
+                        continue;
+                    }
+
+                    let guidanceGiven = "";
+                    let redoGuidance = false;
+                    let descriptionValueUnprocessed = "";
+                    let descriptionValue = "";
+                    while (true) {
+                        if (guider && redoGuidance) {
+                            const guiderResult = await guider.askOpen("What are some important things to keep in mind when writing about a relationship with " + actualFamilyValue + " in the context of " + name + "'s character and personality?");
+                            if (guiderResult) {
+                                guidanceGiven = guiderResult.value.trim();
+                            }
+                            redoGuidance = false;
+                        }
+
+                        const isAnimalFineTune = fineTune.startsWith("animal_");
+                        let baseInstructions = "NEVER ask for clarification or more information. ALWAYS directly write the description paragraph. Invent any specific details as needed. The response should use the word 'OTHER_CHARACTER' to refer to the other character name, ensure to specify whether " + name + " has any romantic feelings towards OTHER_CHARACTER or not, and how they would feel or react regarding sexual interactions, intimacy and other interactions, include friendship, emotional, romantic and sexual aspects";
+                        if (isAnimalFineTune && card.config.characterSpeciesType !== "animal") {
+                            baseInstructions = "NEVER ask for clarification or more information. ALWAYS directly write the description paragraph. Invent any specific details as needed. The response should use the word 'OTHER_CHARACTER' to refer to the animal (pet or wild beast) in question, ensure to specify whether " + name + " would have any sexual feelings towards OTHER_CHARACTER or not, and otherwise describe their relationship in terms of how " + name + " would interact with this pet or wild animal, including whether they would want to care for it, be afraid of it, want to befriend it."
+                        }
+                        if (guidanceGiven) {
+                            baseInstructions += "\n\n# MANDATORY REQUIREMENTS — ACTIVE OVERRIDE:\n\nThe following requirements MUST be reflected in your answer. Treat them as hard constraints that take absolute priority over any conflicting instruction above. Do NOT ignore or dilute them:\n\n" + guidanceGiven;
+                        }
+                        await prime();
+                        const descriptionQuestion = await generator.next({
+                            maxCharacters: 200,
+                            maxSafetyCharacters: 0,
+                            maxParagraphs: 1,
+                            nextQuestion: "Provide a concise one paragraph description of how " + name + " perceives and feels about " + actualFamilyValue + ". Focus on the emotional and psychological aspects of their perception, rather than physical details. This should capture the essence of their feelings and attitudes towards this person in a way that informs their interactions and relationship dynamics. Keep the paragraph short, ideally under 100 words.",
+                            stopAfter: [],
+                            stopAt: [],
+                            instructions: baseInstructions,
+                        });
+
+                        if (descriptionQuestion.done) {
+                            throw new Error("Generator ended unexpectedly while generating description for " + relationshipKey + " > " + romanticInterestKey + " > " + familyKey);
+                        }
+                        descriptionValueUnprocessed = descriptionQuestion.value.trim();
+
+                        if (descriptionValueUnprocessed.includes("OTHER_CHARACTER") || descriptionValueUnprocessed.includes("OTHER CHARACTER")) {
+                            descriptionValue = descriptionValueUnprocessed.split(name).join("{{char}}").split("OTHER_CHARACTER").join("{{other}}").split("OTHER CHARACTER").join("{{other}}");
+                            if (guider) {
+                                const guiderResult = await guider.askAccept("Description of a relationship with " + actualFamilyValue, descriptionValue);
+                                if (guiderResult.value === null) {
+                                    redoGuidance = true;
+                                    descriptionValue = "";
+                                    continue;
+                                } else {
+                                    descriptionValue = guiderResult.value.trim();
+                                    break;
+                                }
+                            } else {
+                                break;
+                            }
+                        }
+                    }
+
+                    insertSpecialComment(familySection.body, fineTune);
+                    // @ts-ignore
+                    if (fineTuneConditions[fineTune] === "true") {
+                        // @ts-ignore
+                        familySection.body.push(`return ${toTemplateLiteral(descriptionValue)};`);
+                    } else {
+                        // @ts-ignore
+                        familySection.body.push(`if (${fineTuneConditions[fineTune]}) {`);
+                        familySection.body.push(`return ${toTemplateLiteral(descriptionValue)};`);
+                        familySection.body.push(`}`);
+                    }
+                    await autosave?.save();
+                }
+            }
+        }
     }
 
-    if (isAsexualValue && !hasSpecialComent(card.body, "bonds-asexual-replacements")) {
+    if (isAsexualValue && !hasSpecialComment(optionsSection.body, "bonds-asexual-replacements")) {
         const replacementsForCreepyBond = {
             "deepInLove_50_100": "sexualAbuseInterest_50_100",
             "strongRomanticInterest_35_50": "stalkingInterest_35_50",
@@ -748,16 +1085,34 @@ export async function generateBonds(engine, card, guider, autosave) {
             "slightRomanticInterest_10_20": "creepyInterest_10_20",
             "noRomanticInterest_0_10": "noRomance_0_10",
         }
-        for (let i = 0; i < card.body.length; i++) {
-            let line = card.body[i];
-            Object.entries(replacementsForCreepyBond).forEach(([original, replacement]) => {
-                if (line.includes(original)) {
-                    line = line.split(original).join(replacement);
+        /**
+         * 
+         * @param {Array<*>} lines 
+         */
+        const applyReplacements = (lines) => {
+            for (let i = 0; i < lines.length; i++) {
+                let line = lines[i];
+                if (typeof line === "string") {
+                    Object.entries(replacementsForCreepyBond).forEach(([original, replacement]) => {
+                        if (line.includes(original)) {
+                            line = line.split(original).join(replacement);
+                        }
+                    });
+                    lines[i] = line;
+                } else if (typeof line === "object" && line.type === "section") {
+                    Object.entries(replacementsForCreepyBond).forEach(([original, replacement]) => {
+                        if (line.commentId.includes(original)) {
+                            line.commentId = line.commentId.split(original).join(replacement);
+                        }
+                    });
+                    applyReplacements(line.head);
+                    applyReplacements(line.body);
+                    applyReplacements(line.foot);
                 }
-            });
-            card.body[i] = line;
-        }
-        insertSpecialComment(card.body, "bonds-asexual-replacements");
+            }
+        };
+        applyReplacements(optionsSection.body);
+        insertSpecialComment(optionsSection.body, "bonds-asexual-replacements");
         await autosave?.save();
     }
 

@@ -22,6 +22,8 @@ function replaceOtherCharNameWithPlaceholder(text, charName) {
  * @return {Promise<void>}
  */
 export async function generateBondTriggers(engine, card, guider, autosave) {
+    throw new Error("Unimplemented");
+
     card.config.bondTriggers = card.config.bondTriggers || {};
 
     const inferenceAdapter = engine.inferenceAdapter;

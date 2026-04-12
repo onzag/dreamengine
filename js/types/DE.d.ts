@@ -1379,7 +1379,7 @@ declare interface DECharacterInterest {
 }
 
 declare interface DEAttraction {
-    towards: "male" | "female" | "ambiguous";
+    towards: "male" | "female" | "ambiguous" | "any";
     /**
      * The race that this attraction applies to
      */

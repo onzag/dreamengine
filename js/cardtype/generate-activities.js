@@ -1,5 +1,5 @@
 import { DEngine } from '../engine/index.js';
-import { createCardStructureFrom, getJsCard, hasSpecialComent, insertSpecialComment, unshiftSpecialComment } from './base.js';
+import { hasSpecialComment, unshiftSpecialComment } from './base.js';
 
 if (typeof process !== "undefined" && process.versions && process.versions.node) {
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
@@ -46,7 +46,7 @@ export async function generateActivities(engine, card, guider, autosave) {
     }
 
     for (const likeOrDislike of allLikesAndDislikes) {
-        if (hasSpecialComent(card.body, "interest " + likeOrDislike)) {
+        if (hasSpecialComment(card.body, "interest " + likeOrDislike)) {
             continue;
         }
         await prime();

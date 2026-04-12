@@ -942,6 +942,7 @@ class CardTypeWizard extends HTMLElement {
         }
 
         .guider-label {
+            white-space: pre-line;
             font-size: 3vh;
             color: #c8dce8;
             letter-spacing: 0.03em;

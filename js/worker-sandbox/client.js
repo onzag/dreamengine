@@ -202,6 +202,7 @@ export class EngineWorkerClient {
      * @param {{
      *    host: string,
      *    secret: string,
+     *    allowSelfSigned: boolean,
      * }} args
      */
     setupInferenceAdapter(args) { return this.#call("setupInferenceAdapter", args); }
