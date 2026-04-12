@@ -144,6 +144,12 @@ const guider = guided ? {
         const answer = await askLine(`${question}${def}:`);
         return { value: answer || defaultValue || '' };
     },
+    async askAccept(question, defaultValue) {
+        // TODO no true support here with cmdline
+        const def = defaultValue !== undefined ? ` [${defaultValue}]` : '';
+        const answer = await askLine(`${question}${def}:`);
+        return { value: answer || defaultValue || '' };
+    },
     async askNumber(question, defaultValue) {
         const def = defaultValue !== undefined ? ` [${defaultValue}]` : '';
         const answer = await askLine(`${question}${def}:`);

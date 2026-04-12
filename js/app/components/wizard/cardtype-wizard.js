@@ -187,6 +187,9 @@ class CardTypeWizard extends HTMLElement {
                 case 'askOpen':
                     result = await guider.askOpen(question, defaultValue);
                     break;
+                case 'askAccept':
+                    result = await guider.askAccept(question, defaultValue);
+                    break;
                 case 'askNumber':
                     result = await guider.askNumber(question, defaultValue);
                     break;
@@ -329,9 +332,10 @@ class CardTypeWizard extends HTMLElement {
          * @param {() => HTMLElement} buildInputFn - builds the input element(s)
          * @param {(container: HTMLElement) => any} extractValueFn - extracts the value on submit
          * @param {any} [defaultValue]
-         * @returns {Promise<{value: any}>}
+         * @param {boolean} [hasTryAgainOption]
+         * @returns {Promise<{value: any }>}
          */
-        function presentQuestion(question, buildInputFn, extractValueFn, defaultValue) {
+        function presentQuestion(question, buildInputFn, extractValueFn, defaultValue, hasTryAgainOption) {
             return new Promise((resolve) => {
                 self.endOverlay();
 
@@ -351,6 +355,24 @@ class CardTypeWizard extends HTMLElement {
                 const inputArea = buildInputFn();
                 container.appendChild(inputArea);
 
+                const buttonsContainer = document.createElement('div');
+                buttonsContainer.className = 'buttons-container';
+                container.appendChild(buttonsContainer);
+
+                if (hasTryAgainOption) {
+                    const tryAgainBtn = document.createElement('div');
+                    tryAgainBtn.className = 'guider-try-again-btn';
+                    tryAgainBtn.textContent = 'Try Again';
+                    tryAgainBtn.addEventListener('mouseenter', playHoverSound);
+                    tryAgainBtn.addEventListener('click', () => {
+                        playCancelSound();
+                        setTempSoundDisable();
+                        self.initOverlay();
+                        resolve({ value: null });
+                    });
+                    buttonsContainer.appendChild(tryAgainBtn);
+                }
+
                 const submitBtn = document.createElement('div');
                 submitBtn.className = 'guider-submit-btn';
                 submitBtn.textContent = 'Confirm';
@@ -361,7 +383,7 @@ class CardTypeWizard extends HTMLElement {
                     self.initOverlay();
                     resolve({ value });
                 });
-                container.appendChild(submitBtn);
+                buttonsContainer.appendChild(submitBtn);
 
                 contentArea.appendChild(container);
             });
@@ -408,12 +430,54 @@ class CardTypeWizard extends HTMLElement {
                             this.style.height = 'auto';
                             this.style.height = this.scrollHeight + 'px';
                         });
+                        requestAnimationFrame(() => {
+                            textarea.style.height = 'auto';
+                            textarea.style.height = textarea.scrollHeight + 'px';
+                        });
+                        setTimeout(() => {
+                            requestAnimationFrame(() => {
+                                textarea.style.height = 'auto';
+                                textarea.style.height = textarea.scrollHeight + 'px';
+                            });
+                        }, 100);
                         return textarea;
                     },
                     (inputArea) => {
                         return /** @type {HTMLTextAreaElement} */ (inputArea).value || defaultValue || '';
                     },
                     defaultValue
+                );
+            },
+
+            async askAccept(question, defaultValue) {
+                return presentQuestion(
+                    question,
+                    () => {
+                        const textarea = document.createElement('textarea');
+                        textarea.className = 'guider-textarea';
+                        textarea.placeholder = defaultValue || '';
+                        if (defaultValue) textarea.value = defaultValue;
+                        textarea.addEventListener('input', function () {
+                            this.style.height = 'auto';
+                            this.style.height = this.scrollHeight + 'px';
+                        });
+                        requestAnimationFrame(() => {
+                            textarea.style.height = 'auto';
+                            textarea.style.height = textarea.scrollHeight + 'px';
+                        });
+                        setTimeout(() => {
+                            requestAnimationFrame(() => {
+                                textarea.style.height = 'auto';
+                                textarea.style.height = textarea.scrollHeight + 'px';
+                            });
+                        }, 100);
+                        return textarea;
+                    },
+                    (inputArea) => {
+                        return /** @type {HTMLTextAreaElement} */ (inputArea).value || defaultValue || '';
+                    },
+                    defaultValue,
+                    true // hasTryAgainOption
                 );
             },
 
@@ -807,6 +871,13 @@ class CardTypeWizard extends HTMLElement {
             );
         }
 
+        .buttons-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 1vh;
+        }
+
         /* Guider question styles */
         .guider-question {
             display: flex;
@@ -821,7 +892,8 @@ class CardTypeWizard extends HTMLElement {
             text-shadow: 0 0 8px rgba(60, 160, 220, 0.1);
         }
 
-        .guider-submit-btn {
+        .guider-submit-btn, .guider-try-again-btn {
+            flex: 1;
             font-size: 3.5vh;
             cursor: pointer;
             color: rgba(120, 200, 240, 0.7);
@@ -838,7 +910,7 @@ class CardTypeWizard extends HTMLElement {
             margin-top: 1vh;
         }
 
-        .guider-submit-btn:hover {
+        .guider-submit-btn:hover, .guider-try-again-btn:hover {
             color: #60d0ff;
             text-shadow: 0 0 14px rgba(60, 180, 255, 0.4);
             border-color: rgba(80, 180, 220, 0.5);

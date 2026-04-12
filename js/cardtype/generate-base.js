@@ -154,35 +154,37 @@ export async function generateBase(engine, card, guider, autosave) {
     if (!hasSpecialComment(newCharacterSection.body, "base-description")) {
         let accepted = true;
         let description = "";
+        let specialInstructionsGuiderValue = "";
 
         while (true) {
-            let specialInstructions = guider ? (await guider.askOpen("Provide any special focus instructions for defining " + name + "'s appearance, personality, or abilities, what to focus on (do not talk about clothing the description is about the character's inherent traits and features)")).value : null;
+            let specialInstructions = guider ? (await guider.askOpen("Provide any special focus instructions for defining " + name + "'s appearance, personality and general abilities, what to focus on (do not talk about clothing the description is about the character's inherent traits and features)", specialInstructionsGuiderValue)).value : null;
             if (specialInstructions) {
-                specialInstructions = ". IMPORTANT INSTRUCTIONS: " + specialInstructions.trim();
+                specialInstructionsGuiderValue = specialInstructions.trim();
+                specialInstructions = "\n\n# MANDATORY REQUIREMENTS — ACTIVE OVERRIDE:\n\nThe following requirements MUST be reflected in your answer. Treat them as hard constraints that take absolute priority over any conflicting instruction above. Do NOT ignore or dilute them:\n\n1." + specialInstructions.trim();
             }
 
             await prime();
             const answerDescription = await generator.next({
                 maxCharacters: 3000,
                 maxSafetyCharacters: 0,
-                maxParagraphs: 10,
-                nextQuestion: "Describe " + name + "'s appearance, personality, and any special traits or abilities they have.",
+                maxParagraphs: 3,
+                nextQuestion: "In 3 concise short paragraphs, Describe " + name + "'s appearance, personality, and any special traits or abilities they have.",
                 stopAfter: [],
                 stopAt: [],
-                instructions: "Be creative, answer with a detailed description of " + name +
-                    "'s general appearance, personality, and any special traits or abilities they have. Use multiple paragraphs and sentences. Do not include items of clothing or specific equipment, just the character's inherent traits and features. Make at least 3 paragraphs" + (specialInstructions || ""),
+                instructions: "Be creative, answer with a description of " + name +
+                    "'s general appearance, personality, and any special traits or abilities they have. Use multiple paragraphs and sentences. Do not include items of clothing or specific equipment, just the character's inherent traits and features. Make at least 3 paragraphs." + (specialInstructions || ""),
             });
 
             if (answerDescription.done) {
                 throw new Error("Generator finished without producing output");
             }
 
-            description = replaceAllCharNameWithPlaceholder(answerDescription.value.trim(), name);
+            description = (replaceAllCharNameWithPlaceholder(answerDescription.value.trim(), name)).replace("# {{char}}", "").trim();
 
             if (guider) {
-                let acceptedResponse = await guider.askOpenWithTryAgain("Is the following description okay?", description);
-                accepted = acceptedResponse.accepted;
-                description = acceptedResponse.value;
+                let acceptedResponse = await guider.askAccept("Is the following description okay?", description);
+                accepted = acceptedResponse.value !== null;
+                description = acceptedResponse.value || "";
             }
 
             if (accepted) {
@@ -190,33 +192,49 @@ export async function generateBase(engine, card, guider, autosave) {
             }
         }
         insertSpecialComment(newCharacterSection.body, "base-description");
-        newCharacterSection.body.push(`general: (DE, info) => ${toTemplateLiteral(description)}),`);
+        newCharacterSection.body.push(`general: (DE, info) => ${toTemplateLiteral(description)},`);
         await autosave?.save();
     }
 
     let shortDescription = "";
     if (!hasSpecialComment(newCharacterSection.body, "base-short-description")) {
-        let specialInstructionsForShortDescription = guider ? (await guider.askOpen("Provide any special focus instructions for defining " + name + "'s external and physical description, what to focus on (do not talk about clothing the description is about the character's inherent traits and features)")).value : null;
-        if (specialInstructionsForShortDescription) {
-            specialInstructionsForShortDescription = ". IMPORTANT INSTRUCTIONS: " + specialInstructionsForShortDescription.trim();
+        let accepted = true;
+        let specialInstructionsGuiderValue = "";
+
+        while (true) {
+            let specialInstructionsForShortDescription = guider ? (await guider.askOpen("Provide any special focus instructions for defining " + name + "'s external and physical description, what to focus on (do not talk about clothing the description is about the character's inherent traits and features)", specialInstructionsGuiderValue)).value : null;
+            if (specialInstructionsForShortDescription) {
+                specialInstructionsGuiderValue = specialInstructionsForShortDescription.trim();
+                specialInstructionsForShortDescription = "\n\n# MANDATORY REQUIREMENTS — ACTIVE OVERRIDE:\n\nThe following requirements MUST be reflected in your answer. Treat them as hard constraints that take absolute priority over any conflicting instruction above. Do NOT ignore or dilute them:\n\n" + specialInstructionsForShortDescription.trim();
+            }
+
+            await prime();
+            const answerShortDescription = await generator.next({
+                maxCharacters: 100,
+                maxSafetyCharacters: 0,
+                maxParagraphs: 1,
+                nextQuestion: "Provide a short one sentence description of " + name + " as they are perceived visually by others in the world, focusing on their most distinctive features",
+                stopAfter: [],
+                stopAt: [],
+                instructions: "Answer with a single sentence that provides a brief description of " + name + "'s appearance and personality. Use no more than 20 words. Do not include items of clothing or specific equipment, just the character's inherent traits and features. Do not include the character name in the description, just describe as an external observer would perceive them, focusing on their most distinctive features." + (specialInstructionsForShortDescription || ""),
+            });
+
+            if (answerShortDescription.done) {
+                throw new Error("Generator finished without producing output");
+            }
+
+            shortDescription = answerShortDescription.value.trim();
+
+            if (guider) {
+                let acceptedResponse = await guider.askAccept("Is the following short description okay?", shortDescription);
+                accepted = acceptedResponse.value !== null;
+                shortDescription = acceptedResponse.value || "";
+            }
+
+            if (accepted) {
+                break;
+            }
         }
-
-        await prime();
-        const answerShortDescription = await generator.next({
-            maxCharacters: 100,
-            maxSafetyCharacters: 0,
-            maxParagraphs: 1,
-            nextQuestion: "Provide a short one sentence description of " + name + " as they are perceived visually by others in the world, focusing on their most distinctive features",
-            stopAfter: [],
-            stopAt: [],
-            instructions: "Answer with a single sentence that provides a brief description of " + name + "'s appearance and personality. Use no more than 20 words. Do not include items of clothing or specific equipment, just the character's inherent traits and features. Do not include the character name in the description, just describe as an external observer would perceive them, focusing on their most distinctive features." + (specialInstructionsForShortDescription || ""),
-        });
-
-        if (answerShortDescription.done) {
-            throw new Error("Generator finished without producing output");
-        }
-
-        shortDescription = answerShortDescription.value.trim();
         insertSpecialComment(newCharacterSection.body, "base-short-description");
         newCharacterSection.body.push(`shortDescription: ${JSON.stringify(shortDescription)},`);
         card.config.shortDescription = shortDescription;
@@ -226,54 +244,89 @@ export async function generateBase(engine, card, guider, autosave) {
     }
 
     if (!hasSpecialComment(newCharacterSection.body, "base-short-description-top-naked-add")) {
-        let specialInstructionsForShortDescriptionAdd = guider ? (await guider.askOpen("Provide any special focus instructions for defining the additions to " + name + "'s short description when they are not wearing any upper body clothing, what to focus on (how to describe their upper body's most distinctive features)")).value : null;
-        if (specialInstructionsForShortDescriptionAdd) {
-            specialInstructionsForShortDescriptionAdd = ". " + specialInstructionsForShortDescriptionAdd.trim();
+        let shortDescriptionTopNakedAdd = "";
+        let accepted = true;
+        let specialInstructionsForShortDescriptionAddGuiderValue = "";
+
+        while (true) {
+            let specialInstructionsForShortDescriptionAdd = guider ? (await guider.askOpen("Provide any special focus instructions for defining the additions to " + name + "'s short description when they are not wearing any upper body clothing, what to focus on (how to describe their upper body's most distinctive features)", specialInstructionsForShortDescriptionAddGuiderValue)).value : null;
+            if (specialInstructionsForShortDescriptionAdd) {
+                specialInstructionsForShortDescriptionAddGuiderValue = specialInstructionsForShortDescriptionAdd.trim();
+                specialInstructionsForShortDescriptionAdd = "\n\n# MANDATORY REQUIREMENTS — ACTIVE OVERRIDE:\n\nThe following requirements MUST be reflected in your answer. Treat them as hard constraints that take absolute priority over any conflicting instruction above. Do NOT ignore or dilute them:\n\n1. " + specialInstructionsForShortDescriptionAdd.trim();
+            }
+
+            await prime();
+            const answerShortDescriptionTopNakedAdd = await generator.next({
+                maxCharacters: 100,
+                maxSafetyCharacters: 0,
+                maxParagraphs: 1,
+                nextQuestion: "Create a sentence that can be added at the end of the short description to describe " + name + " without any upper body clothing, focusing on their upper body's most distinctive features",
+                stopAfter: [],
+                stopAt: [],
+                contextInfo: "The short description is: " + JSON.stringify(shortDescription),
+                instructions: "Answer with a single sentence that can be appended to the short description to describe " + name + " without any upper body clothing, focusing on their upper body's most distinctive features. Do not include the character name in the description, just describe as an external observer would perceive them, focusing on their most distinctive features. Do not add details already mentioned in the short description, only add new details that would be visible when the character is not wearing any upper body clothing. If the character has boobs or a flat chest, nipples, etc... describe it" + (specialInstructionsForShortDescriptionAdd || ""),
+            });
+
+            if (answerShortDescriptionTopNakedAdd.done) {
+                throw new Error("Generator finished without producing output");
+            }
+
+            shortDescriptionTopNakedAdd = answerShortDescriptionTopNakedAdd.value.trim();
+
+            if (guider) {
+                let acceptedResponse = await guider.askAccept("Is the following addition to the short description okay?", shortDescriptionTopNakedAdd);
+                accepted = acceptedResponse.value !== null;
+                shortDescriptionTopNakedAdd = acceptedResponse.value || "";
+            }
+
+            if (accepted) {
+                break;
+            }
         }
 
-        await prime();
-        const answerShortDescriptionTopNakedAdd = await generator.next({
-            maxCharacters: 100,
-            maxSafetyCharacters: 0,
-            maxParagraphs: 1,
-            nextQuestion: "Create a sentence that can be added at the end of the short description to describe " + name + " without any upper body clothing, focusing on their upper body's most distinctive features",
-            stopAfter: [],
-            stopAt: [],
-            contextInfo: "The short description is: " + JSON.stringify(shortDescription),
-            instructions: "Answer with a single sentence that can be appended to the short description to describe " + name + " without any upper body clothing, focusing on their upper body's most distinctive features. Do not include the character name in the description, just describe as an external observer would perceive them, focusing on their most distinctive features. Do not add details already mentioned in the short description, only add new details that would be visible when the character is not wearing any upper body clothing. If the character has boobs or a flat chest, nipples, etc... describe it" + (specialInstructionsForShortDescriptionAdd || ""),
-        });
-
-        if (answerShortDescriptionTopNakedAdd.done) {
-            throw new Error("Generator finished without producing output");
-        }
-
-        const shortDescriptionTopNakedAdd = answerShortDescriptionTopNakedAdd.value.trim();
+        insertSpecialComment(newCharacterSection.body, "base-short-description-top-naked-add");
         newCharacterSection.body.push(`shortDescriptionTopNakedAdd: ${JSON.stringify(shortDescriptionTopNakedAdd)},`);
     }
 
     if (!hasSpecialComment(newCharacterSection.body, "base-short-description-bottom-naked-add")) {
-        let specialInstructionsForShortDescriptionBottomAdd = guider ? (await guider.askOpen("Provide any special focus instructions for defining the additions to " + name + "'s short description when they are not wearing any lower body clothing, what to focus on (how to describe their lower body's most distinctive features)")).value : null;
-        if (specialInstructionsForShortDescriptionBottomAdd) {
-            specialInstructionsForShortDescriptionBottomAdd = ". " + specialInstructionsForShortDescriptionBottomAdd.trim();
+
+        let shortDescriptionBottomNakedAdd = "";
+        let accepted = true;
+        let specialInstructionsForShortDescriptionBottomAddGuiderValue = "";
+
+        while (true) {
+            let specialInstructionsForShortDescriptionBottomAdd = guider ? (await guider.askOpen("Provide any special focus instructions for defining the additions to " + name + "'s short description when they are not wearing any lower body clothing, what to focus on (how to describe their lower body's most distinctive features)", specialInstructionsForShortDescriptionBottomAddGuiderValue)).value : null;
+            if (specialInstructionsForShortDescriptionBottomAdd) {
+                specialInstructionsForShortDescriptionBottomAddGuiderValue = specialInstructionsForShortDescriptionBottomAdd.trim();
+                specialInstructionsForShortDescriptionBottomAdd = "\n\n# MANDATORY REQUIREMENTS — ACTIVE OVERRIDE:\n\nThe following requirements MUST be reflected in your answer. Treat them as hard constraints that take absolute priority over any conflicting instruction above. Do NOT ignore or dilute them:\n\n1. " + specialInstructionsForShortDescriptionBottomAdd.trim();
+            }
+
+            await prime();
+            const answerShortDescriptionBottomNakedAdd = await generator.next({
+                maxCharacters: 100,
+                maxSafetyCharacters: 0,
+                maxParagraphs: 1,
+                nextQuestion: "Create a sentence that can be added at the end of the short description to describe " + name + " without any lower body clothing, focusing on their lower body's most distinctive features",
+                stopAfter: [],
+                stopAt: [],
+                contextInfo: "The short description is: " + JSON.stringify(shortDescription),
+                instructions: "Answer with a single sentence that can be appended to the short description to describe " + name + " without any lower body clothing, focusing on their lower body's most distinctive features. Do not include the character name in the description, just describe as an external observer would perceive them, focusing on their most distinctive features. Do not add details already mentioned in the short description, only add new details that would be visible when the character is not wearing any lower body clothing. If the character has a penis or vagina, describe it" + (specialInstructionsForShortDescriptionBottomAdd || ""),
+            });
+
+            if (answerShortDescriptionBottomNakedAdd.done) {
+                throw new Error("Generator finished without producing output");
+            }
+
+            shortDescriptionBottomNakedAdd = answerShortDescriptionBottomNakedAdd.value.trim();
+
+            if (guider) {
+                let acceptedResponse = await guider.askAccept("Is the following addition to the short description okay?", shortDescriptionBottomNakedAdd);
+                accepted = acceptedResponse.value !== null;
+                shortDescriptionBottomNakedAdd = acceptedResponse.value || "";
+            }
+
+            if (accepted) break;
         }
-
-        await prime();
-        const answerShortDescriptionBottomNakedAdd = await generator.next({
-            maxCharacters: 100,
-            maxSafetyCharacters: 0,
-            maxParagraphs: 1,
-            nextQuestion: "Create a sentence that can be added at the end of the short description to describe " + name + " without any lower body clothing, focusing on their lower body's most distinctive features",
-            stopAfter: [],
-            stopAt: [],
-            contextInfo: "The short description is: " + JSON.stringify(shortDescription),
-            instructions: "Answer with a single sentence that can be appended to the short description to describe " + name + " without any lower body clothing, focusing on their lower body's most distinctive features. Do not include the character name in the description, just describe as an external observer would perceive them, focusing on their most distinctive features. Do not add details already mentioned in the short description, only add new details that would be visible when the character is not wearing any lower body clothing. If the character has a penis or vagina, describe it" + (specialInstructionsForShortDescriptionBottomAdd || ""),
-        });
-
-        if (answerShortDescriptionBottomNakedAdd.done) {
-            throw new Error("Generator finished without producing output");
-        }
-
-        const shortDescriptionBottomNakedAdd = answerShortDescriptionBottomNakedAdd.value.trim();
         insertSpecialComment(newCharacterSection.body, "base-short-description-bottom-naked-add");
         newCharacterSection.body.push(`shortDescriptionBottomNakedAdd: ${JSON.stringify(shortDescriptionBottomNakedAdd)},`);
         await autosave?.save();
@@ -463,7 +516,7 @@ export async function generateBase(engine, card, guider, autosave) {
 
             let specialInstructionsForVoiceDescription = guider ? (await guider.askOpen("Provide any special focus instructions for defining the description of the voice that " + name + " hears as part of their schizophrenia, what to focus on (how to describe the voice and its interactions with " + name + ")")).value : null;
             if (specialInstructionsForVoiceDescription) {
-                specialInstructionsForVoiceDescription = ". " + specialInstructionsForVoiceDescription.trim();
+                specialInstructionsForVoiceDescription = "\n\n# MANDATORY USER REQUIREMENTS — ACTIVE OVERRIDE:\n\nThe following requirements MUST be reflected in your answer. Treat them as hard constraints that take absolute priority over any conflicting instruction above. Do NOT ignore or dilute them:\n\n" + specialInstructionsForVoiceDescription.trim();
             }
 
             await prime();

@@ -498,6 +498,9 @@ function createWorkerGuider(cancelPromise) {
         async askOpen(question, defaultValue) {
             return ask("askOpen", question, { defaultValue });
         },
+        async askAccept(question, defaultValue) {
+            return ask("askAccept", question, { defaultValue });
+        },
         async askNumber(question, defaultValue) {
             return ask("askNumber", question, { defaultValue });
         },

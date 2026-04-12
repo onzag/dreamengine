@@ -83,9 +83,15 @@ export function createCardStructureFrom(jsContent) {
                 } else if (isInFoot) {
                     baseFile.foot.push(section);
                 }
+                sectionId = null;
+                accumulatedLinesOfSection = [];
+            } else if (sectionId) {
+                accumulatedLinesOfSection.push(line);
             }
         } else {
-            if (isInBody) {
+            if (sectionId) {
+                accumulatedLinesOfSection.push(line);
+            } else if (isInBody) {
                 baseFile.body.push(line.trim());
             } else if (isInHead) {
                 baseFile.head.push(line.trim());
@@ -183,6 +189,7 @@ export function getJsCard(base, baseTabCount = 0, noImportsNorCardAndConfig = fa
  * @typedef {Object} CardTypeGuider
  * @property {(question: string, options: string[], defaultValue?: string) => Promise<{value: string}>} askOption
  * @property {(question: string, defaultValue?: string) => Promise<{value: string}>} askOpen
+ * @property {(question: string, defaultValue?: string) => Promise<{value: string | null}>} askAccept
  * @property {(question: string, defaultValue?: number) => Promise<{value: number}>} askNumber
  * @property {(question: string, defaultValue?: boolean) => Promise<{value: boolean}>} askBoolean
  * @property {(question: string, defaultValue?: string[]) => Promise<{value: string[]}>} askList
@@ -299,7 +306,7 @@ export function getSection(lines, commentId) {
  */
 export function toTemplateLiteral(str) {
     // Escape backticks and lone ${} that aren't our placeholders
-    let escaped = str.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$\{/g, '\\${');
+    let escaped = str.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$\{/g, '\\${').replace(/\n/g, '\\n');
     // Replace {{...}} with specific expansions
     escaped = escaped.replace(/\{\{(.+?)\}\}/g, (_, key) => {
         if (key === 'char') return '${info.char.name}';
