@@ -34,3 +34,23 @@ export const emotions = [
     // cold
     "cold", "indifferent", "detached"
 ]
+
+export const emotionsGrouped = {
+    neutral: ["neutral", "calm", "relaxed"],
+    positive: ["happy", "joyful", "excited", "cheerful", "amused", "laughing", "grinning", "smiling", "content", "satisfied", "pleased", "delighted", "euphoric"],
+    negative: ["sad", "crying", "tearful", "depressed", "melancholic", "dissapointed", "hurt", "heartbroken"],
+    anger: ["angry", "irritated", "frustrated", "annoyed", "resentful", "furious", "enraged"],
+    surprise: ["surprised", "shocked", "astonished", "amazed", "startled"],
+    fear: ["fearful", "anxious", "nervous", "worried", "tense", "apprehensive", "panicked", "horrified", "terrified"],
+    disgust: ["disgusted", "revolted", "nauseated", "sickened"],
+    confusion: ["confused", "uncertain", "doubtful"],
+    embarrassment: ["embarassed", "shy", "sheepish", "blushing", "ashamed", "guilty"],
+    tired: ["tired", "sleepy", "exhausted", "fatigued"],
+    boredom: ["bored", "disinterested", "unengaged"],
+    thoughtful: ["thoughtful", "pensive", "contemplative", "focused", "concentrated"],
+    playful: ["playful", "mischievous", "teasing", "smirking"],
+    affection: ["loving", "affectionate", "caring", "tender", "flirty", "enamored", "aroused"],
+    pain: ["hurting", "aching", "sore", "agonizing", "suffering", "distressed"],
+    determination: ["determined", "serious", "resolute", "steadfast", "persistent", "confident", "proud"],
+    cold: ["cold", "indifferent", "detached"]
+}

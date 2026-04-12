@@ -654,7 +654,7 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
             let kinksParsed = kinks.value.split("\n").join(",").split(",").map(kink => kink.trim().replace("- ", " ").trim()).filter(kink => kink);
 
             if (guider) {
-                const guiderResult = await guider.askList("Provide a list of kinks and special sexual/romantic interests for " + name, kinksParsed);
+                const guiderResult = await guider.askList("Provide a list of kinks and special sexual/romantic interests for " + name, null, kinksParsed);
                 if (guiderResult.value) {
                     kinksParsed = guiderResult.value;
                 }
@@ -682,7 +682,7 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
             let reversedKinksParsed = reversedKinks.value.split(",").map(kink => kink.trim()).filter(kink => kink);
 
             if (guider) {
-                const guiderResult = await guider.askList("Provide a list of kinks and special sexual/romantic interests that " + name + " would find repulsive and be a hard no for them", reversedKinksParsed);
+                const guiderResult = await guider.askList("Provide a list of kinks and special sexual/romantic interests that " + name + " would find repulsive and be a hard no for them", null, reversedKinksParsed);
                 if (guiderResult.value) {
                     reversedKinksParsed = guiderResult.value;
                 }

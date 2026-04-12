@@ -507,8 +507,8 @@ function createWorkerGuider(cancelPromise) {
         async askBoolean(question, defaultValue) {
             return ask("askBoolean", question, { defaultValue });
         },
-        async askList(question, defaultValue) {
-            return ask("askList", question, { defaultValue });
+        async askList(question, options, defaultValue) {
+            return ask("askList", question, { options, defaultValue });
         }
     };
 }

@@ -162,7 +162,8 @@ const guider = guided ? {
         if (!answer && defaultValue !== undefined) return { value: defaultValue };
         return { value: answer.toLowerCase().startsWith('y') };
     },
-    async askList(question, defaultValue) {
+    async askList(question, options, defaultValue) {
+        // TODO limit by options somehow?
         const def = defaultValue !== undefined ? ` [${defaultValue.join(', ')}]` : '';
         const answer = await askLine(`${question} (comma-separated)${def}:`);
         if (!answer && defaultValue !== undefined) return { value: defaultValue };

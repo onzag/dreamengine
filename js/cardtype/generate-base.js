@@ -1,5 +1,5 @@
 import { DEngine } from '../engine/index.js';
-import { emotions } from '../engine/util/emotions.js';
+import { emotions, emotionsGrouped } from '../engine/util/emotions.js';
 import { createGrammarListFromList } from '../engine/util/grammar.js';
 import { insertSection, getSection, insertSpecialComment, hasSpecialComment, toTemplateLiteral } from './base.js';
 
@@ -342,10 +342,10 @@ export async function generateBase(engine, card, guider, autosave) {
         newCharacterSection.body.push(`bonds: null,`);
         newCharacterSection.body.push(`characterRules: {},`);
 
-        newCharacterSection.body.push(`states: {},`);
+        newCharacterSection.body.push(`stateDefinitions: {},`);
         newCharacterSection.body.push(`state: {`);
         newCharacterSection.body.push(`BOND_SYSTEM_FORGIVENESS_RATE_PER_DAY: 0.5,`),
-            newCharacterSection.body.push(`},`)
+        newCharacterSection.body.push(`},`)
         newCharacterSection.body.push("triggers: [],");
         newCharacterSection.body.push("temp: {},"); // Temporary properties to use during inference cycles, they do not persist
         await autosave?.save();
@@ -381,7 +381,11 @@ export async function generateBase(engine, card, guider, autosave) {
         ).filter((e, i, arr) => arr.indexOf(e) === i); // remove duplicates
 
         if (guider) {
-            const commonEmotionsByGuider = await guider.askList("Which emotions are common for " + name + "?", commonEmotionsList);
+            const commonEmotionsByGuider = await guider.askList(
+                "Which emotions are common for " + name + "?",
+                emotionsGrouped,
+                commonEmotionsList,
+            );
             if (commonEmotionsByGuider) {
                 commonEmotionsList = commonEmotionsByGuider.value;
             }
@@ -422,7 +426,7 @@ export async function generateBase(engine, card, guider, autosave) {
         ).filter((e, i, arr) => arr.indexOf(e) === i); // remove duplicates
 
         if (guider) {
-            const uncommonEmotionsByGuider = await guider.askList("Which emotions are uncommon for " + name + "?", uncommonEmotionsList);
+            const uncommonEmotionsByGuider = await guider.askList("Which emotions are uncommon for " + name + "?", emotionsGrouped, uncommonEmotionsList);
             if (uncommonEmotionsByGuider) {
                 uncommonEmotionsList = uncommonEmotionsByGuider.value;
             }
@@ -464,7 +468,7 @@ export async function generateBase(engine, card, guider, autosave) {
         schizophrenia = hasSchizophrenia.value.trim().toLowerCase() === "yes" ? 1 : 0;
 
         if (guider) {
-            const isActuallySchizophrenic = await guider.askBoolean(name + " seems to have schizophrenia, is that correct?", schizophrenia === 1);
+            const isActuallySchizophrenic = await guider.askBoolean("Does " + name + " have schizophrenia?", schizophrenia === 1);
             if (!isActuallySchizophrenic) {
                 schizophrenia = 0;
             } else {
@@ -558,7 +562,7 @@ export async function generateBase(engine, card, guider, autosave) {
             maxCharacters: 5,
             maxSafetyCharacters: 0,
             maxParagraphs: 1,
-            nextQuestion: "Does " + name + " have autism? Answer with yes or no.",
+            nextQuestion: "Is " + name + " autistic? Answer with yes or no.",
             stopAfter: [],
             stopAt: [],
             grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`
@@ -571,7 +575,7 @@ export async function generateBase(engine, card, guider, autosave) {
         doesHaveAutism = hasAutism.value.trim().toLowerCase() === "yes";
 
         if (guider) {
-            const isActuallyAutistic = await guider.askBoolean("Does " + name + " have autism?", doesHaveAutism);
+            const isActuallyAutistic = await guider.askBoolean("Is " + name + " autistic?", doesHaveAutism);
             if (!isActuallyAutistic.value) {
                 doesHaveAutism = false;
             } else {
@@ -1466,7 +1470,7 @@ export async function generateBase(engine, card, guider, autosave) {
         let likesListParsedAndDeduped = likesList.value.trim().split(",").filter(item => item.trim() !== "").map(item => item.trim()).filter((item, index, self) => self.indexOf(item) === index); // trim items, filter out empty items and dedupe
 
         if (guider) {
-            const likesListAsked = await guider.askList("List some hobbies, activities, interests, or conversation topics that " + name + " enjoys. Examples: swimming, cooking, cats, astronomy, music, gardening, chess", likesListParsedAndDeduped);
+            const likesListAsked = await guider.askList("List some hobbies, activities, interests, or conversation topics that " + name + " enjoys. Examples: swimming, cooking, cats, astronomy, music, gardening, chess", null, likesListParsedAndDeduped);
             if (likesListAsked) {
                 likesListParsedAndDeduped = likesListAsked.value.map(item => item.trim().toLowerCase()).filter(item => item !== "").filter((item, index, self) => self.indexOf(item) === index);
             }
@@ -1506,7 +1510,7 @@ export async function generateBase(engine, card, guider, autosave) {
             .filter(item => !card.config.globalInterests.includes(item)); // ensure there is no overlap with likes
 
         if (guider) {
-            const dislikesListAsked = await guider.askList("List some hobbies, activities, interests, or conversation topics that " + name + " dislikes. Examples: swimming, cooking, cats, politics, math, spiders, crowds", dislikesListParsedAndDeduped);
+            const dislikesListAsked = await guider.askList("List some hobbies, activities, interests, or conversation topics that " + name + " dislikes. Examples: swimming, cooking, cats, politics, math, spiders, crowds", null, dislikesListParsedAndDeduped);
             if (dislikesListAsked) {
                 dislikesListParsedAndDeduped = dislikesListAsked.value.map(item => item.trim().toLowerCase()).filter(item => item !== "").filter((item, index, self) => self.indexOf(item) === index).filter(item => !card.config.globalInterests.includes(item));
             }
@@ -1662,7 +1666,7 @@ export async function generateBase(engine, card, guider, autosave) {
         let finalGroupBelongingValue = [groupBelonging.value.trim().toLowerCase()].filter(item => item !== "" && item !== "none" && item !== "n/a");
 
         if (guider) {
-            const guidedGroupBelonging = await guider.askList("Does " + name + " belong to any specific group, organization, team, family, etc? if so which ones?", finalGroupBelongingValue);
+            const guidedGroupBelonging = await guider.askList("Does " + name + " belong to any specific group, organization, team, family, etc? if so which ones?", null, finalGroupBelongingValue);
             if (guidedGroupBelonging) {
                 finalGroupBelongingValue = guidedGroupBelonging.value.map(item => item.trim().toLowerCase()).filter(item => item !== "" && item !== "none" && item !== "n/a");
             }
@@ -1679,7 +1683,7 @@ export async function generateBase(engine, card, guider, autosave) {
 
     if (!hasSpecialComment(newCharacterSection.body, "base-prejudices-species")) {
         if (guider) {
-            const dislikeSpeciesPrejudice = await guider.askList("Is " + name + " prejudiced against any species? if so which ones? answer with the name of the species, if there is no prejudice answer with none", []);
+            const dislikeSpeciesPrejudice = await guider.askList("Is " + name + " prejudiced against any species? if so which ones?", null, []);
             insertSpecialComment(newCharacterSection.body, "base-prejudices-species");
             if (dislikeSpeciesPrejudice) {
                 const dislikeSpeciesPrejudiceValue = dislikeSpeciesPrejudice.value.map(item => item.trim().toLowerCase()).filter(item => item !== "" && item !== "none" && item !== "n/a");
@@ -1697,7 +1701,7 @@ export async function generateBase(engine, card, guider, autosave) {
 
     if (!hasSpecialComment(newCharacterSection.body, "base-prejudices-races")) {
         if (guider) {
-            const dislikeRacesPrejudice = await guider.askList("Is " + name + " prejudiced against any races? if so which ones? answer with the name of the races, if there is no prejudice answer with none", []);
+            const dislikeRacesPrejudice = await guider.askList("Is " + name + " prejudiced against any races? if so which ones?", null, []);
             insertSpecialComment(newCharacterSection.body, "base-prejudices-races");
             if (dislikeRacesPrejudice) {
                 const dislikeRacesPrejudiceValue = dislikeRacesPrejudice.value.map(item => item.trim().toLowerCase()).filter(item => item !== "" && item !== "none" && item !== "n/a");
@@ -1715,7 +1719,7 @@ export async function generateBase(engine, card, guider, autosave) {
 
     if (!hasSpecialComment(newCharacterSection.body, "base-prejudices-groups")) {
         if (guider) {
-            const dislikeGroupsPrejudice = await guider.askList("Is " + name + " prejudiced against any groups, organizations, teams, families, etc? if so which ones? answer with the name of the groups, if there is no prejudice answer with none", []);
+            const dislikeGroupsPrejudice = await guider.askList("Is " + name + " prejudiced against any groups, organizations, teams, families, etc?", null, []);
             insertSpecialComment(newCharacterSection.body, "base-prejudices-groups");
             if (dislikeGroupsPrejudice) {
                 const dislikeGroupsPrejudiceValue = dislikeGroupsPrejudice.value.map(item => item.trim().toLowerCase()).filter(item => item !== "" && item !== "none" && item !== "n/a");

@@ -197,7 +197,7 @@ class CardTypeWizard extends HTMLElement {
                     result = await guider.askBoolean(question, defaultValue);
                     break;
                 case 'askList':
-                    result = await guider.askList(question, defaultValue);
+                    result = await guider.askList(question, options, defaultValue);
                     break;
                 default:
                     result = { value: defaultValue };
@@ -541,7 +541,7 @@ class CardTypeWizard extends HTMLElement {
                 );
             },
 
-            async askList(question, defaultValue) {
+            async askList(question, options, defaultValue) {
                 return presentQuestion(
                     question,
                     () => {
@@ -570,6 +570,7 @@ class CardTypeWizard extends HTMLElement {
                                     const idx = parseInt(/** @type {HTMLElement} */(btn).dataset.idx || '0');
                                     items.splice(idx, 1);
                                     renderItems();
+                                    if (options) rebuildAddInput();
                                 });
                             });
                         };
@@ -577,10 +578,58 @@ class CardTypeWizard extends HTMLElement {
                         const addRow = document.createElement('div');
                         addRow.className = 'guider-list-add-row';
 
-                        const addInput = document.createElement('input');
-                        addInput.className = 'guider-input';
-                        addInput.type = 'text';
-                        addInput.placeholder = 'Add item...';
+                        /** @type {HTMLInputElement | HTMLSelectElement} */
+                        let addInput;
+
+                        const rebuildAddInput = () => {
+                            const oldInput = addRow.querySelector('.guider-input');
+                            if (oldInput) oldInput.remove();
+
+                            if (options) {
+                                const select = document.createElement('select');
+                                select.className = 'guider-input';
+                                let hasAny = false;
+                                const groups = Object.keys(options);
+                                for (const group of groups) {
+                                    const remaining = options[group].filter(o => !items.includes(o));
+                                    if (remaining.length === 0) continue;
+                                    hasAny = true;
+                                    const optgroup = document.createElement('optgroup');
+                                    optgroup.label = group;
+                                    remaining.forEach(opt => {
+                                        const o = document.createElement('option');
+                                        o.value = opt;
+                                        o.textContent = opt;
+                                        optgroup.appendChild(o);
+                                    });
+                                    select.appendChild(optgroup);
+                                }
+                                if (!hasAny) {
+                                    const placeholder = document.createElement('option');
+                                    placeholder.value = '';
+                                    placeholder.textContent = 'No more options';
+                                    placeholder.disabled = true;
+                                    placeholder.selected = true;
+                                    select.appendChild(placeholder);
+                                    select.disabled = true;
+                                } else {
+                                    const placeholder = document.createElement('option');
+                                    placeholder.value = '';
+                                    placeholder.textContent = 'Select an option...';
+                                    placeholder.disabled = true;
+                                    placeholder.selected = true;
+                                    select.insertBefore(placeholder, select.firstChild);
+                                }
+                                addInput = select;
+                            } else {
+                                const input = document.createElement('input');
+                                input.className = 'guider-input';
+                                input.type = 'text';
+                                input.placeholder = 'Add item...';
+                                addInput = input;
+                            }
+                            addRow.insertBefore(addInput, addRow.querySelector('.guider-list-add-btn'));
+                        };
 
                         const addBtn = document.createElement('div');
                         addBtn.className = 'guider-list-add-btn';
@@ -592,11 +641,12 @@ class CardTypeWizard extends HTMLElement {
                             items.push(val);
                             addInput.value = '';
                             renderItems();
+                            if (options) rebuildAddInput();
                         });
 
-                        addRow.appendChild(addInput);
                         addRow.appendChild(addBtn);
                         wrapper.appendChild(addRow);
+                        rebuildAddInput();
 
                         renderItems();
                         return wrapper;
@@ -1006,6 +1056,19 @@ class CardTypeWizard extends HTMLElement {
         .guider-input:focus {
             border-color: rgba(80, 180, 220, 0.5);
             box-shadow: inset 0 0 14px rgba(0, 60, 120, 0.4);
+        }
+
+        .guider-input option,
+        .guider-input optgroup {
+            background: #001520;
+            color: #c8dce8;
+        }
+
+        .guider-input optgroup {
+            font-style: normal;
+            font-weight: bold;
+            color: rgba(100, 200, 240, 0.8);
+            padding: 0.5vh 0;
         }
 
         .guider-input::-webkit-inner-spin-button,

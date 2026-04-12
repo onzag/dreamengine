@@ -192,7 +192,7 @@ export function getJsCard(base, baseTabCount = 0, noImportsNorCardAndConfig = fa
  * @property {(question: string, defaultValue?: string) => Promise<{value: string | null}>} askAccept
  * @property {(question: string, defaultValue?: number) => Promise<{value: number}>} askNumber
  * @property {(question: string, defaultValue?: boolean) => Promise<{value: boolean}>} askBoolean
- * @property {(question: string, defaultValue?: string[]) => Promise<{value: string[]}>} askList
+ * @property {(question: string, options: Record<string, string[]> | null, defaultValue?: string[]) => Promise<{value: string[]}>} askList
  */
 
 /**
