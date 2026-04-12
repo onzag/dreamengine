@@ -274,6 +274,10 @@ function removeLoadingBlur() {
     }
 }
 
+/**
+ * @type {*}
+ */
+let INFERENCE_ADAPTER_ERROR = null;
 async function initialChecks() {
     // Check if the engine has any API keys configured, if not show the settings overlay
     const apiKey = await window.API.getConfigValue('secret');
@@ -303,6 +307,32 @@ async function initialChecks() {
             setTimeout(() => {
                 HAS_ACTIVE_DIALOG = false;
                 secondChecks();
+            }, 300);
+        });
+        document.body.appendChild(dialog);
+    } else if (INFERENCE_ADAPTER_ERROR) {
+        const dialog = document.createElement('app-dialog');
+        dialog.setAttribute('dialog-title', 'Could not Connect to Server');
+        dialog.innerHTML = `<p>Failed to initialize the inference adapter. Please check your API key and host configuration, and ensure that your API key has the necessary permissions.</p><p>Error details: ${INFERENCE_ADAPTER_ERROR.message}</p>`;
+        dialog.setAttribute("confirmation", "true");
+        dialog.setAttribute("confirm-text", "Open Settings");
+        dialog.setAttribute("cancel-text", "Ignore");
+        dialog.addEventListener('confirm', () => {
+            const settingsOverlay = document.createElement('app-settings');
+            settingsOverlay.setAttribute("initial-section", "1");
+            document.body.appendChild(settingsOverlay);
+            settingsOverlay.addEventListener('close', () => {
+                document.body.removeChild(settingsOverlay);
+                setTimeout(() => {
+                    HAS_ACTIVE_DIALOG = false;
+                }, 300);
+            });
+            document.body.removeChild(dialog);
+        });
+        dialog.addEventListener('cancel', () => {
+            document.body.removeChild(dialog);
+            setTimeout(() => {
+                HAS_ACTIVE_DIALOG = false;
             }, 300);
         });
         document.body.appendChild(dialog);
@@ -380,6 +410,23 @@ client.ready.then(async () => {
         scripts: scriptFiles,
     });
     await client.jsEnginePreloadAllScripts();
+
+    const host = await window.API.getConfigValue('host');
+    const secret = await window.API.getConfigValue('secret');
+
+    if (host && secret) {
+        await client.setupInferenceAdapter({
+            host,
+            secret,
+        });
+
+        try {
+            await client.initializeInferenceAdapter();
+        } catch (err) {
+            console.error("Failed to initialize inference adapter:", err);
+            INFERENCE_ADAPTER_ERROR = err;
+        }
+    }
 
     // Engine is ready to be used at this point
     WORKER_READY = true;

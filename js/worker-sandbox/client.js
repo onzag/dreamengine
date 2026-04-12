@@ -56,9 +56,12 @@ export class EngineWorkerClient {
         });
 
         this.#worker.onerror = (e) => {
-            const msg = e.message || "Unknown worker error";
+            e.preventDefault();
+            const msg = e.message
+                || (e.error && (e.error.message || String(e.error)))
+                || `Unidentified worker error (type=${e.type}, event keys: ${Object.keys(e).join(", ") || "none"})`;
             const info = e.filename ? ` (${e.filename}:${e.lineno}:${e.colno})` : "";
-            console.error(`[EngineWorker] Worker error: ${msg}${info}`);
+            console.error(`[EngineWorker] Worker error: ${msg}${info}`, e);
             readyReject(new Error(`Worker error: ${msg}${info}`));
         };
 
@@ -89,6 +92,10 @@ export class EngineWorkerClient {
                     case "workerReady":
                         // @ts-ignore
                         readyResolve();
+                        break;
+                    case "workerLoadError":
+                        console.error("[EngineWorker] Worker failed to load modules:\n" + msg.data.error);
+                        readyReject(new Error(`Worker module load failed: ${msg.data.error}`));
                         break;
                     case "deObjectUpdated":
                         this.onDEObjectUpdated?.();
@@ -198,6 +205,8 @@ export class EngineWorkerClient {
      * }} args
      */
     setupInferenceAdapter(args) { return this.#call("setupInferenceAdapter", args); }
+
+    initializeInferenceAdapter() { return this.#call("initializeInferenceAdapter"); }
 
     // ── deObject partial query ──────────────────────────────────
 

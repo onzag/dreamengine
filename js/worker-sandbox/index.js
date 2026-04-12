@@ -1,18 +1,58 @@
 /**
- * Worker that houses the full DEngine + DEJSEngine.
- * Loaded via `new Worker(...)` from app/index.js.
- * Communicates through structured postMessage protocol.
+ * Worker bootstrap – uses dynamic import() so that ANY error in the module
+ * graph (syntax errors, missing files, bad exports, etc.) is caught here
+ * and forwarded to the main thread with full detail instead of the browser's
+ * useless opaque "ErrorEvent".
  */
 
-import { DEngine } from "../engine/index.js";
-import { DEJSEngine } from "../jsengine/index.js";
-import { InferenceAdapterLlamaUncensored } from "../engine/inference/adapter-de-server-uncensored.js";
-import { generateBase } from "../cardtype/generate-base.js";
-import { generateBonds } from "../cardtype/generate-bonds.js";
-import { generateActivities } from "../cardtype/generate-activities.js";
-import { generateBondTriggers } from "../cardtype/generate-bond-triggers.js";
-import { generateBasicStates } from "../cardtype/generate-basic-states.js";
-import { getJsCard } from "../cardtype/base.js";
+// Catch truly unexpected things (runtime errors after init)
+self.onerror = (message, source, lineno, colno, error) => {
+    const detail = error
+        ? `${error.message}\n${error.stack}`
+        : `${message} (${source}:${lineno}:${colno})`;
+    self.postMessage({ type: "event", event: "workerLoadError", data: { error: detail } });
+};
+self.onunhandledrejection = (e) => {
+    const err = e.reason;
+    const detail = err instanceof Error ? `${err.message}\n${err.stack}` : String(err);
+    self.postMessage({ type: "event", event: "workerLoadError", data: { error: `Unhandled rejection: ${detail}` } });
+};
+
+(async () => {
+    try {
+        const [
+            { DEngine },
+            { DEJSEngine },
+            { InferenceAdapterLlamaUncensored },
+            { generateBase },
+            { generateBonds },
+            { generateActivities },
+            { generateBondTriggers },
+            { generateBasicStates },
+        ] = await Promise.all([
+            import("../engine/index.js"),
+            import("../jsengine/index.js"),
+            import("../engine/inference/adapter-de-server-uncensored.js"),
+            import("../cardtype/generate-base.js"),
+            import("../cardtype/generate-bonds.js"),
+            import("../cardtype/generate-activities.js"),
+            import("../cardtype/generate-bond-triggers.js"),
+            import("../cardtype/generate-basic-states.js"),
+        ]);
+
+        workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, generateBase, generateBonds, generateActivities, generateBondTriggers, generateBasicStates });
+    } catch (err) {
+        const detail = err instanceof Error ? `${err.message}\n${err.stack}` : String(err);
+        console.error("[Worker] Failed to load modules:", detail);
+        self.postMessage({ type: "event", event: "workerLoadError", data: { error: detail } });
+    }
+})();
+
+/**
+ * @param {object} deps
+ */
+// @ts-ignore
+function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, generateBase, generateBonds, generateActivities, generateBondTriggers, generateBasicStates }) {
 
 // ── Script path resolvers (using file:// fetch) ────────────────────
 // The main thread sends the absolute paths via the "setScriptPaths" RPC.
@@ -92,14 +132,17 @@ const jsEngine = new DEJSEngine(engine, {
 });
 
 // ── Listener forwarding ─────────────────────────────────────────────
+// @ts-ignore
 engine.addDEObjectUpdatedListener((deObject) => {
     self.postMessage({ type: "event", event: "deObjectUpdated" });
 });
 
+// @ts-ignore
 engine.addCycleInformListener((level, message) => {
     self.postMessage({ type: "event", event: "cycleInform", data: { level, message } });
 });
 
+// @ts-ignore
 engine.addInferringOverConversationMessageListener((deObject, data) => {
     self.postMessage({ type: "event", event: "inferringOverConversationMessage", data: { deObject, data } });
 });
@@ -155,6 +198,15 @@ const handlers = {
 
     async setupInferenceAdapter({ host, secret }) {
         engine.setInferenceAdapter(new InferenceAdapterLlamaUncensored(engine, { host, secret }));
+        return { ok: true };
+    },
+
+    async initializeInferenceAdapter() {
+        const adapter = engine.inferenceAdapter;
+        if (!adapter) {
+            throw new Error("No inference adapter found on engine");
+        }
+        await adapter.ensureInitialized();
         return { ok: true };
     },
 
@@ -350,39 +402,6 @@ const handlers = {
             await generateBondTriggers(engine, currentCard, guider, autosave);
             await generateBasicStates(engine, currentCard, guider, autosave);
 
-            // ── Testing: dummy questions + autosave ──
-            // @ts-ignore
-            // const wait = (ms) => Promise.race([new Promise(r => setTimeout(r, ms)), cancelPromise]);
-
-            // if (guider) {
-            //     const q1 = await guider.askOption('What combat style does this character prefer?', ['Melee', 'Ranged', 'Magic', 'Stealth'], 'Melee');
-            //     console.log('[wizard-test] askOption result:', q1);
-
-            //     await wait(3000);
-
-            //     currentCard.imports.push("// TEST IMPORT " + Math.random());
-
-            //     await autosave.save();
-
-            //     const q2 = await guider.askBoolean('Does the character have a dark past?', false);
-            //     console.log('[wizard-test] askBoolean result:', q2);
-
-            //     await wait(3000);
-
-            //     currentCard.imports.push("// TEST IMPORT " + Math.random());
-
-            //     await autosave.save();
-
-            //     const q3 = await guider.askOpen('Describe the character\'s main motivation', 'Seeking revenge');
-            //     console.log('[wizard-test] askOpen result:', q3);
-
-            //     await wait(2000);
-
-            //     currentCard.imports.push("// TEST IMPORT " + Math.random());
-
-            //     await autosave.save();
-            // }
-
             self.postMessage({ type: "event", event: "cardTypeWizardComplete", data: { currentCard } });
         } catch (err) {
             if (err instanceof WizardCancelledError) {
@@ -567,3 +586,5 @@ self.onmessage = async (e) => {
 
 console.log("Secure Worker initialized...");
 self.postMessage({ type: "event", event: "workerReady" });
+
+} // end workerMain

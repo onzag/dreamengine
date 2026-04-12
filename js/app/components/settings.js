@@ -316,6 +316,7 @@ class Settings extends HTMLElement {
                     title="This is the API secret used by the AI inference DreamServer"
                     input-data-location="secret"
                 ></app-overlay-input>
+                <div style="margin-top:1vh;color:#ff6b6b;font-size:3vh;">&#9888; The app must be restarted after changing the inference host or secret.</div>
             </app-overlay-section>`;
         };
     }

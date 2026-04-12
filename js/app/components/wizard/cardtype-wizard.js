@@ -39,8 +39,15 @@ class CardTypeWizard extends HTMLElement {
             console.error('CardTypeWizard requires character-id and character-namespace attributes');
             return;
         }
-        const cardSource = await window.ENGINE_WORKER_CLIENT.getRawScriptSource({ namespace: characterNamespace, id: characterId });
-        console.log('Card source:', cardSource);
+
+        /** @type {{src: string}} */
+        let cardSource;
+        try {
+            cardSource = await window.ENGINE_WORKER_CLIENT.getRawScriptSource({ namespace: characterNamespace, id: characterId });
+        } catch (err) {
+            this.showError(err instanceof Error ? err.message : String(err));
+            return;
+        }
         const isCardType = isCardTypeFile(cardSource.src);
 
         if (!isCardType) {
@@ -114,7 +121,7 @@ class CardTypeWizard extends HTMLElement {
 
             const textarea = contentArea.querySelector('.card-textarea');
             if (textarea) {
-                textarea.addEventListener('input', function() {
+                textarea.addEventListener('input', function () {
                     // @ts-ignore
                     this.style.height = 'auto';
                     // @ts-ignore
@@ -204,11 +211,18 @@ class CardTypeWizard extends HTMLElement {
             const jsContent = getJsCard(currentCard);
             this.showAutosaveStatus();
             lastCard = currentCard;
-            await window.API.updateScriptFile(
-                characterNamespace,
-                characterId,
-                jsContent
-            );
+            try {
+                await window.API.updateScriptFile(
+                    characterNamespace,
+                    characterId,
+                    jsContent
+                );
+            } catch (err) {
+                cleanup();
+                client.cancelCardTypeGeneration();
+                this.showError(err instanceof Error ? err.message : String(err));
+                return;
+            }
             this.hideAutosaveStatus();
             client.sendAutosaveAck({ sid });
         };
@@ -236,7 +250,14 @@ class CardTypeWizard extends HTMLElement {
         client.onCardTypeWizardComplete = onComplete;
 
         this.initOverlay();
-        await client.continueCardTypeWizard({ currentCard: parsedCard, guided });
+
+        try {
+            await client.continueCardTypeWizard({ currentCard: parsedCard, guided });
+        } catch (err) {
+            cleanup();
+            this.showError(err instanceof Error ? err.message : String(err));
+            return;
+        }
 
         console.log('CardTypeWizard process complete for character:', characterId);
 
@@ -245,11 +266,17 @@ class CardTypeWizard extends HTMLElement {
         lastCard.config.automaticWizardCompleted = true;
         lastCard.config.guidedWizardCompleted = true;
         const finalJsContent = getJsCard(lastCard);
-        await window.API.updateScriptFile(
-            characterNamespace,
-            characterId,
-            finalJsContent,
-        );
+        try {
+            await window.API.updateScriptFile(
+                characterNamespace,
+                characterId,
+                finalJsContent,
+            );
+        } catch (err) {
+            cleanup();
+            this.showError(err instanceof Error ? err.message : String(err));
+            return;
+        }
 
         this.showDone();
     }
@@ -260,6 +287,29 @@ class CardTypeWizard extends HTMLElement {
         if (contentArea) {
             contentArea.innerHTML = '<div class="guider-label" style="text-align:center;margin-top:6vh;">Done!</div>';
         }
+    }
+
+    /**
+     * Shows an error message in the wizard content area and stops the spinner.
+     * @param {string} message
+     */
+    showError(message) {
+        this.endOverlay();
+        const contentArea = this.root.querySelector('.wizard-content');
+        if (contentArea) {
+            contentArea.innerHTML = `<div class="guider-label" style="text-align:center;margin-top:6vh;color:#ff6b6b;font-size:6vh">Error</div>
+                <div class="guider-label" style="text-align:center;margin-top:1vh;font-size:3vh;white-space:pre-wrap;word-break:break-word;">${this.escapeHtml(message)}</div>`;
+        }
+    }
+
+    /**
+     * @param {string} str
+     * @returns {string}
+     */
+    escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
     }
 
     /**
@@ -351,7 +401,7 @@ class CardTypeWizard extends HTMLElement {
                         textarea.className = 'guider-textarea';
                         textarea.placeholder = defaultValue || '';
                         if (defaultValue) textarea.value = defaultValue;
-                        textarea.addEventListener('input', function() {
+                        textarea.addEventListener('input', function () {
                             this.style.height = 'auto';
                             this.style.height = this.scrollHeight + 'px';
                         });
@@ -376,7 +426,7 @@ class CardTypeWizard extends HTMLElement {
                         return input;
                     },
                     (inputArea) => {
-                        const num = parseFloat(/** @type {HTMLInputElement} */ (inputArea).value);
+                        const num = parseFloat(/** @type {HTMLInputElement} */(inputArea).value);
                         return isNaN(num) ? (defaultValue ?? 0) : num;
                     },
                     defaultValue
@@ -450,7 +500,7 @@ class CardTypeWizard extends HTMLElement {
                             listContainer.querySelectorAll('.guider-list-remove').forEach(btn => {
                                 btn.addEventListener('mouseenter', playHoverSound);
                                 btn.addEventListener('click', () => {
-                                    const idx = parseInt(/** @type {HTMLElement} */ (btn).dataset.idx || '0');
+                                    const idx = parseInt(/** @type {HTMLElement} */(btn).dataset.idx || '0');
                                     items.splice(idx, 1);
                                     renderItems();
                                 });
@@ -999,7 +1049,7 @@ class CardTypeWizard extends HTMLElement {
 
         /* Loading overlay */
         .wizard-loading-overlay {
-            position: absolute;
+            position: fixed;
             top: 0;
             left: 0;
             width: 100%;

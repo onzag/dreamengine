@@ -26,7 +26,9 @@ const jsConfig = `
     "checkJs": true,
     "strict": true,
     "moduleResolution": "node",
-    "target": "es2020"
+    "target": "es2020",
+    "moduleDetection": "force",
+    "ignoreDeprecations": "6.0"
   },
   "typeAcquisition": {"enable": true},
   "include": ["**/*.js", "types/**/*.d.ts"]
