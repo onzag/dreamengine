@@ -253,7 +253,7 @@ class Settings extends HTMLElement {
                 ></app-overlay-input>
                 <app-overlay-input
                     label="Stealth"
-                    title="A value from 0 to 1 representing how likely your character is to perform stealthy actions. Higher means more sneaky. Used when determining if others notice your actions like robberies."
+                    title="A value representing how likely your character is to perform stealthy actions. Higher means more sneaky. Used when determining if others notice your actions like robberies."
                     input-data-location="user.stealth"
                     input-placeholder="50"
                     input-type="number"
@@ -261,8 +261,24 @@ class Settings extends HTMLElement {
                 ></app-overlay-input>
                 <app-overlay-input
                     label="Perception"
-                    title="A value from 0 to 1 representing how perceptive your character is. Higher means more observant. Used when determining if your character notices events like robberies happening around them."
+                    title="A value representing how perceptive your character is. Higher means more observant. Used when determining if your character notices events like robberies happening around them."
                     input-data-location="user.perception"
+                    input-placeholder="50"
+                    input-type="number"
+                    input-is-percentage="true"
+                ></app-overlay-input>
+                <app-overlay-input
+                    label="Attractiveness"
+                    title="A value representing how attractive your character is. Higher means more attractive and more likely to be approached by other characters and have romantic interactions."
+                    input-data-location="user.attractiveness"
+                    input-placeholder="50"
+                    input-type="number"
+                    input-is-percentage="true"
+                ></app-overlay-input>
+                <app-overlay-input
+                    label="Charisma"
+                    title="A value representing how charismatic your character is. Higher means more charismatic and more likely to influence other characters and have strong social interactions."
+                    input-data-location="user.charisma"
                     input-placeholder="50"
                     input-type="number"
                     input-is-percentage="true"

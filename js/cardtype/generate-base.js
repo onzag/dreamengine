@@ -1,7 +1,7 @@
 import { DEngine } from '../engine/index.js';
 import { emotions, emotionsGrouped } from '../engine/util/emotions.js';
 import { createGrammarListFromList } from '../engine/util/grammar.js';
-import { insertSection, getSection, insertSpecialComment, hasSpecialComment, toTemplateLiteral } from './base.js';
+import { insertSection, getSection, insertSpecialComment, hasSpecialComment, toTemplateLiteral, unshiftSpecialComment } from './base.js';
 
 if (typeof process !== "undefined" && process.versions && process.versions.node) {
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
@@ -86,7 +86,16 @@ export async function generateBase(engine, card, guider, autosave) {
         }
     }
 
-    const initializeSection = insertSection(card.body, "initialize");
+    const initializeSection = insertSection(card.body, "initialize", (s) => {
+        s.head.push(`initialize(DE) {`);
+        s.foot.push(`},`);
+    });
+
+    const onWorldInitializedAndFirstSceneStartedSection = insertSection(card.body, "on-world-initialized-fss", (s) => {
+        s.head.push(`onWorldInitializedAndFirstSceneStarted(DE) {`);
+        s.foot.push(`},`);
+    });
+
     const newCharacterSection = insertSection(initializeSection.body, "new-character");
 
     let name = "";
@@ -136,15 +145,12 @@ export async function generateBase(engine, card, guider, autosave) {
 
         card.head.push(`description: ${JSON.stringify(answerSmallOneSentenceDescription.value.trim())},`);
 
-        initializeSection.head.push(`initialize(DE) {`);
-
         newCharacterSection.head.push(`DE.utils.newCharacter(DE, fss.setup(DE, {`);
         newCharacterSection.body.push(`name: ${JSON.stringify(name)},`);
         newCharacterSection.foot.push(`},{`); // close newCharacter
         // we will need to get this sections when generating the bonds
         insertSection(newCharacterSection.foot, "options");
         newCharacterSection.foot.push(`}));`); // close setup
-        initializeSection.foot.push(`},`); // close initialize
 
         await autosave?.save();
     } else {
@@ -1422,35 +1428,168 @@ export async function generateBase(engine, card, guider, autosave) {
     }
 
     if (!hasSpecialComment(newCharacterSection.body, "base-family-ties")) {
-        if (guider) {
-            let nextFamilyMemberToAdd = "";
-            /**
-             * @type {{[familyMemberName: string]: DEFamilyTie}}
-             */
-            const collectedTies = {}
-            do {
-                nextFamilyMemberToAdd = (await guider.askOption("Would you like to add a family member?", ["no", "parent", "sibling", "child", "spouse", "cousin", "uncle", "aunt", "grandparent", "grandchild", "niece", "nephew", "other"], "no")).value;
-                if (nextFamilyMemberToAdd && nextFamilyMemberToAdd !== "no") {
-                    const familyMemberName = (await guider.askOpen("What is the name of the " + nextFamilyMemberToAdd + "?")).value;
-                    const familyMemberRelation = nextFamilyMemberToAdd;
-                    collectedTies[familyMemberName] = {
-                        relation: /** @type {DEFamilyRelation} */ (familyMemberRelation),
-                    };
+        insertSpecialComment(newCharacterSection.body, "base-family-ties");
+        newCharacterSection.body.push(`familyTies: {},`);
+        await autosave?.save();
+    }
 
-                    // TODO ask to this family bonds
+    if (!hasSpecialComment(onWorldInitializedAndFirstSceneStartedSection.body, "base-relationships") && guider) {
+        let nextFamilyMemberToAdd = "";
+        do {
+            nextFamilyMemberToAdd = (await guider.askOption("Would you like to add a family member?", ["no", "parent", "sibling", "child", "spouse", "cousin", "uncle", "aunt", "grandparent", "grandchild", "niece", "nephew", "other"], "no")).value;
+            if (nextFamilyMemberToAdd && nextFamilyMemberToAdd !== "no") {
+                const familyMemberName = (await guider.askOpen("What is the name of the " + nextFamilyMemberToAdd + "?")).value;
+                const familyMemberRelation = nextFamilyMemberToAdd;
+
+                onWorldInitializedAndFirstSceneStartedSection.body.push(`DE.utils.newFamilyRelation(DE, ${JSON.stringify(name)}, ${JSON.stringify(familyMemberName)}, ${JSON.stringify(familyMemberRelation)})`);
+
+                const wouldYouLikeToPreCreateBond = await guider.askBoolean("Would you like to pre-create a mutual bond between " + name + " and " + familyMemberName + "? if you don't they will consider each other as strangers unaware they are family", false);
+                if (wouldYouLikeToPreCreateBond.value) {
+                    const options = [
+                        "sworn enemy",
+                        "hostile",
+                        "antagonistic",
+                        "unfriendly",
+                        "unpleasant",
+                        "neutral",
+                        "friendly",
+                        "good relationship",
+                        "close",
+                        "best family relationship",
+                    ];
+                    const optionsValues = [
+                        -75,
+                        -45,
+                        -25,
+                        -15,
+                        -5,
+                        5,
+                        15,
+                        25,
+                        45,
+                        75,
+                    ];
+                    const bondType = await guider.askOption("What type of bond " + name + " and " + familyMemberName + " share?", options, "good relationship");
+                    const bondValue = optionsValues[options.indexOf(bondType.value)];
+                    onWorldInitializedAndFirstSceneStartedSection.body.push(`DE.utils.newMutualBond(DE, ${JSON.stringify(name)}, ${JSON.stringify(familyMemberName)}, {stranger: false, bond: ${bondValue}, bond2: 0, knowsName: true, createdAt: DE.utils.timeShifter(DE.currentTime, {years: -DE.characters[${JSON.stringify(name)}].ageYears})})`);
                 }
-            } while (nextFamilyMemberToAdd !== "no");
-            insertSpecialComment(newCharacterSection.body, "base-family-ties");
-            newCharacterSection.body.push(`familyTies: ${JSON.stringify(collectedTies)},`);
+            }
+        } while (nextFamilyMemberToAdd !== "no");
 
-            await autosave?.save();
+        let nextRelationshipToAdd = false;
+        do {
+            nextRelationshipToAdd = (await guider.askBoolean("Would you like to add a non-family relationship?", false)).value;
+            if (nextRelationshipToAdd) {
+                const personName = (await guider.askOpen("What is the name of the person/animal/creature that relationship is shared with?")).value;
 
-            // TODO ask to pre-create bond towards other characters
-        } else {
-            insertSpecialComment(newCharacterSection.body, "base-family-ties");
-            newCharacterSection.body.push(`familyTies: {}, // Not covered in cardtype`);
-            await autosave?.save();
-        }
+                const options = [
+                    "stranger",
+
+                    "sworn enemy",
+                    "hostile",
+                    "antagonistic",
+                    "unfriendly",
+                    "unpleasant",
+                    "neutral",
+                    "friends",
+                    "good friends",
+                    "close friends",
+                    "best friends",
+                ];
+                const optionsWithPerCharacter = [
+                    ...options,
+                    "select per character (each character sees the other differently)",
+                ];
+                const optionsValues = [
+                    null,
+
+                    -75,
+                    -45,
+                    -25,
+                    -15,
+                    -5,
+                    5,
+                    15,
+                    25,
+                    45,
+                    75,
+                ];
+
+                const bondType = await guider.askOption("What type of bond " + name + " and " + personName + " share?", optionsWithPerCharacter, "friends");
+
+                /**
+                 * @type {number | null}
+                 */
+                let bondValueForCharacter = null;
+                /**
+                 * @type {number | null}
+                 */
+                let bondValueForPerson = null;
+
+                if (bondType.value === "select per character (each character sees the other differently)") {
+                    const bondTypeForCharacter = await guider.askOption("How does " + name + " see " + personName + "?", options, "friends");
+                    const bondTypeForPerson = await guider.askOption("How does " + personName + " see " + name + "?", options, "friends");
+                    bondValueForCharacter = optionsValues[options.indexOf(bondTypeForCharacter.value)];
+                    bondValueForPerson = optionsValues[options.indexOf(bondTypeForPerson.value)];
+                } else {
+                    const bondValue = optionsValues[options.indexOf(bondType.value)];
+                    bondValueForCharacter = bondValue;
+                    bondValueForPerson = bondValue;
+                }
+
+                /**
+                 * @type {number}
+                 */
+                let bond2ValueForCharacter = 0;
+                /**
+                 * @type {number}
+                 */
+                let bond2ValueForPerson = 0;
+
+                const bond2Options = [
+                    "no romantic interest",
+                    "mutual slight romantic interest",
+                    "mutual romantic interest",
+                    "mutual strong romantic interest",
+                    "mutually deep in love",
+                ];
+
+                const bond2OptionsWithPerCharacter = [
+                    ...bond2Options,
+                    "select per character (each character sees the other differently)",
+                ];
+
+                const bond2Values = [
+                    0,
+                    15,
+                    25,
+                    40,
+                    75,
+                ];
+
+                const bond2Type = await guider.askOption("What type of romantic bond " + name + " and " + personName + " share?", bond2OptionsWithPerCharacter, "no romantic interest");
+
+                if (bond2Type.value === "select per character (each character sees the other differently)") {
+                    const bond2TypeForCharacter = await guider.askOption("How does " + name + " see " + personName + " romantically?", bond2Options, "no romantic interest");
+                    const bond2TypeForPerson = await guider.askOption("How does " + personName + " see " + name + " romantically?", bond2Options, "no romantic interest");
+                    bond2ValueForCharacter = bond2Values[bond2Options.indexOf(bond2TypeForCharacter.value)];
+                    bond2ValueForPerson = bond2Values[bond2Options.indexOf(bond2TypeForPerson.value)];
+                } else {
+                    const bond2Value = bond2Values[bond2Options.indexOf(bond2Type.value)];
+                    bond2ValueForCharacter = bond2Value;
+                    bond2ValueForPerson = bond2Value;
+                }
+
+                const bondTimeInYears = await guider.askNumber("How many years has " + name + " known " + personName + "?", 1);
+
+                onWorldInitializedAndFirstSceneStartedSection.body.push(`DE.utils.newBond(DE, ${JSON.stringify(name)}, ${JSON.stringify(personName)}, {stranger: ${JSON.stringify(bondValueForCharacter === null)}, bond: ${bondValueForCharacter || 0}, bond2: ${bond2ValueForCharacter}, knowsName: true, createdAt: DE.utils.timeShifter(DE.currentTime, {years: -${bondTimeInYears}})}, {forceOverride: true});`);
+                onWorldInitializedAndFirstSceneStartedSection.body.push(`DE.utils.newBond(DE, ${JSON.stringify(personName)}, ${JSON.stringify(name)}, {stranger: ${JSON.stringify(bondValueForPerson === null)}, bond: ${bondValueForPerson || 0}, bond2: ${bond2ValueForPerson}, knowsName: true, createdAt: DE.utils.timeShifter(DE.currentTime, {years: -${bondTimeInYears}})});`);
+            }
+        } while (nextRelationshipToAdd);
+
+        unshiftSpecialComment(onWorldInitializedAndFirstSceneStartedSection.body, "base-relationships");
+
+        await autosave?.save();
     }
 
     if (!hasSpecialComment(newCharacterSection.body, "base-likes")) {

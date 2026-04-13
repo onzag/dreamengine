@@ -46,6 +46,12 @@ await engine.initialize({
     tier: "human",
     tierValue: 50,
     powerGrowthRate: 0.25,
+    attractiveness: 0.5,
+    charisma: 0.5,
+    groupBelonging: [],
+    race: null,
+    species: "human",
+    speciesType: "humanoid",
 });
 
 engine.getDEObject().stateFor["Dema"].location = "Lunar Station";

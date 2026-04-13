@@ -185,7 +185,7 @@ export const deEngineUtils = {
         }
         return defineStateInCharacter(DE, characterRef, stateName, stateDefinition);
     },
-    newBond(DE, char1, towards, bondDefinition) {
+    newBond(DE, char1, towards, bondDefinition, options = { forceOverride: false }) {
         const char1Ref = typeof char1 === "string" ? DE.characters[char1] : char1;
         const towardsRef = typeof towards === "string" ? DE.characters[towards] : towards;
 
@@ -208,9 +208,11 @@ export const deEngineUtils = {
             return null;
         }
 
-        const existingBond = DE.bonds[char1Ref.name].active.find(b => b.towards === towardsRef.name);
-        if (existingBond) {
-            return existingBond;
+        if (!options.forceOverride) {
+            const existingBond = DE.bonds[char1Ref.name].active.find(b => b.towards === towardsRef.name);
+            if (existingBond) {
+                return existingBond;
+            }
         }
         const newBond = {
             towards: towardsRef.name,
@@ -220,7 +222,7 @@ export const deEngineUtils = {
         return newBond;
     },
     newMutualBond(DE, char1, char2, bondDefinition) {
-        const bond1 = deEngineUtils.newBond(DE, char1, char2, bondDefinition);
+        const bond1 = deEngineUtils.newBond(DE, char1, char2, bondDefinition, { forceOverride: true });
         const bond2 = deEngineUtils.newBond(DE, char2, char1, bondDefinition);
         return [bond1, bond2];
     },
@@ -236,11 +238,11 @@ export const deEngineUtils = {
             console.warn(`Character with name ${char1} not found when trying to create family relation towards ${towards}`);
         } else {
             if (typeof towards === "string") {
-                character1.socialSimulation.familyTies[towards] = { relation };
-                familyTie1 = character1.socialSimulation.familyTies[towards];
+                character1.familyTies[towards] = { relation };
+                familyTie1 = character1.familyTies[towards];
             } else if (towardsRef) {
-                character1.socialSimulation.familyTies[towardsRef.name] = { relation };
-                familyTie1 = character1.socialSimulation.familyTies[towardsRef.name];
+                character1.familyTies[towardsRef.name] = { relation };
+                familyTie1 = character1.familyTies[towardsRef.name];
             } else {
                 console.warn(`Received null as towards reference when trying to create family relation from ${char1}`);
             }
@@ -291,8 +293,8 @@ export const deEngineUtils = {
                     inverseRelation = "other";
             }
 
-            towardsRef.socialSimulation.familyTies[character1.name] = { relation: inverseRelation };
-            familyTie2 = towardsRef.socialSimulation.familyTies[character1.name];
+            towardsRef.familyTies[character1.name] = { relation: inverseRelation };
+            familyTie2 = towardsRef.familyTies[character1.name];
         } else {
             console.warn(`Received null as character reference when trying to create family relation towards ${towards}`);
         }

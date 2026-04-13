@@ -349,7 +349,8 @@ async function secondChecks() {
         'user.carryingCapacityKg', 'user.carryingCapacityLiters',
         'user.maintenanceCaloriesPerDay', 'user.maintenanceHydrationLitersPerDay',
         'user.rangeMeters', 'user.locomotionSpeedMetersPerSecond',
-        'user.stealth', 'user.perception', 'user.tierValue', 'user.powerGrowthRate'
+        'user.stealth', 'user.perception', 'user.tierValue', 'user.powerGrowthRate',
+        "user.attractiveness", "user.charisma",
     ];
     const missingProperties = [];
     for (const prop of requiredProperties) {

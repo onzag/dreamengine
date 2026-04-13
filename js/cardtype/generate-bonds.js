@@ -109,12 +109,12 @@ export async function generateBonds(engine, card, guider, autosave) {
     const fineTunesDescriptions = {
         "any_character": `Any character regardless of species, gender, or attraction group (Non-attractive for ${name})`,
 
-        "humanoid_character_male_na": `A MALE human or anthrophomorphic character (Non-attractive for ${name})`,
-        "humanoid_character_male_a": `A MALE human or anthrophomorphic character (Attractive for ${name})`,
-        "humanoid_character_female_na": `A FEMALE human or anthrophomorphic character (Non-attractive for ${name})`,
-        "humanoid_character_female_a": `A FEMALE human or anthrophomorphic character (Attractive for ${name})`,
-        "humanoid_character_ambiguous_na": "A human or anthrophomorphic character with AMBIGUOUS gender (Non-attractive for " + name + ")",
-        "humanoid_character_ambiguous_a": "A human or anthrophomorphic character with AMBIGUOUS gender (Attractive for " + name + ")",
+        "humanoid_character_male_na": `A MALE human or humanoid character (Non-attractive for ${name})`,
+        "humanoid_character_male_a": `A MALE human or humanoid character (Attractive for ${name})`,
+        "humanoid_character_female_na": `A FEMALE human or humanoid character (Non-attractive for ${name})`,
+        "humanoid_character_female_a": `A FEMALE human or humanoid character (Attractive for ${name})`,
+        "humanoid_character_ambiguous_na": "A human or humanoid character with AMBIGUOUS gender (Non-attractive for " + name + ")",
+        "humanoid_character_ambiguous_a": "A human or humanoid character with AMBIGUOUS gender (Attractive for " + name + ")",
         "animal_character_male_na": card.config.characterSpeciesType === "animal" ? "Another animal, a MALE (Non-attractive for " + name + ")" : "A MALE animal, a pet or wild creature without verbal capabilities (Non-attractive for " + name + ")",
         "animal_character_male_a": card.config.characterSpeciesType === "animal" ? "Another animal, a MALE (Attractive for " + name + ")" : "A MALE animal, a pet or wild creature without verbal capabilities (Attractive for " + name + ")",
         "animal_character_female_na": card.config.characterSpeciesType === "animal" ? "Another animal, a FEMALE (Non-attractive for " + name + ")" : "A FEMALE animal, a pet or wild creature without verbal capabilities (Non-attractive for " + name + ")",
@@ -129,6 +129,29 @@ export async function generateBonds(engine, card, guider, autosave) {
         "feral_character_ambiguous_a": card.config.characterSpeciesType === "feral" ? "Another creature with evolved cognitive abilities but in a bestial or feral form, with AMBIGUOUS gender (Attractive for " + name + ")" : "A creature with evolved cognitive abilities but in a bestial or feral form with AMBIGUOUS gender (Attractive for " + name + ")",
     };
 
+    const fineTunesDescriptionsWithAlternativesDueToAlreadyInRomanticBond = {
+        "any_character": `Any character regardless of species or gender`,
+
+        "humanoid_character_male_na": `A MALE human or humanoid character (Non-attractive but paradoxically somehow still romantically engaging for ${name})`,
+        "humanoid_character_male_a": `A MALE human or humanoid character (Attractive for ${name})`,
+        "humanoid_character_female_na": `A FEMALE human or humanoid character (Non-attractive but paradoxically somehow still romantically engaging for ${name})`,
+        "humanoid_character_female_a": `A FEMALE human or humanoid character (Attractive for ${name})`,
+        "humanoid_character_ambiguous_na": "A human or humanoid character with AMBIGUOUS gender (Non-attractive but paradoxically somehow still romantically engaging for " + name + ")",
+        "humanoid_character_ambiguous_a": "A human or humanoid character with AMBIGUOUS gender (Attractive for " + name + ")",
+        "animal_character_male_na": card.config.characterSpeciesType === "animal" ? "Another animal, a MALE (Non-attractive but paradoxically somehow still interesting for " + name + ")" : "A MALE animal, a pet or wild creature without verbal capabilities (Non-attractive but paradoxically somehow still interesting for " + name + ")",
+        "animal_character_male_a": card.config.characterSpeciesType === "animal" ? "Another animal, a MALE (Attractive for " + name + ")" : "A MALE animal, a pet or wild creature without verbal capabilities (Attractive for " + name + ")",
+        "animal_character_female_na": card.config.characterSpeciesType === "animal" ? "Another animal, a FEMALE (Non-attractive but paradoxically somehow still interesting for " + name + ")" : "A FEMALE animal, a pet or wild creature without verbal capabilities (Non-attractive but paradoxically somehow still interesting for " + name + ")",
+        "animal_character_female_a": card.config.characterSpeciesType === "animal" ? "Another animal, a FEMALE (Attractive for " + name + ")" : "A FEMALE animal, a pet or wild creature without verbal capabilities (Attractive for " + name + ")",
+        "animal_character_ambiguous_na": card.config.characterSpeciesType === "animal" ? "Another animal with AMBIGUOUS gender (Non-attractive but paradoxically somehow still romantically engaging for " + name + ")" : "An animal with AMBIGUOUS gender, a pet or wild creature without verbal capabilities (Non-attractive but paradoxically somehow still romantically engaging for " + name + ")",
+        "animal_character_ambiguous_a": card.config.characterSpeciesType === "animal" ? "Another animal with AMBIGUOUS gender (Attractive for " + name + ")" : "An animal with AMBIGUOUS gender, a pet or wild creature without verbal capabilities (Attractive for " + name + ")",
+        "feral_character_male_na": card.config.characterSpeciesType === "feral" ? "Another creature with evolved cognitive abilities but in a bestial or feral form, a MALE one (Non-attractive but paradoxically somehow still romantically engaging for " + name + ")" : "A MALE creature with evolved cognitive abilities but in a bestial or feral form (Non-attractive but paradoxically somehow still romantically engaging for " + name + ")",
+        "feral_character_male_a": card.config.characterSpeciesType === "feral" ? "Another creature with evolved cognitive abilities but in a bestial or feral form, a MALE one (Attractive for " + name + ")" : "A MALE creature with evolved cognitive abilities but in a bestial or feral form (Attractive for " + name + ")",
+        "feral_character_female_na": card.config.characterSpeciesType === "feral" ? "Another creature with evolved cognitive abilities but in a bestial or feral form, a FEMALE one (Non-attractive but paradoxically somehow still romantically engaging for " + name + ")" : "A FEMALE creature with evolved cognitive abilities but in a bestial or feral form (Non-attractive but paradoxically somehow still romantically engaging for " + name + ")",
+        "feral_character_female_a": card.config.characterSpeciesType === "feral" ? "Another creature with evolved cognitive abilities but in a bestial or feral form, a FEMALE one (Attractive for " + name + ")" : "A FEMALE creature with evolved cognitive abilities but in a bestial or feral form (Attractive for " + name + ")",
+        "feral_character_ambiguous_na": card.config.characterSpeciesType === "feral" ? "Another creature with evolved cognitive abilities but in a bestial or feral form, with AMBIGUOUS gender (Non-attractive but paradoxically somehow still romantically engaging for " + name + ")" : "A creature with evolved cognitive abilities but in a bestial or feral form with AMBIGUOUS gender (Non-attractive but paradoxically somehow still romantically engaging for " + name + ")",
+        "feral_character_ambiguous_a": card.config.characterSpeciesType === "feral" ? "Another creature with evolved cognitive abilities but in a bestial or feral form, with AMBIGUOUS gender (Attractive for " + name + ")" : "A creature with evolved cognitive abilities but in a bestial or feral form with AMBIGUOUS gender (Attractive for " + name + ")",
+    }
+
     const fineTuneDescriptionsFamily = {
         "any_family_character": `Any family member regardless of gender or attraction group (Non-attractive for ${name})`,
 
@@ -140,35 +163,46 @@ export async function generateBonds(engine, card, guider, autosave) {
         "family_character_ambiguous_a": `A family member with AMBIGUOUS gender (Attractive for ${name})`,
     }
 
+    const fineTuneDescriptionsFamilyWithAlternativesDueToAlreadyInRomanticBond = {
+        "any_family_character": `Any family member regardless of gender or attraction group (Non-attractive for ${name})`,
+
+        "family_character_male_na": `A MALE family member (Non-attractive but paradoxically somehow still romantically engaging for ${name})`,
+        "family_character_male_a": `A MALE family member (Attractive for ${name})`,
+        "family_character_female_na": `A FEMALE family member (Non-attractive but paradoxically somehow still romantically engaging for ${name})`,
+        "family_character_female_a": `A FEMALE family member (Attractive for ${name})`,
+        "family_character_ambiguous_na": `A family member with AMBIGUOUS gender (Non-attractive but paradoxically somehow still romantically engaging for ${name})`,
+        "family_character_ambiguous_a": `A family member with AMBIGUOUS gender (Attractive for ${name})`,
+    }
+
     const fineTuneConditions = {
         "any_character": "true",
         "any_family_character": "true",
 
-        "humanoid_character_male_na": "info.other.speciesType === \"humanoid\" && info.other.gender === \"male\" && !DE.utils.isWithinAttractionsGroup(info.char, info.other)",
-        "humanoid_character_male_a": "info.other.speciesType === \"humanoid\" && info.other.gender === \"male\" && DE.utils.isWithinAttractionsGroup(info.char, info.other)",
-        "humanoid_character_female_na": "info.other.speciesType === \"humanoid\" && info.other.gender === \"female\" && !DE.utils.isWithinAttractionsGroup(info.char, info.other)",
-        "humanoid_character_female_a": "info.other.speciesType === \"humanoid\" && info.other.gender === \"female\" && DE.utils.isWithinAttractionsGroup(info.char, info.other)",
-        "humanoid_character_ambiguous_na": "info.other.speciesType === \"humanoid\" && info.other.gender === \"ambiguous\" && !DE.utils.isWithinAttractionsGroup(info.char, info.other)",
-        "humanoid_character_ambiguous_a": "info.other.speciesType === \"humanoid\" && info.other.gender === \"ambiguous\" && DE.utils.isWithinAttractionsGroup(info.char, info.other)",
-        "animal_character_male_na": "info.other.speciesType === \"animal\" && info.other.gender === \"male\" && !DE.utils.isWithinAttractionsGroup(info.char, info.other)",
-        "animal_character_male_a": "info.other.speciesType === \"animal\" && info.other.gender === \"male\" && DE.utils.isWithinAttractionsGroup(info.char, info.other)",
-        "animal_character_female_na": "info.other.speciesType === \"animal\" && info.other.gender === \"female\" && !DE.utils.isWithinAttractionsGroup(info.char, info.other)",
-        "animal_character_female_a": "info.other.speciesType === \"animal\" && info.other.gender === \"female\" && DE.utils.isWithinAttractionsGroup(info.char, info.other)",
-        "animal_character_ambiguous_na": "info.other.speciesType === \"animal\" && info.other.gender === \"ambiguous\" && !DE.utils.isWithinAttractionsGroup(info.char, info.other)",
-        "animal_character_ambiguous_a": "info.other.speciesType === \"animal\" && info.other.gender === \"ambiguous\" && DE.utils.isWithinAttractionsGroup(info.char, info.other)",
-        "feral_character_male_na": "info.other.speciesType === \"feral\" && info.other.gender === \"male\" && !DE.utils.isWithinAttractionsGroup(info.char, info.other)",
-        "feral_character_male_a": "info.other.speciesType === \"feral\" && info.other.gender === \"male\" && DE.utils.isWithinAttractionsGroup(info.char, info.other)",
-        "feral_character_female_na": "info.other.speciesType === \"feral\" && info.other.gender === \"female\" && !DE.utils.isWithinAttractionsGroup(info.char, info.other)",
-        "feral_character_female_a": "info.other.speciesType === \"feral\" && info.other.gender === \"female\" && DE.utils.isWithinAttractionsGroup(info.char, info.other)",
-        "feral_character_ambiguous_na": "info.other.speciesType === \"feral\" && info.other.gender === \"ambiguous\" && !DE.utils.isWithinAttractionsGroup(info.char, info.other)",
-        "feral_character_ambiguous_a": "info.other.speciesType === \"feral\" && info.other.gender === \"ambiguous\" && DE.utils.isWithinAttractionsGroup(info.char, info.other)",
+        "humanoid_character_male_na": "info.other.speciesType === \"humanoid\" && info.other.gender === \"male\"",
+        "humanoid_character_male_a": "info.other.speciesType === \"humanoid\" && info.other.gender === \"male\" && DE.utils.isAttractiveFor(info.char, info.other)",
+        "humanoid_character_female_na": "info.other.speciesType === \"humanoid\" && info.other.gender === \"female\"",
+        "humanoid_character_female_a": "info.other.speciesType === \"humanoid\" && info.other.gender === \"female\" && DE.utils.isAttractiveFor(info.char, info.other)",
+        "humanoid_character_ambiguous_na": "info.other.speciesType === \"humanoid\" && info.other.gender === \"ambiguous\"",
+        "humanoid_character_ambiguous_a": "info.other.speciesType === \"humanoid\" && info.other.gender === \"ambiguous\" && DE.utils.isAttractiveFor(info.char, info.other)",
+        "animal_character_male_na": "info.other.speciesType === \"animal\" && info.other.gender === \"male\"",
+        "animal_character_male_a": "info.other.speciesType === \"animal\" && info.other.gender === \"male\" && DE.utils.isAttractiveFor(info.char, info.other)",
+        "animal_character_female_na": "info.other.speciesType === \"animal\" && info.other.gender === \"female\"",
+        "animal_character_female_a": "info.other.speciesType === \"animal\" && info.other.gender === \"female\" && DE.utils.isAttractiveFor(info.char, info.other)",
+        "animal_character_ambiguous_na": "info.other.speciesType === \"animal\" && info.other.gender === \"ambiguous\"",
+        "animal_character_ambiguous_a": "info.other.speciesType === \"animal\" && info.other.gender === \"ambiguous\" && DE.utils.isAttractiveFor(info.char, info.other)",
+        "feral_character_male_na": "info.other.speciesType === \"feral\" && info.other.gender === \"male\"",
+        "feral_character_male_a": "info.other.speciesType === \"feral\" && info.other.gender === \"male\" && DE.utils.isAttractiveFor(info.char, info.other)",
+        "feral_character_female_na": "info.other.speciesType === \"feral\" && info.other.gender === \"female\"",
+        "feral_character_female_a": "info.other.speciesType === \"feral\" && info.other.gender === \"female\" && DE.utils.isAttractiveFor(info.char, info.other)",
+        "feral_character_ambiguous_na": "info.other.speciesType === \"feral\" && info.other.gender === \"ambiguous\"",
+        "feral_character_ambiguous_a": "info.other.speciesType === \"feral\" && info.other.gender === \"ambiguous\" && DE.utils.isAttractiveFor(info.char, info.other)",
 
-        "family_character_male_na": "info.other.gender === \"male\" && !DE.utils.isWithinAttractionsGroup(info.char, info.other)",
-        "family_character_male_a": "info.other.gender === \"male\" && DE.utils.isWithinAttractionsGroup(info.char, info.other)",
-        "family_character_female_na": "info.other.gender === \"female\" && !DE.utils.isWithinAttractionsGroup(info.char, info.other)",
-        "family_character_female_a": "info.other.gender === \"female\" && DE.utils.isWithinAttractionsGroup(info.char, info.other)",
-        "family_character_ambiguous_na": "info.other.gender === \"ambiguous\" && !DE.utils.isWithinAttractionsGroup(info.char, info.other)",
-        "family_character_ambiguous_a": "info.other.gender === \"ambiguous\" && DE.utils.isWithinAttractionsGroup(info.char, info.other)",
+        "family_character_male_na": "info.other.gender === \"male\"",
+        "family_character_male_a": "info.other.gender === \"male\" && DE.utils.isAttractiveFor(info.char, info.other)",
+        "family_character_female_na": "info.other.gender === \"female\"",
+        "family_character_female_a": "info.other.gender === \"female\" && DE.utils.isAttractiveFor(info.char, info.other)",
+        "family_character_ambiguous_na": "info.other.gender === \"ambiguous\"",
+        "family_character_ambiguous_a": "info.other.gender === \"ambiguous\" && DE.utils.isAttractiveFor(info.char, info.other)",
     }
 
     const fineTunesRecord = {
@@ -218,8 +252,24 @@ export async function generateBonds(engine, card, guider, autosave) {
      */
     let defaultFamilyFineTunes = [];
 
+    /**
+     * 
+     * @param {string} a 
+     * @param {string} b 
+     * @returns {number}
+     */
+    const sortAEndingFirst = (a, b) => {
+        const aIsA = a.endsWith("_a");
+        const bIsA = b.endsWith("_a");
+        if (aIsA && !bIsA) {
+            return -1;
+        } if (!aIsA && bIsA) {
+            return 1;
+        } return 0;
+    }
+
     if (isAsexualValue) {
-        defaultFineTunes = [
+        defaultFineTunes = ([
             "humanoid_character_male_na",
             "humanoid_character_female_na",
             "humanoid_character_ambiguous_na",
@@ -229,16 +279,14 @@ export async function generateBonds(engine, card, guider, autosave) {
             "feral_character_male_na",
             "feral_character_female_na",
             "feral_character_ambiguous_na",
-
-            "any_character",
-        ]
-        defaultFamilyFineTunes = [
+        ]).sort(sortAEndingFirst);
+        defaultFineTunes.push("any_character");
+        defaultFamilyFineTunes = ([
             "family_character_male_na",
             "family_character_female_na",
             "family_character_ambiguous_na",
-
-            "any_family_character",
-        ]
+        ]).sort(sortAEndingFirst);
+        defaultFamilyFineTunes.push("any_family_character");
     } else {
         defaultFineTunes.push("humanoid_character_male_na");
         if (card.config.attractions.includes("male") && card.config.characterSpeciesType === "humanoid") {
@@ -277,6 +325,8 @@ export async function generateBonds(engine, card, guider, autosave) {
             defaultFineTunes.push("feral_character_ambiguous_a");
         }
 
+        defaultFineTunes = defaultFineTunes.sort(sortAEndingFirst);
+
         defaultFineTunes.push("any_character");
 
         if (isIncestuousValue) {
@@ -292,14 +342,18 @@ export async function generateBonds(engine, card, guider, autosave) {
             if (card.config.attractions.includes("ambiguous")) {
                 defaultFamilyFineTunes.push("family_character_ambiguous_a");
             }
+
+            defaultFamilyFineTunes = defaultFamilyFineTunes.sort(sortAEndingFirst);
+
+            defaultFamilyFineTunes.push("any_family_character");
         } else {
-            defaultFamilyFineTunes = [
+            defaultFamilyFineTunes = ([
                 "family_character_male_na",
                 "family_character_female_na",
                 "family_character_ambiguous_na",
+            ]).sort(sortAEndingFirst);
 
-                "any_family_character",
-            ];
+            defaultFamilyFineTunes.push("any_family_character");
         }
     }
 
@@ -328,6 +382,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                 }
             });
 
+            selectedFineTunes = selectedFineTunes.sort(sortAEndingFirst); 
             selectedFineTunes.push("any_character");
 
             card.config.bondsFineTunes = selectedFineTunes;
@@ -362,6 +417,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                 }
             });
 
+            selectedFamilyFineTunes = selectedFamilyFineTunes.sort(sortAEndingFirst);
             selectedFamilyFineTunes.push("any_family_character");
 
             card.config.bondsFamilyFineTunes = selectedFamilyFineTunes;
@@ -995,9 +1051,15 @@ export async function generateBonds(engine, card, guider, autosave) {
                 const fineTuneListToUse = familyKey === "family" ? selectedFamilyFineTunes : selectedFineTunes
 
                 for (const fineTune of fineTuneListToUse) {
-                    const fineTuneValue =
+                    let fineTuneValue =
                         // @ts-ignore
                         (familyKey === "family" ? fineTuneDescriptionsFamily : fineTunesDescriptions)[fineTune];
+
+                    if (!romanticInterestKey.startsWith("noRomanticInterest")) {
+                        fineTuneValue =
+                            // @ts-ignore
+                            (familyKey === "family" ? fineTuneDescriptionsFamilyWithAlternativesDueToAlreadyInRomanticBond : fineTunesDescriptionsWithAlternativesDueToAlreadyInRomanticBond)[fineTune];
+                    }
 
                     const actualFamilyValue = familyValue.replace("{}", fineTuneValue);
 

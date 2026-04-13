@@ -160,17 +160,17 @@ function createCharacterFromUser(user) {
         tier: user.tier,
         tierValue: user.tierValue,
         powerGrowthRate: user.powerGrowthRate,
+        speciesType: user.speciesType,
+        attractions: [],
+        dislikes: [],
+        likes: [],
+        species: user.species,
+        attractiveness: user.attractiveness,
+        dislikesSpecies: [],
+        familyTies: {},
+        charisma: user.charisma,
         socialSimulation: {
-            speciesType: "humanoid",
-            attractions: [],
-            dislikes: [],
-            likes: [],
-            species: "unknown",
-            attractiveness: 1,
-            dislikesSpecies: [],
-            familyTies: {},
             gossipTendency: 1,
-            charisma: 1,
         },
         triggers: [],
     }
@@ -770,7 +770,9 @@ export class DEngine {
             this.deObject.stateFor[participantName].type = "INTERACTING";
         }
 
-        const narration = typeof sceneObject.narration === "string" ? sceneObject.narration : await sceneObject.narration(this.deObject, {});
+        const narration = typeof sceneObject.narration === "string" ? sceneObject.narration : await sceneObject.narration(this.deObject, {
+            char: this.userCharacter,
+        });
 
         this.deObject.conversations[sceneId] = {
             id: sceneId,

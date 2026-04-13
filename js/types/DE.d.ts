@@ -84,6 +84,16 @@ declare interface DEMinimalCharacterReference {
     perception: number;
 
     /**
+     * A number from 0 to 1 that represents how attractive the character is, higher means more attractive and more likely to be approached by other characters and have romantic interactions, this is useful for characters that are meant to be charming or have a strong romantic appeal, it can also affect how other characters perceive them and interact with them in social situations
+     */
+    attractiveness: number;
+    
+    /**
+     * A number from 0 to 1 that represents how charismatic the character is, higher means more charismatic and more likely to influence other characters and have strong social interactions, this is useful for characters that are meant to be leaders or have a strong social presence, it can also affect how other characters perceive them and interact with them in social situations
+     */
+    charisma: number;
+
+    /**
      * A power scale string that represents the overall power level of the character
      */
     tier: "insect" | "critter" | "human" | "apex" | "street_level" | "block_level" | "city_level" | "country_level" | "continental" | "planetary" | "stellar" | "galactic" | "universal" | "multiversal" | "limitless";
@@ -1176,14 +1186,6 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
      * list of ids for dislikes, must be available in interests object
      */
     dislikes: string[];
-    /**
-     * A number from 0 to 1 that represents how attractive the character is, higher means more attractive and more likely to be approached by other characters and have romantic interactions, this is useful for characters that are meant to be charming or have a strong romantic appeal, it can also affect how other characters perceive them and interact with them in social situations
-     */
-    attractiveness: number;
-    /**
-     * A number from 0 to 1 that represents how charismatic the character is, higher means more charismatic and more likely to influence other characters and have strong social interactions, this is useful for characters that are meant to be leaders or have a strong social presence, it can also affect how other characters perceive them and interact with them in social situations
-     */
-    charisma: number;
     /**
      * Family ties with other characters
      * keeps those characters together and prevents them from building romantic or sexual bonds
@@ -2821,7 +2823,7 @@ declare interface DEUtils {
     newConnection(DE: DEObject, definition: DEConnection): DEConnection;
     createStateInAllCharacters(DE: DEObject, stateName: string, stateDefinition: DECharacterStateDefinition): DECharacterStateDefinition;
     defineStateInCharacter(DE: DEObject, character: string | DECompleteCharacterReference | null, stateName: string, stateDefinition: DECharacterStateDefinition): DECharacterStateDefinition | null;
-    newBond(DE: DEObject, char1: string | DECompleteCharacterReference | null, towards: string | DECompleteCharacterReference | null, bondDefinition: Omit<DESingleBondDescription, "towards">): DESingleBondDescription | null;
+    newBond(DE: DEObject, char1: string | DECompleteCharacterReference | null, towards: string | DECompleteCharacterReference | null, bondDefinition: Omit<DESingleBondDescription, "towards">, options?: {forceOverride: boolean}): DESingleBondDescription | null;
     newMutualBond(DE: DEObject, char1: string | DECompleteCharacterReference | null, char2: string | DECompleteCharacterReference | null, bondDefinition: Omit<DESingleBondDescription, "towards">): [DESingleBondDescription | null, DESingleBondDescription | null];
     newFamilyRelation(DE: DEObject, char1: string | DECompleteCharacterReference | null, towards: string | DECompleteCharacterReference | null, relation: DEFamilyRelation): [DEFamilyTie | null, DEFamilyTie | null];
     newGlobalInterest(DE: DEObject, interest: DECharacterInterest);

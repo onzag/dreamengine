@@ -95,6 +95,11 @@ engine.exports = {
             locomotionSpeedMetersPerSecond: 2,
             stealth: 0.2,
             perception: 1,
+            attractiveness: 0.5,
+            familyTies: {},
+            dislikes: [],
+            likes: [],
+            charisma: 0.3,
             heroism: 1,
             state: {
                 IS_ROBOT: true,
@@ -105,12 +110,7 @@ engine.exports = {
             race: null,
             groupBelonging: [],
             socialSimulation: {
-                attractiveness: 0.5,
-                charisma: 0.3,
                 gossipTendency: 0.5,
-                familyTies: {},
-                dislikes: [],
-                likes: [],
             },
         }, {
             type: "2d_ace_no_family",
