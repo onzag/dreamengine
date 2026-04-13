@@ -87,7 +87,7 @@ declare interface DEMinimalCharacterReference {
      * A number from 0 to 1 that represents how attractive the character is, higher means more attractive and more likely to be approached by other characters and have romantic interactions, this is useful for characters that are meant to be charming or have a strong romantic appeal, it can also affect how other characters perceive them and interact with them in social situations
      */
     attractiveness: number;
-    
+
     /**
      * A number from 0 to 1 that represents how charismatic the character is, higher means more charismatic and more likely to influence other characters and have strong social interactions, this is useful for characters that are meant to be leaders or have a strong social presence, it can also affect how other characters perceive them and interact with them in social situations
      */
@@ -1382,6 +1382,15 @@ declare interface DECharacterInterest {
 
 declare interface DEAttraction {
     towards: "male" | "female" | "ambiguous" | "any";
+    /**
+     * How picky the character is towards this attraction, from 0 to 1, higher means more picky, for example, a character with a pickyness of 1 towards males
+     * basically needs the hottest and most attractive male only
+     */
+    pickiness: number;
+    /**
+     * Specifies the sex that this attraction applies to, while towards is only the gender presentation
+     */
+    sex?: "male" | "female" | "intersex" | "any";
     /**
      * The race that this attraction applies to
      */

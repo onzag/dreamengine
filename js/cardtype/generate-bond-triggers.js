@@ -1,6 +1,6 @@
 import { DEngine } from "../engine/index.js";
 import { createGrammarListFromList, parseListFromGrammarResponse } from "../engine/util/grammar.js";
-import { createCardStructureFrom, getJsCard, hasSpecialComent, insertSpecialComment } from "./base.js";
+import { createCardStructureFrom, getJsCard, hasSpecialComment, insertSpecialComment } from "./base.js";
 import { replaceAllCharNameWithPlaceholder } from "./generate-base.js";
 import { BASIC_EMOTIONAL_STATES } from "./generate-basic-states.js";
 
@@ -37,7 +37,7 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
         `# Character Card:\n\n${card.card}`
     );
 
-    if (!hasSpecialComent(card.imports, "basic-bond-questions-import")) {
+    if (!hasSpecialComment(card.imports, "basic-bond-questions-import")) {
         insertSpecialComment(card.imports, "basic-bond-questions-import");
         card.imports.push(`const basicBondQuestions = await importScript("bond-systems", "basic-bond-questions");`);
         card.body.push(`basicBondQuestions.addBasicBondQuestions(DE, DE.characters[${JSON.stringify(card.config.name)}]);`);
@@ -87,7 +87,7 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
      * @param {string} [altConsidering]
      */
     const askYesNo = async (id, amount, reasoning, trail, consideringInQuestion, consideringInStatement, condition, yesCode, altCondition, altYesCode, altConsidering) => {
-        if (!hasSpecialComent(card.body, "bond-trigger-" + id)) {
+        if (!hasSpecialComment(card.body, "bond-trigger-" + id)) {
             return [card.config.bondTriggers[id].causes, card.config.bondTriggers[id].questions];
         }
 
@@ -497,7 +497,7 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
     // TODO this handles well humans and anthros but for other species
     // maybe we should change how this operates, like what kinks would a regular cat have when this asks for that?...
 
-    if (!hasSpecialComent(card.head, "basic-conditions-for-attraction")) {
+    if (!hasSpecialComment(card.head, "basic-conditions-for-attraction")) {
         insertSpecialComment(card.head, "basic-conditions-for-attraction");
         card.head.push(`const basicConditionsForAttractionFn = (DE, char, other) => {`);
         card.head.push(`// Change these to affect what triggers run for bond updates related to attraction`);
@@ -743,7 +743,7 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
             "they are not that close for this to be acceptable and " + name + " would find it unacceptable/inappropiate",
         );
 
-        if (!hasSpecialComent(card.body, "other-sexual-acts-to-reject")) {
+        if (!hasSpecialComment(card.body, "other-sexual-acts-to-reject")) {
             insertSpecialComment(card.body, "other-sexual-acts-to-reject");
 
             const otherQuestionsJustToReject = [

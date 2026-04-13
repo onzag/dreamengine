@@ -1935,6 +1935,64 @@ export async function generateBase(engine, card, guider, autosave) {
         }
 
         /**
+         * 
+         * @param {string} which 
+         */
+        const determineOnePickiness = async (which) => {
+            const options = [
+                "Very open",
+                "Somewhat open",
+                "Neutral",
+                "Somewhat picky",
+                "Very picky",
+            ];
+
+            const optionsExplained = [
+                "Very open (very open to being attracted to a wide range of people)",
+                "Somewhat open (somewhat open to being attracted to a wide range of people)",
+                "Neutral (not particularly picky or open, has a moderate range of attraction)",
+                "Somewhat picky (only attracted to someone moderately attractive)",
+                "Very picky (only attracted to the most handsome and attractive people)",
+            ]
+
+            const pickinessValues = [
+                0.1,
+                0.3,
+                0.5,
+                0.7,
+                0.9,
+            ]
+
+            const howPickyValue = await generator.next({
+                maxCharacters: 5,
+                maxSafetyCharacters: 0,
+                maxParagraphs: 1,
+                nextQuestion: "How picky is " + name + " towards having an attraction towards " + which + "?",
+                stopAfter: [],
+                stopAt: [],
+                instructions: "Answer with one of the following options: " + optionsExplained.map((option, index) => `\n${index + 1}. ${option}`).join(""),
+                grammar: `root ::= "Very picky" | "Somewhat picky" | "Neutral" | "Somewhat open" | "Very open"`,
+            });
+
+            if (howPickyValue.done) {
+                throw new Error("Generator finished without producing output");
+            }
+
+            let pickinessValue = pickinessValues[options.indexOf(howPickyValue.value.trim())];
+
+            if (guider) {
+                const howPickyValueGuided = await guider.askOption("How picky is " + name + " towards having an attraction towards " + which + "?\n\n" + optionsExplained.map((option, index) => `\n${index + 1}. ${option}`).join(""), options, howPickyValue.value.trim());
+                if (howPickyValueGuided) {
+                    howPickyValue.value = howPickyValueGuided.value.trim();
+                }
+
+                pickinessValue = pickinessValues[options.indexOf(howPickyValueGuided.value)];
+            }
+
+            return pickinessValue;
+        }
+
+        /**
          * @type {Array<string>}
          */
         let attractions = [];
@@ -1973,12 +2031,21 @@ export async function generateBase(engine, card, guider, autosave) {
 
             if (findsAmbiguousGendersSexuallyAttractiveValue) {
                 insertSpecialComment(newCharacterSection.body, "base-attractions");
+
+                const pickinessMale = await determineOnePickiness("males");
+                const pickinessFemale = await determineOnePickiness("females");
+                const pickinessAmbiguous = await determineOnePickiness("ambiguous genders");
+
                 newCharacterSection.body.push(`attractions: [`);
                 newCharacterSection.body.push(`// You can make these far more specific if needed, but these are for the social simulation and wander heuristics`);
                 if (card.config.speciesType === "humanoid") {
-                    newCharacterSection.body.push(`{towards: "any", ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], speciesType: "${card.config.characterSpeciesType}"},`);
+                    newCharacterSection.body.push(`{towards: "male", ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], speciesType: "${card.config.characterSpeciesType}", "pickiness": ${pickinessMale}},`);
+                    newCharacterSection.body.push(`{towards: "female", ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], speciesType: "${card.config.characterSpeciesType}", "pickiness": ${pickinessFemale}},`);
+                    newCharacterSection.body.push(`{towards: "ambiguous", ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], speciesType: "${card.config.characterSpeciesType}", "pickiness": ${pickinessAmbiguous}},`);
                 } else {
-                    newCharacterSection.body.push(`{towards: "any", ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], species: "${card.config.characterSpecies}"},`);
+                    newCharacterSection.body.push(`{towards: "male", ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], species: "${card.config.characterSpecies}", "pickiness": ${pickinessMale}},`);
+                    newCharacterSection.body.push(`{towards: "female", ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], speciesType: "${card.config.characterSpeciesType}", "pickiness": ${pickinessFemale}},`);
+                    newCharacterSection.body.push(`{towards: "ambiguous", ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], speciesType: "${card.config.characterSpeciesType}", "pickiness": ${pickinessAmbiguous}},`);
                 }
                 attractions.push("ambiguous");
                 attractions.push("male");
@@ -2000,12 +2067,18 @@ export async function generateBase(engine, card, guider, autosave) {
                 }
 
                 let findsMalesSexuallyAttractiveValue = findsMalesSexuallyAttractive.value.trim().toLowerCase() === "yes";
+                let findsMalesSexuallyAttractiveLimitToSex = false;
                 if (guider) {
                     const isActuallyFindsMalesSexuallyAttractive = await guider.askBoolean("Does " + name + " find males sexually attractive?", findsMalesSexuallyAttractiveValue);
                     if (!isActuallyFindsMalesSexuallyAttractive.value) {
                         findsMalesSexuallyAttractiveValue = false;
                     } else {
                         findsMalesSexuallyAttractiveValue = true;
+                    }
+
+                    const isFindsMalesSexuallyAttractiveLimitedToSex = await guider.askBoolean("Is " + name + "'s attraction towards males limited to biological sex only?", false);
+                    if (isFindsMalesSexuallyAttractiveLimitedToSex.value) {
+                        findsMalesSexuallyAttractiveLimitToSex = true;
                     }
                 }
 
@@ -2025,6 +2098,7 @@ export async function generateBase(engine, card, guider, autosave) {
                 }
 
                 let findsFemalesSexuallyAttractiveValue = findsFemalesSexuallyAttractive.value.trim().toLowerCase() === "yes";
+                let findsFemalesSexuallyAttractiveLimitToSex = false;
 
                 if (guider) {
                     const isActuallyFindsFemalesSexuallyAttractive = await guider.askBoolean("Does " + name + " find females sexually attractive?", findsFemalesSexuallyAttractiveValue);
@@ -2033,26 +2107,35 @@ export async function generateBase(engine, card, guider, autosave) {
                     } else {
                         findsFemalesSexuallyAttractiveValue = true;
                     }
+
+                    const isFindsFemalesSexuallyAttractiveLimitedToSex = await guider.askBoolean("Is " + name + "'s attraction towards females limited to biological sex only?", false);
+                    if (isFindsFemalesSexuallyAttractiveLimitedToSex.value) {
+                        findsFemalesSexuallyAttractiveLimitToSex = true;
+                    }
                 }
 
                 insertSpecialComment(newCharacterSection.body, "base-attractions");
                 newCharacterSection.body.push(`attractions: [`);
                 newCharacterSection.body.push(`// You can make these far more specific if needed`);
 
+                const pickinessMale = await determineOnePickiness("males");
+
                 if (findsMalesSexuallyAttractiveValue) {
                     if (card.config.characterSpeciesType === "humanoid") {
-                        newCharacterSection.body.push(`{towards: "male", ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], speciesType: "${card.config.characterSpeciesType}"},`);
+                        newCharacterSection.body.push(`{towards: "male", pickiness: ${pickinessMale}, ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], speciesType: "${card.config.characterSpeciesType}"${findsMalesSexuallyAttractiveLimitToSex ? ', sex: "male"' : ''}},`);
                     } else {
-                        newCharacterSection.body.push(`{towards: "male", ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], species: "${card.config.characterSpecies}"},`);
+                        newCharacterSection.body.push(`{towards: "male", pickiness: ${pickinessMale}, ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], species: "${card.config.characterSpecies}"${findsMalesSexuallyAttractiveLimitToSex ? ', sex: "male"' : ''}},`);
                     }
                     attractions.push("male");
                 }
 
+                const pickinessFemale = await determineOnePickiness("females");
+
                 if (findsFemalesSexuallyAttractiveValue) {
                     if (card.config.characterSpeciesType === "humanoid") {
-                        newCharacterSection.body.push(`{towards: "female", ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], speciesType: "${card.config.characterSpeciesType}"},`);
+                        newCharacterSection.body.push(`{towards: "female", pickiness: ${pickinessFemale}, ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], speciesType: "${card.config.characterSpeciesType}"${findsFemalesSexuallyAttractiveLimitToSex ? ', sex: "female"' : ''}},`);
                     } else {
-                        newCharacterSection.body.push(`{towards: "female", ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], species: "${card.config.characterSpecies}"},`);
+                        newCharacterSection.body.push(`{towards: "female", pickiness: ${pickinessFemale}, ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], species: "${card.config.characterSpecies}"${findsFemalesSexuallyAttractiveLimitToSex ? ', sex: "female"' : ''}},`);
                     }
                     attractions.push("female");
                 }
@@ -2066,10 +2149,12 @@ export async function generateBase(engine, card, guider, autosave) {
                     break;
                 } else {
                     const additionalAttractionSpecies = await guider.askOpen("What species is " + name + " attracted to?", "");
-                    const additionalAttractionAgeRangeMin = await guider.askNumber("What is the minimum age of attraction for " + name + " towards " + additionalAttractionSpecies.value + "?", minAgeAttractionPotential);
-                    const additionalAttractionAgeRangeMax = await guider.askNumber("What is the maximum age of attraction for " + name + " towards " + additionalAttractionSpecies.value + "?", maxAgeAttractionPotential);
-                    const additionalAttractionGender = await guider.askOption("What gender is " + name + " attracted to when it comes to " + additionalAttractionSpecies.value + "?", ["male", "female", "ambiguous", "any"], "any");
-                    newCharacterSection.body.push(`{towards: "${additionalAttractionGender.value}", ageRange: [${additionalAttractionAgeRangeMin.value}, ${additionalAttractionAgeRangeMax.value}], species: "${additionalAttractionSpecies.value}"},`);
+                    const additionalAttractionAgeRangeMin = await guider.askNumber("What is the minimum age of attraction for " + name + " towards a " + additionalAttractionSpecies.value + "?", minAgeAttractionPotential);
+                    const additionalAttractionAgeRangeMax = await guider.askNumber("What is the maximum age of attraction for " + name + " towards a " + additionalAttractionSpecies.value + "?", maxAgeAttractionPotential);
+                    const additionalAttractionGender = await guider.askOption("What gender is " + name + " attracted to when it comes to a " + additionalAttractionSpecies.value + "?", ["male", "female", "ambiguous", "any"], "any");
+                    const additionalAttractionSex = await guider.askOption("Is " + name + "'s attraction towards a " + additionalAttractionSpecies.value + " limited to a specific biological sex?", ["male", "female", "intersex", "any"], "any");
+                    const additionalAttractionPickiness = await determineOnePickiness(additionalAttractionGender.value + " belonging to the species " + additionalAttractionSpecies.value);
+                    newCharacterSection.body.push(`{towards: "${additionalAttractionGender.value}", pickiness: ${additionalAttractionPickiness}, ageRange: [${additionalAttractionAgeRangeMin.value}, ${additionalAttractionAgeRangeMax.value}], species: "${additionalAttractionSpecies.value}", "sex": "${additionalAttractionSex.value}"},`);
                 }
             }
 
@@ -2079,10 +2164,22 @@ export async function generateBase(engine, card, guider, autosave) {
                     break;
                 } else {
                     const additionalAttractionSpeciesGroup = await guider.askOption("What species group is " + name + " attracted to?", ["humanoid", "animal", "feral"].filter(card.config.characterSpeciesType), "");
-                    const additionalAttractionAgeRangeMin = await guider.askNumber("What is the minimum age of attraction for " + name + " towards " + additionalAttractionSpeciesGroup.value + "?", minAgeAttractionPotential);
-                    const additionalAttractionAgeRangeMax = await guider.askNumber("What is the maximum age of attraction for " + name + " towards " + additionalAttractionSpeciesGroup.value + "?", maxAgeAttractionPotential);
-                    const additionalAttractionGender = await guider.askOption("What gender is " + name + " attracted to when it comes to " + additionalAttractionSpeciesGroup.value + "?", ["male", "female", "ambiguous", "any"], "any");
-                    newCharacterSection.body.push(`{towards: "${additionalAttractionGender.value}", ageRange: [${additionalAttractionAgeRangeMin.value}, ${additionalAttractionAgeRangeMax.value}], speciesGroup: "${additionalAttractionSpeciesGroup.value}"},`);
+                    const additionalAttractionAgeRangeMin = await guider.askNumber("What is the minimum age of attraction for " + name + " towards a " + additionalAttractionSpeciesGroup.value + " creature?", minAgeAttractionPotential);
+                    const additionalAttractionAgeRangeMax = await guider.askNumber("What is the maximum age of attraction for " + name + " towards a " + additionalAttractionSpeciesGroup.value + " creature?", maxAgeAttractionPotential);
+                    const additionalAttractionGender = await guider.askOption("What gender is " + name + " attracted to when it comes to a " + additionalAttractionSpeciesGroup.value + " creature?", ["male", "female", "ambiguous", "any"], "any");
+                    const additionalAttractionSex = await guider.askOption("Is " + name + "'s attraction towards a " + additionalAttractionSpeciesGroup.value + " creature limited to a specific biological sex?", ["male", "female", "intersex", "any"], "any");
+
+                    /**
+                     * @type {Record<string, string>}
+                     */
+                    const speciesGroupDefinedForPickiness = {
+                        "humanoid": "a human or humanoid creature",
+                        "animal": "a non-humanoid animal",
+                        "feral": "a feral creature that walks on 4 legs but has human level intelligence and can communicate with others through verbal language",
+                    }
+
+                    const additionalAttractionPickiness = await determineOnePickiness("a " + additionalAttractionGender.value + " belonging to the species group " + speciesGroupDefinedForPickiness[additionalAttractionSpeciesGroup.value]);
+                    newCharacterSection.body.push(`{towards: "${additionalAttractionGender.value}", pickiness: ${additionalAttractionPickiness}, ageRange: [${additionalAttractionAgeRangeMin.value}, ${additionalAttractionAgeRangeMax.value}], speciesGroup: "${additionalAttractionSpeciesGroup.value}", "sex": "${additionalAttractionSex.value}"},`);
                 }
             }
         }

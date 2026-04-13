@@ -1638,17 +1638,24 @@ export async function getInternalDescriptionOfCharacter(deObject, characterName)
             }
 
             if (!activeBond.knowsName && activeBond.stranger) {
-                result += ` ${activeBond.towards} is a stranger to ${characterName}, ${characterName} does not know their name.`;
+                result += `\n\n${activeBond.towards} is a stranger to ${characterName}, ${characterName} does not know their name.`;
             } else if (!activeBond.knowsName) {
-                result += ` ${activeBond.towards} is an acquaintance to ${characterName}, but ${characterName} does not know their name!`;
+                result += `\n\n${activeBond.towards} is an acquaintance to ${characterName}, but ${characterName} does not know their name!`;
             } else if (activeBond.stranger) {
-                result += ` ${activeBond.towards} is a stranger to ${characterName}, but ${characterName} knows their name and some details about them.`;
+                result += `\n\n${activeBond.towards} is a stranger to ${characterName}, but ${characterName} knows their name and some details about them.`;
             } else {
-                result += ` ${activeBond.towards} is known to ${characterName}, ${characterName} knows their name and many details about them.`;
+                result += `\n\n${activeBond.towards} is known to ${characterName}, ${characterName} knows their name and many details about them.`;
             }
 
             if (familyRelationship) {
-                result += ` ${activeBond.towards} is ${characterName}'s ${familyRelationship}.`;
+                result += `\n\n${activeBond.towards} is ${characterName}'s ${familyRelationship}.`;
+            }
+
+            // TODO implement this
+            const isAttractive = deObject.utils.isAttractiveForWithReasoning(character, activeBond.towards);
+
+            if (isAttractive.reasoning) {
+                result += `\n\n${isAttractive.reasoning}.`;
             }
 
             relationships.push(result);
@@ -1777,7 +1784,7 @@ export async function getInternalDescriptionOfCharacter(deObject, characterName)
     const likes = [];
     const dislikes = [];
 
-    for (const like of character.socialSimulation.likes) {
+    for (const like of character.likes) {
         const globalInterest = deObject.interests[like];
         if (globalInterest) {
             likes.push(globalInterest.simple);
@@ -1785,7 +1792,7 @@ export async function getInternalDescriptionOfCharacter(deObject, characterName)
             likes.push(like);
         }
     }
-    for (const dislike of character.socialSimulation.dislikes) {
+    for (const dislike of character.dislikes) {
         const globalInterest = deObject.interests[dislike];
         if (globalInterest) {
             dislikes.push(globalInterest.simple);
@@ -2353,7 +2360,7 @@ export async function getRelationshipBetweenCharacters(deObject, characterName, 
  * @param {DECompleteCharacterReference} towards 
  */
 export function getFamilyBondRelation(character, towards) {
-    const familyTie = character.socialSimulation.familyTies[towards.name];
+    const familyTie = character.familyTies[towards.name];
     return familyTie?.relation || null;
 }
 
