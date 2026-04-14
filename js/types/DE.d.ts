@@ -977,6 +977,16 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
          */
         system: string;
         /**
+         * The bond system is creepy if the second bond 2 graduation tracks a negative effect
+         * this is used to detect creeps, rather than romance
+         */
+        bond2DoesNotTrackAttraction: boolean;
+        /**
+         * The bond system is familyb creepy if the second bond 2 graduation tracks a negative effect but only for family members, this is used to detect creepy family trying
+         * to engage in inappropriate interactions with their family members
+         */
+        bond2DoesNotTrackAttractionForFamily: boolean;
+        /**
          * The bond declarations that define how bonds evolve and their descriptions
          * these get injected into reasoning prompts to help the character reason about
          * their relationships
@@ -1051,6 +1061,14 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
          * in the bond description, otherwise the LLM may assume romantic/sexual interactions are allowed
          */
         declarations: Array<DEBondDeclaration>;
+        /**
+         * Graduation of the bond 2 level for the romantic or creepy interest
+         */
+        bond2Graduation: {
+            slight: number;
+            moderate: number;
+            strong: number;
+        }
         /**
          * The absolute weight that a bond has before breaking away from a stranger bond to a regular bond
          * once the character has interacted enough with a stranger and the bond weight surpasses this value
@@ -1411,6 +1429,13 @@ declare interface DEAttraction {
      * The age range that this attraction applies to
      */
     ageRange: [number, number];
+    /**
+     * A special reason why the character is attracted to this
+     * it will be prefixed as
+     * 
+     * `The reason why {{char}} is attracted to {{other}} is because ${specialReason}`
+     */
+    specialReason?: string | null;
 }
 
 declare interface DENamePool {
@@ -2838,6 +2863,9 @@ declare interface DEUtils {
     newGlobalInterest(DE: DEObject, interest: DECharacterInterest);
 
     isStrangerTowards(DE: DEObject, char1: string | DECompleteCharacterReference | null, char2: string | DECompleteCharacterReference | null): boolean;
+    isAttractedTo(DE: DEObject, char1: string | DECompleteCharacterReference | null, potentialAttractiveChar2: string | DECompleteCharacterReference | null): boolean;
+    isAttractedToWithLevel(DE: DEObject, char1: string | DECompleteCharacterReference | null, potentialAttractiveChar2: string | DECompleteCharacterReference | null): "slight" | "moderate" | "strong" | false;
+    isAttractedToWithReasoning(DE: DEObject, char1: string | DECompleteCharacterReference | null, potentialAttractiveChar2: string | DECompleteCharacterReference | null): {attracted: boolean, reasoning: string, level: "slight" | "moderate" | "strong" | false};
 
     /**
      * To be used during questions and triggers mostly

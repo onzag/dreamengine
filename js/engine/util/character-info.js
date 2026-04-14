@@ -1651,8 +1651,7 @@ export async function getInternalDescriptionOfCharacter(deObject, characterName)
                 result += `\n\n${activeBond.towards} is ${characterName}'s ${familyRelationship}.`;
             }
 
-            // TODO implement this
-            const isAttractive = deObject.utils.isAttractiveForWithReasoning(character, activeBond.towards);
+            const isAttractive = deObject.utils.isAttractedToWithReasoning(deObject, character, activeBond.towards);
 
             if (isAttractive.reasoning) {
                 result += `\n\n${isAttractive.reasoning}.`;

@@ -15,6 +15,18 @@ function formatAndHelper(list) {
 }
 
 /**
+ * @param {string[]} list
+ * @returns {string}
+ */
+function formatOrHelper(list) {
+    if (!list || !Array.isArray(list)) return "";
+    if (list.length === 0) return "";
+    if (list.length === 1) return list[0];
+    if (list.length === 2) return `${list[0]} or ${list[1]}`;
+    return `${list.slice(0, -1).join(', ')}, or ${list[list.length - 1]}`;
+}
+
+/**
  * @param {DEObject} DE
  * @param {Array<DECompleteCharacterReference | string>} charsOrig
  * @param {string} they
@@ -377,6 +389,188 @@ export const deEngineUtils = {
         }
         const bond = DE.bonds[char1Ref.name].active.find(b => b.towards === towardsRef.name);
         return !bond || bond.stranger;
+    },
+    isAttractedTo(DE, char1, potentialAttractiveChar2) {
+        return DE.utils.isAttractedToWithReasoning(DE, char1, potentialAttractiveChar2).attracted;
+    },
+    isAttractedToWithLevel(DE, char1, potentialAttractiveChar2) {
+        const attractionResult = DE.utils.isAttractedToWithReasoning(DE, char1, potentialAttractiveChar2);
+        return attractionResult.level;
+    },
+    //@ts-ignore typescript has no clue
+    isAttractedToWithReasoning(DE, char1, potentialAttractiveChar2) {
+        const char1Ref = typeof char1 === "string" ? DE.characters[char1] : char1;
+        const char2Ref = typeof potentialAttractiveChar2 === "string" ? DE.characters[potentialAttractiveChar2] : potentialAttractiveChar2;
+        if (!char1Ref || !char2Ref) {
+            return { attracted: false, reasoning: `Cannot check attraction from ${char1} towards ${potentialAttractiveChar2} because one of the characters was not found` };
+        }
+
+        if (char1Ref.attractions.length === 0) {
+            return { attracted: false, reasoning: `Character ${char1Ref.name} is asexual and therefore not attracted to ${char2Ref.name}` };
+        }
+
+        if (!char1Ref.bonds) {
+            console.warn(`Character ${char1Ref.name} does not have bonds property, cannot check attraction towards ${char2Ref.name}`);
+            return { attracted: false, reasoning: `Character ${char1Ref.name} has no bonds and therefore cannot feel attraction towards ${char2Ref.name}` };
+        }
+
+        /**
+         * @type {"slight" | "moderate" | "strong" | false}
+         */
+        let actuallyFeelsAttractionRegardless = false;
+        const defaultAttraction = "moderate";
+
+        const isFamilyMember = char1Ref.familyTies[char2Ref.name];
+
+        if ((isFamilyMember && !char1Ref.bonds.bond2DoesNotTrackAttractionForFamily) && !char1Ref.bonds.bond2DoesNotTrackAttraction) {
+            const bond2Value = DE.bonds[char1Ref.name].active.find(b => b.towards === char2Ref.name)?.bond2 || 0;
+            if (bond2Value >= char1Ref.bonds.bond2Graduation.slight) {
+                actuallyFeelsAttractionRegardless = "slight";
+            }
+            if (bond2Value >= char1Ref.bonds.bond2Graduation.moderate) {
+                actuallyFeelsAttractionRegardless = "moderate";
+            }
+            if (bond2Value >= char1Ref.bonds.bond2Graduation.strong) {
+                actuallyFeelsAttractionRegardless = "strong";
+            }
+        }
+
+        let level = actuallyFeelsAttractionRegardless || defaultAttraction;
+
+        // from here forwards
+
+        let char1Attractions = (char1Ref.attractions || []).slice();
+
+        char1Attractions = char1Attractions.filter(a => !a.speciesType || a.speciesType === char2Ref.speciesType);
+
+        if (char1Attractions.length === 0) {
+            const explanation = {
+                "humanoid": "humans or humanoid creatures",
+                "animal": "animals",
+                "feral": "feral animalistic creatures of any kind",
+            }
+            if (actuallyFeelsAttractionRegardless) {
+                return { level, attracted: true, reasoning: `Despite ${char1Ref.name} not being attracted to ${explanation[char2Ref.speciesType] || "unknown reason"}, ${char1Ref.name} still feels ${actuallyFeelsAttractionRegardless} sexual/romantic attraction towards ${char2Ref.name}` };
+            }
+            return { level: false, attracted: false, reasoning: `${char1Ref.name} is not romantically/sexually attracted to ${char2Ref.name} because  ${char1Ref.name} is not attracted to ${explanation[char2Ref.speciesType] || "unknown reason"}` };
+        }
+
+        char1Attractions = char1Attractions.filter(a => !a.species || a.species.includes(char2Ref.species));
+
+        if (char1Attractions.length === 0) {
+            if (actuallyFeelsAttractionRegardless) {
+                return { level, attracted: true, reasoning: `Despite ${char1Ref.name} not being attracted to ${char2Ref.species} species, ${char1Ref.name} still feels ${actuallyFeelsAttractionRegardless} sexual/romantic attraction towards ${char2Ref.name}` };
+            }
+            return { level: false, attracted: false, reasoning: `${char1Ref.name} is not romantically/sexually attracted to ${char2Ref.name} because ${char1Ref.name} is not attracted to ${char2Ref.species} species` };
+        }
+
+        const oldChar1AttractionsBeforeAgeCheck = char1Attractions;
+        char1Attractions = char1Attractions.filter(a => (char2Ref.ageYears >= a.ageRange[0] && char2Ref.ageYears <= a.ageRange[1]));
+
+        if (char1Attractions.length === 0) {
+            const isTooOld = char2Ref.ageYears > oldChar1AttractionsBeforeAgeCheck[0].ageRange[1];
+
+            if (actuallyFeelsAttractionRegardless) {
+                const ageReason = isTooOld ? `${char2Ref.name} being too old` : `${char2Ref.name} being too young`;
+                return { level, attracted: true, reasoning: `Despite ${ageReason}, ${char1Ref.name} still feels ${actuallyFeelsAttractionRegardless} sexual/romantic attraction towards ${char2Ref.name}` };
+            }
+            if (isTooOld) {
+                return { level, attracted: false, reasoning: `${char1Ref.name} is not romantically/sexually attracted to ${char2Ref.name} because ${char2Ref.name} is too old for them` };
+            } else {
+                return { level: false, attracted: false, reasoning: `${char1Ref.name} is not romantically/sexually attracted to ${char2Ref.name} because ${char2Ref.name} is too young for them` };
+            }
+        }
+
+        char1Attractions = char1Attractions.filter(a => !a.towards || a.towards.includes(char2Ref.gender));
+
+        if (char1Attractions.length === 0) {
+            if (actuallyFeelsAttractionRegardless) {
+                return { level, attracted: true, reasoning: `Despite ${char1Ref.name} not being attracted to ${char2Ref.name}'s gender being ${char2Ref.gender}, ${char1Ref.name} still feels ${actuallyFeelsAttractionRegardless} sexual/romantic attraction towards ${char2Ref.name}` };
+            }
+            return { level: false, attracted: false, reasoning: `${char1Ref.name} is not romantically/sexually attracted to ${char2Ref.name} because ${char1Ref.name} is not attracted to ${char2Ref.name} gender being ${char2Ref.gender}` };
+        }
+
+        char1Attractions = char1Attractions.filter(a => !a.sex || a.sex.includes(char2Ref.sex));
+
+        if (char1Attractions.length === 0) {
+            if (actuallyFeelsAttractionRegardless) {
+                return { level, attracted: true, reasoning: `Despite ${char1Ref.name} not being attracted to ${char2Ref.name}'s biological sex being ${char2Ref.sex}, ${char1Ref.name} still feels ${actuallyFeelsAttractionRegardless} sexual/romantic attraction towards ${char2Ref.name}` };
+            }
+            return { level: false, attracted: false, reasoning: `${char1Ref.name} is not romantically/sexually attracted to ${char2Ref.name} because ${char1Ref.name} is not attracted to ${char2Ref.name} biological sex being ${char2Ref.sex}` };
+        }
+
+        char1Attractions = char1Attractions.filter(a => !a.race || a.race === char2Ref.race);
+
+        if (char1Attractions.length === 0) {
+            if (actuallyFeelsAttractionRegardless) {
+                const raceReason = char1Ref.race ? `not being attracted to ${char2Ref.name}'s race being ${char2Ref.race}` : `${char2Ref.name} having no racial identity`;
+                return { level, attracted: true, reasoning: `Despite ${raceReason}, ${char1Ref.name} still feels ${actuallyFeelsAttractionRegardless} sexual/romantic attraction towards ${char2Ref.name}` };
+            }
+            if (char1Ref.race) {
+                return { level: false, attracted: false, reasoning: `${char1Ref.name} is not romantically/sexually attracted to ${char2Ref.name} because ${char1Ref.name} is not attracted to ${char2Ref.name} race being ${char2Ref.race}` };
+            } else {
+                return { level: false, attracted: false, reasoning: `${char1Ref.name} is not romantically/sexually attracted to ${char2Ref.name} because ${char2Ref.name} has no racial identity` };
+            }
+        }
+
+        const beforeGroupBelongingFilterAttractions = char1Attractions;
+        char1Attractions = char1Attractions.filter(a => !a.group || char2Ref.groupBelonging.includes(a.group));
+
+        if (char1Attractions.length === 0) {
+            const groupsThatMatter = [...new Set(beforeGroupBelongingFilterAttractions.map(a => a.group))].filter(g => g);
+            if (actuallyFeelsAttractionRegardless) {
+                // @ts-ignore
+                const groupReason = groupsThatMatter.length === 1 ? `not belonging to the group of ${groupsThatMatter[0]}` : `not belonging to any of the following required groups: ${formatOrHelper(groupsThatMatter)}`;
+                return { level, attracted: true, reasoning: `Despite ${groupReason}, ${char1Ref.name} still feels ${actuallyFeelsAttractionRegardless} sexual/romantic attraction towards ${char2Ref.name}` };
+            }
+            if (groupsThatMatter.length === 1) {
+                return { level: false, attracted: false, reasoning: `${char1Ref.name} is not romantically/sexually attracted to ${char2Ref.name} because ${char2Ref.name} does not belong to the group of ${groupsThatMatter[0]}` };
+            }
+            // @ts-ignore
+            return { level: false, attracted: false, reasoning: `${char1Ref.name} is not romantically/sexually attracted to ${char2Ref.name} because ${char2Ref.name} does not belong to any of the following required groups: ${formatOrHelper(groupsThatMatter)}` };
+        }
+
+        const minPickiness = Math.min(...char1Attractions.map(a => a.pickiness || 0));
+
+        const tooUnattractive = char2Ref.attractiveness < minPickiness;
+
+        if (tooUnattractive) {
+            if (actuallyFeelsAttractionRegardless) {
+                return { level, attracted: true, reasoning: `Despite ${char2Ref.name} not being attractive enough, ${char1Ref.name} still feels ${actuallyFeelsAttractionRegardless} sexual/romantic attraction towards ${char2Ref.name}` };
+            }
+            return { level: false, attracted: false, reasoning: `${char1Ref.name} is not romantically/sexually attracted to ${char2Ref.name} because they are not attractive enough for them` };
+        }
+
+        if (minPickiness > 0.65) {
+            const tooUncharismatic = char2Ref.charisma < (minPickiness*0.75);
+            if (tooUncharismatic) {
+                if (actuallyFeelsAttractionRegardless) {
+                    return { level, attracted: true, reasoning: `Despite ${char2Ref.name} lacking charisma, ${char1Ref.name} still feels ${actuallyFeelsAttractionRegardless} sexual/romantic attraction towards ${char2Ref.name}` };
+                }
+                return { level: false, attracted: false, reasoning: `${char1Ref.name} is not romantically/sexually attracted to ${char2Ref.name} because ${char1Ref.name} lacks charisma` };
+            }
+        }
+
+        const specialReason = char1Attractions.find(a => a.specialReason);
+
+        // now we are in territory of attraction, now if they already have attraction but the attraction
+        // would also exist even at low bond level, then we upgrade the attraction to strong because it's not based on both the bond
+        // and the character's inherent preferences
+        if (actuallyFeelsAttractionRegardless) {
+            level = "strong";
+        }
+
+        const diffBetweenMinPickinessAndAttractiveness = minPickiness - char2Ref.attractiveness;
+        // also upgrade to strong if the character is very attractive compared to the pickiness
+        if (diffBetweenMinPickinessAndAttractiveness > 0.35) {
+            level = "strong";
+        }
+        
+        if (specialReason) {
+            return { level, attracted: true, reasoning: `${char1Ref.name} is romantically/sexually attracted to ${char2Ref.name} because ${specialReason.specialReason}` };
+        }
+
+        return { level, attracted: true, reasoning: `${char1Ref.name} is romantically/sexually attracted to ${char2Ref.name}` };
     },
     async shiftState(DE, character, stateName, shiftAmount, causants, causes) {
         return DE.utils.tickleState(DE, character, stateName, shiftAmount, shiftAmount > 0 ? Infinity : -Infinity, causants, causes);
@@ -890,11 +1084,7 @@ export const deEngineUtils = {
             return list.join(', ');
         },
         formatOr(DE, list) {
-            if (!list || !Array.isArray(list)) return "";
-            if (list.length === 0) return "";
-            if (list.length === 1) return list[0];
-            if (list.length === 2) return `${list[0]} or ${list[1]}`;
-            return `${list.slice(0, -1).join(', ')}, or ${list[list.length - 1]}`;
+            return formatOrHelper(list);
         },
         formatVerbToBe(DE, chars) {
             return getPronounHelperLocal(DE, chars, "are", "is", "is", "is");
