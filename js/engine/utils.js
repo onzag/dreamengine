@@ -333,6 +333,7 @@ export const deEngineUtils = {
                 createdAt: DE.currentTime,
                 knowsName: false,
                 stranger: true,
+                undoableShifts: {},
             };
             DE.bonds[char1Ref.name].active.push(bond);
             // let's create a new bond
@@ -376,6 +377,18 @@ export const deEngineUtils = {
             char1Ref.temp["alreadyShiftedBondSecondary_" + towardsRef.name] = actualSecondaryShift;
         }
     },
+    hasBondBeenShiftedThisCycle(DE, char1, towards) {
+        const char1Ref = typeof char1 === "string" ? DE.characters[char1] : char1;
+        const towardsRef = typeof towards === "string" ? DE.characters[towards] : towards;
+        if (!char1Ref || !towardsRef) {
+            console.warn(`Cannot check if bond has been shifted from ${char1} towards ${towards} because one of the characters was not found`);
+            return false;
+        }
+
+        const alreadyShiftedPrimary = char1Ref.temp["alreadyShiftedBondPrimary_" + towardsRef.name] || 0;
+        const alreadyShiftedSecondary = char1Ref.temp["alreadyShiftedBondSecondary_" + towardsRef.name] || 0;
+        return alreadyShiftedPrimary !== 0 || alreadyShiftedSecondary !== 0;
+    },
     triggerActionNext(DE, action) {
         DE.internalState.NEXT_ACTIONS = DE.internalState.NEXT_ACTIONS || [];
         DE.internalState.NEXT_ACTIONS.push(action);
@@ -396,6 +409,19 @@ export const deEngineUtils = {
     isAttractedToWithLevel(DE, char1, potentialAttractiveChar2) {
         const attractionResult = DE.utils.isAttractedToWithReasoning(DE, char1, potentialAttractiveChar2);
         return attractionResult.level;
+    },
+    isAttractedToWithLevelAsNumber(DE, char1, potentialAttractiveChar2) {
+        const attractionResult = DE.utils.isAttractedToWithReasoning(DE, char1, potentialAttractiveChar2);
+        switch (attractionResult.level) {
+            case "slight":
+                return 1;
+            case "moderate":
+                return 2;
+            case "strong":
+                return 3;
+            default:
+                return 0;
+        }
     },
     //@ts-ignore typescript has no clue
     isAttractedToWithReasoning(DE, char1, potentialAttractiveChar2) {

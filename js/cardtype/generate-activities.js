@@ -1,5 +1,5 @@
 import { DEngine } from '../engine/index.js';
-import { hasSpecialComment, unshiftSpecialComment } from './base.js';
+import { hasSpecialComment, toTemplateLiteral, unshiftSpecialComment } from './base.js';
 
 if (typeof process !== "undefined" && process.versions && process.versions.node) {
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
@@ -84,9 +84,14 @@ export async function generateActivities(engine, card, guider, autosave) {
             throw new Error("Generator finished without producing output");
         }
 
-        const templateValue = activityTemplate.value.trim().split("MANY_CHARACTERS").join("{{chars}}");
+        let templateValue = activityTemplate.value.trim().split("MANY_CHARACTERS").join("{{chars}}");
 
-        card.body.unshift(`DE.utils.newGlobalInterest(DE, { id: ${JSON.stringify(likeOrDislike)}, simple: ${JSON.stringify(activitySimple)}, template: DE.utils.newHandlebarsTemplate(DE, ${JSON.stringify(templateValue)}) });`);
+        if (guider) {
+            const guideResult = await guider.askOpen("Provide a template for the activity " + likeOrDislike + " that will be shown to the player. Use {{chars}} as a placeholder for the characters that are engaging in the activity or talking about the topic of conversation.", templateValue);
+            templateValue = guideResult.value.trim();
+        }
+
+        card.body.unshift(`DE.utils.newGlobalInterest(DE, { id: ${JSON.stringify(likeOrDislike)}, simple: ${JSON.stringify(activitySimple)}, template: (DE, info) => ${toTemplateLiteral(templateValue)}});`);
         unshiftSpecialComment(card.body, "interest " + likeOrDislike);
         await autosave?.save();
     }

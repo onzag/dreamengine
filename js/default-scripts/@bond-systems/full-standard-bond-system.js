@@ -48,6 +48,7 @@
  * @property {number} [strangerBreakawayTimeMinutes] Time in minutes after which a stranger can break away, default 30
  * @property {number} [strangerNegativeMultiplier] Multiplier for bond changes with strangers when the change is negative, default 1.5
  * @property {number} [strangerPositiveMultiplier] Multiplier for bond changes with strangers when the change is positive, default 1.0
+ * @property {number} [neutralInteractionBondChange] number to add on a bond on a neutral interaction, does not apply to anything above bond graduation of unfriendly or friend, it maxes there, default 0.5
  * 
  * @property {FSSLoveDefinition} foe_n100_n50
  * @property {FSSLoveDefinition} hostile_n50_n35
@@ -76,6 +77,7 @@
  * @property {number} [strangerBreakawayTimeMinutes] Time in minutes after which a stranger can break away, default 30
  * @property {number} [strangerNegativeMultiplier] Multiplier for bond changes with strangers when the change is negative, default 1.5
  * @property {number} [strangerPositiveMultiplier] Multiplier for bond changes with strangers when the change is positive, default 1.0
+ * @property {number} [neutralInteractionBondChange] number to add on a bond on a neutral interaction, does not apply to anything above bond graduation of unfriendly or friend, it maxes there, default 0.5
  * 
  * @property {FSSCreepyLoveDefinition} foe_n100_n50
  * @property {FSSCreepyLoveDefinition} hostile_n50_n35
@@ -247,6 +249,19 @@ engine.exports = {
                 moderate: 20,
                 strong: 35,
             },
+            bondGraduation: {
+                foe: -100,
+                hostile: -50,
+                antagonistic: -35,
+                unfriendly: -20,
+                unpleasant: -10,
+                acquaintance: 0,
+                friend: 10,
+                goodFriend: 20,
+                closeFriend: 35,
+                bestFriend: 50,
+            },
+            neutralInteractionBondChange: valueOrDefault(options.neutralInteractionBondChange, 0.5), // number to add on a bond on a neutral interaction, does not apply to anything above bond graduation of unfriendly or friend, it maxes there
         };
 
         {

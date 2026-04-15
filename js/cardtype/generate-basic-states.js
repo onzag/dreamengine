@@ -23,6 +23,31 @@ export const BASIC_EMOTIONAL_STATES = [
     "Loving",
 ];
 
+export const BASIC_EMOTIONAL_STATES_OPTIONS = {
+    "Negative": [
+        "Angry",
+        "Annoyed",
+        "Anxious",
+        "Ashamed",
+        "Disgusted",
+        "Sad",
+        "Scared",
+        "Shy",
+        "Jealous",
+    ],
+    "Positive": [
+        "Aroused",
+        "Happy",
+        "Affectionate",
+        "Grateful",
+        "Proud",
+        "Amused",
+        "Curious",
+        "Flirty",
+        "Loving",
+    ],
+}
+
 /**
  * @type {Record<string, DEEmotionNames>}
  */
@@ -70,6 +95,8 @@ function replaceOtherCharNameWithPlaceholder(text, charName) {
  * @return {Promise<void>}
  */
 export async function generateBasicStates(engine, card, guider, autosave) {
+    throw new Error("Unimplemented");
+
     const isAsexualValue = card.config.isAsexual;
     const name = card.config.name;
 

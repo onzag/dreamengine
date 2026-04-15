@@ -1324,6 +1324,37 @@ export async function generateBase(engine, card, guider, autosave) {
         await autosave?.save();
     }
 
+    if (!hasSpecialComment(newCharacterSection.body, "base-violence")) {
+        await prime();
+        const violenceValue = await generator.next({
+            maxCharacters: 5,
+            maxSafetyCharacters: 0,
+            maxParagraphs: 1,
+            nextQuestion: "From 1 to 10 how likely is " + name + " to resort to violence when facing conflicts or threats? with 10 being extremely likely and 1 being very unlikely",
+            stopAfter: [],
+            stopAt: [],
+            grammar: "root ::= [1-9] | \"10\"",
+        });
+
+        if (violenceValue.done) {
+            throw new Error("Generator finished without producing output");
+        }
+
+        if (guider) {
+            const violenceValueAsked = await guider.askNumber(
+                "From 1 to 10 how likely is " + name + " to resort to violence when facing conflicts or threats? with 10 being extremely likely and 1 being very unlikely",
+                parseInt(violenceValue.value.trim()),
+            );
+            if (violenceValueAsked) {
+                violenceValue.value = violenceValueAsked.value.toString();
+            }
+        }
+
+        insertSpecialComment(newCharacterSection.body, "base-violence");
+        newCharacterSection.body.push(`violence: ${parseInt(violenceValue.value.trim()) / 10},`);
+        await autosave?.save();
+    }
+
     if (!hasSpecialComment(newCharacterSection.body, "base-mute")) {
         await prime();
         const isMute = await generator.next({

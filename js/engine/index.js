@@ -911,7 +911,7 @@ export class DEngine {
                 await calculateStateChange(this, this.deObject.characters[participantName], lastItemChangesInfo.interactedCharacters);
 
                 this.informCycleState("info", "Pre-calculating initial bonds for " + participantName + "...");
-                await calculateBondsChangesDueToMessages(this, this.deObject.characters[participantName]);
+                await calculateBondsChangesDueToMessages(this, this.deObject.characters[participantName], lastItemChangesInfo.interactedCharacters);
 
                 /**
                  * @type {string[]}
@@ -988,7 +988,7 @@ export class DEngine {
         await calculateStateChange(this, this.userCharacter, lastItemChangesInfo.interactedCharacters);
 
         this.informCycleState("info", "Pre-calculating initial bonds for your character...");
-        await calculateBondsChangesDueToMessages(this, this.userCharacter);
+        await calculateBondsChangesDueToMessages(this, this.userCharacter, lastItemChangesInfo.interactedCharacters);
 
         /**
          * @type {string[]}
@@ -1077,7 +1077,7 @@ export class DEngine {
 
         this.informCycleState("info", `Next character to talk: ${character.name}`);
         await calculateStateChange(this, character);
-        await calculateBondsChangesDueToMessages(this, character);
+        await calculateBondsChangesDueToMessages(this, character, lastItemChangesInfo.interactedCharacters);
         await talk(character);
 
         const feasibilityResults = await testMessageFeasibilityForCharacter(this, character, previouslyLeftOrderOfInteraction);

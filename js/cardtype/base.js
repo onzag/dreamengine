@@ -193,6 +193,8 @@ export function getJsCard(base, baseTabCount = 0, noImportsNorCardAndConfig = fa
  * @property {(question: string, defaultValue?: number) => Promise<{value: number}>} askNumber
  * @property {(question: string, defaultValue?: boolean) => Promise<{value: boolean}>} askBoolean
  * @property {(question: string, options: Record<string, string[]> | null, defaultValue?: string[]) => Promise<{value: string[]}>} askList
+ * @property {(question: string, defaultValue?: string[]) => Promise<{value: string[]}>} askArbitraryList
+ * @property {(question: string, defaultValue?: string[]) => Promise<{value: string[] | null}>} askAcceptArbitraryList
  */
 
 /**
@@ -320,6 +322,33 @@ export function toTemplateLiteral(str) {
         if (key === 'other') return '${info.other.name}';
         if (key.startsWith('other.')) return '${info.' + key + '}';
         if (key === 'chars') return '${DE.utils.templateUtils.formatAnd(DE, info.chars.map((c) => c.name))}';
+        return '${"???"}';
+    });
+    return '`' + escaped + '`';
+}
+
+/**
+ * Converts a plain string with {{placeholder}} syntax into a backtick-wrapped
+ * template literal string with specific replacements:
+ *   {{char}}        → ${info.char.name}
+ *   {{char.x}}      → ${info.char.x}
+ *   {{other}}       → ${info.other.name}
+ *   {{other.x}}     → ${info.other.x}
+ *   {{chars}}       → ${DE.utils.templateUtils.formatAnd(DE, info.chars.map((c) => c.name))}
+ *   anything else   → ${"???"}
+ *
+ * Escapes existing backticks and $ signs so the result is safe
+ * to embed directly as a JS template literal.
+ * @param {string} str
+ * @returns {string}
+ */
+export function toTemplateLiteralNoInfo(str) {
+    // Escape backticks and lone ${} that aren't our placeholders
+    let escaped = str.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$\{/g, '\\${').replace(/\n/g, '\\n');
+    // Replace {{...}} with specific expansions
+    escaped = escaped.replace(/\{\{(.+?)\}\}/g, (_, key) => {
+        if (key === 'char') return '${char.name}';
+        if (key === 'other') return '${other.name}';
         return '${"???"}';
     });
     return '`' + escaped + '`';

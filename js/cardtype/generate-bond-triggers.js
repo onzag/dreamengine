@@ -1,8 +1,8 @@
 import { DEngine } from "../engine/index.js";
 import { createGrammarListFromList, parseListFromGrammarResponse } from "../engine/util/grammar.js";
-import { createCardStructureFrom, getJsCard, hasSpecialComment, insertSpecialComment } from "./base.js";
+import { createCardStructureFrom, getJsCard, getSection, hasSpecialComment, insertSpecialComment, toTemplateLiteral, toTemplateLiteralNoInfo } from "./base.js";
 import { replaceAllCharNameWithPlaceholder } from "./generate-base.js";
-import { BASIC_EMOTIONAL_STATES } from "./generate-basic-states.js";
+import { BASIC_EMOTIONAL_STATES, BASIC_EMOTIONAL_STATES_OPTIONS } from "./generate-basic-states.js";
 
 /**
  * 
@@ -22,9 +22,12 @@ function replaceOtherCharNameWithPlaceholder(text, charName) {
  * @return {Promise<void>}
  */
 export async function generateBondTriggers(engine, card, guider, autosave) {
-    throw new Error("Unimplemented");
-
     card.config.bondTriggers = card.config.bondTriggers || {};
+
+    const initializeSection = getSection(card.body, "initialize");
+    if (!initializeSection) {
+        throw new Error("Initialize section not found");
+    }
 
     const inferenceAdapter = engine.inferenceAdapter;
     if (!inferenceAdapter) {
@@ -39,8 +42,8 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
 
     if (!hasSpecialComment(card.imports, "basic-bond-questions-import")) {
         insertSpecialComment(card.imports, "basic-bond-questions-import");
-        card.imports.push(`const basicBondQuestions = await importScript("bond-systems", "basic-bond-questions");`);
-        card.body.push(`basicBondQuestions.addBasicBondQuestions(DE, DE.characters[${JSON.stringify(card.config.name)}]);`);
+        card.imports.push(`const basicBondQuestions = await importScript("@bond-systems", "basic-bond-questions");`);
+        initializeSection.body.push(`basicBondQuestions.addBasicBondQuestions(DE, DE.characters[${JSON.stringify(card.config.name)}]);`);
     }
 
     const generator = inferenceAdapter.runQuestioningCustomAgentOn("cardtype-gen", {
@@ -57,6 +60,11 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
     let EMOTIONAL_STATES_TO_CHECK_AGAINST = [...BASIC_EMOTIONAL_STATES]
     if (isAsexualValue) {
         EMOTIONAL_STATES_TO_CHECK_AGAINST = EMOTIONAL_STATES_TO_CHECK_AGAINST.filter(state => !["Flirty", "Loving", "Aroused"].includes(state));
+    }
+
+    const EMOTIONAL_STATES_TO_CHECK_AGAINST_AS_RECORD = { ...BASIC_EMOTIONAL_STATES_OPTIONS };
+    if (isAsexualValue) {
+        EMOTIONAL_STATES_TO_CHECK_AGAINST_AS_RECORD.Positive = EMOTIONAL_STATES_TO_CHECK_AGAINST_AS_RECORD.Positive.filter(state => !["Flirty", "Loving", "Aroused"].includes(state));
     }
 
     const ready = await generator.next(); // start the generator with an empty message to get it going
@@ -85,11 +93,14 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
      * @param {string} [altCondition]
      * @param {string} [altYesCode]
      * @param {string} [altConsidering]
+     * @param {boolean} [severeAndExtremeWithUndo] if true, it means that the yes answer is about a severe and extreme case that would cause intense hatred and sworn enmity, and the altYesCode is about clearing up a mild misunderstanding, so the question is did they do the severe thing that causes intense hatred, and then if not did they do the mild thing that clears up a misunderstanding, and if not then nothing happens, this is used to create triggers that can cause intense hatred but also be cleared up by clearing up a mild misunderstanding, which is important to avoid permanently broken relationships due to misunderstandings or minor things
      */
-    const askYesNo = async (id, amount, reasoning, trail, consideringInQuestion, consideringInStatement, condition, yesCode, altCondition, altYesCode, altConsidering) => {
-        if (!hasSpecialComment(card.body, "bond-trigger-" + id)) {
+    const askYesNo = async (id, amount, reasoning, trail, consideringInQuestion, consideringInStatement, condition, yesCode, altCondition, altYesCode, altConsidering, severeAndExtremeWithUndo) => {
+        if (hasSpecialComment(initializeSection.body, "bond-trigger-" + id)) {
             return [card.config.bondTriggers[id].causes, card.config.bondTriggers[id].questions];
         }
+
+        insertSpecialComment(initializeSection.body, "bond-trigger-" + id);
 
         let yesNoQuestionValue = "";
         /**
@@ -101,6 +112,10 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
         let guidanceGiven = "";
         let redoGuidance = false;
 
+        /**
+         * @type {string[]}
+         */
+        let questionsParsed = [];
         while (true) {
             if (guider && redoGuidance) {
                 const guiderResult = await guider.askOpen("Guidance for generating yes/no questions about " + JSON.stringify(reasoning) + ". What are some important things to keep in mind when writing about that in the context of " + name + "'s character and personality?");
@@ -110,7 +125,7 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
                 redoGuidance = false;
             }
 
-            let instructions = "The list should be in 3rd person and formatted as a markdown list with each question as a separate bullet point, use OTHER_CHARACTER as a placeholder for the other character's name. OTHER_CHARACTER must always be included, the questions should be in past tense and 3rd person, do not use you, your, I, we, or similar words that indicate second or first person";
+            let instructions = "The list should be in 3rd person and formatted as a markdown list with each question as a separate bullet point, use OTHER CHARACTER as a placeholder for the other character's name. OTHER CHARACTER must always be included, the questions should be in past tense and 3rd person, do not use you, your, I, we, or similar words that indicate second or first person";
             if (doNotIncludeQuestions) {
                 instructions += "\n\nDo NOT include any questions similar to these:\n\n- " + doNotIncludeQuestions.join("\n- " + name + " ");
             }
@@ -154,35 +169,33 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
                 console.log("Detected second/first person language, retrying...");
                 continue;
             }
+
+            questionsParsed = yesNoQuestionValue.split("\n").map(line => line.trim()).filter(line => line.startsWith("- "))
+                .map(line => line.substring(2).trim()).map(line => replaceOtherCharNameWithPlaceholder(line, name));
+
             if (guider) {
-                const guiderResult = await guider.askBoolean("Generated Questions:\n\n" + yesNoQuestionValue + "\n\nDo you want to retry?", false);
-                if (guiderResult.value) {
+                const guiderResult = await guider.askAcceptArbitraryList("Yes/no questions about " + JSON.stringify(reasoning), questionsParsed);
+                if (!guiderResult.value) {
                     redoGuidance = true;
                     continue;
                 }
+
+                questionsParsed = guiderResult.value.map(q => q.trim()).filter(q => q.length > 0);
             }
             break;
         }
-        const questionsParsed = yesNoQuestionValue.split("\n").map(line => line.trim()).filter(line => line.startsWith("- "))
-            .map(line => line.substring(2).trim());
 
         for (let i = 0; i < questionsParsed.length; i++) {
             const question = questionsParsed[i];
             generatedQuestions.push(question);
             console.log("Generated question:", question);
-            const questionReplaced = replaceOtherCharNameWithPlaceholder(question, name);
 
-            card.body.push(`DE.utils.newTrigger(DE, ${JSON.stringify(name)}, {`)
-            card.body.push(`type: "yes_no",`);
-            card.body.push(`askPer: "conversing_character",`);
-            card.body.push(condition);
-            card.body.push(`question: DE.utils.newHandlebarsTemplate(DE, ${JSON.stringify(questionReplaced)}),`);
-            card.body.push(`onValue: (answer, char, other) => {`);
-            card.body.push(`if (answer) {`);
-            if (altCondition && altYesCode && altConsidering) {
-                card.body.push(`if (!(${altCondition})) {`);
-            }
-            card.body.push(yesCode);
+            initializeSection.body.push(`DE.utils.newTrigger(DE, ${JSON.stringify(name)}, {`);
+            initializeSection.body.push(`type: "yes_no",`);
+            initializeSection.body.push(`askPer: "conversing_character",`);
+            initializeSection.body.push(condition);
+            initializeSection.body.push(`question: (DE, info) => ${toTemplateLiteral(question)},`);
+            initializeSection.body.push(`onValue: (answer, char, other) => {`);
 
             const causeValue = await generator.next({
                 maxCharacters: 100,
@@ -202,7 +215,7 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
                 ) + "\n\n" + inferenceAdapter.buildContextInfoExample(
                     `Example: if the question is 'Did OTHER CHARACTER jump on top of ${name} and left them paraplejic?' the answer could be 'yes, ${name} was left paraplejic after they got jumped on top'`
                 ),
-                instructions: "Do not include the word OTHER_CHARACTER in the answer, just give a short statement of what the yes answer would mean for " + name + "; the answer must be in past tense and be very short and concise, 10 words at most",
+                instructions: "Do not include the phrase OTHER CHARACTER in the answer, just give a short statement of what the yes answer would mean for " + name + "; the answer must be in past tense and be very short and concise, 10 words at most",
                 answerTrail: `# The short statement is:\n\nyes, ${name} `,
             });
 
@@ -210,8 +223,63 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
                 throw new Error("Generator finished without producing output");
             }
 
-            const description = causeValue.value.trim();
+            let description = causeValue.value.trim();
+
+            if (guider) {
+                const guiderResult = await guider.askOpen(`Short yes answer for ${JSON.stringify(question)}\n\nThis answer does not contain the name of any character on purpose, it's a nameless statement for a reason they are experiencing an emotion; think of it as it starts with "yes, ${name} ...`, description);
+                if (guiderResult.value) {
+                    description = guiderResult.value.trim();
+                }
+            }
+
             causesValue.push(description);
+
+            if (severeAndExtremeWithUndo) {
+                const bondShiftId = `${id}-severe-shift-${i}`;
+                initializeSection.body.push(`const bondShiftId = ${JSON.stringify(bondShiftId)};`);
+                initializeSection.body.push(`const bondShiftAmount = DE.utils.determineExtremeHostileShift(DE, char, other);`);
+
+                const yesNoQuestionClearMisunderstanding = await generator.next({
+                    maxCharacters: 5000,
+                    maxSafetyCharacters: 0,
+                    maxParagraphs: 10,
+                    nextQuestion: `Make a single yes/no question that would cause ${name} to forgive or clear a misunderstanding after ${JSON.stringify(question)}, received a yes answer`,
+                    stopAfter: [
+                        " you ",
+                        " You ",
+                        " your ",
+                        " Your ",
+                        " I'm ",
+                        " I ",
+                    ],
+                    stopAt: [],
+                    contextInfo: inferenceAdapter.buildContextInfoInstructions("The yes answer meant that " + name + " " + JSON.stringify(description)),
+                    instructions: "Make a single yes/no question no matter how difficult to achieve it might be, it either clears a misunderstanding or provides a plausible acceptable reason for the severe action that " + name + " would accept provided a yes answer, use OTHER CHARACTER to specify the character name that caused that situation, the question should be in past tense and 3rd person",
+                    grammar: "root ::= (\"Was\" | \"Did\") \" OTHER CHARACTER \" [a-zA-Z0-9 ,?'!_]+ \"\\n\"",
+                    answerTrail: "# Yes/no question that would make " + name + " forgive, accept or clear the misunderstanding:\n\n",
+                });
+
+                if (yesNoQuestionClearMisunderstanding.done) {
+                    throw new Error("Generator finished without producing output");
+                }
+
+                let altQuestion = replaceOtherCharNameWithPlaceholder(yesNoQuestionClearMisunderstanding.value.trim(), name);
+                if (guider) {
+                    const guiderResult = await guider.askOpen(`Yes/no question that would make ${name} forgive or clear the misunderstanding after ${JSON.stringify(question)}, received a yes answer`, altQuestion);
+                    if (guiderResult.value) {
+                        altQuestion = guiderResult.value.trim();
+                    }
+                }
+                
+                initializeSection.body.push(`const bondShiftAmount = DE.utils.determineExtremeSuddenHostileShift(DE, char, other);`);
+                initializeSection.body.push(`const bondShiftUndoQuestion = ${toTemplateLiteralNoInfo(altQuestion)})`);
+            }
+
+            initializeSection.body.push(`if (answer) {`);
+            if (altCondition && altYesCode && altConsidering) {
+                initializeSection.body.push(`if (!(${altCondition})) {`);
+            }
+            initializeSection.body.push(yesCode);
 
             const listOfEmotions = await generator.next({
                 maxCharacters: 5,
@@ -228,15 +296,22 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
                 throw new Error("Generator finished without producing output");
             }
 
-            const parsedEmotionalStates = parseListFromGrammarResponse(listOfEmotions.value).map(emState => emState[0].toUpperCase() + emState.slice(1).toLowerCase()); // capitalize first letter to match the emotional states format
+            let parsedEmotionalStates = parseListFromGrammarResponse(listOfEmotions.value).map(emState => emState[0].toUpperCase() + emState.slice(1).toLowerCase()); // capitalize first letter to match the emotional states format
+
+            if (guider) {
+                const guiderResult = await guider.askList(`"${name} ${description}", ${consideringInStatement}, how would ${name} feel?`, EMOTIONAL_STATES_TO_CHECK_AGAINST_AS_RECORD, parsedEmotionalStates);
+                if (guiderResult.value) {
+                    parsedEmotionalStates = guiderResult.value.map(em => em.trim()).filter(em => EMOTIONAL_STATES_TO_CHECK_AGAINST.includes(em));
+                }
+            }
 
             for (const emotionalState of parsedEmotionalStates) {
-                card.body.push(`DE.utils.tickleState(DE, char, ${JSON.stringify(emotionalState)}, ${shiftStateByOverride + 1}, ${shiftStateByOverride + 2}, [{name: other?.name, type: "character"}], [{characterCausant: other?.name, description: ${JSON.stringify(description)}}]);`);
+                initializeSection.body.push(`DE.utils.tickleState(DE, char, ${JSON.stringify(emotionalState)}, ${shiftStateByOverride + 1}, ${shiftStateByOverride + 2}, [{name: other?.name, type: "character"}], [{characterCausant: other?.name, description: ${JSON.stringify(description)}}]);`);
             }
 
             if (altCondition && altYesCode && altConsidering) {
-                card.body.push(`} else {`);
-                card.body.push(altYesCode);
+                initializeSection.body.push(`} else {`);
+                initializeSection.body.push(altYesCode);
 
                 const listOfEmotions2 = await generator.next({
                     maxCharacters: 5,
@@ -253,25 +328,30 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
                     throw new Error("Generator finished without producing output");
                 }
 
-                const parsedEmotionalStates2 = parseListFromGrammarResponse(listOfEmotions2.value).map(emState => emState[0].toUpperCase() + emState.slice(1).toLowerCase()); // capitalize first letter to match the emotional states format
-
-                for (const emotionalState of parsedEmotionalStates2) {
-                    card.body.push(`DE.utils.tickleState(DE, char, ${JSON.stringify(emotionalState)}, ${shiftStateByOverride + 1}, ${shiftStateByOverride + 2}, [{name: other?.name, type: "character"}], [{characterCausant: other?.name, description: ${JSON.stringify(description)}}]);`);
+                let parsedEmotionalStates2 = parseListFromGrammarResponse(listOfEmotions2.value).map(emState => emState[0].toUpperCase() + emState.slice(1).toLowerCase()); // capitalize first letter to match the emotional states format
+                if (guider) {
+                    const guiderResult = await guider.askList(`"${name} ${description}", ${altConsidering}, how would ${name} feel?`, EMOTIONAL_STATES_TO_CHECK_AGAINST_AS_RECORD, parsedEmotionalStates2);
+                    if (guiderResult.value) {
+                        parsedEmotionalStates2 = guiderResult.value.map(em => em.trim()).filter(em => EMOTIONAL_STATES_TO_CHECK_AGAINST.includes(em));
+                    }
                 }
 
-                card.body.push(`}`);
+                for (const emotionalState of parsedEmotionalStates2) {
+                    initializeSection.body.push(`DE.utils.tickleState(DE, char, ${JSON.stringify(emotionalState)}, ${shiftStateByOverride + 1}, ${shiftStateByOverride + 2}, [{name: other?.name, type: "character"}], [{characterCausant: other?.name, description: ${JSON.stringify(description)}}]);`);
+                }
+
+                initializeSection.body.push(`}`);
             }
 
-            card.body.push(`}`);
-            card.body.push(`}`); // end onAnswer
-            card.body.push(`});`); // end trigger
+            initializeSection.body.push(`}`);
+            initializeSection.body.push(`}`); // end onAnswer
+            initializeSection.body.push(`});`); // end trigger
         }
 
         shiftStateByOverride = 0;
         doNotIncludeQuestions = null;
         overrideWholeReasoning = false;
 
-        insertSpecialComment(card.body, "bond-trigger-" + id);
         card.config.bondTriggers[id] = {
             causes: causesValue,
             questions: generatedQuestions,
@@ -282,7 +362,7 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
     }
 
     // yes/no questions that would make the character really like or dislike the regardless of the relationship level
-    card.body.push(`// Yes/no questions about liking in all relationship levels`);
+    initializeSection.body.push(`// Yes/no questions about liking in all relationship levels`);
     const [likeAtAnyLevelValue, likeAtAnyLevelQuestions] = await askYesNo(
         "like-at-any-level",
         10,
@@ -294,7 +374,7 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
         `DE.utils.shiftBond(DE, char, other, 1, 0);`,
     );
 
-    card.body.push(`// Yes/no questions about disliking in all relationship levels`);
+    initializeSection.body.push(`// Yes/no questions about disliking in all relationship levels`);
     const [dislikeAtAnyLevelValue, dislikeAtAnyLevelQuestions] = await askYesNo(
         "dislike-at-any-level",
         10,
@@ -307,7 +387,7 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
     );
 
     // yes/no questions that would make the character really like or dislike another character when they are strangers that just met
-    card.body.push(`// Yes/no questions about liking strangers`);
+    initializeSection.body.push(`// Yes/no questions about liking strangers`);
     doNotIncludeQuestions = likeAtAnyLevelQuestions;
     const [likeAtStrangersValue, likeAtStrangersQuestions] = await askYesNo(
         "like-strangers",
@@ -320,7 +400,7 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
         `DE.utils.shiftBond(DE, char, other, 1, 0);`,
     );
 
-    card.body.push(`// Yes/no questions about disliking strangers`);
+    initializeSection.body.push(`// Yes/no questions about disliking strangers`);
     doNotIncludeQuestions = dislikeAtAnyLevelQuestions;
     const [dislikeAtStrangersValue, dislikeAtStrangersQuestions] = await askYesNo(
         "dislike-strangers",
@@ -350,6 +430,13 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
             throw new Error("Generator finished without producing output");
         }
 
+        if (guider) {
+            const guiderResult = await guider.askBoolean("Can " + name + " feel love at first sight?", isLoveAtFirstSightValue);
+            if (guiderResult) {
+                isLoveAtFirstSightValue = guiderResult.value;
+            }
+        }
+
         isLoveAtFirstSightValue = isLoveAtFirstSight.value.trim().toLowerCase() === "yes";
 
         card.config.loveAtFirstSight = isLoveAtFirstSightValue;
@@ -358,15 +445,7 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
     }
 
     if (isLoveAtFirstSightValue) {
-        let conditionForAttraction = "";
-        for (const attraction of card.config.attractions) {
-            if (conditionForAttraction) {
-                conditionForAttraction += " || ";
-            }
-            conditionForAttraction += `DE.utils.is${attraction}(DE, other)`;
-        }
-
-        card.body.push(`// Yes/no questions about love at first sight`);
+        initializeSection.body.push(`// Yes/no questions about love at first sight`);
         doNotIncludeQuestions = [...likeAtAnyLevelQuestions, ...likeAtStrangersQuestions];
         await askYesNo(
             "love-at-first-sight",
@@ -375,12 +454,12 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
             "feel love (romantic and sexual) at first sight towards another when they are strangers",
             "they are strangers towards each other but " + name + " can feel love at first sight",
             "it was love at first sight with a stranger",
-            `runIf: (char, other) => DE.utils.isStrangerTowards(DE, char, other) && (${conditionForAttraction}),`,
-            `DE.utils.shiftBond(DE, char, other, 1, 1);`,
+            `runIf: (char, other) => DE.utils.isStrangerTowards(DE, char, other) && DE.utils.isAttractedTo(DE, char, other),`,
+            `DE.utils.shiftBond(DE, char, other, 1, DE.utils.isAttractedToWithLevelAsNumber(DE, char, other));`,
         );
     }
 
-    card.body.push(`// Yes/no questions about hate at first sight`);
+    initializeSection.body.push(`// Yes/no questions about hate at first sight`);
     doNotIncludeQuestions = [...dislikeAtAnyLevelQuestions, ...dislikeAtStrangersQuestions];
     const [hateAtFirstSightValue, hateAtFirstSightQuestions] = await askYesNo(
         "hate-at-first-sight",
@@ -394,7 +473,7 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
     );
 
     // yes/no questions that would make the character really like or dislike another character when they are acquaintances
-    card.body.push(`// Yes/no questions about acquaintances`);
+    initializeSection.body.push(`// Yes/no questions about acquaintances`);
     doNotIncludeQuestions = likeAtAnyLevelQuestions;
     const [likeAtAcquaintancesValue, likeAtAcquaintancesQuestions] = await askYesNo(
         "like-acquaintances",
@@ -419,8 +498,8 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
         `DE.utils.shiftBond(DE, char, other, -1, -1);`,
     );
 
-    // yes/no questions that would make a character feel sudden hatred and make them instant sworn enemies (abuse towards, witnessing crime, etc)
-    card.body.push(`// Yes/no questions about sudden intense hatred and instant sworn enmity`);
+    // idea create bond shifts with markers that can be undone, eg. did {{other}} just kill somebody?... and then the marker gets created, and the question did {{other}} provide a plausible reason for "killing someone"?
+    initializeSection.body.push(`// Yes/no questions about sudden intense hatred and instant sworn enmity`);
     shiftStateByOverride = 2;
     await askYesNo(
         "sudden-hatred-sworn-enemies",
@@ -429,39 +508,33 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
         "feel a sudden intense hatred towards another and become sworn enemies instantly due to extreme acts",
         "this can include anyone at any relationship level; the act must be severe enough to warrant instant sworn enmity such as killing, abuse, torture, or destruction",
         "it was done by another character and it is an extreme unforgivable act that triggers instant sworn enmity",
-        `runIf: (char, other) => true,`,
-        `DE.utils.shiftBond(DE, char, other, -50, 0);`,
+        `runIf: (char, other) => !DE.utils.hasBondShiftWithId(DE, char, other, bondShiftId),`,
+        `DE.utils.shiftBondWithUndo(DE, char, other, bondShiftAmount, 0, 0.8, bondShiftId, bondShiftUndoQuestion),`,
+
+        undefined,
+        undefined,
+        undefined,
+
+        true,
     );
 
-    card.body.push(`// Yes/no questions about clearing a severe misunderstanding`);
-    const [clearSevereMisunderstandingValue, clearSevereMisunderstandingQuestions] = await askYesNo(
-        "clear-severe-misunderstanding",
-        1,
-        "Clear up a misunderstanding that had caused extreme hatred and hostility (the cause MUST be extreme and severe: murder, killing someone they love, physical abuse, torture, genocide, enslavement, catastrophic betrayal, destruction of their home, or similarly devastating acts; do NOT include mild things like threats, insults, rudeness or general mistreatment)",
-        "feel sudden relief about the misunderstanding that was cleared",
-        "this can include anyone at any relationship level",
-        "it was done by another character that is clearing out an extreme misunderstanding",
-        `runIf: (char, other) => true,`,
-        `DE.utils.clearStatesCausesAndCausantsBetween(DE, char, other) && DE.utils.shiftBond(DE, char, other, 50, 0);`,
-    );
-
-    card.body.push(`// Yes/no questions about clearing a mild misunderstanding`);
-    doNotIncludeQuestions = clearSevereMisunderstandingQuestions;
+    // mild misunderstandings are fine, they don't mess things too much
+    initializeSection.body.push(`// Yes/no questions about clearing a mild misunderstanding`);
     await askYesNo(
         "clear-mild-misunderstanding",
         1,
-        "Clear up a misunderstanding that had caused extreme hatred and hostility (the cause must be mild)",
+        "Clear up a misunderstanding that had caused hostility (the cause must be mild and not extreme: a petty argument, a misunderstanding, a minor betrayal, a small offense, a minor annoyance, or similar acts that can cause hostility but are not severe enough to warrant sworn enmity)",
         "feel sudden relief about the misunderstanding that was cleared",
         "this can include anyone at any relationship level",
         "it was done by another character that is clearing out a mild misunderstanding",
         `runIf: (char, other) => true,`,
-        `DE.utils.clearStatesCausesAndCausantsBetween(DE, char, other) && DE.utils.shiftBond(DE, char, other, 2, 0);`,
+        `DE.utils.shiftBond(DE, char, other, 2, 0);`,
     );
 
     // STRONG POSITIVE BONDS
 
     // yes/no questions that would make the character really like another character when they are close friends and be unacceptable otherwise (non-romantic)
-    card.body.push(`// Yes/no questions close friends behaviours that are only acceptable because of the close friendship bond`);
+    initializeSection.body.push(`// Yes/no questions close friends behaviours that are only acceptable because of the close friendship bond`);
     doNotIncludeQuestions = [...likeAtAnyLevelQuestions, ...likeAtAcquaintancesQuestions];
     const [likeAtCloseFriendsValue, likeAtCloseFriendsQuestions] = await askYesNo(
         "like-close-friends-only",
@@ -479,7 +552,7 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
     );
 
     // BEST FRIENDS
-    card.body.push(`// Yes/no questions about elevating friendship towards best friendship`);
+    initializeSection.body.push(`// Yes/no questions about elevating friendship towards best friendship`);
     doNotIncludeQuestions = [...likeAtAnyLevelQuestions, ...likeAtAcquaintancesQuestions, ...likeAtStrangersQuestions, ...likeAtCloseFriendsQuestions];
     const [elevateToBestFriendValue, elevateToBestFriendQuestions] = await askYesNo(
         "elevate-to-best-friend",
@@ -488,30 +561,16 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
         "elevate a character friendship towards a best friendship",
         "this can include anyone from strangers, enemies, aquitances, friends, close friends, to best friends towards each other",
         "they are already friends",
+        // TODO this isFriendsOrBetter must be used something from the bond system to know what is the graduation
         `runIf: (char, other) => DE.utils.isFriendsOrBetterWith(DE, char, other),`,
         `DE.utils.shiftBond(DE, char, other, 1, 0);`,
+
+        `!DE.utils.isFriendsOrBetterWith(DE, char, other)`,
+        `DE.utils.shiftBond(DE, char, other, -0.5, 0);`,
+        "they are NOT close friends and " + name + " finds the behaviour/action unacceptable, invasive, and inappropriate",
     );
 
     // ======= ROMANTIC ======
-
-    // TODO this handles well humans and anthros but for other species
-    // maybe we should change how this operates, like what kinks would a regular cat have when this asks for that?...
-
-    if (!hasSpecialComment(card.head, "basic-conditions-for-attraction")) {
-        insertSpecialComment(card.head, "basic-conditions-for-attraction");
-        card.head.push(`const basicConditionsForAttractionFn = (DE, char, other) => {`);
-        card.head.push(`// Change these to affect what triggers run for bond updates related to attraction`);
-        card.head.push(`return (`);
-        if (card.config.characterSpeciesType === "anthrophomorphic") {
-            card.head.push(`DE.utils.isAnthro(DE, char) && DE.utils.isAnthro(DE, other) &&`);
-        } else {
-            card.head.push(`DE.utils.isSameSpecies(DE, char, other) &&`);
-        }
-        card.head.push(`DE.utils.isInAgeRange(DE, char, other)`);
-        card.head.push(`);`);
-        card.head.push(`};`);
-        await autosave?.save();
-    }
 
     if (!isAsexualValue) {
 
@@ -766,14 +825,14 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
 
             for (let i = 0; i < otherQuestionsJustToReject.length; i++) {
                 const question = otherQuestionsJustToReject[i];
-                card.body.push(`DE.utils.newTrigger(DE, ${JSON.stringify(name)}, {`)
-                card.body.push(`type: "yes_no",`);
-                card.body.push(`askPer: "conversing_character",`);
-                card.body.push(`runIf: (char, other) => !(${generalConditionForAttraction}),`);
-                card.body.push(`question: DE.utils.newHandlebarsTemplate(DE, ${JSON.stringify(question)}),`);
-                card.body.push(`onValue: (answer, char, other) => {`);
-                card.body.push(`if (answer) {`);
-                card.body.push(`DE.utils.shiftBond(DE, char, other, -5, -2.5);`);
+                initializeSection.body.push(`DE.utils.newTrigger(DE, ${JSON.stringify(name)}, {`)
+                initializeSection.body.push(`type: "yes_no",`);
+                initializeSection.body.push(`askPer: "conversing_character",`);
+                initializeSection.body.push(`runIf: (char, other) => !(${generalConditionForAttraction}),`);
+                initializeSection.body.push(`question: DE.utils.newHandlebarsTemplate(DE, ${JSON.stringify(question)}),`);
+                initializeSection.body.push(`onValue: (answer, char, other) => {`);
+                initializeSection.body.push(`if (answer) {`);
+                initializeSection.body.push(`DE.utils.shiftBond(DE, char, other, -5, -2.5);`);
 
                 const listOfEmotions = await generator.next({
                     maxCharacters: 5,
@@ -793,12 +852,12 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
                 const parsedEmotionalStates = parseListFromGrammarResponse(listOfEmotions.value).map(emState => emState[0].toUpperCase() + emState.slice(1).toLowerCase()); // capitalize first letter to match the emotional states format
 
                 for (const emotionalState of parsedEmotionalStates) {
-                    card.body.push(`DE.utils.tickleState(DE, char, ${JSON.stringify(emotionalState)}, 2, 4, [{name: other?.name, type: "character"}], [{characterCausant: other?.name, description: ${JSON.stringify(descriptionsForQuestions[i])}}]);`);
+                    initializeSection.body.push(`DE.utils.tickleState(DE, char, ${JSON.stringify(emotionalState)}, 2, 4, [{name: other?.name, type: "character"}], [{characterCausant: other?.name, description: ${JSON.stringify(descriptionsForQuestions[i])}}]);`);
                 }
 
-                card.body.push(`}`);
-                card.body.push(`}`);
-                card.body.push(`});`);
+                initializeSection.body.push(`}`);
+                initializeSection.body.push(`}`);
+                initializeSection.body.push(`});`);
             }
 
             await autosave?.save();

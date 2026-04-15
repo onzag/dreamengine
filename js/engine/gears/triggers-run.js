@@ -103,8 +103,9 @@ export async function runQuestion(engine, character, question, options) {
      */
     let others = [null];
     if (question.askPer) {
+        const deObject = engine.getDEObject();
         if (question.askPer === "present_character") {
-            const surroundingCharacters = getSurroundingCharacters(engine, character.name);
+            const surroundingCharacters = getSurroundingCharacters(deObject, character.name);
             const allCharacters = [...surroundingCharacters.nonStrangers, ...surroundingCharacters.totalStrangers];
             if (allCharacters.length === 0) {
                 return; // skip this question if there are no surrounding characters
@@ -117,7 +118,7 @@ export async function runQuestion(engine, character, question, options) {
             }
             others = conversingCharactersRelevant;
         } else if (question.askPer === "present_family_members") {
-            const surroundingCharacters = getSurroundingCharacters(engine, character.name);
+            const surroundingCharacters = getSurroundingCharacters(deObject, character.name);
             const familyMembers = surroundingCharacters.nonStrangers.filter(c => {
                 const relation = getFamilyBondRelation(character, engine.getDEObject().characters[c]);
                 return relation !== null;
@@ -181,10 +182,11 @@ export async function runQuestion(engine, character, question, options) {
             return;
         }
     }
-
+    
+    const deObject = engine.getDEObject();
     for (const other of others) {
         const otherFamilyRelationship = other ? getFamilyBondRelation(character, engine.deObject.characters[other]) : null;
-        const relationship = other ? await getRelationship(engine, character, engine.deObject.characters[other]) : null;
+        const relationship = other ? await getRelationship(deObject, character, engine.deObject.characters[other]) : null;
 
         if (question.runIf) {
             const shouldRun = await question.runIf(character, other ? engine.deObject.characters[other] : null, otherFamilyRelationship);
@@ -198,16 +200,15 @@ export async function runQuestion(engine, character, question, options) {
 
         const questionText = typeof question.question === "function" ? await question.question(engine.deObject, {
             char: character,
-            other: other ? engine.deObject.characters[other] : undefined,
-            otherFamilyRelation: otherFamilyRelationship || undefined,
-            otherRelationship: relationship || undefined,
+            // @ts-ignore typescript is wrong, other can be null
+            other: other ? engine.deObject.characters[other] : null,
+            otherFamilyRelation: otherFamilyRelationship || null,
+            otherRelationship: relationship || null,
         }) : question.question;
 
         console.log(`Asking question: ${questionText}`);
 
         if (question.type === "yes_no") {
-
-
             const answer = await options.questioningAgent.next({
                 maxCharacters: 0,
                 maxSafetyCharacters: 250,

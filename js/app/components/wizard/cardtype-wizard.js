@@ -199,6 +199,12 @@ class CardTypeWizard extends HTMLElement {
                 case 'askList':
                     result = await guider.askList(question, options, defaultValue);
                     break;
+                case 'askArbitraryList':
+                    result = await guider.askArbitraryList(question, defaultValue);
+                    break;
+                case 'askAcceptArbitraryList':
+                    result = await guider.askAcceptArbitraryList(question, defaultValue);
+                    break;
                 default:
                     result = { value: defaultValue };
             }
@@ -389,6 +395,91 @@ class CardTypeWizard extends HTMLElement {
             });
         }
 
+        /**
+         * @param {string} question
+         * @param {string[]} [defaultValue]
+         * @param {boolean} [hasTryAgainOption]
+         * @returns {Promise<{value: string[] | null}>}
+         */
+        function presentArbitraryList(question, defaultValue, hasTryAgainOption) {
+            return presentQuestion(
+                question,
+                () => {
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'guider-list';
+
+                    /** @type {string[]} */
+                    const items = defaultValue ? [...defaultValue] : [];
+
+                    const renderItems = () => {
+                        let listContainer = wrapper.querySelector('.guider-list-items');
+                        if (!listContainer) {
+                            listContainer = document.createElement('div');
+                            listContainer.className = 'guider-list-items';
+                            wrapper.insertBefore(listContainer, wrapper.querySelector('.guider-list-add-row'));
+                        }
+                        listContainer.innerHTML = items.map((item, idx) => `
+                            <div class="guider-list-item">
+                                <span>${item}</span>
+                                <div class="guider-list-remove" data-idx="${idx}">✕</div>
+                            </div>
+                        `).join('');
+                        listContainer.querySelectorAll('.guider-list-remove').forEach(btn => {
+                            btn.addEventListener('mouseenter', playHoverSound);
+                            btn.addEventListener('click', () => {
+                                const idx = parseInt(/** @type {HTMLElement} */(btn).dataset.idx || '0');
+                                items.splice(idx, 1);
+                                renderItems();
+                            });
+                        });
+                    };
+
+                    const addRow = document.createElement('div');
+                    addRow.className = 'guider-list-add-row';
+
+                    const textarea = document.createElement('textarea');
+                    textarea.className = 'guider-textarea';
+                    textarea.placeholder = 'Add item...';
+                    textarea.addEventListener('input', function () {
+                        this.style.height = 'auto';
+                        this.style.height = this.scrollHeight + 'px';
+                    });
+
+                    const addBtn = document.createElement('div');
+                    addBtn.className = 'guider-list-add-btn';
+                    addBtn.textContent = '+';
+                    addBtn.addEventListener('mouseenter', playHoverSound);
+                    addBtn.addEventListener('click', () => {
+                        const val = textarea.value.trim();
+                        if (!val) return;
+                        items.push(val);
+                        textarea.value = '';
+                        textarea.style.height = 'auto';
+                        renderItems();
+                    });
+
+                    addRow.appendChild(textarea);
+                    addRow.appendChild(addBtn);
+                    wrapper.appendChild(addRow);
+
+                    renderItems();
+                    return wrapper;
+                },
+                (inputArea) => {
+                    const itemEls = inputArea.querySelectorAll('.guider-list-item span');
+                    const result = Array.from(itemEls).map(el => el.textContent || '');
+                    const pending = inputArea.querySelector('.guider-list-add-row .guider-textarea');
+                    if (pending) {
+                        const val = /** @type {HTMLTextAreaElement} */ (pending).value.trim();
+                        if (val && !result.includes(val)) result.push(val);
+                    }
+                    return result.length > 0 ? result : (defaultValue ?? []);
+                },
+                defaultValue,
+                hasTryAgainOption
+            );
+        }
+
         return {
             async askOption(question, options, defaultValue) {
                 return presentQuestion(
@@ -539,6 +630,15 @@ class CardTypeWizard extends HTMLElement {
                     },
                     defaultValue
                 );
+            },
+
+            // @ts-ignore
+            async askArbitraryList(question, defaultValue) {
+                return presentArbitraryList(question, defaultValue, false);
+            },
+
+            async askAcceptArbitraryList(question, defaultValue) {
+                return presentArbitraryList(question, defaultValue, true);
             },
 
             async askList(question, options, defaultValue) {

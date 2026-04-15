@@ -1068,7 +1068,23 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
             slight: number;
             moderate: number;
             strong: number;
-        }
+        },
+        bondGraduation: {
+            foe: number;
+            hostile: number;
+            antagonistic: number;
+            unfriendly: number;
+            unpleasant: number;
+            acquaintance: number;
+            friend: number;
+            goodFriend: number;
+            closeFriend: number;
+            bestFriend: number;
+        },
+        /**
+         * When a neutral interaction happens, the bond changes by this amount (multiplied by the multipliers given and the fine tune value)
+         */
+        neutralInteractionBondChange: number;
         /**
          * The absolute weight that a bond has before breaking away from a stranger bond to a regular bond
          * once the character has interacted enough with a stranger and the bond weight surpasses this value
@@ -1176,6 +1192,11 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
      * - When a character witnesses a robbery, the engine uses their heroism score to determine how likely they are to intervene and try to stop the robbery, higher heroism means more likely to intervene and try to stop the robbery
      */
     heroism: number;
+
+    /**
+     * A number from 0 to 1 that represents how likely is the character to resort to violence when facing conflicts or threats, higher means more likely to resort to violence
+     */
+    violence: number;
 
     // TODO implement all these from social simulation in bonds and talk to generate the internal description
     // currently it is not done, also species, speciesType, groupBelonging and race are taken to the MinimalCharacterReference too
@@ -1444,6 +1465,23 @@ declare interface DENamePool {
     amb: Array<string>;
 }
 
+declare interface DEUndoableShift {
+    id: string;
+    amountBond: number;
+    amountBond2: number;
+    /**
+     * The question that should receive a yes answer for the shift to be undone
+     * It must be a string because this question is cached
+     * 
+     * You may specify null to just leave the registry of this id and handle it yourself
+     */
+    undoQuestion: string | null;
+    /**
+     * The percentage of the bond change that is recovered when the shift is undone, for example, if the bond change was -10 and the recovery rate is 0.5, when the shift is undone, the bond will recover 5 points, so the new bond change will be -5 instead of -10
+     */
+    recoveryRate: number;
+}
+
 declare interface DESingleBondDescription {
     towards: string;
     stranger: boolean;
@@ -1451,6 +1489,9 @@ declare interface DESingleBondDescription {
     bond2: number;
     knowsName: boolean;
     createdAt: DETimeDescription;
+    undoableShifts: {
+        [shiftId: string]: DEUndoableShift;
+    }
 }
 
 declare interface DEBondDescription {
@@ -2865,62 +2906,38 @@ declare interface DEUtils {
     isStrangerTowards(DE: DEObject, char1: string | DECompleteCharacterReference | null, char2: string | DECompleteCharacterReference | null): boolean;
     isAttractedTo(DE: DEObject, char1: string | DECompleteCharacterReference | null, potentialAttractiveChar2: string | DECompleteCharacterReference | null): boolean;
     isAttractedToWithLevel(DE: DEObject, char1: string | DECompleteCharacterReference | null, potentialAttractiveChar2: string | DECompleteCharacterReference | null): "slight" | "moderate" | "strong" | false;
+    isAttractedToWithLevelAsNumber(DE: DEObject, char1: string | DECompleteCharacterReference | null, potentialAttractiveChar2: string | DECompleteCharacterReference | null): number;
     isAttractedToWithReasoning(DE: DEObject, char1: string | DECompleteCharacterReference | null, potentialAttractiveChar2: string | DECompleteCharacterReference | null): {attracted: boolean, reasoning: string, level: "slight" | "moderate" | "strong" | false};
 
     /**
      * To be used during questions and triggers mostly
-     * @param DE 
-     * @param char1 
-     * @param towards 
-     * @param primaryShift 
-     * @param secondaryShift 
      */
     shiftBond(DE: DEObject, char1: string | DECompleteCharacterReference | null, towards: string | DECompleteCharacterReference | null, primaryShift: number, secondaryShift: number): void;
     /**
+     * Whether the bond has already been shifted this cycle
+     */
+    hasBondBeenShiftedThisCycle(DE: DEObject, char1: string | DECompleteCharacterReference | null, towards: string | DECompleteCharacterReference | null): boolean;
+    /**
      * Shifts the state of a character by a certain amount
      * To be used during questions and triggers mostly
-     * @param DE 
-     * @param character 
-     * @param stateName 
-     * @param shift 
-     * @param causants
-     * @param causes
      */
     shiftState(DE: DEObject, character: string | DECompleteCharacterReference | null, stateName: string, shift: number, causants: DEStateCausant[] | null, causes: DEStateCause[] | null): void;
     /**
      * Similar to shift state but there is a max limit to how much the state can be shifted based on the cap parameter
-     * @param DE 
-     * @param character 
-     * @param stateName 
-     * @param shift 
-     * @param cap 
-     * @param causants 
-     * @param causes
      */
     tickleState(DE: DEObject, character: string | DECompleteCharacterReference | null, stateName: string, shift: number, cap: number, causants: DEStateCausant[] | null, causes: DEStateCause[] | null): void;
     /**
      * Adds a causant to a character state, this is used to keep track of what caused a state to be applied
-     * @param DE 
-     * @param character 
-     * @param stateName 
-     * @param causant 
      */
     addCausantToState(DE: DEObject, character: string | DECompleteCharacterReference | null, stateName: string, causant: DEStateCausant): void;
     /**
      * Removes a causant from a character state, this is used to keep track of what caused a state to be applied
-     * @param DE 
-     * @param character 
-     * @param stateName 
-     * @param causant 
      */
     removeCausantFromState(DE: DEObject, character: string | DECompleteCharacterReference | null, stateName: string, causant: DEStateCausant): void;
     /**
      * To be used during questions and triggers mostly
      * 
      * Will trigger that action once the character is to talk
-     * 
-     * @param DE 
-     * @param action 
      */
     triggerActionNext(DE: DEObject, action: DEActionPromptInjection): void;
     accumulateInCharacter(DE: DEObject, character: string | DECompleteCharacterReference, accumulatorName: string, amount: number): number;
