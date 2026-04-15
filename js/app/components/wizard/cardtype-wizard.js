@@ -1,5 +1,5 @@
 import { createCardStructureFrom, getJsCard, isCardTypeFile } from '../../../cardtype/base.js';
-import { playCancelSound, playConfirmSound, playHoverSound, setTempSoundDisable } from '../../sound.js';
+import { playCancelSound, playConfirmSound, playHoverSound, setTempSoundDisable, startAmbienceWithFade, stopAmbienceWithFade } from '../../sound.js';
 
 class CardTypeWizard extends HTMLElement {
     constructor() {
@@ -14,7 +14,7 @@ class CardTypeWizard extends HTMLElement {
         this._wizardCleanup = null;
     }
 
-    connectedCallback() {
+    async connectedCallback() {
         this.render();
 
         document.addEventListener('keydown', this.onDocumentKeydown);
@@ -30,6 +30,9 @@ class CardTypeWizard extends HTMLElement {
         });
 
         this.initializeCard();
+
+        await stopAmbienceWithFade(1000, 3);
+        await startAmbienceWithFade(['./sounds/rem.mp3'], 1000, 1);
     }
 
     async initializeCard() {
@@ -139,6 +142,7 @@ class CardTypeWizard extends HTMLElement {
                     if (!cardText) {
                         return;
                     }
+                    this.markUnsaved();
                     parsedCard.card = cardText;
                     if (mode === 'automatic') {
                         parsedCard.config.automaticWizardInProgress = true;
@@ -373,6 +377,7 @@ class CardTypeWizard extends HTMLElement {
                     tryAgainBtn.addEventListener('click', () => {
                         playCancelSound();
                         setTempSoundDisable();
+                        self.markUnsaved();
                         self.initOverlay();
                         resolve({ value: null });
                     });
@@ -386,6 +391,7 @@ class CardTypeWizard extends HTMLElement {
                 submitBtn.addEventListener('click', () => {
                     playConfirmSound();
                     const value = extractValueFn(inputArea);
+                    self.markUnsaved();
                     self.initOverlay();
                     resolve({ value });
                 });
@@ -798,7 +804,23 @@ class CardTypeWizard extends HTMLElement {
     }
 
     /**
-     * Shows the autosave indicator in the title bar.
+     * Marks the autosave status as unsaved.
+     */
+    markUnsaved() {
+        if (this._autosaveHideTimer) {
+            clearTimeout(this._autosaveHideTimer);
+            this._autosaveHideTimer = null;
+        }
+        const el = this.root.querySelector('.wizard-autosave');
+        if (el) {
+            el.textContent = 'Unsaved progress';
+            el.classList.add('visible');
+            el.classList.remove('saved');
+        }
+    }
+
+    /**
+     * Shows the autosave indicator in the title bar as "Saving...".
      */
     showAutosaveStatus() {
         if (this._autosaveHideTimer) {
@@ -807,24 +829,31 @@ class CardTypeWizard extends HTMLElement {
         }
         const el = this.root.querySelector('.wizard-autosave');
         if (el) {
+            el.textContent = 'Saving...';
             el.classList.add('visible');
+            el.classList.remove('saved');
         }
     }
 
     /**
-     * Fades out the autosave indicator after a short delay.
+     * Shows "Saved" and fades out the autosave indicator after a short delay.
      */
     hideAutosaveStatus() {
+        const el = this.root.querySelector('.wizard-autosave');
+        if (el) {
+            el.textContent = 'Saved';
+            el.classList.add('saved');
+        }
         this._autosaveHideTimer = window.setTimeout(() => {
-            const el = this.root.querySelector('.wizard-autosave');
             if (el) {
                 el.classList.remove('visible');
+                el.classList.remove('saved');
             }
             this._autosaveHideTimer = null;
-        }, 1500);
+        }, 2000);
     }
 
-    disconnectedCallback() {
+    async disconnectedCallback() {
         this.endOverlay();
         if (this._autosaveHideTimer) {
             clearTimeout(this._autosaveHideTimer);
@@ -836,6 +865,9 @@ class CardTypeWizard extends HTMLElement {
         }
         document.removeEventListener('keydown', this.onDocumentKeydown);
         this.dispatchEvent(new CustomEvent('wizard-closed'));
+
+        await stopAmbienceWithFade(1000, 1);
+        await startAmbienceWithFade(['./sounds/dream-ambience.mp3'], 1000, 3);
     }
 
     /** @param {KeyboardEvent} e */
@@ -928,6 +960,10 @@ class CardTypeWizard extends HTMLElement {
 
         .wizard-autosave.visible {
             opacity: 1;
+        }
+
+        .wizard-autosave.saved {
+            color: rgba(120, 240, 160, 0.7);
         }
 
         .wizard-content {
@@ -1352,7 +1388,7 @@ class CardTypeWizard extends HTMLElement {
       <div class="wizard-overlay">
         <div class="wizard-title">
             <span>CardType Wizard</span>
-            <span class="wizard-autosave">Saving...</span>
+            <span class="wizard-autosave"></span>
         </div>
         <div class="wizard-content">
             <slot></slot>
