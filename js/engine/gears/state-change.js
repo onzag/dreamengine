@@ -115,8 +115,8 @@ export default async function calculateStateChange(engine, character, interacted
         }
 
         if (stateDescription.requiresCausants) {
-            const causants = alreadyActivatedInfo.causants || [];
-            if (causants.length === 0) {
+            const causeWithCausant = alreadyActivatedInfo.causes?.find(c => c.causant);
+            if (!causeWithCausant) {
                 console.log(`State ${stateName} on character ${character.name} requires causants but has none. Removing state ${stateName}.`);
                 engine.deObject.stateFor[character.name].states = engine.deObject.stateFor[character.name].states.filter(s => s.state !== stateName);
                 removedState = true;
@@ -145,9 +145,8 @@ export default async function calculateStateChange(engine, character, interacted
         }
 
         if (stateDescription.requiresCharacterCausants) {
-            const causants = alreadyActivatedInfo.causants || [];
-            const characterCausants = causants.filter(c => c.type === "character");
-            if (characterCausants.length === 0) {
+            const causeWithCharacterCausant = alreadyActivatedInfo.causes?.find(c => c.causant?.type === "character")
+            if (!causeWithCharacterCausant) {
                 console.log(`State ${stateName} on character ${character.name} requires character causants but has none. Removing state ${stateName}.`);
                 engine.deObject.stateFor[character.name].states = engine.deObject.stateFor[character.name].states.filter(s => s.state !== stateName);
                 removedState = true;
@@ -161,9 +160,8 @@ export default async function calculateStateChange(engine, character, interacted
         }
 
         if (stateDescription.requiresObjectCausants) {
-            const causants = alreadyActivatedInfo.causants || [];
-            const objectCausants = causants.filter(c => c.type === "object");
-            if (objectCausants.length === 0) {
+            const causeWithObjectCausant = alreadyActivatedInfo.causes?.find(c => c.causant?.type === "object")
+            if (!causeWithObjectCausant) {
                 console.log(`State ${stateName} on character ${character.name} requires object causants but has none. Removing state ${stateName}.`);
                 engine.deObject.stateFor[character.name].states = engine.deObject.stateFor[character.name].states.filter(s => s.state !== stateName);
                 removedState = true;

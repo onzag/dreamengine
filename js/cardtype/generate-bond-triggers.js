@@ -57,13 +57,40 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
     const isIncestuousValue = card.config.isIncestuous;
     const name = card.config.name;
 
-    let EMOTIONAL_STATES_TO_CHECK_AGAINST = [...BASIC_EMOTIONAL_STATES]
+    /**
+     * @type {string[]}
+     */
+    let EMOTIONAL_STATES_TO_CHECK_AGAINST = card.config.emotionalStatesToCheckAgainst || [...BASIC_EMOTIONAL_STATES];
     if (isAsexualValue) {
         EMOTIONAL_STATES_TO_CHECK_AGAINST = EMOTIONAL_STATES_TO_CHECK_AGAINST.filter(state => !["Flirty", "Loving", "Aroused"].includes(state));
     }
 
+    if (guider && !card.config.emotionalStatesToCheckAgainst) {
+        const guiderResult = await guider.askArbitraryList(`Emotional states to check against for ${name}`, EMOTIONAL_STATES_TO_CHECK_AGAINST);
+        if (guiderResult.value) {
+            EMOTIONAL_STATES_TO_CHECK_AGAINST = Array.from(new Set(guiderResult.value.map(em => em.trim()).filter(em => em.length > 0)));
+        }
+        card.config.emotionalStatesToCheckAgainst = EMOTIONAL_STATES_TO_CHECK_AGAINST;
+    }
+
+    /**
+     * @type {*}
+     */
     const EMOTIONAL_STATES_TO_CHECK_AGAINST_AS_RECORD = { ...BASIC_EMOTIONAL_STATES_OPTIONS };
+
+    const customEmotionalStates = EMOTIONAL_STATES_TO_CHECK_AGAINST.filter(state => !BASIC_EMOTIONAL_STATES.includes(state));
+
+    // @ts-ignore
+    EMOTIONAL_STATES_TO_CHECK_AGAINST_AS_RECORD.Positive.filter(state => !EMOTIONAL_STATES_TO_CHECK_AGAINST.includes(state));
+    // @ts-ignore
+    EMOTIONAL_STATES_TO_CHECK_AGAINST_AS_RECORD.Negative.filter(state => !EMOTIONAL_STATES_TO_CHECK_AGAINST.includes(state));
+
+    if (customEmotionalStates.length > 0) {
+        EMOTIONAL_STATES_TO_CHECK_AGAINST_AS_RECORD.Custom = customEmotionalStates;
+    }
+
     if (isAsexualValue) {
+        // @ts-ignore
         EMOTIONAL_STATES_TO_CHECK_AGAINST_AS_RECORD.Positive = EMOTIONAL_STATES_TO_CHECK_AGAINST_AS_RECORD.Positive.filter(state => !["Flirty", "Loving", "Aroused"].includes(state));
     }
 
@@ -306,7 +333,7 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
             }
 
             for (const emotionalState of parsedEmotionalStates) {
-                initializeSection.body.push(`DE.utils.tickleState(DE, char, ${JSON.stringify(emotionalState)}, ${shiftStateByOverride + 1}, ${shiftStateByOverride + 2}, [{name: other?.name, type: "character"}], [{characterCausant: other?.name, description: ${JSON.stringify(description)}}]);`);
+                initializeSection.body.push(`DE.utils.tickleState(DE, char, ${JSON.stringify(emotionalState)}, ${shiftStateByOverride + 1}, ${shiftStateByOverride + 2}, [{name: other.name, type: "character"}], [{characterCausant: other.name, description: ${JSON.stringify(description)}}]);`);
             }
 
             if (altCondition && altYesCode && altConsidering) {
@@ -337,7 +364,7 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
                 }
 
                 for (const emotionalState of parsedEmotionalStates2) {
-                    initializeSection.body.push(`DE.utils.tickleState(DE, char, ${JSON.stringify(emotionalState)}, ${shiftStateByOverride + 1}, ${shiftStateByOverride + 2}, [{name: other?.name, type: "character"}], [{characterCausant: other?.name, description: ${JSON.stringify(description)}}]);`);
+                    initializeSection.body.push(`DE.utils.tickleState(DE, char, ${JSON.stringify(emotionalState)}, ${shiftStateByOverride + 1}, ${shiftStateByOverride + 2}, [{name: other.name, type: "character"}], [{characterCausant: other.name, description: ${JSON.stringify(description)}}]);`);
                 }
 
                 initializeSection.body.push(`}`);

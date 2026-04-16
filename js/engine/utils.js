@@ -1,4 +1,4 @@
-import { getSurroundingCharacters, getPowerLevelFromCharacter } from "./util/character-info.js";
+import { getSurroundingCharacters, getPowerLevelFromCharacter, getRelationship } from "./util/character-info.js";
 import { generateIntSeedFromString, weightedRandomByLikelihood } from "../util/random.js";
 import { getCharacterVolume, getCharacterWeight } from "./util/weight-and-volume.js";
 
@@ -49,10 +49,27 @@ function getPronounHelperLocal(DE, charsOrig, they, he, she, theySingular) {
 }
 
 /**
+ * 
+ * @param {string[]} list 
+ * @returns 
+ */
+function removeDuplicatesHelper(list) {
+    if (!list || !Array.isArray(list)) return [];
+    const seen = new Set();
+    return list.filter(item => {
+        if (seen.has(item)) {
+            return false;
+        }
+        seen.add(item);
+        return true;
+    });
+}
+
+/**
  * @param {DEObject} DE
  * @param {DECompleteCharacterReference} character
  * @param {string} stateName
- * @returns {DEStateCausant[]}
+ * @returns {Array<DEStateCauseCausantCharacter | DEStateCauseCausantObject>}
  */
 function getCausantsHelperLocal(DE, character, stateName) {
     const actualStateName = stateName.trim().toUpperCase().replace(/\s+/, "_");
@@ -68,11 +85,12 @@ function getCausantsHelperLocal(DE, character, stateName) {
     }
     if (!lastEntryWithActivation) return [];
     const stateEntry = lastEntryWithActivation.states.find(s => s.state === actualStateName);
-    if (stateEntry?.causants === null) {
-        console.warn(`State ${actualStateName} does not track causants for character ${character.name}`);
+    if (stateEntry?.causes === null || stateEntry?.causes.length === 0) {
+        console.warn(`State ${actualStateName} does not have causants because there are no causes.`);
         return [];
     }
-    return stateEntry?.causants || [];
+    // @ts-ignore
+    return stateEntry?.causes.map(c => c.causant).filter(c => c) || [];
 }
 
 /**
@@ -568,7 +586,7 @@ export const deEngineUtils = {
         }
 
         if (minPickiness > 0.65) {
-            const tooUncharismatic = char2Ref.charisma < (minPickiness*0.75);
+            const tooUncharismatic = char2Ref.charisma < (minPickiness * 0.75);
             if (tooUncharismatic) {
                 if (actuallyFeelsAttractionRegardless) {
                     return { level, attracted: true, reasoning: `Despite ${char2Ref.name} lacking charisma, ${char1Ref.name} still feels ${actuallyFeelsAttractionRegardless} sexual/romantic attraction towards ${char2Ref.name}` };
@@ -591,17 +609,14 @@ export const deEngineUtils = {
         if (diffBetweenMinPickinessAndAttractiveness > 0.35) {
             level = "strong";
         }
-        
+
         if (specialReason) {
             return { level, attracted: true, reasoning: `${char1Ref.name} is romantically/sexually attracted to ${char2Ref.name} because ${specialReason.specialReason}` };
         }
 
         return { level, attracted: true, reasoning: `${char1Ref.name} is romantically/sexually attracted to ${char2Ref.name}` };
     },
-    async shiftState(DE, character, stateName, shiftAmount, causants, causes) {
-        return DE.utils.tickleState(DE, character, stateName, shiftAmount, shiftAmount > 0 ? Infinity : -Infinity, causants, causes);
-    },
-    async tickleState(DE, character, stateName, shiftAmount, cap, causants, causes) {
+    async shiftState(DE, character, stateName, shiftAmount, cap, causes) {
         if (shiftAmount === 0) {
             console.warn(`Shift amount is 0 when trying to shift state ${stateName} on character ${character}, skipping.`);
             return;
@@ -675,7 +690,6 @@ export const deEngineUtils = {
 
             activeState = {
                 state: stateName,
-                causants: null,
                 causes: null,
                 intensity: 0,
                 relieving: false,
@@ -689,43 +703,36 @@ export const deEngineUtils = {
         let hasRemovedIt = false;
 
         const newExpectedIntensity = activeState.intensity + shiftAmount - alreadyShiftedInfo;
-        if (newExpectedIntensity > cap) {
-            shiftAmount = cap - activeState.intensity + alreadyShiftedInfo;
+        if (cap !== undefined && cap !== null) {
+            if (newExpectedIntensity > cap) {
+                shiftAmount = cap - activeState.intensity + alreadyShiftedInfo;
+            }
         }
 
         activeState.intensity += shiftAmount - alreadyShiftedInfo;
         characterRef.temp["alreadyShifted_" + stateName] = shiftAmount;
 
         if (shiftAmount > 0) {
-            if (activeState.causants && causants) {
-                activeState.causants.push(...causants);
-            } else if (causants) {
-                activeState.causants = causants;
-            }
             if (activeState.causes && causes) {
-                activeState.causes.push(...causes);
+                for (const causeToAdd of causes) {
+                    const existingSameCause = activeState.causes.find(c => c.causant && c.causant.name === causeToAdd.causant?.name && c.causant?.type === causeToAdd.causant?.type && c.description === causeToAdd.description);
+                    if (existingSameCause) {
+                        if (existingSameCause.causant && existingSameCause.causant.type === "character") {
+                            const apologizableRate = (causeToAdd.causant?.type === "character" && causeToAdd.causant?.apologizable) || 0;
+                            if (existingSameCause.causant.apologizable > 0) {
+                                existingSameCause.causant.apologizable /= (4 / (apologizableRate + 1));
+                            }
+                        }
+                    } else {
+                        activeState.causes.push(causeToAdd);
+                    }
+                }
             } else if (causes) {
                 activeState.causes = causes;
             }
-        } else {
-            if (activeState.causants && causants) {
-                activeState.causants = activeState.causants.filter(c => causants.some(c2 => c2.name === c.name && c2.type === c.type));
-            }
-            if (activeState.causes && causes) {
-                activeState.causes = activeState.causes.filter(c =>
-                    !causes.some(c2 => c2.description === c.description && (c2.characterCausant || null) === (c.characterCausant || null)) ||
-                    (causants && causants.some(c2 => c2.name === c.characterCausant && c2.type === "character"))
-                );
-            }
-        }
-
-        for (const cause of activeState.causes || []) {
-            if (cause.characterCausant && !activeState.causants?.find(c => c.name === cause.characterCausant && c.type === "character")) {
-                activeState.causants = activeState.causants || [];
-                activeState.causants.push({
-                    name: cause.characterCausant,
-                    type: "character",
-                });
+        } else if (causes && activeState.causes) {
+            for (const causeToRemove of causes) {
+                activeState.causes = activeState.causes.filter(c => !(c.causant && causeToRemove.causant && c.causant.name === causeToRemove.causant.name && c.causant.type === causeToRemove.causant.type && c.description === causeToRemove.description));
             }
         }
 
@@ -774,30 +781,62 @@ export const deEngineUtils = {
         }
         return characterRef.state[accumulatorName] || 0;
     },
-    addCausantToState(DE, character, stateName, causant) {
+    addCauseToState(DE, character, stateName, cause) {
         const characterRef = typeof character === "string" ? DE.characters[character] : character;
         if (!characterRef) {
             if (typeof character === "string") {
-                console.warn(`Character with name ${character} not found when trying to add causant to state ${stateName}`);
+                console.warn(`Character with name ${character} not found when trying to add cause to state ${stateName}`);
             } else {
-                console.warn(`Received null as character reference when trying to add causant to state ${stateName}`);
+                console.warn(`Received null as character reference when trying to add cause to state ${stateName}`);
             }
             return;
         }
 
         const activeState = DE.stateFor[characterRef.name].states.find(s => s.state === stateName);
         if (!activeState) {
-            console.warn(`Character ${characterRef.name} does not have active state ${stateName} when trying to add causant`);
+            console.warn(`Character ${characterRef.name} does not have active state ${stateName} when trying to add cause`);
             return;
         }
 
-        if (activeState.causants) {
-            activeState.causants.push(causant);
+        if (activeState.causes) {
+            const existingSameCause = activeState.causes.find(c => c.causant && c.causant.name === cause.causant?.name && c.causant?.type === cause.causant?.type && c.description === cause.description);
+            if (existingSameCause) {
+                if (existingSameCause.causant && existingSameCause.causant.type === "character") {
+                    const apologizableRate = (cause.causant?.type === "character" && cause.causant?.apologizable) || 0;
+                    if (existingSameCause.causant.apologizable > 0) {
+                        existingSameCause.causant.apologizable /= (4 / (apologizableRate + 1));
+                    }
+                }
+            } else {
+                activeState.causes.push(cause);
+            }
         } else {
-            activeState.causants = [causant];
+            activeState.causes = [cause];
         }
     },
-    removeCausantFromState(DE, character, stateName, causant) {
+    removeCauseFromState(DE, character, stateName, cause) {
+        const characterRef = typeof character === "string" ? DE.characters[character] : character;
+        if (!characterRef) {
+            if (typeof character === "string") {
+                console.warn(`Character with name ${character} not found when trying to remove cause from state ${stateName}`);
+            } else {
+                console.warn(`Received null as character reference when trying to remove cause from state ${stateName}`);
+            }
+            return;
+        }
+        const activeState = DE.stateFor[characterRef.name].states.find(s => s.state === stateName);
+        if (!activeState) {
+            console.warn(`Character ${characterRef.name} does not have active state ${stateName} when trying to remove cause`);
+            return;
+        }
+        if (activeState.causes) {
+            activeState.causes = activeState.causes.filter(c => !(c.causant && cause && c.causant.name === cause.causant?.name && c.causant.type === cause.causant?.type && c.description === cause.description));
+            if (activeState.causes.length === 0) {
+                activeState.causes = null;
+            }
+        }
+    },
+    removeCausantFromState(DE, character, stateName, causant, causantType) {
         const characterRef = typeof character === "string" ? DE.characters[character] : character;
         if (!characterRef) {
             if (typeof character === "string") {
@@ -812,8 +851,8 @@ export const deEngineUtils = {
             console.warn(`Character ${characterRef.name} does not have active state ${stateName} when trying to remove causant`);
             return;
         }
-        if (activeState.causants) {
-            activeState.causants = activeState.causants.filter(c => c.name !== causant.name && c.type !== causant.type);
+        if (activeState.causes) {
+            activeState.causes = activeState.causes.filter(c => !(c.causant && c.causant.name === causant && c.causant.type === causantType));
         }
     },
     newTrigger(DE, character, trigger) {
@@ -859,6 +898,99 @@ export const deEngineUtils = {
     },
 
     templateUtils: {
+        breakDownCharactersAndCausesTemplate(DE, info) {
+            return async (DE, info2) => {
+                let base = typeof info.base === "string" ? info.base : info.base(DE, {
+                    char: info2.char,
+                });
+
+                if (info2.causes) {
+                    /**
+                     * @type {string[]}
+                     */
+                    const causants = [];
+                    /**
+                     * @type {Record<string, string[]>}
+                     */
+                    const causesPerCausant = {};
+                    info2.causes.forEach(cause => {
+                        if (cause.causant && cause.causant.type === "character") {
+                            if (!causesPerCausant[cause.causant.name]) {
+                                causesPerCausant[cause.causant.name] = [];
+                            }
+                            causesPerCausant[cause.causant.name].push(cause.description);
+                            if (!causants.includes(cause.causant.name)) {
+                                causants.push(cause.causant.name);
+                            }
+                        }
+                    });
+
+                    for (let i = 0; i < causants.length; i++) {
+                        const causant = causants[i];
+                        const other = DE.characters[causant];
+                        const otherFamilyRelationship = DE.characters[info2.char.name].familyTies[causant];
+                        const otherRelationship = await getRelationship(DE, info2.char, other);
+                        const descriptionForThatCausant = typeof info.perOther === "string" ? info.perOther : await info.perOther(DE, {
+                            char: info2.char,
+                            other: DE.characters[causant],
+                            otherFamilyRelation: otherFamilyRelationship.relation,
+                            otherRelationship: otherRelationship,
+                        });
+                        if (base) {
+                            base += "\n\n";
+                        }
+                        base += descriptionForThatCausant;
+
+                        if (causesPerCausant[causant].length > 1) {
+                            base += `. Reasons: ${info2.char.name} `;
+                            base += DE.utils.templateUtils.formatAnd(DE, causesPerCausant[causant]);
+                            base += `, by ${other.name}`;
+                        }
+                    }
+                }
+
+                if (info2.causes) {
+                    /**
+                     * @type {string[]}
+                     */
+                    const causants = [];
+                    /**
+                     * @type {Record<string, string[]>}
+                     */
+                    const causesPerCausant = {};
+                    info2.causes.forEach(cause => {
+                        if (cause.causant && cause.causant.type === "object") {
+                            if (!causesPerCausant[cause.causant.name]) {
+                                causesPerCausant[cause.causant.name] = [];
+                            }
+                            causesPerCausant[cause.causant.name].push(cause.description);
+                            if (!causants.includes(cause.causant.name)) {
+                                causants.push(cause.causant.name);
+                            }
+                        }
+                    });
+
+                    for (let i = 0; i < causants.length; i++) {
+                        const causant = causants[i];
+                        const descriptionForThatCausant = typeof info.perObject === "string" ? info.perObject : await info.perObject(DE, {
+                            char: info2.char,
+                            item: causant,
+                        });
+                        if (base) {
+                            base += "\n\n";
+                        }
+                        base += descriptionForThatCausant;
+
+                        if (causesPerCausant[causant].length > 1) {
+                            base += `. Reasons: ${info2.char.name} `;
+                            base += DE.utils.templateUtils.formatAnd(DE, causesPerCausant[causant]);
+                        }
+                    }
+                }
+
+                return base;
+            }
+        },
         allWorldCharacters(DE) {
             return Object.keys(DE.stateFor).filter((charName) => !DE.stateFor[charName].deadEnded).map(name => DE.characters[name]);
         },
@@ -891,10 +1023,10 @@ export const deEngineUtils = {
             return DE.world.locations[locationName]?.isSafe || false;
         },
         getLastStateCausants(DE, char, stateName) {
-            return getCausantsHelperLocal(DE, char, stateName).map(c => c.name);
+            return removeDuplicatesHelper(getCausantsHelperLocal(DE, char, stateName).map(c => c.name));
         },
         getLastStateCharacterCausants(DE, char, stateName) {
-            return getCausantsHelperLocal(DE, char, stateName).filter(c => c.type === "character").map(c => c.name);
+            return removeDuplicatesHelper(getCausantsHelperLocal(DE, char, stateName).filter(c => c.type === "character").map(c => c.name));
         },
         getLastStateObjectCausants(DE, char, stateName) {
             return getCausantsHelperLocal(DE, char, stateName).filter(c => c.type === "object").map(c => c.name);
@@ -1219,7 +1351,6 @@ async function onStateTriggeredOnCharacter(deObject, character, stateName) {
     if (deObject.user && deObject.user.name === character.name) {
         let stateDescriptionText = typeof characterStateDescription.general === "string" ? characterStateDescription.general : await characterStateDescription.general(deObject, {
             char: character,
-            causants: characterStateInfo.causants,
             causes: characterStateInfo.causes,
         });
         if (!stateDescriptionText.endsWith(".")) {
@@ -1247,7 +1378,6 @@ async function onStateTriggeredOnCharacter(deObject, character, stateName) {
                  * @type {DEApplyingState}
                  */
                 const state = {
-                    causants: characterStateInfo.causants,
                     causes: characterStateInfo.causes,
                     state: triggeredState,
                     intensity: withIntensity,
@@ -1309,7 +1439,6 @@ async function onStateTriggeredOnCharacter(deObject, character, stateName) {
     const deadEndPotential = !characterStateDescription.triggersDeadEnd ? "" : (typeof characterStateDescription.triggersDeadEnd === "string" ? characterStateDescription.triggersDeadEnd :
         (await characterStateDescription.triggersDeadEnd(deObject, {
             char: character,
-            causants: characterStateInfo.causants,
             causes: characterStateInfo.causes,
         })).trim());
     if (deadEndPotential) {
@@ -1373,7 +1502,6 @@ export async function onStateRemovedOnCharacter(deObject, character, stateName) 
                  * @type {DEApplyingState}
                  */
                 const state = {
-                    causants: characterStateInfo.causants,
                     causes: characterStateInfo.causes,
                     state: triggeredState,
                     intensity: withIntensity,
@@ -1453,7 +1581,6 @@ export async function onStateRelievedOnCharacter(deObject, character, stateName)
         if (characterStateDescription.relieving && stateDescriptionText) {
             stateDescriptionText += typeof characterStateDescription.relieving === "string" ? characterStateDescription.relieving : (await characterStateDescription.relieving(deObject, {
                 char: character,
-                causants: characterStateInfo.causants,
                 causes: characterStateInfo.causes,
             })).trim();
             if (!stateDescriptionText.endsWith(".")) {
@@ -1480,7 +1607,6 @@ export async function onStateRelievedOnCharacter(deObject, character, stateName)
                  * @type {DEApplyingState}
                  */
                 const state = {
-                    causants: characterStateInfo.causants,
                     causes: characterStateInfo.causes,
                     state: triggeredState,
                     intensity: withIntensity,

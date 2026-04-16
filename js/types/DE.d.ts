@@ -275,21 +275,21 @@ declare interface DECharacterStateDefinition {
      * {{/if}}
      * """
      */
-    general: DEStringTemplateCausantsAndCauses;
+    general: DEStringTemplateCharAndCauses;
     /**
      * Description of the state after being relieved, used for reasoning about the state
      */
-    generalAfterRelief?: DEStringTemplateCausantsAndCauses;
+    generalAfterRelief?: DEStringTemplateCharAndCauses;
     /**
      * Used for descriptions of the character general state
      * get applied at system prompt level
      */
-    generalCharacterDescriptionInjection?: DEStringTemplateCausantsAndCauses;
+    generalCharacterDescriptionInjection?: DEStringTemplateCharAndCauses;
     /**
      * Make sure it is one line only, as this gets injected into the short
      * description of the character that represents the external perception of the character
      */
-    generalCharacterExternalDescriptionInjection?: DEStringTemplateCausantsAndCauses;
+    generalCharacterExternalDescriptionInjection?: DEStringTemplateCharAndCauses;
     /**
      * Very strong, used for instructions that the character must follow
      * make sure that it is not kept every inference cycle unless intended
@@ -322,21 +322,21 @@ declare interface DECharacterStateDefinition {
      * The injection can have intensity levels as well to allow for different instructions
      * allowing it to be more dynamic
      */
-    actionPromptInjection: DEActionPromptInjection<DEStringTemplateCausantsAndCauses>[];
+    actionPromptInjection: DEActionPromptInjection<DEStringTemplateCharAndCauses>[];
     /**
      * Description of the state, used for reasoning about the state
      */
-    relieving?: DEStringTemplateCausantsAndCauses;
+    relieving?: DEStringTemplateCharAndCauses;
     /**
      * Used for descriptions of the character general state
      * get applied at system prompt level when relieving the state
      */
-    relievingGeneralCharacterDescriptionInjection?: DEStringTemplateCausantsAndCauses;
+    relievingGeneralCharacterDescriptionInjection?: DEStringTemplateCharAndCauses;
     /**
      * Make sure it is one line only, as this gets injected into the short
      * description of the character that represents the external perception of the character when relieving the state
      */
-    relievingGeneralCharacterExternalDescriptionInjection?: DEStringTemplateCausantsAndCauses;
+    relievingGeneralCharacterExternalDescriptionInjection?: DEStringTemplateCharAndCauses;
     /**
      * Very strong, used for instructions that the character must follow
      * make sure that it is not kept every inference cycle unless intended
@@ -353,12 +353,12 @@ declare interface DECharacterStateDefinition {
      * 
      * Check the actionPromptInjection description for an example use case
      */
-    relievingActionPromptInjection?: DEActionPromptInjection<DEStringTemplateCausantsAndCauses>[];
+    relievingActionPromptInjection?: DEActionPromptInjection<DEStringTemplateCharAndCauses>[];
     /**
      * Whether this state triggers a dead end that causes the character to be permanently removed from the story
      * use this for the description of the dead end scenario
      */
-    triggersDeadEnd?: DEStringTemplateCausantsAndCauses;
+    triggersDeadEnd?: DEStringTemplateCharAndCauses;
     /**
      * Whether the dead end scenario is a death scenario
      */
@@ -430,9 +430,24 @@ declare interface DECharacterStateDefinition {
      */
     modifiesStatesIntensitiesOnRemove?: { [stateName: string]: { intensity: number } };
 
+    /**
+     * Whether the state requires causants to trigger or mantain activation, once all causants are removed
+     * the state also gets removed
+     */
     requiresCausants?: boolean;
+    /**
+     * Whether the state requires character causants to trigger or mantain activation, once all character causants
+     * are removed the state also gets removed
+     */
     requiresCharacterCausants?: boolean;
+    /**
+     * Whether the state requires object causants to trigger or mantain activation, once all object causants are removed
+     * the state also gets removed
+     */
     requiresObjectCausants?: boolean;
+    /**
+     * Whether the state requires causes to trigger or mantain activation, once all causes are removed the state also gets removed
+     */
     requiresCauses?: boolean;
 
     /**
@@ -575,18 +590,11 @@ declare interface DECharacterStateDefinition {
     /**
      * TODO implement this also affects the user
      * 
-     * An optional instruction for the narrator (story master) to narrate when this state is active before
-     * the talking turn of the character
-     * 
-     * For example the state is FIGHTING and it has the causants Bob and Alice, the preNarration could be:
-     * 
-     * "The fight between {{format_and causants}} is intense and brutal, describe in detail how it is going and the injuries they are causing to each other"
-     * 
      * A pre narration is an extra inference step that happens before the character turn, while it is also possible to put this in
      * the state description as general, preNarration also affects the user, so if it is user that has the preNarration
      * it will also act upon the user
      */
-    preNarration?: DENarrationInstruction<DEStringTemplateCausantsAndCauses>;
+    preNarration?: DENarrationInstruction<DEStringTemplateCharAndCauses>;
     /**
      * TODO implement
      * 
@@ -594,7 +602,7 @@ declare interface DECharacterStateDefinition {
      * 
      * check preNarration for more details, it is basically the same but it happens after the character turn
      */
-    postNarration?: DENarrationInstruction<DEStringTemplateCausantsAndCauses>;
+    postNarration?: DENarrationInstruction<DEStringTemplateCharAndCauses>;
 }
 
 declare interface DENarrationInstruction<TemplateType> {
@@ -1257,13 +1265,9 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
     triggers: Array<DECharacterYesNoQuestion | DECharacterNumericQuestion | DECharacterTextQuestion>;
 }
 
-declare type DEAskPerType = "present_character" | "conversing_character" | "potential_character_causants_of_state" | "character_causants_of_state" | "object_causants_of_state" | "any_causants_of_state" | "present_family_members";
+declare type DEAskPerTypeCharacters = "present_character" | "conversing_character" | "potential_character_causants_of_state" | "character_causants_of_state" | "present_family_members";
 
 declare interface DECharacterQuestionBase {
-    /**
-     * Used in combination with askPer: "potential_character_causants_of_state" or "causants_of_state" or "character_causants_of_state" or "object_causants_of_state" to specify the state that the question should be asked for each potential causant of it, this way the question can be asked for each potential causant of a specific state and have access to {{other}} and {{other_family_relation}} in the question template, which refer to the potential causant character and their family relation to the character respectively
-     */
-    askPerState?: string;
     /**
      * Run the question only if this condition is met
      * @param character 
@@ -1271,10 +1275,10 @@ declare interface DECharacterQuestionBase {
      * @param otherFamilyRelation 
      * @returns 
      */
-    runIf?: (character: DECompleteCharacterReference, otherChar: DECompleteCharacterReference | null, otherFamilyRelation: DEFamilyRelation | null) => boolean | Promise<boolean>;
+    runIf?: (character: DECompleteCharacterReference) => boolean | Promise<boolean>;
 }
 
-declare type DECharacterQuestionWithAskPer = DECharacterQuestionBase & {
+declare type DECharacterQuestionWithAskPerForCharacters = DECharacterQuestionBase & {
     /**
      * The question to run, has access to {{other}} and {{other_family_relation}}
      */
@@ -1282,7 +1286,57 @@ declare type DECharacterQuestionWithAskPer = DECharacterQuestionBase & {
     /**
      * Now the question has access to {{other}} and {{other_family_relation}}
      */
-    askPer: DEAskPerType;
+    askPer: DEAskPerTypeCharacters;
+    /**
+     * Run the question only if this condition is met
+     * @param character 
+     * @param otherChar 
+     * @param otherFamilyRelation 
+     * @returns 
+     */
+    runIf?: (character: DECompleteCharacterReference, otherChar: DECompleteCharacterReference, otherFamilyRelation: DEFamilyRelation | null) => boolean | Promise<boolean>;
+};
+
+declare type DECharacterQuestionWithAskPerForCausants = DECharacterQuestionBase & {
+    /**
+     * The question to run, has access to {{other}
+     * Note that {{other_family_relation}} does not make sense in this context as the other is an object, so it should not be used in the question template
+     */
+    question: DEStringTemplateCharAndItem;
+    /**
+     * Now the question has {{item}}
+     */
+    askPer: "character_causants_of_state";
+    askPerState: string;
+    /**
+     * Run the question only if this condition is met
+     * @param character 
+     * @param otherChar 
+     * @param otherFamilyRelation 
+     * @returns 
+     */
+    runIf?: (character: DECompleteCharacterReference, otherChar: DECompleteCharacterReference, otherFamilyRelation: DEFamilyRelation | null) => boolean | Promise<boolean>;
+};
+
+declare type DECharacterQuestionWithAskPerForObjects = DECharacterQuestionBase & {
+    /**
+     * The question to run, has access to {{other}
+     * Note that {{other_family_relation}} does not make sense in this context as the other is an object, so it should not be used in the question template
+     */
+    question: DEStringTemplateCharAndItem;
+    /**
+     * Now the question has {{item}}
+     */
+    askPer: "object_causants_of_state";
+    askPerState: string;
+    /**
+     * Run the question only if this condition is met
+     * @param character 
+     * @param otherChar 
+     * @param otherFamilyRelation 
+     * @returns 
+     */
+    runIf?: (character: DECompleteCharacterReference, item: string) => boolean | Promise<boolean>;
 };
 
 declare type DECharacterQuestionWithoutAskPer = DECharacterQuestionBase & {
@@ -1294,7 +1348,7 @@ declare type DECharacterQuestionWithoutAskPer = DECharacterQuestionBase & {
 };
 
 declare type DECharacterYesNoQuestion =
-    | (DECharacterQuestionWithAskPer & {
+    | (DECharacterQuestionWithAskPerForCharacters & {
         question: DEStringTemplateCharAndOther;
         type: "yes_no"; onValue: (
             answer: boolean,
@@ -1303,19 +1357,34 @@ declare type DECharacterYesNoQuestion =
             otherFamilyRelation: DEFamilyRelation | null,
             otherRelationship: string | null,
         ) => Promise<void> | void;
-    })
+    }) | (DECharacterQuestionWithAskPerForObjects & {
+        question: DEStringTemplateCharAndItem;
+        type: "yes_no"; onValue: (
+            answer: boolean,
+            character: DECompleteCharacterReference,
+            item: string,
+        ) => Promise<void> | void;
+    }) | (
+        DECharacterQuestionWithAskPerForCausants & {
+            question: DEStringTemplateCharAndOther;
+            type: "yes_no"; onValue: (
+                answer: boolean,
+                character: DECompleteCharacterReference,
+                otherChar: DECompleteCharacterReference | null,
+                otherFamilyRelation: DEFamilyRelation | null,
+                otherRelationship: string | null,
+            ) => Promise<void> | void;
+        }
+    )
     | (DECharacterQuestionWithoutAskPer & { type: "yes_no"; onValue: DEYesNoQuestionCallback; });
 
 declare type DEYesNoQuestionCallback = (
     answer: boolean,
     character: DECompleteCharacterReference,
-    otherChar: DECompleteCharacterReference | null,
-    otherFamilyRelation: DEFamilyRelation | null,
-    otherRelationship: string | null,
 ) => Promise<void> | void;
 
 declare type DECharacterNumericQuestion =
-    | (DECharacterQuestionWithAskPer & {
+    | (DECharacterQuestionWithAskPerForCharacters & {
         question: DEStringTemplateCharAndOther;
         type: "numeric"; onNumber: (
             answer: number,
@@ -1324,19 +1393,34 @@ declare type DECharacterNumericQuestion =
             otherFamilyRelation: DEFamilyRelation | null,
             otherRelationship: string | null,
         ) => Promise<void> | void;
-    })
+    }) | (DECharacterQuestionWithAskPerForObjects & {
+        question: DEStringTemplateCharAndItem;
+        type: "numeric"; onNumber: (
+            answer: number,
+            character: DECompleteCharacterReference,
+            item: string,
+        ) => Promise<void> | void;
+    }) | (
+        DECharacterQuestionWithAskPerForCausants & {
+            question: DEStringTemplateCharAndOther;
+            type: "yes_no"; onValue: (
+                answer: number,
+                character: DECompleteCharacterReference,
+                otherChar: DECompleteCharacterReference | null,
+                otherFamilyRelation: DEFamilyRelation | null,
+                otherRelationship: string | null,
+            ) => Promise<void> | void;
+        }
+    )
     | (DECharacterQuestionWithoutAskPer & { type: "numeric"; onNumber: DENumericQuestionCallback; });
 
 declare type DENumericQuestionCallback = (
     answer: number,
     character: DECompleteCharacterReference,
-    otherChar: DECompleteCharacterReference | null,
-    otherFamilyRelation: DEFamilyRelation | null,
-    otherRelationship: string | null,
 ) => Promise<void> | void;
 
 declare type DECharacterTextQuestion =
-    | (DECharacterQuestionWithAskPer & {
+    | (DECharacterQuestionWithAskPerForCharacters & {
         question: DEStringTemplateCharAndOther;
         type: "text"; grammar?: string; onText: (
             answer: string,
@@ -1345,15 +1429,30 @@ declare type DECharacterTextQuestion =
             otherFamilyRelation: DEFamilyRelation | null,
             otherRelationship: string | null,
         ) => Promise<void> | void;
-    })
+    }) | (DECharacterQuestionWithAskPerForObjects & {
+        question: DEStringTemplateCharAndItem;
+        type: "text"; grammar?: string; onText: (
+            answer: string,
+            character: DECompleteCharacterReference,
+            item: string,
+        ) => Promise<void> | void;
+    }) | (
+        DECharacterQuestionWithAskPerForCausants & {
+            question: DEStringTemplateCharAndOther;
+            type: "yes_no"; onValue: (
+                answer: string,
+                character: DECompleteCharacterReference,
+                otherChar: DECompleteCharacterReference | null,
+                otherFamilyRelation: DEFamilyRelation | null,
+                otherRelationship: string | null,
+            ) => Promise<void> | void;
+        }
+    )
     | (DECharacterQuestionWithoutAskPer & { type: "text"; grammar?: string; onText: DETextQuestionCallback; });
 
 declare type DETextQuestionCallback = (
     answer: string,
     character: DECompleteCharacterReference,
-    otherChar: DECompleteCharacterReference | null,
-    otherFamilyRelation: DEFamilyRelation | null,
-    otherRelationship: string | null,
 ) => Promise<void> | void;
 
 declare type DEFamilyRelation = "parent" | "sibling" | "child" | "spouse" | "cousin" | "uncle" | "aunt" | "grandparent" | "grandchild" | "niece" | "nephew" | "other";
@@ -1499,14 +1598,24 @@ declare interface DEBondDescription {
     ex: Array<DESingleBondDescription>;
 }
 
-declare interface DEStateCausant {
+declare interface DEStateCauseCausantCharacter {
     name: string;
-    type: "character" | "object";
+    type: "character";
+    /**
+     * A number from 0 to 1 that represents how likely is the character that was targeted by this state to accept an apology from this causant character
+     * higher means more likely to accept an apology
+     */
+    apologizable: number;
+}
+
+declare interface DEStateCauseCausantObject {
+    name: string;
+    type: "object";
 }
 
 declare interface DEStateCause {
     description: string;
-    characterCausant?: string | null;
+    causant?: DEStateCauseCausantCharacter | DEStateCauseCausantObject;
 }
 
 declare interface DEApplyingState {
@@ -1516,7 +1625,6 @@ declare interface DEApplyingState {
      */
     relieving: boolean;
     intensity: number;
-    causants: Array<DEStateCausant> | null;
     causes: Array<DEStateCause> | null;
 
     /**
@@ -2683,7 +2791,7 @@ declare interface DEStringTemplateInfoCharAndOther {
     otherRelationship: string | null,
 }
 
-declare interface DEStringTemplateInfoCausantsAndCauses {
+declare interface DEStringTemplateInfoCharAndItem {
     /**
      * Available the character invoking the template
      * Usually available, but in rare cases like in narration
@@ -2692,9 +2800,22 @@ declare interface DEStringTemplateInfoCausantsAndCauses {
     char: DECompleteCharacterReference,
 
     /**
-     * Only available in state description templates, these are the causants of a given state
+     * Only available in a special utility
      */
-    causants: DEStateCausant[] | null,
+    item: string,
+}
+
+declare interface DEStringTemplateInfoCharAndCauses {
+    /**
+     * Available the character invoking the template
+     * Usually available, but in rare cases like in narration
+     * it may not be
+     */
+    char: DECompleteCharacterReference,
+
+    /**
+     * Only available in state description templates, these are the causes and causants of a given state
+     */
     causes: DEStateCause[] | null,
 }
 
@@ -2722,13 +2843,22 @@ declare type DEStringTemplateCharAndOther = string | ((
     info: DEStringTemplateInfoCharAndOther
 ) => Promise<string> | string);
 
-declare type DEStringTemplateCausantsAndCauses = string | ((
+declare type DEStringTemplateCharAndItem = string | ((
+    /**
+     * Always available the DE object representing the whole simulation
+     * this is useful for checking the current state of the world, the characters, etc... to generate dynamic descriptions based on the current situation
+     */
+    DE: DEObject,
+    info: DEStringTemplateInfoCharAndItem
+) => Promise<string> | string);
+
+declare type DEStringTemplateCharAndCauses = string | ((
     /**
      * Always available the DE object representing the whole simulation
      *  this is useful for checking the current state of the world, the characters, etc... to generate dynamic descriptions based on the current situation
      */
     DE: DEObject,
-    info: DEStringTemplateInfoCausantsAndCauses
+    info: DEStringTemplateInfoCharAndCauses
 ) => Promise<string> | string);
 
 declare type DEStringTemplateManyChars = string | ((
@@ -2898,7 +3028,7 @@ declare interface DEUtils {
     newConnection(DE: DEObject, definition: DEConnection): DEConnection;
     createStateInAllCharacters(DE: DEObject, stateName: string, stateDefinition: DECharacterStateDefinition): DECharacterStateDefinition;
     defineStateInCharacter(DE: DEObject, character: string | DECompleteCharacterReference | null, stateName: string, stateDefinition: DECharacterStateDefinition): DECharacterStateDefinition | null;
-    newBond(DE: DEObject, char1: string | DECompleteCharacterReference | null, towards: string | DECompleteCharacterReference | null, bondDefinition: Omit<DESingleBondDescription, "towards">, options?: {forceOverride: boolean}): DESingleBondDescription | null;
+    newBond(DE: DEObject, char1: string | DECompleteCharacterReference | null, towards: string | DECompleteCharacterReference | null, bondDefinition: Omit<DESingleBondDescription, "towards">, options?: { forceOverride: boolean }): DESingleBondDescription | null;
     newMutualBond(DE: DEObject, char1: string | DECompleteCharacterReference | null, char2: string | DECompleteCharacterReference | null, bondDefinition: Omit<DESingleBondDescription, "towards">): [DESingleBondDescription | null, DESingleBondDescription | null];
     newFamilyRelation(DE: DEObject, char1: string | DECompleteCharacterReference | null, towards: string | DECompleteCharacterReference | null, relation: DEFamilyRelation): [DEFamilyTie | null, DEFamilyTie | null];
     newGlobalInterest(DE: DEObject, interest: DECharacterInterest);
@@ -2907,7 +3037,7 @@ declare interface DEUtils {
     isAttractedTo(DE: DEObject, char1: string | DECompleteCharacterReference | null, potentialAttractiveChar2: string | DECompleteCharacterReference | null): boolean;
     isAttractedToWithLevel(DE: DEObject, char1: string | DECompleteCharacterReference | null, potentialAttractiveChar2: string | DECompleteCharacterReference | null): "slight" | "moderate" | "strong" | false;
     isAttractedToWithLevelAsNumber(DE: DEObject, char1: string | DECompleteCharacterReference | null, potentialAttractiveChar2: string | DECompleteCharacterReference | null): number;
-    isAttractedToWithReasoning(DE: DEObject, char1: string | DECompleteCharacterReference | null, potentialAttractiveChar2: string | DECompleteCharacterReference | null): {attracted: boolean, reasoning: string, level: "slight" | "moderate" | "strong" | false};
+    isAttractedToWithReasoning(DE: DEObject, char1: string | DECompleteCharacterReference | null, potentialAttractiveChar2: string | DECompleteCharacterReference | null): { attracted: boolean, reasoning: string, level: "slight" | "moderate" | "strong" | false };
 
     /**
      * To be used during questions and triggers mostly
@@ -2921,19 +3051,16 @@ declare interface DEUtils {
      * Shifts the state of a character by a certain amount
      * To be used during questions and triggers mostly
      */
-    shiftState(DE: DEObject, character: string | DECompleteCharacterReference | null, stateName: string, shift: number, causants: DEStateCausant[] | null, causes: DEStateCause[] | null): void;
+    shiftState(DE: DEObject, character: string | DECompleteCharacterReference | null, stateName: string, shift: number, cap: number | null, causes: DEStateCause[] | null): void;
     /**
-     * Similar to shift state but there is a max limit to how much the state can be shifted based on the cap parameter
+     * Adds a cause to a character state, this is used to keep track of what caused a state to be applied
      */
-    tickleState(DE: DEObject, character: string | DECompleteCharacterReference | null, stateName: string, shift: number, cap: number, causants: DEStateCausant[] | null, causes: DEStateCause[] | null): void;
+    addCauseToState(DE: DEObject, character: string | DECompleteCharacterReference | null, stateName: string, cause: DEStateCause): void;
     /**
-     * Adds a causant to a character state, this is used to keep track of what caused a state to be applied
+     * Removes a cause from a character state, this is used to keep track of what caused a state to be applied
      */
-    addCausantToState(DE: DEObject, character: string | DECompleteCharacterReference | null, stateName: string, causant: DEStateCausant): void;
-    /**
-     * Removes a causant from a character state, this is used to keep track of what caused a state to be applied
-     */
-    removeCausantFromState(DE: DEObject, character: string | DECompleteCharacterReference | null, stateName: string, causant: DEStateCausant): void;
+    removeCauseFromState(DE: DEObject, character: string | DECompleteCharacterReference | null, stateName: string, cause: DEStateCause): void;
+    removeCausantFromState(DE: DEObject, character: string | DECompleteCharacterReference | null, stateName: string, causant: string, causantType: "character" | "object"): void;
     /**
      * To be used during questions and triggers mostly
      * 
@@ -2950,6 +3077,47 @@ declare interface DEUtils {
     charIsRelievingState(DE: DEObject, character: string | DECompleteCharacterReference, stateName: string): boolean;
 
     templateUtils: {
+        /**
+         * Returns a DEStringTemplateCharAndCauses that is broken down into causants and causes
+         * 
+         * For example, say the state is "Angry"
+         * 
+         * By default the LLM will inject the following phrase into the template:
+         * 
+         * `{{char}} is very Angry` (or whatever the intensity is)
+         * 
+         * Then it will inject the template, this will simply do the following:
+         * 
+         * {{base}}
+         * 
+         * causes:
+         * [perOther]
+         * perOther cause: {{cause}}
+         * [/perOther]
+         * 
+         * [perItem]
+         * perItem cause: {{cause}}
+         * [/perItem]
+         * 
+         * @param DE 
+         * @param param1 
+         */
+        breakDownCharactersAndCausesTemplate(DE: DEObject, info: {
+            /**
+             * A template on how the character acts in general
+             */
+            base: DEStringTemplateCharOnly,
+            /**
+             * A template on how the character will act towards a specific character
+             * that caused that given state, the reason why that charater will be added at the end of the sentence
+             */
+            perOther: DEStringTemplateCharAndOther,
+            /**
+             * A template on how the character will act towards an object that caused that
+             * given state
+             */
+            perObject: DEStringTemplateCharAndItem,
+        }): DEStringTemplateCharAndCauses;
         /**
          * The list of all characters available in the world, including the user
          * @returns eg. [Arya, Thalon, Mira, Dorian, Luna, Kiro]
@@ -2992,19 +3160,19 @@ declare interface DEUtils {
         locationIsSafe(DE: DEObject, locationName: string): boolean;
         /**
          * TODO does this work?
-         * The name of the characters/users/objects that activated the state last, it is available everywhere but it needs track_causants enabled for the state to work
+         * The name of the characters/users/objects that activated the state last
          * @returns eg. ["Aria", "Thalon", "Player", "The Ancient Sword"]
          */
         getLastStateCausants(DE: DEObject, char: DECompleteCharacterReference, stateName: string): string[];
         /**
          * TODO does this work?
-         * The name of the characters only that activated the state last, it is available everywhere but it needs track_causants enabled for the state to work
+         * The name of the characters only that activated the state last
          * @returns eg. ["Aria", "Thalon", "Player"]
          */
         getLastStateCharacterCausants(DE: DEObject, char: DECompleteCharacterReference, stateName: string): string[];
         /**
          * TODO does this work?
-         * The name of the characters only that activated the state last, it is available everywhere but it needs track_causants enabled for the state to work
+         * The name of the characters only that activated the state last
          * @returns eg. ["Aria", "Thalon", "Player"]
          */
         getLastStateObjectCausants(DE: DEObject, char: DECompleteCharacterReference, stateName: string): string[];

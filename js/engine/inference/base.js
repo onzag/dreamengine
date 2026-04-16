@@ -53,6 +53,8 @@ export class BaseInferenceAdapter {
      *   visibleEnviroment: string,
      *   narrativeEffects: string[],
      *   grammar: string|null,
+     *   primaryEmotion: string,
+     *   activeStates: Array<{state: string, dominance: number}>,
      * }} options
      * @returns {AsyncGenerator<{type: "text" | "warning" | "hidden", content: string}, void, boolean>}
      */

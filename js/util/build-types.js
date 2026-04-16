@@ -69,21 +69,6 @@ export default async function build(options = { doNotBuildLocals: false, doNotWr
                 console.warn(`Could not write config.json: ${err.message}`);
             }
         }
-
-        // cardtype-generator-llama-adapter script
-        const adapterFile = path.resolve(path.dirname(thisFile), "..", "cardtype", "cardtype-generator-llama-adapter.js");
-        const adapterScriptName = isWin ? 'cardtype.cmd' : 'cardtype.sh';
-        const adapterScriptContent = isWin
-            ? `@echo off\r\nnode "${adapterFile}" %*\r\n`
-            : `#!/bin/sh\nnode "${adapterFile}" "$@"\n`;
-        const adapterScriptPath = path.join(localDEPathAtHomeDir, adapterScriptName);
-        try {
-            await fsPromises.writeFile(adapterScriptPath, adapterScriptContent, { mode: 0o755 });
-            console.log(`Wrote ${adapterScriptName} to ${adapterScriptPath}`);
-        } catch (err) {
-            // @ts-ignore
-            console.warn(`Could not write ${adapterScriptName}: ${err.message}`);
-        }
     }
 
     console.log('Done.');

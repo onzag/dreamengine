@@ -1,5 +1,5 @@
 import { DEngine } from "../engine/index.js";
-import { createCardStructureFrom, getJsCard } from "./base.js";
+import { createCardStructureFrom, getJsCard, getSection } from "./base.js";
 import { replaceAllCharNameWithPlaceholder } from "./generate-base.js";
 
 export const BASIC_EMOTIONAL_STATES = [
@@ -95,14 +95,30 @@ function replaceOtherCharNameWithPlaceholder(text, charName) {
  * @return {Promise<void>}
  */
 export async function generateBasicStates(engine, card, guider, autosave) {
-    throw new Error("Unimplemented");
-
     const isAsexualValue = card.config.isAsexual;
     const name = card.config.name;
 
-    let EMOTIONAL_STATES_TO_CHECK_AGAINST = [...BASIC_EMOTIONAL_STATES]
+    const initializeSection = getSection(card.body, "initialize");
+
+    if (initializeSection === null) {
+        throw new Error("Initialize section not found");
+    }
+
+    /**
+     * @type {string[]}
+     */
+    let EMOTIONAL_STATES_TO_CHECK_AGAINST = card.config.emotionalStatesToCheckAgainst || [...BASIC_EMOTIONAL_STATES];
     if (isAsexualValue) {
         EMOTIONAL_STATES_TO_CHECK_AGAINST = EMOTIONAL_STATES_TO_CHECK_AGAINST.filter(state => !["Flirty", "Loving", "Aroused"].includes(state));
+    }
+
+    if (guider && !card.config.emotionalStatesToCheckAgainst) {
+        const guiderResult = await guider.askArbitraryList(`Emotional states to check against for ${name}`, EMOTIONAL_STATES_TO_CHECK_AGAINST);
+        if (guiderResult.value) {
+            EMOTIONAL_STATES_TO_CHECK_AGAINST = Array.from(new Set(guiderResult.value.map(em => em.trim()).filter(em => em.length > 0)));
+        }
+        card.config.emotionalStatesToCheckAgainst = EMOTIONAL_STATES_TO_CHECK_AGAINST;
+        await autosave?.save();
     }
 
     const inferenceAdapter = engine.inferenceAdapter;

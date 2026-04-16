@@ -87,6 +87,9 @@ export async function runQuestion(engine, character, question, options) {
         throw new Error(`Character ${character.name} has no bonds defined.`);
     }
 
+    // TODO implement apologizable state with causants, and inject something like, x did not accept the apology or if they did
+    // narrative effect or somethin
+
     // first we need to update the bonds towards the character, for that we need to get a whole extended cycle
     // gather all the other characters that talked inbetween, and update bonds for each
     const lastCycleMessagesInfo = options.lastCycleMessagesInfo || await getHistoryFragmentForCharacter(engine, character, {
@@ -128,6 +131,7 @@ export async function runQuestion(engine, character, question, options) {
             }
             others = familyMembers;
         } else if (question.askPer === "potential_character_causants_of_state") {
+            // @ts-ignore it does exist
             const stateInQuestion = question.askPerState;
             if (!stateInQuestion) {
                 console.warn(`Question has askPer set to potential_character_causants_of_state but no askPerState specified, skipping`);
@@ -155,41 +159,73 @@ export async function runQuestion(engine, character, question, options) {
             }
 
             others = determinePotentialCharacterCausants(engine, character, stateDef, allCharactersInAnalysis).map(c => c.name);
-        } else if (question.askPer === "character_causants_of_state" || question.askPer === "object_causants_of_state" || question.askPer === "any_causants_of_state") {
+        } else if (question.askPer === "character_causants_of_state") {
             const stateForCharacter = engine.deObject.stateFor[character.name];
 
+            // @ts-ignore it does exist
             const appliedState = stateForCharacter.states.find(s => s.state === question.askPerState);
 
             if (!appliedState) {
+                // @ts-ignore it does exist
                 console.warn(`Question has askPer set to ${question.askPer} and askPerState set to ${question.askPerState} but character has no such state applied, skipping`);
                 return;
             }
 
-            if (!appliedState.causants || appliedState.causants.length === 0) {
+            if (!appliedState.causes || appliedState.causes.length === 0) {
+                // @ts-ignore it does exist
                 console.warn(`Question has askPer set to ${question.askPer} and askPerState set to ${question.askPerState} but the state has no causants, skipping`);
                 return;
             }
 
-            if (question.askPer === "character_causants_of_state") {
-                others = appliedState.causants.filter(c => c.type === "character").map(c => c.name);
-            } else if (question.askPer === "object_causants_of_state") {
-                others = appliedState.causants.filter(c => c.type === "object").map(c => c.name);
-            } else {
-                others = appliedState.causants.map(c => c.name);
+            // @ts-ignore
+            others = Array.from(new Set(appliedState.causes.filter(c => c.causant?.type === "character").map(c => c.causant?.name)));
+        } else if (question.askPer === "object_causants_of_state") {
+            const stateForCharacter = engine.deObject.stateFor[character.name];
+
+            const appliedState = stateForCharacter.states.find(s => s.state === question.askPerState);
+            if (!appliedState) {
+                console.warn(`Question has askPer set to ${question.askPer} and askPerState set to ${question.askPerState} but character has no such state applied, skipping`);
+                return;
             }
+            if (!appliedState.causes || appliedState.causes.length === 0) {
+                console.warn(`Question has askPer set to ${question.askPer} and askPerState set to ${question.askPerState} but the state has no causants, skipping`);
+                return;
+            }
+            // @ts-ignore
+            others = Array.from(new Set(appliedState.causes.filter(c => c.causant?.type === "object").map(c => c.causant?.name)));
         } else {
             console.warn(`Unknown askPer value ${question.askPer} for question, skipping`);
             return;
         }
     }
-    
+
     const deObject = engine.getDEObject();
     for (const other of others) {
-        const otherFamilyRelationship = other ? getFamilyBondRelation(character, engine.deObject.characters[other]) : null;
-        const relationship = other ? await getRelationship(deObject, character, engine.deObject.characters[other]) : null;
+        const otherFamilyRelationship = other && question.askPer !== "object_causants_of_state" ? getFamilyBondRelation(character, engine.deObject.characters[other]) : null;
+        const relationship = other && question.askPer !== "object_causants_of_state" ? await getRelationship(deObject, character, engine.deObject.characters[other]) : null;
 
         if (question.runIf) {
-            const shouldRun = await question.runIf(character, other ? engine.deObject.characters[other] : null, otherFamilyRelationship);
+            let shouldRun = false;
+            if (question.askPer === "object_causants_of_state") {
+                shouldRun = await question.runIf(character, other || "Unknown Item");
+            } else if (question.askPer === "character_causants_of_state" || question.askPer === "potential_character_causants_of_state" ||
+                question.askPer === "present_character" || question.askPer === "present_family_members" || question.askPer === "conversing_character"
+            ) {
+                if (!other) {
+                    console.warn(`Question has askPer set to ${question.askPer} but other is null, skipping`);
+                    shouldRun = false;
+                } else {
+                    const otherCharacter = engine.deObject.characters[other];
+                    if (!otherCharacter) {
+                        console.warn(`Question has askPer set to ${question.askPer} but other character ${other} not found in DE object, skipping`);
+                        shouldRun = false;
+                    } else {
+                        shouldRun = await question.runIf(character, otherCharacter, otherFamilyRelationship);
+                    }
+                }
+            } else {
+                shouldRun = await question.runIf(character);
+            }
             if (!shouldRun) {
                 console.warn(`Question has runIf condition that returned false for character ${character.name} and other ${other}, skipping`);
                 continue;
@@ -230,6 +266,7 @@ export async function runQuestion(engine, character, question, options) {
 
             const isYesAnswer = isYes(answerText);
 
+            // @ts-ignore tired of fighting typescript
             await question.onValue(isYesAnswer, character, other ? engine.deObject.characters[other] : null, otherFamilyRelationship, relationship);
         } else if (question.type === "text") {
             const answer = await options.questioningAgent.next({
@@ -250,6 +287,7 @@ export async function runQuestion(engine, character, question, options) {
 
             console.log(`Received answer: ${answerText}`);
 
+            // @ts-ignore tired of fighting typescript
             await question.onText(answerText, character, other ? engine.deObject.characters[other] : null, otherFamilyRelationship, relationship);
         } else if (question.type === "numeric") {
             const answer = await options.questioningAgent.next({
@@ -277,6 +315,7 @@ export async function runQuestion(engine, character, question, options) {
                 continue;
             }
 
+            // @ts-ignore tired of fighting typescript
             await question.onNumber(parsedNumber, character, other ? engine.deObject.characters[other] : null, otherFamilyRelationship, relationship);
         }
     }

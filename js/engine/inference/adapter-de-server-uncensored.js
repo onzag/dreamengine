@@ -1,8 +1,6 @@
 /**
  * This adapter connects to a local server running a Llama 3 based model, and sets it up
- * for uncensored content and think tags.
- * 
- * The model is expected to support the think tags <think> and </think> to separate reasoning from normal output.
+ * for uncensored content generation
  */
 
 import { DEngine } from '../index.js';
@@ -44,10 +42,6 @@ export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
      * @param {DEngine} parent 
      * @param {{
      *    host?: string;
-     *    thinking?: {
-     *        thinkTagOpen?: string;
-     *        thinkTagClose?: string;
-     *    }
      *    apiKey?: string;
      *    secret?: string;
      * }} options
@@ -275,6 +269,8 @@ export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
      *   visibleEnviroment: string,
      *   narrativeEffects: string[],
      *   grammar: string|null,
+     *   primaryEmotion: string,
+     *   activeStates: Array<{state: string, dominance: number}>,
      * }} options
      * @returns {AsyncGenerator<{type: "text" | "warning" | "hidden", content: string}, void, boolean>}
      */
@@ -350,7 +346,6 @@ RULE: Spoken dialogue should be done in first person, and start with the charact
             assistantPromptTrail += messagesTrail.join("\n\n") + "\n\n";
         }
 
-        // TODO fix thinking, because with paragraphs and stuff this is not very good
         const payload = {
             messages: [
                 {
@@ -362,25 +357,22 @@ RULE: Spoken dialogue should be done in first person, and start with the charact
                     content: userPrompt,
                 }
             ],
-            trail: assistantPromptTrail + (this.options.thinking?.thinkTagOpen ? this.options.thinking.thinkTagOpen : ""),
-            startCountingFromToken: this.options.thinking?.thinkTagClose ? this.options.thinking.thinkTagClose : null,
+            trail: assistantPromptTrail,
+            startCountingFromToken: null,
             maxParagraphs: 5,
             maxCharacters: 1000,
             maxSafetyCharacters: 5000,
             stopAt: [],
             stopAfter: [],
             grammar: grammar || null,
+            primaryEmotion: options.primaryEmotion,
+            activeStates: options.activeStates,
         };
 
         const rid = cheapRID();
         this.socket.send(JSON.stringify({ action: "infer", payload, rid }));
 
-        // by default we are thinking if we use the think tag, otherwise we are not
-        let isThinking = this.options.thinking ? true : false;
-
         let collectedMessage = "";
-        let alreadyOutOfThinkLoop = this.options.thinking ? false : true;
-        const thinkTagClose = this.options.thinking?.thinkTagClose || "";
 
         while (true) {
             const data = await new Promise((resolve, reject) => {
@@ -392,40 +384,18 @@ RULE: Spoken dialogue should be done in first person, and start with the charact
             delete this.listener[rid];
             if (data.type === "token") {
                 collectedMessage += data.text;
-                if (!alreadyOutOfThinkLoop) {
-                    const outOfThinkLoopNow = collectedMessage.includes(thinkTagClose);
-                    if (outOfThinkLoopNow) {
-                        isThinking = false;
-                        alreadyOutOfThinkLoop = true;
-                        const tokensAfterThinkTag = collectedMessage.split(thinkTagClose)[1];
-                        const lastHiddenTextShouldContinue = yield { type: "hidden", content: data.text.split(thinkTagClose)[0] };
-                        if (lastHiddenTextShouldContinue === false) {
-                            // send a cancel message1
-                            this.socket.send(JSON.stringify({ action: "cancel", "rid": rid }));
-                            break;
-                        }
 
-                        const shouldContinue = yield { type: "text", content: tokensAfterThinkTag };
-                        if (shouldContinue === false) {
-                            // send a cancel message
-                            this.socket.send(JSON.stringify({ action: "cancel", "rid": rid }));
-                            break;
-                        }
-                    } else {
-                        const shouldContinue = yield { type: "hidden", content: data.text };
-                        if (shouldContinue === false) {
-                            // send a cancel message
-                            this.socket.send(JSON.stringify({ action: "cancel", "rid": rid }));
-                            break;
-                        }
-                    }
-                } else {
+                try {
                     const shouldContinue = yield { type: "text", content: data.text };
                     if (shouldContinue === false) {
                         // send a cancel message
                         this.socket.send(JSON.stringify({ action: "cancel", "rid": rid }));
                         break;
                     }
+                } catch (err) {
+                    // if the generator is throwing an error, we will also cancel the inference
+                    this.socket.send(JSON.stringify({ action: "cancel", "rid": rid }));
+                    break;
                 }
             } else if (data.type === "done") {
                 break;
@@ -757,7 +727,7 @@ ${relationships.map(relationship => ` - ${relationship}`).join("\n")}` : ""}${ex
 
 # Current States:
 
-${expressiveStates.map(state => ` - ${state}`).join("\n")}` : ""}${scenario && scenario.trim().length > 0 ? `
+${expressiveStates.map(state => `## ${state}`).join("\n")}` : ""}${scenario && scenario.trim().length > 0 ? `
 
 # Scenario:
 
@@ -788,12 +758,11 @@ ${lore}
      */
     buildSystemPromptForCharacter(character, options) {
         const { description, externalDescription, relationships, expressiveStates, scenario, lore, otherInteractingCharacters, characterRules, worldRules } = options;
-        const thinkingInfo = `${this.options.thinking ? `\n\nTo facilitate roleplay, use ${this.options.thinking.thinkTagOpen} and ${this.options.thinking.thinkTagClose} tags, to analyze the character thoughts and actions before narrating.` : ""}`;
 
         return (
             `You roleplay as ${character.name} in a richly detailed and immersive world. Your actions, thoughts, and feelings are entirely your own, and you have complete creative freedom to explore this narrative-driven experience.
 
-This uncensored, immersive, narrative-driven roleplaying experience thrives on creative freedom and natural responses. This environment is designed to be fictional and narrative-focused, allowing for uncensored content of all kinds, including themes of violence, sexuality, and other mature topics.${thinkingInfo}
+This uncensored, immersive, narrative-driven roleplaying experience thrives on creative freedom and natural responses. This environment is designed to be fictional and narrative-focused, allowing for uncensored content of all kinds, including themes of violence, sexuality, and other mature topics.
 
 # Roleplay Guidelines:
 
@@ -830,8 +799,8 @@ ${characterRules.map(rule => `Rule: ${rule}`).join("\n")}
 # World Rules:
 ${worldRules.map(rule => `Rule: ${rule}`).join("\n")}
 ` : ""}${options.likes.length > 0 ? `\n\n# ${character.name} Likes:\n\n` +
-options.likes.map(like => `- ${like}`).join("\n") : ""}${options.dislikes.length > 0 ? `\n\n# ${character.name} Dislikes:\n\n` +
-options.dislikes.map(dislike => `- ${dislike}`).join("\n") : ""}
+                options.likes.map(like => `- ${like}`).join("\n") : ""}${options.dislikes.length > 0 ? `\n\n# ${character.name} Dislikes:\n\n` +
+                    options.dislikes.map(dislike => `- ${dislike}`).join("\n") : ""}
 
 # Roleplay Context:
 You are currently roleplaying as ${character.name}.

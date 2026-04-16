@@ -49,7 +49,6 @@ export async function talk(engine, character, options) {
                 engine.deObject,
                 {
                     char: character,
-                    causants: action.applyingState?.causants,
                     causes: action.applyingState?.causes,
                 }
             );
@@ -58,7 +57,6 @@ export async function talk(engine, character, options) {
                 engine.deObject,
                 {
                     char: character,
-                    causants: action.applyingState?.causants,
                     causes: action.applyingState?.causes,
                 },
             ) : null);
@@ -136,7 +134,18 @@ export async function talk(engine, character, options) {
     const narrativeEffects = [];
     let narrativeEffectsDominance = 0;
 
+    /**
+     * @type {Array<{state: string, dominance: number}>}
+     */
+    const activeStates = [];
+
     for (const state of characterSystemPrompt.internalDescription.activeStates) {
+
+        activeStates.push({
+            state: state.applyingState.state,
+            dominance: state.stateInfo.dominance,
+        });
+
         let stateDominance = state.stateInfo.dominance;
         if (state.stateInfo.relieving && typeof state.stateInfo.dominanceAfterRelief === "number") {
             stateDominance = state.stateInfo.dominanceAfterRelief;
@@ -209,14 +218,12 @@ export async function talk(engine, character, options) {
             if (action.action.action.narrativeEffect && narrativeEffectsDominance < stateDominance) {
                 narrativeEffects.push(typeof action.action.action.narrativeEffect === "string" ? action.action.action.narrativeEffect : await action.action.action.narrativeEffect(engine.deObject, {
                     char: character,
-                    causants: action.action.applyingState?.causants || null,
                     causes: action.action.applyingState?.causes || null,
                 }));
                 narrativeEffectsDominance = stateDominance;
             } else if (action.action.action.narrativeEffect && narrativeEffectsDominance === stateDominance) {
                 narrativeEffects.push(typeof action.action.action.narrativeEffect === "string" ? action.action.action.narrativeEffect : await action.action.action.narrativeEffect(engine.deObject, {
                     char: character,
-                    causants: action.action.applyingState?.causants || null,
                     causes: action.action.applyingState?.causes || null,
                 }));
             }
@@ -387,7 +394,6 @@ export async function talk(engine, character, options) {
                 if (preNarrationOrigin) {
                     const preNarrationText = typeof preNarrationOrigin === "string" ? preNarrationOrigin : await preNarrationOrigin(engine.deObject, {
                         char: character,
-                        causants: state.applyingState.causants || null,
                         causes: state.applyingState.causes || null,
                     });
                     const trimmed = preNarrationText.trim();
@@ -412,7 +418,6 @@ export async function talk(engine, character, options) {
                 if (postNarrationOrigin) {
                     const postNarrationText = typeof postNarrationOrigin === "string" ? postNarrationOrigin : await postNarrationOrigin(engine.deObject, {
                         char: character,
-                        causants: state.applyingState.causants || null,
                         causes: state.applyingState.causes || null,
                     });
                     const trimmed = postNarrationText.trim();
@@ -577,6 +582,10 @@ export async function talk(engine, character, options) {
                 visibleEnviroment: characterCanSee.everything,
                 narrativeEffects,
                 grammar: nextToGenerateIsSameAsPreviousButNarrativeAction ? grammar.narrative : (nextToGenerate.type === "dialogue" ? grammar.dialogue : grammar.narrative),
+                activeStates,
+
+                // @ts-ignore primary emotion is guaranteed to be set at this point, because if it wasn't, we would have set it to "neutral"
+                primaryEmotion,
             },
         );
 

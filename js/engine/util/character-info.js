@@ -620,7 +620,6 @@ export async function getExternalDescriptionOfCharacter(deObject, characterName,
                 } else {
                     toAdd = await stateInfo.relievingGeneralCharacterExternalDescriptionInjection(deObject, {
                         char: character,
-                        causants: state.causants,
                         causes: state.causes,
                     });
                 }
@@ -632,7 +631,6 @@ export async function getExternalDescriptionOfCharacter(deObject, characterName,
                 } else {
                     toAdd = await stateInfo.generalCharacterExternalDescriptionInjection(deObject, {
                         char: character,
-                        causants: state.causants,
                         causes: state.causes,
                     });
                 }
@@ -1431,7 +1429,7 @@ export async function getInternalDescriptionOfCharacter(deObject, characterName)
     /**
      * @type {Array<{
      *   applyingState: DEApplyingState,
-     *   action: DEActionPromptInjection<DEStringTemplateCausantsAndCauses>,
+     *   action: DEActionPromptInjection<DEStringTemplateCharAndCauses>,
      *   stateInfo: DECharacterStateDefinition,
      * } | {
      *   applyingState: null,
@@ -1511,7 +1509,6 @@ export async function getInternalDescriptionOfCharacter(deObject, characterName)
             if (generalDescriptionOrigin) {
                 const generalDescription = typeof generalDescriptionOrigin === "string" ? generalDescriptionOrigin : await generalDescriptionOrigin(deObject, {
                     char: character,
-                    causants: state.causants,
                     causes: state.causes,
                 });
                 const trimmed = generalDescription.trim();
@@ -1553,7 +1550,6 @@ export async function getInternalDescriptionOfCharacter(deObject, characterName)
             if (stateInfo.relievingGeneralCharacterDescriptionInjection) {
                 const relievingInjection = typeof stateInfo.relievingGeneralCharacterDescriptionInjection === "string" ? stateInfo.relievingGeneralCharacterDescriptionInjection : (await stateInfo.relievingGeneralCharacterDescriptionInjection(deObject, {
                     char: character,
-                    causants: state.causants,
                     causes: state.causes,
                 })).trim();
                 if (relievingInjection) {
@@ -1579,7 +1575,6 @@ export async function getInternalDescriptionOfCharacter(deObject, characterName)
             if (stateInfo.generalCharacterDescriptionInjection) {
                 const injection = typeof stateInfo.generalCharacterDescriptionInjection === "string" ? stateInfo.generalCharacterDescriptionInjection : (await stateInfo.generalCharacterDescriptionInjection(deObject, {
                     char: character,
-                    causants: state.causants,
                     causes: state.causes,
                 })).trim();
                 if (injection) {
@@ -2328,6 +2323,7 @@ export async function getRelationshipBetweenCharacters(deObject, characterName, 
             towards: towards,
             createdAt: deObject.currentTime,
             knowsName: false,
+            undoableShifts: {},
         }
         pseudoBond = true;
     }
