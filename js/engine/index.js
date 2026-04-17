@@ -887,7 +887,7 @@ export class DEngine {
             const randomizedList = ([...sceneObject.engagedCharacters]).sort(() => Math.random() - 0.5);
             for (const participantName of randomizedList) {
                 this.informCycleState("info", "Running all triggers for " + participantName + "...");
-                await runAllTriggersFor(this, this.deObject.characters[participantName], lastItemChangesInfo.interactedCharacters);
+                const microInjections = await runAllTriggersFor(this, this.deObject.characters[participantName], lastItemChangesInfo.interactedCharacters);
 
                 const nextActionsProduced = this.deObject.internalState.NEXT_ACTIONS || [];
                 delete this.deObject.internalState.NEXT_ACTIONS;
@@ -916,16 +916,16 @@ export class DEngine {
                 /**
                  * @type {string[]}
                  */
-                const postureChangeMessagesAccum = [];
+                const messagesAccum = microInjections;
 
                 for (const participantName of expectedParticipants) {
                     this.informCycleState("info", "Pre-calculating posture for " + participantName + "...");
                     const messages = await calculatePostureChange(this, this.deObject.characters[participantName], lastItemChangesInfo.charactersThatMoved);
-                    postureChangeMessagesAccum.push(...messages);
+                    messagesAccum.push(...messages);
                 }
 
-                if (postureChangeMessagesAccum.length > 0) {
-                    await addMessageForStoryMaster(postureChangeMessagesAccum);
+                if (messagesAccum.length > 0) {
+                    await addMessageForStoryMaster(messagesAccum);
                 }
 
                 for (const script of Object.values(this.jsEngine.scriptCache)) {
@@ -960,7 +960,7 @@ export class DEngine {
         }
 
         this.informCycleState("info", "Running all triggers for " + this.userCharacter.name + "...");
-        await runAllTriggersFor(this, this.userCharacter, lastItemChangesInfo.interactedCharacters);
+        const microInjections = await runAllTriggersFor(this, this.userCharacter, lastItemChangesInfo.interactedCharacters);
 
         const nextActionsProduced = this.deObject.internalState.NEXT_ACTIONS || [];
         delete this.deObject.internalState.NEXT_ACTIONS;
@@ -993,16 +993,16 @@ export class DEngine {
         /**
          * @type {string[]}
          */
-        const postureChangeMessagesAccum = [];
+        const messageAccum = microInjections;
 
         for (const participantName of expectedParticipants) {
             this.informCycleState("info", "Pre-calculating posture for " + participantName + "...");
             const messages = await calculatePostureChange(this, this.deObject.characters[participantName], lastItemChangesInfo.charactersThatMoved);
-            postureChangeMessagesAccum.push(...messages);
+            messageAccum.push(...messages);
         }
 
-        if (postureChangeMessagesAccum.length > 0) {
-            await addMessageForStoryMaster(postureChangeMessagesAccum);
+        if (messageAccum.length > 0) {
+            await addMessageForStoryMaster(messageAccum);
         }
 
         scene.sceneReady && await scene.sceneReady(this.deObject, scene);

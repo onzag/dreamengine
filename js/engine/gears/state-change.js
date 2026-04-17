@@ -28,7 +28,8 @@ export default async function calculateStateChange(engine, character, interacted
 
         let removedState = false;
 
-        if (intensityChangeRatePerInferenceCycle && intensityChangeRatePerInferenceCycle > 0 && alreadyActivatedInfo.contiguousStartActivationCyclesAgo > 0) {
+        const alreadyShiftedInfo = character.temp["alreadyShifted_" + stateName] || 0;
+        if (intensityChangeRatePerInferenceCycle && intensityChangeRatePerInferenceCycle > 0 && alreadyActivatedInfo.contiguousStartActivationCyclesAgo > 0 && alreadyShiftedInfo === 0) {
             console.log(`Applying decay of ${intensityChangeRatePerInferenceCycle} to state ${alreadyActivatedInfo.state} on character ${character.name} with current intensity ${alreadyActivatedInfo.intensity}.`);
             alreadyActivatedInfo.intensity += intensityChangeRatePerInferenceCycle;
             if (alreadyActivatedInfo.intensity > 4) {

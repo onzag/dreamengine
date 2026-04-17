@@ -72,6 +72,11 @@ const basicEmotionalStateToPrimaryEmotion = {
     "Loving": "loving",
 };
 
+const EMOTIONAL_STATES_APOLOGIZABLE = [
+    "Angry",
+    "Annoyed",
+]
+
 export const EMOTIONAL_STATES_WITH_EXPLICIT_ACTIONS = [
     "Aroused",
     "Flirty",
@@ -95,6 +100,7 @@ function replaceOtherCharNameWithPlaceholder(text, charName) {
  * @return {Promise<void>}
  */
 export async function generateBasicStates(engine, card, guider, autosave) {
+    throw new Error("TODO");
     const isAsexualValue = card.config.isAsexual;
     const name = card.config.name;
 

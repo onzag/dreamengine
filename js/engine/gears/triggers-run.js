@@ -374,6 +374,55 @@ export default async function runAllTriggersFor(engine, character, interactedCha
         });
     }
 
+    let microInjections = [];
+
+    /**
+     * @type {Record<string, boolean>}
+     */
+    const smallQuestionsCache = {};
+    for (const stateForCharacter of engine.deObject.stateFor[character.name].states) {
+        if (stateForCharacter.causes) {
+            for (const cause of stateForCharacter.causes) {
+                let removed = false;
+                if (cause.causant?.type === "character") {
+                    if (cause.causant.apologizable) {
+                        const question = "Has " + cause.causant.name + " apologized to " + character.name + " for causing them to become " + stateForCharacter.state + ": " + JSON.stringify(cause.description) + " (done by " + cause.causant.name + ")?";
+                        if (!smallQuestionsCache[question]) {
+                            await runQuestion(engine, character, {
+                                type: "yes_no",
+                                question: question,
+                                onValue: async (answer) => {
+                                    smallQuestionsCache[question] = answer;
+                                },
+                            }, {
+                                lastCycleMessagesInfo,
+                                interactedCharactersAccordingToItemChange,
+                                questioningAgent,
+                                initializeAgent,
+                            });
+                        }
+
+                        if (smallQuestionsCache[question]) {
+                            const apologySuccessful = Math.random() < cause.causant.apologizable;
+                            if (apologySuccessful) {
+                                microInjections.push(character.name + " accepted the apology from " + cause.causant.name + " for causing them to become " + stateForCharacter.state);
+                                stateForCharacter.causes = stateForCharacter.causes.filter(c => c !== cause);
+                                removed = true;
+                            } else {
+                                microInjections.push(character.name + " did not accept the apology from " + cause.causant.name + " for causing them to become " + stateForCharacter.state);
+                            }
+                        }
+                    }
+                }
+
+                if (!removed) {
+                    // More?
+                }
+            }
+        }
+    }
+
+
     if (initialized) {
         await questioningAgent.next(null);
         await questioningAgent.return();
@@ -381,7 +430,7 @@ export default async function runAllTriggersFor(engine, character, interactedCha
 
     await deleteTemp(engine);
 
-    return;
+    return microInjections;
 }
 
 /**
