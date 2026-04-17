@@ -1455,7 +1455,7 @@ declare type DETextQuestionCallback = (
     character: DECompleteCharacterReference,
 ) => Promise<void> | void;
 
-declare type DEFamilyRelation = "parent" | "sibling" | "child" | "spouse" | "cousin" | "uncle" | "aunt" | "grandparent" | "grandchild" | "niece" | "nephew" | "other";
+declare type DEFamilyRelation = "parent" | "sibling" | "child" | "spouse" | "cousin" | "uncle" | "aunt" | "grandparent" | "grandchild" | "niece" | "nephew" | "other" | "step parent" | "step child" | "step sibling" | "half sibling" | "step grandparent" | "step grandchild";
 
 declare interface DEFamilyTie {
     relation: DEFamilyRelation;
@@ -1614,6 +1614,20 @@ declare interface DEStateCauseCausantObject {
 }
 
 declare interface DEStateCause {
+    /**
+     * The description of a cause should be able to be preceeded by the character name in question
+     * eg.
+     * 
+     * "was hit in the face"
+     * 
+     * this way when injected it will be injected as
+     * 
+     * "{{char}} was hit in the face, done by {{causant}}"
+     * 
+     * Provided that the causant exists and is a character, if not it will just be
+     * 
+     * "{{char}} got hit in the small toe, caused by {{eg. desk}}"
+     */
     description: string;
     causant?: DEStateCauseCausantCharacter | DEStateCauseCausantObject;
 }

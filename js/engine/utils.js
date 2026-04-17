@@ -319,6 +319,24 @@ export const deEngineUtils = {
                 case "nephew":
                     inverseRelation = character1.gender === "male" || character1.gender === "ambiguous" ? "uncle" : "aunt";
                     break;
+                case "half sibling":
+                    inverseRelation = "half sibling";
+                    break;
+                case "step parent":
+                    inverseRelation = "step child";
+                    break;
+                case "step child":
+                    inverseRelation = "step parent";
+                    break;
+                case "step sibling":
+                    inverseRelation = "step sibling";
+                    break;
+                case "step grandparent":
+                    inverseRelation = "step grandchild";
+                    break;
+                case "step grandchild":
+                    inverseRelation = "step grandparent";
+                    break;
                 default:
                     inverseRelation = "other";
             }
@@ -914,7 +932,7 @@ export const deEngineUtils = {
                      */
                     const causesPerCausant = {};
                     info2.causes.forEach(cause => {
-                        if (cause.causant && cause.causant.type === "character") {
+                        if (cause.causant) {
                             if (!causesPerCausant[cause.causant.name]) {
                                 causesPerCausant[cause.causant.name] = [];
                             }
@@ -984,6 +1002,7 @@ export const deEngineUtils = {
                         if (causesPerCausant[causant].length > 1) {
                             base += `. Reasons: ${info2.char.name} `;
                             base += DE.utils.templateUtils.formatAnd(DE, causesPerCausant[causant]);
+                            base += `, by/with the object: ${causant}`;
                         }
                     }
                 }

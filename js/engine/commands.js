@@ -539,6 +539,7 @@ export const commands = {
                     stranger: true,
                     createdAt: engine.deObject.currentTime,
                     knowsName: knowsNameValue,
+                    undoableShifts: {},
                 });
                 return `No active bond found from "${characterName}" towards "${otherCharacterName}". A new bond has been created with the specified knowsName value.`;
             }
@@ -554,7 +555,26 @@ export const commands = {
             if (!engine.deObject) {
                 throw new Error("DEngine not initialized");
             }
-            const validRelations = ["parent", "sibling", "child", "spouse", "cousin", "uncle", "aunt", "grandparent", "grandchild", "niece", "nephew", "other"];
+            const validRelations = [
+                "parent",
+                "sibling",
+                "child",
+                "spouse",
+                "cousin",
+                "uncle",
+                "aunt",
+                "grandparent",
+                "grandchild",
+                "niece", 
+                "nephew",
+                "other",
+                "step parent",
+                "step child",
+                "step sibling",
+                "half sibling",
+                "step grandparent",
+                "step grandchild"
+            ];
             if (args.length < 3) {
                 return `Usage: /setfamilyrelationshipfor <character name>, <towards character name>, <relation|none>\nValid relations: ${validRelations.join(", ")}, or "none" to remove the tie.`;
             }

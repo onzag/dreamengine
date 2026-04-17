@@ -385,8 +385,11 @@ export default async function runAllTriggersFor(engine, character, interactedCha
             for (const cause of stateForCharacter.causes) {
                 let removed = false;
                 if (cause.causant?.type === "character") {
+                    if (!interactedCharactersAccordingToItemChange.includes(cause.causant.name)) {
+                        continue; // skip causants that are not relevant
+                    }
                     if (cause.causant.apologizable) {
-                        const question = "Has " + cause.causant.name + " apologized to " + character.name + " for causing them to become " + stateForCharacter.state + ": " + JSON.stringify(cause.description) + " (done by " + cause.causant.name + ")?";
+                        const question = "Has " + cause.causant.name + " apologized to " + character.name + " for causing them to become " + stateForCharacter.state + ": " + JSON.stringify(character.name + " " + cause.description) + " (done by " + cause.causant.name + ")?";
                         if (!smallQuestionsCache[question]) {
                             await runQuestion(engine, character, {
                                 type: "yes_no",

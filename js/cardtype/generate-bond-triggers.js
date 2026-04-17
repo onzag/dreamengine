@@ -10,7 +10,7 @@ import { BASIC_EMOTIONAL_STATES, BASIC_EMOTIONAL_STATES_OPTIONS } from "./genera
  * @param {string} charName
  * @returns 
  */
-function replaceOtherCharNameWithPlaceholder(text, charName) {
+export function replaceOtherCharNameWithPlaceholder(text, charName) {
     return replaceAllCharNameWithPlaceholder(text.replace(/OTHER_CHARACTER|OTHER CHARACTER|[Oo]ther character/g, "{{other}}"), charName);
 }
 
@@ -333,7 +333,7 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
             }
 
             for (const emotionalState of parsedEmotionalStates) {
-                initializeSection.body.push(`DE.utils.tickleState(DE, char, ${JSON.stringify(emotionalState)}, ${shiftStateByOverride + 1}, ${shiftStateByOverride + 2}, [{name: other.name, type: "character"}], [{characterCausant: other.name, description: ${JSON.stringify(description)}}]);`);
+                initializeSection.body.push(`DE.utils.shiftState(DE, char, ${JSON.stringify(emotionalState)}, ${shiftStateByOverride + 1}, ${shiftStateByOverride + 2}, [{causant: {name: other.name, type: "character"}, description: ${JSON.stringify(description)}}}]);`);
             }
 
             if (altCondition && altYesCode && altConsidering) {
@@ -364,7 +364,7 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
                 }
 
                 for (const emotionalState of parsedEmotionalStates2) {
-                    initializeSection.body.push(`DE.utils.tickleState(DE, char, ${JSON.stringify(emotionalState)}, ${shiftStateByOverride + 1}, ${shiftStateByOverride + 2}, [{name: other.name, type: "character"}], [{characterCausant: other.name, description: ${JSON.stringify(description)}}]);`);
+                    initializeSection.body.push(`DE.utils.shiftState(DE, char, ${JSON.stringify(emotionalState)}, ${shiftStateByOverride + 1}, ${shiftStateByOverride + 2}, [{causant: {name: other.name, type: "character"}, description: ${JSON.stringify(description)}}}]);`);
                 }
 
                 initializeSection.body.push(`}`);
@@ -879,7 +879,7 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
                 const parsedEmotionalStates = parseListFromGrammarResponse(listOfEmotions.value).map(emState => emState[0].toUpperCase() + emState.slice(1).toLowerCase()); // capitalize first letter to match the emotional states format
 
                 for (const emotionalState of parsedEmotionalStates) {
-                    initializeSection.body.push(`DE.utils.tickleState(DE, char, ${JSON.stringify(emotionalState)}, 2, 4, [{name: other?.name, type: "character"}], [{characterCausant: other?.name, description: ${JSON.stringify(descriptionsForQuestions[i])}}]);`);
+                    initializeSection.body.push(`DE.utils.shiftState(DE, char, ${JSON.stringify(emotionalState)}, 2, 4, [{name: other?.name, type: "character"}], [{characterCausant: other?.name, description: ${JSON.stringify(descriptionsForQuestions[i])}}]);`);
                 }
 
                 initializeSection.body.push(`}`);

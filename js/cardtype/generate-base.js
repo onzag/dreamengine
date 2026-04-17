@@ -1467,7 +1467,8 @@ export async function generateBase(engine, card, guider, autosave) {
     if (!hasSpecialComment(onWorldInitializedAndFirstSceneStartedSection.body, "base-relationships") && guider) {
         let nextFamilyMemberToAdd = "";
         do {
-            nextFamilyMemberToAdd = (await guider.askOption("Would you like to add a family member?", ["no", "parent", "sibling", "child", "spouse", "cousin", "uncle", "aunt", "grandparent", "grandchild", "niece", "nephew", "other"], "no")).value;
+            nextFamilyMemberToAdd = (await guider.askOption("Would you like to add a family member?", ["no", "parent", "sibling", "child", "spouse", "cousin", "uncle",
+                "aunt", "grandparent", "grandchild", "niece", "nephew", "other", "step parent", "step child", "step sibling", "half sibling", "step grandparent", "step grandchild"], "no")).value;
             if (nextFamilyMemberToAdd && nextFamilyMemberToAdd !== "no") {
                 const familyMemberName = (await guider.askOpen("What is the name of the " + nextFamilyMemberToAdd + "?")).value;
                 const familyMemberRelation = nextFamilyMemberToAdd;
@@ -1855,7 +1856,7 @@ export async function generateBase(engine, card, guider, autosave) {
 
         insertSpecialComment(newCharacterSection.body, "base-group-belonging");
         if (finalGroupBelongingValue.length > 0) {
-            newCharacterSection.body.push(`groupBelonging: null,`);
+            newCharacterSection.body.push(`groupBelonging: [],`);
         } else {
             newCharacterSection.body.push(`groupBelonging: ${JSON.stringify(finalGroupBelongingValue)},`);
         }
@@ -2012,7 +2013,7 @@ export async function generateBase(engine, card, guider, autosave) {
             let pickinessValue = pickinessValues[options.indexOf(howPickyValue.value.trim())];
 
             if (guider) {
-                const howPickyValueGuided = await guider.askOption("How picky is " + name + " towards having an attraction towards " + which + "?\n\n" + optionsExplained.map((option, index) => `\n${index + 1}. ${option}`).join(""), options, howPickyValue.value.trim());
+                const howPickyValueGuided = await guider.askOption("How picky is " + name + " towards having an attraction towards " + which + "?\n" + optionsExplained.map((option, index) => `\n${index + 1}. ${option}`).join(""), options, howPickyValue.value.trim());
                 if (howPickyValueGuided) {
                     howPickyValue.value = howPickyValueGuided.value.trim();
                 }
@@ -2107,9 +2108,11 @@ export async function generateBase(engine, card, guider, autosave) {
                         findsMalesSexuallyAttractiveValue = true;
                     }
 
-                    const isFindsMalesSexuallyAttractiveLimitedToSex = await guider.askBoolean("Is " + name + "'s attraction towards males limited to biological sex only?", false);
-                    if (isFindsMalesSexuallyAttractiveLimitedToSex.value) {
-                        findsMalesSexuallyAttractiveLimitToSex = true;
+                    if (findsMalesSexuallyAttractiveValue) {
+                        const isFindsMalesSexuallyAttractiveLimitedToSex = await guider.askBoolean("Is " + name + "'s attraction towards males limited to biological sex only?", false);
+                        if (isFindsMalesSexuallyAttractiveLimitedToSex.value) {
+                            findsMalesSexuallyAttractiveLimitToSex = true;
+                        }
                     }
                 }
 
@@ -2139,9 +2142,11 @@ export async function generateBase(engine, card, guider, autosave) {
                         findsFemalesSexuallyAttractiveValue = true;
                     }
 
-                    const isFindsFemalesSexuallyAttractiveLimitedToSex = await guider.askBoolean("Is " + name + "'s attraction towards females limited to biological sex only?", false);
-                    if (isFindsFemalesSexuallyAttractiveLimitedToSex.value) {
-                        findsFemalesSexuallyAttractiveLimitToSex = true;
+                    if (findsFemalesSexuallyAttractiveValue) {
+                        const isFindsFemalesSexuallyAttractiveLimitedToSex = await guider.askBoolean("Is " + name + "'s attraction towards females limited to biological sex only?", false);
+                        if (isFindsFemalesSexuallyAttractiveLimitedToSex.value) {
+                            findsFemalesSexuallyAttractiveLimitToSex = true;
+                        }
                     }
                 }
 
@@ -2149,9 +2154,9 @@ export async function generateBase(engine, card, guider, autosave) {
                 newCharacterSection.body.push(`attractions: [`);
                 newCharacterSection.body.push(`// You can make these far more specific if needed`);
 
-                const pickinessMale = await determineOnePickiness("males");
-
                 if (findsMalesSexuallyAttractiveValue) {
+                    const pickinessMale = await determineOnePickiness("males");
+
                     if (card.config.characterSpeciesType === "humanoid") {
                         newCharacterSection.body.push(`{towards: "male", pickiness: ${pickinessMale}, ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], speciesType: "${card.config.characterSpeciesType}"${findsMalesSexuallyAttractiveLimitToSex ? ', sex: "male"' : ''}},`);
                     } else {
@@ -2160,9 +2165,8 @@ export async function generateBase(engine, card, guider, autosave) {
                     attractions.push("male");
                 }
 
-                const pickinessFemale = await determineOnePickiness("females");
-
                 if (findsFemalesSexuallyAttractiveValue) {
+                    const pickinessFemale = await determineOnePickiness("females");
                     if (card.config.characterSpeciesType === "humanoid") {
                         newCharacterSection.body.push(`{towards: "female", pickiness: ${pickinessFemale}, ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], speciesType: "${card.config.characterSpeciesType}"${findsFemalesSexuallyAttractiveLimitToSex ? ', sex: "female"' : ''}},`);
                     } else {
@@ -2175,7 +2179,7 @@ export async function generateBase(engine, card, guider, autosave) {
 
         if (!isAsexualValue && guider) {
             while (true) {
-                const additionalAttractions = await guider.askBoolean("Would you like to add an attraction towards a specific species that isn't covered?");
+                const additionalAttractions = await guider.askBoolean("Would you like to add an attraction towards a specific species that isn't covered?", false);
                 if (!additionalAttractions.value) {
                     break;
                 } else {
