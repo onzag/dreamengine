@@ -224,6 +224,17 @@ declare interface DECharacterStateDefinition {
      */
     dominance: number;
     /**
+     * Causes the character intimacy to multiply by this factor when the state is active
+     * dominance irrelevant all active states affect it
+     * Default is 1, meaning no change, a value of 0.5 would mean that intimacy is halved when the state is active, a value of 2 would mean that intimacy is doubled when the state is active
+     */
+    intimacyMultiplier?: number;
+    /**
+     * Determines towards which characters the intimacy multiplier applies, if not specified, it applies towards everyone, if set to "causants_only", it only applies towards causants of the state,
+     * this is useful for states that are meant to affect intimacy towards specific characters, for example a state like FLIRTING may increase intimacy towards the causants of the flirting but not towards other characters
+     */
+    intimacyMultiplierDirectionality?: "everyone" | "causants_only";
+    /**
      * How dominant this state is after being relieved
      */
     dominanceAfterRelief?: number;
@@ -3156,6 +3167,16 @@ declare interface DEUtils {
 
     charHasState(DE: DEObject, character: string | DECompleteCharacterReference, stateName: string): boolean;
     charIsRelievingState(DE: DEObject, character: string | DECompleteCharacterReference, stateName: string): boolean;
+
+    /**
+     * Causes any bond intimacy types check to not run, say if they are in some form of conflicting state
+     * reducing a bond will also cause this effect
+     * 
+     * @param DE 
+     * @param char1 
+     * @param towards 
+     */
+    rejectIntimacy(DE: DEObject, char1: string | DECompleteCharacterReference | null, towards: string | DECompleteCharacterReference | null): void;
 
     templateUtils: {
         /**

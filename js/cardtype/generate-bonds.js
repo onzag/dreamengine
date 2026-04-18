@@ -2053,9 +2053,479 @@ export async function generateBonds(engine, card, guider, autosave) {
                             continue;
                         }
 
-                        
+                        let allExtraInfo = "";
 
-                        let guidanceGiven = "";
+                        // First openToAffection for each intimacy modifier
+                        let extraInfoOpenToAffection = "";
+                        let allIsNotReceptive = true;
+                        // @ts-ignore
+                        if (fineTuneConditions[fineTune] !== "true") {
+                            // @ts-ignore
+                            familySectionOpenToAffection.body.push(`if (${getDeeperFineTuneCondition(fineTuneConditions[fineTune], deeperFineTune)}) {`);
+                        }
+                        for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
+                            const openToAffectionQuestion = "How receptive to affection is " + name + " towards " + actualFamilyValue + " when they are " + intimateModifier.toLowerCase() + "?";
+                            const answer = await generator.next({
+                                maxCharacters: 50,
+                                maxSafetyCharacters: 0,
+                                maxParagraphs: 1,
+                                nextQuestion: openToAffectionQuestion,
+                                stopAfter: [],
+                                stopAt: [],
+                                instructions: "Answer with one of the following options: 'Not receptive', 'Slightly receptive', 'Moderately receptive', 'Very receptive'. Consider the nature of the relationship and the specific modifier of intimacy when determining the level of openness to affection.",
+                            });
+
+                            if (answer.done) {
+                                throw new Error("Generator ended unexpectedly while generating openToAffection for " + relationshipKey + " > " + romanticInterestKey + " > " + familyKey);
+                            }
+
+                            if (guider) {
+                                const guiderResult = await guider.askOption("How receptive to affection is " + name + " towards " + actualFamilyValue + " when they are " + intimateModifier.toLowerCase(), [
+                                    "Not receptive",
+                                    "Slightly receptive",
+                                    "Moderately receptive",
+                                    "Very receptive",
+                                ], answer.value);
+                                if (guiderResult.value) {
+                                    answer.value = guiderResult.value;
+                                }
+                            }
+
+                            const answerTrimmed = answer.value.trim().toLowerCase();
+                            if (answerTrimmed !== "not receptive") {
+                                allIsNotReceptive = false;
+                            }
+
+                            const toValue = {
+                                "not receptive": "not",
+                                "slightly receptive": "slight",
+                                "moderately receptive": "moderate",
+                                "very receptive": "very",
+                            }
+
+                            // @ts-ignore
+                            const valueAnswer = toValue[answerTrimmed];
+
+                            extraInfoOpenToAffection += `\n${name} is ${answerTrimmed} to affection from this other character when they are ${intimateModifier.toLowerCase()}`;
+
+                            // @ts-ignore
+                            const modifierInfo = MODIFIERS_INTIMACY[intimateModifier];
+                            const condition = modifierInfo.condition;
+                            if (condition !== "true") {
+                                familySectionOpenToAffection.body.push(`if (${condition}) {`);
+                            }
+                            /**
+                             * @type {string | null}
+                             */
+                            let reason = null;
+                            if (valueAnswer === "not") {
+                                reason = modifierInfo.reasonNo;
+                            } else {
+                                reason = modifierInfo.reasonYes;
+                            }
+                            familySectionOpenToAffection.body.push(`return {value: ${JSON.stringify(valueAnswer)}, reason: ${JSON.stringify(reason)}};`);
+                            if (condition !== "true") {
+                                familySectionOpenToAffection.body.push(`}`);
+                            }
+                        }
+                        if (allIsNotReceptive) {
+                            extraInfoOpenToAffection = `\n${name} is not receptive to affection from this other character in any context.`;
+                        }
+                        allExtraInfo += extraInfoOpenToAffection;
+                        // @ts-ignore
+                        if (fineTuneConditions[fineTune] !== "true") {
+                            // @ts-ignore
+                            familySectionOpenToAffection.body.push(`}`);
+                        }
+                        // done openToAffection
+
+                        // Next openToIntimateAffection for each intimacy modifier
+                        let extraInfoOpenToIntimateAffection = "";
+                        let allIsNotReceptiveIntimateAffection = true;
+                        // @ts-ignore
+                        if (fineTuneConditions[fineTune] !== "true") {
+                            // @ts-ignore
+                            familySectionOpenToIntimateAffection.body.push(`if (${getDeeperFineTuneCondition(fineTuneConditions[fineTune], deeperFineTune)}) {`);
+                        }
+                        for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
+                            const openToIntimateAffectionQuestion = "How receptive to intimate affection is " + name + " towards " + actualFamilyValue + " when they are " + intimateModifier.toLowerCase() + "?";
+                            const answer = await generator.next({
+                                maxCharacters: 50,
+                                maxSafetyCharacters: 0,
+                                maxParagraphs: 1,
+                                nextQuestion: openToIntimateAffectionQuestion,
+                                stopAfter: [],
+                                stopAt: [],
+                                instructions: "Answer with one of the following options: 'Not receptive', 'Slightly receptive', 'Moderately receptive', 'Very receptive'. Consider the nature of the relationship and the specific modifier of intimacy when determining the level of openness to intimate affection.",
+                            });
+
+                            if (answer.done) {
+                                throw new Error("Generator ended unexpectedly while generating openToIntimateAffection for " + relationshipKey + " > " + romanticInterestKey + " > " + familyKey);
+                            }
+
+                            if (guider) {
+                                const guiderResult = await guider.askOption("How receptive to intimate affection is " + name + " towards " + actualFamilyValue + " when they are " + intimateModifier.toLowerCase(), [
+                                    "Not receptive",
+                                    "Slightly receptive",
+                                    "Moderately receptive",
+                                    "Very receptive",
+                                ], answer.value);
+                                if (guiderResult.value) {
+                                    answer.value = guiderResult.value;
+                                }
+                            }
+
+                            const answerTrimmed = answer.value.trim().toLowerCase();
+                            if (answerTrimmed !== "not receptive") {
+                                allIsNotReceptiveIntimateAffection = false;
+                            }
+
+                            const toValue = {
+                                "not receptive": "not",
+                                "slightly receptive": "slight",
+                                "moderately receptive": "moderate",
+                                "very receptive": "very",
+                            }
+
+                            // @ts-ignore
+                            const valueAnswer = toValue[answerTrimmed];
+
+                            extraInfoOpenToIntimateAffection += `\n${name} is ${answerTrimmed} to intimate affection from this other character when they are ${intimateModifier.toLowerCase()}`;
+
+                            // @ts-ignore
+                            const modifierInfo = MODIFIERS_INTIMACY[intimateModifier];
+                            const condition = modifierInfo.condition;
+                            if (condition !== "true") {
+                                familySectionOpenToIntimateAffection.body.push(`if (${condition}) {`);
+                            }
+                            /**
+                             * @type {string | null}
+                             */
+                            let reason = null;
+                            if (valueAnswer === "not") {
+                                reason = modifierInfo.reasonNo;
+                            } else {
+                                reason = modifierInfo.reasonYes;
+                            }
+                            familySectionOpenToIntimateAffection.body.push(`return {value: ${JSON.stringify(valueAnswer)}, reason: ${JSON.stringify(reason)}};`);
+                            if (condition !== "true") {
+                                familySectionOpenToIntimateAffection.body.push(`}`);
+                            }
+                        }
+                        if (allIsNotReceptiveIntimateAffection) {
+                            extraInfoOpenToIntimateAffection = `\n${name} is not receptive to intimate affection from this other character in any context.`;
+                        }
+                        allExtraInfo += extraInfoOpenToIntimateAffection;
+                        // @ts-ignore
+                        if (fineTuneConditions[fineTune] !== "true") {
+                            // @ts-ignore
+                            familySectionOpenToIntimateAffection.body.push(`}`);
+                        }
+                        // done openToIntimateAffection
+
+                        // Next openToSex for each intimacy modifier
+                        let extraInfoOpenToSex = "";
+                        let allIsNotReceptiveOpenToSex = true;
+                        // @ts-ignore
+                        if (fineTuneConditions[fineTune] !== "true") {
+                            // @ts-ignore
+                            familySectionOpenToSex.body.push(`if (${getDeeperFineTuneCondition(fineTuneConditions[fineTune], deeperFineTune)}) {`);
+                        }
+                        for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
+                            const openToSexQuestion = "How receptive to sex is " + name + " towards " + actualFamilyValue + " when they are " + intimateModifier.toLowerCase() + "?";
+                            const answer = await generator.next({
+                                maxCharacters: 50,
+                                maxSafetyCharacters: 0,
+                                maxParagraphs: 1,
+                                nextQuestion: openToSexQuestion,
+                                stopAfter: [],
+                                stopAt: [],
+                                instructions: "Answer with one of the following options: 'Not receptive', 'Slightly receptive', 'Moderately receptive', 'Very receptive'. Consider the nature of the relationship and the specific modifier of intimacy when determining the level of openness to sex.",
+                            });
+
+                            if (answer.done) {
+                                throw new Error("Generator ended unexpectedly while generating openToSex for " + relationshipKey + " > " + romanticInterestKey + " > " + familyKey);
+                            }
+
+                            if (guider) {
+                                const guiderResult = await guider.askOption("How receptive to sex is " + name + " towards " + actualFamilyValue + " when they are " + intimateModifier.toLowerCase(), [
+                                    "Not receptive",
+                                    "Slightly receptive",
+                                    "Moderately receptive",
+                                    "Very receptive",
+                                ], answer.value);
+                                if (guiderResult.value) {
+                                    answer.value = guiderResult.value;
+                                }
+                            }
+
+                            const answerTrimmed = answer.value.trim().toLowerCase();
+                            if (answerTrimmed !== "not receptive") {
+                                allIsNotReceptiveOpenToSex = false;
+                            }
+
+                            const toValue = {
+                                "not receptive": "not",
+                                "slightly receptive": "slight",
+                                "moderately receptive": "moderate",
+                                "very receptive": "very",
+                            }
+
+                            // @ts-ignore
+                            const valueAnswer = toValue[answerTrimmed];
+
+                            extraInfoOpenToSex += `\n${name} is ${answerTrimmed} to sex with this other character when they are ${intimateModifier.toLowerCase()}`;
+
+                            // @ts-ignore
+                            const modifierInfo = MODIFIERS_INTIMACY[intimateModifier];
+                            const condition = modifierInfo.condition;
+                            if (condition !== "true") {
+                                familySectionOpenToSex.body.push(`if (${condition}) {`);
+                            }
+                            /**
+                             * @type {string | null}
+                             */
+                            let reason = null;
+                            if (valueAnswer === "not") {
+                                reason = modifierInfo.reasonNo;
+                            } else {
+                                reason = modifierInfo.reasonYes;
+                            }
+                            familySectionOpenToSex.body.push(`return {value: ${JSON.stringify(valueAnswer)}, reason: ${JSON.stringify(reason)}};`);
+                            if (condition !== "true") {
+                                familySectionOpenToSex.body.push(`}`);
+                            }
+                        }
+                        if (allIsNotReceptiveOpenToSex) {
+                            extraInfoOpenToSex = `\n${name} is not receptive to sex with this other character in any context.`;
+                        }
+                        allExtraInfo += extraInfoOpenToSex;
+                        // @ts-ignore
+                        if (fineTuneConditions[fineTune] !== "true") {
+                            // @ts-ignore
+                            familySectionOpenToSex.body.push(`}`);
+                        }
+                        // done openToSex
+
+                        // Next proneToInitiatingAffection for each intimacy modifier
+                        let extraInfoProneToInitiatingAffection = "";
+                        let allIsNotProneToInitiatingAffection = true;
+                        // @ts-ignore
+                        if (fineTuneConditions[fineTune] !== "true") {
+                            // @ts-ignore
+                            familySectionProneToInitiatingAffection.body.push(`if (${getDeeperFineTuneCondition(fineTuneConditions[fineTune], deeperFineTune)}) {`);
+                        }
+                        for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
+                            const proneToInitiatingAffectionQuestion = "From 0 to 10 how likely is " + name + " to initiate non-romantic physical affection towards " + actualFamilyValue + " when they are " + intimateModifier.toLowerCase() + "? with 10 being extremely likely and 0 being not at all";
+                            const answer = await generator.next({
+                                maxCharacters: 5,
+                                maxSafetyCharacters: 0,
+                                maxParagraphs: 1,
+                                nextQuestion: proneToInitiatingAffectionQuestion,
+                                stopAfter: [],
+                                stopAt: [],
+                                grammar: "root ::= \"0\" | [1-9] | \"10\"",
+                            });
+
+                            if (answer.done) {
+                                throw new Error("Generator ended unexpectedly while generating proneToInitiatingAffection for " + relationshipKey + " > " + romanticInterestKey + " > " + familyKey);
+                            }
+
+                            if (guider) {
+                                const guiderResult = await guider.askNumber(
+                                    "From 0 to 10 how likely is " + name + " to initiate non-romantic physical affection towards " + actualFamilyValue + " when they are " + intimateModifier.toLowerCase() + "? with 10 being extremely likely and 0 being not at all",
+                                    parseInt(answer.value.trim()),
+                                );
+                                if (guiderResult) {
+                                    answer.value = guiderResult.value.toString();
+                                }
+                            }
+
+                            const probability = Math.min(10, Math.max(0, parseInt(answer.value.trim()) || 0)) / 10;
+
+                            if (probability > 0) {
+                                allIsNotProneToInitiatingAffection = false;
+                                const odds = probability >= 0.7 ? "very likely" : probability >= 0.4 ? "somewhat likely" : "slightly likely";
+                                extraInfoProneToInitiatingAffection += `\n${name} is ${odds} to initiate physical affection towards this other character when they are ${intimateModifier.toLowerCase()}`;
+                            } else {
+                                extraInfoProneToInitiatingAffection += `\n${name} is not likely to initiate physical affection towards this other character when they are ${intimateModifier.toLowerCase()}`;
+                            }
+
+                            // @ts-ignore
+                            const modifierInfo = MODIFIERS_INTIMACY[intimateModifier];
+                            const condition = modifierInfo.condition;
+                            if (condition !== "true") {
+                                familySectionProneToInitiatingAffection.body.push(`if (${condition}) {`);
+                            }
+                            familySectionProneToInitiatingAffection.body.push(`return {probability: ${probability}, options: ${JSON.stringify(card.config.affectionShowcases)}};`);
+                            if (condition !== "true") {
+                                familySectionProneToInitiatingAffection.body.push(`}`);
+                            }
+                        }
+                        if (allIsNotProneToInitiatingAffection) {
+                            extraInfoProneToInitiatingAffection = `\n${name} is not likely to initiate physical affection towards this other character in any context.`;
+                        } else {
+                            allExtraInfo += extraInfoProneToInitiatingAffection;
+                        }
+                        // @ts-ignore
+                        if (fineTuneConditions[fineTune] !== "true") {
+                            // @ts-ignore
+                            familySectionProneToInitiatingAffection.body.push(`}`);
+                        }
+                        // done proneToInitiatingAffection
+
+                        // Next proneToInitiatingIntimateAffection for each intimacy modifier
+                        let extraInfoProneToInitiatingIntimateAffection = "";
+                        let allIsNotProneToInitiatingIntimateAffection = true;
+                        // @ts-ignore
+                        if (fineTuneConditions[fineTune] !== "true") {
+                            // @ts-ignore
+                            familySectionProneToInitiatingIntimateAffection.body.push(`if (${getDeeperFineTuneCondition(fineTuneConditions[fineTune], deeperFineTune)}) {`);
+                        }
+                        for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
+                            const proneToInitiatingIntimateAffectionQuestion = "From 0 to 10 how likely is " + name + " to initiate romantic or sexual physical affection towards " + actualFamilyValue + " when they are " + intimateModifier.toLowerCase() + "? with 10 being extremely likely and 0 being not at all";
+                            const answer = await generator.next({
+                                maxCharacters: 5,
+                                maxSafetyCharacters: 0,
+                                maxParagraphs: 1,
+                                nextQuestion: proneToInitiatingIntimateAffectionQuestion,
+                                stopAfter: [],
+                                stopAt: [],
+                                grammar: "root ::= \"0\" | [1-9] | \"10\"",
+                            });
+
+                            if (answer.done) {
+                                throw new Error("Generator ended unexpectedly while generating proneToInitiatingIntimateAffection for " + relationshipKey + " > " + romanticInterestKey + " > " + familyKey);
+                            }
+
+                            if (guider) {
+                                const guiderResult = await guider.askNumber(
+                                    "From 0 to 10 how likely is " + name + " to initiate romantic or sexual physical affection towards " + actualFamilyValue + " when they are " + intimateModifier.toLowerCase() + "? with 10 being extremely likely and 0 being not at all",
+                                    parseInt(answer.value.trim()),
+                                );
+                                if (guiderResult) {
+                                    answer.value = guiderResult.value.toString();
+                                }
+                            }
+
+                            const probability = Math.min(10, Math.max(0, parseInt(answer.value.trim()) || 0)) / 10;
+
+                            if (probability > 0) {
+                                allIsNotProneToInitiatingIntimateAffection = false;
+                                const odds = probability >= 0.7 ? "very likely" : probability >= 0.4 ? "somewhat likely" : "slightly likely";
+                                extraInfoProneToInitiatingIntimateAffection += `\n${name} is ${odds} to initiate romantic or sexual physical affection towards this other character when they are ${intimateModifier.toLowerCase()}`;
+                            } else {
+                                extraInfoProneToInitiatingIntimateAffection += `\n${name} is not likely to initiate romantic or sexual physical affection towards this other character when they are ${intimateModifier.toLowerCase()}`;
+                            }
+
+                            // @ts-ignore
+                            const modifierInfo = MODIFIERS_INTIMACY[intimateModifier];
+                            const condition = modifierInfo.condition;
+                            if (condition !== "true") {
+                                familySectionProneToInitiatingIntimateAffection.body.push(`if (${condition}) {`);
+                            }
+                            familySectionProneToInitiatingIntimateAffection.body.push(`return {probability: ${probability}, options: ${JSON.stringify(card.config.intimateAffectionShowcases)}};`);
+                            if (condition !== "true") {
+                                familySectionProneToInitiatingIntimateAffection.body.push(`}`);
+                            }
+                        }
+                        // @ts-ignore
+                        if (fineTuneConditions[fineTune] !== "true") {
+                            // @ts-ignore
+                            familySectionProneToInitiatingIntimateAffection.body.push(`}`);
+                        }
+                        // done proneToInitiatingIntimateAffection
+                        if (allIsNotProneToInitiatingIntimateAffection) {
+                            extraInfoProneToInitiatingIntimateAffection = `\n${name} is not likely to initiate romantic or sexual physical affection towards this other character in any context.`;
+                        } else {
+                            allExtraInfo += extraInfoProneToInitiatingIntimateAffection;
+                        }
+
+                        // Next proneToInitiatingSex for each intimacy modifier
+                        let extraInfoProneToInitiatingSex = "";
+                        let allIsNotProneToInitiatingSex = true;
+                        // @ts-ignore
+                        if (fineTuneConditions[fineTune] !== "true") {
+                            // @ts-ignore
+                            familySectionProneToInitiatingSex.body.push(`if (${getDeeperFineTuneCondition(fineTuneConditions[fineTune], deeperFineTune)}) {`);
+                        }
+                        for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
+                            const proneToInitiatingSexQuestion = "From 0 to 10 how likely is " + name + " to initiate sex towards " + actualFamilyValue + " when they are " + intimateModifier.toLowerCase() + "? with 10 being extremely likely and 0 being not at all";
+                            const answer = await generator.next({
+                                maxCharacters: 5,
+                                maxSafetyCharacters: 0,
+                                maxParagraphs: 1,
+                                nextQuestion: proneToInitiatingSexQuestion,
+                                stopAfter: [],
+                                stopAt: [],
+                                grammar: "root ::= \"0\" | [1-9] | \"10\"",
+                            });
+
+                            if (answer.done) {
+                                throw new Error("Generator ended unexpectedly while generating proneToInitiatingSex for " + relationshipKey + " > " + romanticInterestKey + " > " + familyKey);
+                            }
+
+                            if (guider) {
+                                const guiderResult = await guider.askNumber(
+                                    "From 0 to 10 how likely is " + name + " to initiate sex towards " + actualFamilyValue + " when they are " + intimateModifier.toLowerCase() + "? with 10 being extremely likely and 0 being not at all",
+                                    parseInt(answer.value.trim()),
+                                );
+                                if (guiderResult) {
+                                    answer.value = guiderResult.value.toString();
+                                }
+                            }
+
+                            const probability = Math.min(10, Math.max(0, parseInt(answer.value.trim()) || 0)) / 10;
+
+                            if (probability > 0) {
+                                allIsNotProneToInitiatingSex = false;
+                                const odds = probability >= 0.7 ? "very likely" : probability >= 0.4 ? "somewhat likely" : "slightly likely";
+                                extraInfoProneToInitiatingSex += `\n${name} is ${odds} to initiate sex towards this other character when they are ${intimateModifier.toLowerCase()}`;
+                            } else {
+                                extraInfoProneToInitiatingSex += `\n${name} is not likely to initiate sex towards this other character when they are ${intimateModifier.toLowerCase()}`;
+                            }
+
+                            // @ts-ignore
+                            const modifierInfo = MODIFIERS_INTIMACY[intimateModifier];
+                            const condition = modifierInfo.condition;
+                            if (condition !== "true") {
+                                familySectionProneToInitiatingSex.body.push(`if (${condition}) {`);
+                            }
+
+                            const hasKinksForMales = card.config.kinksForMales && card.config.kinksForMales.length > 0;
+                            const hasKinksForFemales = card.config.kinksForFemales && card.config.kinksForFemales.length > 0;
+
+                            if (hasKinksForMales || hasKinksForFemales) {
+                                if (hasKinksForMales) {
+                                    familySectionProneToInitiatingSex.body.push(`if (other.sex === "male") {`);
+                                    familySectionProneToInitiatingSex.body.push(`return {probability: ${probability}, options: ${JSON.stringify([...card.config.kinks, ...card.config.kinksForMales])}};`);
+                                    familySectionProneToInitiatingSex.body.push(`}`);
+                                }
+                                if (hasKinksForFemales) {
+                                    familySectionProneToInitiatingSex.body.push(`if (other.sex === "female") {`);
+                                    familySectionProneToInitiatingSex.body.push(`return {probability: ${probability}, options: ${JSON.stringify([...card.config.kinks, ...card.config.kinksForFemales])}};`);
+                                    familySectionProneToInitiatingSex.body.push(`}`);
+                                }
+                            }
+                            familySectionProneToInitiatingSex.body.push(`return {probability: ${probability}, options: ${JSON.stringify(card.config.kinks)}};`);
+
+                            if (condition !== "true") {
+                                familySectionProneToInitiatingSex.body.push(`}`);
+                            }
+                        }
+                        if (allIsNotProneToInitiatingSex) {
+                            extraInfoProneToInitiatingSex = `\n${name} is not likely to initiate sex towards this other character in any context.`;
+                        } else {
+                            allExtraInfo += extraInfoProneToInitiatingSex;
+                        }
+                        // @ts-ignore
+                        if (fineTuneConditions[fineTune] !== "true") {
+                            // @ts-ignore
+                            familySectionProneToInitiatingSex.body.push(`}`);
+                        }
+                        // done proneToInitiatingSex
+
+                        let guidanceGiven = allExtraInfo;
                         let redoGuidance = false;
                         let descriptionValueUnprocessed = "";
                         let descriptionValue = "";

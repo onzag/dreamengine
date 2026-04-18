@@ -427,6 +427,29 @@ export default async function runAllTriggersFor(engine, character, interactedCha
 
     for (const bond of engine.deObject.bonds[character.name].active) {
         if (bond.towards in interactedCharactersAccordingToItemChange) {
+            if (character.temp["rejectIntimacy_" + bond.towards]) {
+                console.log("Intimacy towards " + bond.towards + " is currently rejected for " + character.name + ", skipping intimacy triggers for this bond");
+                continue; // skip this bond if intimacy is rejected due to recent negative interaction or already shifted bond
+            }
+
+            if (character.temp["alreadyShiftedBondPrimary_" + bond.towards] < 0 || character.temp["alreadyShiftedBondSecondary_" + bond.towards] < 0) {
+                console.log("Intimacy towards " + bond.towards + " is currently rejected for " + character.name + " because of a negative interaction or already shifted bond, skipping intimacy triggers for this bond");
+                continue; // skip this bond if intimacy is rejected due to recent negative interaction or already shifted bond
+            }
+
+            let multiplier = 1;
+
+            const allActiveStates = engine.deObject.stateFor[character.name].states;
+            for (const activeState of allActiveStates) {
+                const stateDef = character.stateDefinitions[activeState.state];
+                if (typeof stateDef.intimacyMultiplier === "number" && stateDef.intimacyMultiplier !== 1) {
+                    const applies = stateDef.intimacyMultiplierDirectionality === "everyone" ? true : activeState.causes?.some(cause => cause.causant?.type === "character" && cause.causant.name === bond.towards);
+                    if (applies) {
+                        multiplier *= stateDef.intimacyMultiplier;
+                    }
+                }
+            }
+
             const bondDeclaration = getBondDeclarationFromBondDescription(engine.deObject, character, bond);
             if (bondDeclaration) {
                 let alreadyInIntimateAct = false;
@@ -531,14 +554,17 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                     const proneToInitiateSex = {...await bondDeclaration.intimacy.proneToInitiatingSex(engine.deObject, character, engine.deObject.characters[bond.towards])};
 
                     proneToInitiateAffection.probability *= alreadyInAffectionateAct ? 2 : proneToInitiateAffection.probability;
+                    proneToInitiateAffection.probability *= multiplier;
                     if (proneToInitiateAffection.probability > 1) {
                         proneToInitiateAffection.probability = 1;
                     }
                     proneToInitiateIntimateAffection.probability *= alreadyInIntimateAct || alreadyInAffectionateAct ? 2 : proneToInitiateIntimateAffection.probability;
+                    proneToInitiateIntimateAffection.probability *= multiplier;
                     if (proneToInitiateIntimateAffection.probability > 1) {
                         proneToInitiateIntimateAffection.probability = 1;
                     }
                     proneToInitiateSex.probability *= alreadyInSex ? 0 : (alreadyInIntimateAct || alreadyInAffectionateAct ? 2 : proneToInitiateSex.probability);
+                    proneToInitiateSex.probability *= multiplier;
                     if (proneToInitiateSex.probability > 1) {
                         proneToInitiateSex.probability = 1;
                     }

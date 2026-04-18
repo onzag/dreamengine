@@ -77,6 +77,27 @@ const EMOTIONAL_STATES_APOLOGIZABLE = [
     "Annoyed",
 ]
 
+const EMOTIONAL_STATES_INTIMACY_MULTIPLIERS = {
+    "Angry": 0.5,
+    "Annoyed": 0.7,
+    "Anxious": 0.8,
+    "Ashamed": 0.6,
+    "Aroused": 3,
+    "Disgusted": 0.5,
+    "Sad": 0.7,
+    "Scared": 0.6,
+    "Shy": 0.8,
+    "Happy": 1.2,
+    "Affectionate": 1.5,
+    "Grateful": 1.3,
+    "Proud": 1.1,
+    "Amused": 1.2,
+    "Curious": 1.0,
+    "Jealous": 0.6,
+    "Flirty": 2,
+    "Loving": 1.5,
+}
+
 export const EMOTIONAL_STATES_WITH_EXPLICIT_ACTIONS = [
     "Aroused",
     "Flirty",
@@ -101,6 +122,7 @@ function replaceOtherCharNameWithPlaceholder(text, charName) {
  */
 export async function generateBasicStates(engine, card, guider, autosave) {
     throw new Error("TODO");
+    // TODO remember the intimacy in the states, eg. Angry we may not want
     const isAsexualValue = card.config.isAsexual;
     const name = card.config.name;
 

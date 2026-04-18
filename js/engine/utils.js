@@ -413,6 +413,15 @@ export const deEngineUtils = {
             char1Ref.temp["alreadyShiftedBondSecondary_" + towardsRef.name] = actualSecondaryShift;
         }
     },
+    rejectIntimacy(DE, char1, towards) {
+        const char1Ref = typeof char1 === "string" ? DE.characters[char1] : char1;
+        const towardsRef = typeof towards === "string" ? DE.characters[towards] : towards;
+        if (!char1Ref || !towardsRef) {
+            console.warn(`Cannot reject intimacy from ${char1} towards ${towards} because one of the characters was not found`);
+            return;
+        }
+        char1Ref.temp["rejectIntimacy_" + towardsRef.name] = true;
+    },
     hasBondBeenShiftedThisCycle(DE, char1, towards) {
         const char1Ref = typeof char1 === "string" ? DE.characters[char1] : char1;
         const towardsRef = typeof towards === "string" ? DE.characters[towards] : towards;
