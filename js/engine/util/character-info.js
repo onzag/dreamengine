@@ -1652,6 +1652,48 @@ export async function getInternalDescriptionOfCharacter(deObject, characterName)
                 result += `\n\n${isAttractive.reasoning}.`;
             }
 
+            const openToAffection = await bondDeclaration.intimacy.openToAffection(deObject, character, deObject.characters[activeBond.towards]);
+
+            if (openToAffection.value) {
+                result += `\n\n${characterName} is open to receiving affection from ${activeBond.towards}`;
+                if (openToAffection.reason) {
+                    result += `, reason: ${openToAffection.reason}`;
+                }
+            } else {
+                result += `\n\n${characterName} is not open to receiving affection from ${activeBond.towards}`;
+                if (openToAffection.reason) {
+                    result += `, reason: ${openToAffection.reason}`;
+                }
+            }
+
+            const openToSex = await bondDeclaration.intimacy.openToSex(deObject, character, deObject.characters[activeBond.towards]);
+
+            const openToIntimateAffection = await bondDeclaration.intimacy.openToIntimateAffection(deObject, character, deObject.characters[activeBond.towards]);
+
+            if (openToIntimateAffection.value) {
+                result += `\n\n${characterName} is open to receiving intimate romantic affection (${openToSex.value ? "including sexual acts" : "excluding sexual acts"}) from ${activeBond.towards}`;
+                if (openToIntimateAffection.reason) {
+                    result += `, reason: ${openToIntimateAffection.reason}`;
+                }
+            } else {
+                result += `\n\n${characterName} is not open to receiving intimate romantic affection from ${activeBond.towards}`;
+                if (openToIntimateAffection.reason) {
+                    result += `, reason: ${openToIntimateAffection.reason}`;
+                }
+            }
+
+            if (openToSex.value) {
+                result += `\n\n${characterName} is open to receiving sexual acts from ${activeBond.towards}`;
+                if (openToSex.reason) {
+                    result += `, reason: ${openToSex.reason}`;
+                }
+            } else {
+                result += `\n\n${characterName} is not open to receiving sexual acts from ${activeBond.towards}`;
+                if (openToSex.reason) {
+                    result += `, reason: ${openToSex.reason}`;
+                }
+            }
+
             relationships.push(result);
 
             if (bondDeclaration.generalCharacterDescriptionInjection) {

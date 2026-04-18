@@ -1,5 +1,5 @@
 import { DEngine } from "../index.js";
-import { getFamilyBondRelation, getRelationship, getSurroundingCharacters } from "../util/character-info.js";
+import { getBondDeclarationFromBondDescription, getFamilyBondRelation, getRelationship, getSurroundingCharacters } from "../util/character-info.js";
 import { isYes, numberGrammar, yesNoGrammar } from "../util/grammar.js";
 import { getHistoryFragmentForCharacter } from "../util/messages.js";
 
@@ -420,6 +420,189 @@ export default async function runAllTriggersFor(engine, character, interactedCha
 
                 if (!removed) {
                     // More?
+                }
+            }
+        }
+    }
+
+    for (const bond of engine.deObject.bonds[character.name].active) {
+        if (bond.towards in interactedCharactersAccordingToItemChange) {
+            const bondDeclaration = getBondDeclarationFromBondDescription(engine.deObject, character, bond);
+            if (bondDeclaration) {
+                let alreadyInIntimateAct = false;
+                let alreadyInSex = false;
+                let negativeInteraction = false;
+                let alreadyInAffectionateAct = false;
+
+                const openToSex = await bondDeclaration.intimacy.openToSex(engine.deObject, character, engine.deObject.characters[bond.towards]);
+                const questionOfSex = "In the last story fragment, has " + character.name + " engaged in sexual activities or sexual acts with " + bond.towards + "?";
+
+                if (!smallQuestionsCache[questionOfSex]) {
+                    await runQuestion(engine, character, {
+                        type: "yes_no",
+                        question: questionOfSex,
+                        onValue: async (answer) => {
+                            smallQuestionsCache[questionOfSex] = answer;
+                        },
+                    }, {
+                        lastCycleMessagesInfo,
+                        interactedCharactersAccordingToItemChange,
+                        questioningAgent,
+                        initializeAgent,
+                    });
+                }
+
+                const engagedInSex = smallQuestionsCache[questionOfSex];
+
+                if (engagedInSex) {
+                    alreadyInIntimateAct = true;
+                    alreadyInSex = true;
+                    if (!openToSex.value) {
+                        negativeInteraction = true;
+                        microInjections.push(character.name + " just engaged in sexual activities with " + bond.towards + " but " + character.name + " is not open to sex with them, this might cause serious tension, trauma, or conflict in their interactions");
+                    } else {
+                        microInjections.push(character.name + " just engaged in sexual activities with " + bond.towards + " and " + character.name + " is open to sex with them, this might significantly deepen their bond and intimacy");
+                    }
+                } else {
+                    const openToIntimateAffection = await bondDeclaration.intimacy.openToIntimateAffection(engine.deObject, character, engine.deObject.characters[bond.towards]);
+                    const questionOfIntimateAffection = "In the last story fragment, has " + character.name + " received intimate affection from " + bond.towards + "? eg. kissing with arousing/sexual intent, making out, intimate actions with romantic/sexual interest, etc.";
+
+                    if (!smallQuestionsCache[questionOfIntimateAffection]) {
+                        await runQuestion(engine, character, {
+                            type: "yes_no",
+                            question: questionOfIntimateAffection,
+                            onValue: async (answer) => {
+                                smallQuestionsCache[questionOfIntimateAffection] = answer;
+                            },
+                        }, {
+                            lastCycleMessagesInfo,
+                            interactedCharactersAccordingToItemChange,
+                            questioningAgent,
+                            initializeAgent,
+                        });
+                    }
+
+                    const receivedIntimateAffection = smallQuestionsCache[questionOfIntimateAffection];
+
+                    if (receivedIntimateAffection) {
+                        alreadyInIntimateAct = true;
+                        if (!openToIntimateAffection.value) {
+                            negativeInteraction = true;
+                            microInjections.push(character.name + " just received intimate affection from " + bond.towards + " but " + character.name + " is not open to intimate affection from them, this might cause significant tension, discomfort, or conflict in their interactions");
+                        } else {
+                            microInjections.push(character.name + " just received intimate affection from " + bond.towards + " and " + character.name + " is open to intimate affection from them, this might deepen their bond and have a very positive effect on their interactions");
+                        }
+                    } else {
+                        const openToAffection = await bondDeclaration.intimacy.openToAffection(engine.deObject, character, engine.deObject.characters[bond.towards]);
+                        const questionOfAffection = "In the last story fragment, has " + character.name + " received affection from " + bond.towards + "? eg. hugging, caressing, holding hands, affectionate words, etc.";
+
+                        if (!smallQuestionsCache[questionOfAffection]) {
+                            await runQuestion(engine, character, {
+                                type: "yes_no",
+                                question: questionOfAffection,
+                                onValue: async (answer) => {
+                                    smallQuestionsCache[questionOfAffection] = answer;
+                                },
+                            }, {
+                                lastCycleMessagesInfo,
+                                interactedCharactersAccordingToItemChange,
+                                questioningAgent,
+                                initializeAgent,
+                            });
+                        }
+
+                        const receivedAffection = smallQuestionsCache[questionOfAffection];
+
+                        if (receivedAffection) {
+                            alreadyInAffectionateAct = true;
+                            if (!openToAffection.value) {
+                                negativeInteraction = true;
+                                microInjections.push(character.name + " just received affection from " + bond.towards + " but " + character.name + " is not open to affection from them, this might cause some tension or discomfort in their interactions");
+                            } else {
+                                microInjections.push(character.name + " just received affection from " + bond.towards + " and " + character.name + " is open to affection from them, this might have a positive effect on their interactions");
+                            }
+                        }
+                    }
+                }
+
+                if (!negativeInteraction) {
+                    const proneToInitiateAffection = {...await bondDeclaration.intimacy.proneToInitiatingAffection(engine.deObject, character, engine.deObject.characters[bond.towards])};
+                    const proneToInitiateIntimateAffection = {...await bondDeclaration.intimacy.proneToInitiatingIntimateAffection(engine.deObject, character, engine.deObject.characters[bond.towards])};
+                    const proneToInitiateSex = {...await bondDeclaration.intimacy.proneToInitiatingSex(engine.deObject, character, engine.deObject.characters[bond.towards])};
+
+                    proneToInitiateAffection.probability *= alreadyInAffectionateAct ? 2 : proneToInitiateAffection.probability;
+                    if (proneToInitiateAffection.probability > 1) {
+                        proneToInitiateAffection.probability = 1;
+                    }
+                    proneToInitiateIntimateAffection.probability *= alreadyInIntimateAct || alreadyInAffectionateAct ? 2 : proneToInitiateIntimateAffection.probability;
+                    if (proneToInitiateIntimateAffection.probability > 1) {
+                        proneToInitiateIntimateAffection.probability = 1;
+                    }
+                    proneToInitiateSex.probability *= alreadyInSex ? 0 : (alreadyInIntimateAct || alreadyInAffectionateAct ? 2 : proneToInitiateSex.probability);
+                    if (proneToInitiateSex.probability > 1) {
+                        proneToInitiateSex.probability = 1;
+                    }
+
+                    if (proneToInitiateAffection.probability > 0) {
+                        // affection showcase is not subject to libido
+                        if (Math.random() < proneToInitiateAffection.probability) {
+                            const options = proneToInitiateAffection.options || ["General affectionate behavior"];
+                            const behaviour = options[Math.floor(Math.random() * options.length)];
+                            microInjections.push(character.name + " will initiate \"" + behaviour + "\" towards " + bond.towards);
+                            character.state["last_affectionate_act_towards_" + bond.towards] = engine.deObject.currentTime;
+                        }
+                    }
+
+                    const characterLibido = character.libido;
+                    if (!characterLibido) {
+                        continue;
+                    }
+
+                    const cooldownPeriodHours = (1 - characterLibido) * 48; // from 0 hours at libido 1 to 48 hours at libido 0
+                    const cooldownPeriodMilliseconds = cooldownPeriodHours * 60 * 60 * 1000;
+
+                    const intimateCooldownPeriodHours = (1 - characterLibido) * 1;
+                    const intimateCooldownPeriodMilliseconds = intimateCooldownPeriodHours * 60 * 60 * 1000;
+                    
+                    const timeSinceLastSex = engine.deObject.currentTime.time - (character.state["last_sexual_act_towards_" + bond.towards] || 0);
+                    const timeSinceLastIntimateAffection = engine.deObject.currentTime.time - (character.state["last_intimate_affectionate_act_towards_" + bond.towards] || 0);
+
+                    const sexCooldownActive = timeSinceLastSex < cooldownPeriodMilliseconds;
+                    let sexCooldownRatio = sexCooldownActive && cooldownPeriodMilliseconds > 0 ? (timeSinceLastSex / cooldownPeriodMilliseconds) : 1;
+                    if (sexCooldownRatio > 1) {
+                        sexCooldownRatio = 1;
+                    }
+
+                    const intimateAffectionCooldownActive = timeSinceLastIntimateAffection < intimateCooldownPeriodMilliseconds;
+                    let intimateAffectionCooldownRatio = intimateAffectionCooldownActive && intimateCooldownPeriodMilliseconds > 0 ? (timeSinceLastIntimateAffection / intimateCooldownPeriodMilliseconds) : 1;
+                    if (intimateAffectionCooldownRatio > 1) {
+                        intimateAffectionCooldownRatio = 1;
+                    }
+
+                    proneToInitiateSex.probability *= sexCooldownRatio;
+                    if (sexCooldownActive && sexCooldownRatio > intimateAffectionCooldownRatio) {
+                        proneToInitiateIntimateAffection.probability *= sexCooldownRatio;
+                    } else {
+                        proneToInitiateIntimateAffection.probability *= intimateAffectionCooldownRatio;
+                    }
+
+                    if (Math.random() < proneToInitiateIntimateAffection.probability) {
+                        const options = proneToInitiateIntimateAffection.options || ["General intimate affectionate behavior"];
+                        if (options.length !== 0) {
+                            const behaviour = options[Math.floor(Math.random() * options.length)];
+                            microInjections.push(character.name + " will initiate \"" + behaviour + "\" with intimate/sexual intent towards " + bond.towards);
+                            character.state["last_intimate_affectionate_act_towards_" + bond.towards] = engine.deObject.currentTime;
+                        }
+                    }
+
+                    if (Math.random() < proneToInitiateSex.probability) {
+                        const options = proneToInitiateSex.options || ["Sexual activity"];
+                        if (options.length !== 0) {
+                            const behaviour = options[Math.floor(Math.random() * options.length)];
+                            microInjections.push(character.name + " will initiate \"" + behaviour + "\" towards " + bond.towards);
+                            character.state["last_sexual_act_towards_" + bond.towards] = engine.deObject.currentTime;
+                        }
+                    }
                 }
             }
         }

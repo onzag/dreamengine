@@ -598,7 +598,6 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
     );
 
     // ======= ROMANTIC ======
-
     if (!isAsexualValue) {
 
         const levelsOfRomanticBond = {
@@ -622,7 +621,9 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
         let romanticBondValueMale = 100;
         let romanticBondValueFemale = 100;
 
+        // TODO make this better
         let generalConditionForAttraction = "";
+
         if (card.config.attractions.includes("ambiguous")) {
             /**
              * @type {number}
@@ -970,6 +971,8 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
     if (!isIncestuousValue) {
         // TODO creepy bonds for incest
     }
+
+    // TODO generate some actions, alone with a character that is romantic interest, etc...
 
     delete card.config.bondTriggers;
     await autosave?.save();

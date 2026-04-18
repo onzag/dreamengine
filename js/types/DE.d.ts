@@ -735,6 +735,65 @@ declare interface DEBondDeclaration {
      * {{char}} used to trust {{other}} a lot and be best friends but now {{other}} is gone and they feel sad about it.
      */
     generalCharacterDescriptionInjectionEx?: DEStringTemplateCharAndOther;
+    /**
+     * Description of intimacy
+     */
+    intimacy: {
+        /**
+         * Whether the character in question with the other will be open to affection at this bond level, and the reason why or why not
+         * make sure to keep in mind the circumstances
+         * @param DE 
+         * @param char 
+         * @param other 
+         * @returns 
+         */
+        openToAffection: (DE: DEObject, char: DECompleteCharacterReference, other: DECompleteCharacterReference) => Promise<{value: boolean | string, reason?: string}>;
+        /**
+         * Whether the character in question with another, the options are what types of affection they will be prone to initiating
+         * Make sure to keep in mind the circumstances
+         * @param DE 
+         * @param char 
+         * @param other 
+         * @returns 
+         */
+        proneToInitiatingAffection: (DE: DEObject, char: DECompleteCharacterReference, other: DECompleteCharacterReference) => Promise<{probability: number, options?: string[]}>;
+        /**
+         * Whether the character in question with the other will be open to intimate affection at this bond level, and the reason why or why not
+         * make sure to keep in mind the circumstances
+         * @param DE 
+         * @param char 
+         * @param other 
+         * @returns 
+         */
+        openToIntimateAffection: (DE: DEObject, char: DECompleteCharacterReference, other: DECompleteCharacterReference) => Promise<{value: boolean | string, reason?: string}>;
+        /**
+         * Whether the character in question with another, the options are what types of intimate affection they will be prone to initiating
+         * Make sure to keep in mind the circumstances
+         * @param DE 
+         * @param char 
+         * @param other 
+         * @returns 
+         */
+        proneToInitiatingIntimateAffection: (DE: DEObject, char: DECompleteCharacterReference, other: DECompleteCharacterReference) => Promise<{probability: number, options?: string[]}>;
+        /**
+         * Whether the character in question with the other will be open to sex at this bond level, and the reason why or why not
+         * make sure to keep in mind the circumstances
+         * @param DE 
+         * @param char 
+         * @param other 
+         * @returns 
+         */
+        openToSex: (DE: DEObject, char: DECompleteCharacterReference, other: DECompleteCharacterReference) => Promise<{value: boolean | string, reason?: string}>;
+        /**
+         * Whether the character in question with another, the options are what types of sex they will be prone to initiating
+         * Make sure to keep in mind the circumstances
+         * @param DE 
+         * @param char 
+         * @param other 
+         * @returns 
+         */
+        proneToInitiatingSex: (DE: DEObject, char: DECompleteCharacterReference, other: DECompleteCharacterReference) => Promise<{probability: number, options?: string[]}>;
+    }
 }
 
 declare interface DEEmotionDefinition {
@@ -1205,6 +1264,12 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
      * A number from 0 to 1 that represents how likely is the character to resort to violence when facing conflicts or threats, higher means more likely to resort to violence
      */
     violence: number;
+
+    /**
+     * A number from 0 to 1 that represents how much the character enjoys or seeks out sexual activities and interactions, higher means more likely to do it and repeat
+     * do not make it 1, or the character will likely become insatiable
+     */
+    libido: number;
 
     // TODO implement all these from social simulation in bonds and talk to generate the internal description
     // currently it is not done, also species, speciesType, groupBelonging and race are taken to the MinimalCharacterReference too

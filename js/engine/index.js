@@ -916,7 +916,7 @@ export class DEngine {
                 /**
                  * @type {string[]}
                  */
-                const messagesAccum = microInjections;
+                const messagesAccum = [];
 
                 for (const participantName of expectedParticipants) {
                     this.informCycleState("info", "Pre-calculating posture for " + participantName + "...");
@@ -935,6 +935,7 @@ export class DEngine {
                 const talkResult = await talk(this, this.deObject.characters[participantName], {
                     doNotMove: true,
                     injectedActions: nextActionsProduced,
+                    microInjections,
                 });
 
                 await addMessageForStoryMaster(talkResult.addedMessagesForStoryMaster);
@@ -993,7 +994,7 @@ export class DEngine {
         /**
          * @type {string[]}
          */
-        const messageAccum = microInjections;
+        const messageAccum = [];
 
         for (const participantName of expectedParticipants) {
             this.informCycleState("info", "Pre-calculating posture for " + participantName + "...");

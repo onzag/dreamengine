@@ -11,6 +11,7 @@ import { mergeVocabularyLimits } from "../util/vocabulary.js";
  * @param {{
  *   doNotMove: boolean, // if true, the character will not be allowed to change location
  *   injectedActions: Array<DEActionPromptInjection<DEStringTemplateCharOnly>>,
+ *   microInjections: string[], // these are messages that are injected into the context of the inference adapter for this talk, but are not shown to the story master, they are meant to be used for micro-injections of information that the character would know but the story master doesn't need to know, such as "I see a monster in the bushes" or "I have a knife in my pocket", which can then be used by the inference adapter to generate more accurate dialogue and narration, but doesn't need to be shown to the story master
  * }} options
  */
 export async function talk(engine, character, options) {
@@ -113,6 +114,11 @@ export async function talk(engine, character, options) {
         } else {
             actionsAsText = "# IMPORTANT: The following actions must be executed by " + character.name + ":\n\n - " + actionsAsText;
         }
+    }
+
+    let microInjectionsAsText = "";
+    if (!deadEndAction && options.microInjections && options.microInjections.length > 0) {
+        microInjectionsAsText = "# Additionally:\n\n - " + options.microInjections.join("\n - ");
     }
 
     /**
@@ -276,6 +282,7 @@ export async function talk(engine, character, options) {
                 emotionsList,
                 ...characterSystemPrompt.internalDescription.stateInjections,
                 actionsAsText,
+                microInjectionsAsText,
             ]).join("\n\n"),
             remarkLastStoryFragmentForAnalysis: false,
         });

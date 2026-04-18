@@ -2227,6 +2227,44 @@ export async function generateBase(engine, card, guider, autosave) {
         await autosave?.save();
     }
 
+    if (!hasSpecialComment(newCharacterSection.body, "base-libido")) {
+        if (card.config.isAsexual) {
+            insertSpecialComment(newCharacterSection.body, "base-libido");
+            newCharacterSection.body.push(`libido: 0, // Since ${name} is asexual, they have no libido`);
+            await autosave?.save();
+            return;
+        }
+
+        await prime();
+        const libidoValue = await generator.next({
+            maxCharacters: 5,
+            maxSafetyCharacters: 0,
+            maxParagraphs: 1,
+            nextQuestion: "From 1 to 10 how high is " + name + "'s libido? with 10 being extremely high and 1 being very low",
+            stopAfter: [],
+            stopAt: [],
+            grammar: "root ::= [1-9] | \"10\"",
+        });
+
+        if (libidoValue.done) {
+            throw new Error("Generator finished without producing output");
+        }
+
+        if (guider) {
+            const libidoValueAsked = await guider.askNumber(
+                "From 1 to 10 how high is " + name + "'s libido? with 10 being extremely high and 1 being very low",
+                parseInt(libidoValue.value.trim()),
+            );
+            if (libidoValueAsked) {
+                libidoValue.value = libidoValueAsked.value.toString();
+            }
+        }
+
+        insertSpecialComment(newCharacterSection.body, "base-libido");
+        newCharacterSection.body.push(`libido: ${parseInt(libidoValue.value.trim()) / 10},`);
+        await autosave?.save();
+    }
+
     const socialSimulationSection = insertSection(newCharacterSection.body, "social-simulation", (s) => {
         s.head.push(`socialSimulation: {`);
         s.foot.push(`},`);
