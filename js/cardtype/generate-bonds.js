@@ -1671,6 +1671,194 @@ export async function generateBonds(engine, card, guider, autosave) {
                 }
                 // done openToSex
 
+                // Next proneToInitiatingAffection for each intimacy modifier
+                let allIsNotProneToInitiatingAffection = true;
+                // @ts-ignore
+                if (fineTuneConditions[fineTune] !== "true") {
+                    // @ts-ignore
+                    strangerSectionProneToInitiatingAffection.body.push(`if (${getDeeperFineTuneCondition(fineTuneConditions[fineTune], deeperFineTune)}) {`);
+                }
+                for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
+                    const proneToInitiatingAffectionQuestion = "From 0 to 10 how likely is " + name + " to initiate non-romantic physical affection towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "? with 10 being extremely likely and 0 being not at all";
+                    const answer = await generator.next({
+                        maxCharacters: 5,
+                        maxSafetyCharacters: 0,
+                        maxParagraphs: 1,
+                        nextQuestion: proneToInitiatingAffectionQuestion,
+                        stopAfter: [],
+                        stopAt: [],
+                        grammar: "root ::= \"0\" | [1-9] | \"10\"",
+                    });
+
+                    if (answer.done) {
+                        throw new Error("Generator ended unexpectedly while generating proneToInitiatingAffection for " + strangerKey);
+                    }
+
+                    if (guider) {
+                        const guiderResult = await guider.askNumber(
+                            "From 0 to 10 how likely is " + name + " to initiate non-romantic physical affection towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "? with 10 being extremely likely and 0 being not at all",
+                            parseInt(answer.value.trim()),
+                        );
+                        if (guiderResult) {
+                            answer.value = guiderResult.value.toString();
+                        }
+                    }
+
+                    const probability = Math.min(10, Math.max(0, parseInt(answer.value.trim()) || 0)) / 10;
+
+                    if (probability > 0) {
+                        allIsNotProneToInitiatingAffection = false;
+                    }
+
+                    // @ts-ignore
+                    const modifierInfo = MODIFIERS_INTIMACY[intimateModifier];
+                    const condition = modifierInfo.condition;
+                    if (condition !== "true") {
+                        strangerSectionProneToInitiatingAffection.body.push(`if (${condition}) {`);
+                    }
+                    strangerSectionProneToInitiatingAffection.body.push(`return {probability: ${probability}, options: ${JSON.stringify(card.config.affectionShowcases)}};`);
+                    if (condition !== "true") {
+                        strangerSectionProneToInitiatingAffection.body.push(`}`);
+                    }
+                }
+                // @ts-ignore
+                if (fineTuneConditions[fineTune] !== "true") {
+                    // @ts-ignore
+                    strangerSectionProneToInitiatingAffection.body.push(`}`);
+                }
+                // done proneToInitiatingAffection
+
+                // Next proneToInitiatingIntimateAffection for each intimacy modifier
+                let allIsNotProneToInitiatingIntimateAffection = true;
+                // @ts-ignore
+                if (fineTuneConditions[fineTune] !== "true") {
+                    // @ts-ignore
+                    strangerSectionProneToInitiatingIntimateAffection.body.push(`if (${getDeeperFineTuneCondition(fineTuneConditions[fineTune], deeperFineTune)}) {`);
+                }
+                for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
+                    const proneToInitiatingIntimateAffectionQuestion = "From 0 to 10 how likely is " + name + " to initiate romantic or sexual physical affection towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "? with 10 being extremely likely and 0 being not at all";
+                    const answer = await generator.next({
+                        maxCharacters: 5,
+                        maxSafetyCharacters: 0,
+                        maxParagraphs: 1,
+                        nextQuestion: proneToInitiatingIntimateAffectionQuestion,
+                        stopAfter: [],
+                        stopAt: [],
+                        grammar: "root ::= \"0\" | [1-9] | \"10\"",
+                    });
+
+                    if (answer.done) {
+                        throw new Error("Generator ended unexpectedly while generating proneToInitiatingIntimateAffection for " + strangerKey);
+                    }
+
+                    if (guider) {
+                        const guiderResult = await guider.askNumber(
+                            "From 0 to 10 how likely is " + name + " to initiate romantic or sexual physical affection towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "? with 10 being extremely likely and 0 being not at all",
+                            parseInt(answer.value.trim()),
+                        );
+                        if (guiderResult) {
+                            answer.value = guiderResult.value.toString();
+                        }
+                    }
+
+                    const probability = Math.min(10, Math.max(0, parseInt(answer.value.trim()) || 0)) / 10;
+
+                    if (probability > 0) {
+                        allIsNotProneToInitiatingIntimateAffection = false;
+                    }
+
+                    // @ts-ignore
+                    const modifierInfo = MODIFIERS_INTIMACY[intimateModifier];
+                    const condition = modifierInfo.condition;
+                    if (condition !== "true") {
+                        strangerSectionProneToInitiatingIntimateAffection.body.push(`if (${condition}) {`);
+                    }
+                    strangerSectionProneToInitiatingIntimateAffection.body.push(`return {probability: ${probability}, options: ${JSON.stringify(card.config.intimateAffectionShowcases)}};`);
+                    if (condition !== "true") {
+                        strangerSectionProneToInitiatingIntimateAffection.body.push(`}`);
+                    }
+                }
+                // @ts-ignore
+                if (fineTuneConditions[fineTune] !== "true") {
+                    // @ts-ignore
+                    strangerSectionProneToInitiatingIntimateAffection.body.push(`}`);
+                }
+                // done proneToInitiatingIntimateAffection
+
+                // Next proneToInitiatingSex for each intimacy modifier
+                let allIsNotProneToInitiatingSex = true;
+                // @ts-ignore
+                if (fineTuneConditions[fineTune] !== "true") {
+                    // @ts-ignore
+                    strangerSectionProneToInitiatingSex.body.push(`if (${getDeeperFineTuneCondition(fineTuneConditions[fineTune], deeperFineTune)}) {`);
+                }
+                for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
+                    const proneToInitiatingSexQuestion = "From 0 to 10 how likely is " + name + " to initiate sex towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "? with 10 being extremely likely and 0 being not at all";
+                    const answer = await generator.next({
+                        maxCharacters: 5,
+                        maxSafetyCharacters: 0,
+                        maxParagraphs: 1,
+                        nextQuestion: proneToInitiatingSexQuestion,
+                        stopAfter: [],
+                        stopAt: [],
+                        grammar: "root ::= \"0\" | [1-9] | \"10\"",
+                    });
+
+                    if (answer.done) {
+                        throw new Error("Generator ended unexpectedly while generating proneToInitiatingSex for " + strangerKey);
+                    }
+
+                    if (guider) {
+                        const guiderResult = await guider.askNumber(
+                            "From 0 to 10 how likely is " + name + " to initiate sex towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "? with 10 being extremely likely and 0 being not at all",
+                            parseInt(answer.value.trim()),
+                        );
+                        if (guiderResult) {
+                            answer.value = guiderResult.value.toString();
+                        }
+                    }
+
+                    const probability = Math.min(10, Math.max(0, parseInt(answer.value.trim()) || 0)) / 10;
+
+                    if (probability > 0) {
+                        allIsNotProneToInitiatingSex = false;
+                    }
+
+                    // @ts-ignore
+                    const modifierInfo = MODIFIERS_INTIMACY[intimateModifier];
+                    const condition = modifierInfo.condition;
+                    if (condition !== "true") {
+                        strangerSectionProneToInitiatingSex.body.push(`if (${condition}) {`);
+                    }
+
+                    const hasKinksForMales = card.config.kinksForMales && card.config.kinksForMales.length > 0;
+                    const hasKinksForFemales = card.config.kinksForFemales && card.config.kinksForFemales.length > 0;
+
+                    if (hasKinksForMales || hasKinksForFemales) {
+                        if (hasKinksForMales) {
+                            strangerSectionProneToInitiatingSex.body.push(`if (other.sex === "male") {`);
+                            strangerSectionProneToInitiatingSex.body.push(`return {probability: ${probability}, options: ${JSON.stringify([...card.config.kinks, ...card.config.kinksForMales])}};`);
+                            strangerSectionProneToInitiatingSex.body.push(`}`);
+                        }
+                        if (hasKinksForFemales) {
+                            strangerSectionProneToInitiatingSex.body.push(`if (other.sex === "female") {`);
+                            strangerSectionProneToInitiatingSex.body.push(`return {probability: ${probability}, options: ${JSON.stringify([...card.config.kinks, ...card.config.kinksForFemales])}};`);
+                            strangerSectionProneToInitiatingSex.body.push(`}`);
+                        }
+                    }
+                    strangerSectionProneToInitiatingSex.body.push(`return {probability: ${probability}, options: ${JSON.stringify(card.config.kinks)}};`);
+
+                    if (condition !== "true") {
+                        strangerSectionProneToInitiatingSex.body.push(`}`);
+                    }
+                }
+                // @ts-ignore
+                if (fineTuneConditions[fineTune] !== "true") {
+                    // @ts-ignore
+                    strangerSectionProneToInitiatingSex.body.push(`}`);
+                }
+                // done proneToInitiatingSex
+
                 let guidanceGiven = allExtraInfo;
                 let redoGuidance = false;
                 let descriptionValueUnprocessed = "";
