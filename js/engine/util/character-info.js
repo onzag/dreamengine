@@ -1654,8 +1654,15 @@ export async function getInternalDescriptionOfCharacter(deObject, characterName)
 
             const openToAffection = await bondDeclaration.intimacy.openToAffection(deObject, character, deObject.characters[activeBond.towards]);
 
-            if (openToAffection.value) {
-                result += `\n\n${characterName} is open to receiving affection from ${activeBond.towards}`;
+            const valueToWord = {
+                "not": "not",
+                "slight": "slightly",
+                "moderate": "moderately",
+                "very": "very"
+            }
+
+            if (openToAffection.value !== "not") {
+                result += `\n\n${characterName} is ${valueToWord[openToAffection.value]} receptive to affection from ${activeBond.towards}`;
                 if (openToAffection.reason) {
                     result += `, reason: ${openToAffection.reason}`;
                 }
@@ -1670,25 +1677,25 @@ export async function getInternalDescriptionOfCharacter(deObject, characterName)
 
             const openToIntimateAffection = await bondDeclaration.intimacy.openToIntimateAffection(deObject, character, deObject.characters[activeBond.towards]);
 
-            if (openToIntimateAffection.value) {
-                result += `\n\n${characterName} is open to receiving intimate romantic affection (${openToSex.value ? "including sexual acts" : "excluding sexual acts"}) from ${activeBond.towards}`;
+            if (openToIntimateAffection.value !== "not") {
+                result += `\n\n${characterName} is ${valueToWord[openToIntimateAffection.value]} receptive to intimate romantic affection (${openToSex.value !== "not" ? "including sexual acts (" + valueToWord[openToSex.value] + ")" : "excluding sexual acts"}) from ${activeBond.towards}`;
                 if (openToIntimateAffection.reason) {
                     result += `, reason: ${openToIntimateAffection.reason}`;
                 }
             } else {
-                result += `\n\n${characterName} is not open to receiving intimate romantic affection from ${activeBond.towards}`;
+                result += `\n\n${characterName} is not receptive to intimate romantic affection from ${activeBond.towards}`;
                 if (openToIntimateAffection.reason) {
                     result += `, reason: ${openToIntimateAffection.reason}`;
                 }
             }
 
-            if (openToSex.value) {
-                result += `\n\n${characterName} is open to receiving sexual acts from ${activeBond.towards}`;
+            if (openToSex.value !== "not") {
+                result += `\n\n${characterName} is ${valueToWord[openToSex.value]} receptive to sexual acts from ${activeBond.towards}`;
                 if (openToSex.reason) {
                     result += `, reason: ${openToSex.reason}`;
                 }
             } else {
-                result += `\n\n${characterName} is not open to receiving sexual acts from ${activeBond.towards}`;
+                result += `\n\n${characterName} is not receptive to sexual acts from ${activeBond.towards}`;
                 if (openToSex.reason) {
                     result += `, reason: ${openToSex.reason}`;
                 }

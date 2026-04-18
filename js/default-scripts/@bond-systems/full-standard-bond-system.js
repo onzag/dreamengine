@@ -9,12 +9,12 @@
  * @property {DEStringTemplateCharAndOther} [bondAdditionalDescription] additional description to be added to the bond description
  * @property {DEStringTemplateCharAndOther} [generalCharacterDescriptionInjection] A template that can be injected into the general character description when this bond declaration is active, it will have access to the same variables as the description, but it is meant to be a smaller piece of text that can be added to the general description when relevant, instead of being the main description of the bond level.
  * @property {DEStringTemplateCharAndOther} [generalCharacterDescriptionInjectionEx] Similar to generalCharacterDescriptionInjection but it will only be injected in the general character description and not in the bond description, this is useful for cases where the information is relevant for the character description but not for the bond description, for example if you want to add a sentence about how the character's family relationship with the other character affects their behavior towards them, you might want that to be in the general description injection but not in the bond description, since the bond description might be focused on romantic feelings and the family relationship might not be relevant for that.
- * @property {(DE: DEObject, char: DECompleteCharacterReference, other: DECompleteCharacterReference) => Promise<{value: boolean | string, reason?: string}>} openToAffection
- * @property {(DE: DEObject, char: DECompleteCharacterReference, other: DECompleteCharacterReference) => Promise<{value: boolean | string, reason?: string}>} openToIntimateAffection
- * @property {(DE: DEObject, char: DECompleteCharacterReference, other: DECompleteCharacterReference) => Promise<{value: boolean | string, reason?: string}>} openToSex
- * @property {(DE: DEObject, char: DECompleteCharacterReference, other: DECompleteCharacterReference) => Promise<{probability: number, options?: string[]}>} proneToInitiatingAffection
- * @property {(DE: DEObject, char: DECompleteCharacterReference, other: DECompleteCharacterReference) => Promise<{probability: number, options?: string[]}>} proneToInitiatingIntimateAffection
- * @property {(DE: DEObject, char: DECompleteCharacterReference, other: DECompleteCharacterReference) => Promise<{probability: number, options?: string[]}>} proneToInitiatingSex
+ * @property {(DE: DEObject, char: DECompleteCharacterReference, other: DECompleteCharacterReference) => PromiseOrNot<{value: "not" | "slight" | "moderate" | "very", reason?: string | null}>} openToAffection
+ * @property {(DE: DEObject, char: DECompleteCharacterReference, other: DECompleteCharacterReference) => PromiseOrNot<{value: "not" | "slight" | "moderate" | "very", reason?: string | null}>} openToIntimateAffection
+ * @property {(DE: DEObject, char: DECompleteCharacterReference, other: DECompleteCharacterReference) => PromiseOrNot<{value: "not" | "slight" | "moderate" | "very", reason?: string | null}>} openToSex
+ * @property {(DE: DEObject, char: DECompleteCharacterReference, other: DECompleteCharacterReference) => PromiseOrNot<{probability: number, options?: string[]}>} proneToInitiatingAffection
+ * @property {(DE: DEObject, char: DECompleteCharacterReference, other: DECompleteCharacterReference) => PromiseOrNot<{probability: number, options?: string[]}>} proneToInitiatingIntimateAffection
+ * @property {(DE: DEObject, char: DECompleteCharacterReference, other: DECompleteCharacterReference) => PromiseOrNot<{probability: number, options?: string[]}>} proneToInitiatingSex
  */
 
 /**

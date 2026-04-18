@@ -1151,13 +1151,76 @@ export async function generateBonds(engine, card, guider, autosave) {
         return fineTuneConditionRaw.replace("[]", JSON.stringify(v));
     }
 
+    const MODIFIERS_INTIMACY = {
+        "In public around friends": {
+            condition: "DE.utils.isAroundFriendsOrBetter(char, {exclude: other, excludeFamily: true})",
+            reasonYes: "they are around friends",
+            reasonNo: "they are around friends, and that makes it uncomfortable"
+        },
+        "In public around family": {
+            condition: "DE.utils.isAroundFamily(char, {exclude: other})",
+            reasonYes: "they are around family members",
+            reasonNo: "they are around family members, and that makes it uncomfortable"
+        },
+        "In private": {
+            condition: "DE.utils.isAloneWith(char, other) && DE.utils.isInPrivateLocation(char)",
+            reasonYes: "they are alone together in a private location",
+            reasonNo: "they are alone together in a private location",
+        },
+        "In public": {
+            condition: "true",
+            reasonYes: "they are in public",
+            reasonNo: "they are in public",
+        },
+    };
+
+    const MODIFIERS_INTIMACY_ORDER = [
+        "In private",
+        "In public around friends",
+        "In public around family",
+        "In public",
+    ];
+
     for (const [strangerKey, strangerValue] of Object.entries(STRANGERS)) {
 
-        const strangerSection = insertSection(optionsSection.body, strangerKey, (s) => {
+        const strangerSectionBase = insertSection(optionsSection.body, strangerKey, (s) => {
             s.head.push(`${strangerKey}: {`);
             s.head.push(`relationshipName: null,`);
+            s.foot.push(`},`);
+        });
+
+        const strangerSectionDescription = insertSection(strangerSectionBase.body, "description", (s) => {
             s.head.push(`description: (DE, info) => {`);
             s.foot.push(`},`);
+        });
+
+        const strangerSectionOpenToAffection = insertSection(strangerSectionBase.body, "openToAffection", (s) => {
+            s.head.push(`openToAffection: (DE, char, other) => {`);
+            s.foot.push(`},`);
+        });
+
+        const strangerSectionOpenToIntimateAffection = insertSection(strangerSectionBase.body, "openToIntimateAffection", (s) => {
+            s.head.push(`openToIntimateAffection: (DE, char, other) => {`);
+            s.foot.push(`},`);
+        });
+
+        const strangerSectionOpenToSex = insertSection(strangerSectionBase.body, "openToSex", (s) => {
+            s.head.push(`openToSex: (DE, char, other) => {`);
+            s.foot.push(`},`);
+        });
+
+        const strangerSectionProneToInitiatingAffection = insertSection(strangerSectionBase.body, "proneToInitiatingAffection", (s) => {
+            s.head.push(`proneToInitiatingAffection: (DE, char, other) => {`);
+            s.foot.push(`},`);
+        });
+
+        const strangerSectionProneToInitiatingIntimateAffection = insertSection(strangerSectionBase.body, "proneToInitiatingIntimateAffection", (s) => {
+            s.head.push(`proneToInitiatingIntimateAffection: (DE, char, other) => {`);
+            s.foot.push(`},`);
+        });
+
+        const strangerSectionProneToInitiatingSex = insertSection(strangerSectionBase.body, "proneToInitiatingSex", (s) => {
+            s.head.push(`proneToInitiatingSex: (DE, char, other) => {`);
             s.foot.push(`},`);
         });
 
@@ -1175,7 +1238,7 @@ export async function generateBonds(engine, card, guider, autosave) {
             let internalFineTuneToUse = fineTune.endsWith("_a") ? FINE_TUNE_WITH_ATTRACTION_POTENTIALS_STRANGER : ["n/a"];
 
             for (const deeperFineTune of internalFineTuneToUse) {
-                if (hasSpecialComment(strangerSection.body, fineTune + (deeperFineTune !== "n/a" ? "_" + deeperFineTune : ""))) {
+                if (hasSpecialComment(strangerSectionBase.body, fineTune + (deeperFineTune !== "n/a" ? "_" + deeperFineTune : ""))) {
                     continue;
                 }
 
@@ -1183,7 +1246,93 @@ export async function generateBonds(engine, card, guider, autosave) {
 
                 const actualStrangerValue = strangerValue.replace("{}", fineTuneValue);
 
-                let guidanceGiven = "";
+                let allExtraInfo = "";
+
+                // First openToAffection for each intimacy modifier
+                let extraInfoOpenToAffection = "";
+                let allIsNotReceptive = true;
+                // @ts-ignore
+                if (fineTuneConditions[fineTune] !== "true") {
+                    // @ts-ignore
+                    strangerSectionOpenToAffection.body.push(`if (${getDeeperFineTuneCondition(fineTuneConditions[fineTune], deeperFineTune)}) {`);
+                }
+                for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
+                    const openToAffectionQuestion = "How receptive to affection is " + name + " towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "?";
+                    const answer = await generator.next({
+                        maxCharacters: 50,
+                        maxSafetyCharacters: 0,
+                        maxParagraphs: 1,
+                        nextQuestion: openToAffectionQuestion,
+                        stopAfter: [],
+                        stopAt: [],
+                        instructions: "Answer with one of the following options: 'Not receptive', 'Slightly receptive', 'Moderately receptive', 'Very receptive'. Consider the nature of the relationship and the specific modifier of intimacy when determining the level of openness to affection.",
+                    });
+
+                    if (answer.done) {
+                        throw new Error("Generator ended unexpectedly while generating openToAffection for " + strangerKey);
+                    }
+
+                    if (guider) {
+                        const guiderResult = await guider.askOption("How receptive to affection is " + name + " towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase(), [
+                            "Not receptive",
+                            "Slightly receptive",
+                            "Moderately receptive",
+                            "Very receptive",
+                        ], answer.value);
+                        if (guiderResult.value) {
+                            answer.value = guiderResult.value;
+                        }
+                    }
+
+                    const answerTrimmed = answer.value.trim().toLowerCase();
+                    if (answerTrimmed !== "not receptive") {
+                        allIsNotReceptive = false;
+                    }
+
+                    const toValue = {
+                        "not receptive": "not",
+                        "slightly receptive": "slight",
+                        "moderately receptive": "moderate",
+                        "very receptive": "very",
+                    }
+
+                    // @ts-ignore
+                    const valueAnswer = toValue[answerTrimmed];
+
+                    extraInfoOpenToAffection += `\n${name} is ${answerTrimmed} to affection from this other chraracter when they are ${intimateModifier.toLowerCase()}`;
+
+                    // @ts-ignore
+                    const modifierInfo = MODIFIERS_INTIMACY[intimateModifier];
+                    const condition = modifierInfo.condition;
+                    if (condition !== "true") {
+                        strangerSectionOpenToAffection.body.push(`if (${condition}) {`);
+                    }
+                    /**
+                     * @type {string | null}
+                     */
+                    let reason = null;
+                    if (valueAnswer === "not") {
+                        reason = modifierInfo.reasonNo;
+                    } else {
+                        reason = modifierInfo.reasonYes;
+                    }
+                    strangerSectionOpenToAffection.body.push(`return {value: ${JSON.stringify(valueAnswer)}, reason: ${JSON.stringify(reason)}};`);
+                    if (condition !== "true") {
+                        strangerSectionOpenToAffection.body.push(`}`);
+                    }
+                }
+                if (allIsNotReceptive) {
+                    extraInfoOpenToAffection = `\n${name} is not receptive to affection from this other character in any context.`;
+                }
+                allExtraInfo += extraInfoOpenToAffection;
+                // @ts-ignore
+                if (fineTuneConditions[fineTune] !== "true") {
+                    // @ts-ignore
+                    strangerSectionOpenToAffection.body.push(`}`);
+                }
+                // done
+
+                let guidanceGiven = allExtraInfo;
                 let redoGuidance = false;
                 let descriptionValueUnprocessed = "";
                 let descriptionValue = "";
@@ -1197,9 +1346,9 @@ export async function generateBonds(engine, card, guider, autosave) {
                     }
 
                     const isAnimalFineTune = fineTune.startsWith("animal_");
-                    let baseInstructions = "NEVER ask for clarification or more information. ALWAYS directly write the description paragraph. Invent any specific details as needed. The response should use the word 'OTHER_CHARACTER' to refer to the other character name, ensure to specify whether " + name + " has any romantic feelings towards OTHER_CHARACTER or not, and how they would feel or react regarding sexual interactions, intimacy and other interactions, include friendship, emotional, romantic and sexual aspects"
+                    let baseInstructions = "NEVER ask for clarification or more information. ALWAYS directly write the description short paragraph. Invent any specific details as needed. The response should use the word 'OTHER_CHARACTER' to refer to the other character name, ensure to specify whether " + name + " has any romantic feelings towards OTHER_CHARACTER or not, and how they would feel or react regarding sexual interactions, intimacy and other interactions, include friendship, emotional, romantic and sexual aspects"
                     if (isAnimalFineTune && card.config.characterSpeciesType !== "animal") {
-                        baseInstructions = "NEVER ask for clarification or more information. ALWAYS directly write the description paragraph. Invent any specific details as needed. The response should use the word 'OTHER_CHARACTER' to refer to the animal (pet or wild beast) in question, ensure to specify whether " + name + " would have any sexual feelings towards OTHER_CHARACTER or not, and otherwise describe their relationship in terms of how " + name + " would interact with this pet or wild animal, including whether they would want to care for it, be afraid of it, want to befriend it."
+                        baseInstructions = "NEVER ask for clarification or more information. ALWAYS directly write the description short paragraph. Invent any specific details as needed. The response should use the word 'OTHER_CHARACTER' to refer to the animal (pet or wild beast) in question, ensure to specify whether " + name + " would have any sexual feelings towards OTHER_CHARACTER or not, and otherwise describe their relationship in terms of how " + name + " would interact with this pet or wild animal, including whether they would want to care for it, be afraid of it, want to befriend it."
                     }
                     if (guidanceGiven) {
                         baseInstructions += "\n\n# MANDATORY REQUIREMENTS — ACTIVE OVERRIDE:\n\nThe following requirements MUST be reflected in your answer. Treat them as hard constraints that take absolute priority over any conflicting instruction above. Do NOT ignore or dilute them:\n\n" + guidanceGiven;
@@ -1209,7 +1358,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                         maxCharacters: 200,
                         maxSafetyCharacters: 0,
                         maxParagraphs: 1,
-                        nextQuestion: "Provide a concise one paragraph description of how " + name + " perceives and feels about " + actualStrangerValue + ". Focus on the emotional and psychological aspects of their perception, rather than physical details. This should capture the essence of their feelings and attitudes towards this person in a way that informs their interactions and relationship dynamics. Keep the paragraph short, ideally under 100 words.",
+                        nextQuestion: "Provide a concise and short one paragraph description of how " + name + " perceives and feels about " + actualStrangerValue + ". Focus on the emotional and psychological aspects of their perception, rather than physical details. This should capture the essence of their feelings and attitudes towards this person in a way that informs their interactions and relationship dynamics. Keep the paragraph short, ideally under 100 words.",
                         stopAfter: [],
                         stopAt: [],
                         instructions: baseInstructions,
@@ -1238,16 +1387,16 @@ export async function generateBonds(engine, card, guider, autosave) {
                     }
                 }
 
-                insertSpecialComment(strangerSection.body, fineTune + (deeperFineTune !== "n/a" ? "_" + deeperFineTune : ""));
+                insertSpecialComment(strangerSectionDescription.body, fineTune + (deeperFineTune !== "n/a" ? "_" + deeperFineTune : ""));
                 // @ts-ignore
                 if (fineTuneConditions[fineTune] === "true") {
                     // @ts-ignore
-                    strangerSection.body.push(`return ${toTemplateLiteral(descriptionValue)};`);
+                    strangerSectionDescription.body.push(`return ${toTemplateLiteral(descriptionValue)};`);
                 } else {
                     // @ts-ignore
-                    strangerSection.body.push(`if (${getDeeperFineTuneCondition(fineTuneConditions[fineTune], deeperFineTune)}) {`);
-                    strangerSection.body.push(`return ${toTemplateLiteral(descriptionValue)};`);
-                    strangerSection.body.push(`}`);
+                    strangerSectionDescription.body.push(`if (${getDeeperFineTuneCondition(fineTuneConditions[fineTune], deeperFineTune)}) {`);
+                    strangerSectionDescription.body.push(`return ${toTemplateLiteral(descriptionValue)};`);
+                    strangerSectionDescription.body.push(`}`);
                 }
 
                 await autosave?.save();
@@ -1340,7 +1489,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                                 maxCharacters: 200,
                                 maxSafetyCharacters: 0,
                                 maxParagraphs: 1,
-                                nextQuestion: "Provide a concise one paragraph description of how " + name + " perceives and feels about " + actualFamilyValue + ". Focus on the emotional and psychological aspects of their perception, rather than physical details. This should capture the essence of their feelings and attitudes towards this person in a way that informs their interactions and relationship dynamics. Keep the paragraph short, ideally under 100 words.",
+                                nextQuestion: "Provide a concise and short one paragraph description of how " + name + " perceives and feels about " + actualFamilyValue + ". Focus on the emotional and psychological aspects of their perception, rather than physical details. This should capture the essence of their feelings and attitudes towards this person in a way that informs their interactions and relationship dynamics. Keep the paragraph short, ideally under 100 words.",
                                 stopAfter: [],
                                 stopAt: [],
                                 instructions: baseInstructions,

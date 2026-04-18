@@ -1,3 +1,5 @@
+declare type PromiseOrNot<T> = T | Promise<T>;
+
 declare interface DEMinimalCharacterReference {
     /**
      * Name of the character
@@ -747,7 +749,7 @@ declare interface DEBondDeclaration {
          * @param other 
          * @returns 
          */
-        openToAffection: (DE: DEObject, char: DECompleteCharacterReference, other: DECompleteCharacterReference) => Promise<{value: boolean | string, reason?: string}>;
+        openToAffection: (DE: DEObject, char: DECompleteCharacterReference, other: DECompleteCharacterReference) => PromiseOrNot<{value: "not" | "slight" | "moderate" | "very", reason?: string | null}>;
         /**
          * Whether the character in question with another, the options are what types of affection they will be prone to initiating
          * Make sure to keep in mind the circumstances
@@ -756,7 +758,7 @@ declare interface DEBondDeclaration {
          * @param other 
          * @returns 
          */
-        proneToInitiatingAffection: (DE: DEObject, char: DECompleteCharacterReference, other: DECompleteCharacterReference) => Promise<{probability: number, options?: string[]}>;
+        proneToInitiatingAffection: (DE: DEObject, char: DECompleteCharacterReference, other: DECompleteCharacterReference) => PromiseOrNot<{probability: number, options?: string[]}>;
         /**
          * Whether the character in question with the other will be open to intimate affection at this bond level, and the reason why or why not
          * make sure to keep in mind the circumstances
@@ -765,7 +767,7 @@ declare interface DEBondDeclaration {
          * @param other 
          * @returns 
          */
-        openToIntimateAffection: (DE: DEObject, char: DECompleteCharacterReference, other: DECompleteCharacterReference) => Promise<{value: boolean | string, reason?: string}>;
+        openToIntimateAffection: (DE: DEObject, char: DECompleteCharacterReference, other: DECompleteCharacterReference) => PromiseOrNot<{value: "not" | "slight" | "moderate" | "very", reason?: string | null}>;
         /**
          * Whether the character in question with another, the options are what types of intimate affection they will be prone to initiating
          * Make sure to keep in mind the circumstances
@@ -774,7 +776,7 @@ declare interface DEBondDeclaration {
          * @param other 
          * @returns 
          */
-        proneToInitiatingIntimateAffection: (DE: DEObject, char: DECompleteCharacterReference, other: DECompleteCharacterReference) => Promise<{probability: number, options?: string[]}>;
+        proneToInitiatingIntimateAffection: (DE: DEObject, char: DECompleteCharacterReference, other: DECompleteCharacterReference) => PromiseOrNot<{probability: number, options?: string[]}>;
         /**
          * Whether the character in question with the other will be open to sex at this bond level, and the reason why or why not
          * make sure to keep in mind the circumstances
@@ -783,7 +785,7 @@ declare interface DEBondDeclaration {
          * @param other 
          * @returns 
          */
-        openToSex: (DE: DEObject, char: DECompleteCharacterReference, other: DECompleteCharacterReference) => Promise<{value: boolean | string, reason?: string}>;
+        openToSex: (DE: DEObject, char: DECompleteCharacterReference, other: DECompleteCharacterReference) => PromiseOrNot<{value: "not" | "slight" | "moderate" | "very", reason?: string | null}>;
         /**
          * Whether the character in question with another, the options are what types of sex they will be prone to initiating
          * Make sure to keep in mind the circumstances
@@ -792,7 +794,7 @@ declare interface DEBondDeclaration {
          * @param other 
          * @returns 
          */
-        proneToInitiatingSex: (DE: DEObject, char: DECompleteCharacterReference, other: DECompleteCharacterReference) => Promise<{probability: number, options?: string[]}>;
+        proneToInitiatingSex: (DE: DEObject, char: DECompleteCharacterReference, other: DECompleteCharacterReference) => PromiseOrNot<{probability: number, options?: string[]}>;
     }
 }
 
@@ -1340,7 +1342,7 @@ declare interface DECharacterQuestionBase {
      * @param otherFamilyRelation 
      * @returns 
      */
-    runIf?: (character: DECompleteCharacterReference) => boolean | Promise<boolean>;
+    runIf?: (character: DECompleteCharacterReference) => PromiseOrNot<boolean>;
 }
 
 declare type DECharacterQuestionWithAskPerForCharacters = DECharacterQuestionBase & {
@@ -1359,7 +1361,7 @@ declare type DECharacterQuestionWithAskPerForCharacters = DECharacterQuestionBas
      * @param otherFamilyRelation 
      * @returns 
      */
-    runIf?: (character: DECompleteCharacterReference, otherChar: DECompleteCharacterReference, otherFamilyRelation: DEFamilyRelation | null) => boolean | Promise<boolean>;
+    runIf?: (character: DECompleteCharacterReference, otherChar: DECompleteCharacterReference, otherFamilyRelation: DEFamilyRelation | null) => PromiseOrNot<boolean>;
 };
 
 declare type DECharacterQuestionWithAskPerForCausants = DECharacterQuestionBase & {
@@ -1380,7 +1382,7 @@ declare type DECharacterQuestionWithAskPerForCausants = DECharacterQuestionBase 
      * @param otherFamilyRelation 
      * @returns 
      */
-    runIf?: (character: DECompleteCharacterReference, otherChar: DECompleteCharacterReference, otherFamilyRelation: DEFamilyRelation | null) => boolean | Promise<boolean>;
+    runIf?: (character: DECompleteCharacterReference, otherChar: DECompleteCharacterReference, otherFamilyRelation: DEFamilyRelation | null) => PromiseOrNot<boolean>;
 };
 
 declare type DECharacterQuestionWithAskPerForObjects = DECharacterQuestionBase & {
@@ -1401,7 +1403,7 @@ declare type DECharacterQuestionWithAskPerForObjects = DECharacterQuestionBase &
      * @param otherFamilyRelation 
      * @returns 
      */
-    runIf?: (character: DECompleteCharacterReference, item: string) => boolean | Promise<boolean>;
+    runIf?: (character: DECompleteCharacterReference, item: string) => PromiseOrNot<boolean>;
 };
 
 declare type DECharacterQuestionWithoutAskPer = DECharacterQuestionBase & {
