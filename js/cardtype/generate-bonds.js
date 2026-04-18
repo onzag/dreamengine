@@ -1672,6 +1672,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                 // done openToSex
 
                 // Next proneToInitiatingAffection for each intimacy modifier
+                let extraInfoProneToInitiatingAffection = "";
                 let allIsNotProneToInitiatingAffection = true;
                 // @ts-ignore
                 if (fineTuneConditions[fineTune] !== "true") {
@@ -1708,6 +1709,10 @@ export async function generateBonds(engine, card, guider, autosave) {
 
                     if (probability > 0) {
                         allIsNotProneToInitiatingAffection = false;
+                        const odds = probability >= 0.7 ? "very likely" : probability >= 0.4 ? "somewhat likely" : "slightly likely";
+                        extraInfoProneToInitiatingAffection += `\n${name} is ${odds} to initiate physical affection towards this other character when they are ${intimateModifier.toLowerCase()}`;
+                    } else {
+                        extraInfoProneToInitiatingAffection += `\n${name} is not likely to initiate physical affection towards this other character when they are ${intimateModifier.toLowerCase()}`;
                     }
 
                     // @ts-ignore
@@ -1721,6 +1726,11 @@ export async function generateBonds(engine, card, guider, autosave) {
                         strangerSectionProneToInitiatingAffection.body.push(`}`);
                     }
                 }
+                if (allIsNotProneToInitiatingAffection) {
+                    extraInfoProneToInitiatingAffection = `\n${name} is not likely to initiate physical affection towards this other character in any context.`;
+                } else {
+                    allExtraInfo += extraInfoProneToInitiatingAffection;
+                }
                 // @ts-ignore
                 if (fineTuneConditions[fineTune] !== "true") {
                     // @ts-ignore
@@ -1729,6 +1739,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                 // done proneToInitiatingAffection
 
                 // Next proneToInitiatingIntimateAffection for each intimacy modifier
+                let extraInfoProneToInitiatingIntimateAffection = "";
                 let allIsNotProneToInitiatingIntimateAffection = true;
                 // @ts-ignore
                 if (fineTuneConditions[fineTune] !== "true") {
@@ -1765,6 +1776,10 @@ export async function generateBonds(engine, card, guider, autosave) {
 
                     if (probability > 0) {
                         allIsNotProneToInitiatingIntimateAffection = false;
+                        const odds = probability >= 0.7 ? "very likely" : probability >= 0.4 ? "somewhat likely" : "slightly likely";
+                        extraInfoProneToInitiatingIntimateAffection += `\n${name} is ${odds} to initiate romantic or sexual physical affection towards this other character when they are ${intimateModifier.toLowerCase()}`;
+                    } else {
+                        extraInfoProneToInitiatingIntimateAffection += `\n${name} is not likely to initiate romantic or sexual physical affection towards this other character when they are ${intimateModifier.toLowerCase()}`;
                     }
 
                     // @ts-ignore
@@ -1784,8 +1799,14 @@ export async function generateBonds(engine, card, guider, autosave) {
                     strangerSectionProneToInitiatingIntimateAffection.body.push(`}`);
                 }
                 // done proneToInitiatingIntimateAffection
+                if (allIsNotProneToInitiatingIntimateAffection) {
+                    extraInfoProneToInitiatingIntimateAffection = `\n${name} is not likely to initiate romantic or sexual physical affection towards this other character in any context.`;
+                } else {
+                    allExtraInfo += extraInfoProneToInitiatingIntimateAffection;
+                }
 
                 // Next proneToInitiatingSex for each intimacy modifier
+                let extraInfoProneToInitiatingSex = "";
                 let allIsNotProneToInitiatingSex = true;
                 // @ts-ignore
                 if (fineTuneConditions[fineTune] !== "true") {
@@ -1822,6 +1843,10 @@ export async function generateBonds(engine, card, guider, autosave) {
 
                     if (probability > 0) {
                         allIsNotProneToInitiatingSex = false;
+                        const odds = probability >= 0.7 ? "very likely" : probability >= 0.4 ? "somewhat likely" : "slightly likely";
+                        extraInfoProneToInitiatingSex += `\n${name} is ${odds} to initiate sex towards this other character when they are ${intimateModifier.toLowerCase()}`;
+                    } else {
+                        extraInfoProneToInitiatingSex += `\n${name} is not likely to initiate sex towards this other character when they are ${intimateModifier.toLowerCase()}`;
                     }
 
                     // @ts-ignore
@@ -1851,6 +1876,11 @@ export async function generateBonds(engine, card, guider, autosave) {
                     if (condition !== "true") {
                         strangerSectionProneToInitiatingSex.body.push(`}`);
                     }
+                }
+                if (allIsNotProneToInitiatingSex) {
+                    extraInfoProneToInitiatingSex = `\n${name} is not likely to initiate sex towards this other character in any context.`;
+                } else {
+                    allExtraInfo += extraInfoProneToInitiatingSex;
                 }
                 // @ts-ignore
                 if (fineTuneConditions[fineTune] !== "true") {
@@ -1947,11 +1977,44 @@ export async function generateBonds(engine, card, guider, autosave) {
 
             for (const [familyKey, familyValue] of Object.entries(romanticInterestValue)) {
 
-                const familySection = insertSection(romanticInterestSection.body, familyKey, (s) => {
+                const familySectionBase = insertSection(romanticInterestSection.body, familyKey, (s) => {
                     s.head.push(`${familyKey}: {`);
                     s.head.push(`relationshipName: null, // fill if you want this relationship to have a name`);
+                    s.foot.push(`},`);
+                });
+
+                const familySectionDescription = insertSection(familySectionBase.body, "description", (s) => {
                     s.head.push(`description: (DE, info) => {`);
                     s.foot.push(`},`);
+                });
+
+                const familySectionOpenToAffection = insertSection(familySectionBase.body, "openToAffection", (s) => {
+                    s.head.push(`openToAffection: (DE, char, other) => {`);
+                    s.foot.push(`},`);
+                });
+
+                const familySectionOpenToIntimateAffection = insertSection(familySectionBase.body, "openToIntimateAffection", (s) => {
+                    s.head.push(`openToIntimateAffection: (DE, char, other) => {`);
+                    s.foot.push(`},`);
+                });
+
+                const familySectionOpenToSex = insertSection(familySectionBase.body, "openToSex", (s) => {
+                    s.head.push(`openToSex: (DE, char, other) => {`);
+                    s.foot.push(`},`);
+                });
+
+                const familySectionProneToInitiatingAffection = insertSection(familySectionBase.body, "proneToInitiatingAffection", (s) => {
+                    s.head.push(`proneToInitiatingAffection: (DE, char, other) => {`);
+                    s.foot.push(`},`);
+                });
+
+                const familySectionProneToInitiatingIntimateAffection = insertSection(familySectionBase.body, "proneToInitiatingIntimateAffection", (s) => {
+                    s.head.push(`proneToInitiatingIntimateAffection: (DE, char, other) => {`);
+                    s.foot.push(`},`);
+                });
+
+                const familySectionProneToInitiatingSex = insertSection(familySectionBase.body, "proneToInitiatingSex", (s) => {
+                    s.head.push(`proneToInitiatingSex: (DE, char, other) => {`);
                     s.foot.push(`},`);
                 });
 
@@ -1986,9 +2049,11 @@ export async function generateBonds(engine, card, guider, autosave) {
 
                         const actualFamilyValue = familyValue.replace("{}", fineTuneValue);
 
-                        if (hasSpecialComment(familySection.body, fineTune + (deeperFineTune !== "n/a" ? "_" + deeperFineTune : ""))) {
+                        if (hasSpecialComment(familySectionDescription.body, fineTune + (deeperFineTune !== "n/a" ? "_" + deeperFineTune : ""))) {
                             continue;
                         }
+
+                        
 
                         let guidanceGiven = "";
                         let redoGuidance = false;
@@ -2045,16 +2110,16 @@ export async function generateBonds(engine, card, guider, autosave) {
                             }
                         }
 
-                        insertSpecialComment(familySection.body, fineTune + (deeperFineTune !== "n/a" ? "_" + deeperFineTune : ""));
+                        insertSpecialComment(familySectionDescription.body, fineTune + (deeperFineTune !== "n/a" ? "_" + deeperFineTune : ""));
                         // @ts-ignore
                         if (fineTuneConditions[fineTune] === "true") {
                             // @ts-ignore
-                            familySection.body.push(`return ${toTemplateLiteral(descriptionValue)};`);
+                            familySectionDescription.body.push(`return ${toTemplateLiteral(descriptionValue)};`);
                         } else {
                             // @ts-ignore
-                            familySection.body.push(`if (${getDeeperFineTuneCondition(fineTuneConditions[fineTune], deeperFineTune)}) {`);
-                            familySection.body.push(`return ${toTemplateLiteral(descriptionValue)};`);
-                            familySection.body.push(`}`);
+                            familySectionDescription.body.push(`if (${getDeeperFineTuneCondition(fineTuneConditions[fineTune], deeperFineTune)}) {`);
+                            familySectionDescription.body.push(`return ${toTemplateLiteral(descriptionValue)};`);
+                            familySectionDescription.body.push(`}`);
                         }
                         await autosave?.save();
                     }
