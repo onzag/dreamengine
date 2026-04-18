@@ -46,6 +46,177 @@ export async function generateBonds(engine, card, guider, autosave) {
     const isAsexualValue = card.config.isAsexual;
     const name = card.config.name;
 
+    if (!card.config.affectionShowcases) {
+        const affectionShowcases = await generator.next({
+            maxCharacters: 500,
+            maxSafetyCharacters: 500,
+            maxParagraphs: 1,
+            nextQuestion: `List ${name}'s specific way that they show non-romantic, non-sexual physical affection towards others, as a comma separated list of short 1-3 word items. These should be specific actions or behaviors that ${name} would perform to showcase physical affection. List 7 to 10 unique items.`,
+            stopAfter: [],
+            stopAt: [],
+            instructions: "Each item must be a specific way that " + name + " shows non-romantic affection. Do NOT say generic things like showing affection or being nice to others. We want specific actions or behaviors.",
+            answerTrail: name + "'s non-romantic physical affection showcases:\n\n",
+        });
+        if (affectionShowcases.done) {
+            throw new Error("Generator finished without producing output");
+        }
+        let affectionShowcasesParsed = affectionShowcases.value.split("\n").join(",").split(",").map(item => item.trim().replace("- ", " ").trim()).filter(item => item);
+
+        if (guider) {
+            const guiderResult = await guider.askList("Provide a list of specific ways that " + name + " shows non-romantic, non-sexual physical affection towards others", null, affectionShowcasesParsed);
+            if (guiderResult.value) {
+                affectionShowcasesParsed = guiderResult.value;
+            }
+        }
+
+        card.config.affectionShowcases = affectionShowcasesParsed;
+
+        await autosave?.save();
+    }
+
+    if (!isAsexualValue && !card.config.intimateAffectionShowcases) {
+        const intimateAffectionShowcases = await generator.next({
+            maxCharacters: 500,
+            maxSafetyCharacters: 500,
+            maxParagraphs: 1,
+            nextQuestion: `List ${name}'s specific way that they show romantic or sexual physical affection towards others, these must be explicit sexual actions, as a comma separated list of short 1-3 word items. These should be specific actions or behaviors that ${name} would perform to showcase sexual physical affection. List 7 to 10 unique items.`,
+            stopAfter: [],
+            stopAt: [],
+            instructions: "Each item must be a specific way that " + name + " shows romantic or sexual physical affection. Do NOT include any of the following " + card.config.affectionShowcases.join(", ") + " as those are non-romantic ways that " + name + " shows physical affection. We want specific romantic or sexual actions or behaviors.",
+            answerTrail: name + "'s romantic or sexual physical affection showcases:\n\n",
+        });
+        if (intimateAffectionShowcases.done) {
+            throw new Error("Generator finished without producing output");
+        }
+        let intimateAffectionShowcasesParsed = intimateAffectionShowcases.value.split("\n").join(",").split(",").map(item => item.trim().replace("- ", " ").trim()).filter(item => item);
+
+        if (guider) {
+            const guiderResult = await guider.askList("Provide a list of specific ways that " + name + " shows romantic or sexual physical affection towards others", null, intimateAffectionShowcasesParsed);
+            if (guiderResult.value) {
+                intimateAffectionShowcasesParsed = guiderResult.value;
+            }
+        }
+
+        card.config.intimateAffectionShowcases = intimateAffectionShowcasesParsed;
+
+        await autosave?.save();
+    }
+
+    const isAttractedToMales = card.config.attractions?.includes("male");
+    const isAttractedToFemales = card.config.attractions?.includes("female");
+
+    if (!isAsexualValue && typeof card.config.kinks === "undefined") {
+        const kinks = await generator.next({
+            maxCharacters: 200,
+            maxSafetyCharacters: 200,
+            maxParagraphs: 1,
+            nextQuestion: `List ${name}'s specific kinks and fetishes as a comma separated list of short 1-2 word items. These must be actual kinks and fetishes, NOT vanilla activities. Do NOT include generic things like cuddling, kissing, hugging, or hand holding. Examples of what we want: bondage, dominance, submission, biting, scratching, rough play, voyeurism, exhibitionism, roleplay, sensory deprivation, choking, hair pulling, praise kink, degradation, pet play, etc. Infer what ${name} would specifically be into based on their personality and background. List 3 to 7 unique items.`,
+            stopAfter: [],
+            stopAt: [],
+            instructions: "Each item must be a specific kink or fetish, not a generic romantic activity. Do NOT say cuddling, kissing, hugging, hand holding, or similar vanilla activities.",
+            answerTrail: name + "'s kinks and fetishes:\n\n",
+        });
+        if (kinks.done) {
+            throw new Error("Generator finished without producing output");
+        }
+        let kinksParsed = kinks.value.split("\n").join(",").split(",").map(kink => kink.trim().replace("- ", " ").trim()).filter(kink => kink);
+
+        if (guider) {
+            const guiderResult = await guider.askList("Provide a list of kinks and special sexual/romantic interests for " + name + " (General non-gender specific)", null, kinksParsed);
+            if (guiderResult.value) {
+                kinksParsed = guiderResult.value;
+            }
+        }
+
+        card.config.kinks = kinksParsed;
+
+        await autosave?.save();
+    }
+
+    if (!isAsexualValue && isAttractedToMales && typeof card.config.kinksForMales === "undefined") {
+        const kinksForMales = await generator.next({
+            maxCharacters: 200,
+            maxSafetyCharacters: 200,
+            maxParagraphs: 1,
+            nextQuestion: `List ${name}'s specific kinks and fetishes that are exclusive to male partners, as a comma separated list of short 1-3 word items. These must involve male-specific anatomy or secondary sex characteristics (e.g. penis, balls, deep voice, Adam's apple, masculine build, body hair, etc.). These should be things that can ONLY be done with or to a male body. Do NOT include generic kinks. Infer what ${name} would specifically enjoy about male partners based on their personality and background. List 3 to 5 unique items.`,
+            stopAfter: [],
+            stopAt: [],
+            instructions: "Each item must be a kink or fetish specific to male anatomy or male secondary sex characteristics. Do NOT include any of the following general kinks: " + card.config.kinks.join(", ") + ". We want ONLY things exclusive to male bodies. eg. male domination, male smell, things related to male genitalia",
+            answerTrail: name + "'s male-specific kinks and fetishes:\n\n",
+        });
+        if (kinksForMales.done) {
+            throw new Error("Generator finished without producing output");
+        }
+        let kinksForMalesParsed = kinksForMales.value.split("\n").join(",").split(",").map(kink => kink.trim().replace("- ", " ").trim()).filter(kink => kink);
+
+        if (guider) {
+            const guiderResult = await guider.askList("Provide a list of kinks specific to male partners for " + name + " (male anatomy/characteristics only)", null, kinksForMalesParsed);
+            if (guiderResult.value) {
+                kinksForMalesParsed = guiderResult.value;
+            }
+        }
+
+        card.config.kinksForMales = kinksForMalesParsed;
+
+        await autosave?.save();
+    }
+
+    if (!isAsexualValue && isAttractedToFemales && typeof card.config.kinksForFemales === "undefined") {
+        const kinksForFemales = await generator.next({
+            maxCharacters: 200,
+            maxSafetyCharacters: 200,
+            maxParagraphs: 1,
+            nextQuestion: `List ${name}'s specific kinks and fetishes that are exclusive to female partners, as a comma separated list of short 1-3 word items. These must involve female-specific anatomy or secondary sex characteristics (e.g. breasts, vagina, clitoris, curves, wide hips, soft skin, etc.). These should be things that can ONLY be done with or to a female body. Do NOT include generic kinks. Infer what ${name} would specifically enjoy about female partners based on their personality and background. List 3 to 5 unique items.`,
+            stopAfter: [],
+            stopAt: [],
+            instructions: "Each item must be a kink or fetish specific to female anatomy or female secondary sex characteristics. Do NOT include any of the following general kinks: " + card.config.kinks.join(", ") + ". We want ONLY things exclusive to female bodies, eg. boob-play, dominatrix, pegging, things related to female genitalia",
+            answerTrail: name + "'s female-specific kinks and fetishes:\n\n",
+        });
+        if (kinksForFemales.done) {
+            throw new Error("Generator finished without producing output");
+        }
+        let kinksForFemalesParsed = kinksForFemales.value.split("\n").join(",").split(",").map(kink => kink.trim().replace("- ", " ").trim()).filter(kink => kink);
+
+        if (guider) {
+            const guiderResult = await guider.askList("Provide a list of kinks specific to female partners for " + name + " (female anatomy/characteristics only)", null, kinksForFemalesParsed);
+            if (guiderResult.value) {
+                kinksForFemalesParsed = guiderResult.value;
+            }
+        }
+
+        card.config.kinksForFemales = kinksForFemalesParsed;
+
+        await autosave?.save();
+    }
+
+    if (!isAsexualValue && typeof card.config.reversedKinks === "undefined") {
+        const reversedKinks = await generator.next({
+            maxCharacters: 200,
+            maxSafetyCharacters: 200,
+            maxParagraphs: 1,
+            nextQuestion: `List specific kinks and fetishes that ${name} would absolutely refuse, find repulsive, or be a hard no, as a comma separated list of short 1-2 word items. These must be actual kinks and fetishes that disgust or repulse ${name}, NOT generic dislikes. Examples: scat, vore, gore, feet worship, infantilism, humiliation, needle play, blood play, etc. Infer what ${name} would specifically hate based on their personality and background. List 5 to 10 unique items.`,
+            stopAfter: [],
+            stopAt: [],
+            instructions: "Each item must be a specific kink or fetish that " + name + " finds repulsive. Do NOT include any of the following as those are things " + name + " enjoys: " + [...card.config.kinks, ...card.config.kinksForMales, ...card.config.kinksForFemales].join(", "),
+            answerTrail: name + "'s hard limit kinks and fetishes:\n\n",
+        });
+        if (reversedKinks.done) {
+            throw new Error("Generator finished without producing output");
+        }
+        let reversedKinksParsed = reversedKinks.value.split(",").map(kink => kink.trim()).filter(kink => kink);
+
+        if (guider) {
+            const guiderResult = await guider.askList("Provide a list of kinks and special sexual/romantic interests that " + name + " would find repulsive and be a hard no for them", null, reversedKinksParsed);
+            if (guiderResult.value) {
+                reversedKinksParsed = guiderResult.value;
+            }
+        }
+
+        card.config.reversedKinks = reversedKinksParsed;
+
+        await autosave?.save();
+    }
+
     const initializeSection = getSection(card.body, "initialize");
 
     if (initializeSection === null) {
@@ -1330,7 +1501,175 @@ export async function generateBonds(engine, card, guider, autosave) {
                     // @ts-ignore
                     strangerSectionOpenToAffection.body.push(`}`);
                 }
-                // done
+                // done openToAffection
+
+                // Next openToIntimateAffection for each intimacy modifier
+                let extraInfoOpenToIntimateAffection = "";
+                let allIsNotReceptiveIntimateAffection = true;
+                // @ts-ignore
+                if (fineTuneConditions[fineTune] !== "true") {
+                    // @ts-ignore
+                    strangerSectionOpenToIntimateAffection.body.push(`if (${getDeeperFineTuneCondition(fineTuneConditions[fineTune], deeperFineTune)}) {`);
+                }
+                for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
+                    const openToIntimateAffectionQuestion = "How receptive to intimate affection is " + name + " towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "?";
+                    const answer = await generator.next({
+                        maxCharacters: 50,
+                        maxSafetyCharacters: 0,
+                        maxParagraphs: 1,
+                        nextQuestion: openToIntimateAffectionQuestion,
+                        stopAfter: [],
+                        stopAt: [],
+                        instructions: "Answer with one of the following options: 'Not receptive', 'Slightly receptive', 'Moderately receptive', 'Very receptive'. Consider the nature of the relationship and the specific modifier of intimacy when determining the level of openness to intimate affection.",
+                    });
+
+                    if (answer.done) {
+                        throw new Error("Generator ended unexpectedly while generating openToIntimateAffection for " + strangerKey);
+                    }
+
+                    if (guider) {
+                        const guiderResult = await guider.askOption("How receptive to intimate affection is " + name + " towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase(), [
+                            "Not receptive",
+                            "Slightly receptive",
+                            "Moderately receptive",
+                            "Very receptive",
+                        ], answer.value);
+                        if (guiderResult.value) {
+                            answer.value = guiderResult.value;
+                        }
+                    }
+
+                    const answerTrimmed = answer.value.trim().toLowerCase();
+                    if (answerTrimmed !== "not receptive") {
+                        allIsNotReceptiveIntimateAffection = false;
+                    }
+
+                    const toValue = {
+                        "not receptive": "not",
+                        "slightly receptive": "slight",
+                        "moderately receptive": "moderate",
+                        "very receptive": "very",
+                    }
+
+                    // @ts-ignore
+                    const valueAnswer = toValue[answerTrimmed];
+
+                    extraInfoOpenToIntimateAffection += `\n${name} is ${answerTrimmed} to intimate affection from this other character when they are ${intimateModifier.toLowerCase()}`;
+
+                    // @ts-ignore
+                    const modifierInfo = MODIFIERS_INTIMACY[intimateModifier];
+                    const condition = modifierInfo.condition;
+                    if (condition !== "true") {
+                        strangerSectionOpenToIntimateAffection.body.push(`if (${condition}) {`);
+                    }
+                    /**
+                     * @type {string | null}
+                     */
+                    let reason = null;
+                    if (valueAnswer === "not") {
+                        reason = modifierInfo.reasonNo;
+                    } else {
+                        reason = modifierInfo.reasonYes;
+                    }
+                    strangerSectionOpenToIntimateAffection.body.push(`return {value: ${JSON.stringify(valueAnswer)}, reason: ${JSON.stringify(reason)}};`);
+                    if (condition !== "true") {
+                        strangerSectionOpenToIntimateAffection.body.push(`}`);
+                    }
+                }
+                if (allIsNotReceptiveIntimateAffection) {
+                    extraInfoOpenToIntimateAffection = `\n${name} is not receptive to intimate affection from this other character in any context.`;
+                }
+                allExtraInfo += extraInfoOpenToIntimateAffection;
+                // @ts-ignore
+                if (fineTuneConditions[fineTune] !== "true") {
+                    // @ts-ignore
+                    strangerSectionOpenToIntimateAffection.body.push(`}`);
+                }
+                // done openToIntimateAffection
+
+                // Next openToSex for each intimacy modifier
+                let extraInfoOpenToSex = "";
+                let allIsNotReceptiveOpenToSex = true;
+                // @ts-ignore
+                if (fineTuneConditions[fineTune] !== "true") {
+                    // @ts-ignore
+                    strangerSectionOpenToSex.body.push(`if (${getDeeperFineTuneCondition(fineTuneConditions[fineTune], deeperFineTune)}) {`);
+                }
+                for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
+                    const openToSexQuestion = "How receptive to sex is " + name + " towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "?";
+                    const answer = await generator.next({
+                        maxCharacters: 50,
+                        maxSafetyCharacters: 0,
+                        maxParagraphs: 1,
+                        nextQuestion: openToSexQuestion,
+                        stopAfter: [],
+                        stopAt: [],
+                        instructions: "Answer with one of the following options: 'Not receptive', 'Slightly receptive', 'Moderately receptive', 'Very receptive'. Consider the nature of the relationship and the specific modifier of intimacy when determining the level of openness to sex.",
+                    });
+
+                    if (answer.done) {
+                        throw new Error("Generator ended unexpectedly while generating openToSex for " + strangerKey);
+                    }
+
+                    if (guider) {
+                        const guiderResult = await guider.askOption("How receptive to sex is " + name + " towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase(), [
+                            "Not receptive",
+                            "Slightly receptive",
+                            "Moderately receptive",
+                            "Very receptive",
+                        ], answer.value);
+                        if (guiderResult.value) {
+                            answer.value = guiderResult.value;
+                        }
+                    }
+
+                    const answerTrimmed = answer.value.trim().toLowerCase();
+                    if (answerTrimmed !== "not receptive") {
+                        allIsNotReceptiveOpenToSex = false;
+                    }
+
+                    const toValue = {
+                        "not receptive": "not",
+                        "slightly receptive": "slight",
+                        "moderately receptive": "moderate",
+                        "very receptive": "very",
+                    }
+
+                    // @ts-ignore
+                    const valueAnswer = toValue[answerTrimmed];
+
+                    extraInfoOpenToSex += `\n${name} is ${answerTrimmed} to sex with this other character when they are ${intimateModifier.toLowerCase()}`;
+
+                    // @ts-ignore
+                    const modifierInfo = MODIFIERS_INTIMACY[intimateModifier];
+                    const condition = modifierInfo.condition;
+                    if (condition !== "true") {
+                        strangerSectionOpenToSex.body.push(`if (${condition}) {`);
+                    }
+                    /**
+                     * @type {string | null}
+                     */
+                    let reason = null;
+                    if (valueAnswer === "not") {
+                        reason = modifierInfo.reasonNo;
+                    } else {
+                        reason = modifierInfo.reasonYes;
+                    }
+                    strangerSectionOpenToSex.body.push(`return {value: ${JSON.stringify(valueAnswer)}, reason: ${JSON.stringify(reason)}};`);
+                    if (condition !== "true") {
+                        strangerSectionOpenToSex.body.push(`}`);
+                    }
+                }
+                if (allIsNotReceptiveOpenToSex) {
+                    extraInfoOpenToSex = `\n${name} is not receptive to sex with this other character in any context.`;
+                }
+                allExtraInfo += extraInfoOpenToSex;
+                // @ts-ignore
+                if (fineTuneConditions[fineTune] !== "true") {
+                    // @ts-ignore
+                    strangerSectionOpenToSex.body.push(`}`);
+                }
+                // done openToSex
 
                 let guidanceGiven = allExtraInfo;
                 let redoGuidance = false;

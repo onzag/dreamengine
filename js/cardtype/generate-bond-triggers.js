@@ -726,62 +726,6 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
             }
         }
 
-        if (typeof card.config.kinks === "undefined") {
-            const kinks = await generator.next({
-                maxCharacters: 200,
-                maxSafetyCharacters: 200,
-                maxParagraphs: 1,
-                nextQuestion: `List ${name}'s specific kinks and fetishes as a comma separated list of short 1-2 word items. These must be actual kinks and fetishes, NOT vanilla activities. Do NOT include generic things like cuddling, kissing, hugging, or hand holding. Examples of what we want: bondage, dominance, submission, biting, scratching, rough play, voyeurism, exhibitionism, roleplay, sensory deprivation, choking, hair pulling, praise kink, degradation, pet play, etc. Infer what ${name} would specifically be into based on their personality and background. List 3 to 7 unique items.`,
-                stopAfter: [],
-                stopAt: [],
-                instructions: "Each item must be a specific kink or fetish, not a generic romantic activity. Do NOT say cuddling, kissing, hugging, hand holding, or similar vanilla activities.",
-                answerTrail: name + "'s kinks and fetishes:\n\n",
-            });
-            if (kinks.done) {
-                throw new Error("Generator finished without producing output");
-            }
-            let kinksParsed = kinks.value.split("\n").join(",").split(",").map(kink => kink.trim().replace("- ", " ").trim()).filter(kink => kink);
-
-            if (guider) {
-                const guiderResult = await guider.askList("Provide a list of kinks and special sexual/romantic interests for " + name, null, kinksParsed);
-                if (guiderResult.value) {
-                    kinksParsed = guiderResult.value;
-                }
-            }
-
-            card.config.kinks = kinksParsed;
-
-            await autosave?.save();
-        }
-
-        if (typeof card.config.reversedKinks === "undefined") {
-            const reversedKinks = await generator.next({
-                maxCharacters: 200,
-                maxSafetyCharacters: 200,
-                maxParagraphs: 1,
-                nextQuestion: `List specific kinks and fetishes that ${name} would absolutely refuse, find repulsive, or be a hard no, as a comma separated list of short 1-2 word items. These must be actual kinks and fetishes that disgust or repulse ${name}, NOT generic dislikes. Examples: scat, vore, gore, feet worship, infantilism, humiliation, needle play, blood play, etc. Infer what ${name} would specifically hate based on their personality and background. List 5 to 10 unique items.`,
-                stopAfter: [],
-                stopAt: [],
-                instructions: "Each item must be a specific kink or fetish that " + name + " finds repulsive. Do NOT include any of the following as those are things " + name + " enjoys: " + card.config.kinks.join(", "),
-                answerTrail: name + "'s hard limit kinks and fetishes:\n\n",
-            });
-            if (reversedKinks.done) {
-                throw new Error("Generator finished without producing output");
-            }
-            let reversedKinksParsed = reversedKinks.value.split(",").map(kink => kink.trim()).filter(kink => kink);
-
-            if (guider) {
-                const guiderResult = await guider.askList("Provide a list of kinks and special sexual/romantic interests that " + name + " would find repulsive and be a hard no for them", null, reversedKinksParsed);
-                if (guiderResult.value) {
-                    reversedKinksParsed = guiderResult.value;
-                }
-            }
-
-            card.config.reversedKinks = reversedKinksParsed;
-
-            await autosave?.save();
-        }
-
         overrideWholeReasoning = true;
         await askYesNo(
             "like-kinks",
