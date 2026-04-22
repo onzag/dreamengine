@@ -122,7 +122,7 @@ function replaceOtherCharNameWithPlaceholder(text, charName) {
  */
 export async function generateBasicStates(engine, card, guider, autosave) {
     throw new Error("TODO");
-    // TODO remember the intimacy in the states, eg. Angry we may not want
+    // TODO remember the intimacy in the states, eg. Angry we may not want with intimacyMultiplierDirectionality and intimacyMultiplier
     const isAsexualValue = card.config.isAsexual;
     const name = card.config.name;
 

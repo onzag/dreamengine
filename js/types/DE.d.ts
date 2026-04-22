@@ -673,6 +673,45 @@ declare interface DEVocabularyLimit {
     narrationStyle?: DENarrationStyle;
 }
 
+declare interface DEIntimateAction {
+    /**
+     * Action template to inject
+     */
+    action: DEStringTemplateCharAndOther;
+    /**
+     * Probability to trigger, subject to things like libido (for sexual actions)
+     * and other circumstances
+     */
+    probability: number;
+    /**
+     * By default the action is injected outright, and the character will perform it
+     * but with this question, first the consentMechanism action will be injected,
+     * and only if the character consents to it, which is checked later by the check question, the actual action will
+     * be injected
+     */
+    consentMechanism?: {
+        action: DEStringTemplateCharAndOther;
+        check: DEStringTemplateCharAndOther;
+        checkAmbiguousResponse: DEStringTemplateCharAndOther;
+        /**
+         * A number from 0 to 1 how likely to take a no for an answer
+         */
+        insistance: number;
+        /**
+         * A number from 0 to 1 how likely they are to reject consent
+         * and proceed anyway after receveing a no for an answer
+         */
+        rejection: number;
+    };
+    /**
+     * By default the intimate action is considered completed after
+     * it is injected as an action, so it has no life, but by
+     * adding this question the action will be constantly reinjected
+     * until the question is answered yes
+     */
+    fullfillCriteriaQuestions?: DEStringTemplateCharAndOther[];
+}
+
 declare interface DEBondDeclaration {
     /**
      * Name of the bond, useful to identify it
@@ -769,7 +808,7 @@ declare interface DEBondDeclaration {
          * @param other 
          * @returns 
          */
-        proneToInitiatingAffection: (DE: DEObject, char: DECompleteCharacterReference, other: DECompleteCharacterReference) => PromiseOrNot<{probability: number, options?: string[]}>;
+        proneToInitiatingAffection: {probability: (DE: DEObject, char: DECompleteCharacterReference, other: DECompleteCharacterReference) => PromiseOrNot<number>, actions: DEIntimateAction[]};
         /**
          * Whether the character in question with the other will be open to intimate affection at this bond level, and the reason why or why not
          * make sure to keep in mind the circumstances
@@ -787,7 +826,7 @@ declare interface DEBondDeclaration {
          * @param other 
          * @returns 
          */
-        proneToInitiatingIntimateAffection: (DE: DEObject, char: DECompleteCharacterReference, other: DECompleteCharacterReference) => PromiseOrNot<{probability: number, options?: string[]}>;
+        proneToInitiatingIntimateAffection: {probability: (DE: DEObject, char: DECompleteCharacterReference, other: DECompleteCharacterReference) => PromiseOrNot<number>, actions: DEIntimateAction[]};
         /**
          * Whether the character in question with the other will be open to sex at this bond level, and the reason why or why not
          * make sure to keep in mind the circumstances
@@ -805,7 +844,7 @@ declare interface DEBondDeclaration {
          * @param other 
          * @returns 
          */
-        proneToInitiatingSex: (DE: DEObject, char: DECompleteCharacterReference, other: DECompleteCharacterReference) => PromiseOrNot<{probability: number, options?: string[]}>;
+        proneToInitiatingSex: {probability: (DE: DEObject, char: DECompleteCharacterReference, other: DECompleteCharacterReference) => PromiseOrNot<number>, actions: DEIntimateAction[]};
     }
 }
 

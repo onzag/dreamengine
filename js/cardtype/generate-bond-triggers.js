@@ -730,7 +730,7 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
         await askYesNo(
             "like-kinks",
             7,
-            "Considering the kinks " + JSON.stringify(card.config.kinks.join(" ,")) + ". Make a list of yes/no questions about activities that involve these kinks that " + name + " would absolutely enjoy with another character, be explicit",
+            "Considering the kinks " + JSON.stringify([...card.config.kinks, ...card.config.kinksForMales, ...card.config.kinksForFemales].join(" ,")) + ". Make a list of yes/no questions about activities that involve these kinks that " + name + " would absolutely enjoy with another character, be explicit",
             "list of questions about activities that involve " + name + "'s kinks that they would enjoy with a character",
             "they are romantically and sexually attracted towards each other with strong sexual tension",
             "it was done by other character performed a sexual or intimate act that " + name + " finds arousing and pleasurable",

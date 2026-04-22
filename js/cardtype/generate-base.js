@@ -834,10 +834,10 @@ export async function generateBase(engine, card, guider, autosave) {
     const sortedTiers = ["insect", "critter", "human", "apex", "street_level", "block_level", "city_level", "country_level", "continental", "planetary", "stellar", "galactic", "universal", "multiversal", "limitless"];
 
     const tierQuestions = {
-        "insect": "Is " + name + " an insect or bug or as weak as one?",
-        "critter": "Is " + name + " a small or weak creature?",
-        "human": "Is " + name + " a human, humanoid or as strong as one?",
-        "apex": "Is " + name + " an apex predator?",
+        "insect": "Is " + name + " as strong an insect?",
+        "critter": "Is " + name + " as strong as a critter?",
+        "human": "Is " + name + " as strong as a person?",
+        "apex": "Is " + name + " far stronger than a person?",
         "street_level": "Is " + name + " at street level threat? (can destroy a whole street singlehandedly)",
         "block_level": "Is " + name + " at block level threat? (can destroy a whole block singlehandedly)",
         "city_level": "Is " + name + " at city level threat? (can destroy a whole city singlehandedly)",
@@ -1945,6 +1945,10 @@ export async function generateBase(engine, card, guider, autosave) {
         }
 
         let minAgeAttractionPotential = (card.config.characterAge / 2) + 7; // the half your age plus seven rule is a common rule of thumb for the minimum age of attraction
+        if (minAgeAttractionPotential < card.config.characterAge) {
+            // what is this a kid?... eh I guess it could be a dog or something.
+            minAgeAttractionPotential = Math.floor(card.config.characterAge) - 1;
+        }
 
         if (guider && !isAsexualValue) {
             const guidedMinAgeAttractionPotential = await guider.askNumber("What is the minimum age of attraction for " + name + "?", minAgeAttractionPotential);
@@ -1956,6 +1960,9 @@ export async function generateBase(engine, card, guider, autosave) {
         }
 
         let maxAgeAttractionPotential = card.config.characterAge + 10;
+        if (card.config.speciesType === "humanoid" && card.config.characterAge <= 18) {
+            maxAgeAttractionPotential = card.config.characterAge + 3; // for very young characters we can make the max age of attraction closer to their age since it's more likely they would be attracted to people closer to their age
+        }
 
         if (guider && !isAsexualValue) {
             const guidedMaxAgeAttractionPotential = await guider.askNumber("What is the maximum age of attraction for " + name + "?", maxAgeAttractionPotential);

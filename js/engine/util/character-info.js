@@ -652,14 +652,14 @@ export async function getExternalDescriptionOfCharacter(deObject, characterName,
 
     const hasItemsCoveringTopNakedness = !topNaked;
     if (!hasItemsCoveringTopNakedness && character.shortDescriptionTopNakedAdd) {
-        finalDescription += ` ${character.shortDescriptionTopNakedAdd}`;
+        finalDescription += ` Not wearing any clothes on the upper body. ${character.shortDescriptionTopNakedAdd}`;
         if (!finalDescription.endsWith(".")) {
             finalDescription += ".";
         }
     }
     const hasItemsCoveringBottomNakedness = !bottomNaked;
     if (!hasItemsCoveringBottomNakedness && character.shortDescriptionBottomNakedAdd) {
-        finalDescription += ` ${character.shortDescriptionBottomNakedAdd}`;
+        finalDescription += ` Not wearing any clothes on the lower body. ${character.shortDescriptionBottomNakedAdd}`;
         if (!finalDescription.endsWith(".")) {
             finalDescription += ".";
         }
@@ -667,7 +667,7 @@ export async function getExternalDescriptionOfCharacter(deObject, characterName,
     if (characterState.wearing.length > 0) {
         finalDescription += " Wearing " + deObject.functions.format_and(deObject, null, characterState.wearing.map(item => item.amount >= 2 ? item.amount + " of " + item.description + " (" + getWearableFitment(deObject, item, characterName).fitment + ")" : item.description + " (" + getWearableFitment(deObject, item, characterName).fitment + ")")) + ".";
     } else {
-        finalDescription += " Not wearing any clothes or accessories.";
+        finalDescription += " Completely naked, without clothes or accessories.";
     }
 
     const characterExactLocation = getCharacterExactLocation(deObject, characterName);
@@ -1883,6 +1883,27 @@ export function getBondDeclarationFromBondDescription(deObject, character, bond)
 
     const bondDeclaration =
         character.bonds.declarations.find(bondDecl => bondDecl.strangerBond === bond.stranger && bondDecl.minBondLevel <= bond.bond && bond.bond < (bondDecl.maxBondLevel === 100 ? 200 : bondDecl.maxBondLevel) && bondDecl.min2BondLevel <= bond.bond2 && bond.bond2 < (bondDecl.max2BondLevel === 100 ? 200 : bondDecl.max2BondLevel));
+
+    if (!bondDeclaration) {
+        return null;
+    }
+    return bondDeclaration;
+}
+
+/**
+ * @param {DEObject} deObject 
+ * @param {DECompleteCharacterReference} character 
+ * @param {string} bondName 
+ * @returns {DEBondDeclaration|null}
+ */
+export function getBondDeclarationFromName(deObject, character, bondName) {
+    if (!character.bonds || !character.bonds.declarations) {
+        return null;
+    } else if (!deObject) {
+        throw new Error("DEngine not initialized");
+    }
+
+    const bondDeclaration = character.bonds.declarations.find(bondDecl => bondDecl.name === bondName);
 
     if (!bondDeclaration) {
         return null;
