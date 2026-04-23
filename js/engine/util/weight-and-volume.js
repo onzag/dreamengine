@@ -288,7 +288,7 @@ export function getItemExcessElements(deObject, item) {
 
     if (isOverweightAndBreaks) {
         const breakList = breakReasonsItemsAndCharacters.map((i, ind) => typeof i === "string" ? i : utilItemCount(deObject, null, i.owner, i.amount, i.name, false, true));
-        const listOfItems = deObject?.utils.templateUtils.formatAnd(deObject, breakList);
+        const listOfItems = deObject?.utils.templateUtils.formatAnd(breakList);
         const overweightReasons = [
             `${listOfItems} causes ${itemNameForText} to be overweight and break`,
             `${itemNameForText} bursts apart from the sheer amount of ${listOfItems} stuffed inside`,
@@ -337,7 +337,7 @@ export function getItemExcessElements(deObject, item) {
 
     if (isOverweightAndBreaks) {
         const breakList = breakReasonsItemsAndCharacters.map((i, ind) => typeof i === "string" ? i : utilItemCount(deObject, null, i.owner, i.amount, i.name, false, true));
-        const listOfItems = deObject?.utils.templateUtils.formatAnd(deObject, breakList);
+        const listOfItems = deObject?.utils.templateUtils.formatAnd(breakList);
         const crushedReasons = [
             `${listOfItems} causes ${itemNameForText} to be overloaded and it breaks under the weight`,
             `${itemNameForText} collapses under the crushing weight of ${listOfItems}`,
@@ -483,7 +483,7 @@ export function getWearableFitment(deObject, item, character, isNotBeingCurrentl
                 extraAddedExtraTraitsAtTheEnd.push(trait);
             }
             return {
-                fitment: deObject.utils.templateUtils.formatAnd(deObject, ["fits perfectly", ...extraAddedExtraTraitsAtTheEnd]),
+                fitment: deObject.utils.templateUtils.formatAnd(["fits perfectly", ...extraAddedExtraTraitsAtTheEnd]),
                 shouldFallDown: false,
                 shouldBreak: false,
                 breakReason: null,
@@ -504,7 +504,7 @@ export function getWearableFitment(deObject, item, character, isNotBeingCurrentl
             const itemNameForText = utilItemCount(deObject, null, item.owner, item.amount, item.name, false, true);
 
             return {
-                fitment: deObject.utils.templateUtils.formatAnd(deObject, [fitmentDescription, ...extraAddedExtraTraitsAtTheEnd]),
+                fitment: deObject.utils.templateUtils.formatAnd([fitmentDescription, ...extraAddedExtraTraitsAtTheEnd]),
                 shouldFallDown: false,
                 shouldBreak: totalBodyVolume > largestSizeItCanFit,
                 breakReason: totalBodyVolume > largestSizeItCanFit ? (() => {
@@ -531,7 +531,7 @@ export function getWearableFitment(deObject, item, character, isNotBeingCurrentl
             }
 
             return {
-                fitment: deObject.utils.templateUtils.formatAnd(deObject, [fitmentDescription, ...extraAddedExtraTraitsAtTheEnd]),
+                fitment: deObject.utils.templateUtils.formatAnd([fitmentDescription, ...extraAddedExtraTraitsAtTheEnd]),
                 shouldFallDown: totalBodyVolume < smallestSizeItCanFit,
                 shouldBreak: false,
                 breakReason: null,

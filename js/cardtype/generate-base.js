@@ -145,7 +145,7 @@ export async function generateBase(engine, card, guider, autosave) {
 
         card.head.push(`description: ${JSON.stringify(answerSmallOneSentenceDescription.value.trim())},`);
 
-        newCharacterSection.head.push(`DE.utils.newCharacter(DE, fss.setup(DE, {`);
+        newCharacterSection.head.push(`DE.utils.newCharacter(fss.setup(DE, {`);
         newCharacterSection.body.push(`name: ${JSON.stringify(name)},`);
         newCharacterSection.foot.push(`},{`); // close newCharacter
         // we will need to get this sections when generating the bonds
@@ -198,7 +198,7 @@ export async function generateBase(engine, card, guider, autosave) {
             }
         }
         insertSpecialComment(newCharacterSection.body, "base-description");
-        newCharacterSection.body.push(`general: (DE, info) => ${toTemplateLiteral(description)},`);
+        newCharacterSection.body.push(`general: (info) => ${toTemplateLiteral(description)},`);
         await autosave?.save();
     }
 
@@ -549,7 +549,7 @@ export async function generateBase(engine, card, guider, autosave) {
 
             insertSpecialComment(newCharacterSection.body, "base-schizo-details");
             newCharacterSection.body.push(`schizophrenia: ${severity},`);
-            newCharacterSection.body.push(`schizophrenicVoiceDescription: DE.utils.newHandlebarTemplate(${JSON.stringify(voiceDescription)}),`);
+            newCharacterSection.body.push(`schizophrenicVoiceDescription: (info) => ${toTemplateLiteral(voiceDescription)},`);
             await autosave?.save();
         } else {
             insertSpecialComment(newCharacterSection.body, "base-schizo-details");
@@ -1473,7 +1473,7 @@ export async function generateBase(engine, card, guider, autosave) {
                 const familyMemberName = (await guider.askOpen("What is the name of the " + nextFamilyMemberToAdd + "?")).value;
                 const familyMemberRelation = nextFamilyMemberToAdd;
 
-                onWorldInitializedAndFirstSceneStartedSection.body.push(`DE.utils.newFamilyRelation(DE, ${JSON.stringify(name)}, ${JSON.stringify(familyMemberName)}, ${JSON.stringify(familyMemberRelation)})`);
+                onWorldInitializedAndFirstSceneStartedSection.body.push(`DE.utils.newFamilyRelation(${JSON.stringify(name)}, ${JSON.stringify(familyMemberName)}, ${JSON.stringify(familyMemberRelation)})`);
 
                 const wouldYouLikeToPreCreateBond = await guider.askBoolean("Would you like to pre-create a mutual bond between " + name + " and " + familyMemberName + "? if you don't they will consider each other as strangers unaware they are family", false);
                 if (wouldYouLikeToPreCreateBond.value) {
@@ -1503,7 +1503,7 @@ export async function generateBase(engine, card, guider, autosave) {
                     ];
                     const bondType = await guider.askOption("What type of bond " + name + " and " + familyMemberName + " share?", options, "good relationship");
                     const bondValue = optionsValues[options.indexOf(bondType.value)];
-                    onWorldInitializedAndFirstSceneStartedSection.body.push(`DE.utils.newMutualBond(DE, ${JSON.stringify(name)}, ${JSON.stringify(familyMemberName)}, {stranger: false, bond: ${bondValue}, bond2: 0, knowsName: true, createdAt: DE.utils.timeShifter(DE.currentTime, {years: -DE.characters[${JSON.stringify(name)}].ageYears})})`);
+                    onWorldInitializedAndFirstSceneStartedSection.body.push(`DE.utils.newMutualBond(${JSON.stringify(name)}, ${JSON.stringify(familyMemberName)}, {stranger: false, bond: ${bondValue}, bond2: 0, knowsName: true, createdAt: DE.utils.timeShifter(DE.currentTime, {years: -DE.characters[${JSON.stringify(name)}].ageYears})})`);
                 }
             }
         } while (nextFamilyMemberToAdd !== "no");
@@ -1614,8 +1614,8 @@ export async function generateBase(engine, card, guider, autosave) {
 
                 const bondTimeInYears = await guider.askNumber("How many years has " + name + " known " + personName + "?", 1);
 
-                onWorldInitializedAndFirstSceneStartedSection.body.push(`DE.utils.newBond(DE, ${JSON.stringify(name)}, ${JSON.stringify(personName)}, {stranger: ${JSON.stringify(bondValueForCharacter === null)}, bond: ${bondValueForCharacter || 0}, bond2: ${bond2ValueForCharacter}, knowsName: true, createdAt: DE.utils.timeShifter(DE.currentTime, {years: -${bondTimeInYears}})}, {forceOverride: true});`);
-                onWorldInitializedAndFirstSceneStartedSection.body.push(`DE.utils.newBond(DE, ${JSON.stringify(personName)}, ${JSON.stringify(name)}, {stranger: ${JSON.stringify(bondValueForPerson === null)}, bond: ${bondValueForPerson || 0}, bond2: ${bond2ValueForPerson}, knowsName: true, createdAt: DE.utils.timeShifter(DE.currentTime, {years: -${bondTimeInYears}})});`);
+                onWorldInitializedAndFirstSceneStartedSection.body.push(`DE.utils.newBond(${JSON.stringify(name)}, ${JSON.stringify(personName)}, {stranger: ${JSON.stringify(bondValueForCharacter === null)}, bond: ${bondValueForCharacter || 0}, bond2: ${bond2ValueForCharacter}, knowsName: true, createdAt: DE.utils.timeShifter(DE.currentTime, {years: -${bondTimeInYears}})}, {forceOverride: true});`);
+                onWorldInitializedAndFirstSceneStartedSection.body.push(`DE.utils.newBond(${JSON.stringify(personName)}, ${JSON.stringify(name)}, {stranger: ${JSON.stringify(bondValueForPerson === null)}, bond: ${bondValueForPerson || 0}, bond2: ${bond2ValueForPerson}, knowsName: true, createdAt: DE.utils.timeShifter(DE.currentTime, {years: -${bondTimeInYears}})});`);
             }
         } while (nextRelationshipToAdd);
 

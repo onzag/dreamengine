@@ -47,19 +47,15 @@ export async function talk(engine, character, options) {
                 return null;
             }
             const text = typeof action.action.action === "string" ? action.action.action : await action.action.action(
-                // @ts-ignore
-                engine.deObject,
                 {
                     char: character,
-                    causes: action.applyingState?.causes,
+                    causes: action.applyingState?.causes || null,
                 }
             );
             const narrativeAction = typeof action.action.narrativeAction === "string" ? action.action.narrativeAction : (action.action.narrativeAction ? await action.action.narrativeAction(
-                // @ts-ignore
-                engine.deObject,
                 {
                     char: character,
-                    causes: action.applyingState?.causes,
+                    causes: action.applyingState?.causes || null,
                 },
             ) : null);
             const narrativeActionTrimmed = narrativeAction ? narrativeAction.trim() : null;
@@ -78,10 +74,10 @@ export async function talk(engine, character, options) {
 
     if (options.injectedActions) {
         const injectedActionsProcessed = (await Promise.all(options.injectedActions.map(async (a) => ({
-            text: typeof a.action === "string" ? a.action : a.action ? await a.action(engine.getDEObject(), {
+            text: typeof a.action === "string" ? a.action : a.action ? await a.action({
                 char: character,
             }) : null,
-            narrativeAction: typeof a.narrativeAction === "string" ? a.narrativeAction : a.narrativeAction ? await a.narrativeAction(engine.getDEObject(), {
+            narrativeAction: typeof a.narrativeAction === "string" ? a.narrativeAction : a.narrativeAction ? await a.narrativeAction({
                 char: character,
             }) : null,
             action: {
@@ -226,13 +222,13 @@ export async function talk(engine, character, options) {
             }
 
             if (action.action.action.narrativeEffect && narrativeEffectsDominance < stateDominance) {
-                narrativeEffects.push(typeof action.action.action.narrativeEffect === "string" ? action.action.action.narrativeEffect : await action.action.action.narrativeEffect(engine.deObject, {
+                narrativeEffects.push(typeof action.action.action.narrativeEffect === "string" ? action.action.action.narrativeEffect : await action.action.action.narrativeEffect({
                     char: character,
                     causes: action.action.applyingState?.causes || null,
                 }));
                 narrativeEffectsDominance = stateDominance;
             } else if (action.action.action.narrativeEffect && narrativeEffectsDominance === stateDominance) {
-                narrativeEffects.push(typeof action.action.action.narrativeEffect === "string" ? action.action.action.narrativeEffect : await action.action.action.narrativeEffect(engine.deObject, {
+                narrativeEffects.push(typeof action.action.action.narrativeEffect === "string" ? action.action.action.narrativeEffect : await action.action.action.narrativeEffect({
                     char: character,
                     causes: action.action.applyingState?.causes || null,
                 }));
@@ -403,7 +399,7 @@ export async function talk(engine, character, options) {
                 const isRelieving = state.applyingState.relieving;
                 const preNarrationOrigin = isRelieving ? state.stateInfo.preNarration.afterRelief : state.stateInfo.preNarration.narration;
                 if (preNarrationOrigin) {
-                    const preNarrationText = typeof preNarrationOrigin === "string" ? preNarrationOrigin : await preNarrationOrigin(engine.deObject, {
+                    const preNarrationText = typeof preNarrationOrigin === "string" ? preNarrationOrigin : await preNarrationOrigin({
                         char: character,
                         causes: state.applyingState.causes || null,
                     });
@@ -427,7 +423,7 @@ export async function talk(engine, character, options) {
                 const isRelieving = state.applyingState.relieving;
                 const postNarrationOrigin = isRelieving ? state.stateInfo.postNarration.afterRelief : state.stateInfo.postNarration.narration;
                 if (postNarrationOrigin) {
-                    const postNarrationText = typeof postNarrationOrigin === "string" ? postNarrationOrigin : await postNarrationOrigin(engine.deObject, {
+                    const postNarrationText = typeof postNarrationOrigin === "string" ? postNarrationOrigin : await postNarrationOrigin({
                         char: character,
                         causes: state.applyingState.causes || null,
                     });

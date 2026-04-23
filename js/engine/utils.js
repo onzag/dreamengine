@@ -94,10 +94,11 @@ function getCausantsHelperLocal(DE, character, stateName) {
 }
 
 /**
- * @type {DEUtils}
+ * @param {DEObject} DE
+ * @returns {DEUtils}
  */
-export const deEngineUtils = {
-    newGlobalInterest(DE, interest) {
+export const deEngineUtilsFn = (DE) => ({
+    newGlobalInterest(interest) {
         if (DE.interests[interest.id]) {
             console.warn(`Interest with id ${interest.id} already exists, mixing it.`);
             if (!Array.isArray(DE.interests[interest.id].template)) {
@@ -112,7 +113,7 @@ export const deEngineUtils = {
             DE.interests[interest.id] = interest;
         }
     },
-    newLocation(DE, name, locationDef) {
+    newLocation(name, locationDef) {
         /**
          * @type {DEStatefulLocationDefinition}
          */
@@ -174,7 +175,7 @@ export const deEngineUtils = {
         DE.world.locations[name] = statefulLocation;
         return DE.world.locations[name];
     },
-    newConnection(DE, connectionDef) {
+    newConnection(connectionDef) {
         const id = connectionDef.from + " to " + connectionDef.to;
         const existingConnection = DE.world.connections[id];
         DE.world.connections[id] = connectionDef;
@@ -183,7 +184,7 @@ export const deEngineUtils = {
         }
         return DE.world.connections[id];
     },
-    newCharacter(DE, characterDef) {
+    newCharacter(characterDef) {
         const currentCharacter = DE.characters[characterDef.name];
         if (!currentCharacter) {
             return characterDef;
@@ -197,13 +198,13 @@ export const deEngineUtils = {
         }
         return DE.characters[characterDef.name];
     },
-    createStateInAllCharacters(DE, stateName, stateDefinition) {
+    createStateInAllCharacters(stateName, stateDefinition) {
         Object.values(DE.characters).forEach((character) => {
             defineStateInCharacter(DE, character, stateName, stateDefinition);
         });
         return stateDefinition;
     },
-    defineStateInCharacter(DE, character, stateName, stateDefinition) {
+    defineStateInCharacter(character, stateName, stateDefinition) {
         const characterRef = typeof character === "string" ? DE.characters[character] : character;
         if (!characterRef) {
             if (typeof character === "string") {
@@ -215,7 +216,7 @@ export const deEngineUtils = {
         }
         return defineStateInCharacter(DE, characterRef, stateName, stateDefinition);
     },
-    newBond(DE, char1, towards, bondDefinition, options = { forceOverride: false }) {
+    newBond(char1, towards, bondDefinition, options = { forceOverride: false }) {
         const char1Ref = typeof char1 === "string" ? DE.characters[char1] : char1;
         const towardsRef = typeof towards === "string" ? DE.characters[towards] : towards;
 
@@ -251,12 +252,12 @@ export const deEngineUtils = {
         DE.bonds[char1Ref.name].active.push(newBond);
         return newBond;
     },
-    newMutualBond(DE, char1, char2, bondDefinition) {
-        const bond1 = deEngineUtils.newBond(DE, char1, char2, bondDefinition, { forceOverride: true });
-        const bond2 = deEngineUtils.newBond(DE, char2, char1, bondDefinition);
+    newMutualBond(char1, char2, bondDefinition) {
+        const bond1 = DE.utils.newBond(char1, char2, bondDefinition, { forceOverride: true });
+        const bond2 = DE.utils.newBond(char2, char1, bondDefinition);
         return [bond1, bond2];
     },
-    newFamilyRelation(DE, char1, towards, relation) {
+    newFamilyRelation(char1, towards, relation) {
         const character1 = typeof char1 === "string" ? DE.characters[char1] : char1;
         const towardsRef = typeof towards === "string" ? DE.characters[towards] : towards;
 
@@ -349,7 +350,7 @@ export const deEngineUtils = {
 
         return [familyTie1, familyTie2];
     },
-    shiftBond(DE, char1, towards, primaryShift, secondaryShift) {
+    shiftBond(char1, towards, primaryShift, secondaryShift) {
         const char1Ref = typeof char1 === "string" ? DE.characters[char1] : char1;
         const towardsRef = typeof towards === "string" ? DE.characters[towards] : towards;
         if (!char1Ref || !towardsRef) {
@@ -413,7 +414,7 @@ export const deEngineUtils = {
             char1Ref.temp["alreadyShiftedBondSecondary_" + towardsRef.name] = actualSecondaryShift;
         }
     },
-    rejectIntimacy(DE, char1, towards) {
+    rejectIntimacy(char1, towards) {
         const char1Ref = typeof char1 === "string" ? DE.characters[char1] : char1;
         const towardsRef = typeof towards === "string" ? DE.characters[towards] : towards;
         if (!char1Ref || !towardsRef) {
@@ -422,7 +423,7 @@ export const deEngineUtils = {
         }
         char1Ref.temp["rejectIntimacy_" + towardsRef.name] = true;
     },
-    hasBondBeenShiftedThisCycle(DE, char1, towards) {
+    hasBondBeenShiftedThisCycle(char1, towards) {
         const char1Ref = typeof char1 === "string" ? DE.characters[char1] : char1;
         const towardsRef = typeof towards === "string" ? DE.characters[towards] : towards;
         if (!char1Ref || !towardsRef) {
@@ -434,11 +435,11 @@ export const deEngineUtils = {
         const alreadyShiftedSecondary = char1Ref.temp["alreadyShiftedBondSecondary_" + towardsRef.name] || 0;
         return alreadyShiftedPrimary !== 0 || alreadyShiftedSecondary !== 0;
     },
-    triggerActionNext(DE, action) {
+    triggerActionNext(action) {
         DE.internalState.NEXT_ACTIONS = DE.internalState.NEXT_ACTIONS || [];
         DE.internalState.NEXT_ACTIONS.push(action);
     },
-    isStrangerTowards(DE, char1, towards) {
+    isStrangerTowards(char1, towards) {
         const char1Ref = typeof char1 === "string" ? DE.characters[char1] : char1;
         const towardsRef = typeof towards === "string" ? DE.characters[towards] : towards;
         if (!char1Ref || !towardsRef) {
@@ -448,15 +449,15 @@ export const deEngineUtils = {
         const bond = DE.bonds[char1Ref.name].active.find(b => b.towards === towardsRef.name);
         return !bond || bond.stranger;
     },
-    isAttractedTo(DE, char1, potentialAttractiveChar2) {
-        return DE.utils.isAttractedToWithReasoning(DE, char1, potentialAttractiveChar2).attracted;
+    isAttractedTo(char1, potentialAttractiveChar2) {
+        return DE.utils.isAttractedToWithReasoning(char1, potentialAttractiveChar2).attracted;
     },
-    isAttractedToWithLevel(DE, char1, potentialAttractiveChar2) {
-        const attractionResult = DE.utils.isAttractedToWithReasoning(DE, char1, potentialAttractiveChar2);
+    isAttractedToWithLevel(char1, potentialAttractiveChar2) {
+        const attractionResult = DE.utils.isAttractedToWithReasoning(char1, potentialAttractiveChar2);
         return attractionResult.level;
     },
-    isAttractedToWithLevelAsNumber(DE, char1, potentialAttractiveChar2) {
-        const attractionResult = DE.utils.isAttractedToWithReasoning(DE, char1, potentialAttractiveChar2);
+    isAttractedToWithLevelAsNumber(char1, potentialAttractiveChar2) {
+        const attractionResult = DE.utils.isAttractedToWithReasoning(char1, potentialAttractiveChar2);
         switch (attractionResult.level) {
             case "slight":
                 return 1;
@@ -469,7 +470,7 @@ export const deEngineUtils = {
         }
     },
     //@ts-ignore typescript has no clue
-    isAttractedToWithReasoning(DE, char1, potentialAttractiveChar2) {
+    isAttractedToWithReasoning(char1, potentialAttractiveChar2) {
         const char1Ref = typeof char1 === "string" ? DE.characters[char1] : char1;
         const char2Ref = typeof potentialAttractiveChar2 === "string" ? DE.characters[potentialAttractiveChar2] : potentialAttractiveChar2;
         if (!char1Ref || !char2Ref) {
@@ -643,7 +644,7 @@ export const deEngineUtils = {
 
         return { level, attracted: true, reasoning: `${char1Ref.name} is romantically/sexually attracted to ${char2Ref.name}` };
     },
-    async shiftState(DE, character, stateName, shiftAmount, cap, causes) {
+    async shiftState(character, stateName, shiftAmount, cap, causes) {
         if (shiftAmount === 0) {
             console.warn(`Shift amount is 0 when trying to shift state ${stateName} on character ${character}, skipping.`);
             return;
@@ -783,7 +784,7 @@ export const deEngineUtils = {
             }
         }
     },
-    accumulateInCharacter(DE, character, accumulatorName, amount) {
+    accumulateInCharacter(character, accumulatorName, amount) {
         const characterRef = typeof character === "string" ? DE.characters[character] : character;
         if (!characterRef) {
             if (typeof character === "string") {
@@ -796,7 +797,7 @@ export const deEngineUtils = {
         characterRef.state[accumulatorName] = (characterRef.state[accumulatorName] || 0) + amount;
         return characterRef.state[accumulatorName];
     },
-    getAccumulatedValueInCharacter(DE, character, accumulatorName) {
+    getAccumulatedValueInCharacter(character, accumulatorName) {
         const characterRef = typeof character === "string" ? DE.characters[character] : character;
         if (!characterRef) {
             if (typeof character === "string") {
@@ -808,7 +809,7 @@ export const deEngineUtils = {
         }
         return characterRef.state[accumulatorName] || 0;
     },
-    addCauseToState(DE, character, stateName, cause) {
+    addCauseToState(character, stateName, cause) {
         const characterRef = typeof character === "string" ? DE.characters[character] : character;
         if (!characterRef) {
             if (typeof character === "string") {
@@ -841,7 +842,7 @@ export const deEngineUtils = {
             activeState.causes = [cause];
         }
     },
-    removeCauseFromState(DE, character, stateName, cause) {
+    removeCauseFromState(character, stateName, cause) {
         const characterRef = typeof character === "string" ? DE.characters[character] : character;
         if (!characterRef) {
             if (typeof character === "string") {
@@ -863,7 +864,7 @@ export const deEngineUtils = {
             }
         }
     },
-    removeCausantFromState(DE, character, stateName, causant, causantType) {
+    removeCausantFromState(character, stateName, causant, causantType) {
         const characterRef = typeof character === "string" ? DE.characters[character] : character;
         if (!characterRef) {
             if (typeof character === "string") {
@@ -882,7 +883,7 @@ export const deEngineUtils = {
             activeState.causes = activeState.causes.filter(c => !(c.causant && c.causant.name === causant && c.causant.type === causantType));
         }
     },
-    newTrigger(DE, character, trigger) {
+    newTrigger(character, trigger) {
         const characterRef = typeof character === "string" ? DE.characters[character] : character;
         if (!characterRef) {
             if (typeof character === "string") {
@@ -896,12 +897,12 @@ export const deEngineUtils = {
 
         characterRef.triggers.push(trigger);
     },
-    newTriggerInAllCharacters(DE, trigger) {
+    newTriggerInAllCharacters(trigger) {
         Object.values(DE.characters).forEach((character) => {
-            deEngineUtils.newTrigger(DE, character, trigger);
+            DE.utils.newTrigger(character, trigger);
         });
     },
-    charHasState(DE, character, stateName) {
+    charHasState(character, stateName) {
         const characterName = typeof character === "string" ? character : character.name;
         const characterState = DE.stateFor[characterName];
         if (!characterState) {
@@ -910,7 +911,7 @@ export const deEngineUtils = {
         }
         return characterState.states.some(s => s.state === stateName && s.intensity > 0);
     },
-    charIsRelievingState(DE, character, stateName) {
+    charIsRelievingState(character, stateName) {
         const characterName = typeof character === "string" ? character : character.name;
         const characterState = DE.stateFor[characterName];
         if (!characterState) {
@@ -925,9 +926,9 @@ export const deEngineUtils = {
     },
 
     templateUtils: {
-        breakDownCharactersAndCausesTemplate(DE, info) {
-            return async (DE, info2) => {
-                let base = typeof info.base === "string" ? info.base : info.base(DE, {
+        breakDownCharactersAndCausesTemplate(info) {
+            return async (info2) => {
+                let base = typeof info.base === "string" ? info.base : info.base({
                     char: info2.char,
                 });
 
@@ -957,7 +958,7 @@ export const deEngineUtils = {
                         const other = DE.characters[causant];
                         const otherFamilyRelationship = DE.characters[info2.char.name].familyTies[causant];
                         const otherRelationship = await getRelationship(DE, info2.char, other);
-                        const descriptionForThatCausant = typeof info.perOther === "string" ? info.perOther : await info.perOther(DE, {
+                        const descriptionForThatCausant = typeof info.perOther === "string" ? info.perOther : await info.perOther({
                             char: info2.char,
                             other: DE.characters[causant],
                             otherFamilyRelation: otherFamilyRelationship.relation,
@@ -970,7 +971,7 @@ export const deEngineUtils = {
 
                         if (causesPerCausant[causant].length > 1) {
                             base += `. Reasons: ${info2.char.name} `;
-                            base += DE.utils.templateUtils.formatAnd(DE, causesPerCausant[causant]);
+                            base += DE.utils.templateUtils.formatAnd(causesPerCausant[causant]);
                             base += `, by ${other.name}`;
                         }
                     }
@@ -999,7 +1000,7 @@ export const deEngineUtils = {
 
                     for (let i = 0; i < causants.length; i++) {
                         const causant = causants[i];
-                        const descriptionForThatCausant = typeof info.perObject === "string" ? info.perObject : await info.perObject(DE, {
+                        const descriptionForThatCausant = typeof info.perObject === "string" ? info.perObject : await info.perObject({
                             char: info2.char,
                             item: causant,
                         });
@@ -1010,7 +1011,7 @@ export const deEngineUtils = {
 
                         if (causesPerCausant[causant].length > 1) {
                             base += `. Reasons: ${info2.char.name} `;
-                            base += DE.utils.templateUtils.formatAnd(DE, causesPerCausant[causant]);
+                            base += DE.utils.templateUtils.formatAnd(causesPerCausant[causant]);
                             base += `, by/with the object: ${causant}`;
                         }
                     }
@@ -1019,22 +1020,22 @@ export const deEngineUtils = {
                 return base;
             }
         },
-        allWorldCharacters(DE) {
+        allWorldCharacters() {
             return Object.keys(DE.stateFor).filter((charName) => !DE.stateFor[charName].deadEnded).map(name => DE.characters[name]);
         },
-        allWorldCharactersButUser(DE) {
+        allWorldCharactersButUser() {
             return Object.keys(DE.stateFor).filter(name => name !== DE.user.name && !DE.stateFor[name].deadEnded).map(name => DE.characters[name]);
         },
-        currentLocation(DE) {
+        currentLocation() {
             return DE.world.currentLocation;
         },
-        currentLocationIsInVehicle(DE) {
+        currentLocationIsInVehicle() {
             return !!DE.world.locations[DE.world.currentLocation]?.vehicleType || false;
         },
-        currentLocationIsSafe(DE) {
+        currentLocationIsSafe() {
             return DE.world.locations[DE.world.currentLocation]?.isSafe || false;
         },
-        allCharactersAtLocation(DE, locationName) {
+        allCharactersAtLocation(locationName) {
             const result = [];
             for (const member of Object.keys(DE.stateFor)) {
                 if (DE.stateFor[member].location === locationName) {
@@ -1044,37 +1045,37 @@ export const deEngineUtils = {
             }
             return result;
         },
-        locationIsVehicle(DE, locationName) {
+        locationIsVehicle(locationName) {
             return !!DE.world.locations[locationName]?.vehicleType || false;
         },
-        locationIsSafe(DE, locationName) {
+        locationIsSafe(locationName) {
             return DE.world.locations[locationName]?.isSafe || false;
         },
-        getLastStateCausants(DE, char, stateName) {
+        getLastStateCausants(char, stateName) {
             return removeDuplicatesHelper(getCausantsHelperLocal(DE, char, stateName).map(c => c.name));
         },
-        getLastStateCharacterCausants(DE, char, stateName) {
+        getLastStateCharacterCausants(char, stateName) {
             return removeDuplicatesHelper(getCausantsHelperLocal(DE, char, stateName).filter(c => c.type === "character").map(c => c.name));
         },
-        getLastStateObjectCausants(DE, char, stateName) {
+        getLastStateObjectCausants(char, stateName) {
             return getCausantsHelperLocal(DE, char, stateName).filter(c => c.type === "object").map(c => c.name);
         },
-        getStates(DE, char) {
+        getStates(char) {
             return DE.stateFor[char.name].states.map(s => s.state);
         },
-        getStateIntensity(DE, char, stateName) {
+        getStateIntensity(char, stateName) {
             const stateObject = DE.stateFor[char.name].states.find(s => s.state === stateName);
             return stateObject ? stateObject.intensity : 0;
         },
-        hasState(DE, char, stateName) {
+        hasState(char, stateName) {
             return DE.stateFor[char.name].states.some(s => s.state === stateName);
         },
-        stateHasJustActivated(DE, char, stateName) {
+        stateHasJustActivated(char, stateName) {
             const stateObject = DE.stateFor[char.name].states.find(s => s.state === stateName);
             if (!stateObject) return false;
             return stateObject.contiguousStartActivationCyclesAgo === 0;
         },
-        getStateActivationCyclesAgo(DE, char, stateName) {
+        getStateActivationCyclesAgo(char, stateName) {
             const stateObject = DE.stateFor[char.name].states.find(s => s.state === stateName);
             if (!stateObject) {
                 const stateHistory = [...DE.stateFor[char.name].history, DE.stateFor[char.name]];
@@ -1091,19 +1092,19 @@ export const deEngineUtils = {
             }
             return stateObject.contiguousStartActivationCyclesAgo;
         },
-        getSocialGroup(DE, char, minBondLevel, maxBondLevel, min2BondLevel, max2BondLevel) {
+        getSocialGroup(char, minBondLevel, maxBondLevel, min2BondLevel, max2BondLevel) {
             return DE.bonds[char.name].active.filter(bond => {
                 return bond.bond >= minBondLevel && bond.bond <= maxBondLevel && bond.bond2 >= min2BondLevel && bond.bond2 <= max2BondLevel;
             }).map(bond => bond.towards);
         },
-        getPresentSocialGroup(DE, char, minBondLevel, maxBondLevel, min2BondLevel, max2BondLevel) {
+        getPresentSocialGroup(char, minBondLevel, maxBondLevel, min2BondLevel, max2BondLevel) {
             const currentLocation = DE.world.currentLocation;
             const socialGroup = DE.bonds[char.name].active.filter(bond => {
                 return bond.bond >= minBondLevel && bond.bond <= maxBondLevel && bond.bond2 >= min2BondLevel && bond.bond2 <= max2BondLevel;
             }).map(bond => bond.towards);
             return socialGroup.filter(memberName => DE.stateFor[memberName].location === currentLocation);
         },
-        getPresentConversingSocialGroup(DE, char, minBondLevel, maxBondLevel, min2BondLevel, max2BondLevel) {
+        getPresentConversingSocialGroup(char, minBondLevel, maxBondLevel, min2BondLevel, max2BondLevel) {
             if (minBondLevel === -100 && maxBondLevel === 100 && min2BondLevel === 0 && max2BondLevel === 100) {
                 const conversationId = DE.stateFor[char.name].conversationId;
                 if (!conversationId) return [];
@@ -1116,75 +1117,75 @@ export const deEngineUtils = {
             }).map(bond => bond.towards);
             return DE.conversations[conversationId].participants.filter(memberName => socialGroup.includes(memberName));
         },
-        getDifferenceOfPresentSocialGroup(DE, char, list) {
+        getDifferenceOfPresentSocialGroup(char, list) {
             const currentLocation = DE.world.currentLocation;
             const socialGroup = DE.bonds[char.name].active.map(bond => bond.towards);
             const presentSocialGroup = socialGroup.filter(memberName => DE.stateFor[memberName].location === currentLocation);
             return list.filter(name => !presentSocialGroup.includes(name));
         },
-        getExSocialGroup(DE, char, minBondLevel, maxBondLevel, min2BondLevel, max2BondLevel) {
+        getExSocialGroup(char, minBondLevel, maxBondLevel, min2BondLevel, max2BondLevel) {
             return DE.bonds[char.name].ex.filter(bond => {
                 return bond.bond >= minBondLevel && bond.bond <= maxBondLevel && bond.bond2 >= min2BondLevel && bond.bond2 <= max2BondLevel;
             }).map(bond => bond.towards);
         },
-        getCarryWeight(DE, char) {
+        getCarryWeight(char) {
             return getCharacterWeight(DE, char.name).weight;
         },
-        getCarryVolume(DE, char) {
+        getCarryVolume(char) {
             return getCharacterVolume(DE, char.name).volume;
         },
-        getPowerLevel(DE, char) {
+        getPowerLevel(char) {
             return getPowerLevelFromCharacter(char);
         },
-        getTier(DE, char) {
+        getTier(char) {
             return char.tier;
         },
-        getTierValue(DE, char) {
+        getTierValue(char) {
             return char.tierValue;
         },
-        isDead(DE, char) {
+        isDead(char) {
             return DE.stateFor[char.name].dead;
         },
-        getChar(DE, potentialCharacter) {
+        getChar(potentialCharacter) {
             return DE.characters[potentialCharacter] || null;
         },
-        isUser(DE, char) {
+        isUser(char) {
             return DE.user.name === char.name;
         },
-        isPresentMember(DE, char) {
+        isPresentMember(char) {
             const currentLocation = DE.world.currentLocation;
             return DE.stateFor[char.name].location === currentLocation;
         },
-        isNotPresent(DE, char) {
+        isNotPresent(char) {
             const currentLocation = DE.world.currentLocation;
             return DE.stateFor[char.name].location !== currentLocation;
         },
-        isGone(DE, char) {
+        isGone(char) {
             const exbonds = DE.bonds[char.name]?.ex;
             if (!exbonds) return false;
             return exbonds.length > 0;
         },
-        isInConversation(DE, char) {
+        isInConversation(char) {
             const conversationId = DE.stateFor[char.name].conversationId;
             return !!conversationId;
         },
-        isIndoors(DE, char) {
+        isIndoors(char) {
             const locationOfChar = DE.stateFor[char.name].location;
             const locationInfo = DE.world.locations[locationOfChar];
             return locationInfo ? locationInfo.isIndoors : false;
         },
-        isOutdoors(DE, char) {
+        isOutdoors(char) {
             const locationOfChar = DE.stateFor[char.name].location;
             const locationInfo = DE.world.locations[locationOfChar];
             return locationInfo ? !locationInfo.isIndoors : false;
         },
-        hasItem(DE, char, itemName) {
+        hasItem(char, itemName) {
             return DE.stateFor[char.name].carrying.find(item => item.name === itemName) !== undefined;
         },
-        getPosture(DE, char) {
+        getPosture(char) {
             return DE.stateFor[char.name].posture;
         },
-        lastSaw(DE, char) {
+        lastSaw(char) {
             const surroundingCharacters = getSurroundingCharacters(DE, char.name);
             if (surroundingCharacters.nonStrangers.length > 0) {
                 return DE.stateFor[char.name].location;
@@ -1198,7 +1199,7 @@ export const deEngineUtils = {
             }
             return "";
         },
-        hasNoIdeaWhereIs(DE, char) {
+        hasNoIdeaWhereIs(char) {
             const surroundingCharacters = getSurroundingCharacters(DE, char.name);
             if (surroundingCharacters.nonStrangers.length > 0) {
                 return false;
@@ -1221,11 +1222,11 @@ export const deEngineUtils = {
             }
             return false;
         },
-        doesNotKnow(DE, char) {
+        doesNotKnow(char) {
             const bonds = DE.bonds[char.name].active;
             return bonds.length === 0;
         },
-        isStrangersWith(DE, char, towardsChar) {
+        isStrangersWith(char, towardsChar) {
             const bonds = DE.bonds[char.name].active;
             for (const bond of bonds) {
                 if (bond.towards === towardsChar.name && bond.stranger) {
@@ -1234,7 +1235,7 @@ export const deEngineUtils = {
             }
             return false;
         },
-        getBondTowards(DE, char, towardsChar) {
+        getBondTowards(char, towardsChar) {
             const bonds = DE.bonds[char.name].active;
             for (const bond of bonds) {
                 if (bond.towards === towardsChar.name) {
@@ -1243,7 +1244,7 @@ export const deEngineUtils = {
             }
             return 0;
         },
-        getSecondaryBondTowards(DE, char, towardsChar) {
+        getSecondaryBondTowards(char, towardsChar) {
             const bonds = DE.bonds[char.name].active;
             for (const bond of bonds) {
                 if (bond.towards === towardsChar.name) {
@@ -1252,65 +1253,65 @@ export const deEngineUtils = {
             }
             return 0;
         },
-        isAtSameLocation(DE, char, char2) {
+        isAtSameLocation(char, char2) {
             return DE.stateFor[char.name].location === DE.stateFor[char2.name].location;
         },
-        isAtSameSlot(DE, char, char2) {
+        isAtSameSlot(char, char2) {
             return DE.stateFor[char.name].location === DE.stateFor[char2.name].location &&
                 DE.stateFor[char.name].locationSlot === DE.stateFor[char2.name].locationSlot;
         },
-        isHere(DE, char) {
+        isHere(char) {
             return DE.stateFor[char.name].location === DE.world.currentLocation;
         },
-        formatAnd(DE, list) {
+        formatAnd(list) {
             return formatAndHelper(list);
         },
-        formatCommaList(DE, list) {
+        formatCommaList(list) {
             if (!list || !Array.isArray(list)) return "";
             return list.join(', ');
         },
-        formatOr(DE, list) {
+        formatOr(list) {
             return formatOrHelper(list);
         },
-        formatVerbToBe(DE, chars) {
+        formatVerbToBe(chars) {
             return getPronounHelperLocal(DE, chars, "are", "is", "is", "is");
         },
-        formatPluralOrSingular(DE, chars, plural, singular) {
+        formatPluralOrSingular(chars, plural, singular) {
             if (chars.length === 1) return singular;
             return plural;
         },
-        formatObjectPronoun(DE, chars) {
+        formatObjectPronoun(chars) {
             return getPronounHelperLocal(DE, chars, "them", "him", "her", "them");
         },
-        formatPossessive(DE, chars) {
+        formatPossessive(chars) {
             return getPronounHelperLocal(DE, chars, "their", "his", "her", "their");
         },
-        formatReflexive(DE, chars) {
+        formatReflexive(chars) {
             return getPronounHelperLocal(DE, chars, "themselves", "himself", "herself", "themself");
         },
-        formatPronoun(DE, chars) {
+        formatPronoun(chars) {
             return getPronounHelperLocal(DE, chars, "they", "he", "she", "they");
         },
-        formatOwnershipPronoun(DE, chars) {
+        formatOwnershipPronoun(chars) {
             return getPronounHelperLocal(DE, chars, "theirs", "his", "hers", "theirs");
         },
-        getRandomSeedFromString(DE, optionsNumber, inputString) {
+        getRandomSeedFromString(optionsNumber, inputString) {
             return generateIntSeedFromString(optionsNumber, inputString);
         },
-        getRandomSeedFromTime(DE, optionsNumber) {
+        getRandomSeedFromTime(optionsNumber) {
             const currentTimeString = DE.currentTime.time.toString();
             return generateIntSeedFromString(optionsNumber, currentTimeString);
         },
-        getRandomOption(DE, options) {
+        getRandomOption(options) {
             const result = weightedRandomByLikelihood(options.map(option => ({ item: option, likelihood: 1 })), generateIntSeedFromString(1000000, DE.currentTime.time.toString()));
             return result ? result.item : options[0];
         },
-        getRandomOptionFixedCharacter(DE, char, options) {
+        getRandomOptionFixedCharacter(char, options) {
             const result = weightedRandomByLikelihood(options.map(option => ({ item: option, likelihood: 1 })), generateIntSeedFromString(1000000, char.name));
             return result ? result.item : options[0];
         },
     }
-};
+});
 
 /**
  * 
@@ -1377,7 +1378,7 @@ async function onStateTriggeredOnCharacter(deObject, character, stateName) {
 
     // if the new state triggered is from the user, make a message about it
     if (deObject.user && deObject.user.name === character.name) {
-        let stateDescriptionText = typeof characterStateDescription.general === "string" ? characterStateDescription.general : await characterStateDescription.general(deObject, {
+        let stateDescriptionText = typeof characterStateDescription.general === "string" ? characterStateDescription.general : await characterStateDescription.general({
             char: character,
             causes: characterStateInfo.causes,
         });
@@ -1465,7 +1466,7 @@ async function onStateTriggeredOnCharacter(deObject, character, stateName) {
 
     // DETERMINE if we activated any state with a dead-end trigger
     const deadEndPotential = !characterStateDescription.triggersDeadEnd ? "" : (typeof characterStateDescription.triggersDeadEnd === "string" ? characterStateDescription.triggersDeadEnd :
-        (await characterStateDescription.triggersDeadEnd(deObject, {
+        (await characterStateDescription.triggersDeadEnd({
             char: character,
             causes: characterStateInfo.causes,
         })).trim());
@@ -1607,7 +1608,7 @@ export async function onStateRelievedOnCharacter(deObject, character, stateName)
         let stateDescriptionText = ".\n";
 
         if (characterStateDescription.relieving && stateDescriptionText) {
-            stateDescriptionText += typeof characterStateDescription.relieving === "string" ? characterStateDescription.relieving : (await characterStateDescription.relieving(deObject, {
+            stateDescriptionText += typeof characterStateDescription.relieving === "string" ? characterStateDescription.relieving : (await characterStateDescription.relieving({
                 char: character,
                 causes: characterStateInfo.causes,
             })).trim();

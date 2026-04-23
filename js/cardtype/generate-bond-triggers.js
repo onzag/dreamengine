@@ -43,7 +43,7 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
     if (!hasSpecialComment(card.imports, "basic-bond-questions-import")) {
         insertSpecialComment(card.imports, "basic-bond-questions-import");
         card.imports.push(`const basicBondQuestions = await importScript("@bond-systems", "basic-bond-questions");`);
-        initializeSection.body.push(`basicBondQuestions.addBasicBondQuestions(DE, DE.characters[${JSON.stringify(card.config.name)}]);`);
+        initializeSection.body.push(`basicBondQuestions.addBasicBondQuestions(DE.characters[${JSON.stringify(card.config.name)}]);`);
     }
 
     const generator = inferenceAdapter.runQuestioningCustomAgentOn("cardtype-gen", {
@@ -217,11 +217,11 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
             generatedQuestions.push(question);
             console.log("Generated question:", question);
 
-            initializeSection.body.push(`DE.utils.newTrigger(DE, ${JSON.stringify(name)}, {`);
+            initializeSection.body.push(`DE.utils.newTrigger(${JSON.stringify(name)}, {`);
             initializeSection.body.push(`type: "yes_no",`);
             initializeSection.body.push(`askPer: "conversing_character",`);
             initializeSection.body.push(condition);
-            initializeSection.body.push(`question: (DE, info) => ${toTemplateLiteral(question)},`);
+            initializeSection.body.push(`question: (info) => ${toTemplateLiteral(question)},`);
             initializeSection.body.push(`onValue: (answer, char, other) => {`);
 
             const causeValue = await generator.next({
@@ -264,7 +264,7 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
             if (severeAndExtremeWithUndo) {
                 const bondShiftId = `${id}-severe-shift-${i}`;
                 initializeSection.body.push(`const bondShiftId = ${JSON.stringify(bondShiftId)};`);
-                initializeSection.body.push(`const bondShiftAmount = DE.utils.determineExtremeHostileShift(DE, char, other);`);
+                initializeSection.body.push(`const bondShiftAmount = DE.utils.determineExtremeHostileShift(char, other);`);
 
                 const yesNoQuestionClearMisunderstanding = await generator.next({
                     maxCharacters: 5000,
@@ -298,7 +298,7 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
                     }
                 }
                 
-                initializeSection.body.push(`const bondShiftAmount = DE.utils.determineExtremeSuddenHostileShift(DE, char, other);`);
+                initializeSection.body.push(`const bondShiftAmount = DE.utils.determineExtremeSuddenHostileShift(char, other);`);
                 initializeSection.body.push(`const bondShiftUndoQuestion = ${toTemplateLiteralNoInfo(altQuestion)})`);
             }
 
@@ -333,7 +333,7 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
             }
 
             for (const emotionalState of parsedEmotionalStates) {
-                initializeSection.body.push(`DE.utils.shiftState(DE, char, ${JSON.stringify(emotionalState)}, ${shiftStateByOverride + 1}, ${shiftStateByOverride + 2}, [{causant: {name: other.name, type: "character"}, description: ${JSON.stringify(description)}}}]);`);
+                initializeSection.body.push(`DE.utils.shiftState(char, ${JSON.stringify(emotionalState)}, ${shiftStateByOverride + 1}, ${shiftStateByOverride + 2}, [{causant: {name: other.name, type: "character"}, description: ${JSON.stringify(description)}}}]);`);
             }
 
             if (altCondition && altYesCode && altConsidering) {
@@ -364,7 +364,7 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
                 }
 
                 for (const emotionalState of parsedEmotionalStates2) {
-                    initializeSection.body.push(`DE.utils.shiftState(DE, char, ${JSON.stringify(emotionalState)}, ${shiftStateByOverride + 1}, ${shiftStateByOverride + 2}, [{causant: {name: other.name, type: "character"}, description: ${JSON.stringify(description)}}}]);`);
+                    initializeSection.body.push(`DE.utils.shiftState(char, ${JSON.stringify(emotionalState)}, ${shiftStateByOverride + 1}, ${shiftStateByOverride + 2}, [{causant: {name: other.name, type: "character"}, description: ${JSON.stringify(description)}}}]);`);
                 }
 
                 initializeSection.body.push(`}`);
@@ -398,7 +398,7 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
         "this can include anyone from strangers, enemies, aquitances, friends, close friends, to best friends towards each other",
         "it was done by another character",
         `runIf: (char, other) => true,`,
-        `DE.utils.shiftBond(DE, char, other, 1, 0);`,
+        `DE.utils.shiftBond(char, other, 1, 0);`,
     );
 
     initializeSection.body.push(`// Yes/no questions about disliking in all relationship levels`);
@@ -410,7 +410,7 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
         "this can include anyone from strangers, enemies, aquitances, friends, close friends, to best friends towards each other",
         "it was done by another character",
         `runIf: (char, other) => true,`,
-        `DE.utils.shiftBond(DE, char, other, -1, 0);`,
+        `DE.utils.shiftBond(char, other, -1, 0);`,
     );
 
     // yes/no questions that would make the character really like or dislike another character when they are strangers that just met
@@ -423,8 +423,8 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
         "like another character when they are strangers",
         "they are strangers towards each other",
         "it was done by a stranger",
-        `runIf: (char, other) => DE.utils.isStrangerTowards(DE, char, other),`,
-        `DE.utils.shiftBond(DE, char, other, 1, 0);`,
+        `runIf: (char, other) => DE.utils.isStrangerTowards(char, other),`,
+        `DE.utils.shiftBond(char, other, 1, 0);`,
     );
 
     initializeSection.body.push(`// Yes/no questions about disliking strangers`);
@@ -436,8 +436,8 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
         "dislike another character when they are strangers",
         "they are strangers towards each other",
         "it was done by a stranger",
-        `runIf: (char, other) => DE.utils.isStrangerTowards(DE, char, other),`,
-        `DE.utils.shiftBond(DE, char, other, -1, -1);`,
+        `runIf: (char, other) => DE.utils.isStrangerTowards(char, other),`,
+        `DE.utils.shiftBond(char, other, -1, -1);`,
     );
 
     let isLoveAtFirstSightValue = false;
@@ -481,8 +481,8 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
             "feel love (romantic and sexual) at first sight towards another when they are strangers",
             "they are strangers towards each other but " + name + " can feel love at first sight",
             "it was love at first sight with a stranger",
-            `runIf: (char, other) => DE.utils.isStrangerTowards(DE, char, other) && DE.utils.isAttractedTo(DE, char, other),`,
-            `DE.utils.shiftBond(DE, char, other, 1, DE.utils.isAttractedToWithLevelAsNumber(DE, char, other));`,
+            `runIf: (char, other) => DE.utils.isStrangerTowards(char, other) && DE.utils.isAttractedTo(char, other),`,
+            `DE.utils.shiftBond(char, other, 1, DE.utils.isAttractedToWithLevelAsNumber(char, other));`,
         );
     }
 
@@ -495,8 +495,8 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
         "feel hate at first sight towards another when they are strangers",
         "they are strangers towards each other",
         "it was hate at first sight with a stranger",
-        `runIf: (char, other) => DE.utils.isStrangerTowards(DE, char, other),`,
-        `DE.utils.shiftBond(DE, char, other, -3, -1);`,
+        `runIf: (char, other) => DE.utils.isStrangerTowards(char, other),`,
+        `DE.utils.shiftBond(char, other, -3, -1);`,
     );
 
     // yes/no questions that would make the character really like or dislike another character when they are acquaintances
@@ -509,8 +509,8 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
         "like another character when they are acquaintances",
         "they are acquaintances but not close friends towards each other",
         "it was done by an aquaintance showcasing friendship potential",
-        `runIf: (char, other) => DE.utils.isNotStrangersTowards(DE, char, other) && DE.utils.isAcquaintanceOrWorseTowards(DE, char, other),`,
-        `DE.utils.shiftBond(DE, char, other, 1, 0);`,
+        `runIf: (char, other) => DE.utils.isNotStrangersTowards(char, other) && DE.utils.isAcquaintanceOrWorseTowards(char, other),`,
+        `DE.utils.shiftBond(char, other, 1, 0);`,
     );
 
     doNotIncludeQuestions = dislikeAtAnyLevelQuestions;
@@ -521,8 +521,8 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
         "dislike another character when they are acquaintances",
         "they are acquaintances but not close friends towards each other",
         "it was done by an aquaintance but it would only be acceptable if it was a close friend",
-        `runIf: (char, other) => DE.utils.isNotStrangersTowards(DE, char, other) && DE.utils.isAcquaintanceOrWorseTowards(DE, char, other),`,
-        `DE.utils.shiftBond(DE, char, other, -1, -1);`,
+        `runIf: (char, other) => DE.utils.isNotStrangersTowards(char, other) && DE.utils.isAcquaintanceOrWorseTowards(char, other),`,
+        `DE.utils.shiftBond(char, other, -1, -1);`,
     );
 
     // idea create bond shifts with markers that can be undone, eg. did {{other}} just kill somebody?... and then the marker gets created, and the question did {{other}} provide a plausible reason for "killing someone"?
@@ -535,8 +535,8 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
         "feel a sudden intense hatred towards another and become sworn enemies instantly due to extreme acts",
         "this can include anyone at any relationship level; the act must be severe enough to warrant instant sworn enmity such as killing, abuse, torture, or destruction",
         "it was done by another character and it is an extreme unforgivable act that triggers instant sworn enmity",
-        `runIf: (char, other) => !DE.utils.hasBondShiftWithId(DE, char, other, bondShiftId),`,
-        `DE.utils.shiftBondWithUndo(DE, char, other, bondShiftAmount, 0, 0.8, bondShiftId, bondShiftUndoQuestion),`,
+        `runIf: (char, other) => !DE.utils.hasBondShiftWithId(char, other, bondShiftId),`,
+        `DE.utils.shiftBondWithUndo(char, other, bondShiftAmount, 0, 0.8, bondShiftId, bondShiftUndoQuestion),`,
 
         undefined,
         undefined,
@@ -555,7 +555,7 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
         "this can include anyone at any relationship level",
         "it was done by another character that is clearing out a mild misunderstanding",
         `runIf: (char, other) => true,`,
-        `DE.utils.shiftBond(DE, char, other, 2, 0);`,
+        `DE.utils.shiftBond(char, other, 2, 0);`,
     );
 
     // STRONG POSITIVE BONDS
@@ -571,10 +571,10 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
         "they are close friends towards each other and the behaviour is only acceptable because of that friendship bond",
         "it was done by a close friend and they find it acceptable so they shouldn't get angry or hostile",
         `runIf: (char, other) => true,`,
-        `DE.utils.shiftBond(DE, char, other, 1, 0);`,
+        `DE.utils.shiftBond(char, other, 1, 0);`,
 
-        `!DE.utils.isFriendsOrBetterWith(DE, char, other)`,
-        `DE.utils.shiftBond(DE, char, other, -0.5, 0);`,
+        `!DE.utils.isFriendsOrBetterWith(char, other)`,
+        `DE.utils.shiftBond(char, other, -0.5, 0);`,
         "they are NOT close friends and " + name + " finds the behaviour/action unacceptable, invasive, and inappropriate",
     );
 
@@ -589,11 +589,11 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
         "this can include anyone from strangers, enemies, aquitances, friends, close friends, to best friends towards each other",
         "they are already friends",
         // TODO this isFriendsOrBetter must be used something from the bond system to know what is the graduation
-        `runIf: (char, other) => DE.utils.isFriendsOrBetterWith(DE, char, other),`,
-        `DE.utils.shiftBond(DE, char, other, 1, 0);`,
+        `runIf: (char, other) => DE.utils.isFriendsOrBetterWith(char, other),`,
+        `DE.utils.shiftBond(char, other, 1, 0);`,
 
-        `!DE.utils.isFriendsOrBetterWith(DE, char, other)`,
-        `DE.utils.shiftBond(DE, char, other, -0.5, 0);`,
+        `!DE.utils.isFriendsOrBetterWith(char, other)`,
+        `DE.utils.shiftBond(char, other, -0.5, 0);`,
         "they are NOT close friends and " + name + " finds the behaviour/action unacceptable, invasive, and inappropriate",
     );
 
@@ -665,7 +665,8 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
                 romanticBondValue = levelsOfRomanticBond[card.config.attractionEasyOrDifficult];
             }
 
-            generalConditionForAttraction += `(basicConditionsForAttractionFn(DE, char, other) && DE.utils.isSecondBondEqOrMoreThan(DE, char, other, ${romanticBondValue}))`;
+            // TODO basicConditionsForAttractionFn is not defined anywhere
+            generalConditionForAttraction += `(basicConditionsForAttractionFn(char, other) && DE.utils.isSecondBondEqOrMoreThan(char, other, ${romanticBondValue}))`;
             romanticBondValueMale = romanticBondValue;
             romanticBondValueFemale = romanticBondValue;
         } else {
@@ -722,7 +723,7 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
                     romanticBondValueFemale = romanticBondValue;
                 }
 
-                generalConditionForAttraction += `(DE.utils.${attractionToFn[attraction]}(DE, other) &&  basicConditionsForAttractionFn(DE, char, other) && DE.utils.isSecondBondEqOrMoreThan(DE, char, other, ${romanticBondValue}))`;
+                generalConditionForAttraction += `(DE.utils.${attractionToFn[attraction]}(other) &&  basicConditionsForAttractionFn(char, other) && DE.utils.isSecondBondEqOrMoreThan(char, other, ${romanticBondValue}))`;
             }
         }
 
@@ -735,10 +736,10 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
             "they are romantically and sexually attracted towards each other with strong sexual tension",
             "it was done by other character performed a sexual or intimate act that " + name + " finds arousing and pleasurable",
             `runIf: (char, other) => true,`,
-            `DE.utils.shiftBond(DE, char, other, 2, 3);`,
+            `DE.utils.shiftBond(char, other, 2, 3);`,
 
             `!(${generalConditionForAttraction})`,
-            `DE.utils.shiftBond(DE, char, other, -3, 0);`,
+            `DE.utils.shiftBond(char, other, -3, 0);`,
             "they are not that close for this to be acceptable and " + name + " would find it unacceptable/inappropiate",
         );
 
@@ -751,10 +752,10 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
             "they are romantically and sexually attracted towards each other with strong sexual tension but there are certain activities that " + name + " finds repulsive",
             "it was done by other character performed a sexual or intimate act that " + name + " finds repulsive and disgusting",
             `runIf: (char, other) => true,`,
-            `DE.utils.shiftBond(DE, char, other, 0, -3);`,
+            `DE.utils.shiftBond(char, other, 0, -3);`,
 
             `!(${generalConditionForAttraction})`,
-            `DE.utils.shiftBond(DE, char, other, -5, -2.5);`,
+            `DE.utils.shiftBond(char, other, -5, -2.5);`,
             "they are not that close for this to be acceptable and " + name + " would find it unacceptable/inappropiate",
         );
 
@@ -767,10 +768,10 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
             "they are romantically and sexually attracted towards each other with strong sexual tension",
             "it was done by other character performed a sexual or intimate act that " + name + " finds arousing and pleasurable",
             `runIf: (char, other) => true,`,
-            `DE.utils.shiftBond(DE, char, other, 2, 3);`,
+            `DE.utils.shiftBond(char, other, 2, 3);`,
 
             `!(${generalConditionForAttraction})`,
-            `DE.utils.shiftBond(DE, char, other, -3, 0);`,
+            `DE.utils.shiftBond(char, other, -3, 0);`,
             "they are not that close for this to be acceptable and " + name + " would find it unacceptable/inappropiate",
         );
 
@@ -801,10 +802,10 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
                 initializeSection.body.push(`type: "yes_no",`);
                 initializeSection.body.push(`askPer: "conversing_character",`);
                 initializeSection.body.push(`runIf: (char, other) => !(${generalConditionForAttraction}),`);
-                initializeSection.body.push(`question: DE.utils.newHandlebarsTemplate(DE, ${JSON.stringify(question)}),`);
+                initializeSection.body.push(`question: (info) => ${toTemplateLiteral(question)},`);
                 initializeSection.body.push(`onValue: (answer, char, other) => {`);
                 initializeSection.body.push(`if (answer) {`);
-                initializeSection.body.push(`DE.utils.shiftBond(DE, char, other, -5, -2.5);`);
+                initializeSection.body.push(`DE.utils.shiftBond(char, other, -5, -2.5);`);
 
                 const listOfEmotions = await generator.next({
                     maxCharacters: 5,
@@ -824,7 +825,7 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
                 const parsedEmotionalStates = parseListFromGrammarResponse(listOfEmotions.value).map(emState => emState[0].toUpperCase() + emState.slice(1).toLowerCase()); // capitalize first letter to match the emotional states format
 
                 for (const emotionalState of parsedEmotionalStates) {
-                    initializeSection.body.push(`DE.utils.shiftState(DE, char, ${JSON.stringify(emotionalState)}, 2, 4, [{name: other?.name, type: "character"}], [{characterCausant: other?.name, description: ${JSON.stringify(descriptionsForQuestions[i])}}]);`);
+                    initializeSection.body.push(`DE.utils.shiftState(char, ${JSON.stringify(emotionalState)}, 2, 4, [{name: other?.name, type: "character"}], [{characterCausant: other?.name, description: ${JSON.stringify(descriptionsForQuestions[i])}}]);`);
                 }
 
                 initializeSection.body.push(`}`);
@@ -843,9 +844,9 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
                 continue; // skip ambiguous attraction
             }
 
-            let conditionForAttraction = `DE.utils.${attractionToFn[attraction]}(DE, other) && basicConditionsForAttractionFn(DE, char, other)`;
+            let conditionForAttraction = `DE.utils.${attractionToFn[attraction]}(other) && basicConditionsForAttractionFn(char, other)`;
             if (card.config.attractions.includes("ambiguous")) {
-                conditionForAttraction = `(DE.utils.${attractionToFn[attraction]}(DE, other) || DE.utils.isAmbiguous(DE, other)) && basicConditionsForAttractionFn(DE, char, other)`;
+                conditionForAttraction = `(DE.utils.${attractionToFn[attraction]}(other) || DE.utils.isAmbiguous(other)) && basicConditionsForAttractionFn(char, other)`;
             }
 
             await askYesNo(
@@ -867,7 +868,7 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
                 "there is sexual tension and romantic chemistry building between them",
                 "it was done by other " + attraction + " character did something that creates sexual tension or romantic chemistry with " + name + ", so it should be a positive and arousing experience for " + name,
                 `runIf: (char, other) => ${conditionForAttraction},`,
-                `DE.utils.shiftBond(DE, char, other, 0.2, 2.5);`,
+                `DE.utils.shiftBond(char, other, 0.2, 2.5);`,
             );
 
             await askYesNo(
@@ -878,7 +879,7 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
                 "they have a good friendship but " + name + " is losing romantic/sexual interest specifically",
                 "it was done by other " + attraction + " character did or displayed something that is a romantic/sexual turn-off but would not affect a friendship",
                 `runIf: (char, other) => ${conditionForAttraction},`,
-                `DE.utils.shiftBond(DE, char, other, 0, -2.5);`,
+                `DE.utils.shiftBond(char, other, 0, -2.5);`,
             );
 
             await askYesNo(
@@ -889,7 +890,7 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
                 "they may still be friends but " + name + " can never see them romantically or sexually again",
                 "it was done by other " + attraction + " character revealed or displayed something that is an absolute romantic/sexual dealbreaker for " + name + " but does not affect friendship",
                 `runIf: (char, other) => ${conditionForAttraction},`,
-                `DE.utils.shiftBond(DE, char, other, 0, -2.5);`,
+                `DE.utils.shiftBond(char, other, 0, -2.5);`,
             );
 
             overrideWholeReasoning = true;
@@ -901,10 +902,10 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
                 "they are romantically and sexually attracted towards each other with strong sexual tension",
                 "it was done by other " + attraction + " character performed a sexual or intimate act that " + name + " finds arousing and pleasurable",
                 `runIf: (char, other) => true,`,
-                `DE.utils.shiftBond(DE, char, other, 2, 3);`,
+                `DE.utils.shiftBond(char, other, 2, 3);`,
 
-                `DE.utils.isBondLessThan(DE, char, other, ${attraction === "male" ? romanticBondValueMale : romanticBondValueFemale})`,
-                `DE.utils.shiftBond(DE, char, other, -3, 0);`,
+                `DE.utils.isBondLessThan(char, other, ${attraction === "male" ? romanticBondValueMale : romanticBondValueFemale})`,
+                `DE.utils.shiftBond(char, other, -3, 0);`,
                 "they are not that close for this to be acceptable and " + name + " would find it unacceptable/inappropiate",
             );
         }

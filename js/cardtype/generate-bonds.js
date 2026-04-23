@@ -1190,37 +1190,37 @@ export async function generateBonds(engine, card, guider, autosave) {
         });
 
         const strangerSectionDescription = insertSection(strangerSectionBase.body, "description", (s) => {
-            s.head.push(`description: (DE, info) => {`);
+            s.head.push(`description: (info) => {`);
             s.foot.push(`},`);
         });
 
         const strangerSectionOpenToAffection = insertSection(strangerSectionBase.body, "openToAffection", (s) => {
-            s.head.push(`openToAffection: (DE, char, other) => {`);
+            s.head.push(`openToAffection: (char, other) => {`);
             s.foot.push(`},`);
         });
 
         const strangerSectionOpenToIntimateAffection = insertSection(strangerSectionBase.body, "openToIntimateAffection", (s) => {
-            s.head.push(`openToIntimateAffection: (DE, char, other) => {`);
+            s.head.push(`openToIntimateAffection: (char, other) => {`);
             s.foot.push(`},`);
         });
 
         const strangerSectionOpenToSex = insertSection(strangerSectionBase.body, "openToSex", (s) => {
-            s.head.push(`openToSex: (DE, char, other) => {`);
+            s.head.push(`openToSex: (char, other) => {`);
             s.foot.push(`},`);
         });
 
         const strangerSectionProneToInitiatingAffection = insertSection(strangerSectionBase.body, "proneToInitiatingAffection", (s) => {
-            s.head.push(`proneToInitiatingAffection: (DE, char, other) => {`);
+            s.head.push(`proneToInitiatingAffection: (char, other) => {`);
             s.foot.push(`},`);
         });
 
         const strangerSectionProneToInitiatingIntimateAffection = insertSection(strangerSectionBase.body, "proneToInitiatingIntimateAffection", (s) => {
-            s.head.push(`proneToInitiatingIntimateAffection: (DE, char, other) => {`);
+            s.head.push(`proneToInitiatingIntimateAffection: (char, other) => {`);
             s.foot.push(`},`);
         });
 
         const strangerSectionProneToInitiatingSex = insertSection(strangerSectionBase.body, "proneToInitiatingSex", (s) => {
-            s.head.push(`proneToInitiatingSex: (DE, char, other) => {`);
+            s.head.push(`proneToInitiatingSex: (char, other) => {`);
             s.foot.push(`},`);
         });
 

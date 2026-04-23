@@ -618,7 +618,7 @@ export async function getExternalDescriptionOfCharacter(deObject, characterName,
                 if (typeof stateInfo.relievingGeneralCharacterExternalDescriptionInjection === "string") {
                     toAdd = stateInfo.relievingGeneralCharacterExternalDescriptionInjection;
                 } else {
-                    toAdd = await stateInfo.relievingGeneralCharacterExternalDescriptionInjection(deObject, {
+                    toAdd = await stateInfo.relievingGeneralCharacterExternalDescriptionInjection({
                         char: character,
                         causes: state.causes,
                     });
@@ -629,7 +629,7 @@ export async function getExternalDescriptionOfCharacter(deObject, characterName,
                 if (typeof stateInfo.generalCharacterExternalDescriptionInjection === "string") {
                     toAdd = stateInfo.generalCharacterExternalDescriptionInjection;
                 } else {
-                    toAdd = await stateInfo.generalCharacterExternalDescriptionInjection(deObject, {
+                    toAdd = await stateInfo.generalCharacterExternalDescriptionInjection({
                         char: character,
                         causes: state.causes,
                     });
@@ -665,7 +665,7 @@ export async function getExternalDescriptionOfCharacter(deObject, characterName,
         }
     }
     if (characterState.wearing.length > 0) {
-        finalDescription += " Wearing " + deObject.functions.format_and(deObject, null, characterState.wearing.map(item => item.amount >= 2 ? item.amount + " of " + item.description + " (" + getWearableFitment(deObject, item, characterName).fitment + ")" : item.description + " (" + getWearableFitment(deObject, item, characterName).fitment + ")")) + ".";
+        finalDescription += " Wearing " + deObject.utils.templateUtils.formatAnd(characterState.wearing.map(item => item.amount >= 2 ? item.amount + " of " + item.description + " (" + getWearableFitment(deObject, item, characterName).fitment + ")" : item.description + " (" + getWearableFitment(deObject, item, characterName).fitment + ")")) + ".";
     } else {
         finalDescription += " Completely naked, without clothes or accessories.";
     }
@@ -674,7 +674,7 @@ export async function getExternalDescriptionOfCharacter(deObject, characterName,
 
     if (!onlyBasics) {
         if (characterState.carrying.length > 0) {
-            finalDescription += " Carrying " + deObject.functions.format_and(deObject, null, characterState.carrying.map(item => item.amount >= 2 ? item.amount + " of " + item.description : item.description)) + ".";
+            finalDescription += " Carrying " + deObject.utils.templateUtils.formatAnd(characterState.carrying.map(item => item.amount >= 2 ? item.amount + " of " + item.description : item.description)) + ".";
         } else {
             finalDescription += " Not carrying any items.";
         }
@@ -685,7 +685,7 @@ export async function getExternalDescriptionOfCharacter(deObject, characterName,
 
         const carriedCharacters = getListOfCarriedCharactersByCharacter(deObject, characterName);
         if (carriedCharacters.length > 0) {
-            finalDescription += ` Carrying characters: ` + deObject.functions.format_and(deObject, null, carriedCharacters.map((v) => v.carriedName)) + ".";
+            finalDescription += ` Carrying characters: ` + deObject.utils.templateUtils.formatAnd(carriedCharacters.map((v) => v.carriedName)) + ".";
         }
     }
 
@@ -894,13 +894,13 @@ export async function getCharacterCanSee(deObject, characterName) {
             tags.push(`too big for ${character.name} to carry`);
         } else if (character.carryingCapacityKg < realItemWeight.singularWeight) {
             if (realItemWeight.allCharactersInvolved.length) {
-                tags.push(`too heavy for ${character.name} (contents include ${deObject.functions.format_and(deObject, null, realItemWeight.allCharactersInvolved)})`);
+                tags.push(`too heavy for ${character.name} (contents include ${deObject.utils.templateUtils.formatAnd(realItemWeight.allCharactersInvolved)})`);
             } else {
                 tags.push(`too heavy for ${character.name} (due to contents)`);
             }
         } else if (character.carryingCapacityLiters < realItemVolume.singularVolume) {
             if (realItemVolume.allCharactersInvolved.length) {
-                tags.push(`too big for ${character.name} to carry (contents include ${deObject.functions.format_and(deObject, null, realItemVolume.allCharactersInvolved)})`);
+                tags.push(`too big for ${character.name} to carry (contents include ${deObject.utils.templateUtils.formatAnd(realItemVolume.allCharactersInvolved)})`);
             } else {
                 tags.push(`too big for ${character.name} to carry (due to contents)`);
             }
@@ -1390,12 +1390,12 @@ export async function getInternalDescriptionOfCharacter(deObject, characterName)
         throw new Error(`Character state for ${characterName} not found.`);
     }
 
-    let general = typeof character.general === "string" ? character.general : await character.general(deObject, {
+    let general = typeof character.general === "string" ? character.general : await character.general({
         char: character,
     });
 
     for (const injectable of Object.values(character.generalCharacterDescriptionInjection)) {
-        const injectableV = typeof injectable === "string" ? injectable : await injectable(deObject, {
+        const injectableV = typeof injectable === "string" ? injectable : await injectable({
             char: character,
         });
         if (injectableV) {
@@ -1507,7 +1507,7 @@ export async function getInternalDescriptionOfCharacter(deObject, characterName)
 
             const generalDescriptionOrigin = !state.relieving ? stateInfo.general : stateInfo.generalAfterRelief;
             if (generalDescriptionOrigin) {
-                const generalDescription = typeof generalDescriptionOrigin === "string" ? generalDescriptionOrigin : await generalDescriptionOrigin(deObject, {
+                const generalDescription = typeof generalDescriptionOrigin === "string" ? generalDescriptionOrigin : await generalDescriptionOrigin({
                     char: character,
                     causes: state.causes,
                 });
@@ -1548,7 +1548,7 @@ export async function getInternalDescriptionOfCharacter(deObject, characterName)
             }
 
             if (stateInfo.relievingGeneralCharacterDescriptionInjection) {
-                const relievingInjection = typeof stateInfo.relievingGeneralCharacterDescriptionInjection === "string" ? stateInfo.relievingGeneralCharacterDescriptionInjection : (await stateInfo.relievingGeneralCharacterDescriptionInjection(deObject, {
+                const relievingInjection = typeof stateInfo.relievingGeneralCharacterDescriptionInjection === "string" ? stateInfo.relievingGeneralCharacterDescriptionInjection : (await stateInfo.relievingGeneralCharacterDescriptionInjection({
                     char: character,
                     causes: state.causes,
                 })).trim();
@@ -1573,7 +1573,7 @@ export async function getInternalDescriptionOfCharacter(deObject, characterName)
             }
 
             if (stateInfo.generalCharacterDescriptionInjection) {
-                const injection = typeof stateInfo.generalCharacterDescriptionInjection === "string" ? stateInfo.generalCharacterDescriptionInjection : (await stateInfo.generalCharacterDescriptionInjection(deObject, {
+                const injection = typeof stateInfo.generalCharacterDescriptionInjection === "string" ? stateInfo.generalCharacterDescriptionInjection : (await stateInfo.generalCharacterDescriptionInjection({
                     char: character,
                     causes: state.causes,
                 })).trim();
@@ -1612,7 +1612,7 @@ export async function getInternalDescriptionOfCharacter(deObject, characterName)
         const familyRelationship = getFamilyBondRelation(character, otherCharacter);
         const generalRelationship = await getRelationship(deObject, character, otherCharacter);
         if (bondDeclaration) {
-            let result = typeof bondDeclaration.description === "string" ? bondDeclaration.description : (await bondDeclaration.description(deObject, {
+            let result = typeof bondDeclaration.description === "string" ? bondDeclaration.description : (await bondDeclaration.description({
                 char: character,
                 other: deObject.characters[activeBond.towards],
                 otherFamilyRelation: familyRelationship,
@@ -1624,7 +1624,7 @@ export async function getInternalDescriptionOfCharacter(deObject, characterName)
                 } else if (!result.endsWith(" ")) {
                     result += " ";
                 }
-                result += typeof bondDeclaration.bondAdditionalDescription === "string" ? bondDeclaration.bondAdditionalDescription : (await bondDeclaration.bondAdditionalDescription(deObject, {
+                result += typeof bondDeclaration.bondAdditionalDescription === "string" ? bondDeclaration.bondAdditionalDescription : (await bondDeclaration.bondAdditionalDescription({
                     char: character,
                     other: deObject.characters[activeBond.towards],
                     otherFamilyRelation: familyRelationship,
@@ -1646,13 +1646,13 @@ export async function getInternalDescriptionOfCharacter(deObject, characterName)
                 result += `\n\n${activeBond.towards} is ${characterName}'s ${familyRelationship}.`;
             }
 
-            const isAttractive = deObject.utils.isAttractedToWithReasoning(deObject, character, activeBond.towards);
+            const isAttractive = deObject.utils.isAttractedToWithReasoning(character, activeBond.towards);
 
             if (isAttractive.reasoning) {
                 result += `\n\n${isAttractive.reasoning}.`;
             }
 
-            const openToAffection = await bondDeclaration.intimacy.openToAffection(deObject, character, deObject.characters[activeBond.towards]);
+            const openToAffection = await bondDeclaration.intimacy.openToAffection(character, deObject.characters[activeBond.towards]);
 
             const valueToWord = {
                 "not": "not",
@@ -1673,9 +1673,9 @@ export async function getInternalDescriptionOfCharacter(deObject, characterName)
                 }
             }
 
-            const openToSex = await bondDeclaration.intimacy.openToSex(deObject, character, deObject.characters[activeBond.towards]);
+            const openToSex = await bondDeclaration.intimacy.openToSex(character, deObject.characters[activeBond.towards]);
 
-            const openToIntimateAffection = await bondDeclaration.intimacy.openToIntimateAffection(deObject, character, deObject.characters[activeBond.towards]);
+            const openToIntimateAffection = await bondDeclaration.intimacy.openToIntimateAffection(character, deObject.characters[activeBond.towards]);
 
             if (openToIntimateAffection.value !== "not") {
                 result += `\n\n${characterName} is ${valueToWord[openToIntimateAffection.value]} receptive to intimate romantic affection (${openToSex.value !== "not" ? "including sexual acts (" + valueToWord[openToSex.value] + ")" : "excluding sexual acts"}) from ${activeBond.towards}`;
@@ -1704,7 +1704,7 @@ export async function getInternalDescriptionOfCharacter(deObject, characterName)
             relationships.push(result);
 
             if (bondDeclaration.generalCharacterDescriptionInjection) {
-                const injection = typeof bondDeclaration.generalCharacterDescriptionInjection === "string" ? bondDeclaration.generalCharacterDescriptionInjection : (await bondDeclaration.generalCharacterDescriptionInjection(deObject, {
+                const injection = typeof bondDeclaration.generalCharacterDescriptionInjection === "string" ? bondDeclaration.generalCharacterDescriptionInjection : (await bondDeclaration.generalCharacterDescriptionInjection({
                     char: character,
                     other: deObject.characters[activeBond.towards],
                     otherFamilyRelation: familyRelationship,
@@ -1731,7 +1731,7 @@ export async function getInternalDescriptionOfCharacter(deObject, characterName)
         if (bondDeclaration) {
             if (bondDeclaration.generalCharacterDescriptionInjectionEx) {
                 const familyRelationship = getFamilyBondRelation(character, deObject.characters[exBond.towards]);
-                const injection = typeof bondDeclaration.generalCharacterDescriptionInjectionEx === "string" ? bondDeclaration.generalCharacterDescriptionInjectionEx : (await bondDeclaration.generalCharacterDescriptionInjectionEx(deObject, {
+                const injection = typeof bondDeclaration.generalCharacterDescriptionInjectionEx === "string" ? bondDeclaration.generalCharacterDescriptionInjectionEx : (await bondDeclaration.generalCharacterDescriptionInjectionEx({
                     char: character,
                     other: deObject.characters[exBond.towards],
                     otherFamilyRelation: familyRelationship,
@@ -1778,7 +1778,7 @@ export async function getInternalDescriptionOfCharacter(deObject, characterName)
         if (strangerCharacter) {
             const familyRelationship = getFamilyBondRelation(character, strangerCharacter);
             const generalRelationship = await getRelationship(deObject, character, strangerCharacter);
-            let result = typeof strangerBondDeclaration.description === "string" ? strangerBondDeclaration.description : (await strangerBondDeclaration.description(deObject, {
+            let result = typeof strangerBondDeclaration.description === "string" ? strangerBondDeclaration.description : (await strangerBondDeclaration.description({
                 char: character,
                 other: strangerCharacter,
                 otherFamilyRelation: familyRelationship,
@@ -1790,7 +1790,7 @@ export async function getInternalDescriptionOfCharacter(deObject, characterName)
                 } else if (!result.endsWith(" ")) {
                     result += " ";
                 }
-                result += typeof strangerBondDeclaration.bondAdditionalDescription === "string" ? strangerBondDeclaration.bondAdditionalDescription : (await strangerBondDeclaration.bondAdditionalDescription(deObject, {
+                result += typeof strangerBondDeclaration.bondAdditionalDescription === "string" ? strangerBondDeclaration.bondAdditionalDescription : (await strangerBondDeclaration.bondAdditionalDescription({
                     char: character,
                     other: strangerCharacter,
                     otherFamilyRelation: familyRelationship,
@@ -1806,7 +1806,7 @@ export async function getInternalDescriptionOfCharacter(deObject, characterName)
         }
 
         if (strangerBondDeclaration.generalCharacterDescriptionInjection) {
-            const injection = typeof strangerBondDeclaration.generalCharacterDescriptionInjection === "string" ? strangerBondDeclaration.generalCharacterDescriptionInjection : (await strangerBondDeclaration.generalCharacterDescriptionInjection(deObject, {
+            const injection = typeof strangerBondDeclaration.generalCharacterDescriptionInjection === "string" ? strangerBondDeclaration.generalCharacterDescriptionInjection : (await strangerBondDeclaration.generalCharacterDescriptionInjection({
                 char: character,
                 other: strangerCharacter,
                 otherFamilyRelation: getFamilyBondRelation(character, strangerCharacter),
@@ -1968,7 +1968,7 @@ export async function getSysPromptForCharacter(engine, characterName) {
     const worldRules = [];
     if (engine.deObject.worldRules) {
         for (const rule of Object.values(engine.deObject.worldRules)) {
-            const ruleText = typeof rule.rule === "string" ? rule.rule : (await rule.rule(engine.deObject, {
+            const ruleText = typeof rule.rule === "string" ? rule.rule : (await rule.rule({
                 char: character,
             })).trim();
             if (ruleText.length > 0) {
@@ -1984,7 +1984,7 @@ export async function getSysPromptForCharacter(engine, characterName) {
     if (character.characterRules) {
         for (const rule of Object.values(character.characterRules)) {
             // @ts-ignore
-            const ruleText = typeof rule.rule === "string" ? rule.rule : (await rule.rule(engine.deObject, {
+            const ruleText = typeof rule.rule === "string" ? rule.rule : (await rule.rule({
                 char: character,
             })).trim();
             if (ruleText.length > 0) {
@@ -1997,13 +1997,13 @@ export async function getSysPromptForCharacter(engine, characterName) {
     let scenario = "";
     const currentLocation = engine.deObject.world.locations[engine.deObject.stateFor[characterName].location];
     if (currentLocation) {
-        scenario = `## Location:\n\n${engine.deObject.stateFor[characterName].location}, ` + (typeof currentLocation.description === "string" ? currentLocation.description : await currentLocation.description(engine.deObject, {
+        scenario = `## Location:\n\n${engine.deObject.stateFor[characterName].location}, ` + (typeof currentLocation.description === "string" ? currentLocation.description : await currentLocation.description({
             char: character,
         }));
     }
     const currentLocationSlot = currentLocation.slots[engine.deObject.stateFor[characterName].locationSlot];
     if (currentLocationSlot) {
-        scenario += `\n\nSpecifically at the ${engine.deObject.stateFor[characterName].locationSlot} of ${engine.deObject.stateFor[characterName].location}, ` + (typeof currentLocationSlot.description === "string" ? currentLocationSlot.description : await currentLocationSlot.description(engine.deObject, {
+        scenario += `\n\nSpecifically at the ${engine.deObject.stateFor[characterName].locationSlot} of ${engine.deObject.stateFor[characterName].location}, ` + (typeof currentLocationSlot.description === "string" ? currentLocationSlot.description : await currentLocationSlot.description({
             char: character,
         }));
     }
@@ -2061,16 +2061,16 @@ export async function whatIsWeatherLikeForCharacter(deObject, characterName) {
     const weatherThere = location.internalState.currentWeather;
     const isSheltered = await isCharacterShelteredFromWeather(deObject, characterName, weatherThere, characterLocation, characterLocationSlot);
     if (isSheltered.fullySheltered) {
-        const noEffectDescription = typeof location.internalState.currentWeatherNoEffectDescription === "string" ? location.internalState.currentWeatherNoEffectDescription : await location.internalState.currentWeatherNoEffectDescription(deObject, { char: character });
+        const noEffectDescription = typeof location.internalState.currentWeatherNoEffectDescription === "string" ? location.internalState.currentWeatherNoEffectDescription : await location.internalState.currentWeatherNoEffectDescription({ char: character });
         return `The current weather where "${characterName}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}". However, "${characterName}" is fully sheltered from its effects. ${isSheltered.reason || ""}, therefore ${noEffectDescription || "no weather effects apply to them."}`;
     } else if (isSheltered.partiallySheltered) {
-        const partialEffectDescription = typeof location.internalState.currentWeatherPartialEffectDescription === "string" ? location.internalState.currentWeatherPartialEffectDescription : await location.internalState.currentWeatherPartialEffectDescription(deObject, { char: character });
+        const partialEffectDescription = typeof location.internalState.currentWeatherPartialEffectDescription === "string" ? location.internalState.currentWeatherPartialEffectDescription : await location.internalState.currentWeatherPartialEffectDescription({ char: character });
         return `The current weather where "${characterName}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}". "${characterName}" is partially sheltered from its effects. ${isSheltered.reason || ""}, therefore ${partialEffectDescription || "some weather effects may apply to them."}`;
     } else if (isSheltered.negativelyExposed) {
-        const negativeEffectsDescription = typeof location.internalState.currentWeatherNegativelyExposedDescription === "string" ? location.internalState.currentWeatherNegativelyExposedDescription : await location.internalState.currentWeatherNegativelyExposedDescription(deObject, { char: character });
+        const negativeEffectsDescription = typeof location.internalState.currentWeatherNegativelyExposedDescription === "string" ? location.internalState.currentWeatherNegativelyExposedDescription : await location.internalState.currentWeatherNegativelyExposedDescription({ char: character });
         return `The current weather where "${characterName}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}". "${characterName}" is negatively exposed to its effects. ${isSheltered.reason || ""}, therefore ${negativeEffectsDescription || "strongly negative weather effects apply to them."}`;
     } else {
-        const effectDescription = typeof location.internalState.currentWeatherFullEffectDescription === "string" ? location.internalState.currentWeatherFullEffectDescription : await location.internalState.currentWeatherFullEffectDescription(deObject, { char: character });
+        const effectDescription = typeof location.internalState.currentWeatherFullEffectDescription === "string" ? location.internalState.currentWeatherFullEffectDescription : await location.internalState.currentWeatherFullEffectDescription({ char: character });
         return `The current weather where "${characterName}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}". ${isSheltered.reason || ""}, therefore ${effectDescription || "all weather effects apply to them."}`;
     }
 }
@@ -2188,7 +2188,7 @@ export async function isCharacterShelteredFromWeather(deObject, characterName, w
         }
     }
     if (weatherSystem.fullyProtectedTemplate) {
-        const hasFullProtect = typeof weatherSystem.fullyProtectedTemplate === "string" ? weatherSystem.fullyProtectedTemplate : await weatherSystem.fullyProtectedTemplate(deObject, { char: character });
+        const hasFullProtect = typeof weatherSystem.fullyProtectedTemplate === "string" ? weatherSystem.fullyProtectedTemplate : await weatherSystem.fullyProtectedTemplate({ char: character });
         if (hasFullProtect) {
             returnInformation.fullySheltered = true;
             returnInformation.reason = `Because ${hasFullProtect}, ${characterName} is immune to the weather condition "${weatherName}"`;
@@ -2457,5 +2457,5 @@ export async function getRelationship(deObject, character, towards) {
 
     const familyRelationship = getFamilyBondRelation(character, towards);
 
-    return typeof bondDecl.relationshipName === "string" ? bondDecl.relationshipName : await bondDecl.relationshipName(deObject, { char: character, other: towards, otherFamilyRelation: familyRelationship, otherRelationship: null });
+    return typeof bondDecl.relationshipName === "string" ? bondDecl.relationshipName : await bondDecl.relationshipName({ char: character, other: towards, otherFamilyRelation: familyRelationship, otherRelationship: null });
 }

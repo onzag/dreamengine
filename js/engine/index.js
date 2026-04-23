@@ -1,7 +1,5 @@
-import { ALL_FUNCTIONS_WITH_SPECIALS } from "../util/functions.js"
-import { weightedRandomByLikelihood } from "../util/random.js"
 import { emotions } from "./util/emotions.js";
-import { deEngineUtils } from "./utils.js";
+import { deEngineUtilsFn } from "./utils.js";
 import { commands } from "./commands.js";
 import { BaseInferenceAdapter } from "./inference/base.js";
 import calculateStateChange from "./gears/state-change.js";
@@ -46,17 +44,6 @@ function serializationReplacer(root) {
         if (typeof value === 'function') return undefined;
         return value;
     };
-}
-
-function setupFunctions() {
-    const finalObject = {};
-    for (const [signature, details, returnDesc, fn] of ALL_FUNCTIONS_WITH_SPECIALS) {
-        const parts = signature.split("->");
-        const name = parts[0].trim().split(" ")[0];
-        // @ts-ignore
-        finalObject[name] = fn;
-    }
-    return finalObject;
 }
 
 /**
@@ -139,6 +126,26 @@ function createCharacterFromUser(user) {
             strangerNegativeMultiplier: 1.0,
             strangerPositiveMultiplier: 1.0,
             descriptionGeneralInjection: null,
+            bond2DoesNotTrackAttraction: false,
+            bond2DoesNotTrackAttractionForFamily: false,
+            bond2Graduation: {
+                moderate: 0,
+                strong: 0,
+                slight: 0,
+            },
+            bondGraduation: {
+                acquaintance: 0,
+                antagonistic: 0,
+                bestFriend: 0,
+                closeFriend: 0,
+                foe: 0,
+                friend: 0,
+                goodFriend: 0,
+                hostile: 0,
+                unfriendly: 0,
+                unpleasant: 0,
+            },
+            neutralInteractionBondChange: 0,
         },
         shortDescription: user.shortDescription,
         shortDescriptionBottomNakedAdd: user.shortDescriptionBottomNakedAdd,
@@ -173,13 +180,15 @@ function createCharacterFromUser(user) {
             gossipTendency: 1,
         },
         triggers: [],
+        violence: 0,
+        libido: 0,
+        race: null,
+        groupBelonging: [],
     }
 }
 
 export class DEngine {
     constructor() {
-        // constructor code
-        this.allInternalFunctions = setupFunctions();
         /**
          * @type {DEObject | null}
          */
@@ -360,11 +369,11 @@ export class DEngine {
             stateFor: {},
             initialTime: defaultTimeDEFormat,
             currentTime: { ...defaultTimeDEFormat },
-            functions: /** @type {*} */ (this.allInternalFunctions),
             social: {
                 bonds: {},
             },
-            utils: deEngineUtils,
+            // @ts-ignore
+            utils: undefined,
             gameOver: false,
             worldRules: {},
             actionAccumulators: {},
@@ -375,6 +384,8 @@ export class DEngine {
                 narrativeBias: 0.2,
             },
         }
+        // @ts-ignore
+        this.deObject.utils = deEngineUtilsFn(this.deObject);
 
         this.user = user;
         this.userCharacter = createCharacterFromUser(user);
@@ -723,7 +734,7 @@ export class DEngine {
         if (!scene) {
             throw new Error(`Scene with option name ${optionName} not found.`);
         }
-        const sceneObject = scene.prepareScene ? await scene.prepareScene(this.deObject, scene) || scene : scene;
+        const sceneObject = scene.prepareScene ? await scene.prepareScene(scene) || scene : scene;
         if (sceneObject.time) {
             // check that the time is in the future
             if (sceneObject.time.time < this.deObject.currentTime.time && this.deObject.world.selectedScene) {
@@ -770,7 +781,7 @@ export class DEngine {
             this.deObject.stateFor[participantName].type = "INTERACTING";
         }
 
-        const narration = typeof sceneObject.narration === "string" ? sceneObject.narration : await sceneObject.narration(this.deObject, {
+        const narration = typeof sceneObject.narration === "string" ? sceneObject.narration : await sceneObject.narration({
             char: this.userCharacter,
         });
 
@@ -871,7 +882,7 @@ export class DEngine {
             await this.informDEObjectUpdated();
         }
 
-        scene.sceneStarted && await scene.sceneStarted(this.deObject, scene);
+        scene.sceneStarted && await scene.sceneStarted(scene);
         for (const script of Object.values(this.jsEngine.scriptCache)) {
             script.onSceneStarted && await script.onSceneStarted(this.deObject, scene);
         }
@@ -1007,7 +1018,7 @@ export class DEngine {
             await addMessageForStoryMaster(messageAccum);
         }
 
-        scene.sceneReady && await scene.sceneReady(this.deObject, scene);
+        scene.sceneReady && await scene.sceneReady(scene);
 
         for (const script of Object.values(this.jsEngine.scriptCache)) {
             script.onSceneReady && await script.onSceneReady(this.deObject, scene);

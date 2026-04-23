@@ -169,8 +169,9 @@ while ($true) {
                 index++;
                 sceneToIndex[index] = sceneName;
                 const scene = this.engine.deObject.world.scenes[sceneName];
-                const narrationMessage = typeof scene.narration === "string" ? scene.narration : await scene.narration(this.engine.deObject, {});
-                // @ts-ignore
+                const narrationMessage = typeof scene.narration === "string" ? scene.narration : await scene.narration({
+                    char: this.engine.deObject.characters[this.username],
+                });
                 console.log(`${index}: ${narrationMessage}`);
             }
 

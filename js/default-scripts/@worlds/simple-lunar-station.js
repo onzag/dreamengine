@@ -12,10 +12,10 @@ engine.exports = {
         DE.world.scenes["Default Scene"] = /** @type {DEScene} */ ({
             location: "Lunar Station",
             locationSlot: "Common Area",
-            narration: (DE, info) => {
-                const others = DE.utils.templateUtils.allWorldCharactersButUser(DE);
+            narration: (info) => {
+                const others = DE.utils.templateUtils.allWorldCharactersButUser();
                 const user = DE.user;
-                return `${user.name} is a visitor to the Lunar Station, eager to explore this small outpost in space, yet ${DE.utils.templateUtils.formatPronoun(DE, [user.name])} didn't expect to find someone else here, but it so happens that ${DE.utils.templateUtils.formatAnd(DE, others.map((n) => n.name))} ${DE.utils.templateUtils.formatVerbToBe(DE, others)} also visiting the station at this time, now they face each other in the common area near the airlock`;
+                return `${user.name} is a visitor to the Lunar Station, eager to explore this small outpost in space, yet ${DE.utils.templateUtils.formatPronoun([user.name])} didn't expect to find someone else here, but it so happens that ${DE.utils.templateUtils.formatAnd(others.map((n) => n.name))} ${DE.utils.templateUtils.formatVerbToBe(others)} also visiting the station at this time, now they face each other in the common area near the airlock`;
             },
             charactersStart: true,
             engagedCharacters: ["Dema"],
@@ -45,8 +45,8 @@ engine.exports = {
             ],
             applyingStatesDuringNoEffect: [],
             applyStatesInOrder: false,
-            fullEffectDescription: (DE, info) => `The lack of atmosphere asphixiates and freezes ${info.char.name}`,
-            partialEffectDescription: (DE, info) => `The lack of atmosphere asphixiates and freezes ${info.char.name}`,
+            fullEffectDescription: (info) => `The lack of atmosphere asphixiates and freezes ${info.char.name}`,
+            partialEffectDescription: (info) => `The lack of atmosphere asphixiates and freezes ${info.char.name}`,
             maxDurationInHours: 0,
             minDurationInHours: 0,
             negativelyAffectingStates: [],
@@ -57,7 +57,7 @@ engine.exports = {
             fullyProtectingWornItems: ["Space Suit"],
             fullyProtectingCarriedItems: [],
             partiallyProtectingCarriedItems: [],
-            fullyProtectedTemplate: (DE, info) => {
+            fullyProtectedTemplate: (info) => {
                 if (info.char?.state["IS_ROBOT"]) {
                     return `"${info.char.name}" is a robot and is inpervious to the vaccuum of space`;
                 }
@@ -65,8 +65,8 @@ engine.exports = {
             },
             partiallyProtectingWornItems: [],
             negativelyAffectingCarriedItems: [],
-            noEffectDescription: (DE, info) => `${info.char.name} is safe from the vaccuum`,
-            negativelyExposedDescription: (DE, info) => `The lack of atmosphere specially asphixiates and freezes ${info.char.name} very quickly`,
+            noEffectDescription: (info) => `${info.char.name} is safe from the vaccuum`,
+            negativelyExposedDescription: (info) => `The lack of atmosphere specially asphixiates and freezes ${info.char.name} very quickly`,
 
             applyingStatesDuringFullEffect: [
                 {
@@ -419,7 +419,7 @@ engine.exports = {
             communicator: null,
         };
 
-        DE.utils.newLocation(DE, "Surface of the Moon", {
+        DE.utils.newLocation("Surface of the Moon", {
             description: "The barren, grey surface of the Moon stretches out in all directions, dotted with craters and rocks. The sky above is a pitch-black void, with the Earth hanging in the distance. The silence is absolute, broken only by the faint hum of distant machinery from the lunar station nearby",
             entrances: [],
             isIndoors: false,
@@ -472,7 +472,7 @@ engine.exports = {
             },
         });
 
-        DE.utils.newLocation(DE, "Lunar Station", {
+        DE.utils.newLocation("Lunar Station", {
             description: "A small lunar station orbiting the Moon. The station serves as a research outpost and habitat for astronauts and scientists studying the lunar environment. The station is equipped with life support systems, scientific laboratories, living quarters, and communication facilities",
             entrances: [
                 {
@@ -535,7 +535,7 @@ engine.exports = {
             },
         });
 
-        DE.utils.newConnection(DE, {
+        DE.utils.newConnection({
             from: "Lunar Station",
             to: "Surface of the Moon",
             bidirectional: true,
@@ -552,7 +552,7 @@ engine.exports = {
 
         for (let i = 0; i < 2; i++) {
             const letter = String.fromCharCode(65 + i);
-            DE.utils.newLocation(DE, "Lunar Station Bedroom " + letter, {
+            DE.utils.newLocation("Lunar Station Bedroom " + letter, {
                 description: "A small, utilitarian bedroom within the lunar station. The room is sparsely furnished with a bunk bed, a small desk, and a locker for personal belongings. A porthole window offers a view of the lunar surface below",
                 entrances: [
                     {
@@ -619,7 +619,7 @@ engine.exports = {
                 },
             });
 
-            DE.utils.newConnection(DE, {
+            DE.utils.newConnection({
                 from: "Lunar Station Bedroom " + letter,
                 to: "Lunar Station",
                 bidirectional: true,
@@ -637,61 +637,61 @@ engine.exports = {
     },
 
     onWorldInitialized(DE) {
-        DE.utils.newTriggerInAllCharacters(DE, {
+        DE.utils.newTriggerInAllCharacters({
             type: "yes_no",
-            question: (DE, info) => `has ${info.char.name} returned to a pressurized environment successfully?`,
+            question: (info) => `has ${info.char.name} returned to a pressurized environment successfully?`,
             runIf: (char) => {
-                return DE.utils.charHasState(DE, char, "Asphyxiating in the Vaccuum")
+                return DE.utils.charHasState(char, "Asphyxiating in the Vaccuum")
             },
             onValue: (answer, char) => {
                 if (answer) {
-                    DE.utils.shiftState(DE, char, "Asphyxiating in the Vaccuum", -4, null, null);
-                    DE.utils.shiftState(DE, char, "Freezing in the Vaccuum", -1, null, null);
+                    DE.utils.shiftState(char, "Asphyxiating in the Vaccuum", -4, null, null);
+                    DE.utils.shiftState(char, "Freezing in the Vaccuum", -1, null, null);
                 }
             }
         });
 
-        DE.utils.newTriggerInAllCharacters(DE, {
+        DE.utils.newTriggerInAllCharacters({
             type: "yes_no",
-            question: (DE, info) => `has ${info.char.name} put on a space suit?`,
+            question: (info) => `has ${info.char.name} put on a space suit?`,
             runIf: (char) => {
-                return DE.utils.charHasState(DE, char, "Asphyxiating in the Vaccuum") || DE.utils.charHasState(DE, char, "Freezing in the Vaccuum");
+                return DE.utils.charHasState(char, "Asphyxiating in the Vaccuum") || DE.utils.charHasState(char, "Freezing in the Vaccuum");
             },
             onValue: (answer, char) => {
                 if (answer) {
-                    DE.utils.shiftState(DE, char, "Asphyxiating in the Vaccuum", -4, null, null);
-                    DE.utils.shiftState(DE, char, "Freezing in the Vaccuum", -1, null, null);
+                    DE.utils.shiftState(char, "Asphyxiating in the Vaccuum", -4, null, null);
+                    DE.utils.shiftState(char, "Freezing in the Vaccuum", -1, null, null);
                 }
             }
         });
 
-        DE.utils.newTriggerInAllCharacters(DE, {
+        DE.utils.newTriggerInAllCharacters({
             type: "yes_no",
-            question: (DE, info) => `has ${info.char.name} taken a hot shower or used a heater?`,
+            question: (info) => `has ${info.char.name} taken a hot shower or used a heater?`,
             runIf: (char) => {
-                return DE.utils.charIsRelievingState(DE, char, "Freezing in the Vaccuum");
+                return DE.utils.charIsRelievingState(char, "Freezing in the Vaccuum");
             },
             onValue: (answer, char) => {
                 if (answer) {
-                    DE.utils.shiftState(DE, char, "Freezing in the Vaccuum", -2, null, null);
+                    DE.utils.shiftState(char, "Freezing in the Vaccuum", -2, null, null);
                 }
             }
         });
 
-        DE.utils.newTriggerInAllCharacters(DE, {
+        DE.utils.newTriggerInAllCharacters({
             type: "yes_no",
-            question: (DE, info) => `has ${info.char.name} put on a blanket, warm clothes or similar?`,
+            question: (info) => `has ${info.char.name} put on a blanket, warm clothes or similar?`,
             runIf: (char) => {
-                return DE.utils.charIsRelievingState(DE, char, "Freezing in the Vaccuum");
+                return DE.utils.charIsRelievingState(char, "Freezing in the Vaccuum");
             },
             onValue: (answer, char) => {
                 if (answer) {
-                    DE.utils.shiftState(DE, char, "Freezing in the Vaccuum", -1, null, null);
+                    DE.utils.shiftState(char, "Freezing in the Vaccuum", -1, null, null);
                 }
             },
         });
 
-        DE.utils.createStateInAllCharacters(DE, "Asphyxiating in the Vaccuum", {
+        DE.utils.createStateInAllCharacters("Asphyxiating in the Vaccuum", {
             randomSpawnRate: 0,
             permanent: false,
             modifiesStatesIntensitiesOnTrigger: {},
@@ -706,7 +706,7 @@ engine.exports = {
             // what else could it be?
             actionPromptInjection: [
                 {
-                    action: (DE, info) => `${info.char.name} has an urgent need to return to the airlock and into the lunar station to avoid asphyxiation`,
+                    action: (info) => `${info.char.name} has an urgent need to return to the airlock and into the lunar station to avoid asphyxiation`,
                     isDeadEndScenario: false,
                     deadEndIsDeath: false,
                     primaryEmotion: "fearful",
@@ -718,13 +718,13 @@ engine.exports = {
             deadEndIsDeath: true,
             // 30 seconds to death by asphyxiation
             deadEndByTimeInMinutes: 0.5,
-            triggersDeadEnd: (DE, info) => `${info.char.name} has run out of air and has asphyxiated in the vacuum of space`,
+            triggersDeadEnd: (info) => `${info.char.name} has run out of air and has asphyxiated in the vacuum of space`,
             intensityChangeRatePerInferenceCycle: 0,
             dominance: 10,
-            general: (DE, info) => `${info.char.name} is struggling to breathe in the vacuum of space`,
+            general: (info) => `${info.char.name} is struggling to breathe in the vacuum of space`,
         });
 
-        DE.utils.createStateInAllCharacters(DE, "Freezing in the Vaccuum", {
+        DE.utils.createStateInAllCharacters("Freezing in the Vaccuum", {
             randomSpawnRate: 0,
             permanent: false,
             modifiesStatesIntensitiesOnTrigger: {},
@@ -734,7 +734,7 @@ engine.exports = {
             requiresPosture: null,
             injuryAndDeath: true,
             usesReliefDynamic: true,
-            relieving: (DE, info) => `${info.char.name} is recovering from the severe freezing effects of the vacuum of space and should look for warmth`,
+            relieving: (info) => `${info.char.name} is recovering from the severe freezing effects of the vacuum of space and should look for warmth`,
             intensityChangeRatePerInferenceCycleAfterRelief: -0.1,
             // need no triggers, the weather system will apply the state
             triggersStates: {},
@@ -744,11 +744,11 @@ engine.exports = {
             deadEndIsDeath: true,
             // 5 minutes to death by freezing
             deadEndByTimeInMinutes: 5,
-            triggersDeadEnd: (DE, info) => `${info.char.name} has succumbed to the extreme cold of the vacuum of space`,
+            triggersDeadEnd: (info) => `${info.char.name} has succumbed to the extreme cold of the vacuum of space`,
             intensityChangeRatePerInferenceCycle: 0,
             dominance: 10,
             dominanceAfterRelief: 1,
-            general: (DE, info) => `${info.char.name} is freezing in the vacuum of space`,
+            general: (info) => `${info.char.name} is freezing in the vacuum of space`,
         });
     }
 }

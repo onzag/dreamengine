@@ -1,5 +1,3 @@
-// @ts-nocheck
-
 import { weightedRandom } from "../../util/random.js";
 import { DEngine } from "../index.js";
 import { getBondDeclarationFromBondDescription, getBondDeclarationFromName, getFamilyBondRelation, getRelationship, getSurroundingCharacters } from "../util/character-info.js";
@@ -238,7 +236,7 @@ export async function runQuestion(engine, character, question, options) {
 
         await options.initializeAgent();
 
-        const questionText = typeof question.question === "function" ? await question.question(engine.deObject, {
+        const questionText = typeof question.question === "function" ? await question.question({
             char: character,
             // @ts-ignore typescript is wrong, other can be null
             other: other ? engine.deObject.characters[other] : null,
@@ -467,9 +465,9 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                 let negativeInteraction = false;
                 let alreadyInAffectionateAct = false;
 
-                const openToAffection = await bondDeclaration.intimacy.openToAffection(engine.deObject, character, engine.deObject.characters[bond.towards]);
-                const openToIntimateAffection = await bondDeclaration.intimacy.openToIntimateAffection(engine.deObject, character, engine.deObject.characters[bond.towards]);
-                const openToSex = await bondDeclaration.intimacy.openToSex(engine.deObject, character, engine.deObject.characters[bond.towards]);
+                const openToAffection = await bondDeclaration.intimacy.openToAffection(character, engine.deObject.characters[bond.towards]);
+                const openToIntimateAffection = await bondDeclaration.intimacy.openToIntimateAffection(character, engine.deObject.characters[bond.towards]);
+                const openToSex = await bondDeclaration.intimacy.openToSex(character, engine.deObject.characters[bond.towards]);
 
                 const openToAffectionQuestions = bondDeclaration.intimacy.openAffectionateResponses.filter(r => !r.onlyAtLevel || r.onlyAtLevel === openToAffection.value);
                 const openToIntimateAffectionQuestions = bondDeclaration.intimacy.openIntimateAffectionateResponses.filter(r => !r.onlyAtLevel || r.onlyAtLevel === openToIntimateAffection.value);
@@ -482,7 +480,7 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                 const otherRelationship = await getRelationship(engine.deObject, character, engine.deObject.characters[bond.towards]);
 
                 for (const questionToAsk of allQuestionsToAsk) {
-                    const questionText = typeof questionToAsk.question === "string" ? questionToAsk.question : await questionToAsk.question(engine.deObject, {
+                    const questionText = typeof questionToAsk.question === "string" ? questionToAsk.question : await questionToAsk.question({
                         char: character,
                         other: engine.deObject.characters[bond.towards],
                         otherFamilyRelation,
@@ -504,7 +502,7 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                     }
 
                     if (smallQuestionsCache[questionText]) {
-                        const injection = typeof questionToAsk.reaction === "string" ? questionToAsk.reaction : await questionToAsk.reaction(engine.deObject, {
+                        const injection = typeof questionToAsk.reaction === "string" ? questionToAsk.reaction : await questionToAsk.reaction({
                             char: character,
                             other: engine.deObject.characters[bond.towards],
                             otherFamilyRelation,
@@ -604,9 +602,9 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                 }
 
                 if (!negativeInteraction) {
-                    let proneToInitiateAffectionProbability = await bondDeclaration.intimacy.proneToInitiatingAffection.probability(engine.deObject, character, engine.deObject.characters[bond.towards]);
-                    let proneToInitiateIntimateAffectionProbability = await bondDeclaration.intimacy.proneToInitiatingIntimateAffection.probability(engine.deObject, character, engine.deObject.characters[bond.towards]);
-                    let proneToInitiateSexProbability = await bondDeclaration.intimacy.proneToInitiatingSex.probability(engine.deObject, character, engine.deObject.characters[bond.towards]);
+                    let proneToInitiateAffectionProbability = await bondDeclaration.intimacy.proneToInitiatingAffection.probability(character, engine.deObject.characters[bond.towards]);
+                    let proneToInitiateIntimateAffectionProbability = await bondDeclaration.intimacy.proneToInitiatingIntimateAffection.probability(character, engine.deObject.characters[bond.towards]);
+                    let proneToInitiateSexProbability = await bondDeclaration.intimacy.proneToInitiatingSex.probability(character, engine.deObject.characters[bond.towards]);
 
                     proneToInitiateAffectionProbability *= alreadyInAffectionateAct ? 2 : proneToInitiateAffectionProbability;
                     proneToInitiateAffectionProbability *= multiplier;
@@ -684,7 +682,7 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                                      */
                                     const injectConsentQuestion = async (retry) => {
                                         if (actionToChoose.consentMechanism) {
-                                            const actionToAskForConsent = typeof actionToChoose.consentMechanism.action === "string" ? actionToChoose.consentMechanism.action : await actionToChoose.consentMechanism.action(engine.getDEObject(), {
+                                            const actionToAskForConsent = typeof actionToChoose.consentMechanism.action === "string" ? actionToChoose.consentMechanism.action : await actionToChoose.consentMechanism.action({
                                                 char: character,
                                                 // @ts-ignore typescript is wrong, it is not null
                                                 other: engine.deObject.characters[bond.towards],
@@ -715,7 +713,7 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                                     if (lastIsExecutingAffectionateAct) {
                                         let isFullfilled = false;
                                         for (const question of (actionToChoose.fullfillCriteriaQuestions || [])) {
-                                            const questionValue = (typeof question === "string" ? question : await question(engine.deObject, {
+                                            const questionValue = (typeof question === "string" ? question : await question({
                                                 char: character,
                                                 other: engine.deObject.characters[bond.towards],
                                                 otherFamilyRelation,
@@ -748,7 +746,7 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                                         }
                                     } else if (actionToChoose.consentMechanism) {
                                         if (lastIsWaitingForAffectionConsent) {
-                                            const questionAmbigous = (typeof actionToChoose.consentMechanism.checkAmbiguousResponse === "string" ? actionToChoose.consentMechanism.checkAmbiguousResponse : await actionToChoose.consentMechanism.checkAmbiguousResponse(engine.deObject, {
+                                            const questionAmbigous = (typeof actionToChoose.consentMechanism.checkAmbiguousResponse === "string" ? actionToChoose.consentMechanism.checkAmbiguousResponse : await actionToChoose.consentMechanism.checkAmbiguousResponse({
                                                 char: character,
                                                 other: engine.deObject.characters[bond.towards],
                                                 otherFamilyRelation,
@@ -778,7 +776,7 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                                                 // will insist because too ambiguous
                                                 await injectConsentQuestion(true);
                                             } else {
-                                                const question = (typeof actionToChoose.consentMechanism.check === "string" ? actionToChoose.consentMechanism.check : await actionToChoose.consentMechanism.check(engine.deObject, {
+                                                const question = (typeof actionToChoose.consentMechanism.check === "string" ? actionToChoose.consentMechanism.check : await actionToChoose.consentMechanism.check({
                                                     char: character,
                                                     other: engine.deObject.characters[bond.towards],
                                                     otherFamilyRelation,
@@ -923,7 +921,7 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                                  */
                                 const injectConsentQuestion = async (retry) => {
                                     if (actionToChoose.consentMechanism) {
-                                        const actionToAskForConsent = typeof actionToChoose.consentMechanism.action === "string" ? actionToChoose.consentMechanism.action : await actionToChoose.consentMechanism.action(engine.getDEObject(), {
+                                        const actionToAskForConsent = typeof actionToChoose.consentMechanism.action === "string" ? actionToChoose.consentMechanism.action : await actionToChoose.consentMechanism.action({
                                             char: character,
                                             // @ts-ignore typescript is wrong, it is not null
                                             other: engine.deObject.characters[bond.towards],
@@ -954,7 +952,7 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                                 if (lastIsExecutingIntimateAffectionateAct) {
                                     let isFullfilled = false;
                                     for (const question of (actionToChoose.fullfillCriteriaQuestions || [])) {
-                                        const questionValue = (typeof question === "string" ? question : await question(engine.deObject, {
+                                        const questionValue = (typeof question === "string" ? question : await question({
                                             char: character,
                                             other: engine.deObject.characters[bond.towards],
                                             otherFamilyRelation,
@@ -987,7 +985,7 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                                     }
                                 } else if (actionToChoose.consentMechanism) {
                                     if (lastIsWaitingForIntimateAffectionConsent) {
-                                        const questionAmbigous = (typeof actionToChoose.consentMechanism.checkAmbiguousResponse === "string" ? actionToChoose.consentMechanism.checkAmbiguousResponse : await actionToChoose.consentMechanism.checkAmbiguousResponse(engine.deObject, {
+                                        const questionAmbigous = (typeof actionToChoose.consentMechanism.checkAmbiguousResponse === "string" ? actionToChoose.consentMechanism.checkAmbiguousResponse : await actionToChoose.consentMechanism.checkAmbiguousResponse({
                                             char: character,
                                             other: engine.deObject.characters[bond.towards],
                                             otherFamilyRelation,
@@ -1017,7 +1015,7 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                                             // will insist because too ambiguous
                                             await injectConsentQuestion(true);
                                         } else {
-                                            const question = (typeof actionToChoose.consentMechanism.check === "string" ? actionToChoose.consentMechanism.check : await actionToChoose.consentMechanism.check(engine.deObject, {
+                                            const question = (typeof actionToChoose.consentMechanism.check === "string" ? actionToChoose.consentMechanism.check : await actionToChoose.consentMechanism.check({
                                                 char: character,
                                                 other: engine.deObject.characters[bond.towards],
                                                 otherFamilyRelation,
@@ -1128,7 +1126,7 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                                  */
                                 const injectConsentQuestion = async (retry) => {
                                     if (actionToChoose.consentMechanism) {
-                                        const actionToAskForConsent = typeof actionToChoose.consentMechanism.action === "string" ? actionToChoose.consentMechanism.action : await actionToChoose.consentMechanism.action(engine.getDEObject(), {
+                                        const actionToAskForConsent = typeof actionToChoose.consentMechanism.action === "string" ? actionToChoose.consentMechanism.action : await actionToChoose.consentMechanism.action({
                                             char: character,
                                             // @ts-ignore typescript is wrong, it is not null
                                             other: engine.deObject.characters[bond.towards],
@@ -1159,7 +1157,7 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                                 if (lastIsExecutingSexualAct) {
                                     let isFullfilled = false;
                                     for (const question of (actionToChoose.fullfillCriteriaQuestions || [])) {
-                                        const questionValue = (typeof question === "string" ? question : await question(engine.deObject, {
+                                        const questionValue = (typeof question === "string" ? question : await question({
                                             char: character,
                                             other: engine.deObject.characters[bond.towards],
                                             otherFamilyRelation,
@@ -1192,7 +1190,7 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                                     }
                                 } else if (actionToChoose.consentMechanism) {
                                     if (lastIsWaitingForSexConsent) {
-                                        const questionAmbigous = (typeof actionToChoose.consentMechanism.checkAmbiguousResponse === "string" ? actionToChoose.consentMechanism.checkAmbiguousResponse : await actionToChoose.consentMechanism.checkAmbiguousResponse(engine.deObject, {
+                                        const questionAmbigous = (typeof actionToChoose.consentMechanism.checkAmbiguousResponse === "string" ? actionToChoose.consentMechanism.checkAmbiguousResponse : await actionToChoose.consentMechanism.checkAmbiguousResponse({
                                             char: character,
                                             other: engine.deObject.characters[bond.towards],
                                             otherFamilyRelation,
@@ -1222,12 +1220,13 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                                             // will insist because too ambiguous
                                             await injectConsentQuestion(true);
                                         } else {
-                                            const question = (typeof actionToChoose.consentMechanism.check === "string" ? actionToChoose.consentMechanism.check : await actionToChoose.consentMechanism.check(engine.deObject, {
+                                            const question = (typeof actionToChoose.consentMechanism.check === "string" ? actionToChoose.consentMechanism.check : await actionToChoose.consentMechanism.check({
                                                 char: character,
                                                 other: engine.deObject.characters[bond.towards],
                                                 otherFamilyRelation,
                                                 otherRelationship,
                                             })).trim();
+
                                             let answerBool = false;
                                             if (question.toLowerCase() === "yes" || question.toLowerCase() === "no") {
                                                 answerBool = question.toLowerCase() === "yes";

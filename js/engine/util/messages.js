@@ -200,7 +200,7 @@ export async function* getHistoryForCharacter(engine, character, options) {
         // @ts-ignore typescript is wrong, deObject has been null checked at the beginning of the function
         let message = `From ${makeTimestamp(engine.deObject, fromTime)} to ${makeTimestamp(engine.deObject, statesAccumulatedFromTime)}, ` + character.name;
         if (statesAccumulated.size > 0) {
-            message += ` finds ${engine.deObject?.functions.format_reflexive(engine.deObject, character, character.name)} in the following states: `;
+            message += ` finds ${engine.getDEObject().utils.templateUtils.formatReflexive([character])} in the following states: `;
             let statesList = "";
             statesAccumulated.forEach(s => {
                 if (statesList.length > 0) {
@@ -272,7 +272,7 @@ export async function* getHistoryForCharacter(engine, character, options) {
                 }
                 const participantsExcludingCharacter = currentConversationObject.participants.filter(p => p !== character.name);
                 const timeMark = makeTimestamp(engine.deObject, conversationStartTime);
-                const withOrAlone = participantsExcludingCharacter.length === 0 ? "on their own" : "with " + engine.deObject.functions.format_and(engine.deObject, null, participantsExcludingCharacter);
+                const withOrAlone = participantsExcludingCharacter.length === 0 ? "on their own" : "with " + engine.deObject.utils.templateUtils.formatAnd(participantsExcludingCharacter);
 
                 const expectedId = `story-master-${state.conversationId}-summary`;
                 const keepgoing = yield {
@@ -316,7 +316,7 @@ export async function* getHistoryForCharacter(engine, character, options) {
                     const participantsExcludingCharacter = currentConversationObject.participants.filter(p => p !== character.name);
                     const timeMark = makeTimestamp(engine.deObject, conversationStartTime);
                     const timeMarkDetailed = timeMark === "Now" ? "right now" : "at " + timeMark;
-                    const withOrAlone = participantsExcludingCharacter.length === 0 ? "on their own" : "with " + engine.deObject.functions.format_and(engine.deObject, null, participantsExcludingCharacter);
+                    const withOrAlone = participantsExcludingCharacter.length === 0 ? "on their own" : "with " + engine.deObject.utils.templateUtils.formatAnd(participantsExcludingCharacter);
                     const keepgoing = yield {
                         name: "Story Master",
                         message: "The following interaction took place " + timeMarkDetailed + ", " + character.name + " is at " + conversationLocation + withOrAlone + ".",

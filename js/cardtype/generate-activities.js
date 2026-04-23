@@ -91,7 +91,7 @@ export async function generateActivities(engine, card, guider, autosave) {
             templateValue = guideResult.value.trim();
         }
 
-        card.body.unshift(`DE.utils.newGlobalInterest(DE, { id: ${JSON.stringify(likeOrDislike)}, simple: ${JSON.stringify(activitySimple)}, template: (DE, info) => ${toTemplateLiteral(templateValue)}});`);
+        card.body.unshift(`DE.utils.newGlobalInterest({ id: ${JSON.stringify(likeOrDislike)}, simple: ${JSON.stringify(activitySimple)}, template: (DE, info) => ${toTemplateLiteral(templateValue)}});`);
         unshiftSpecialComment(card.body, "interest " + likeOrDislike);
         await autosave?.save();
     }

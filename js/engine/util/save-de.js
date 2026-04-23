@@ -1,7 +1,7 @@
 // TODO implement this
 
 import { DEngine } from "../index.js";
-import { deEngineUtils } from "../utils.js";
+import { deEngineUtilsFn } from "../utils.js";
 
 /**
  * @param {DEObject} object 
@@ -16,7 +16,6 @@ export function removeUnnecessaryPropertiesFromDE(object) {
  * @returns {DEObject}
  */
 export function regenerateDEFromSavedDE(engine, savedDE) {
-    savedDE.functions = engine.allInternalFunctions;
-    savedDE.utils = deEngineUtils;
+    savedDE.utils = deEngineUtilsFn(savedDE);
     return savedDE;
 }
