@@ -1,10 +1,12 @@
 {
   "compilerOptions": {
     "module": "esnext",
-    "checkJs": false,
+    "checkJs": true,
+    "strict": true,
     "moduleResolution": "node",
     "target": "es2020",
-    "moduleDetection": "force"
+    "moduleDetection": "force",
+    "skipLibCheck": true
   },
   "typeAcquisition": {"enable": false},
   "include": ["js/**/*.js", "js/types/**/*.d.ts"],
