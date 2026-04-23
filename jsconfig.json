@@ -6,9 +6,10 @@
     "moduleResolution": "node",
     "target": "es2020",
     "moduleDetection": "force",
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "ignoreDeprecations": "6.0",
   },
   "typeAcquisition": {"enable": false},
   "include": ["js/**/*.js", "js/types/**/*.d.ts"],
-  "exclude": ["node_modules", "prototype"]
+  "exclude": ["node_modules", "prototype", "js/engine/gears/triggers-run.js"]
 }

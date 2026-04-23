@@ -72,12 +72,7 @@ function determinePotentialCharacterCausants(
  * @param {DEngine} engine
  * @param {DECompleteCharacterReference} character
  * @param {DECharacterYesNoQuestion | DECharacterTextQuestion | DECharacterNumericQuestion} question
- * @param {{
- *    lastCycleMessagesInfo?: Awaited<ReturnType<typeof getHistoryFragmentForCharacter>>,
- *    interactedCharactersAccordingToItemChange: string[],
- *    questioningAgent: ReturnType<NonNullable<DEngine["inferenceAdapter"]>["runQuestioningCustomAgentOn"]>,
- *    initializeAgent: () => Promise<void>,
- * }} options
+ * @param {DERunQuestionOptions} options
  */
 export async function runQuestion(engine, character, question, options) {
     if (!engine.deObject) {
