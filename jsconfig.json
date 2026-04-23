@@ -8,6 +8,7 @@
     "moduleDetection": "force",
     "ignoreDeprecations": "6.0"
   },
-  "typeAcquisition": {"enable": true},
-  "include": ["js/**/*.js", "js/types/**/*.d.ts"]
+  "typeAcquisition": {"enable": false},
+  "include": ["js/**/*.js", "js/types/**/*.d.ts"],
+  "exclude": ["node_modules", "prototype"]
 }

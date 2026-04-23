@@ -326,6 +326,7 @@ export async function runQuestion(engine, character, question, options) {
  * @param {DEngine} engine
  * @param {DECompleteCharacterReference} character
  * @param {string[]} interactedCharactersAccordingToItemChange
+ * @returns {Promise<{microInjections: string[], microVocabularyLimits: DEVocabularyLimit[]}>}
  */
 export default async function runAllTriggersFor(engine, character, interactedCharactersAccordingToItemChange) {
     if (!engine.deObject) {
@@ -376,6 +377,11 @@ export default async function runAllTriggersFor(engine, character, interactedCha
     }
 
     let microInjections = [];
+
+    /**
+     * @type {DEVocabularyLimit[]}
+     */
+    let microVocabularyLimits = [];
 
     /**
      * @type {Record<string, boolean>}
@@ -571,17 +577,19 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                     }
 
                     const lastIsWaitingForAffectionConsent = character.state["last_is_waiting_for_affection_consent_from_" + bond.towards];
-                    if (proneToInitiateAffectionProbability > 0 || lastIsWaitingForAffectionConsent) {
+                    const lastIsExecutingAffectionateAct = character.state["last_continous_affectionate_act_towards_" + bond.towards];
+                    const referenceToUse = lastIsExecutingAffectionateAct || lastIsWaitingForAffectionConsent;
+                    if (proneToInitiateAffectionProbability > 0 || referenceToUse) {
                         // affection showcase is not subject to libido
-                        if (Math.random() < proneToInitiateAffectionProbability || lastIsWaitingForAffectionConsent) {
-                            const realBondDeclaration = /** @type {DEBondDeclaration} */ (lastIsWaitingForAffectionConsent ?
-                                getBondDeclarationFromName(engine.deObject, character, lastIsWaitingForAffectionConsent.decl) :
+                        if (Math.random() < proneToInitiateAffectionProbability || referenceToUse) {
+                            const realBondDeclaration = /** @type {DEBondDeclaration} */ (referenceToUse ?
+                                getBondDeclarationFromName(engine.deObject, character, referenceToUse.decl) :
                                 bondDeclaration);
                             if (!realBondDeclaration) {
-                                console.warn("Could not find bond declaration for " + character.name + " towards " + bond.towards + " with name " + lastIsWaitingForAffectionConsent.decl + ", skipping affectionate action");
+                                console.warn("Could not find bond declaration for " + character.name + " towards " + bond.towards + " with name " + referenceToUse.decl + ", skipping affectionate action");
                             } else {
-                                const actionToChoose = lastIsWaitingForAffectionConsent ? (
-                                    realBondDeclaration.intimacy.proneToInitiatingAffection.actions[lastIsWaitingForAffectionConsent.actionIndex]
+                                const actionToChoose = referenceToUse ? (
+                                    realBondDeclaration.intimacy.proneToInitiatingAffection.actions[referenceToUse.actionIndex]
                                 ) : weightedRandom(bondDeclaration.intimacy.proneToInitiatingAffection.actions, (i) => i.probability);
                                 if (actionToChoose) {
                                     const otherFamilyRelation = getFamilyBondRelation(character, engine.deObject.characters[bond.towards]);
@@ -606,8 +614,22 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                                         } else {
                                             microInjections.push(behaviour);
                                         }
+
+                                        if (actionToChoose.vocabularyLimit) {
+                                            microVocabularyLimits.push(actionToChoose.vocabularyLimit);
+                                        }
+
                                         // @ts-ignore typescript is wrong, it is not null
                                         character.state["last_affectionate_act_towards_" + bond.towards] = engine.deObject.currentTime;
+
+                                        if ((actionToChoose.fullfillCriteriaQuestions || []).length > 0) {
+                                            character.state["last_continous_affectionate_act_towards_" + bond.towards] = {
+                                                decl: realBondDeclaration.name,
+                                                actionIndex: realBondDeclaration.intimacy.proneToInitiatingAffection.actions.indexOf(actionToChoose),
+                                            };
+                                        } else {
+                                            delete character.state["last_continous_affectionate_act_towards_" + bond.towards];
+                                        }
 
                                         delete character.state["last_is_waiting_for_affection_consent_response_from_" + bond.towards];
                                     }
@@ -617,7 +639,7 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                                      */
                                     const injectConsentQuestion = async (retry) => {
                                         if (actionToChoose.consentMechanism) {
-                                            const actionToAskForConsent = typeof actionToChoose.consentMechanism.action === "string" ? actionToChoose.consentMechanism.action : await actionToChoose.consentMechanism.action(engine.deObject, {
+                                            const actionToAskForConsent = typeof actionToChoose.consentMechanism.action === "string" ? actionToChoose.consentMechanism.action : await actionToChoose.consentMechanism.action(engine.getDEObject(), {
                                                 char: character,
                                                 // @ts-ignore typescript is wrong, it is not null
                                                 other: engine.deObject.characters[bond.towards],
@@ -629,21 +651,57 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                                             } else {
                                                 microInjections.push(actionToAskForConsent);
                                             }
-                                            if (lastIsWaitingForAffectionConsent) {
-                                                lastIsWaitingForAffectionConsent.tries++;
-                                            } else {
-                                                character.state["last_is_waiting_for_affection_consent_response_from_" + bond.towards] = {
-                                                    decl: realBondDeclaration.name,
-                                                    actionIndex: realBondDeclaration.intimacy.proneToInitiatingAffection.actions.indexOf(actionToChoose),
-                                                    tries: 0,
-                                                };
+                                            if (!lastIsExecutingAffectionateAct) {
+                                                if (lastIsWaitingForAffectionConsent) {
+                                                    lastIsWaitingForAffectionConsent.tries++;
+                                                } else {
+                                                    character.state["last_is_waiting_for_affection_consent_response_from_" + bond.towards] = {
+                                                        decl: realBondDeclaration.name,
+                                                        actionIndex: realBondDeclaration.intimacy.proneToInitiatingAffection.actions.indexOf(actionToChoose),
+                                                        tries: 0,
+                                                    };
+                                                }
                                             }
                                         } else {
                                             await injectBehaviour();
                                         }
                                     }
 
-                                    if (actionToChoose.consentMechanism) {
+                                    if (lastIsExecutingAffectionateAct) {
+                                        let isFullfilled = false;
+                                        for (const question of (actionToChoose.fullfillCriteriaQuestions || [])) {
+                                            const questionValue = (typeof question === "string" ? question : await question(engine.deObject, {
+                                                char: character,
+                                                other: engine.deObject.characters[bond.towards],
+                                                otherFamilyRelation,
+                                                otherRelationship,
+                                            })).trim();
+                                            await runQuestion(engine, character, {
+                                                type: "yes_no",
+                                                question: questionValue,
+                                                onValue: async (answer) => {
+                                                    smallQuestionsCache[questionValue] = answer;
+                                                },
+                                            }, {
+                                                lastCycleMessagesInfo,
+                                                interactedCharactersAccordingToItemChange,
+                                                questioningAgent,
+                                                initializeAgent,
+                                            });
+
+                                            if (smallQuestionsCache[questionValue]) {
+                                                isFullfilled = true;
+                                                break;
+                                            }
+                                        }
+
+                                        if (!isFullfilled) {
+                                            await injectBehaviour();
+                                        } else {
+                                            delete character.state["last_continous_affectionate_act_towards_" + bond.towards];
+                                            delete character.state["last_is_waiting_for_affection_consent_response_from_" + bond.towards];
+                                        }
+                                    } else if (actionToChoose.consentMechanism) {
                                         if (lastIsWaitingForAffectionConsent) {
                                             const questionAmbigous = (typeof actionToChoose.consentMechanism.checkAmbiguousResponse === "string" ? actionToChoose.consentMechanism.checkAmbiguousResponse : await actionToChoose.consentMechanism.checkAmbiguousResponse(engine.deObject, {
                                                 char: character,
@@ -759,25 +817,413 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                         proneToInitiateIntimateAffectionProbability *= intimateAffectionCooldownRatio;
                     }
 
-                    if (Math.random() < proneToInitiateIntimateAffectionProbability) {
-                        const options = proneToInitiateIntimateAffection.options || ["General intimate affectionate behavior"];
-                        if (options.length !== 0) {
-                            const behaviour = options[Math.floor(Math.random() * options.length)];
-                            microInjections.push(character.name + " will initiate \"" + behaviour + "\" with intimate/sexual intent towards " + bond.towards);
-                            character.state["last_intimate_affectionate_act_towards_" + bond.towards] = engine.deObject.currentTime;
+                    const lastIsWaitingForIntimateAffectionConsent = character.state["last_is_waiting_for_intimate_affection_consent_from_" + bond.towards];
+                    const lastIsExecutingIntimateAffectionateAct = character.state["last_continous_intimate_affectionate_act_towards_" + bond.towards];
+                    const referenceToUseIntimate = lastIsExecutingIntimateAffectionateAct || lastIsWaitingForIntimateAffectionConsent;
+                    if (Math.random() < proneToInitiateIntimateAffectionProbability || referenceToUseIntimate) {
+                        const realBondDeclaration = /** @type {DEBondDeclaration} */ (referenceToUseIntimate ?
+                            getBondDeclarationFromName(engine.deObject, character, referenceToUseIntimate.decl) :
+                            bondDeclaration);
+                        if (!realBondDeclaration) {
+                            console.warn("Could not find bond declaration for " + character.name + " towards " + bond.towards + " with name " + referenceToUseIntimate.decl + ", skipping intimate affectionate action");
+                        } else {
+                            const actionToChoose = referenceToUseIntimate ? (
+                                realBondDeclaration.intimacy.proneToInitiatingIntimateAffection.actions[referenceToUseIntimate.actionIndex]
+                            ) : weightedRandom(bondDeclaration.intimacy.proneToInitiatingIntimateAffection.actions, (i) => i.probability);
+                            if (actionToChoose) {
+                                const otherFamilyRelation = getFamilyBondRelation(character, engine.deObject.characters[bond.towards]);
+                                const otherRelationship = await getRelationship(engine.deObject, character, engine.deObject.characters[bond.towards]);
+
+                                /**
+                                 * Proceeded despite the lack of consent
+                                 * @param {boolean} proceedAnyway 
+                                 */
+                                const injectBehaviour = async (proceedAnyway = false) => {
+                                    // @ts-ignore typescript is wrong, it is not null
+                                    const behaviour = typeof actionToChoose.action === "string" ? actionToChoose.action : await actionToChoose.action(engine.deObject, {
+                                        char: character,
+                                        // @ts-ignore typescript is wrong, it is not null
+                                        other: engine.deObject.characters[bond.towards],
+                                        otherFamilyRelation,
+                                        otherRelationship,
+                                    });
+
+                                    if (proceedAnyway) {
+                                        microInjections.push("Even though " + character.name + " did not receive consent: " + behaviour);
+                                    } else {
+                                        microInjections.push(behaviour);
+                                    }
+
+                                    if (actionToChoose.vocabularyLimit) {
+                                        microVocabularyLimits.push(actionToChoose.vocabularyLimit);
+                                    }
+
+                                    // @ts-ignore typescript is wrong, it is not null
+                                    character.state["last_intimate_affectionate_act_towards_" + bond.towards] = engine.deObject.currentTime;
+
+                                    if ((actionToChoose.fullfillCriteriaQuestions || []).length > 0) {
+                                        character.state["last_continous_intimate_affectionate_act_towards_" + bond.towards] = {
+                                            decl: realBondDeclaration.name,
+                                            actionIndex: realBondDeclaration.intimacy.proneToInitiatingIntimateAffection.actions.indexOf(actionToChoose),
+                                        };
+                                    } else {
+                                        delete character.state["last_continous_intimate_affectionate_act_towards_" + bond.towards];
+                                    }
+
+                                    delete character.state["last_is_waiting_for_intimate_affection_consent_response_from_" + bond.towards];
+                                }
+
+                                /**
+                                 * @param {boolean} retry 
+                                 */
+                                const injectConsentQuestion = async (retry) => {
+                                    if (actionToChoose.consentMechanism) {
+                                        const actionToAskForConsent = typeof actionToChoose.consentMechanism.action === "string" ? actionToChoose.consentMechanism.action : await actionToChoose.consentMechanism.action(engine.getDEObject(), {
+                                            char: character,
+                                            // @ts-ignore typescript is wrong, it is not null
+                                            other: engine.deObject.characters[bond.towards],
+                                            otherFamilyRelation,
+                                            otherRelationship,
+                                        });
+                                        if (retry) {
+                                            microInjections.push(character.name + " will insist on the behaviour: " + actionToAskForConsent);
+                                        } else {
+                                            microInjections.push(actionToAskForConsent);
+                                        }
+                                        if (!lastIsExecutingIntimateAffectionateAct) {
+                                            if (lastIsWaitingForIntimateAffectionConsent) {
+                                                lastIsWaitingForIntimateAffectionConsent.tries++;
+                                            } else {
+                                                character.state["last_is_waiting_for_intimate_affection_consent_response_from_" + bond.towards] = {
+                                                    decl: realBondDeclaration.name,
+                                                    actionIndex: realBondDeclaration.intimacy.proneToInitiatingIntimateAffection.actions.indexOf(actionToChoose),
+                                                    tries: 0,
+                                                };
+                                            }
+                                        }
+                                    } else {
+                                        await injectBehaviour();
+                                    }
+                                }
+
+                                if (lastIsExecutingIntimateAffectionateAct) {
+                                    let isFullfilled = false;
+                                    for (const question of (actionToChoose.fullfillCriteriaQuestions || [])) {
+                                        const questionValue = (typeof question === "string" ? question : await question(engine.deObject, {
+                                            char: character,
+                                            other: engine.deObject.characters[bond.towards],
+                                            otherFamilyRelation,
+                                            otherRelationship,
+                                        })).trim();
+                                        await runQuestion(engine, character, {
+                                            type: "yes_no",
+                                            question: questionValue,
+                                            onValue: async (answer) => {
+                                                smallQuestionsCache[questionValue] = answer;
+                                            },
+                                        }, {
+                                            lastCycleMessagesInfo,
+                                            interactedCharactersAccordingToItemChange,
+                                            questioningAgent,
+                                            initializeAgent,
+                                        });
+
+                                        if (smallQuestionsCache[questionValue]) {
+                                            isFullfilled = true;
+                                            break;
+                                        }
+                                    }
+
+                                    if (!isFullfilled) {
+                                        await injectBehaviour();
+                                    } else {
+                                        delete character.state["last_continous_intimate_affectionate_act_towards_" + bond.towards];
+                                        delete character.state["last_is_waiting_for_intimate_affection_consent_response_from_" + bond.towards];
+                                    }
+                                } else if (actionToChoose.consentMechanism) {
+                                    if (lastIsWaitingForIntimateAffectionConsent) {
+                                        const questionAmbigous = (typeof actionToChoose.consentMechanism.checkAmbiguousResponse === "string" ? actionToChoose.consentMechanism.checkAmbiguousResponse : await actionToChoose.consentMechanism.checkAmbiguousResponse(engine.deObject, {
+                                            char: character,
+                                            other: engine.deObject.characters[bond.towards],
+                                            otherFamilyRelation,
+                                            otherRelationship,
+                                        })).trim();
+                                        let answerAmbigousBool = false;
+                                        if (questionAmbigous.toLowerCase() === "yes" || questionAmbigous.toLowerCase() === "no") {
+                                            answerAmbigousBool = questionAmbigous.toLowerCase() === "yes";
+                                        } else if (!smallQuestionsCache[questionAmbigous]) {
+                                            await runQuestion(engine, character, {
+                                                type: "yes_no",
+                                                question: questionAmbigous,
+                                                onValue: async (answer) => {
+                                                    smallQuestionsCache[questionAmbigous] = answer;
+                                                },
+                                            }, {
+                                                lastCycleMessagesInfo,
+                                                interactedCharactersAccordingToItemChange,
+                                                questioningAgent,
+                                                initializeAgent,
+                                            });
+                                            answerAmbigousBool = smallQuestionsCache[questionAmbigous];
+                                        }
+
+                                        if (answerAmbigousBool) {
+                                            // insist for a clear reply on it
+                                            // will insist because too ambiguous
+                                            await injectConsentQuestion(true);
+                                        } else {
+                                            const question = (typeof actionToChoose.consentMechanism.check === "string" ? actionToChoose.consentMechanism.check : await actionToChoose.consentMechanism.check(engine.deObject, {
+                                                char: character,
+                                                other: engine.deObject.characters[bond.towards],
+                                                otherFamilyRelation,
+                                                otherRelationship,
+                                            })).trim();
+                                            let answerBool = false;
+                                            if (question.toLowerCase() === "yes" || question.toLowerCase() === "no") {
+                                                answerBool = question.toLowerCase() === "yes";
+                                            } else if (!smallQuestionsCache[question]) {
+                                                await runQuestion(engine, character, {
+                                                    type: "yes_no",
+                                                    question: question,
+                                                    onValue: async (answer) => {
+                                                        smallQuestionsCache[question] = answer;
+                                                    },
+                                                }, {
+                                                    lastCycleMessagesInfo,
+                                                    interactedCharactersAccordingToItemChange,
+                                                    questioningAgent,
+                                                    initializeAgent,
+                                                });
+                                                answerBool = smallQuestionsCache[question];
+                                            }
+                                            if (answerBool) {
+                                                // consent given
+                                                await injectBehaviour();
+                                            } else {
+                                                // consent refused, let's see if we insist or not
+                                                if (Math.random() < actionToChoose.consentMechanism.insistance) {
+                                                    // try to insist
+                                                    await injectConsentQuestion(true);
+                                                } else if (Math.random() < actionToChoose.consentMechanism.rejection) {
+                                                    // proceed anyway after receiving a no
+                                                    await injectBehaviour(true);
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        await injectConsentQuestion(false);
+                                    }
+                                } else {
+                                    await injectBehaviour();
+                                }
+                            } else {
+                                console.warn("No action to choose for " + character.name + " towards " + bond.towards + " for intimate affection initiation, skipping");
+                            }
                         }
                     }
 
-                    if (Math.random() < proneToInitiateSexProbability) {
-                        const options = proneToInitiateSex.options || ["Sexual activity"];
-                        if (options.length !== 0) {
-                            const behaviour = options[Math.floor(Math.random() * options.length)];
-                            // TODO attempt? request?... maybe we should ask how the situation is before decided how to phrase
-                            // instead of a micro-injection we should probably have it be a state, a pseudo-state or alike
-                            // when the state is active, the character will keep attempting, until either they are asked otherwise or something akin
-                            // how do you then deal with consent?... how do you deal with initiation?... hmmm...
-                            microInjections.push(character.name + " will initiate \"" + behaviour + "\" towards " + bond.towards);
-                            character.state["last_sexual_act_towards_" + bond.towards] = engine.deObject.currentTime;
+                    const lastIsWaitingForSexConsent = character.state["last_is_waiting_for_sex_consent_from_" + bond.towards];
+                    const lastIsExecutingSexualAct = character.state["last_continous_sexual_act_towards_" + bond.towards];
+                    const referenceToUseSex = lastIsExecutingSexualAct || lastIsWaitingForSexConsent;
+                    if (Math.random() < proneToInitiateSexProbability || referenceToUseSex) {
+                        const realBondDeclaration = /** @type {DEBondDeclaration} */ (referenceToUseSex ?
+                            getBondDeclarationFromName(engine.deObject, character, referenceToUseSex.decl) :
+                            bondDeclaration);
+                        if (!realBondDeclaration) {
+                            console.warn("Could not find bond declaration for " + character.name + " towards " + bond.towards + " with name " + referenceToUseSex.decl + ", skipping sexual action");
+                        } else {
+                            const actionToChoose = referenceToUseSex ? (
+                                realBondDeclaration.intimacy.proneToInitiatingSex.actions[referenceToUseSex.actionIndex]
+                            ) : weightedRandom(bondDeclaration.intimacy.proneToInitiatingSex.actions, (i) => i.probability);
+                            if (actionToChoose) {
+                                const otherFamilyRelation = getFamilyBondRelation(character, engine.deObject.characters[bond.towards]);
+                                const otherRelationship = await getRelationship(engine.deObject, character, engine.deObject.characters[bond.towards]);
+
+                                /**
+                                 * Proceeded despite the lack of consent
+                                 * @param {boolean} proceedAnyway 
+                                 */
+                                const injectBehaviour = async (proceedAnyway = false) => {
+                                    // @ts-ignore typescript is wrong, it is not null
+                                    const behaviour = typeof actionToChoose.action === "string" ? actionToChoose.action : await actionToChoose.action(engine.deObject, {
+                                        char: character,
+                                        // @ts-ignore typescript is wrong, it is not null
+                                        other: engine.deObject.characters[bond.towards],
+                                        otherFamilyRelation,
+                                        otherRelationship,
+                                    });
+
+                                    if (proceedAnyway) {
+                                        microInjections.push("Even though " + character.name + " did not receive consent: " + behaviour);
+                                    } else {
+                                        microInjections.push(behaviour);
+                                    }
+
+                                    if (actionToChoose.vocabularyLimit) {
+                                        microVocabularyLimits.push(actionToChoose.vocabularyLimit);
+                                    }
+
+                                    // @ts-ignore typescript is wrong, it is not null
+                                    character.state["last_sexual_act_towards_" + bond.towards] = engine.deObject.currentTime;
+
+                                    if ((actionToChoose.fullfillCriteriaQuestions || []).length > 0) {
+                                        character.state["last_continous_sexual_act_towards_" + bond.towards] = {
+                                            decl: realBondDeclaration.name,
+                                            actionIndex: realBondDeclaration.intimacy.proneToInitiatingSex.actions.indexOf(actionToChoose),
+                                        };
+                                    } else {
+                                        delete character.state["last_continous_sexual_act_towards_" + bond.towards];
+                                    }
+
+                                    delete character.state["last_is_waiting_for_sex_consent_response_from_" + bond.towards];
+                                }
+
+                                /**
+                                 * @param {boolean} retry 
+                                 */
+                                const injectConsentQuestion = async (retry) => {
+                                    if (actionToChoose.consentMechanism) {
+                                        const actionToAskForConsent = typeof actionToChoose.consentMechanism.action === "string" ? actionToChoose.consentMechanism.action : await actionToChoose.consentMechanism.action(engine.getDEObject(), {
+                                            char: character,
+                                            // @ts-ignore typescript is wrong, it is not null
+                                            other: engine.deObject.characters[bond.towards],
+                                            otherFamilyRelation,
+                                            otherRelationship,
+                                        });
+                                        if (retry) {
+                                            microInjections.push(character.name + " will insist on the behaviour: " + actionToAskForConsent);
+                                        } else {
+                                            microInjections.push(actionToAskForConsent);
+                                        }
+                                        if (!lastIsExecutingSexualAct) {
+                                            if (lastIsWaitingForSexConsent) {
+                                                lastIsWaitingForSexConsent.tries++;
+                                            } else {
+                                                character.state["last_is_waiting_for_sex_consent_response_from_" + bond.towards] = {
+                                                    decl: realBondDeclaration.name,
+                                                    actionIndex: realBondDeclaration.intimacy.proneToInitiatingSex.actions.indexOf(actionToChoose),
+                                                    tries: 0,
+                                                };
+                                            }
+                                        }
+                                    } else {
+                                        await injectBehaviour();
+                                    }
+                                }
+
+                                if (lastIsExecutingSexualAct) {
+                                    let isFullfilled = false;
+                                    for (const question of (actionToChoose.fullfillCriteriaQuestions || [])) {
+                                        const questionValue = (typeof question === "string" ? question : await question(engine.deObject, {
+                                            char: character,
+                                            other: engine.deObject.characters[bond.towards],
+                                            otherFamilyRelation,
+                                            otherRelationship,
+                                        })).trim();
+                                        await runQuestion(engine, character, {
+                                            type: "yes_no",
+                                            question: questionValue,
+                                            onValue: async (answer) => {
+                                                smallQuestionsCache[questionValue] = answer;
+                                            },
+                                        }, {
+                                            lastCycleMessagesInfo,
+                                            interactedCharactersAccordingToItemChange,
+                                            questioningAgent,
+                                            initializeAgent,
+                                        });
+
+                                        if (smallQuestionsCache[questionValue]) {
+                                            isFullfilled = true;
+                                            break;
+                                        }
+                                    }
+
+                                    if (!isFullfilled) {
+                                        await injectBehaviour();
+                                    } else {
+                                        delete character.state["last_continous_sexual_act_towards_" + bond.towards];
+                                        delete character.state["last_is_waiting_for_sex_consent_response_from_" + bond.towards];
+                                    }
+                                } else if (actionToChoose.consentMechanism) {
+                                    if (lastIsWaitingForSexConsent) {
+                                        const questionAmbigous = (typeof actionToChoose.consentMechanism.checkAmbiguousResponse === "string" ? actionToChoose.consentMechanism.checkAmbiguousResponse : await actionToChoose.consentMechanism.checkAmbiguousResponse(engine.deObject, {
+                                            char: character,
+                                            other: engine.deObject.characters[bond.towards],
+                                            otherFamilyRelation,
+                                            otherRelationship,
+                                        })).trim();
+                                        let answerAmbigousBool = false;
+                                        if (questionAmbigous.toLowerCase() === "yes" || questionAmbigous.toLowerCase() === "no") {
+                                            answerAmbigousBool = questionAmbigous.toLowerCase() === "yes";
+                                        } else if (!smallQuestionsCache[questionAmbigous]) {
+                                            await runQuestion(engine, character, {
+                                                type: "yes_no",
+                                                question: questionAmbigous,
+                                                onValue: async (answer) => {
+                                                    smallQuestionsCache[questionAmbigous] = answer;
+                                                },
+                                            }, {
+                                                lastCycleMessagesInfo,
+                                                interactedCharactersAccordingToItemChange,
+                                                questioningAgent,
+                                                initializeAgent,
+                                            });
+                                            answerAmbigousBool = smallQuestionsCache[questionAmbigous];
+                                        }
+
+                                        if (answerAmbigousBool) {
+                                            // insist for a clear reply on it
+                                            // will insist because too ambiguous
+                                            await injectConsentQuestion(true);
+                                        } else {
+                                            const question = (typeof actionToChoose.consentMechanism.check === "string" ? actionToChoose.consentMechanism.check : await actionToChoose.consentMechanism.check(engine.deObject, {
+                                                char: character,
+                                                other: engine.deObject.characters[bond.towards],
+                                                otherFamilyRelation,
+                                                otherRelationship,
+                                            })).trim();
+                                            let answerBool = false;
+                                            if (question.toLowerCase() === "yes" || question.toLowerCase() === "no") {
+                                                answerBool = question.toLowerCase() === "yes";
+                                            } else if (!smallQuestionsCache[question]) {
+                                                await runQuestion(engine, character, {
+                                                    type: "yes_no",
+                                                    question: question,
+                                                    onValue: async (answer) => {
+                                                        smallQuestionsCache[question] = answer;
+                                                    },
+                                                }, {
+                                                    lastCycleMessagesInfo,
+                                                    interactedCharactersAccordingToItemChange,
+                                                    questioningAgent,
+                                                    initializeAgent,
+                                                });
+                                                answerBool = smallQuestionsCache[question];
+                                            }
+                                            if (answerBool) {
+                                                // consent given
+                                                await injectBehaviour();
+                                            } else {
+                                                // consent refused, let's see if we insist or not
+                                                if (Math.random() < actionToChoose.consentMechanism.insistance) {
+                                                    // try to insist
+                                                    await injectConsentQuestion(true);
+                                                } else if (Math.random() < actionToChoose.consentMechanism.rejection) {
+                                                    // proceed anyway after receiving a no
+                                                    await injectBehaviour(true);
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        await injectConsentQuestion(false);
+                                    }
+                                } else {
+                                    await injectBehaviour();
+                                }
+                            } else {
+                                console.warn("No action to choose for " + character.name + " towards " + bond.towards + " for sex initiation, skipping");
+                            }
                         }
                     }
                 } else {
@@ -795,7 +1241,10 @@ export default async function runAllTriggersFor(engine, character, interactedCha
 
     await deleteTemp(engine);
 
-    return microInjections;
+    return {
+        microInjections,
+        microVocabularyLimits,
+    };
 }
 
 /**

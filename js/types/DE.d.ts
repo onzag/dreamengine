@@ -704,12 +704,21 @@ declare interface DEIntimateAction {
         rejection: number;
     };
     /**
+     * States to trigger with this action once it executes
+     */
+    triggerStates?: string[];
+    /**
      * By default the intimate action is considered completed after
      * it is injected as an action, so it has no life, but by
      * adding this question the action will be constantly reinjected
      * until the question is answered yes
      */
     fullfillCriteriaQuestions?: DEStringTemplateCharAndOther[];
+
+    /**
+     * Apply a vocabulary limit while performing the action
+     */
+    vocabularyLimit?: DEVocabularyLimit;
 }
 
 declare interface DEBondDeclaration {

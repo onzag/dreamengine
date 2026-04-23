@@ -887,7 +887,7 @@ export class DEngine {
             const randomizedList = ([...sceneObject.engagedCharacters]).sort(() => Math.random() - 0.5);
             for (const participantName of randomizedList) {
                 this.informCycleState("info", "Running all triggers for " + participantName + "...");
-                const microInjections = await runAllTriggersFor(this, this.deObject.characters[participantName], lastItemChangesInfo.interactedCharacters);
+                const triggersResult = await runAllTriggersFor(this, this.deObject.characters[participantName], lastItemChangesInfo.interactedCharacters);
 
                 const nextActionsProduced = this.deObject.internalState.NEXT_ACTIONS || [];
                 delete this.deObject.internalState.NEXT_ACTIONS;
@@ -935,7 +935,7 @@ export class DEngine {
                 const talkResult = await talk(this, this.deObject.characters[participantName], {
                     doNotMove: true,
                     injectedActions: nextActionsProduced,
-                    microInjections,
+                    microInjections: triggersResult.microInjections,
                 });
 
                 await addMessageForStoryMaster(talkResult.addedMessagesForStoryMaster);
@@ -961,7 +961,7 @@ export class DEngine {
         }
 
         this.informCycleState("info", "Running all triggers for " + this.userCharacter.name + "...");
-        const microInjections = await runAllTriggersFor(this, this.userCharacter, lastItemChangesInfo.interactedCharacters);
+        const triggerResults = await runAllTriggersFor(this, this.userCharacter, lastItemChangesInfo.interactedCharacters);
 
         const nextActionsProduced = this.deObject.internalState.NEXT_ACTIONS || [];
         delete this.deObject.internalState.NEXT_ACTIONS;
