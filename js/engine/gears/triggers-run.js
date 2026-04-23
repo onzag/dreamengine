@@ -464,7 +464,54 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                 let negativeInteraction = false;
                 let alreadyInAffectionateAct = false;
 
+                const openToAffection = await bondDeclaration.intimacy.openToAffection(engine.deObject, character, engine.deObject.characters[bond.towards]);
+                const openToIntimateAffection = await bondDeclaration.intimacy.openToIntimateAffection(engine.deObject, character, engine.deObject.characters[bond.towards]);
                 const openToSex = await bondDeclaration.intimacy.openToSex(engine.deObject, character, engine.deObject.characters[bond.towards]);
+
+                const openToAffectionQuestions = bondDeclaration.intimacy.openAffectionateResponses.filter(r => !r.onlyAtLevel || r.onlyAtLevel === openToAffection.value);
+                const openToIntimateAffectionQuestions = bondDeclaration.intimacy.openIntimateAffectionateResponses.filter(r => !r.onlyAtLevel || r.onlyAtLevel === openToIntimateAffection.value);
+                const openToSexQuestions = bondDeclaration.intimacy.openSexResponses.filter(r => !r.onlyAtLevel || r.onlyAtLevel === openToSex.value);
+
+                const allQuestionsToAsk = [...openToAffectionQuestions, ...openToIntimateAffectionQuestions, ...openToSexQuestions];
+
+
+                const otherFamilyRelation = getFamilyBondRelation(character, engine.deObject.characters[bond.towards]);
+                const otherRelationship = await getRelationship(engine.deObject, character, engine.deObject.characters[bond.towards]);
+
+                for (const questionToAsk of allQuestionsToAsk) {
+                    const questionText = typeof questionToAsk.question === "string" ? questionToAsk.question : await questionToAsk.question(engine.deObject, {
+                        char: character,
+                        other: engine.deObject.characters[bond.towards],
+                        otherFamilyRelation,
+                        otherRelationship,
+                    });
+                    if (!smallQuestionsCache[questionText]) {
+                        await runQuestion(engine, character, {
+                            type: "yes_no",
+                            question: questionText,
+                            onValue: async (answer) => {
+                                smallQuestionsCache[questionText] = answer;
+                            },
+                        }, {
+                            lastCycleMessagesInfo,
+                            interactedCharactersAccordingToItemChange,
+                            questioningAgent,
+                            initializeAgent,
+                        });
+                    }
+
+                    if (smallQuestionsCache[questionText]) {
+                        const injection = typeof questionToAsk.reaction === "string" ? questionToAsk.reaction : await questionToAsk.reaction(engine.deObject, {
+                            char: character,
+                            other: engine.deObject.characters[bond.towards],
+                            otherFamilyRelation,
+                            otherRelationship,
+                        });
+
+                        microInjections.push(injection);
+                    }
+                }
+
                 const questionOfSex = "In the last story fragment, has " + character.name + " engaged in sexual activities or sexual acts with " + bond.towards + "?";
 
                 if (!smallQuestionsCache[questionOfSex]) {
@@ -487,14 +534,13 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                 if (engagedInSex) {
                     alreadyInIntimateAct = true;
                     alreadyInSex = true;
-                    if (!openToSex.value) {
+                    if (openToSex.value === "not") {
                         negativeInteraction = true;
                         microInjections.push(character.name + " just engaged in sexual activities with " + bond.towards + " but " + character.name + " is not open to sex with them, this might cause serious tension, trauma, or conflict in their interactions");
                     } else {
-                        microInjections.push(character.name + " just engaged in sexual activities with " + bond.towards + " and " + character.name + " is open to sex with them, this might significantly deepen their bond and intimacy");
+                        microInjections.push(character.name + " just engaged in sexual activities with " + bond.towards + " and " + character.name + " is " + openToSex.value + " open to sex with them, this might significantly deepen their bond and intimacy");
                     }
                 } else {
-                    const openToIntimateAffection = await bondDeclaration.intimacy.openToIntimateAffection(engine.deObject, character, engine.deObject.characters[bond.towards]);
                     const questionOfIntimateAffection = "In the last story fragment, has " + character.name + " received intimate affection from " + bond.towards + "? eg. kissing with arousing/sexual intent, making out, intimate actions with romantic/sexual interest, etc.";
 
                     if (!smallQuestionsCache[questionOfIntimateAffection]) {
@@ -516,14 +562,13 @@ export default async function runAllTriggersFor(engine, character, interactedCha
 
                     if (receivedIntimateAffection) {
                         alreadyInIntimateAct = true;
-                        if (!openToIntimateAffection.value) {
+                        if (openToIntimateAffection.value === "not") {
                             negativeInteraction = true;
                             microInjections.push(character.name + " just received intimate affection from " + bond.towards + " but " + character.name + " is not open to intimate affection from them, this might cause significant tension, discomfort, or conflict in their interactions");
                         } else {
-                            microInjections.push(character.name + " just received intimate affection from " + bond.towards + " and " + character.name + " is open to intimate affection from them, this might deepen their bond and have a very positive effect on their interactions");
+                            microInjections.push(character.name + " just received intimate affection from " + bond.towards + " and " + character.name + " is " + openToIntimateAffection.value + " open to intimate affection from them, this might deepen their bond and have a very positive effect on their interactions");
                         }
                     } else {
-                        const openToAffection = await bondDeclaration.intimacy.openToAffection(engine.deObject, character, engine.deObject.characters[bond.towards]);
                         const questionOfAffection = "In the last story fragment, has " + character.name + " received affection from " + bond.towards + "? eg. hugging, caressing, holding hands, affectionate words, etc.";
 
                         if (!smallQuestionsCache[questionOfAffection]) {
@@ -545,11 +590,11 @@ export default async function runAllTriggersFor(engine, character, interactedCha
 
                         if (receivedAffection) {
                             alreadyInAffectionateAct = true;
-                            if (!openToAffection.value) {
+                            if (openToAffection.value === "not") {
                                 negativeInteraction = true;
                                 microInjections.push(character.name + " just received affection from " + bond.towards + " but " + character.name + " is not open to affection from them, this might cause some tension or discomfort in their interactions");
                             } else {
-                                microInjections.push(character.name + " just received affection from " + bond.towards + " and " + character.name + " is open to affection from them, this might have a positive effect on their interactions");
+                                microInjections.push(character.name + " just received affection from " + bond.towards + " and " + character.name + " is " + openToAffection.value + " open to affection from them, this might have a positive effect on their interactions");
                             }
                         }
                     }
@@ -592,9 +637,6 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                                     realBondDeclaration.intimacy.proneToInitiatingAffection.actions[referenceToUse.actionIndex]
                                 ) : weightedRandom(bondDeclaration.intimacy.proneToInitiatingAffection.actions, (i) => i.probability);
                                 if (actionToChoose) {
-                                    const otherFamilyRelation = getFamilyBondRelation(character, engine.deObject.characters[bond.towards]);
-                                    const otherRelationship = await getRelationship(engine.deObject, character, engine.deObject.characters[bond.towards]);
-
                                     /**
                                      * Proceeded despite the lack of consent
                                      * @param {boolean} proceedAnyway 

@@ -705,6 +705,7 @@ declare interface DEIntimateAction {
     };
     /**
      * States to trigger with this action once it executes
+     * TODO implement
      */
     triggerStates?: string[];
     /**
@@ -810,6 +811,14 @@ declare interface DEBondDeclaration {
          */
         openToAffection: (DE: DEObject, char: DECompleteCharacterReference, other: DECompleteCharacterReference) => PromiseOrNot<{value: "not" | "slight" | "moderate" | "very", reason?: string | null}>;
         /**
+         * Responses to specific affective actions when performed (mostly by the other character)
+         * for example, question can be: is {{char}} being hugged by {{other}}?
+         * and reaction can be: {{char}} feels happy and comfortable being hugged by {{other}} and hugs them back passionately
+         * 
+         * These only inject if openToAffection returns a value other than "not", unless it is a not specific affectionate rule
+         */
+        openAffectionateResponses: Array<{question: DEStringTemplateCharAndOther, reaction: DEStringTemplateCharAndOther, onlyAtLevel?: "not" | "slight" | "moderate" | "very"}>;
+        /**
          * Whether the character in question with another, the options are what types of affection they will be prone to initiating
          * Make sure to keep in mind the circumstances
          * @param DE 
@@ -828,6 +837,14 @@ declare interface DEBondDeclaration {
          */
         openToIntimateAffection: (DE: DEObject, char: DECompleteCharacterReference, other: DECompleteCharacterReference) => PromiseOrNot<{value: "not" | "slight" | "moderate" | "very", reason?: string | null}>;
         /**
+         * Responses to specific affective actions when performed (mostly by the other character)
+         * for example, question can be: is {{char}} being kissed by {{other}}?
+         * and reaction can be: {{char}} feels happy and comfortable being kissed by {{other}} and kisses them back passionately
+         * 
+         * These only inject if openToIntimateAffection returns a value other than "not", unless it is a not specific intimate affectionate rule
+         */
+        openIntimateAffectionateResponses: Array<{question: DEStringTemplateCharAndOther, reaction: DEStringTemplateCharAndOther, onlyAtLevel?: "not" | "slight" | "moderate" | "very"}>;
+        /**
          * Whether the character in question with another, the options are what types of intimate affection they will be prone to initiating
          * Make sure to keep in mind the circumstances
          * @param DE 
@@ -845,6 +862,14 @@ declare interface DEBondDeclaration {
          * @returns 
          */
         openToSex: (DE: DEObject, char: DECompleteCharacterReference, other: DECompleteCharacterReference) => PromiseOrNot<{value: "not" | "slight" | "moderate" | "very", reason?: string | null}>;
+        /**
+         * Responses to specific sexual actions when performed (mostly by the other character)
+         * for example, question can be: is {{char}} being touched in a sexual way by {{other}}?
+         * and reaction can be: {{char}} feels aroused and comfortable being touched in a sexual way by {{other}} and touches them back passionately
+         * 
+         * These only inject if openToSex returns a value other than "not", unless it is a not specific sexual rule
+         */
+        openSexResponses: Array<{question: DEStringTemplateCharAndOther, reaction: DEStringTemplateCharAndOther, onlyAtLevel?: "not" | "slight" | "moderate" | "very"}>;
         /**
          * Whether the character in question with another, the options are what types of sex they will be prone to initiating
          * Make sure to keep in mind the circumstances

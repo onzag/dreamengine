@@ -9,5 +9,7 @@
   "search.exclude": {
     "**/node_modules": true,
     "**/prototype": true
-  }
+  },
+  "typescript.tsserver.maxTsServerMemory": 16384,
+  "typescript.tsserver.experimental.enableProjectDiagnostics": false
 }

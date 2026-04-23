@@ -936,6 +936,7 @@ export class DEngine {
                     doNotMove: true,
                     injectedActions: nextActionsProduced,
                     microInjections: triggersResult.microInjections,
+                    microVocabularyLimits: triggersResult.microVocabularyLimits,
                 });
 
                 await addMessageForStoryMaster(talkResult.addedMessagesForStoryMaster);

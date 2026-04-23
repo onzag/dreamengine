@@ -29,6 +29,7 @@ self.onunhandledrejection = (e) => {
             { generateActivities },
             { generateBondTriggers },
             { generateBasicStates },
+            { generateAffectiveStates },
         ] = await Promise.all([
             import("../engine/index.js"),
             import("../jsengine/index.js"),
@@ -38,9 +39,10 @@ self.onunhandledrejection = (e) => {
             import("../cardtype/generate-activities.js"),
             import("../cardtype/generate-bond-triggers.js"),
             import("../cardtype/generate-basic-states.js"),
+            import("../cardtype/generate-affective-states.js"),
         ]);
 
-        workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, generateBase, generateBonds, generateActivities, generateBondTriggers, generateBasicStates });
+        workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, generateBase, generateBonds, generateAffectiveStates, generateActivities, generateBondTriggers, generateBasicStates });
     } catch (err) {
         const detail = err instanceof Error ? `${err.message}\n${err.stack}` : String(err);
         console.error("[Worker] Failed to load modules:", detail);
@@ -52,7 +54,7 @@ self.onunhandledrejection = (e) => {
  * @param {object} deps
  */
 // @ts-ignore
-function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, generateBase, generateBonds, generateActivities, generateBondTriggers, generateBasicStates }) {
+function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, generateBase, generateBonds, generateAffectiveStates, generateActivities, generateBondTriggers, generateBasicStates }) {
 
     // ── Script path resolvers (using file:// fetch) ────────────────────
     // The main thread sends the absolute paths via the "setScriptPaths" RPC.
@@ -397,6 +399,7 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
 
             try {
                 await generateBase(engine, currentCard, guider, autosave);
+                await generateAffectiveStates(engine, currentCard, guider, autosave);
                 await generateBonds(engine, currentCard, guider, autosave);
                 await generateActivities(engine, currentCard, guider, autosave);
                 await generateBondTriggers(engine, currentCard, guider, autosave);

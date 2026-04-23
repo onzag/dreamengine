@@ -12,6 +12,7 @@ import { mergeVocabularyLimits } from "../util/vocabulary.js";
  *   doNotMove: boolean, // if true, the character will not be allowed to change location
  *   injectedActions: Array<DEActionPromptInjection<DEStringTemplateCharOnly>>,
  *   microInjections: string[], // these are messages that are injected into the context of the inference adapter for this talk, but are not shown to the story master, they are meant to be used for micro-injections of information that the character would know but the story master doesn't need to know, such as "I see a monster in the bushes" or "I have a knife in my pocket", which can then be used by the inference adapter to generate more accurate dialogue and narration, but doesn't need to be shown to the story master
+ *   microVocabularyLimits: DEVocabularyLimit[] // limits for the micro-injections vocabulary
  * }} options
  */
 export async function talk(engine, character, options) {
@@ -132,6 +133,9 @@ export async function talk(engine, character, options) {
     let emotionalRange = [];
 
     let baseVocabularyLimit = engine.deObject.characters[character.name].vocabularyLimit;
+    for (const microVocabularyLimit of options.microVocabularyLimits || []) {
+        baseVocabularyLimit = baseVocabularyLimit ? mergeVocabularyLimits(baseVocabularyLimit, microVocabularyLimit) : microVocabularyLimit;
+    }
     let vocabularyLimitDominance = 0;
 
     /**
