@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 import { weightedRandom } from "../../util/random.js";
 import { DEngine } from "../index.js";
 import { getBondDeclarationFromBondDescription, getBondDeclarationFromName, getFamilyBondRelation, getRelationship, getSurroundingCharacters } from "../util/character-info.js";
@@ -72,7 +74,12 @@ function determinePotentialCharacterCausants(
  * @param {DEngine} engine
  * @param {DECompleteCharacterReference} character
  * @param {DECharacterYesNoQuestion | DECharacterTextQuestion | DECharacterNumericQuestion} question
- * @param {DERunQuestionOptions} options
+ * @param {{
+ *    lastCycleMessagesInfo?: Awaited<ReturnType<typeof getHistoryFragmentForCharacter>>,
+ *    interactedCharactersAccordingToItemChange: string[],
+ *    questioningAgent: ReturnType<NonNullable<DEngine["inferenceAdapter"]>["runQuestioningCustomAgentOn"]>,
+ *    initializeAgent: () => Promise<void>,
+ * }} options
  */
 export async function runQuestion(engine, character, question, options) {
     if (!engine.deObject) {
@@ -187,6 +194,7 @@ export async function runQuestion(engine, character, question, options) {
                 console.warn(`Question has askPer set to ${question.askPer} and askPerState set to ${question.askPerState} but the state has no causants, skipping`);
                 return;
             }
+
             // @ts-ignore
             others = Array.from(new Set(appliedState.causes.filter(c => c.causant?.type === "object").map(c => c.causant?.name)));
         } else {

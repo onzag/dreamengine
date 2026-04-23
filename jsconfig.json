@@ -11,5 +11,5 @@
   },
   "typeAcquisition": {"enable": false},
   "include": ["js/**/*.js", "js/types/**/*.d.ts"],
-  "exclude": ["node_modules", "prototype", "js/engine/gears/triggers-run.js"]
+  "exclude": ["node_modules", "prototype"]
 }
