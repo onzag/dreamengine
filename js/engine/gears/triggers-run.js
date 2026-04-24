@@ -469,9 +469,9 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                 const openToIntimateAffection = await bondDeclaration.intimacy.openToIntimateAffection(character, engine.deObject.characters[bond.towards]);
                 const openToSex = await bondDeclaration.intimacy.openToSex(character, engine.deObject.characters[bond.towards]);
 
-                const openToAffectionQuestions = bondDeclaration.intimacy.openAffectionateResponses.filter(r => !r.onlyAtLevel || r.onlyAtLevel === openToAffection.value);
-                const openToIntimateAffectionQuestions = bondDeclaration.intimacy.openIntimateAffectionateResponses.filter(r => !r.onlyAtLevel || r.onlyAtLevel === openToIntimateAffection.value);
-                const openToSexQuestions = bondDeclaration.intimacy.openSexResponses.filter(r => !r.onlyAtLevel || r.onlyAtLevel === openToSex.value);
+                const openToAffectionQuestions = bondDeclaration.intimacy.openToAffectionResponses.filter(r => !r.onlyAtLevel || r.onlyAtLevel === openToAffection.value);
+                const openToIntimateAffectionQuestions = bondDeclaration.intimacy.openToIntimateAffectionResponses.filter(r => !r.onlyAtLevel || r.onlyAtLevel === openToIntimateAffection.value);
+                const openToSexQuestions = bondDeclaration.intimacy.openToSexResponses.filter(r => !r.onlyAtLevel || r.onlyAtLevel === openToSex.value);
 
                 const allQuestionsToAsk = [...openToAffectionQuestions, ...openToIntimateAffectionQuestions, ...openToSexQuestions];
 
@@ -681,8 +681,9 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                                      * @param {boolean} retry 
                                      */
                                     const injectConsentQuestion = async (retry) => {
-                                        if (actionToChoose.consentMechanism) {
-                                            const actionToAskForConsent = typeof actionToChoose.consentMechanism.action === "string" ? actionToChoose.consentMechanism.action : await actionToChoose.consentMechanism.action({
+                                        if (actionToChoose.consentMechanism && actionToChoose.consentMechanism.actionsAndChecks.length > 0) {
+                                            const consentActionIndex = Math.floor(Math.random() * actionToChoose.consentMechanism.actionsAndChecks.length);
+                                            const actionToAskForConsent = typeof actionToChoose.consentMechanism.actionsAndChecks[consentActionIndex].action === "string" ? actionToChoose.consentMechanism.actionsAndChecks[consentActionIndex].action : await actionToChoose.consentMechanism.actionsAndChecks[consentActionIndex].action({
                                                 char: character,
                                                 // @ts-ignore typescript is wrong, it is not null
                                                 other: engine.deObject.characters[bond.towards],
@@ -701,6 +702,7 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                                                     character.state["last_is_waiting_for_affection_consent_response_from_" + bond.towards] = {
                                                         decl: realBondDeclaration.name,
                                                         actionIndex: realBondDeclaration.intimacy.proneToInitiatingAffection.actions.indexOf(actionToChoose),
+                                                        consentActionIndex: consentActionIndex,
                                                         tries: 0,
                                                     };
                                                 }
@@ -711,7 +713,7 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                                     }
 
                                     if (lastIsExecutingAffectionateAct) {
-                                        let isFullfilled = false;
+                                        let isFullfilled = actionToChoose.fullfillCriteriaQuestions && actionToChoose.fullfillCriteriaQuestions.length > 0 ? false : true;
                                         for (const question of (actionToChoose.fullfillCriteriaQuestions || [])) {
                                             const questionValue = (typeof question === "string" ? question : await question({
                                                 char: character,
@@ -746,7 +748,8 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                                         }
                                     } else if (actionToChoose.consentMechanism) {
                                         if (lastIsWaitingForAffectionConsent) {
-                                            const questionAmbigous = (typeof actionToChoose.consentMechanism.checkAmbiguousResponse === "string" ? actionToChoose.consentMechanism.checkAmbiguousResponse : await actionToChoose.consentMechanism.checkAmbiguousResponse({
+                                            const consentActionIndex = lastIsWaitingForAffectionConsent.consentActionIndex;
+                                            const questionAmbigous = (typeof actionToChoose.consentMechanism.actionsAndChecks[consentActionIndex].checkAmbiguousResponse === "string" ? actionToChoose.consentMechanism.actionsAndChecks[consentActionIndex].checkAmbiguousResponse : await actionToChoose.consentMechanism.actionsAndChecks[consentActionIndex].checkAmbiguousResponse({
                                                 char: character,
                                                 other: engine.deObject.characters[bond.towards],
                                                 otherFamilyRelation,
@@ -776,7 +779,7 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                                                 // will insist because too ambiguous
                                                 await injectConsentQuestion(true);
                                             } else {
-                                                const question = (typeof actionToChoose.consentMechanism.check === "string" ? actionToChoose.consentMechanism.check : await actionToChoose.consentMechanism.check({
+                                                const question = (typeof actionToChoose.consentMechanism.actionsAndChecks[consentActionIndex].check === "string" ? actionToChoose.consentMechanism.actionsAndChecks[consentActionIndex].check : await actionToChoose.consentMechanism.actionsAndChecks[consentActionIndex].check({
                                                     char: character,
                                                     other: engine.deObject.characters[bond.towards],
                                                     otherFamilyRelation,
@@ -805,12 +808,15 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                                                     await injectBehaviour();
                                                 } else {
                                                     // consent refused, let's see if we insist or not
-                                                    if (Math.random() < actionToChoose.consentMechanism.insistance) {
+                                                    if (Math.random() < actionToChoose.consentMechanism.insistence) {
                                                         // try to insist
                                                         await injectConsentQuestion(true);
-                                                    } else if (Math.random() < actionToChoose.consentMechanism.rejection) {
+                                                    } else if (Math.random() < actionToChoose.consentMechanism.ignoreConsentRejection) {
                                                         // proceed anyway after receiving a no
                                                         await injectBehaviour(true);
+                                                    } else {
+                                                        delete character.state["last_continous_affectionate_act_towards_" + bond.towards];
+                                                        delete character.state["last_is_waiting_for_affection_consent_response_from_" + bond.towards];
                                                     }
                                                 }
                                             }
@@ -921,7 +927,8 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                                  */
                                 const injectConsentQuestion = async (retry) => {
                                     if (actionToChoose.consentMechanism) {
-                                        const actionToAskForConsent = typeof actionToChoose.consentMechanism.action === "string" ? actionToChoose.consentMechanism.action : await actionToChoose.consentMechanism.action({
+                                        const consentActionIndex = Math.floor(Math.random() * actionToChoose.consentMechanism.actionsAndChecks.length);
+                                        const actionToAskForConsent = typeof actionToChoose.consentMechanism.actionsAndChecks[consentActionIndex].action === "string" ? actionToChoose.consentMechanism.actionsAndChecks[consentActionIndex].action : await actionToChoose.consentMechanism.actionsAndChecks[consentActionIndex].action({
                                             char: character,
                                             // @ts-ignore typescript is wrong, it is not null
                                             other: engine.deObject.characters[bond.towards],
@@ -940,6 +947,7 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                                                 character.state["last_is_waiting_for_intimate_affection_consent_response_from_" + bond.towards] = {
                                                     decl: realBondDeclaration.name,
                                                     actionIndex: realBondDeclaration.intimacy.proneToInitiatingIntimateAffection.actions.indexOf(actionToChoose),
+                                                    consentActionIndex,
                                                     tries: 0,
                                                 };
                                             }
@@ -950,7 +958,7 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                                 }
 
                                 if (lastIsExecutingIntimateAffectionateAct) {
-                                    let isFullfilled = false;
+                                    let isFullfilled = actionToChoose.fullfillCriteriaQuestions && actionToChoose.fullfillCriteriaQuestions.length > 0 ? false : true;
                                     for (const question of (actionToChoose.fullfillCriteriaQuestions || [])) {
                                         const questionValue = (typeof question === "string" ? question : await question({
                                             char: character,
@@ -985,7 +993,8 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                                     }
                                 } else if (actionToChoose.consentMechanism) {
                                     if (lastIsWaitingForIntimateAffectionConsent) {
-                                        const questionAmbigous = (typeof actionToChoose.consentMechanism.checkAmbiguousResponse === "string" ? actionToChoose.consentMechanism.checkAmbiguousResponse : await actionToChoose.consentMechanism.checkAmbiguousResponse({
+                                        const consentActionIndex = lastIsWaitingForIntimateAffectionConsent.consentActionIndex;
+                                        const questionAmbigous = (typeof actionToChoose.consentMechanism.actionsAndChecks[consentActionIndex].checkAmbiguousResponse === "string" ? actionToChoose.consentMechanism.actionsAndChecks[consentActionIndex].checkAmbiguousResponse : await actionToChoose.consentMechanism.actionsAndChecks[consentActionIndex].checkAmbiguousResponse({
                                             char: character,
                                             other: engine.deObject.characters[bond.towards],
                                             otherFamilyRelation,
@@ -1015,7 +1024,7 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                                             // will insist because too ambiguous
                                             await injectConsentQuestion(true);
                                         } else {
-                                            const question = (typeof actionToChoose.consentMechanism.check === "string" ? actionToChoose.consentMechanism.check : await actionToChoose.consentMechanism.check({
+                                            const question = (typeof actionToChoose.consentMechanism.actionsAndChecks[consentActionIndex].check === "string" ? actionToChoose.consentMechanism.actionsAndChecks[consentActionIndex].check : await actionToChoose.consentMechanism.actionsAndChecks[consentActionIndex].check({
                                                 char: character,
                                                 other: engine.deObject.characters[bond.towards],
                                                 otherFamilyRelation,
@@ -1044,12 +1053,15 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                                                 await injectBehaviour();
                                             } else {
                                                 // consent refused, let's see if we insist or not
-                                                if (Math.random() < actionToChoose.consentMechanism.insistance) {
+                                                if (Math.random() < actionToChoose.consentMechanism.insistence) {
                                                     // try to insist
                                                     await injectConsentQuestion(true);
-                                                } else if (Math.random() < actionToChoose.consentMechanism.rejection) {
+                                                } else if (Math.random() < actionToChoose.consentMechanism.ignoreConsentRejection) {
                                                     // proceed anyway after receiving a no
                                                     await injectBehaviour(true);
+                                                } else {
+                                                    delete character.state["last_continous_intimate_affectionate_act_towards_" + bond.towards];
+                                                    delete character.state["last_is_waiting_for_intimate_affection_consent_response_from_" + bond.towards];
                                                 }
                                             }
                                         }
@@ -1087,8 +1099,7 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                                  * @param {boolean} proceedAnyway 
                                  */
                                 const injectBehaviour = async (proceedAnyway = false) => {
-                                    // @ts-ignore typescript is wrong, it is not null
-                                    const behaviour = typeof actionToChoose.action === "string" ? actionToChoose.action : await actionToChoose.action(engine.deObject, {
+                                    const behaviour = typeof actionToChoose.action === "string" ? actionToChoose.action : await actionToChoose.action({
                                         char: character,
                                         // @ts-ignore typescript is wrong, it is not null
                                         other: engine.deObject.characters[bond.towards],
@@ -1126,7 +1137,8 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                                  */
                                 const injectConsentQuestion = async (retry) => {
                                     if (actionToChoose.consentMechanism) {
-                                        const actionToAskForConsent = typeof actionToChoose.consentMechanism.action === "string" ? actionToChoose.consentMechanism.action : await actionToChoose.consentMechanism.action({
+                                        const consentActionIndex = Math.floor(Math.random() * actionToChoose.consentMechanism.actionsAndChecks.length);
+                                        const actionToAskForConsent = typeof actionToChoose.consentMechanism.actionsAndChecks[consentActionIndex].action === "string" ? actionToChoose.consentMechanism.actionsAndChecks[consentActionIndex].action : await actionToChoose.consentMechanism.actionsAndChecks[consentActionIndex].action({
                                             char: character,
                                             // @ts-ignore typescript is wrong, it is not null
                                             other: engine.deObject.characters[bond.towards],
@@ -1145,6 +1157,7 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                                                 character.state["last_is_waiting_for_sex_consent_response_from_" + bond.towards] = {
                                                     decl: realBondDeclaration.name,
                                                     actionIndex: realBondDeclaration.intimacy.proneToInitiatingSex.actions.indexOf(actionToChoose),
+                                                    consentActionIndex,
                                                     tries: 0,
                                                 };
                                             }
@@ -1155,7 +1168,7 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                                 }
 
                                 if (lastIsExecutingSexualAct) {
-                                    let isFullfilled = false;
+                                    let isFullfilled = actionToChoose.fullfillCriteriaQuestions && actionToChoose.fullfillCriteriaQuestions.length > 0 ? false : true;
                                     for (const question of (actionToChoose.fullfillCriteriaQuestions || [])) {
                                         const questionValue = (typeof question === "string" ? question : await question({
                                             char: character,
@@ -1190,7 +1203,8 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                                     }
                                 } else if (actionToChoose.consentMechanism) {
                                     if (lastIsWaitingForSexConsent) {
-                                        const questionAmbigous = (typeof actionToChoose.consentMechanism.checkAmbiguousResponse === "string" ? actionToChoose.consentMechanism.checkAmbiguousResponse : await actionToChoose.consentMechanism.checkAmbiguousResponse({
+                                        const consentActionIndex = lastIsWaitingForSexConsent.consentActionIndex;
+                                        const questionAmbigous = (typeof actionToChoose.consentMechanism.actionsAndChecks[consentActionIndex].checkAmbiguousResponse === "string" ? actionToChoose.consentMechanism.actionsAndChecks[consentActionIndex].checkAmbiguousResponse : await actionToChoose.consentMechanism.actionsAndChecks[consentActionIndex].checkAmbiguousResponse({
                                             char: character,
                                             other: engine.deObject.characters[bond.towards],
                                             otherFamilyRelation,
@@ -1220,7 +1234,7 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                                             // will insist because too ambiguous
                                             await injectConsentQuestion(true);
                                         } else {
-                                            const question = (typeof actionToChoose.consentMechanism.check === "string" ? actionToChoose.consentMechanism.check : await actionToChoose.consentMechanism.check({
+                                            const question = (typeof actionToChoose.consentMechanism.actionsAndChecks[consentActionIndex].check === "string" ? actionToChoose.consentMechanism.actionsAndChecks[consentActionIndex].check : await actionToChoose.consentMechanism.actionsAndChecks[consentActionIndex].check({
                                                 char: character,
                                                 other: engine.deObject.characters[bond.towards],
                                                 otherFamilyRelation,
@@ -1250,12 +1264,15 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                                                 await injectBehaviour();
                                             } else {
                                                 // consent refused, let's see if we insist or not
-                                                if (Math.random() < actionToChoose.consentMechanism.insistance) {
+                                                if (Math.random() < actionToChoose.consentMechanism.insistence) {
                                                     // try to insist
                                                     await injectConsentQuestion(true);
-                                                } else if (Math.random() < actionToChoose.consentMechanism.rejection) {
+                                                } else if (Math.random() < actionToChoose.consentMechanism.ignoreConsentRejection) {
                                                     // proceed anyway after receiving a no
                                                     await injectBehaviour(true);
+                                                } else {
+                                                    delete character.state["last_continous_sexual_act_towards_" + bond.towards];
+                                                    delete character.state["last_is_waiting_for_sex_consent_response_from_" + bond.towards];
                                                 }
                                             }
                                         }

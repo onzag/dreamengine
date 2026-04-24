@@ -247,6 +247,31 @@ export function insertSection(lines, commentId, defaultCreateFn) {
 }
 
 /**
+ * 
+ * @param {Array<CardTypeCardSection | string>} lines 
+ * @param {string} commentId 
+ * @param {(section: CardTypeCardSection) => void} [defaultCreateFn] - Optional function to initialize the section
+ */
+export function unshiftSection(lines, commentId, defaultCreateFn) {
+    const existingSection = getSection(lines, commentId);
+    if (existingSection) {
+        return existingSection;
+    }
+    const newSection = {
+        type: 'section',
+        commentId,
+        head: [],
+        body: [],
+        foot: [],
+    };
+    if (defaultCreateFn) {
+        defaultCreateFn(newSection);
+    }
+    lines.unshift(newSection);
+    return newSection;
+}
+
+/**
  * @param {Array<CardTypeCardSection | string>} lines 
  * @param {string} commentId 
  */

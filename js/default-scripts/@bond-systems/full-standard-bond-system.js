@@ -9,12 +9,15 @@
  * @property {DEStringTemplateCharAndOther} [bondAdditionalDescription] additional description to be added to the bond description
  * @property {DEStringTemplateCharAndOther} [generalCharacterDescriptionInjection] A template that can be injected into the general character description when this bond declaration is active, it will have access to the same variables as the description, but it is meant to be a smaller piece of text that can be added to the general description when relevant, instead of being the main description of the bond level.
  * @property {DEStringTemplateCharAndOther} [generalCharacterDescriptionInjectionEx] Similar to generalCharacterDescriptionInjection but it will only be injected in the general character description and not in the bond description, this is useful for cases where the information is relevant for the character description but not for the bond description, for example if you want to add a sentence about how the character's family relationship with the other character affects their behavior towards them, you might want that to be in the general description injection but not in the bond description, since the bond description might be focused on romantic feelings and the family relationship might not be relevant for that.
- * @property {(DE: DEObject, char: DECompleteCharacterReference, other: DECompleteCharacterReference) => PromiseOrNot<{value: "not" | "slight" | "moderate" | "very", reason?: string | null}>} openToAffection
- * @property {(DE: DEObject, char: DECompleteCharacterReference, other: DECompleteCharacterReference) => PromiseOrNot<{value: "not" | "slight" | "moderate" | "very", reason?: string | null}>} openToIntimateAffection
- * @property {(DE: DEObject, char: DECompleteCharacterReference, other: DECompleteCharacterReference) => PromiseOrNot<{value: "not" | "slight" | "moderate" | "very", reason?: string | null}>} openToSex
- * @property {(DE: DEObject, char: DECompleteCharacterReference, other: DECompleteCharacterReference) => PromiseOrNot<{probability: number, options?: string[]}>} proneToInitiatingAffection
- * @property {(DE: DEObject, char: DECompleteCharacterReference, other: DECompleteCharacterReference) => PromiseOrNot<{probability: number, options?: string[]}>} proneToInitiatingIntimateAffection
- * @property {(DE: DEObject, char: DECompleteCharacterReference, other: DECompleteCharacterReference) => PromiseOrNot<{probability: number, options?: string[]}>} proneToInitiatingSex
+ * @property {(char: DECompleteCharacterReference, other: DECompleteCharacterReference) => PromiseOrNot<{value: "not" | "slight" | "moderate" | "very", reason?: string | null}>} openToAffection
+ * @property {(char: DECompleteCharacterReference, other: DECompleteCharacterReference) => PromiseOrNot<{value: "not" | "slight" | "moderate" | "very", reason?: string | null}>} openToIntimateAffection
+ * @property {(char: DECompleteCharacterReference, other: DECompleteCharacterReference) => PromiseOrNot<{value: "not" | "slight" | "moderate" | "very", reason?: string | null}>} openToSex
+ * @property {{ probability: (char: DECompleteCharacterReference, other: DECompleteCharacterReference) => PromiseOrNot<number>, actions: DEIntimateAction[] }} proneToInitiatingAffection
+ * @property {{ probability: (char: DECompleteCharacterReference, other: DECompleteCharacterReference) => PromiseOrNot<number>, actions: DEIntimateAction[] }} proneToInitiatingIntimateAffection
+ * @property {{ probability: (char: DECompleteCharacterReference, other: DECompleteCharacterReference) => PromiseOrNot<number>, actions: DEIntimateAction[] }} proneToInitiatingSex
+ * @property {Array<{ question: DEStringTemplateCharAndOther, reaction: DEStringTemplateCharAndOther, onlyAtLevel?: "not" | "slight" | "moderate" | "very" }>} openToAffectionResponses
+ * @property {Array<{ question: DEStringTemplateCharAndOther, reaction: DEStringTemplateCharAndOther, onlyAtLevel?: "not" | "slight" | "moderate" | "very" }>} openToIntimateAffectionResponses
+ * @property {Array<{ question: DEStringTemplateCharAndOther, reaction: DEStringTemplateCharAndOther, onlyAtLevel?: "not" | "slight" | "moderate" | "very" }>} openToSexResponses
  */
 
 /**
@@ -286,8 +289,11 @@ engine.exports = {
                 generalCharacterDescriptionInjectionEx: options.strangerBad_n100_n5.generalCharacterDescriptionInjectionEx,
                 intimacy: {
                     openToAffection: options.strangerBad_n100_n5.openToAffection,
+                    openToAffectionResponses: options.strangerBad_n100_n5.openToAffectionResponses,
                     openToIntimateAffection: options.strangerBad_n100_n5.openToIntimateAffection,
+                    openToIntimateAffectionResponses: options.strangerBad_n100_n5.openToIntimateAffectionResponses,
                     openToSex: options.strangerBad_n100_n5.openToSex,
+                    openToSexResponses: options.strangerBad_n100_n5.openToSexResponses,
                     proneToInitiatingAffection: options.strangerBad_n100_n5.proneToInitiatingAffection,
                     proneToInitiatingIntimateAffection: options.strangerBad_n100_n5.proneToInitiatingIntimateAffection,
                     proneToInitiatingSex: options.strangerBad_n100_n5.proneToInitiatingSex,
@@ -309,8 +315,11 @@ engine.exports = {
                 generalCharacterDescriptionInjectionEx: options.strangerNeutral_n5_5.generalCharacterDescriptionInjectionEx,
                 intimacy: {
                     openToAffection: options.strangerNeutral_n5_5.openToAffection,
+                    openToAffectionResponses: options.strangerNeutral_n5_5.openToAffectionResponses,
                     openToIntimateAffection: options.strangerNeutral_n5_5.openToIntimateAffection,
+                    openToIntimateAffectionResponses: options.strangerNeutral_n5_5.openToIntimateAffectionResponses,
                     openToSex: options.strangerNeutral_n5_5.openToSex,
+                    openToSexResponses: options.strangerNeutral_n5_5.openToSexResponses,
                     proneToInitiatingAffection: options.strangerNeutral_n5_5.proneToInitiatingAffection,
                     proneToInitiatingIntimateAffection: options.strangerNeutral_n5_5.proneToInitiatingIntimateAffection,
                     proneToInitiatingSex: options.strangerNeutral_n5_5.proneToInitiatingSex,
@@ -332,8 +341,11 @@ engine.exports = {
                 generalCharacterDescriptionInjectionEx: options.strangerGood_5_100.generalCharacterDescriptionInjectionEx,
                 intimacy: {
                     openToAffection: options.strangerGood_5_100.openToAffection,
+                    openToAffectionResponses: options.strangerGood_5_100.openToAffectionResponses,
                     openToIntimateAffection: options.strangerGood_5_100.openToIntimateAffection,
+                    openToIntimateAffectionResponses: options.strangerGood_5_100.openToIntimateAffectionResponses,
                     openToSex: options.strangerGood_5_100.openToSex,
+                    openToSexResponses: options.strangerGood_5_100.openToSexResponses,
                     proneToInitiatingAffection: options.strangerGood_5_100.proneToInitiatingAffection,
                     proneToInitiatingIntimateAffection: options.strangerGood_5_100.proneToInitiatingIntimateAffection,
                     proneToInitiatingSex: options.strangerGood_5_100.proneToInitiatingSex,
@@ -374,6 +386,9 @@ engine.exports = {
                                 proneToInitiatingAffection: baseRule.proneToInitiatingAffection,
                                 proneToInitiatingIntimateAffection: baseRule.proneToInitiatingIntimateAffection,
                                 proneToInitiatingSex: baseRule.proneToInitiatingSex,
+                                openToAffectionResponses: baseRule.openToAffectionResponses,
+                                openToIntimateAffectionResponses: baseRule.openToIntimateAffectionResponses,
+                                openToSexResponses: baseRule.openToSexResponses,
                             },
                         });
                     }

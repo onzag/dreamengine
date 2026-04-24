@@ -1309,9 +1309,6 @@ class CardTypeWizard extends HTMLElement {
 
         .guider-list-item span {
             flex: 1;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
         }
 
         .guider-list-remove {

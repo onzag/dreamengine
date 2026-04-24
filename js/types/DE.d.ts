@@ -690,18 +690,20 @@ declare interface DEIntimateAction {
      * be injected
      */
     consentMechanism?: {
-        action: DEStringTemplateCharAndOther;
-        check: DEStringTemplateCharAndOther;
-        checkAmbiguousResponse: DEStringTemplateCharAndOther;
+        actionsAndChecks: Array<{
+            action: DEStringTemplateCharAndOther;
+            check: DEStringTemplateCharAndOther;
+            checkAmbiguousResponse: DEStringTemplateCharAndOther;
+        }>;
         /**
          * A number from 0 to 1 how likely to take a no for an answer
          */
-        insistance: number;
+        insistence: number;
         /**
          * A number from 0 to 1 how likely they are to reject consent
          * and proceed anyway after receveing a no for an answer
          */
-        rejection: number;
+        ignoreConsentRejection: number;
     };
     /**
      * States to trigger with this action once it executes
@@ -819,7 +821,7 @@ declare interface DEBondIntimacyInfo {
      * 
      * These only inject if openToAffection returns a value other than "not", unless it is a not specific affectionate rule
      */
-    openAffectionateResponses: Array<{ question: DEStringTemplateCharAndOther, reaction: DEStringTemplateCharAndOther, onlyAtLevel?: "not" | "slight" | "moderate" | "very" }>;
+    openToAffectionResponses: Array<{ question: DEStringTemplateCharAndOther, reaction: DEStringTemplateCharAndOther, onlyAtLevel?: "not" | "slight" | "moderate" | "very" }>;
     /**
      * Whether the character in question with another, the options are what types of affection they will be prone to initiating
      * Make sure to keep in mind the circumstances
@@ -843,7 +845,7 @@ declare interface DEBondIntimacyInfo {
      * 
      * These only inject if openToIntimateAffection returns a value other than "not", unless it is a not specific intimate affectionate rule
      */
-    openIntimateAffectionateResponses: Array<{ question: DEStringTemplateCharAndOther, reaction: DEStringTemplateCharAndOther, onlyAtLevel?: "not" | "slight" | "moderate" | "very" }>;
+    openToIntimateAffectionResponses: Array<{ question: DEStringTemplateCharAndOther, reaction: DEStringTemplateCharAndOther, onlyAtLevel?: "not" | "slight" | "moderate" | "very" }>;
     /**
      * Whether the character in question with another, the options are what types of intimate affection they will be prone to initiating
      * Make sure to keep in mind the circumstances
@@ -867,7 +869,7 @@ declare interface DEBondIntimacyInfo {
      * 
      * These only inject if openToSex returns a value other than "not", unless it is a not specific sexual rule
      */
-    openSexResponses: Array<{ question: DEStringTemplateCharAndOther, reaction: DEStringTemplateCharAndOther, onlyAtLevel?: "not" | "slight" | "moderate" | "very" }>;
+    openToSexResponses: Array<{ question: DEStringTemplateCharAndOther, reaction: DEStringTemplateCharAndOther, onlyAtLevel?: "not" | "slight" | "moderate" | "very" }>;
     /**
      * Whether the character in question with another, the options are what types of sex they will be prone to initiating
      * Make sure to keep in mind the circumstances
