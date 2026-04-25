@@ -805,6 +805,8 @@ declare interface DEBondDeclaration {
     intimacy: DEBondIntimacyInfo;
 }
 
+declare interface DEIntimateOpenActivity { question: DEStringTemplateCharAndOther, reaction: DEStringTemplateCharAndOther, vocabularyLimit?: DEVocabularyLimit, onlyAtLevel?: Array<"not" | "slight" | "moderate" | "very"> };
+
 declare interface DEBondIntimacyInfo {
     /**
      * Whether the character in question with the other will be open to affection at this bond level, and the reason why or why not
@@ -821,7 +823,7 @@ declare interface DEBondIntimacyInfo {
      * 
      * These only inject if openToAffection returns a value other than "not", unless it is a not specific affectionate rule
      */
-    openToAffectionResponses: Array<{ question: DEStringTemplateCharAndOther, reaction: DEStringTemplateCharAndOther, onlyAtLevel?: "not" | "slight" | "moderate" | "very" }>;
+    openToAffectionResponses: Array<DEIntimateOpenActivity>;
     /**
      * Whether the character in question with another, the options are what types of affection they will be prone to initiating
      * Make sure to keep in mind the circumstances
@@ -845,7 +847,7 @@ declare interface DEBondIntimacyInfo {
      * 
      * These only inject if openToIntimateAffection returns a value other than "not", unless it is a not specific intimate affectionate rule
      */
-    openToIntimateAffectionResponses: Array<{ question: DEStringTemplateCharAndOther, reaction: DEStringTemplateCharAndOther, onlyAtLevel?: "not" | "slight" | "moderate" | "very" }>;
+    openToIntimateAffectionResponses: Array<DEIntimateOpenActivity>;
     /**
      * Whether the character in question with another, the options are what types of intimate affection they will be prone to initiating
      * Make sure to keep in mind the circumstances
@@ -869,7 +871,7 @@ declare interface DEBondIntimacyInfo {
      * 
      * These only inject if openToSex returns a value other than "not", unless it is a not specific sexual rule
      */
-    openToSexResponses: Array<{ question: DEStringTemplateCharAndOther, reaction: DEStringTemplateCharAndOther, onlyAtLevel?: "not" | "slight" | "moderate" | "very" }>;
+    openToSexResponses: Array<DEIntimateOpenActivity>;
     /**
      * Whether the character in question with another, the options are what types of sex they will be prone to initiating
      * Make sure to keep in mind the circumstances

@@ -228,10 +228,11 @@ export async function generateAffectiveStates(engine, card, guider, autosave) {
     /**
      * 
      * @param {string} act 
+     * @param {boolean} consentDefaultNo
      * @param {boolean} addVocabLimit 
      * @param {boolean} continous
      */
-    const generateIntimateAction = async (act, addVocabLimit, continous) => {
+    const generateIntimateAction = async (act, consentDefaultNo, addVocabLimit, continous) => {
         intimateHead.body.push(`action: (info) => ${toTemplateLiteral(act)},`);
         intimateHead.body.push(`probability: 1,`);
 
@@ -328,7 +329,7 @@ export async function generateAffectiveStates(engine, card, guider, autosave) {
             intimateHead.body.push(`],`);
         }
 
-        const wouldAskForConsent = await generator.next({
+        const wouldAskForConsent = consentDefaultNo ? {done: true, value: "no"} : await generator.next({
             maxCharacters: 20,
             maxSafetyCharacters: 20,
             maxParagraphs: 1,
@@ -574,6 +575,47 @@ export async function generateAffectiveStates(engine, card, guider, autosave) {
         }
     }
 
+    if (!hasSpecialComment(intimateHead.body, "affection-showcases")) {
+        await prime();
+        const affectionShowcasesResult = await generator.next({
+            maxCharacters: 1000,
+            maxSafetyCharacters: 1000,
+            maxParagraphs: 10,
+            nextQuestion: `List ${name}'s simple affection showcases towards another character (regardless of gender). Each act must be a single simultaneous action with an emotional reaction. Examples: hugging warmly, patting on the back, ruffling hair, holding hands, leaning on shoulder, etc.`,
+            stopAfter: [],
+            stopAt: [],
+            instructions: "Each item must be ONE simultaneous affectionate action in the format: " + name + " [does X] while [feeling/reacting Y]. The action is performed by " + name + ". These are general, friendly affection showcases that any character could appreciate regardless of relationship. Do NOT use 'and then', 'before', 'after', or any sequence of events — only a single act paired with a simultaneous emotional or physical state. Use OTHER_CHARACTER as a placeholder for the other character's name.",
+            answerTrail: name + "'s affection showcases:\n\n",
+            grammar: "root ::= list\nlist ::=" + (" bulletPoint").repeat(10) + "\nbulletPoint ::= \"- \" " + JSON.stringify(name) + " \" will \" [a-zA-Z0-9 ,;.'_]+ \"\\n\"",
+        });
+
+        if (affectionShowcasesResult.done) {
+            throw new Error("Generator finished without producing output");
+        }
+
+        let affectionShowcasesActsParsed = affectionShowcasesResult.value.split("\n").map(act => replaceOtherCharNameWithPlaceholder(act.trim().replace(`- `, "").trim(), name)).filter(act => act);
+        if (guider) {
+            const guiderResult = await guider.askArbitraryList("Provide a list of affection showcases that " + name + " would take initiative performing towards another character", affectionShowcasesActsParsed);
+            if (guiderResult.value) {
+                affectionShowcasesActsParsed = guiderResult.value;
+            }
+        }
+
+        insertSpecialComment(intimateHead.body, "affection-showcases");
+        intimateHead.body.push(`/** @type {DEIntimateAction[]} */`);
+        intimateHead.body.push(`const affectionShowcases = [`)
+
+        for (const act of affectionShowcasesActsParsed) {
+            intimateHead.body.push(`{`)
+            await generateIntimateAction(act, true, false, false);
+            intimateHead.body.push(`},`)
+        }
+
+        intimateHead.body.push(`];`)
+
+        await autosave?.save();
+    }
+
     if (isAttractedToMales && !hasSpecialComment(intimateHead.body, "intimate-affection-for-males")) {
         await prime();
         const isNonAnimal = card.config.characterSpeciesType !== "animal";
@@ -646,7 +688,7 @@ export async function generateAffectiveStates(engine, card, guider, autosave) {
 
         for (const act of intimateAffectionForMalesParsed) {
             intimateHead.body.push(`{`)
-            await generateIntimateAction(act, false, false);
+            await generateIntimateAction(act, true, false, false);
             intimateHead.body.push(`},`)
         }
 
@@ -727,7 +769,7 @@ export async function generateAffectiveStates(engine, card, guider, autosave) {
 
         for (const act of intimateAffectionForFemalesParsed) {
             intimateHead.body.push(`{`)
-            await generateIntimateAction(act, false, false);
+            await generateIntimateAction(act, true, false, false);
             intimateHead.body.push(`},`)
         }
 
@@ -808,7 +850,7 @@ export async function generateAffectiveStates(engine, card, guider, autosave) {
 
         for (const act of intimateAffectionForAmbiguousParsed) {
             intimateHead.body.push(`{`)
-            await generateIntimateAction(act, false, false);
+            await generateIntimateAction(act, true, false, false);
             intimateHead.body.push(`},`)
         }
 
@@ -849,7 +891,7 @@ export async function generateAffectiveStates(engine, card, guider, autosave) {
 
         for (const act of sexActsForMalesParsed) {
             intimateHead.body.push(`{`)
-            await generateIntimateAction(act, true, true);
+            await generateIntimateAction(act, false, true, true);
             intimateHead.body.push(`},`)
         }
 
@@ -890,7 +932,7 @@ export async function generateAffectiveStates(engine, card, guider, autosave) {
 
         for (const act of sexActsForFemalesParsed) {
             intimateHead.body.push(`{`)
-            await generateIntimateAction(act, true, true);
+            await generateIntimateAction(act, false, true, true);
             intimateHead.body.push(`},`)
         }
 
@@ -931,7 +973,7 @@ export async function generateAffectiveStates(engine, card, guider, autosave) {
 
         for (const act of sexActsForAmbiguousParsed) {
             intimateHead.body.push(`{`)
-            await generateIntimateAction(act, true, true);
+            await generateIntimateAction(act, false, true, true);
             intimateHead.body.push(`},`)
         }
 
@@ -940,7 +982,127 @@ export async function generateAffectiveStates(engine, card, guider, autosave) {
         await autosave?.save();
     }
 
-    
+    // Now let's do when it is other character the one that takes initiative
+    // Now we only really need to do the sex ones, because intimate affection and affection
+    // are okay being handled by the LLM itself, since the main thing is negative interactions
+    // and applying vocabulary limits, the negative kinks should be enough to steer it away
+    // from any weird intimate affection or affection that doesn't fit the character
+
+    if (!isAsexualValue && !hasSpecialComment(intimateHead.body, "sex-acts-open-to")) {
+        insertSpecialComment(intimateHead.body, "sex-acts-open-to");
+        intimateHead.body.push(`/** @type {DEIntimateOpenActivity[]} */`);
+        intimateHead.body.push(`const sexOpenTo = [`)
+
+        // first ask for the reversed kinks
+        await prime();
+        /**
+         * @type {string[]}
+         */
+        const reversedKinks = card.config.reversedKinks || [];
+
+        if (reversedKinks.length > 0) {
+            let reversedKinksQuestion = `Is {{other}} currently engaging or attempting to engage any of the following with {{char}}: ` + engine.getDEObject().utils.templateUtils.formatOr(reversedKinks) + "?";
+
+            if (guider) {
+                const guiderResult = await guider.askOpen("Question to determine if any of unwanted kinks are currently being attempted or engaged in by the other character towards our character", reversedKinksQuestion);
+                if (guiderResult.value) {
+                    reversedKinksQuestion = guiderResult.value;
+                }
+            }
+
+            // now let's determine the reaction using inference
+            const reversedKinksList = reversedKinks.join(", ");
+
+            const lovedReactionResult = await generator.next({
+                maxCharacters: 400,
+                maxSafetyCharacters: 400,
+                maxParagraphs: 1,
+                nextQuestion: `OTHER_CHARACTER is someone ${name} loves or has positive feelings towards. OTHER_CHARACTER is currently performing unwanted sexual behaviours onto ${name} (specifically things like: ${reversedKinksList}) — these are things ${name} finds repulsive or simply does not enjoy. Describe how ${name} would react in this loving context. The reaction should be MILD: gently refusing, expressing discomfort softly, suggesting they do something else instead — making it clear they don't like it but without anger or hostility, since they care about OTHER_CHARACTER. Write the reaction as a short narrative description in 1-2 sentences. Use OTHER_CHARACTER as a placeholder for the other character's name.`,
+                stopAfter: [],
+                stopAt: [],
+                instructions: `Write a short 1-2 sentence, single paragraph, narrative describing ${name}'s mild, gentle reaction. ${name} should clearly communicate they don't like what OTHER_CHARACTER is doing and want to redirect to something else, but without anger or hostility — they love OTHER_CHARACTER. Use OTHER_CHARACTER as a placeholder for the other character's name. Do not include the unwanted acts by name.`,
+                answerTrail: `${name}'s mild reaction (loving context) when OTHER_CHARACTER does unwanted things:\n\n`,
+            });
+
+            if (lovedReactionResult.done) {
+                throw new Error("Generator finished without producing output");
+            }
+
+            let reversedKinksReactionLoved = replaceOtherCharNameWithPlaceholder(lovedReactionResult.value.trim(), name);
+
+            if (guider) {
+                const guiderResult = await guider.askOpen(
+                    `${name}'s reaction when another character that they are attracted to attempts unwanted sexual behaviours onto them — they don't like it and want to redirect`,
+                    reversedKinksReactionLoved
+                );
+                if (guiderResult.value) {
+                    reversedKinksReactionLoved = guiderResult.value;
+                }
+            }
+
+            intimateHead.body.push("{");
+            intimateHead.body.push(`question: (info) => ${toTemplateLiteral(reversedKinksQuestion)},`);
+            intimateHead.body.push(`reaction: ${toTemplateLiteral(reversedKinksReactionLoved)},`);
+            intimateHead.body.push(`onlyAtLevel: ["slight", "moderate", "heavy"],`);
+            intimateHead.body.push(`},`)
+
+            const unlovedReactionResult = await generator.next({
+                maxCharacters: 400,
+                maxSafetyCharacters: 400,
+                maxParagraphs: 1,
+                nextQuestion: `OTHER_CHARACTER is someone ${name} does NOT love or has neutral/negative feelings towards. OTHER_CHARACTER is currently performing unwanted sexual behaviours onto ${name} (specifically things like: ${reversedKinksList}) — these are things ${name} finds repulsive or simply does not enjoy. Describe how ${name} would react in this non-loving context. The reaction should be STRONG: firmly refusing, pushing back, expressing clear disgust, anger, or hostility, demanding it stop, possibly threatening or physically resisting. Write the reaction as a short narrative description in 1-2 sentences. Use OTHER_CHARACTER as a placeholder for the other character's name.`,
+                stopAfter: [],
+                stopAt: [],
+                instructions: `Write a short 1-2 sentence, single paragraph, narrative describing ${name}'s strong, firm reaction. ${name} should clearly and forcefully reject what OTHER_CHARACTER is doing — with anger, disgust, or hostility appropriate to ${name}'s personality. Use OTHER_CHARACTER as a placeholder for the other character's name. Do not include the unwanted acts by name.`,
+                answerTrail: `${name}'s strong reaction (non-loving context) when OTHER_CHARACTER does unwanted things:\n\n`,
+            });
+
+            if (unlovedReactionResult.done) {
+                throw new Error("Generator finished without producing output");
+            }
+
+            let reversedKinksReactionUnloved = replaceOtherCharNameWithPlaceholder(unlovedReactionResult.value.trim(), name);
+
+            if (guider) {
+                const guiderResult = await guider.askOpen(
+                    `${name}'s reaction when another character that they are NOT attracted to attempts unwanted sexual behaviours onto them — they don't like it and want it to stop`,
+                    reversedKinksReactionUnloved
+                );
+                if (guiderResult.value) {
+                    reversedKinksReactionUnloved = guiderResult.value;
+                }
+            }
+
+            intimateHead.body.push("{");
+            intimateHead.body.push(`question: (info) => ${toTemplateLiteral(reversedKinksQuestion)},`);
+            intimateHead.body.push(`reaction: ${toTemplateLiteral(reversedKinksReactionUnloved)},`);
+            intimateHead.body.push(`onlyAtLevel: ["not"],`);
+            intimateHead.body.push(`},`)
+        }
+
+        let listOfSexActs = [
+            "is {{char}} currently being sexually penetrated by {{other}}?",
+            card.config.sex === "male" ? "is {{char}} currently penetrating {{other}}?" : "Is {{char}} currently pegging or using their fingers penetratively on {{other}}?",
+            "is {{char}} currently receiving oral sex from {{other}}?",
+            "is {{char}} currently giving oral sex to {{other}}?",
+            "is {{char}} currently engaging in non-penetrative sexual contact with {{other}} (e.g. grinding, mutual masturbation, tribbing, frotting, etc.)?"
+        ];
+
+        if (guider) {
+            const guiderResult = await guider.askArbitraryList("Questions to determine if any sex acts are currently being performed by the other character towards our character", listOfSexActs);
+            if (guiderResult.value) {
+                // we can do some basic parsing here to determine which acts are being performed, but for now let's just store the raw response and let the engine handle it in inference
+                // if we want to do parsing, we can look for keywords like "
+                listOfSexActs = guiderResult.value;
+            }
+        }
+
+        // TODO now similarly to the reversed kinks, we will ask for a reaction to yes and a reaction to no to each of these questions, remembering to replacing {{char}} with name and {{other}} with the placeholder OTHER_CHARACTER
+        // and asking the same from the inference response (this time the question ought to be different as we need to ask, if x answers yes to this question what would be their reaction)
+        // we need two reactions, one for loved characters and one for unloved characters, just like with the reversed kinks, because the reaction will likely be different depending on how they feel about the other character
+
+        autosave?.save();
+    }
 
     if (primed) {
         await generator.next(null); // end the generator

@@ -469,9 +469,9 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                 const openToIntimateAffection = await bondDeclaration.intimacy.openToIntimateAffection(character, engine.deObject.characters[bond.towards]);
                 const openToSex = await bondDeclaration.intimacy.openToSex(character, engine.deObject.characters[bond.towards]);
 
-                const openToAffectionQuestions = bondDeclaration.intimacy.openToAffectionResponses.filter(r => !r.onlyAtLevel || r.onlyAtLevel === openToAffection.value);
-                const openToIntimateAffectionQuestions = bondDeclaration.intimacy.openToIntimateAffectionResponses.filter(r => !r.onlyAtLevel || r.onlyAtLevel === openToIntimateAffection.value);
-                const openToSexQuestions = bondDeclaration.intimacy.openToSexResponses.filter(r => !r.onlyAtLevel || r.onlyAtLevel === openToSex.value);
+                const openToAffectionQuestions = bondDeclaration.intimacy.openToAffectionResponses.filter(r => !r.onlyAtLevel || r.onlyAtLevel.includes(openToAffection.value));
+                const openToIntimateAffectionQuestions = bondDeclaration.intimacy.openToIntimateAffectionResponses.filter(r => !r.onlyAtLevel || r.onlyAtLevel.includes(openToIntimateAffection.value));
+                const openToSexQuestions = bondDeclaration.intimacy.openToSexResponses.filter(r => !r.onlyAtLevel || r.onlyAtLevel.includes(openToSex.value));
 
                 const allQuestionsToAsk = [...openToAffectionQuestions, ...openToIntimateAffectionQuestions, ...openToSexQuestions];
 
@@ -510,6 +510,10 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                         });
 
                         microInjections.push(injection);
+
+                        if (questionToAsk.vocabularyLimit) {
+                            microVocabularyLimits.push(questionToAsk.vocabularyLimit);
+                        }
                     }
                 }
 

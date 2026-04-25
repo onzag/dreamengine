@@ -15,9 +15,9 @@
  * @property {{ probability: (char: DECompleteCharacterReference, other: DECompleteCharacterReference) => PromiseOrNot<number>, actions: DEIntimateAction[] }} proneToInitiatingAffection
  * @property {{ probability: (char: DECompleteCharacterReference, other: DECompleteCharacterReference) => PromiseOrNot<number>, actions: DEIntimateAction[] }} proneToInitiatingIntimateAffection
  * @property {{ probability: (char: DECompleteCharacterReference, other: DECompleteCharacterReference) => PromiseOrNot<number>, actions: DEIntimateAction[] }} proneToInitiatingSex
- * @property {Array<{ question: DEStringTemplateCharAndOther, reaction: DEStringTemplateCharAndOther, onlyAtLevel?: "not" | "slight" | "moderate" | "very" }>} openToAffectionResponses
- * @property {Array<{ question: DEStringTemplateCharAndOther, reaction: DEStringTemplateCharAndOther, onlyAtLevel?: "not" | "slight" | "moderate" | "very" }>} openToIntimateAffectionResponses
- * @property {Array<{ question: DEStringTemplateCharAndOther, reaction: DEStringTemplateCharAndOther, onlyAtLevel?: "not" | "slight" | "moderate" | "very" }>} openToSexResponses
+ * @property {Array<DEIntimateOpenActivity>} openToAffectionResponses
+ * @property {Array<DEIntimateOpenActivity>} openToIntimateAffectionResponses
+ * @property {Array<DEIntimateOpenActivity>} openToSexResponses
  */
 
 /**

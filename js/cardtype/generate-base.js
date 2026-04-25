@@ -758,6 +758,8 @@ export async function generateBase(engine, card, guider, autosave) {
 
         const finalGender = guider ? (await guider.askOption("What is " + name + "'s gender identity?", ["male", "female", "ambiguous"], genderGuess)).value : genderGuess;
 
+        card.config.gender = finalGender;
+
         insertSpecialComment(newCharacterSection.body, "base-gender");
         newCharacterSection.body.push(`gender: ${JSON.stringify(finalGender)},`);
         await autosave?.save();
@@ -825,6 +827,8 @@ export async function generateBase(engine, card, guider, autosave) {
         }
 
         const finalSex = guider ? (await guider.askOption("What is " + name + "'s biological sex?", ["male", "female", "intersex", "none"], sexGuess)).value : sexGuess;
+
+        card.config.sex = finalSex;
 
         insertSpecialComment(newCharacterSection.body, "base-sex");
         newCharacterSection.body.push(`sex: ${JSON.stringify(finalSex)},`);
