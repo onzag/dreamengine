@@ -63,66 +63,6 @@ export async function generateAffectiveStates(engine, card, guider, autosave) {
     const isAsexualValue = card.config.isAsexual;
     const name = card.config.name;
 
-    if (!card.config.affectionShowcases) {
-        await prime();
-        const affectionShowcases = await generator.next({
-            maxCharacters: 500,
-            maxSafetyCharacters: 500,
-            maxParagraphs: 1,
-            nextQuestion: `List ${name}'s specific ways that they show non-romantic, non-sexual physical affection towards others, as a comma separated list of actions. These should be specific actions or behaviors that ${name} would perform to showcase physical affection. List 7 to 10 unique items.`,
-            stopAfter: [],
-            stopAt: [],
-            instructions: "Each item must be a specific way that " + name + " shows non-romantic affection and it must not depend on any items or particular circumstances, they should always be possible. Do NOT say generic things like showing affection or being nice to others. We want specific actions or behaviors.",
-            answerTrail: name + "'s non-romantic physical affection showcases:\n\n",
-            grammar: "root ::= list\nlist ::=" + (" bulletPoint").repeat(7) + "\nbulletPoint ::= \"- \" [a-zA-Z0-9 ,;.'_]+ \"\\n\"",
-        });
-        if (affectionShowcases.done) {
-            throw new Error("Generator finished without producing output");
-        }
-        let affectionShowcasesParsed = affectionShowcases.value.split("\n").join(",").split(",").map(item => item.trim().replace("- ", " ").trim()).filter(item => item);
-
-        if (guider) {
-            const guiderResult = await guider.askList("Provide a list of specific ways that " + name + " shows non-romantic, non-sexual physical affection towards others", null, affectionShowcasesParsed);
-            if (guiderResult.value) {
-                affectionShowcasesParsed = guiderResult.value;
-            }
-        }
-
-        card.config.affectionShowcases = affectionShowcasesParsed;
-
-        await autosave?.save();
-    }
-
-    if (!isAsexualValue && !card.config.intimateAffectionShowcases) {
-        await prime();
-        const intimateAffectionShowcases = await generator.next({
-            maxCharacters: 500,
-            maxSafetyCharacters: 500,
-            maxParagraphs: 1,
-            nextQuestion: `List ${name}'s specific way that they show romantic or sexual physical affection towards others, these must be explicit sexual actions, as a comma separated list of short 1-3 word items. These should be specific actions or behaviors that ${name} would perform to showcase sexual physical affection. List 7 to 10 unique items.`,
-            stopAfter: [],
-            stopAt: [],
-            instructions: "Each item must be a specific way that " + name + " shows romantic or sexual physical affection and it must not depend on any items or particular circumstances, they should always be possible. Do NOT include any of the following " + card.config.affectionShowcases.join(", ") + " as those are non-romantic ways that " + name + " shows physical affection. We want specific romantic or sexual actions or behaviors.",
-            answerTrail: name + "'s romantic or sexual physical affection showcases:\n\n",
-            grammar: "root ::= list\nlist ::=" + (" bulletPoint").repeat(7) + "\nbulletPoint ::= \"- \" [a-zA-Z0-9 ,;.'_]+ \"\\n\"",
-        });
-        if (intimateAffectionShowcases.done) {
-            throw new Error("Generator finished without producing output");
-        }
-        let intimateAffectionShowcasesParsed = intimateAffectionShowcases.value.split("\n").join(",").split(",").map(item => item.trim().replace("- ", " ").trim()).filter(item => item);
-
-        if (guider) {
-            const guiderResult = await guider.askList("Provide a list of specific ways that " + name + " shows romantic or sexual physical affection towards others", null, intimateAffectionShowcasesParsed);
-            if (guiderResult.value) {
-                intimateAffectionShowcasesParsed = guiderResult.value;
-            }
-        }
-
-        card.config.intimateAffectionShowcases = intimateAffectionShowcasesParsed;
-
-        await autosave?.save();
-    }
-
     const isAttractedToMales = card.config.attractions?.includes("male");
     const isAttractedToFemales = card.config.attractions?.includes("female");
     const isAttractedToAmbiguous = card.config.attractions?.includes("ambiguous");
@@ -146,7 +86,7 @@ export async function generateAffectiveStates(engine, card, guider, autosave) {
         let kinksParsed = kinks.value.split("\n").join(",").split(",").map(kink => kink.trim().replace("- ", " ").trim()).filter(kink => kink);
 
         if (guider) {
-            const guiderResult = await guider.askList("Provide a list of kinks and special sexual/romantic interests for " + name + " (General non-gender specific)", null, kinksParsed);
+            const guiderResult = await guider.askArbitraryList("Provide a list of kinks and special sexual/romantic interests for " + name + " (General non-gender specific)", kinksParsed);
             if (guiderResult.value) {
                 kinksParsed = guiderResult.value;
             }
@@ -176,7 +116,7 @@ export async function generateAffectiveStates(engine, card, guider, autosave) {
         let kinksForMalesParsed = kinksForMales.value.split("\n").join(",").split(",").map(kink => kink.trim().replace("- ", " ").trim()).filter(kink => kink);
 
         if (guider) {
-            const guiderResult = await guider.askList("Provide a list of kinks specific to male partners for " + name + " (male anatomy/characteristics only)", null, kinksForMalesParsed);
+            const guiderResult = await guider.askArbitraryList("Provide a list of kinks specific to male partners for " + name + " (male anatomy/characteristics only)", kinksForMalesParsed);
             if (guiderResult.value) {
                 kinksForMalesParsed = guiderResult.value;
             }
@@ -206,7 +146,7 @@ export async function generateAffectiveStates(engine, card, guider, autosave) {
         let kinksForFemalesParsed = kinksForFemales.value.split("\n").map(kink => kink.trim().replace("- ", " ").trim()).filter(kink => kink);
 
         if (guider) {
-            const guiderResult = await guider.askList("Provide a list of kinks specific to female partners for " + name + " (female anatomy/characteristics only)", null, kinksForFemalesParsed);
+            const guiderResult = await guider.askArbitraryList("Provide a list of kinks specific to female partners for " + name + " (female anatomy/characteristics only)", kinksForFemalesParsed);
             if (guiderResult.value) {
                 kinksForFemalesParsed = guiderResult.value;
             }
@@ -236,7 +176,7 @@ export async function generateAffectiveStates(engine, card, guider, autosave) {
         let reversedKinksParsed = reversedKinks.value.split("\n").map(kink => kink.trim().replace("- ", " ").trim()).filter(kink => kink);
 
         if (guider) {
-            const guiderResult = await guider.askList("Provide a list of kinks and special sexual/romantic interests that " + name + " would find repulsive and be a hard no for them", null, reversedKinksParsed);
+            const guiderResult = await guider.askArbitraryList("Provide a list of kinks and special sexual/romantic interests that " + name + " would find repulsive and be a hard no for them", reversedKinksParsed);
             if (guiderResult.value) {
                 reversedKinksParsed = guiderResult.value;
             }
@@ -292,7 +232,7 @@ export async function generateAffectiveStates(engine, card, guider, autosave) {
      * @param {boolean} continous
      */
     const generateIntimateAction = async (act, addVocabLimit, continous) => {
-        intimateHead.body.push(`action: (info) => ${toTemplateLiteral(act)}`);
+        intimateHead.body.push(`action: (info) => ${toTemplateLiteral(act)},`);
         intimateHead.body.push(`probability: 1,`);
 
         const actForInference = act.replace(/{{other}}/g, "other character").replace(/{{char}}/g, name);
@@ -307,6 +247,7 @@ export async function generateAffectiveStates(engine, card, guider, autosave) {
                 "screaming",
                 "mute",
                 "none",
+                "normal",
             ];
 
             const vocabResult = await generator.next({
@@ -356,9 +297,9 @@ export async function generateAffectiveStates(engine, card, guider, autosave) {
                 nextQuestion: `Given that ${name} is performing the following act: "${actForInference}", write 2 to 3 short questions that would determine when this act has ended or been completed. Each question should describe a condition or event that signals the act is over. Use OTHER_CHARACTER as a placeholder for the other character's name.`,
                 stopAfter: [],
                 stopAt: [],
-                instructions: `Write 2 to 3 short questions as a bullet point list. Each question must describe a condition that ends the act "${actForInference}". Use OTHER_CHARACTER as a placeholder for the other character's name. Keep questions short and specific to this act.`,
+                instructions: `Write 2 to 3 short questions as a bullet point list. Since this is about a sexual act focus on the following endings like "orgasm has been achieved" or acts that would cause the act to end. Use OTHER_CHARACTER as a placeholder for the other character's name. Keep questions short and specific to this act.`,
                 answerTrail: `Questions that determine the end of "${actForInference}":\n\n`,
-                grammar: "root ::= list\nlist ::=" + (" bulletPoint").repeat(2) + " bulletPoint\nbulletPoint ::= \"- \" [a-zA-Z0-9 ,;.'?!_]+ \"\\n\"",
+                grammar: "root ::= list\nlist ::=" + (" bulletPoint").repeat(3) + " bulletPoint\nbulletPoint ::= \"- Has \" [a-zA-Z0-9 ,;.'?!_]+ \"\\n\"",
             });
 
             if (criteriaResult.done) {
@@ -371,9 +312,8 @@ export async function generateAffectiveStates(engine, card, guider, autosave) {
                 .filter(q => q);
 
             if (guider) {
-                const guiderResult = await guider.askList(
+                const guiderResult = await guider.askArbitraryList(
                     `Provide 2-3 questions that determine when ${name} has finished performing: "${actForInference}"`,
-                    null,
                     fullfillCriteriaQuestions
                 );
                 if (guiderResult.value) {
@@ -421,12 +361,17 @@ export async function generateAffectiveStates(engine, card, guider, autosave) {
         }
 
         if (wouldAskForConsentValue) {
-            newCharacterSection.head.push(`consentMechanism: {`);
+            intimateHead.body.push(`consentMechanism: {`);
 
             const verbality = card.config.intimateVerbality ?? 5;
             const totalActions = 6;
-            const verbalCount = Math.round(totalActions * (verbality / 10));
-            const nonVerbalCount = totalActions - verbalCount;
+            let verbalCount = Math.round(totalActions * (verbality / 10));
+            let nonVerbalCount = totalActions - verbalCount;
+
+            if (verbalCount === 0 && verbality > 0) {
+                nonVerbalCount--;
+                verbalCount++;
+            }
 
             /**
              * @type {string[]}
@@ -439,15 +384,15 @@ export async function generateAffectiveStates(engine, card, guider, autosave) {
 
             if (verbalCount > 0) {
                 const verbalResult = await generator.next({
-                    maxCharacters: 300,
-                    maxSafetyCharacters: 300,
-                    maxParagraphs: verbalCount,
-                    nextQuestion: `List ${verbalCount} specific verbal things ${name} would say or ask to seek consent before performing: "${actForInference}". These must be spoken words or phrases, not physical actions. Use OTHER_CHARACTER as a placeholder for the other character's name.`,
+                    maxCharacters: 3000,
+                    maxSafetyCharacters: 3000,
+                    maxParagraphs: 50,
+                    nextQuestion: `List ${verbalCount} specific verbal things ${name} would say or ask to seek consent before performing: "${actForInference}". These must be spoken words or phrases, not physical actions. Use OTHER_CHARACTER as a placeholder for the other character's name. Keep each listed item short, only 1 or 2 sentences at most.`,
                     stopAfter: [],
                     stopAt: [],
-                    instructions: `List exactly ${verbalCount} short verbal consent phrases or questions that ${name} would use. Use OTHER_CHARACTER as a placeholder for the other character's name.`,
+                    instructions: `List exactly ${verbalCount} short verbal consent phrases or questions that ${name} would use. Use OTHER_CHARACTER as a placeholder for the other character's name. The phrase or question ${name} would use SHOULD BE INCLUDED in the output, do not just say "asks for consent" or similar, we want the actual words or phrases that ${name} would say.`,
                     answerTrail: `${name}'s verbal consent phrases:\n\n`,
-                    grammar: "root ::= list\nlist ::=" + (" bulletPoint").repeat(verbalCount) + "\nbulletPoint ::= \"- \" " + JSON.stringify(name) + " \" will\" [a-zA-Z0-9 ,;.'?!_ ]+ \"\\n\"",
+                    grammar: "root ::= list\nlist ::=" + (" bulletPoint").repeat(verbalCount) + "\nbulletPoint ::= \"- \" " + JSON.stringify(name) + " \" will \" (\"say\" | \"ask\") \" '\" sentence (\" \" sentence)? \"'\\n\"\nsentence ::= [a-zA-Z0-9 ,;'_-]+ (\".\" | \"!\" | \"?\")",
                 });
                 if (verbalResult.done) {
                     throw new Error("Generator finished without producing output");
@@ -460,15 +405,15 @@ export async function generateAffectiveStates(engine, card, guider, autosave) {
 
             if (nonVerbalCount > 0) {
                 const nonVerbalResult = await generator.next({
-                    maxCharacters: 300,
-                    maxSafetyCharacters: 300,
-                    maxParagraphs: nonVerbalCount,
-                    nextQuestion: `List ${nonVerbalCount} specific non-verbal body language actions ${name} would perform to seek consent before performing: "${actForInference}". These must be physical gestures or body language — not spoken words. Use OTHER_CHARACTER as a placeholder for the other character's name.`,
+                    maxCharacters: 3000,
+                    maxSafetyCharacters: 3000,
+                    maxParagraphs: 50,
+                    nextQuestion: `List ${nonVerbalCount} specific non-verbal body language actions ${name} would perform to seek consent that clearly and unambiguously signal the intent to perform: "${actForInference}". These must be physical gestures or body language — not spoken words. The actions MUST be proportional in intensity and explicitness to the act itself: if the act is sexual or intimate (e.g. having sex, oral sex, penetration), the consent gesture must be equally suggestive and direct (e.g. inappropriate touching, grinding against them, guiding their hand to an intimate place, undressing in front of them, seductive body movements). Do NOT suggest vague or innocent gestures like "giving cute eyes", "smiling sweetly", or "blushing" for explicit acts — those do not communicate the act being asked about. Use OTHER_CHARACTER as a placeholder for the other character's name.`,
                     stopAfter: [],
                     stopAt: [],
-                    instructions: `List exactly ${nonVerbalCount} short non-verbal consent actions that ${name} would use. These must be physical gestures or body language only — not spoken words. Use OTHER_CHARACTER as a placeholder for the other character's name.`,
+                    instructions: `List exactly ${nonVerbalCount} short non-verbal consent actions that ${name} would use. These must be physical gestures or body language only — not spoken words. CRITICAL: each gesture must be proportional to the explicitness of "${actForInference}". For sexual/intimate acts, gestures must be overtly sexual or seductive (suggestive touching, intimate caresses, guiding hands, removing clothing, grinding, etc.) so it is unambiguously clear what is being asked. Vague, cute, or innocent gestures are NOT acceptable when the act itself is explicit. Use OTHER_CHARACTER as a placeholder for the other character's name.`,
                     answerTrail: `${name}'s non-verbal consent actions:\n\n`,
-                    grammar: "root ::= list\nlist ::=" + (" bulletPoint").repeat(nonVerbalCount) + "\nbulletPoint ::= \"- \" " + JSON.stringify(name) + " \" will\" [a-zA-Z0-9 ,;.'?!_ ]+ \"\\n\"",
+                    grammar: "root ::= list\nlist ::=" + (" bulletPoint").repeat(nonVerbalCount) + "\nbulletPoint ::= \"- \" " + JSON.stringify(name) + " \" will \" sentence (\" \" sentence)? \"\\n\"\nsentence ::= [a-zA-Z0-9 ,;'_-]+ (\".\" | \"!\" | \"?\")",
                 });
                 if (nonVerbalResult.done) {
                     throw new Error("Generator finished without producing output");
@@ -482,9 +427,8 @@ export async function generateAffectiveStates(engine, card, guider, autosave) {
 
             let combined = [...verbalActions, ...nonVerbalActions];
             if (guider) {
-                const guiderResult = await guider.askList(
+                const guiderResult = await guider.askArbitraryList(
                     `Provide the consent-seeking actions for ${name} before performing: "${actForInference}"`,
-                    null,
                     combined
                 );
                 if (guiderResult.value) {
@@ -492,7 +436,7 @@ export async function generateAffectiveStates(engine, card, guider, autosave) {
                 }
             }
 
-            newCharacterSection.head.push(`actionsAndChecks: [`);
+            intimateHead.body.push(`actionsAndChecks: [`);
             for (const consentRequestingAction of combined) {
                 const consentRequestingActionForInference = consentRequestingAction.replace(/{{other}}/g, "other character").replace(/{{char}}/g, name);
 
@@ -505,7 +449,7 @@ export async function generateAffectiveStates(engine, card, guider, autosave) {
                     stopAt: [],
                     instructions: `Write a single short question ending with "?" that asks whether OTHER_CHARACTER consented after "${consentRequestingActionForInference}". Be broad enough to include verbal and non-verbal consent but specific to this request and act. Use OTHER_CHARACTER as a placeholder.`,
                     answerTrail: `Consent granted question: `,
-                    grammar: `root ::= has OTHER_CHARACTER [A-Za-z0-9 ,.'!_]+ "?"`,
+                    grammar: `root ::= "has OTHER_CHARACTER " [A-Za-z0-9 ,.'!_]+ "?"`,
                 });
 
                 if (consentGrantedResult.done) {
@@ -515,7 +459,7 @@ export async function generateAffectiveStates(engine, card, guider, autosave) {
                 let consentGrantedQuestion = replaceOtherCharNameWithPlaceholder(consentGrantedResult.value.trim(), name);
 
                 if (guider) {
-                    const guiderResult = await guider.askAccept(
+                    const guiderResult = await guider.askOpen(
                         `Question for when consent is granted after "${consentRequestingAction}"`,
                         consentGrantedQuestion
                     );
@@ -533,7 +477,7 @@ export async function generateAffectiveStates(engine, card, guider, autosave) {
                     stopAt: [],
                     instructions: `Write a single short question ending with "?" that asks whether OTHER_CHARACTER gave a vague or unclear response after "${consentRequestingActionForInference}". The question should capture non-committal or ambiguous signals. Use OTHER_CHARACTER as a placeholder.`,
                     answerTrail: `Consent unspecified question: `,
-                    grammar: `root ::= has OTHER_CHARACTER [A-Za-z0-9 ,.'!_]+ "?"`,
+                    grammar: `root ::= "has OTHER_CHARACTER " [A-Za-z0-9 ,.'!_]+ "?"`,
                 });
 
                 if (consentUnspecifiedResult.done) {
@@ -543,7 +487,7 @@ export async function generateAffectiveStates(engine, card, guider, autosave) {
                 let consentUnspecifiedQuestion = replaceOtherCharNameWithPlaceholder(consentUnspecifiedResult.value.trim(), name);
 
                 if (guider) {
-                    const guiderResult = await guider.askAccept(
+                    const guiderResult = await guider.askOpen(
                         `Question for when consent is unspecified/ambiguous after "${consentRequestingAction}"`,
                         consentUnspecifiedQuestion
                     );
@@ -552,13 +496,13 @@ export async function generateAffectiveStates(engine, card, guider, autosave) {
                     }
                 }
 
-                newCharacterSection.head.push(`{`);
-                newCharacterSection.head.push(`action: (info) => ${toTemplateLiteral(consentRequestingAction)},`);
-                newCharacterSection.head.push(`check: (info) => ${toTemplateLiteral(consentRequestingAction)},`);
-                newCharacterSection.head.push(`checkAmbiguousResponse: (info) => ${toTemplateLiteral(consentUnspecifiedQuestion)},`);
-                newCharacterSection.head.push(`},`);
+                intimateHead.body.push(`{`);
+                intimateHead.body.push(`action: (info) => ${toTemplateLiteral(consentRequestingAction)},`);
+                intimateHead.body.push(`check: (info) => ${toTemplateLiteral(consentGrantedQuestion)},`);
+                intimateHead.body.push(`checkAmbiguousResponse: (info) => ${toTemplateLiteral(consentUnspecifiedQuestion)},`);
+                intimateHead.body.push(`},`);
             }
-            newCharacterSection.head.push(`],`);
+            intimateHead.body.push(`],`);
 
             const insistenceResult = await generator.next({
                 maxCharacters: 2,
@@ -591,7 +535,7 @@ export async function generateAffectiveStates(engine, card, guider, autosave) {
                 }
             }
 
-            newCharacterSection.head.push(`insistence: ${insistenceParsed/10},`);
+            intimateHead.body.push(`insistence: ${insistenceParsed/10},`);
 
             const ignoreConsentResult = await generator.next({
                 maxCharacters: 2,
@@ -624,19 +568,262 @@ export async function generateAffectiveStates(engine, card, guider, autosave) {
                 }
             }
 
-            newCharacterSection.head.push(`ignoreConsentRejection: ${ignoreConsentParsed/10},`);
+            intimateHead.body.push(`ignoreConsentRejection: ${ignoreConsentParsed/10},`);
 
-            newCharacterSection.head.push(`},`);
+            intimateHead.body.push(`},`);
         }
     }
 
-    if (!isAsexualValue && isAttractedToMales && hasSpecialComment(intimateHead.body, "sex-acts-for-males")) {
+    if (isAttractedToMales && !hasSpecialComment(intimateHead.body, "intimate-affection-for-males")) {
+        await prime();
+        const isNonAnimal = card.config.characterSpeciesType !== "animal";
+
+        /** @type {string[]} */
+        let intimateAffectionForMalesParsed = [];
+
+        if (isNonAnimal) {
+            const kissingResult = await generator.next({
+                maxCharacters: 600,
+                maxSafetyCharacters: 600,
+                maxParagraphs: 6,
+                nextQuestion: `List 5 distinct variations of kissing or making out that ${name} would do towards a male character. Each must be a single simultaneous action with an emotional/sexual reaction (e.g. "${name} gives a soft kiss on the lips while smiling tenderly", "${name} kisses OTHER_CHARACTER deeply while moaning softly"). Vary the type, intensity, and body part involved (lips, neck, jaw, forehead, French kiss, biting lip, slow making out, hungry making out, etc.).`,
+                stopAfter: [],
+                stopAt: [],
+                instructions: "Each item must be ONE simultaneous kissing or making-out variation in the format: " + name + " [kisses/makes out X] while [feeling/reacting Y]. The action is performed by " + name + ". Vary the type, intensity, and body part across the 5 items. Do NOT use 'and then', 'before', 'after', or any sequence of events. Use OTHER_CHARACTER as a placeholder for the other character's name.",
+                answerTrail: name + "'s male-specific kissing/making-out variations:\n\n",
+                grammar: "root ::= list\nlist ::=" + (" bulletPoint").repeat(5) + "\nbulletPoint ::= \"- \" " + JSON.stringify(name) + " \" will \" [a-zA-Z0-9 ,;.'_]+ \"\\n\"",
+            });
+            if (kissingResult.done) {
+                throw new Error("Generator finished without producing output");
+            }
+            const kissingParsed = kissingResult.value.split("\n").map(act => replaceOtherCharNameWithPlaceholder(act.trim().replace(`- `, "").trim(), name)).filter(act => act);
+
+            const otherResult = await generator.next({
+                maxCharacters: 600,
+                maxSafetyCharacters: 600,
+                maxParagraphs: 6,
+                nextQuestion: `List 5 intimate affectionate actions (NOT kissing or making out) that ${name} would do towards a male character. Each must be a single simultaneous action with an emotional/sexual reaction. Examples: cuddling, hair caressing, gentle touching, holding hands, nuzzling, hugging tightly, stroking the cheek, etc.`,
+                stopAfter: [],
+                stopAt: [],
+                instructions: "Each item must be ONE simultaneous affectionate action in the format: " + name + " [does X] while [feeling/reacting Y]. The action is performed by " + name + ". CRITICAL: do NOT include kissing or making out — those were already covered. Focus on cuddling, caressing, touching, hugging, nuzzling, stroking and similar non-kissing affectionate gestures. Do NOT use 'and then', 'before', 'after', or any sequence of events. Use OTHER_CHARACTER as a placeholder for the other character's name.",
+                answerTrail: name + "'s male-specific non-kissing affectionate actions:\n\n",
+                grammar: "root ::= list\nlist ::=" + (" bulletPoint").repeat(5) + "\nbulletPoint ::= \"- \" " + JSON.stringify(name) + " \" will \" [a-zA-Z0-9 ,;.'_]+ \"\\n\"",
+            });
+            if (otherResult.done) {
+                throw new Error("Generator finished without producing output");
+            }
+            const otherParsed = otherResult.value.split("\n").map(act => replaceOtherCharNameWithPlaceholder(act.trim().replace(`- `, "").trim(), name)).filter(act => act);
+
+            intimateAffectionForMalesParsed = [...kissingParsed, ...otherParsed];
+        } else {
+            const intimateAffectionForMales = await generator.next({
+                maxCharacters: 1000,
+                maxSafetyCharacters: 1000,
+                maxParagraphs: 10,
+                nextQuestion: `List ${name}'s intimate sexual and affectionate actions towards a male character. Each act must be a single simultaneous action with an emotional and sexual reaction. Examples include cuddling, hair caressing, gentle touching, nuzzling, hugging tightly.`,
+                stopAfter: [],
+                stopAt: [],
+                instructions: "Each item must be ONE simultaneous action in the format: " + name + " [does X] while [feeling/reacting Y]. It must be an intimate affectionate act with sexual undertones. The action is performed by " + name + ". Do NOT use 'and then', 'before', 'after', or any sequence of events — only a single act paired with a simultaneous emotional or physical state. Use OTHER_CHARACTER as a placeholder for the other character's name.",
+                answerTrail: name + "'s male-specific intimate affectionate actions:\n\n",
+                grammar: "root ::= list\nlist ::=" + (" bulletPoint").repeat(10) + "\nbulletPoint ::= \"- \" " + JSON.stringify(name) + " \" will \" [a-zA-Z0-9 ,;.'_]+ \"\\n\"",
+            });
+            if (intimateAffectionForMales.done) {
+                throw new Error("Generator finished without producing output");
+            }
+            intimateAffectionForMalesParsed = intimateAffectionForMales.value.split("\n").map(act => replaceOtherCharNameWithPlaceholder(act.trim().replace(`- `, "").trim(), name)).filter(act => act);
+        }
+
+        if (guider) {
+            const guiderResult = await guider.askArbitraryList("Provide a list of intimate affectionate actions that " + name + " would take initiative performing towards a male character", intimateAffectionForMalesParsed);
+            if (guiderResult.value) {
+                intimateAffectionForMalesParsed = guiderResult.value;
+            }
+        }
+
+        insertSpecialComment(intimateHead.body, "intimate-affection-for-males");
+        intimateHead.body.push(`/** @type {DEIntimateAction[]} */`);
+        intimateHead.body.push(`const intimateAffectionForMales = [`)
+
+        for (const act of intimateAffectionForMalesParsed) {
+            intimateHead.body.push(`{`)
+            await generateIntimateAction(act, false, false);
+            intimateHead.body.push(`},`)
+        }
+
+        intimateHead.body.push(`];`)
+
+        await autosave?.save();
+    }
+
+    if (isAttractedToFemales && !hasSpecialComment(intimateHead.body, "intimate-affection-for-females")) {
+        await prime();
+        const isNonAnimal = card.config.characterSpeciesType !== "animal";
+
+        /** @type {string[]} */
+        let intimateAffectionForFemalesParsed = [];
+
+        if (isNonAnimal) {
+            const kissingResult = await generator.next({
+                maxCharacters: 600,
+                maxSafetyCharacters: 600,
+                maxParagraphs: 6,
+                nextQuestion: `List 5 distinct variations of kissing or making out that ${name} would do towards a female character. Each must be a single simultaneous action with an emotional/sexual reaction (e.g. "${name} gives a soft kiss on the lips while smiling tenderly", "${name} kisses OTHER_CHARACTER deeply while moaning softly"). Vary the type, intensity, and body part involved (lips, neck, jaw, forehead, French kiss, biting lip, slow making out, hungry making out, etc.).`,
+                stopAfter: [],
+                stopAt: [],
+                instructions: "Each item must be ONE simultaneous kissing or making-out variation in the format: " + name + " [kisses/makes out X] while [feeling/reacting Y]. The action is performed by " + name + ". Vary the type, intensity, and body part across the 5 items. Do NOT use 'and then', 'before', 'after', or any sequence of events. Use OTHER_CHARACTER as a placeholder for the other character's name.",
+                answerTrail: name + "'s female-specific kissing/making-out variations:\n\n",
+                grammar: "root ::= list\nlist ::=" + (" bulletPoint").repeat(5) + "\nbulletPoint ::= \"- \" " + JSON.stringify(name) + " \" will \" [a-zA-Z0-9 ,;.'_]+ \"\\n\"",
+            });
+            if (kissingResult.done) {
+                throw new Error("Generator finished without producing output");
+            }
+            const kissingParsed = kissingResult.value.split("\n").map(act => replaceOtherCharNameWithPlaceholder(act.trim().replace(`- `, "").trim(), name)).filter(act => act);
+
+            const otherResult = await generator.next({
+                maxCharacters: 600,
+                maxSafetyCharacters: 600,
+                maxParagraphs: 6,
+                nextQuestion: `List 5 intimate affectionate actions (NOT kissing or making out) that ${name} would do towards a female character. Each must be a single simultaneous action with an emotional/sexual reaction. Examples: cuddling, hair caressing, gentle touching, holding hands, nuzzling, hugging tightly, stroking the cheek, etc.`,
+                stopAfter: [],
+                stopAt: [],
+                instructions: "Each item must be ONE simultaneous affectionate action in the format: " + name + " [does X] while [feeling/reacting Y]. The action is performed by " + name + ". CRITICAL: do NOT include kissing or making out — those were already covered. Focus on cuddling, caressing, touching, hugging, nuzzling, stroking and similar non-kissing affectionate gestures. Do NOT use 'and then', 'before', 'after', or any sequence of events. Use OTHER_CHARACTER as a placeholder for the other character's name.",
+                answerTrail: name + "'s female-specific non-kissing affectionate actions:\n\n",
+                grammar: "root ::= list\nlist ::=" + (" bulletPoint").repeat(5) + "\nbulletPoint ::= \"- \" " + JSON.stringify(name) + " \" will \" [a-zA-Z0-9 ,;.'_]+ \"\\n\"",
+            });
+            if (otherResult.done) {
+                throw new Error("Generator finished without producing output");
+            }
+            const otherParsed = otherResult.value.split("\n").map(act => replaceOtherCharNameWithPlaceholder(act.trim().replace(`- `, "").trim(), name)).filter(act => act);
+
+            intimateAffectionForFemalesParsed = [...kissingParsed, ...otherParsed];
+        } else {
+            const intimateAffectionForFemales = await generator.next({
+                maxCharacters: 1000,
+                maxSafetyCharacters: 1000,
+                maxParagraphs: 10,
+                nextQuestion: `List ${name}'s intimate sexual and affectionate actions towards a female character. Each act must be a single simultaneous action with an emotional and sexual reaction. Examples include cuddling, hair caressing, gentle touching, nuzzling, hugging tightly.`,
+                stopAfter: [],
+                stopAt: [],
+                instructions: "Each item must be ONE simultaneous action in the format: " + name + " [does X] while [feeling/reacting Y]. It must be an intimate affectionate act with sexual undertones. The action is performed by " + name + ". Do NOT use 'and then', 'before', 'after', or any sequence of events — only a single act paired with a simultaneous emotional or physical state. Use OTHER_CHARACTER as a placeholder for the other character's name.",
+                answerTrail: name + "'s female-specific intimate affectionate actions:\n\n",
+                grammar: "root ::= list\nlist ::=" + (" bulletPoint").repeat(10) + "\nbulletPoint ::= \"- \" " + JSON.stringify(name) + " \" will \" [a-zA-Z0-9 ,;.'_]+ \"\\n\"",
+            });
+            if (intimateAffectionForFemales.done) {
+                throw new Error("Generator finished without producing output");
+            }
+            intimateAffectionForFemalesParsed = intimateAffectionForFemales.value.split("\n").map(act => replaceOtherCharNameWithPlaceholder(act.trim().replace(`- `, "").trim(), name)).filter(act => act);
+        }
+
+        if (guider) {
+            const guiderResult = await guider.askArbitraryList("Provide a list of intimate affectionate actions that " + name + " would take initiative performing towards a female character", intimateAffectionForFemalesParsed);
+            if (guiderResult.value) {
+                intimateAffectionForFemalesParsed = guiderResult.value;
+            }
+        }
+
+        insertSpecialComment(intimateHead.body, "intimate-affection-for-females");
+        intimateHead.body.push(`/** @type {DEIntimateAction[]} */`);
+        intimateHead.body.push(`const intimateAffectionForFemales = [`)
+
+        for (const act of intimateAffectionForFemalesParsed) {
+            intimateHead.body.push(`{`)
+            await generateIntimateAction(act, false, false);
+            intimateHead.body.push(`},`)
+        }
+
+        intimateHead.body.push(`];`)
+
+        await autosave?.save();
+    }
+
+    if (isAttractedToAmbiguous && !hasSpecialComment(intimateHead.body, "intimate-affection-for-ambiguous")) {
+        await prime();
+        const isNonAnimal = card.config.characterSpeciesType !== "animal";
+
+        /** @type {string[]} */
+        let intimateAffectionForAmbiguousParsed = [];
+
+        if (isNonAnimal) {
+            const kissingResult = await generator.next({
+                maxCharacters: 600,
+                maxSafetyCharacters: 600,
+                maxParagraphs: 6,
+                nextQuestion: `List 5 distinct variations of kissing or making out that ${name} would do towards an ambiguous or androgynous character. Each must be a single simultaneous action with an emotional/sexual reaction (e.g. "${name} gives a soft kiss on the lips while smiling tenderly", "${name} kisses OTHER_CHARACTER deeply while moaning softly"). Vary the type, intensity, and body part involved (lips, neck, jaw, forehead, French kiss, biting lip, slow making out, hungry making out, etc.).`,
+                stopAfter: [],
+                stopAt: [],
+                instructions: "Each item must be ONE simultaneous kissing or making-out variation in the format: " + name + " [kisses/makes out X] while [feeling/reacting Y]. The action is performed by " + name + ". Vary the type, intensity, and body part across the 5 items. Do NOT use 'and then', 'before', 'after', or any sequence of events. Use OTHER_CHARACTER as a placeholder for the other character's name.",
+                answerTrail: name + "'s ambiguous-specific kissing/making-out variations:\n\n",
+                grammar: "root ::= list\nlist ::=" + (" bulletPoint").repeat(5) + "\nbulletPoint ::= \"- \" " + JSON.stringify(name) + " \" will \" [a-zA-Z0-9 ,;.'_]+ \"\\n\"",
+            });
+            if (kissingResult.done) {
+                throw new Error("Generator finished without producing output");
+            }
+            const kissingParsed = kissingResult.value.split("\n").map(act => replaceOtherCharNameWithPlaceholder(act.trim().replace(`- `, "").trim(), name)).filter(act => act);
+
+            const otherResult = await generator.next({
+                maxCharacters: 600,
+                maxSafetyCharacters: 600,
+                maxParagraphs: 6,
+                nextQuestion: `List 5 intimate affectionate actions (NOT kissing or making out) that ${name} would do towards an ambiguous or androgynous character. Each must be a single simultaneous action with an emotional/sexual reaction. Examples: cuddling, hair caressing, gentle touching, holding hands, nuzzling, hugging tightly, stroking the cheek, etc.`,
+                stopAfter: [],
+                stopAt: [],
+                instructions: "Each item must be ONE simultaneous affectionate action in the format: " + name + " [does X] while [feeling/reacting Y]. The action is performed by " + name + ". CRITICAL: do NOT include kissing or making out — those were already covered. Focus on cuddling, caressing, touching, hugging, nuzzling, stroking and similar non-kissing affectionate gestures. Do NOT use 'and then', 'before', 'after', or any sequence of events. Use OTHER_CHARACTER as a placeholder for the other character's name.",
+                answerTrail: name + "'s ambiguous-specific non-kissing affectionate actions:\n\n",
+                grammar: "root ::= list\nlist ::=" + (" bulletPoint").repeat(5) + "\nbulletPoint ::= \"- \" " + JSON.stringify(name) + " \" will \" [a-zA-Z0-9 ,;.'_]+ \"\\n\"",
+            });
+            if (otherResult.done) {
+                throw new Error("Generator finished without producing output");
+            }
+            const otherParsed = otherResult.value.split("\n").map(act => replaceOtherCharNameWithPlaceholder(act.trim().replace(`- `, "").trim(), name)).filter(act => act);
+
+            intimateAffectionForAmbiguousParsed = [...kissingParsed, ...otherParsed];
+        } else {
+            const intimateAffectionForAmbiguous = await generator.next({
+                maxCharacters: 1000,
+                maxSafetyCharacters: 1000,
+                maxParagraphs: 10,
+                nextQuestion: `List ${name}'s intimate sexual and affectionate actions towards an ambiguous or androgynous character. Each act must be a single simultaneous action with an emotional and sexual reaction. Examples include cuddling, hair caressing, gentle touching, nuzzling, hugging tightly.`,
+                stopAfter: [],
+                stopAt: [],
+                instructions: "Each item must be ONE simultaneous action in the format: " + name + " [does X] while [feeling/reacting Y]. It must be an intimate affectionate act with sexual undertones. The action is performed by " + name + ". Do NOT use 'and then', 'before', 'after', or any sequence of events — only a single act paired with a simultaneous emotional or physical state. Use OTHER_CHARACTER as a placeholder for the other character's name.",
+                answerTrail: name + "'s ambiguous-specific intimate affectionate actions:\n\n",
+                grammar: "root ::= list\nlist ::=" + (" bulletPoint").repeat(10) + "\nbulletPoint ::= \"- \" " + JSON.stringify(name) + " \" will \" [a-zA-Z0-9 ,;.'_]+ \"\\n\"",
+            });
+            if (intimateAffectionForAmbiguous.done) {
+                throw new Error("Generator finished without producing output");
+            }
+            intimateAffectionForAmbiguousParsed = intimateAffectionForAmbiguous.value.split("\n").map(act => replaceOtherCharNameWithPlaceholder(act.trim().replace(`- `, "").trim(), name)).filter(act => act);
+        }
+
+        if (guider) {
+            const guiderResult = await guider.askArbitraryList("Provide a list of intimate affectionate actions that " + name + " would take initiative performing towards an ambiguous or androgynous character", intimateAffectionForAmbiguousParsed);
+            if (guiderResult.value) {
+                intimateAffectionForAmbiguousParsed = guiderResult.value;
+            }
+        }
+
+        insertSpecialComment(intimateHead.body, "intimate-affection-for-ambiguous");
+        intimateHead.body.push(`/** @type {DEIntimateAction[]} */`);
+        intimateHead.body.push(`const intimateAffectionForAmbiguous = [`)
+
+        for (const act of intimateAffectionForAmbiguousParsed) {
+            intimateHead.body.push(`{`)
+            await generateIntimateAction(act, false, false);
+            intimateHead.body.push(`},`)
+        }
+
+        intimateHead.body.push(`];`)
+
+        await autosave?.save();
+    }
+
+    if (!isAsexualValue && isAttractedToMales && !hasSpecialComment(intimateHead.body, "sex-acts-for-males")) {
         await prime();
         const sexActsForMales = await generator.next({
             maxCharacters: 1000,
             maxSafetyCharacters: 1000,
             maxParagraphs: 10,
-            nextQuestion: `List ${name}'s sex acts towards a male character. Each act must be a single simultaneous action with an emotional or physical reaction, like "${name} rides OTHER_CHARACTER while moaning" or "${name} sucks OTHER_CHARACTER while gagging". NO sequences, NO "and then", NO narrative — just one act happening at the same time as one reaction.`,
+            nextQuestion: `List ${name}'s sex acts towards a male character. Each act must be a single simultaneous action  with an emotional and sexual reaction, like "${name} rides OTHER_CHARACTER while moaning" or "${name} sucks OTHER_CHARACTER while gagging". NO sequences, NO "and then", NO narrative — just one act happening at the same time as one reaction.`,
             stopAfter: [],
             stopAt: [],
             instructions: "Each item must be ONE simultaneous action in the format: " + name + " [does X] while [feeling/reacting Y]. It must be a sex act where sexual activity occurs that involves genitalia where penetration or stimulation is involved. The action is performed by " + name + ". Be explicit and detailed. Do NOT use 'and then', 'before', 'after', or any sequence of events — only a single act paired with a simultaneous emotional or physical state. Keep in mind " + name + "'s kinks: " + [...card.config.kinks, ...card.config.kinksForMales].join(", ") + ". Use OTHER_CHARACTER as a placeholder for the other character's name.",
@@ -650,7 +837,7 @@ export async function generateAffectiveStates(engine, card, guider, autosave) {
 
         let sexActsForMalesParsed = sexActsForMales.value.split("\n").map(act => replaceOtherCharNameWithPlaceholder(act.trim().replace(`- `, "").trim(), name)).filter(act => act);
         if (guider) {
-            const guiderResult = await guider.askList("Provide a list of sex acts that " + name + " would take initiative performing towards a male character", null, sexActsForMalesParsed);
+            const guiderResult = await guider.askArbitraryList("Provide a list of sex acts that " + name + " would take initiative performing towards a male character", sexActsForMalesParsed);
             if (guiderResult.value) {
                 sexActsForMalesParsed = guiderResult.value;
             }
@@ -670,6 +857,90 @@ export async function generateAffectiveStates(engine, card, guider, autosave) {
 
         await autosave?.save();
     }
+
+    if (!isAsexualValue && isAttractedToFemales && !hasSpecialComment(intimateHead.body, "sex-acts-for-females")) {
+        await prime();
+        const sexActsForFemales = await generator.next({
+            maxCharacters: 1000,
+            maxSafetyCharacters: 1000,
+            maxParagraphs: 10,
+            nextQuestion: `List ${name}'s sex acts towards a female character. Each act must be a single simultaneous action  with an emotional and sexual reaction, like "${name} rides OTHER_CHARACTER while moaning" or "${name} touches OTHER_CHARACTER while panting". NO sequences, NO "and then", NO narrative — just one act happening at the same time as one reaction.`,
+            stopAfter: [],
+            stopAt: [],
+            instructions: "Each item must be ONE simultaneous action in the format: " + name + " [does X] while [feeling/reacting Y]. It must be a sex act where sexual activity occurs that involves genitalia where penetration or stimulation is involved. The action is performed by " + name + ". Be explicit and detailed. Do NOT use 'and then', 'before', 'after', or any sequence of events — only a single act paired with a simultaneous emotional or physical state. Keep in mind " + name + "'s kinks: " + [...card.config.kinks, ...(card.config.kinksForFemales || [])].join(", ") + ". Use OTHER_CHARACTER as a placeholder for the other character's name.",
+            answerTrail: name + "'s female-specific sex acts:\n\n",
+            grammar: "root ::= list\nlist ::=" + (" bulletPoint").repeat(5) + "\nbulletPoint ::= \"- \" " + JSON.stringify(name) + " \" will \" [a-zA-Z0-9 ,;.'_]+ \"\\n\"",
+        });
+
+        if (sexActsForFemales.done) {
+            throw new Error("Generator finished without producing output");
+        }
+
+        let sexActsForFemalesParsed = sexActsForFemales.value.split("\n").map(act => replaceOtherCharNameWithPlaceholder(act.trim().replace(`- `, "").trim(), name)).filter(act => act);
+        if (guider) {
+            const guiderResult = await guider.askArbitraryList("Provide a list of sex acts that " + name + " would take initiative performing towards a female character", sexActsForFemalesParsed);
+            if (guiderResult.value) {
+                sexActsForFemalesParsed = guiderResult.value;
+            }
+        }
+
+        insertSpecialComment(intimateHead.body, "sex-acts-for-females");
+        intimateHead.body.push(`/** @type {DEIntimateAction[]} */`);
+        intimateHead.body.push(`const sexActsForFemales = [`)
+
+        for (const act of sexActsForFemalesParsed) {
+            intimateHead.body.push(`{`)
+            await generateIntimateAction(act, true, true);
+            intimateHead.body.push(`},`)
+        }
+
+        intimateHead.body.push(`];`)
+
+        await autosave?.save();
+    }
+
+    if (!isAsexualValue && isAttractedToAmbiguous && !hasSpecialComment(intimateHead.body, "sex-acts-for-ambiguous")) {
+        await prime();
+        const sexActsForAmbiguous = await generator.next({
+            maxCharacters: 1000,
+            maxSafetyCharacters: 1000,
+            maxParagraphs: 10,
+            nextQuestion: `List ${name}'s sex acts towards an ambiguous or androgynous character. Each act must be a single simultaneous action  with an emotional and sexual reaction, like "${name} rides OTHER_CHARACTER while moaning" or "${name} touches OTHER_CHARACTER while panting". These acts should not depend on specific male or female anatomy. NO sequences, NO "and then", NO narrative — just one act happening at the same time as one reaction.`,
+            stopAfter: [],
+            stopAt: [],
+            instructions: "Each item must be ONE simultaneous action in the format: " + name + " [does X] while [feeling/reacting Y]. It must be a sex act where sexual activity occurs that involves stimulation or intimacy that is not anatomy-specific. The action is performed by " + name + ". Be explicit and detailed. Do NOT use 'and then', 'before', 'after', or any sequence of events — only a single act paired with a simultaneous emotional or physical state. Keep in mind " + name + "'s kinks: " + (card.config.kinks || []).join(", ") + ". Use OTHER_CHARACTER as a placeholder for the other character's name.",
+            answerTrail: name + "'s ambiguous-specific sex acts:\n\n",
+            grammar: "root ::= list\nlist ::=" + (" bulletPoint").repeat(5) + "\nbulletPoint ::= \"- \" " + JSON.stringify(name) + " \" will \" [a-zA-Z0-9 ,;.'_]+ \"\\n\"",
+        });
+
+        if (sexActsForAmbiguous.done) {
+            throw new Error("Generator finished without producing output");
+        }
+
+        let sexActsForAmbiguousParsed = sexActsForAmbiguous.value.split("\n").map(act => replaceOtherCharNameWithPlaceholder(act.trim().replace(`- `, "").trim(), name)).filter(act => act);
+        if (guider) {
+            const guiderResult = await guider.askArbitraryList("Provide a list of sex acts that " + name + " would take initiative performing towards an ambiguous or androgynous character", sexActsForAmbiguousParsed);
+            if (guiderResult.value) {
+                sexActsForAmbiguousParsed = guiderResult.value;
+            }
+        }
+
+        insertSpecialComment(intimateHead.body, "sex-acts-for-ambiguous");
+        intimateHead.body.push(`/** @type {DEIntimateAction[]} */`);
+        intimateHead.body.push(`const sexActsForAmbiguous = [`)
+
+        for (const act of sexActsForAmbiguousParsed) {
+            intimateHead.body.push(`{`)
+            await generateIntimateAction(act, true, true);
+            intimateHead.body.push(`},`)
+        }
+
+        intimateHead.body.push(`];`)
+
+        await autosave?.save();
+    }
+
+    
 
     if (primed) {
         await generator.next(null); // end the generator

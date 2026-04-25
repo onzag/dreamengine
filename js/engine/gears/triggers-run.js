@@ -714,7 +714,20 @@ export default async function runAllTriggersFor(engine, character, interactedCha
 
                                     if (lastIsExecutingAffectionateAct) {
                                         let isFullfilled = actionToChoose.fullfillCriteriaQuestions && actionToChoose.fullfillCriteriaQuestions.length > 0 ? false : true;
-                                        for (const question of (actionToChoose.fullfillCriteriaQuestions || [])) {
+
+                                        const behaviour = typeof actionToChoose.action === "string" ? actionToChoose.action : await actionToChoose.action({
+                                            char: character,
+                                            // @ts-ignore typescript is wrong, it is not null
+                                            other: engine.deObject.characters[bond.towards],
+                                            otherFamilyRelation,
+                                            otherRelationship,
+                                        });
+
+                                        const question = "Has the following action that was started before stopped: " + behaviour + " ? Answer 'yes' if the action has clearly stopped or is not being performed anymore, answer 'no' if the action is still being performed.";
+                                        const fullfillQuestions = actionToChoose.fullfillCriteriaQuestions || [];
+                                        fullfillQuestions.unshift(question);
+
+                                        for (const question of fullfillQuestions) {
                                             const questionValue = (typeof question === "string" ? question : await question({
                                                 char: character,
                                                 other: engine.deObject.characters[bond.towards],
@@ -959,7 +972,20 @@ export default async function runAllTriggersFor(engine, character, interactedCha
 
                                 if (lastIsExecutingIntimateAffectionateAct) {
                                     let isFullfilled = actionToChoose.fullfillCriteriaQuestions && actionToChoose.fullfillCriteriaQuestions.length > 0 ? false : true;
-                                    for (const question of (actionToChoose.fullfillCriteriaQuestions || [])) {
+
+                                    const behaviour = typeof actionToChoose.action === "string" ? actionToChoose.action : await actionToChoose.action({
+                                        char: character,
+                                        // @ts-ignore typescript is wrong, it is not null
+                                        other: engine.deObject.characters[bond.towards],
+                                        otherFamilyRelation,
+                                        otherRelationship,
+                                    });
+
+                                    const question = "Has the following action that was started before stopped: " + behaviour + " ? Answer 'yes' if the action has clearly stopped or is not being performed anymore, answer 'no' if the action is still being performed.";
+                                    const fullfillQuestions = actionToChoose.fullfillCriteriaQuestions || [];
+                                    fullfillQuestions.unshift(question);
+
+                                    for (const question of fullfillQuestions) {
                                         const questionValue = (typeof question === "string" ? question : await question({
                                             char: character,
                                             other: engine.deObject.characters[bond.towards],
@@ -1169,7 +1195,19 @@ export default async function runAllTriggersFor(engine, character, interactedCha
 
                                 if (lastIsExecutingSexualAct) {
                                     let isFullfilled = actionToChoose.fullfillCriteriaQuestions && actionToChoose.fullfillCriteriaQuestions.length > 0 ? false : true;
-                                    for (const question of (actionToChoose.fullfillCriteriaQuestions || [])) {
+                                    const behaviour = typeof actionToChoose.action === "string" ? actionToChoose.action : await actionToChoose.action({
+                                        char: character,
+                                        // @ts-ignore typescript is wrong, it is not null
+                                        other: engine.deObject.characters[bond.towards],
+                                        otherFamilyRelation,
+                                        otherRelationship,
+                                    });
+
+                                    const question = "Has the following action that was started before stopped: " + behaviour + " ? Answer 'yes' if the action has clearly stopped or is not being performed anymore, answer 'no' if the action is still being performed.";
+                                    const fullfillQuestions = actionToChoose.fullfillCriteriaQuestions || [];
+                                    fullfillQuestions.unshift(question);
+
+                                    for (const question of fullfillQuestions) {
                                         const questionValue = (typeof question === "string" ? question : await question({
                                             char: character,
                                             other: engine.deObject.characters[bond.towards],

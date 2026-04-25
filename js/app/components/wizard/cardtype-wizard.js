@@ -417,6 +417,15 @@ class CardTypeWizard extends HTMLElement {
                     /** @type {string[]} */
                     const items = defaultValue ? [...defaultValue] : [];
 
+                    const syncItemsFromDom = () => {
+                        const listContainer = wrapper.querySelector('.guider-list-items');
+                        if (!listContainer) return;
+                        const spans = listContainer.querySelectorAll('.guider-list-item span');
+                        spans.forEach((span, idx) => {
+                            if (idx < items.length) items[idx] = span.textContent || '';
+                        });
+                    };
+
                     const renderItems = () => {
                         let listContainer = wrapper.querySelector('.guider-list-items');
                         if (!listContainer) {
@@ -424,19 +433,45 @@ class CardTypeWizard extends HTMLElement {
                             listContainer.className = 'guider-list-items';
                             wrapper.insertBefore(listContainer, wrapper.querySelector('.guider-list-add-row'));
                         }
-                        listContainer.innerHTML = items.map((item, idx) => `
-                            <div class="guider-list-item">
-                                <span>${item}</span>
-                                <div class="guider-list-remove" data-idx="${idx}">✕</div>
-                            </div>
-                        `).join('');
-                        listContainer.querySelectorAll('.guider-list-remove').forEach(btn => {
-                            btn.addEventListener('mouseenter', playHoverSound);
-                            btn.addEventListener('click', () => {
-                                const idx = parseInt(/** @type {HTMLElement} */(btn).dataset.idx || '0');
+                        listContainer.innerHTML = '';
+                        items.forEach((item, idx) => {
+                            const itemEl = document.createElement('div');
+                            itemEl.className = 'guider-list-item';
+
+                            const span = document.createElement('span');
+                            span.setAttribute('contenteditable', 'plaintext-only');
+                            span.setAttribute('spellcheck', 'true');
+                            span.textContent = item;
+                            // Fallback for browsers that don't support plaintext-only:
+                            // strip rich content from pasted data and block enter newlines.
+                            span.addEventListener('paste', (e) => {
+                                e.preventDefault();
+                                const text = e.clipboardData?.getData('text/plain') ?? '';
+                                const selection = window.getSelection();
+                                if (!selection || selection.rangeCount === 0) return;
+                                const range = selection.getRangeAt(0);
+                                range.deleteContents();
+                                range.insertNode(document.createTextNode(text));
+                                range.collapse(false);
+                            });
+                            span.addEventListener('keydown', (e) => {
+                                if (e.key === 'Enter') e.preventDefault();
+                            });
+                            itemEl.appendChild(span);
+
+                            const removeBtn = document.createElement('div');
+                            removeBtn.className = 'guider-list-remove';
+                            removeBtn.dataset.idx = String(idx);
+                            removeBtn.textContent = '✕';
+                            removeBtn.addEventListener('mouseenter', playHoverSound);
+                            removeBtn.addEventListener('click', () => {
+                                syncItemsFromDom();
                                 items.splice(idx, 1);
                                 renderItems();
                             });
+                            itemEl.appendChild(removeBtn);
+
+                            listContainer.appendChild(itemEl);
                         });
                     };
 
@@ -458,6 +493,7 @@ class CardTypeWizard extends HTMLElement {
                     addBtn.addEventListener('click', () => {
                         const val = textarea.value.trim();
                         if (!val) return;
+                        syncItemsFromDom();
                         items.push(val);
                         textarea.value = '';
                         textarea.style.height = 'auto';

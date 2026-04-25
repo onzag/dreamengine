@@ -514,7 +514,7 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
                 return ask("askList", question, { options, defaultValue });
             },
             async askArbitraryList(question, defaultValue) {
-                return ask("askAcceptArbitraryList", question, { defaultValue });
+                return ask("askArbitraryList", question, { defaultValue });
             },
             async askAcceptArbitraryList(question, defaultValue) {
                 return ask("askAcceptArbitraryList", question, { defaultValue });

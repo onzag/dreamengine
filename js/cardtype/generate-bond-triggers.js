@@ -11,7 +11,7 @@ import { BASIC_EMOTIONAL_STATES, BASIC_EMOTIONAL_STATES_OPTIONS } from "./genera
  * @returns 
  */
 export function replaceOtherCharNameWithPlaceholder(text, charName) {
-    return replaceAllCharNameWithPlaceholder(text.replace(/OTHER_CHARACTER|OTHER CHARACTER|[Oo]ther character/g, "{{other}}"), charName);
+    return replaceAllCharNameWithPlaceholder(text.replace(/other[_ ]character/gi, "{{other}}"), charName);
 }
 
 /**

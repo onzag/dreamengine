@@ -568,14 +568,13 @@ export async function generateBonds(engine, card, guider, autosave) {
             card.config.bondsFamilyFineTunesAfterRomanticInterest = selectedFamilyFineTunesAfterRomanticInterest;
             await autosave?.save();
         } else {
-            selectedFamilyFineTunesAfterRomanticInterest = defaultFamilyFineTunes;
+            selectedFamilyFineTunesAfterRomanticInterest = defaultFamilyFineTunesAfterRomanticInterest;
         }
     }
 
     if (!card.config.bondsFamilyFineTunesAfterRomanticInterest && isIncestuousValue) {
         await selectFamilyFineTunesAfterRomanticInterest();
     }
-
 
     let wouldUseViolenceTowardsEnemiesValue = false;
     if (!hasSpecialComment(optionsSection.body, "bonds-violence")) {
