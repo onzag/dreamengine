@@ -2205,7 +2205,7 @@ export async function generateBase(engine, card, guider, autosave) {
             }
 
             while (true) {
-                const additionalAttractions = await guider.askBoolean("Would you like to add an attraction towards a specific species group that isn't covered?");
+                const additionalAttractions = await guider.askBoolean("Would you like to add an attraction towards a specific species group that isn't covered?", false);
                 if (!additionalAttractions.value) {
                     break;
                 } else {

@@ -591,7 +591,10 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
                 const result = await handler(args || {});
                 self.postMessage({ type: "rpcResponse", id, result });
             } catch (err) {
-                self.postMessage({ type: "rpcResponse", id, error: err instanceof Error ? err.message : String(err) });
+                console.error(`[Worker] RPC '${method}' failed:`);
+                console.error(err instanceof Error ? err : String(err));
+                const message = err instanceof Error ? err.message : String(err);
+                self.postMessage({ type: "rpcResponse", id, error: message });
             }
         }
     };

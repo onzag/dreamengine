@@ -78,6 +78,7 @@ export class EngineWorkerClient {
                 if (p) {
                     this.#pending.delete(msg.id);
                     if (msg.error) {
+                        console.error(`[EngineWorker] RPC #${msg.id} rejected:`, msg.error);
                         p.reject(new Error(msg.error));
                     } else {
                         p.resolve(msg.result);

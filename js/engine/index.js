@@ -241,6 +241,8 @@ export class DEngine {
          * this speeds up things greatly when testing other parts of the engine
          */
         this.disabledWorldRules = false;
+
+        this.getDEObject = this.getDEObject.bind(this);
     }
 
     getDEObject() {
