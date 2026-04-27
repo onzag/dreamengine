@@ -682,7 +682,7 @@ declare interface DEIntimateAction {
      * Probability to trigger, subject to things like libido (for sexual actions)
      * and other circumstances
      */
-    probability: number;
+    probability: (char: DECompleteCharacterReference, other: DECompleteCharacterReference) => number;
     /**
      * By default the action is injected outright, and the character will perform it
      * but with this question, first the consentMechanism action will be injected,

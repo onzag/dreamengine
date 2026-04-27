@@ -640,7 +640,7 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                             } else {
                                 const actionToChoose = referenceToUse ? (
                                     realBondDeclaration.intimacy.proneToInitiatingAffection.actions[referenceToUse.actionIndex]
-                                ) : weightedRandom(bondDeclaration.intimacy.proneToInitiatingAffection.actions, (i) => i.probability);
+                                ) : weightedRandom(bondDeclaration.intimacy.proneToInitiatingAffection.actions, (i) => i.probability(character, engine.getDEObject().characters[bond.towards]));
                                 if (actionToChoose) {
                                     /**
                                      * Proceeded despite the lack of consent
@@ -895,7 +895,7 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                         } else {
                             const actionToChoose = referenceToUseIntimate ? (
                                 realBondDeclaration.intimacy.proneToInitiatingIntimateAffection.actions[referenceToUseIntimate.actionIndex]
-                            ) : weightedRandom(bondDeclaration.intimacy.proneToInitiatingIntimateAffection.actions, (i) => i.probability);
+                            ) : weightedRandom(bondDeclaration.intimacy.proneToInitiatingIntimateAffection.actions, (i) => i.probability(character, engine.getDEObject().characters[bond.towards]));
                             if (actionToChoose) {
                                 const otherFamilyRelation = getFamilyBondRelation(character, engine.deObject.characters[bond.towards]);
                                 const otherRelationship = await getRelationship(engine.deObject, character, engine.deObject.characters[bond.towards]);
@@ -1119,7 +1119,7 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                         } else {
                             const actionToChoose = referenceToUseSex ? (
                                 realBondDeclaration.intimacy.proneToInitiatingSex.actions[referenceToUseSex.actionIndex]
-                            ) : weightedRandom(bondDeclaration.intimacy.proneToInitiatingSex.actions, (i) => i.probability);
+                            ) : weightedRandom(bondDeclaration.intimacy.proneToInitiatingSex.actions, (i) => i.probability(character, engine.getDEObject().characters[bond.towards]));
                             if (actionToChoose) {
                                 const otherFamilyRelation = getFamilyBondRelation(character, engine.deObject.characters[bond.towards]);
                                 const otherRelationship = await getRelationship(engine.deObject, character, engine.deObject.characters[bond.towards]);

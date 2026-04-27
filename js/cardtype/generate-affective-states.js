@@ -243,10 +243,11 @@ export async function generateAffectiveStates(engine, card, guider, autosave) {
      * @param {boolean} consentDefaultNo
      * @param {boolean} addVocabLimit 
      * @param {boolean} continous
+     * @param {string} probabilityCondition
      */
-    const generateIntimateAction = async (act, consentDefaultNo, addVocabLimit, continous) => {
+    const generateIntimateAction = async (act, consentDefaultNo, addVocabLimit, continous, probabilityCondition) => {
         intimateHead.body.push(`action: (info) => ${toTemplateLiteral(act)},`);
-        intimateHead.body.push(`probability: 1,`);
+        intimateHead.body.push(`probability: (char, other) => ${probabilityCondition},`);
 
         const actForInference = act.replace(/{{other}}/g, "other character").replace(/{{char}}/g, name);
 
@@ -618,11 +619,11 @@ export async function generateAffectiveStates(engine, card, guider, autosave) {
 
         insertSpecialComment(intimateHead.body, "affection-showcases");
         intimateHead.body.push(`/** @type {DEIntimateAction[]} */`);
-        intimateHead.body.push(`const affectionShowcases = [`)
+        intimateHead.body.push(`const affectionActs = [`)
 
         for (const act of affectionShowcasesActsParsed) {
             intimateHead.body.push(`{`)
-            await generateIntimateAction(act, true, false, false);
+            await generateIntimateAction(act, true, false, false, "1");
             intimateHead.body.push(`},`)
         }
 
@@ -631,7 +632,13 @@ export async function generateAffectiveStates(engine, card, guider, autosave) {
         await autosave?.save();
     }
 
-    if (isAttractedToMales && !hasSpecialComment(intimateHead.body, "intimate-affection-for-males")) {
+    const intimateAffectionActs = insertSection(intimateHead.body, "intimate-affection-acts-section", (s) => {
+        s.head.push(`/** @type {DEIntimateAction[]} */`);
+        s.head.push(`const intimateAffectionActs = [`);
+        s.foot.push(`];`);
+    });
+
+    if (isAttractedToMales && !hasSpecialComment(intimateAffectionActs.body, "intimate-affection-for-males")) {
         await prime();
         const isNonAnimal = card.config.characterSpeciesType !== "animal";
 
@@ -697,22 +704,20 @@ export async function generateAffectiveStates(engine, card, guider, autosave) {
             }
         }
 
-        insertSpecialComment(intimateHead.body, "intimate-affection-for-males");
-        intimateHead.body.push(`/** @type {DEIntimateAction[]} */`);
-        intimateHead.body.push(`const intimateAffectionForMales = [`)
+        insertSpecialComment(intimateAffectionActs.body, "intimate-affection-for-males");
 
         for (const act of intimateAffectionForMalesParsed) {
-            intimateHead.body.push(`{`)
-            await generateIntimateAction(act, true, false, false);
-            intimateHead.body.push(`},`)
+            intimateAffectionActs.body.push(`{`)
+            await generateIntimateAction(act, true, false, false, "DE.utils.isWithinAttractionGroupForMale(char, other) ? 1 : 0");
+            intimateAffectionActs.body.push(`},`)
         }
 
-        intimateHead.body.push(`];`)
+        intimateAffectionActs.body.push(`];`)
 
         await autosave?.save();
     }
 
-    if (isAttractedToFemales && !hasSpecialComment(intimateHead.body, "intimate-affection-for-females")) {
+    if (isAttractedToFemales && !hasSpecialComment(intimateAffectionActs.body, "intimate-affection-for-females")) {
         await prime();
         const isNonAnimal = card.config.characterSpeciesType !== "animal";
 
@@ -778,22 +783,20 @@ export async function generateAffectiveStates(engine, card, guider, autosave) {
             }
         }
 
-        insertSpecialComment(intimateHead.body, "intimate-affection-for-females");
-        intimateHead.body.push(`/** @type {DEIntimateAction[]} */`);
-        intimateHead.body.push(`const intimateAffectionForFemales = [`)
+        insertSpecialComment(intimateAffectionActs.body, "intimate-affection-for-females");
 
         for (const act of intimateAffectionForFemalesParsed) {
-            intimateHead.body.push(`{`)
-            await generateIntimateAction(act, true, false, false);
-            intimateHead.body.push(`},`)
+            intimateAffectionActs.body.push(`{`)
+            await generateIntimateAction(act, true, false, false, "DE.utils.isWithinAttractionGroupForFemale(char, other) ? 1 : 0");
+            intimateAffectionActs.body.push(`},`)
         }
 
-        intimateHead.body.push(`];`)
+        intimateAffectionActs.body.push(`];`)
 
         await autosave?.save();
     }
 
-    if (isAttractedToAmbiguous && !hasSpecialComment(intimateHead.body, "intimate-affection-for-ambiguous")) {
+    if (isAttractedToAmbiguous && !hasSpecialComment(intimateAffectionActs.body, "intimate-affection-for-ambiguous")) {
         await prime();
         const isNonAnimal = card.config.characterSpeciesType !== "animal";
 
@@ -859,22 +862,26 @@ export async function generateAffectiveStates(engine, card, guider, autosave) {
             }
         }
 
-        insertSpecialComment(intimateHead.body, "intimate-affection-for-ambiguous");
-        intimateHead.body.push(`/** @type {DEIntimateAction[]} */`);
-        intimateHead.body.push(`const intimateAffectionForAmbiguous = [`)
+        insertSpecialComment(intimateAffectionActs.body, "intimate-affection-for-ambiguous");
 
         for (const act of intimateAffectionForAmbiguousParsed) {
-            intimateHead.body.push(`{`)
-            await generateIntimateAction(act, true, false, false);
-            intimateHead.body.push(`},`)
+            intimateAffectionActs.body.push(`{`)
+            await generateIntimateAction(act, true, false, false, "DE.utils.isWithinAttractionGroupForAmbiguous(char, other) ? 1 : 0");
+            intimateAffectionActs.body.push(`},`)
         }
 
-        intimateHead.body.push(`];`)
+        intimateAffectionActs.body.push(`];`)
 
         await autosave?.save();
     }
 
-    if (!isAsexualValue && isAttractedToMales && !hasSpecialComment(intimateHead.body, "sex-acts-for-males")) {
+    const sexActsSection = insertSection(intimateHead.body, "sex-acts-section", (s) => {
+        s.head.push(`/** @type {DEIntimateAction[]} */`);
+        s.head.push(`const sexActs = [`);
+        s.foot.push(`];`);
+    });
+
+    if (!isAsexualValue && isAttractedToMales && !hasSpecialComment(sexActsSection.body, "sex-acts-for-males")) {
         await prime();
         const sexActsForMales = await generator.next({
             maxCharacters: 1000,
@@ -900,22 +907,20 @@ export async function generateAffectiveStates(engine, card, guider, autosave) {
             }
         }
 
-        insertSpecialComment(intimateHead.body, "sex-acts-for-males");
-        intimateHead.body.push(`/** @type {DEIntimateAction[]} */`);
-        intimateHead.body.push(`const sexActsForMales = [`)
+        insertSpecialComment(sexActsSection.body, "sex-acts-for-males");
 
         for (const act of sexActsForMalesParsed) {
-            intimateHead.body.push(`{`)
-            await generateIntimateAction(act, false, true, true);
-            intimateHead.body.push(`},`)
+            sexActsSection.body.push(`{`)
+            await generateIntimateAction(act, false, true, true, "DE.utils.isWithinAttractionGroupForMale(char, other) ? 1 : 0");
+            sexActsSection.body.push(`},`)
         }
 
-        intimateHead.body.push(`];`)
+        sexActsSection.body.push(`];`)
 
         await autosave?.save();
     }
 
-    if (!isAsexualValue && isAttractedToFemales && !hasSpecialComment(intimateHead.body, "sex-acts-for-females")) {
+    if (!isAsexualValue && isAttractedToFemales && !hasSpecialComment(sexActsSection.body, "sex-acts-for-females")) {
         await prime();
         const sexActsForFemales = await generator.next({
             maxCharacters: 1000,
@@ -941,22 +946,20 @@ export async function generateAffectiveStates(engine, card, guider, autosave) {
             }
         }
 
-        insertSpecialComment(intimateHead.body, "sex-acts-for-females");
-        intimateHead.body.push(`/** @type {DEIntimateAction[]} */`);
-        intimateHead.body.push(`const sexActsForFemales = [`)
+        insertSpecialComment(sexActsSection.body, "sex-acts-for-females");
 
         for (const act of sexActsForFemalesParsed) {
-            intimateHead.body.push(`{`)
-            await generateIntimateAction(act, false, true, true);
-            intimateHead.body.push(`},`)
+            sexActsSection.body.push(`{`)
+            await generateIntimateAction(act, false, true, true, "DE.utils.isWithinAttractionGroupForFemale(char, other) ? 1 : 0");
+            sexActsSection.body.push(`},`)
         }
 
-        intimateHead.body.push(`];`)
+        sexActsSection.body.push(`];`)
 
         await autosave?.save();
     }
 
-    if (!isAsexualValue && isAttractedToAmbiguous && !hasSpecialComment(intimateHead.body, "sex-acts-for-ambiguous")) {
+    if (!isAsexualValue && isAttractedToAmbiguous && !hasSpecialComment(sexActsSection.body, "sex-acts-for-ambiguous")) {
         await prime();
         const sexActsForAmbiguous = await generator.next({
             maxCharacters: 1000,
@@ -982,17 +985,15 @@ export async function generateAffectiveStates(engine, card, guider, autosave) {
             }
         }
 
-        insertSpecialComment(intimateHead.body, "sex-acts-for-ambiguous");
-        intimateHead.body.push(`/** @type {DEIntimateAction[]} */`);
-        intimateHead.body.push(`const sexActsForAmbiguous = [`)
+        insertSpecialComment(sexActsSection.body, "sex-acts-for-ambiguous");
 
         for (const act of sexActsForAmbiguousParsed) {
-            intimateHead.body.push(`{`)
-            await generateIntimateAction(act, false, true, true);
-            intimateHead.body.push(`},`)
+            sexActsSection.body.push(`{`)
+            await generateIntimateAction(act, false, true, true, "DE.utils.isWithinAttractionGroupForAmbiguous(char, other) ? 1 : 0");
+            sexActsSection.body.push(`},`)
         }
 
-        intimateHead.body.push(`];`)
+        sexActsSection.body.push(`];`)
 
         await autosave?.save();
     }

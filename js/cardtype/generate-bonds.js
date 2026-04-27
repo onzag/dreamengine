@@ -1,4 +1,5 @@
 import { DEngine } from '../engine/index.js';
+import { createGrammarFromList } from '../engine/util/grammar.js';
 import { createCardStructureFrom, getJsCard, getSection, hasSpecialComment, insertSection, insertSpecialComment, toTemplateLiteral } from './base.js';
 import { replaceOtherCharNameWithPlaceholder } from './generate-bond-triggers.js';
 
@@ -70,7 +71,7 @@ export async function generateBonds(engine, card, guider, autosave) {
             await prime();
             const isIncestuous = await generator.next({
                 maxCharacters: 5,
-                maxSafetyCharacters: 0,
+                maxSafetyCharacters: 100,
                 maxParagraphs: 1,
                 nextQuestion: "Does " + name + " have an incestuous attraction towards family members? Answer with yes or no.",
                 stopAfter: [],
@@ -581,7 +582,7 @@ export async function generateBonds(engine, card, guider, autosave) {
         await prime();
         const wouldUseViolenceTowardsEnemies = await generator.next({
             maxCharacters: 5,
-            maxSafetyCharacters: 0,
+            maxSafetyCharacters: 100,
             maxParagraphs: 1,
             nextQuestion: "If " + name + " has an extremely hostile and abusive relationship with another character, would they be willing use violence towards that character if they had the opportunity? Answer with yes or no.",
             stopAfter: [],
@@ -1206,20 +1207,30 @@ export async function generateBonds(engine, card, guider, autosave) {
         const strangerSectionOpenToSex = insertSection(strangerSectionBase.body, "openToSex", (s) => {
             s.head.push(`openToSex: (char, other) => {`);
             s.foot.push(`},`);
+            s.foot.push(`openToSexResponses: openToSex,`);
         });
 
         const strangerSectionProneToInitiatingAffection = insertSection(strangerSectionBase.body, "proneToInitiatingAffection", (s) => {
-            s.head.push(`proneToInitiatingAffection: (char, other) => {`);
+            s.head.push(`proneToInitiatingAffection: {`);
+            s.head.push(`probability: (char, other) => {`);
+            s.foot.push(`},`);
+            s.foot.push(`actions: affectionActs,`);
             s.foot.push(`},`);
         });
 
         const strangerSectionProneToInitiatingIntimateAffection = insertSection(strangerSectionBase.body, "proneToInitiatingIntimateAffection", (s) => {
-            s.head.push(`proneToInitiatingIntimateAffection: (char, other) => {`);
+            s.head.push(`proneToInitiatingIntimateAffection: {`);
+            s.head.push(`probability: (char, other) => {`);
+            s.foot.push(`},`);
+            s.foot.push(`actions: intimateAffectionActs,`);
             s.foot.push(`},`);
         });
 
         const strangerSectionProneToInitiatingSex = insertSection(strangerSectionBase.body, "proneToInitiatingSex", (s) => {
-            s.head.push(`proneToInitiatingSex: (char, other) => {`);
+            s.head.push(`proneToInitiatingSex: {`);
+            s.head.push(`probability: (char, other) => {`);
+            s.foot.push(`},`);
+            s.foot.push(`actions: sexActs,`);
             s.foot.push(`},`);
         });
 
@@ -1257,14 +1268,16 @@ export async function generateBonds(engine, card, guider, autosave) {
                 }
                 for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
                     const openToAffectionQuestion = "How receptive to affection is " + name + " towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "?";
+                    await prime();
                     const answer = await generator.next({
                         maxCharacters: 50,
-                        maxSafetyCharacters: 0,
+                        maxSafetyCharacters: 100,
                         maxParagraphs: 1,
                         nextQuestion: openToAffectionQuestion,
                         stopAfter: [],
                         stopAt: [],
                         instructions: "Answer with one of the following options: 'Not receptive', 'Slightly receptive', 'Moderately receptive', 'Very receptive'. Consider the nature of the relationship and the specific modifier of intimacy when determining the level of openness to affection.",
+                        grammar: createGrammarFromList(engine, ["Not receptive", "Slightly receptive", "Moderately receptive", "Very receptive"]).grammar,
                     });
 
                     if (answer.done) {
@@ -1277,9 +1290,9 @@ export async function generateBonds(engine, card, guider, autosave) {
                             "Slightly receptive",
                             "Moderately receptive",
                             "Very receptive",
-                        ], answer.value);
+                        ], answer.value.toLowerCase());
                         if (guiderResult.value) {
-                            answer.value = guiderResult.value;
+                            answer.value = guiderResult.value.toLowerCase();
                         }
                     }
 
@@ -1341,14 +1354,16 @@ export async function generateBonds(engine, card, guider, autosave) {
                 }
                 for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
                     const openToIntimateAffectionQuestion = "How receptive to intimate affection is " + name + " towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "?";
+                    await prime();
                     const answer = await generator.next({
                         maxCharacters: 50,
-                        maxSafetyCharacters: 0,
+                        maxSafetyCharacters: 100,
                         maxParagraphs: 1,
                         nextQuestion: openToIntimateAffectionQuestion,
                         stopAfter: [],
                         stopAt: [],
                         instructions: "Answer with one of the following options: 'Not receptive', 'Slightly receptive', 'Moderately receptive', 'Very receptive'. Consider the nature of the relationship and the specific modifier of intimacy when determining the level of openness to intimate affection.",
+                        grammar: createGrammarFromList(engine, ["Not receptive", "Slightly receptive", "Moderately receptive", "Very receptive"]).grammar,
                     });
 
                     if (answer.done) {
@@ -1361,9 +1376,9 @@ export async function generateBonds(engine, card, guider, autosave) {
                             "Slightly receptive",
                             "Moderately receptive",
                             "Very receptive",
-                        ], answer.value);
+                        ], answer.value.toLowerCase());
                         if (guiderResult.value) {
-                            answer.value = guiderResult.value;
+                            answer.value = guiderResult.value.toLowerCase();
                         }
                     }
 
@@ -1425,14 +1440,16 @@ export async function generateBonds(engine, card, guider, autosave) {
                 }
                 for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
                     const openToSexQuestion = "How receptive to sex is " + name + " towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "?";
+                    await prime();
                     const answer = await generator.next({
                         maxCharacters: 50,
-                        maxSafetyCharacters: 0,
+                        maxSafetyCharacters: 100,
                         maxParagraphs: 1,
                         nextQuestion: openToSexQuestion,
                         stopAfter: [],
                         stopAt: [],
                         instructions: "Answer with one of the following options: 'Not receptive', 'Slightly receptive', 'Moderately receptive', 'Very receptive'. Consider the nature of the relationship and the specific modifier of intimacy when determining the level of openness to sex.",
+                        grammar: createGrammarFromList(engine, ["Not receptive", "Slightly receptive", "Moderately receptive", "Very receptive"]).grammar,
                     });
 
                     if (answer.done) {
@@ -1445,9 +1462,9 @@ export async function generateBonds(engine, card, guider, autosave) {
                             "Slightly receptive",
                             "Moderately receptive",
                             "Very receptive",
-                        ], answer.value);
+                        ], answer.value.toLowerCase());
                         if (guiderResult.value) {
-                            answer.value = guiderResult.value;
+                            answer.value = guiderResult.value.toLowerCase();
                         }
                     }
 
@@ -1509,9 +1526,10 @@ export async function generateBonds(engine, card, guider, autosave) {
                 }
                 for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
                     const proneToInitiatingAffectionQuestion = "From 0 to 10 how likely is " + name + " to initiate non-romantic physical affection towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "? with 10 being extremely likely and 0 being not at all";
+                    await prime();
                     const answer = await generator.next({
                         maxCharacters: 5,
-                        maxSafetyCharacters: 0,
+                        maxSafetyCharacters: 100,
                         maxParagraphs: 1,
                         nextQuestion: proneToInitiatingAffectionQuestion,
                         stopAfter: [],
@@ -1576,9 +1594,10 @@ export async function generateBonds(engine, card, guider, autosave) {
                 }
                 for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
                     const proneToInitiatingIntimateAffectionQuestion = "From 0 to 10 how likely is " + name + " to initiate romantic or sexual physical affection towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "? with 10 being extremely likely and 0 being not at all";
+                    await prime();
                     const answer = await generator.next({
                         maxCharacters: 5,
-                        maxSafetyCharacters: 0,
+                        maxSafetyCharacters: 100,
                         maxParagraphs: 1,
                         nextQuestion: proneToInitiatingIntimateAffectionQuestion,
                         stopAfter: [],
@@ -1643,9 +1662,10 @@ export async function generateBonds(engine, card, guider, autosave) {
                 }
                 for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
                     const proneToInitiatingSexQuestion = "From 0 to 10 how likely is " + name + " to initiate sex towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "? with 10 being extremely likely and 0 being not at all";
+                    await prime();
                     const answer = await generator.next({
                         maxCharacters: 5,
-                        maxSafetyCharacters: 0,
+                        maxSafetyCharacters: 100,
                         maxParagraphs: 1,
                         nextQuestion: proneToInitiatingSexQuestion,
                         stopAfter: [],
@@ -1684,22 +1704,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                         strangerSectionProneToInitiatingSex.body.push(`if (${condition}) {`);
                     }
 
-                    const hasKinksForMales = card.config.kinksForMales && card.config.kinksForMales.length > 0;
-                    const hasKinksForFemales = card.config.kinksForFemales && card.config.kinksForFemales.length > 0;
-
-                    if (hasKinksForMales || hasKinksForFemales) {
-                        if (hasKinksForMales) {
-                            strangerSectionProneToInitiatingSex.body.push(`if (other.sex === "male") {`);
-                            strangerSectionProneToInitiatingSex.body.push(`return {probability: ${probability}, options: ${JSON.stringify([...card.config.kinks, ...card.config.kinksForMales])}};`);
-                            strangerSectionProneToInitiatingSex.body.push(`}`);
-                        }
-                        if (hasKinksForFemales) {
-                            strangerSectionProneToInitiatingSex.body.push(`if (other.sex === "female") {`);
-                            strangerSectionProneToInitiatingSex.body.push(`return {probability: ${probability}, options: ${JSON.stringify([...card.config.kinks, ...card.config.kinksForFemales])}};`);
-                            strangerSectionProneToInitiatingSex.body.push(`}`);
-                        }
-                    }
-                    strangerSectionProneToInitiatingSex.body.push(`return {probability: ${probability}, options: ${JSON.stringify(card.config.kinks)}};`);
+                    strangerSectionProneToInitiatingSex.body.push(`return ${probability};`);
 
                     if (condition !== "true") {
                         strangerSectionProneToInitiatingSex.body.push(`}`);
@@ -1717,7 +1722,8 @@ export async function generateBonds(engine, card, guider, autosave) {
                 }
                 // done proneToInitiatingSex
 
-                let guidanceGiven = allExtraInfo;
+                let guidanceGivenAllExtraInfo = allExtraInfo;
+                let guidanceGiven = "";
                 let redoGuidance = false;
                 let descriptionValueUnprocessed = "";
                 let descriptionValue = "";
@@ -1735,13 +1741,16 @@ export async function generateBonds(engine, card, guider, autosave) {
                     if (isAnimalFineTune && card.config.characterSpeciesType !== "animal") {
                         baseInstructions = "NEVER ask for clarification or more information. ALWAYS directly write the description short paragraph. Invent any specific details as needed. The response should use the word 'OTHER_CHARACTER' to refer to the animal (pet or wild beast) in question, ensure to specify whether " + name + " would have any sexual feelings towards OTHER_CHARACTER or not, and otherwise describe their relationship in terms of how " + name + " would interact with this pet or wild animal, including whether they would want to care for it, be afraid of it, want to befriend it."
                     }
+                    if (guidanceGivenAllExtraInfo) {
+                        baseInstructions += "\n\nThe following information has been provided based on the previous questions and answers:\n\n" + guidanceGivenAllExtraInfo;
+                    }
                     if (guidanceGiven) {
                         baseInstructions += "\n\n# MANDATORY REQUIREMENTS — ACTIVE OVERRIDE:\n\nThe following requirements MUST be reflected in your answer. Treat them as hard constraints that take absolute priority over any conflicting instruction above. Do NOT ignore or dilute them:\n\n" + guidanceGiven;
                     }
                     await prime();
                     const descriptionQuestion = await generator.next({
                         maxCharacters: 200,
-                        maxSafetyCharacters: 0,
+                        maxSafetyCharacters: 600,
                         maxParagraphs: 1,
                         nextQuestion: "Provide a concise and short one paragraph description of how " + name + " perceives and feels about " + actualStrangerValue + ". Focus on the emotional and psychological aspects of their perception, rather than physical details. This should capture the essence of their feelings and attitudes towards this person in a way that informs their interactions and relationship dynamics. Keep the paragraph short, ideally under 100 words.",
                         stopAfter: [],
@@ -1827,22 +1836,32 @@ export async function generateBonds(engine, card, guider, autosave) {
                 });
 
                 const familySectionOpenToSex = insertSection(familySectionBase.body, "openToSex", (s) => {
-                    s.head.push(`openToSex: (DE, char, other) => {`);
+                    s.head.push(`openToSex: (char, other) => {`);
                     s.foot.push(`},`);
+                    s.foot.push(`openToSexResponses: openToSex,`);
                 });
 
                 const familySectionProneToInitiatingAffection = insertSection(familySectionBase.body, "proneToInitiatingAffection", (s) => {
-                    s.head.push(`proneToInitiatingAffection: (DE, char, other) => {`);
+                    s.head.push(`proneToInitiatingAffection: {`);
+                    s.head.push(`probability: (char, other) => {`);
+                    s.foot.push(`},`);
+                    s.foot.push(`actions: affectionActs,`);
                     s.foot.push(`},`);
                 });
 
                 const familySectionProneToInitiatingIntimateAffection = insertSection(familySectionBase.body, "proneToInitiatingIntimateAffection", (s) => {
-                    s.head.push(`proneToInitiatingIntimateAffection: (DE, char, other) => {`);
+                    s.head.push(`proneToInitiatingIntimateAffection: {`);
+                    s.head.push(`probability: (char, other) => {`);
+                    s.foot.push(`},`);
+                    s.foot.push(`actions: intimateAffectionActs,`);
                     s.foot.push(`},`);
                 });
 
                 const familySectionProneToInitiatingSex = insertSection(familySectionBase.body, "proneToInitiatingSex", (s) => {
-                    s.head.push(`proneToInitiatingSex: (DE, char, other) => {`);
+                    s.head.push(`proneToInitiatingSex: {`);
+                    s.head.push(`probability: (char, other) => {`);
+                    s.foot.push(`},`);
+                    s.foot.push(`actions: sexActs,`);
                     s.foot.push(`},`);
                 });
 
@@ -1893,14 +1912,16 @@ export async function generateBonds(engine, card, guider, autosave) {
                         }
                         for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
                             const openToAffectionQuestion = "How receptive to affection is " + name + " towards " + actualFamilyValue + " when they are " + intimateModifier.toLowerCase() + "?";
+                            await prime();
                             const answer = await generator.next({
                                 maxCharacters: 50,
-                                maxSafetyCharacters: 0,
+                                maxSafetyCharacters: 100,
                                 maxParagraphs: 1,
                                 nextQuestion: openToAffectionQuestion,
                                 stopAfter: [],
                                 stopAt: [],
                                 instructions: "Answer with one of the following options: 'Not receptive', 'Slightly receptive', 'Moderately receptive', 'Very receptive'. Consider the nature of the relationship and the specific modifier of intimacy when determining the level of openness to affection.",
+                                grammar: createGrammarFromList(engine, ["Not receptive", "Slightly receptive", "Moderately receptive", "Very receptive"]).grammar,
                             });
 
                             if (answer.done) {
@@ -1913,9 +1934,9 @@ export async function generateBonds(engine, card, guider, autosave) {
                                     "Slightly receptive",
                                     "Moderately receptive",
                                     "Very receptive",
-                                ], answer.value);
+                                ], answer.value.toLowerCase());
                                 if (guiderResult.value) {
-                                    answer.value = guiderResult.value;
+                                    answer.value = guiderResult.value.toLowerCase();
                                 }
                             }
 
@@ -1977,14 +1998,16 @@ export async function generateBonds(engine, card, guider, autosave) {
                         }
                         for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
                             const openToIntimateAffectionQuestion = "How receptive to intimate affection is " + name + " towards " + actualFamilyValue + " when they are " + intimateModifier.toLowerCase() + "?";
+                            await prime();
                             const answer = await generator.next({
                                 maxCharacters: 50,
-                                maxSafetyCharacters: 0,
+                                maxSafetyCharacters: 100,
                                 maxParagraphs: 1,
                                 nextQuestion: openToIntimateAffectionQuestion,
                                 stopAfter: [],
                                 stopAt: [],
                                 instructions: "Answer with one of the following options: 'Not receptive', 'Slightly receptive', 'Moderately receptive', 'Very receptive'. Consider the nature of the relationship and the specific modifier of intimacy when determining the level of openness to intimate affection.",
+                                grammar: createGrammarFromList(engine, ["Not receptive", "Slightly receptive", "Moderately receptive", "Very receptive"]).grammar,
                             });
 
                             if (answer.done) {
@@ -1997,9 +2020,9 @@ export async function generateBonds(engine, card, guider, autosave) {
                                     "Slightly receptive",
                                     "Moderately receptive",
                                     "Very receptive",
-                                ], answer.value);
+                                ], answer.value.toLowerCase());
                                 if (guiderResult.value) {
-                                    answer.value = guiderResult.value;
+                                    answer.value = guiderResult.value.toLowerCase();
                                 }
                             }
 
@@ -2061,14 +2084,16 @@ export async function generateBonds(engine, card, guider, autosave) {
                         }
                         for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
                             const openToSexQuestion = "How receptive to sex is " + name + " towards " + actualFamilyValue + " when they are " + intimateModifier.toLowerCase() + "?";
+                            await prime();
                             const answer = await generator.next({
                                 maxCharacters: 50,
-                                maxSafetyCharacters: 0,
+                                maxSafetyCharacters: 100,
                                 maxParagraphs: 1,
                                 nextQuestion: openToSexQuestion,
                                 stopAfter: [],
                                 stopAt: [],
                                 instructions: "Answer with one of the following options: 'Not receptive', 'Slightly receptive', 'Moderately receptive', 'Very receptive'. Consider the nature of the relationship and the specific modifier of intimacy when determining the level of openness to sex.",
+                                grammar: createGrammarFromList(engine, ["Not receptive", "Slightly receptive", "Moderately receptive", "Very receptive"]).grammar,
                             });
 
                             if (answer.done) {
@@ -2081,9 +2106,9 @@ export async function generateBonds(engine, card, guider, autosave) {
                                     "Slightly receptive",
                                     "Moderately receptive",
                                     "Very receptive",
-                                ], answer.value);
+                                ], answer.value.toLowerCase());
                                 if (guiderResult.value) {
-                                    answer.value = guiderResult.value;
+                                    answer.value = guiderResult.value.toLowerCase();
                                 }
                             }
 
@@ -2145,6 +2170,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                         }
                         for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
                             const proneToInitiatingAffectionQuestion = "From 0 to 10 how likely is " + name + " to initiate non-romantic physical affection towards " + actualFamilyValue + " when they are " + intimateModifier.toLowerCase() + "? with 10 being extremely likely and 0 being not at all";
+                            await prime();
                             const answer = await generator.next({
                                 maxCharacters: 5,
                                 maxSafetyCharacters: 0,
@@ -2212,9 +2238,10 @@ export async function generateBonds(engine, card, guider, autosave) {
                         }
                         for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
                             const proneToInitiatingIntimateAffectionQuestion = "From 0 to 10 how likely is " + name + " to initiate romantic or sexual physical affection towards " + actualFamilyValue + " when they are " + intimateModifier.toLowerCase() + "? with 10 being extremely likely and 0 being not at all";
+                            await prime();
                             const answer = await generator.next({
                                 maxCharacters: 5,
-                                maxSafetyCharacters: 0,
+                                maxSafetyCharacters: 500,
                                 maxParagraphs: 1,
                                 nextQuestion: proneToInitiatingIntimateAffectionQuestion,
                                 stopAfter: [],
@@ -2279,9 +2306,10 @@ export async function generateBonds(engine, card, guider, autosave) {
                         }
                         for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
                             const proneToInitiatingSexQuestion = "From 0 to 10 how likely is " + name + " to initiate sex towards " + actualFamilyValue + " when they are " + intimateModifier.toLowerCase() + "? with 10 being extremely likely and 0 being not at all";
+                            await prime();
                             const answer = await generator.next({
                                 maxCharacters: 5,
-                                maxSafetyCharacters: 0,
+                                maxSafetyCharacters: 10,
                                 maxParagraphs: 1,
                                 nextQuestion: proneToInitiatingSexQuestion,
                                 stopAfter: [],
@@ -2320,22 +2348,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                                 familySectionProneToInitiatingSex.body.push(`if (${condition}) {`);
                             }
 
-                            const hasKinksForMales = card.config.kinksForMales && card.config.kinksForMales.length > 0;
-                            const hasKinksForFemales = card.config.kinksForFemales && card.config.kinksForFemales.length > 0;
-
-                            if (hasKinksForMales || hasKinksForFemales) {
-                                if (hasKinksForMales) {
-                                    familySectionProneToInitiatingSex.body.push(`if (other.sex === "male") {`);
-                                    familySectionProneToInitiatingSex.body.push(`return {probability: ${probability}, options: ${JSON.stringify([...card.config.kinks, ...card.config.kinksForMales])}};`);
-                                    familySectionProneToInitiatingSex.body.push(`}`);
-                                }
-                                if (hasKinksForFemales) {
-                                    familySectionProneToInitiatingSex.body.push(`if (other.sex === "female") {`);
-                                    familySectionProneToInitiatingSex.body.push(`return {probability: ${probability}, options: ${JSON.stringify([...card.config.kinks, ...card.config.kinksForFemales])}};`);
-                                    familySectionProneToInitiatingSex.body.push(`}`);
-                                }
-                            }
-                            familySectionProneToInitiatingSex.body.push(`return {probability: ${probability}, options: ${JSON.stringify(card.config.kinks)}};`);
+                            familySectionProneToInitiatingSex.body.push(`return ${probability};`);
 
                             if (condition !== "true") {
                                 familySectionProneToInitiatingSex.body.push(`}`);
@@ -2353,7 +2366,8 @@ export async function generateBonds(engine, card, guider, autosave) {
                         }
                         // done proneToInitiatingSex
 
-                        let guidanceGiven = allExtraInfo;
+                        let guidanceGivenAllExtraInfo = allExtraInfo;
+                        let guidanceGiven = "";
                         let redoGuidance = false;
                         let descriptionValueUnprocessed = "";
                         let descriptionValue = "";
@@ -2371,13 +2385,16 @@ export async function generateBonds(engine, card, guider, autosave) {
                             if (isAnimalFineTune && card.config.characterSpeciesType !== "animal") {
                                 baseInstructions = "NEVER ask for clarification or more information. ALWAYS directly write the description paragraph. Invent any specific details as needed. The response should use the word 'OTHER_CHARACTER' to refer to the animal (pet or wild beast) in question, ensure to specify whether " + name + " would have any sexual feelings towards OTHER_CHARACTER or not, and otherwise describe their relationship in terms of how " + name + " would interact with this pet or wild animal, including whether they would want to care for it, be afraid of it, want to befriend it."
                             }
+                            if (guidanceGivenAllExtraInfo) {
+                                baseInstructions += "\n\nThe following information has been provided based on the previous questions and answers:\n\n" + guidanceGivenAllExtraInfo;
+                            }
                             if (guidanceGiven) {
                                 baseInstructions += "\n\n# MANDATORY REQUIREMENTS — ACTIVE OVERRIDE:\n\nThe following requirements MUST be reflected in your answer. Treat them as hard constraints that take absolute priority over any conflicting instruction above. Do NOT ignore or dilute them:\n\n" + guidanceGiven;
                             }
                             await prime();
                             const descriptionQuestion = await generator.next({
                                 maxCharacters: 200,
-                                maxSafetyCharacters: 0,
+                                maxSafetyCharacters: 400,
                                 maxParagraphs: 1,
                                 nextQuestion: "Provide a concise and short one paragraph description of how " + name + " perceives and feels about " + actualFamilyValue + ". Focus on the emotional and psychological aspects of their perception, rather than physical details. This should capture the essence of their feelings and attitudes towards this person in a way that informs their interactions and relationship dynamics. Keep the paragraph short, ideally under 100 words.",
                                 stopAfter: [],
