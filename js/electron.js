@@ -37,6 +37,7 @@ const createWindow = () => {
         height: 800,
         fullscreenable: true,
         fullscreen: config.fullscreen || false,
+        icon: path.join(__dirname, 'app', 'images', process.platform === 'win32' ? 'icon-512x512.ico' : 'icon-512x512.png'),
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true,
@@ -422,6 +423,7 @@ ipcMain.handle('uploadFileToDEPath', async (event, dePath, file) => {
         throw new Error("Invalid path");
     }
     const destPath = path.join(DREAMENGINE_HOME, dePath);
+    await fs.promises.mkdir(path.dirname(destPath), { recursive: true });
     const arrayBuffer = await file.arrayBuffer();
     await fs.promises.writeFile(destPath, Buffer.from(arrayBuffer));
     return true;
@@ -437,7 +439,7 @@ ipcMain.handle('uploadBytesToDEPath', async (event, dePath, bytes) => {
     if (dePath.includes('..')) {
         throw new Error('Invalid path');
     }
-    if (dePath !== "profile" && !dePath.startsWith("characters-assets/")) {
+    if (dePath !== "profile" && !dePath.startsWith("assets/")) {
         throw new Error('Unauthorized path for upload');
     }
     if (dePath.endsWith(".json") || dePath.endsWith(".js")) {
@@ -452,6 +454,7 @@ ipcMain.handle('uploadBytesToDEPath', async (event, dePath, bytes) => {
     } else {
         throw new Error('Unsupported byte payload type');
     }
+    await fs.promises.mkdir(path.dirname(destPath), { recursive: true });
     await fs.promises.writeFile(destPath, buffer);
     return true;
 });

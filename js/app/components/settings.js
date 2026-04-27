@@ -390,13 +390,14 @@ class Settings extends HTMLElement {
     }
 
     async onSaveAndCloseSettings() {
-        this.closeSettings();
         playConfirmSound();
 
         await Promise.all(Array.from(this.root.querySelectorAll('app-overlay-input, app-overlay-select, app-profile-image, app-overlay-list-input, app-overlay-input-boolean')).map(inputComponent =>
             // @ts-ignore
             inputComponent.saveValueToUserData()
         ));
+
+        this.closeSettings();
 
         await window.API.saveConfig();
     }
@@ -414,6 +415,8 @@ class Settings extends HTMLElement {
             .main-profile-image-container {
                 width: 20vw;
                 height: 20vw;
+                min-width: 200px;
+                min-height: 200px;
             }
         </style>
         <app-overlay overlay-title="Settings" cancel-text="Cancel" confirm-text="Save & Close">

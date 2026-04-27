@@ -1,5 +1,6 @@
 import { createCardStructureFrom, isCardTypeFile } from '../../cardtype/base.js';
 import { playCancelSound, playConfirmSound, playHoverSound, playPauseSound, setTempSoundDisable } from '../sound.js';
+import './profile-image.js';
 
 /**
  * 
@@ -8,10 +9,10 @@ import { playCancelSound, playConfirmSound, playHoverSound, playPauseSound, setT
  */
 function escapeHTML(str) {
     return String(str)
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;');
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
 }
 
 class CharacterOverlay extends HTMLElement {
@@ -44,16 +45,22 @@ class CharacterOverlay extends HTMLElement {
         this.root.querySelector("app-overlay").addEventListener('cancel', () => {
             playCancelSound();
             setTempSoundDisable();
+            this.dispatchEvent(new CustomEvent('close'));
             this.remove();
         });
 
         // @ts-expect-error
-        this.root.querySelector("app-overlay").addEventListener('confirm', () => {
+        this.root.querySelector("app-overlay").addEventListener('confirm', async () => {
             // Here you would typically gather any changes made in the UI and save them back to the script file
             // For this example, we'll just close the overlay
             playConfirmSound();
             setTempSoundDisable();
-            this.remove();
+            try {
+                await this.saveProfileImage();
+            } finally {
+                this.dispatchEvent(new CustomEvent('close'));
+                this.remove();
+            }
         });
 
         this.renderSection();
@@ -146,6 +153,22 @@ class CharacterOverlay extends HTMLElement {
         });
     }
 
+    async saveProfileImage() {
+        const tabsContainer = this.root.querySelector('app-overlay-tabs');
+        if (!tabsContainer) return;
+        const profileImage = tabsContainer.querySelector('app-profile-image');
+        if (!profileImage) return;
+        // @ts-ignore
+        if (typeof profileImage.saveValueToUserData === 'function') {
+            try {
+                // @ts-ignore
+                await profileImage.saveValueToUserData();
+            } catch (err) {
+                console.error('Failed to save character image:', err);
+            }
+        }
+    }
+
     async renderSection() {
         const tabsContainer = this.root.querySelector('app-overlay-tabs');
         if (!tabsContainer) return;
@@ -230,7 +253,17 @@ class CharacterOverlay extends HTMLElement {
 
             const description = thisFileInfo?.description || "No description available";
 
+            const isSystemNamespace = this.currentCharacterNamespace.startsWith('@');
+            const profileImageUrl = `assets/${this.currentCharacterNamespace}/${this.currentCharacterId}/profile`;
+
             tabsContainer.innerHTML = `
+                <app-overlay-section section-title="Character Image">
+                    <div class="character-profile-image-container-parent">
+                        <div class="character-profile-image-container">
+                            <app-profile-image image-url="${escapeHTML(profileImageUrl)}"${isSystemNamespace ? '' : ' editable="true"'}></app-profile-image>
+                        </div>
+                    </div>
+                </app-overlay-section>
                 <app-overlay-section section-title="Description">
                     <p>${escapeHTML(description)}</p>
                 </app-overlay-section>
@@ -267,6 +300,21 @@ class CharacterOverlay extends HTMLElement {
         this.root.innerHTML = `
             <style>
                 @import "./components/character.css";
+                .character-profile-image-container-parent {
+                    width: 100%;
+                    display: flex;
+                    justify-content: flex-start;
+                    align-items: flex-start;
+                }
+                .character-profile-image-container {
+                    width: 20vw;
+                    height: 20vw;
+                    min-width: 200px;
+                    min-height: 200px;
+                    display: flex;
+                    align-items: flex-start;
+                    justify-content: center;
+                }
             </style>
             <app-overlay
                 overlay-title="Working on: ${(this.currentCharacterNamespace.replace("@", "(System|ReadOnly) ") + " / " + this.currentCharacterId).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')}"
