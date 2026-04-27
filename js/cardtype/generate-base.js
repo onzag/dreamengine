@@ -42,6 +42,8 @@ export function replaceAllCharNameWithPlaceholder(str, charName) {
  * @return {Promise<void>}
  */
 export async function generateBase(engine, card, guider, autosave) {
+    card.config.version = 1;
+    
     if (!hasSpecialComment(card.imports, "base-imports")) {
         insertSpecialComment(card.imports, "base-imports");
         card.imports.push(`const fss = await importScript("@bond-systems", "full-standard-bond-system");`);

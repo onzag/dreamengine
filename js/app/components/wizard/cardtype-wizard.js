@@ -67,6 +67,13 @@ class CardTypeWizard extends HTMLElement {
                 return;
             }
 
+            if (parsedCard.config.version && parsedCard.config.version !== 1) {
+                const contentArea = this.root.querySelector('.wizard-content');
+                // @ts-ignore
+                contentArea.innerHTML = `<p>This character script was generated with version ${parsedCard.config.version} of the wizard, but you are currently running version 1. There may be incompatibilities that prevent the wizard from working correctly. Please update your character script by copying its content, creating a new character with the latest version of the wizard, and pasting the content into the new character's script.</p>`;
+                return;
+            }
+
             let isAutomaticInProgress = parsedCard.config.automaticWizardInProgress && !parsedCard.config.automaticWizardCompleted;
             let isGuidedInProgress = parsedCard.config.guidedWizardInProgress && !parsedCard.config.guidedWizardCompleted;
 
