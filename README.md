@@ -85,3 +85,15 @@ Because the system is not attention based, it doesn't consume tokens.
 ## Local Servers
 
 For local servers check out [DreamServer](https://github.com/onzag/de-server), a local server implementation for the DreamEngine protocol, that can be used to run the engine on your own hardware, and connect to it via this client, either in NodeJS or the Electron app client.
+
+## Prebuilt Electron App
+
+## Initialaization
+
+### Electron App
+
+`npm run start` to start an electron app with the engine
+
+### Web Version
+
+`npm run web` to start a web version of the engine, it requires the optional dependencies to be installed, the web version creates a single user, secure server that runs in the browser and can be connected to by other clients, it is meant for sharing an instance of the engine, all the files are hosted on the host machine and can be accessed via a web browser.

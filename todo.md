@@ -9,7 +9,7 @@ Roadmap
 - [x] Evolving Relationships
 - [x] Mental States
 - [ ] Basic Lunar Station test area finalized
-- [ ] full SFW and NSFW Bond System
+- [x] full SFW and NSFW Bond System
 - [x] Add family bonds Support
 - [ ] Wander Heuristics
 - [ ] Social Simulation
