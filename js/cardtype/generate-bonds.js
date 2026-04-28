@@ -1,10 +1,44 @@
 import { DEngine } from '../engine/index.js';
 import { createGrammarFromList } from '../engine/util/grammar.js';
-import { createCardStructureFrom, getJsCard, getSection, hasSpecialComment, insertSection, insertSpecialComment, toTemplateLiteral } from './base.js';
+import { createCardStructureFrom, getJsCard, getSection, hasSpecialComment, insertSection, insertSpecialComment, toTemplateLiteral, toTemplateLiteralNoInfo } from './base.js';
 import { replaceOtherCharNameWithPlaceholder } from './generate-bond-triggers.js';
 
 if (typeof process !== "undefined" && process.versions && process.versions.node) {
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+}
+
+const PROBABILITY_OPTIONS = ["Unlikely", "Slightly Likely", "Moderately Likely", "Very Likely", "Certainly"];
+/** @type {Record<string, number>} */
+const PROBABILITY_MAP = {
+    "Unlikely": 0,
+    "Slightly Likely": 0.25,
+    "Moderately Likely": 0.5,
+    "Very Likely": 0.75,
+    "Certainly": 1,
+};
+
+/**
+ * Normalizes a free-form answer string to the canonical probability option
+ * label (case-insensitive). Returns the first option as a fallback.
+ * @param {string} answer
+ * @returns {string}
+ */
+function canonicalProbabilityOption(answer) {
+    const trimmed = answer.trim().toLowerCase();
+    for (const option of PROBABILITY_OPTIONS) {
+        if (trimmed === option.toLowerCase()) {
+            return option;
+        }
+    }
+    return PROBABILITY_OPTIONS[0];
+}
+
+/**
+ * @param {string} answer
+ * @returns {number}
+ */
+function probabilityFromAnswer(answer) {
+    return PROBABILITY_MAP[canonicalProbabilityOption(answer)];
 }
 
 /**
@@ -19,6 +53,8 @@ export async function generateBonds(engine, card, guider, autosave) {
     if (!inferenceAdapter) {
         throw new Error("No inference adapter found on engine");
     }
+
+    const probabilityGrammar = createGrammarFromList(engine, PROBABILITY_OPTIONS);
 
     const systemPrompt = inferenceAdapter.buildSystemPromptForQuestioningAgent(
         `You are a helpful assistant that will answer and assist in defining a character for a game based on their description, you are allowed free rein to interpret the character's description and generate the code that defines them in the game, you will be asked questions about the character and you should answer them as best as you can`,
@@ -1154,23 +1190,55 @@ export async function generateBonds(engine, card, guider, autosave) {
     const MODIFIERS_INTIMACY = {
         "In public around friends": {
             condition: "DE.utils.isAroundFriendsOrBetter(char, {exclude: other, excludeFamily: true})",
-            reasonYes: "they are around friends",
-            reasonNo: "they are around friends, and that makes it uncomfortable"
+            reasonYes: [
+                "they are around friends, and that makes it more comfortable",
+                "they are around friends, it would be better in a more private setting",
+                "{{other}} is a [], which makes {{char}} feel comfortable",
+                "{{other}} is a [], it would be better if they knew each other better",
+            ],
+            reasonNo: [
+                "they are around friends, and that makes it uncomfortable",
+                "they are around friends, it would be possible in a more private setting",
+                "{{other}} is a [], it would be possible if they knew each other better",
+                "{{char}} will never allow it",
+            ]
         },
         "In public around family": {
             condition: "DE.utils.isAroundFamily(char, {exclude: other})",
-            reasonYes: "they are around family members",
-            reasonNo: "they are around family members, and that makes it uncomfortable"
+            reasonYes: [
+                "they are around family, and that makes it more comfortable",
+                "they are around family, it would be better in a more private setting",
+                "{{other}} is a [], which makes {{char}} feel comfortable",
+                "{{other}} is a [], it would be better if they knew each other better",
+            ],
+            reasonNo: [
+                "they are around family, and that makes it uncomfortable",
+                "they are around family, it would be possible in a more private setting",
+                "{{other}} is a [], it would be possible if they knew each other better",
+                "{{char}} will never allow it",
+            ]
         },
         "In private": {
             condition: "DE.utils.isAloneWith(char, other) && DE.utils.isInPrivateLocation(char)",
-            reasonYes: "they are alone together in a private location",
-            reasonNo: "they are alone together in a private location",
+            reasonYes: [
+                "{{char}} is alone with {{other}}, who is a [], which makes {{char}} feel comfortable",
+                "{{char}} is alone with {{other}}, who is a [], it would be better if they knew each other better",
+            ],
+            reasonNo: [
+                "{{char}} is alone with {{other}}, who is a [], which makes {{char}} feel uncomfortable",
+                "{{char}} will never allow it",
+            ],
         },
         "In public": {
             condition: "true",
-            reasonYes: "they are in public",
-            reasonNo: "they are in public",
+            reasonYes: [
+                "{{char}} is in public with {{other}}, who is a [], which makes {{char}} feel comfortable",
+                "{{char}} is in public with {{other}}, who is a [], it would be better in a more private location",
+            ],
+            reasonNo: [
+                "{{char}} is in public with {{other}}, who is a [], which makes {{char}} feel uncomfortable",
+                "{{char}} will never allow it",
+            ],
         },
     };
 
@@ -1191,6 +1259,8 @@ export async function generateBonds(engine, card, guider, autosave) {
 
         const strangerSectionDescription = insertSection(strangerSectionBase.body, "description", (s) => {
             s.head.push(`description: (info) => {`);
+            s.head.push(`const char = info.char;`);
+            s.head.push(`const other = info.other;`);
             s.foot.push(`},`);
         });
 
@@ -1207,7 +1277,7 @@ export async function generateBonds(engine, card, guider, autosave) {
         const strangerSectionOpenToSex = insertSection(strangerSectionBase.body, "openToSex", (s) => {
             s.head.push(`openToSex: (char, other) => {`);
             s.foot.push(`},`);
-            s.foot.push(`openToSexResponses: openToSex,`);
+            s.foot.push(`openToSexResponses: sexOpenTo,`);
         });
 
         const strangerSectionProneToInitiatingAffection = insertSection(strangerSectionBase.body, "proneToInitiatingAffection", (s) => {
@@ -1319,16 +1389,31 @@ export async function generateBonds(engine, card, guider, autosave) {
                     if (condition !== "true") {
                         strangerSectionOpenToAffection.body.push(`if (${condition}) {`);
                     }
+
                     /**
                      * @type {string | null}
                      */
                     let reason = null;
-                    if (valueAnswer === "not") {
-                        reason = modifierInfo.reasonNo;
-                    } else {
-                        reason = modifierInfo.reasonYes;
+                    if (guider) {
+                        /**
+                     * @type {string[]}
+                     */
+                        let reasons;
+                        if (valueAnswer === "not") {
+                            reasons = modifierInfo.reasonNo;
+                        } else {
+                            reasons = modifierInfo.reasonYes;
+                        }
+                        const optionsForGuider = reasons.map(r => r.replace("{{char}}", name).replace("{{other}}", "the other character").replace("[]", "stranger"));
+                        const guiderResult = await guider.askOption("What is the reason for " + name + " being " + answerTrimmed + " to affection from this other character when they are " + intimateModifier.toLowerCase() + "?", optionsForGuider, optionsForGuider[0]);
+                        if (guiderResult.value) {
+                            const reasonIndex = optionsForGuider.indexOf(guiderResult.value);
+                            const originalReason = reasons[reasonIndex];
+                            reason = originalReason.replace("[]", "stranger");
+                        }
                     }
-                    strangerSectionOpenToAffection.body.push(`return {value: ${JSON.stringify(valueAnswer)}, reason: ${JSON.stringify(reason)}};`);
+
+                    strangerSectionOpenToAffection.body.push(`return {value: ${JSON.stringify(valueAnswer)}, reason: ${reason ? toTemplateLiteralNoInfo(reason) : "null"}};`);
                     if (condition !== "true") {
                         strangerSectionOpenToAffection.body.push(`}`);
                     }
@@ -1525,16 +1610,17 @@ export async function generateBonds(engine, card, guider, autosave) {
                     strangerSectionProneToInitiatingAffection.body.push(`if (${getDeeperFineTuneCondition(fineTuneConditions[fineTune], deeperFineTune)}) {`);
                 }
                 for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
-                    const proneToInitiatingAffectionQuestion = "From 0 to 10 how likely is " + name + " to initiate non-romantic physical affection towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "? with 10 being extremely likely and 0 being not at all";
+                    const proneToInitiatingAffectionQuestion = "How likely is " + name + " to initiate non-romantic physical affection towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "?";
                     await prime();
                     const answer = await generator.next({
-                        maxCharacters: 5,
+                        maxCharacters: 50,
                         maxSafetyCharacters: 100,
                         maxParagraphs: 1,
                         nextQuestion: proneToInitiatingAffectionQuestion,
-                        stopAfter: [],
+                        instructions: "Answer with: " + PROBABILITY_OPTIONS.join(", "),
+                        stopAfter: probabilityGrammar.stopAfter,
                         stopAt: [],
-                        grammar: "root ::= \"0\" | [1-9] | \"10\"",
+                        grammar: probabilityGrammar.grammar,
                     });
 
                     if (answer.done) {
@@ -1542,16 +1628,17 @@ export async function generateBonds(engine, card, guider, autosave) {
                     }
 
                     if (guider) {
-                        const guiderResult = await guider.askNumber(
-                            "From 0 to 10 how likely is " + name + " to initiate non-romantic physical affection towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "? with 10 being extremely likely and 0 being not at all",
-                            parseInt(answer.value.trim()),
+                        const guiderResult = await guider.askOption(
+                            proneToInitiatingAffectionQuestion,
+                            PROBABILITY_OPTIONS,
+                            canonicalProbabilityOption(answer.value),
                         );
                         if (guiderResult) {
-                            answer.value = guiderResult.value.toString();
+                            answer.value = guiderResult.value;
                         }
                     }
 
-                    const probability = Math.min(10, Math.max(0, parseInt(answer.value.trim()) || 0)) / 10;
+                    const probability = probabilityFromAnswer(answer.value);
 
                     if (probability > 0) {
                         allIsNotProneToInitiatingAffection = false;
@@ -1593,16 +1680,17 @@ export async function generateBonds(engine, card, guider, autosave) {
                     strangerSectionProneToInitiatingIntimateAffection.body.push(`if (${getDeeperFineTuneCondition(fineTuneConditions[fineTune], deeperFineTune)}) {`);
                 }
                 for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
-                    const proneToInitiatingIntimateAffectionQuestion = "From 0 to 10 how likely is " + name + " to initiate romantic or sexual physical affection towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "? with 10 being extremely likely and 0 being not at all";
+                    const proneToInitiatingIntimateAffectionQuestion = "How likely is " + name + " to initiate romantic or sexual physical affection towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "?";
                     await prime();
                     const answer = await generator.next({
-                        maxCharacters: 5,
+                        maxCharacters: 50,
                         maxSafetyCharacters: 100,
                         maxParagraphs: 1,
                         nextQuestion: proneToInitiatingIntimateAffectionQuestion,
-                        stopAfter: [],
+                        instructions: "Answer with: " + PROBABILITY_OPTIONS.join(", "),
+                        stopAfter: probabilityGrammar.stopAfter,
                         stopAt: [],
-                        grammar: "root ::= \"0\" | [1-9] | \"10\"",
+                        grammar: probabilityGrammar.grammar,
                     });
 
                     if (answer.done) {
@@ -1610,16 +1698,17 @@ export async function generateBonds(engine, card, guider, autosave) {
                     }
 
                     if (guider) {
-                        const guiderResult = await guider.askNumber(
-                            "From 0 to 10 how likely is " + name + " to initiate romantic or sexual physical affection towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "? with 10 being extremely likely and 0 being not at all",
-                            parseInt(answer.value.trim()),
+                        const guiderResult = await guider.askOption(
+                            proneToInitiatingIntimateAffectionQuestion,
+                            PROBABILITY_OPTIONS,
+                            canonicalProbabilityOption(answer.value),
                         );
                         if (guiderResult) {
-                            answer.value = guiderResult.value.toString();
+                            answer.value = guiderResult.value;
                         }
                     }
 
-                    const probability = Math.min(10, Math.max(0, parseInt(answer.value.trim()) || 0)) / 10;
+                    const probability = probabilityFromAnswer(answer.value);
 
                     if (probability > 0) {
                         allIsNotProneToInitiatingIntimateAffection = false;
@@ -1661,16 +1750,17 @@ export async function generateBonds(engine, card, guider, autosave) {
                     strangerSectionProneToInitiatingSex.body.push(`if (${getDeeperFineTuneCondition(fineTuneConditions[fineTune], deeperFineTune)}) {`);
                 }
                 for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
-                    const proneToInitiatingSexQuestion = "From 0 to 10 how likely is " + name + " to initiate sex towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "? with 10 being extremely likely and 0 being not at all";
+                    const proneToInitiatingSexQuestion = "How likely is " + name + " to initiate sex towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "?";
                     await prime();
                     const answer = await generator.next({
-                        maxCharacters: 5,
+                        maxCharacters: 50,
                         maxSafetyCharacters: 100,
                         maxParagraphs: 1,
                         nextQuestion: proneToInitiatingSexQuestion,
-                        stopAfter: [],
+                        instructions: "Answer with: " + PROBABILITY_OPTIONS.join(", "),
+                        stopAfter: probabilityGrammar.stopAfter,
                         stopAt: [],
-                        grammar: "root ::= \"0\" | [1-9] | \"10\"",
+                        grammar: probabilityGrammar.grammar,
                     });
 
                     if (answer.done) {
@@ -1678,16 +1768,17 @@ export async function generateBonds(engine, card, guider, autosave) {
                     }
 
                     if (guider) {
-                        const guiderResult = await guider.askNumber(
-                            "From 0 to 10 how likely is " + name + " to initiate sex towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "? with 10 being extremely likely and 0 being not at all",
-                            parseInt(answer.value.trim()),
+                        const guiderResult = await guider.askOption(
+                            proneToInitiatingSexQuestion,
+                            PROBABILITY_OPTIONS,
+                            canonicalProbabilityOption(answer.value),
                         );
                         if (guiderResult) {
-                            answer.value = guiderResult.value.toString();
+                            answer.value = guiderResult.value;
                         }
                     }
 
-                    const probability = Math.min(10, Math.max(0, parseInt(answer.value.trim()) || 0)) / 10;
+                    const probability = probabilityFromAnswer(answer.value);
 
                     if (probability > 0) {
                         allIsNotProneToInitiatingSex = false;
@@ -1821,17 +1912,19 @@ export async function generateBonds(engine, card, guider, autosave) {
                 });
 
                 const familySectionDescription = insertSection(familySectionBase.body, "description", (s) => {
-                    s.head.push(`description: (DE, info) => {`);
+                    s.head.push(`description: (info) => {`);
+                    s.head.push(`const char = info.char;`);
+                    s.head.push(`const other = info.other;`);
                     s.foot.push(`},`);
                 });
 
                 const familySectionOpenToAffection = insertSection(familySectionBase.body, "openToAffection", (s) => {
-                    s.head.push(`openToAffection: (DE, char, other) => {`);
+                    s.head.push(`openToAffection: (char, other) => {`);
                     s.foot.push(`},`);
                 });
 
                 const familySectionOpenToIntimateAffection = insertSection(familySectionBase.body, "openToIntimateAffection", (s) => {
-                    s.head.push(`openToIntimateAffection: (DE, char, other) => {`);
+                    s.head.push(`openToIntimateAffection: (char, other) => {`);
                     s.foot.push(`},`);
                 });
 
@@ -2169,16 +2262,17 @@ export async function generateBonds(engine, card, guider, autosave) {
                             familySectionProneToInitiatingAffection.body.push(`if (${getDeeperFineTuneCondition(fineTuneConditions[fineTune], deeperFineTune)}) {`);
                         }
                         for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
-                            const proneToInitiatingAffectionQuestion = "From 0 to 10 how likely is " + name + " to initiate non-romantic physical affection towards " + actualFamilyValue + " when they are " + intimateModifier.toLowerCase() + "? with 10 being extremely likely and 0 being not at all";
+                            const proneToInitiatingAffectionQuestion = "How likely is " + name + " to initiate non-romantic physical affection towards " + actualFamilyValue + " when they are " + intimateModifier.toLowerCase() + "?";
                             await prime();
                             const answer = await generator.next({
-                                maxCharacters: 5,
+                                maxCharacters: 50,
                                 maxSafetyCharacters: 0,
                                 maxParagraphs: 1,
                                 nextQuestion: proneToInitiatingAffectionQuestion,
-                                stopAfter: [],
+                                instructions: "Answer with: " + PROBABILITY_OPTIONS.join(", "),
+                                stopAfter: probabilityGrammar.stopAfter,
                                 stopAt: [],
-                                grammar: "root ::= \"0\" | [1-9] | \"10\"",
+                                grammar: probabilityGrammar.grammar,
                             });
 
                             if (answer.done) {
@@ -2186,16 +2280,17 @@ export async function generateBonds(engine, card, guider, autosave) {
                             }
 
                             if (guider) {
-                                const guiderResult = await guider.askNumber(
-                                    "From 0 to 10 how likely is " + name + " to initiate non-romantic physical affection towards " + actualFamilyValue + " when they are " + intimateModifier.toLowerCase() + "? with 10 being extremely likely and 0 being not at all",
-                                    parseInt(answer.value.trim()),
+                                const guiderResult = await guider.askOption(
+                                    proneToInitiatingAffectionQuestion,
+                                    PROBABILITY_OPTIONS,
+                                    canonicalProbabilityOption(answer.value),
                                 );
                                 if (guiderResult) {
-                                    answer.value = guiderResult.value.toString();
+                                    answer.value = guiderResult.value;
                                 }
                             }
 
-                            const probability = Math.min(10, Math.max(0, parseInt(answer.value.trim()) || 0)) / 10;
+                            const probability = probabilityFromAnswer(answer.value);
 
                             if (probability > 0) {
                                 allIsNotProneToInitiatingAffection = false;
@@ -2237,16 +2332,17 @@ export async function generateBonds(engine, card, guider, autosave) {
                             familySectionProneToInitiatingIntimateAffection.body.push(`if (${getDeeperFineTuneCondition(fineTuneConditions[fineTune], deeperFineTune)}) {`);
                         }
                         for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
-                            const proneToInitiatingIntimateAffectionQuestion = "From 0 to 10 how likely is " + name + " to initiate romantic or sexual physical affection towards " + actualFamilyValue + " when they are " + intimateModifier.toLowerCase() + "? with 10 being extremely likely and 0 being not at all";
+                            const proneToInitiatingIntimateAffectionQuestion = "How likely is " + name + " to initiate romantic or sexual physical affection towards " + actualFamilyValue + " when they are " + intimateModifier.toLowerCase() + "?";
                             await prime();
                             const answer = await generator.next({
-                                maxCharacters: 5,
+                                maxCharacters: 50,
                                 maxSafetyCharacters: 500,
                                 maxParagraphs: 1,
                                 nextQuestion: proneToInitiatingIntimateAffectionQuestion,
-                                stopAfter: [],
+                                instructions: "Answer with: " + PROBABILITY_OPTIONS.join(", "),
+                                stopAfter: probabilityGrammar.stopAfter,
                                 stopAt: [],
-                                grammar: "root ::= \"0\" | [1-9] | \"10\"",
+                                grammar: probabilityGrammar.grammar,
                             });
 
                             if (answer.done) {
@@ -2254,16 +2350,17 @@ export async function generateBonds(engine, card, guider, autosave) {
                             }
 
                             if (guider) {
-                                const guiderResult = await guider.askNumber(
-                                    "From 0 to 10 how likely is " + name + " to initiate romantic or sexual physical affection towards " + actualFamilyValue + " when they are " + intimateModifier.toLowerCase() + "? with 10 being extremely likely and 0 being not at all",
-                                    parseInt(answer.value.trim()),
+                                const guiderResult = await guider.askOption(
+                                    proneToInitiatingIntimateAffectionQuestion,
+                                    PROBABILITY_OPTIONS,
+                                    canonicalProbabilityOption(answer.value),
                                 );
                                 if (guiderResult) {
-                                    answer.value = guiderResult.value.toString();
+                                    answer.value = guiderResult.value;
                                 }
                             }
 
-                            const probability = Math.min(10, Math.max(0, parseInt(answer.value.trim()) || 0)) / 10;
+                            const probability = probabilityFromAnswer(answer.value);
 
                             if (probability > 0) {
                                 allIsNotProneToInitiatingIntimateAffection = false;
@@ -2305,16 +2402,17 @@ export async function generateBonds(engine, card, guider, autosave) {
                             familySectionProneToInitiatingSex.body.push(`if (${getDeeperFineTuneCondition(fineTuneConditions[fineTune], deeperFineTune)}) {`);
                         }
                         for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
-                            const proneToInitiatingSexQuestion = "From 0 to 10 how likely is " + name + " to initiate sex towards " + actualFamilyValue + " when they are " + intimateModifier.toLowerCase() + "? with 10 being extremely likely and 0 being not at all";
+                            const proneToInitiatingSexQuestion = "How likely is " + name + " to initiate sex towards " + actualFamilyValue + " when they are " + intimateModifier.toLowerCase() + "?";
                             await prime();
                             const answer = await generator.next({
-                                maxCharacters: 5,
+                                maxCharacters: 50,
                                 maxSafetyCharacters: 10,
                                 maxParagraphs: 1,
                                 nextQuestion: proneToInitiatingSexQuestion,
-                                stopAfter: [],
+                                instructions: "Answer with: " + PROBABILITY_OPTIONS.join(", "),
+                                stopAfter: probabilityGrammar.stopAfter,
                                 stopAt: [],
-                                grammar: "root ::= \"0\" | [1-9] | \"10\"",
+                                grammar: probabilityGrammar.grammar,
                             });
 
                             if (answer.done) {
@@ -2322,16 +2420,16 @@ export async function generateBonds(engine, card, guider, autosave) {
                             }
 
                             if (guider) {
-                                const guiderResult = await guider.askNumber(
-                                    "From 0 to 10 how likely is " + name + " to initiate sex towards " + actualFamilyValue + " when they are " + intimateModifier.toLowerCase() + "? with 10 being extremely likely and 0 being not at all",
-                                    parseInt(answer.value.trim()),
+                                const guiderResult = await guider.askOption(
+                                    proneToInitiatingSexQuestion,
+                                    PROBABILITY_OPTIONS,
+                                    canonicalProbabilityOption(answer.value),
                                 );
                                 if (guiderResult) {
-                                    answer.value = guiderResult.value.toString();
+                                    answer.value = guiderResult.value;
                                 }
                             }
-
-                            const probability = Math.min(10, Math.max(0, parseInt(answer.value.trim()) || 0)) / 10;
+                            const probability = probabilityFromAnswer(answer.value);
 
                             if (probability > 0) {
                                 allIsNotProneToInitiatingSex = false;
