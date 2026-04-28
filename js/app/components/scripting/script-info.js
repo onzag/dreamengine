@@ -57,7 +57,7 @@ class ScriptInfo extends HTMLElement {
                 <div class="toolbar">
                     <app-overlay-button id="refresh-btn">Refresh</app-overlay-button>
                     <app-overlay-button id="view-btn">View Source</app-overlay-button>
-                    ${isReadOnly ? '' : '<app-overlay-button id="open-btn">Edit File</app-overlay-button>'}
+                    ${isReadOnly || window.API.mode === "web" ? '' : '<app-overlay-button id="open-btn">Edit File</app-overlay-button>'}
                 </div>
                 ${info ? `
                     <div class="section">
@@ -83,9 +83,9 @@ class ScriptInfo extends HTMLElement {
                                 ${Object.entries(info.exposeProperties).map(([name, prop]) => `
                                     <div class="prop-item">
                                         <span class="prop-name">${this.#esc(name)}</span>
-                                        <span class="prop-type">${this.#esc(/** @type {any} */ (prop).type)}</span>
-                                        <span class="prop-location">${this.#esc(/** @type {any} */ (prop).propertyLocation)}</span>
-                                        ${/** @type {any} */ (prop).description ? `<span class="prop-desc">${this.#esc(/** @type {any} */ (prop).description)}</span>` : ''}
+                                        <span class="prop-type">${this.#esc(/** @type {any} */(prop).type)}</span>
+                                        <span class="prop-location">${this.#esc(/** @type {any} */(prop).propertyLocation)}</span>
+                                        ${/** @type {any} */ (prop).description ? `<span class="prop-desc">${this.#esc(/** @type {any} */(prop).description)}</span>` : ''}
                                     </div>
                                 `).join('')}
                             </div>
@@ -113,6 +113,7 @@ class ScriptInfo extends HTMLElement {
             this.renderLoading();
             this.refresh();
         });
+
 
         this.root.getElementById('open-btn')?.addEventListener('button-click', async () => {
             const isSystem = this.scriptNamespace.startsWith('@');

@@ -10,9 +10,84 @@ if (!window.API) {
         openDevTools: () => {
             console.log('openDevTools called - no-op in web version');
         },
-        viewSource: (fileUrl) => {
-            console.log(`viewSource called with ${fileUrl} - no-op in web version`);
-            return Promise.resolve();
+        viewSource: async (fileUrl) => {
+            // Web equivalent of the electron viewSource: fetch the file from
+            // the same origin, syntax-highlight it client-side, and open the
+            // result as a blob: URL in a new tab.
+            if (typeof fileUrl !== 'string' || !fileUrl) {
+                throw new Error('Invalid URL');
+            }
+            // Only allow URLs served by this same origin (the static mounts).
+            let urlObj;
+            try {
+                urlObj = new URL(fileUrl, location.href);
+            } catch {
+                throw new Error('Invalid URL');
+            }
+            if (urlObj.origin !== location.origin) {
+                throw new Error('URL not allowed');
+            }
+
+            const res = await fetch(urlObj.href, { credentials: 'same-origin' });
+            if (!res.ok) {
+                throw new Error(`viewSource fetch failed: ${res.status} ${res.statusText}`);
+            }
+            const source = await res.text();
+            const fileName = decodeURIComponent(urlObj.pathname.split('/').pop() || 'source');
+
+            const esc = (/** @type {string} */ s) => s
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+            const highlightJS = (/** @type {string} */ code) => {
+                const tokens = [];
+                const re = /(\/\/.*$|\/\*[\s\S]*?\*\/)|(`(?:[^`\\]|\\[\s\S])*`)|('(?:[^'\\]|\\[\s\S])*'|"(?:[^"\\]|\\[\s\S])*")|(\/(?![*\/])(?:[^\[\/\\]|\\.|\[(?:[^\]\\]|\\.)*\])+\/[gimsuy]*)|(\b(?:async|await|break|case|catch|class|const|continue|debugger|default|delete|do|else|export|extends|finally|for|from|function|if|import|in|instanceof|let|new|of|return|static|super|switch|this|throw|try|typeof|var|void|while|with|yield)\b)|(\b(?:true|false|null|undefined|NaN|Infinity)\b)|(\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b)|(\b[a-zA-Z_$][\w$]*(?=\s*\())|([\n])/gm;
+                let lastIndex = 0;
+                let match;
+                while ((match = re.exec(code)) !== null) {
+                    if (match.index > lastIndex) {
+                        tokens.push(esc(code.slice(lastIndex, match.index)));
+                    }
+                    const [, comment, template, str, regex, kw, cnst, num, fn, nl] = match;
+                    if (nl) tokens.push(nl);
+                    else if (comment) tokens.push(`<span class="cmt">${esc(comment)}</span>`);
+                    else if (template) tokens.push(`<span class="tpl">${esc(template)}</span>`);
+                    else if (str) tokens.push(`<span class="str">${esc(str)}</span>`);
+                    else if (regex) tokens.push(`<span class="reg">${esc(regex)}</span>`);
+                    else if (kw) tokens.push(`<span class="kw">${esc(kw)}</span>`);
+                    else if (cnst) tokens.push(`<span class="cnst">${esc(cnst)}</span>`);
+                    else if (num) tokens.push(`<span class="num">${esc(num)}</span>`);
+                    else if (fn) tokens.push(`<span class="fn">${esc(fn)}</span>`);
+                    lastIndex = re.lastIndex;
+                }
+                if (lastIndex < code.length) {
+                    tokens.push(esc(code.slice(lastIndex)));
+                }
+                const highlighted = tokens.join('');
+                const lines = highlighted.split('\n');
+                return lines.map((line, i) => `<span class="ln">${i + 1}</span>${line}`).join('\n');
+            };
+
+            const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(fileName)}</title>
+<style>
+body { margin:0; background:#1e1e1e; color:#d4d4d4; font-family:Consolas,'Courier New',monospace; font-size:14px; }
+pre { margin:0; padding:16px; line-height:1.5; white-space:pre-wrap; word-wrap:break-word; tab-size:4; }
+.ln { color:#858585; user-select:none; display:inline-block; min-width:3em; text-align:right; padding-right:1.5em; }
+.kw { color:#569cd6; } .str { color:#ce9178; } .num { color:#b5cea8; }
+.cmt { color:#6a9955; } .fn { color:#dcdcaa; } .reg { color:#d16969; }
+.cnst { color:#4fc1ff; } .op { color:#d4d4d4; } .tpl { color:#ce9178; }
+</style></head><body><pre>${highlightJS(source)}</pre></body></html>`;
+
+            const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+            const blobUrl = URL.createObjectURL(blob);
+            const win = window.open(blobUrl, '_blank', 'noopener,noreferrer');
+            if (!win) {
+                URL.revokeObjectURL(blobUrl);
+                throw new Error('Popup blocked: please allow popups to view source');
+            }
+            // Revoke the blob URL after a short delay so the new tab has time
+            // to load it.
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 10_000);
         },
         detectEditors: () => {
             console.log('detectEditors called - no-op in web version');
