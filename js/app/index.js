@@ -14,7 +14,7 @@ import { EngineWorkerClient } from "../worker-sandbox/client.js";
 
 import {
     playConfirmSound, playHoverSound, toggleAmbience,
-    toggleFX, isAmbienceEnabled, isFXEnabled, startAmbienceWithFade
+    toggleFX, isAmbienceEnabled, isFXEnabled, startAmbienceWithFade, stopAmbienceWithFade
 } from './sound.js';
 
 const initialPromise = new Promise((resolve) => {
@@ -138,33 +138,31 @@ footerLinks.forEach(link => {
     });
 });
 
-const licenseLink = document.getElementById('license-link');
-licenseLink?.addEventListener('click', async () => {
+/**
+ * @param {string} tagName 
+ */
+async function showCreditsOverlay(tagName) {
     HAS_ACTIVE_DIALOG = true;
     await initialPromise;
-    const overlay = document.createElement("app-license");
+    const overlay = document.createElement(tagName);
     document.body.appendChild(overlay);
-    overlay.addEventListener('close', () => {
+    overlay.addEventListener('close', async () => {
         document.body.removeChild(overlay);
+        await stopAmbienceWithFade(1000, 1.2);
+        await startAmbienceWithFade(['./sounds/dream-ambience.mp3'], 1000, 3);
         setTimeout(() => {
             HAS_ACTIVE_DIALOG = false;
         }, 300);
     });
-});
+    await stopAmbienceWithFade(1000, 3);
+    await startAmbienceWithFade(['./sounds/credits.mp3'], 2000, 1.2);
+}
+
+const licenseLink = document.getElementById('license-link');
+licenseLink?.addEventListener('click', () => showCreditsOverlay('app-license'));
 
 const otherAttributionsLink = document.getElementById('attributions-link');
-otherAttributionsLink?.addEventListener('click', async () => {
-    HAS_ACTIVE_DIALOG = true;
-    await initialPromise;
-    const overlay = document.createElement("app-other-attributions");
-    document.body.appendChild(overlay);
-    overlay.addEventListener('close', () => {
-        document.body.removeChild(overlay);
-        setTimeout(() => {
-            HAS_ACTIVE_DIALOG = false;
-        }, 300);
-    });
-});
+otherAttributionsLink?.addEventListener('click', () => showCreditsOverlay('app-other-attributions'));
 
 // Toggle full screen on alt+Enter
 document.addEventListener("keydown", async (e) => {
