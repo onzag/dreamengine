@@ -9,6 +9,24 @@ let ambienceEnabled = (localStorage.getItem('ambienceEnabled') || "true") === 't
 let TEMP_SOUND_DISABLE = false;
 
 /**
+ * Browsers refuse to start an AudioContext until the user has interacted with
+ * the page (autoplay policy). There is no permanent "allow audio" permission
+ * in browsers; the unlock is per-page-session and happens automatically on the
+ * first user gesture. In electron mode this is a no-op (resolves immediately)
+ * so the desktop experience is unchanged.
+ * @type {Promise<void>}
+ */
+const audioUnlockReady = new Promise((resolve) => {
+  /** @type {Array<keyof DocumentEventMap>} */
+  const events = ['pointerdown', 'mousedown', 'keydown', 'touchstart'];
+  const onGesture = () => {
+    events.forEach(ev => document.removeEventListener(ev, onGesture, true));
+    resolve();
+  };
+  events.forEach(ev => document.addEventListener(ev, onGesture, { capture: true, passive: true }));
+});
+
+/**
  */
 function setTempSoundDisable() {
   TEMP_SOUND_DISABLE = true;
@@ -95,8 +113,22 @@ async function playAmbience(src, volume = 0.75) {
   if (!ambienceEnabled) {
     return;
   }
+  // In web mode wait for the first user gesture before creating an
+  // AudioContext (no-op in electron). This avoids the
+  // "AudioContext was not allowed to start" warning.
+  if (window.API.mode === "web") {
+    await audioUnlockReady;
+  }
+  if (!ambienceEnabled) {
+    return;
+  }
   // @ts-ignore
   const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  // Some browsers still create the context in the suspended state; resume it
+  // explicitly now that we know we have a user gesture.
+  if (audioContext.state === 'suspended') {
+    try { await audioContext.resume(); } catch { /* ignore */ }
+  }
   const gainNode = audioContext.createGain();
   const sources = [];
   for (const srcItem of src) {

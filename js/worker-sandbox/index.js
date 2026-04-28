@@ -167,6 +167,9 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
              */
             const toFileUrl = (p) => {
                 const normalized = p.replace(/\\/g, '/');
+                if (userScriptsPath.startsWith('http://') || userScriptsPath.startsWith('https://')) {
+                    return p; // Already a URL, return as-is
+                }
                 return normalized.startsWith('/') ? `file://${normalized}` : `file:///${normalized}`;
             };
             userScriptsBase = toFileUrl(userScriptsPath);

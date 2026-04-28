@@ -332,12 +332,11 @@ class Settings extends HTMLElement {
                     title="This is the API secret used by the AI inference DreamServer"
                     input-data-location="secret"
                 ></app-overlay-input>
-                <app-overlay-input-boolean
+                ${window.API.mode === "web" ? `<div style="margin-top:1vh;color:#ff6b6b;font-size:3vh;">&#9888; The app must be restarted after changing the inference host or secret.</div>` : `<app-overlay-input-boolean
                     label="Allow self-signed SSL certificates"
                     title="Allow connecting to inference servers with self-signed SSL certificates, only enable this if you are connecting to a trusted server with a self-signed certificate, enabling this will make your connection less secure and vulnerable"
                     input-data-location="allowSelfSigned"
-                ></app-overlay-input-boolean>
-                <div style="margin-top:1vh;color:#ff6b6b;font-size:3vh;">&#9888; The app must be restarted after changing the inference host, secret or self-signed SSL certificate settings.</div>
+                ></app-overlay-input-boolean><div style="margin-top:1vh;color:#ff6b6b;font-size:3vh;">&#9888; The app must be restarted after changing the inference host, secret or self-signed SSL certificate settings.</div>`}
             </app-overlay-section>`;
         };
     }

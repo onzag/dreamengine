@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 // create methods to communicate with the renderer process
 // using ipcMain and ipcRenderer if needed
 contextBridge.exposeInMainWorld('API', {
+    mode: 'electron',
     toggleFullScreen: () => {
         console.log("Toggling full screen");
         ipcRenderer.invoke('toggleFullScreen');

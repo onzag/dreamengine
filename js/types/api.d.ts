@@ -5,6 +5,7 @@
 import { EngineWorkerClient } from "../worker-sandbox/client";
 
 declare interface DEAPI {
+  mode: 'electron' | 'web';
   toggleFullScreen(): void | Promise<void>;
   openDevTools(): void;
   viewSource(fileUrl: string): Promise<void>;

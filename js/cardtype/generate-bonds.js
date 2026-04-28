@@ -177,34 +177,34 @@ export async function generateBonds(engine, card, guider, autosave) {
         "any_character": "true",
         "any_family_character": "true",
 
-        "humanoid_character_male_na": "info.other.speciesType === \"humanoid\" && info.other.gender === \"male\"",
-        "humanoid_character_male_a": "info.other.speciesType === \"humanoid\" && info.other.gender === \"male\" && DE.utils.isAttractedToWithLevel(info.char, info.other) === []",
-        "humanoid_character_female_na": "info.other.speciesType === \"humanoid\" && info.other.gender === \"female\"",
-        "humanoid_character_female_a": "info.other.speciesType === \"humanoid\" && info.other.gender === \"female\" && DE.utils.isAttractedToWithLevel(info.char, info.other) === []",
-        "humanoid_character_ambiguous_na": "info.other.speciesType === \"humanoid\" && info.other.gender === \"ambiguous\"",
-        "humanoid_character_ambiguous_a": "info.other.speciesType === \"humanoid\" && info.other.gender === \"ambiguous\" && DE.utils.isAttractedToWithLevel(info.char, info.other) === []",
-        "humanoid_character_any_na": "info.other.speciesType === \"humanoid\"",
-        "animal_character_male_na": "info.other.speciesType === \"animal\" && info.other.gender === \"male\"",
-        "animal_character_male_a": "info.other.speciesType === \"animal\" && info.other.gender === \"male\" && DE.utils.isAttractedToWithLevel(info.char, info.other) === []",
-        "animal_character_female_na": "info.other.speciesType === \"animal\" && info.other.gender === \"female\"",
-        "animal_character_female_a": "info.other.speciesType === \"animal\" && info.other.gender === \"female\" && DE.utils.isAttractedToWithLevel(info.char, info.other) === []",
-        "animal_character_ambiguous_na": "info.other.speciesType === \"animal\" && info.other.gender === \"ambiguous\"",
-        "animal_character_ambiguous_a": "info.other.speciesType === \"animal\" && info.other.gender === \"ambiguous\" && DE.utils.isAttractedToWithLevel(info.char, info.other) === []",
-        "animal_character_any_na": "info.other.speciesType === \"animal\"",
-        "feral_character_male_na": "info.other.speciesType === \"feral\" && info.other.gender === \"male\"",
-        "feral_character_male_a": "info.other.speciesType === \"feral\" && info.other.gender === \"male\" && DE.utils.isAttractedToWithLevel(info.char, info.other) === []",
-        "feral_character_female_na": "info.other.speciesType === \"feral\" && info.other.gender === \"female\"",
-        "feral_character_female_a": "info.other.speciesType === \"feral\" && info.other.gender === \"female\" && DE.utils.isAttractedToWithLevel(info.char, info.other) === []",
-        "feral_character_ambiguous_na": "info.other.speciesType === \"feral\" && info.other.gender === \"ambiguous\"",
-        "feral_character_ambiguous_a": "info.other.speciesType === \"feral\" && info.other.gender === \"ambiguous\" && DE.utils.isAttractedToWithLevel(info.char, info.other) === []",
-        "feral_character_any_na": "info.other.speciesType === \"feral\"",
+        "humanoid_character_male_na": "other.speciesType === \"humanoid\" && other.gender === \"male\"",
+        "humanoid_character_male_a": "other.speciesType === \"humanoid\" && other.gender === \"male\" && DE.utils.isAttractedToWithLevel(char, other) === []",
+        "humanoid_character_female_na": "other.speciesType === \"humanoid\" && other.gender === \"female\"",
+        "humanoid_character_female_a": "other.speciesType === \"humanoid\" && other.gender === \"female\" && DE.utils.isAttractedToWithLevel(char, other) === []",
+        "humanoid_character_ambiguous_na": "other.speciesType === \"humanoid\" && other.gender === \"ambiguous\"",
+        "humanoid_character_ambiguous_a": "other.speciesType === \"humanoid\" && other.gender === \"ambiguous\" && DE.utils.isAttractedToWithLevel(char, other) === []",
+        "humanoid_character_any_na": "other.speciesType === \"humanoid\"",
+        "animal_character_male_na": "other.speciesType === \"animal\" && other.gender === \"male\"",
+        "animal_character_male_a": "other.speciesType === \"animal\" && other.gender === \"male\" && DE.utils.isAttractedToWithLevel(char, other) === []",
+        "animal_character_female_na": "other.speciesType === \"animal\" && other.gender === \"female\"",
+        "animal_character_female_a": "other.speciesType === \"animal\" && other.gender === \"female\" && DE.utils.isAttractedToWithLevel(char, other) === []",
+        "animal_character_ambiguous_na": "other.speciesType === \"animal\" && other.gender === \"ambiguous\"",
+        "animal_character_ambiguous_a": "other.speciesType === \"animal\" && other.gender === \"ambiguous\" && DE.utils.isAttractedToWithLevel(char, other) === []",
+        "animal_character_any_na": "other.speciesType === \"animal\"",
+        "feral_character_male_na": "other.speciesType === \"feral\" && other.gender === \"male\"",
+        "feral_character_male_a": "other.speciesType === \"feral\" && other.gender === \"male\" && DE.utils.isAttractedToWithLevel(char, other) === []",
+        "feral_character_female_na": "other.speciesType === \"feral\" && other.gender === \"female\"",
+        "feral_character_female_a": "other.speciesType === \"feral\" && other.gender === \"female\" && DE.utils.isAttractedToWithLevel(char, other) === []",
+        "feral_character_ambiguous_na": "other.speciesType === \"feral\" && other.gender === \"ambiguous\"",
+        "feral_character_ambiguous_a": "other.speciesType === \"feral\" && other.gender === \"ambiguous\" && DE.utils.isAttractedToWithLevel(char, other) === []",
+        "feral_character_any_na": "other.speciesType === \"feral\"",
 
-        "family_character_male_na": "info.other.gender === \"male\"",
-        "family_character_male_a": "info.other.gender === \"male\" && DE.utils.isAttractedToWithLevel(info.char, info.other) === []",
-        "family_character_female_na": "info.other.gender === \"female\"",
-        "family_character_female_a": "info.other.gender === \"female\" && DE.utils.isAttractedToWithLevel(info.char, info.other) === []",
-        "family_character_ambiguous_na": "info.other.gender === \"ambiguous\"",
-        "family_character_ambiguous_a": "info.other.gender === \"ambiguous\" && DE.utils.isAttractedToWithLevel(info.char, info.other) === []",
+        "family_character_male_na": "other.gender === \"male\"",
+        "family_character_male_a": "other.gender === \"male\" && DE.utils.isAttractedToWithLevel(char, other) === []",
+        "family_character_female_na": "other.gender === \"female\"",
+        "family_character_female_a": "other.gender === \"female\" && DE.utils.isAttractedToWithLevel(char, other) === []",
+        "family_character_ambiguous_na": "other.gender === \"ambiguous\"",
+        "family_character_ambiguous_a": "other.gender === \"ambiguous\" && DE.utils.isAttractedToWithLevel(char, other) === []",
         "family_character_any_na": "true",
     }
 
@@ -1286,10 +1286,10 @@ export async function generateBonds(engine, card, guider, autosave) {
 
                     if (guider) {
                         const guiderResult = await guider.askOption("How receptive to affection is " + name + " towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase(), [
-                            "Not receptive",
-                            "Slightly receptive",
-                            "Moderately receptive",
-                            "Very receptive",
+                            "not receptive",
+                            "slightly receptive",
+                            "moderately receptive",
+                            "very receptive",
                         ], answer.value.toLowerCase());
                         if (guiderResult.value) {
                             answer.value = guiderResult.value.toLowerCase();
@@ -1372,10 +1372,10 @@ export async function generateBonds(engine, card, guider, autosave) {
 
                     if (guider) {
                         const guiderResult = await guider.askOption("How receptive to intimate affection is " + name + " towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase(), [
-                            "Not receptive",
-                            "Slightly receptive",
-                            "Moderately receptive",
-                            "Very receptive",
+                            "not receptive",
+                            "slightly receptive",
+                            "moderately receptive",
+                            "very receptive",
                         ], answer.value.toLowerCase());
                         if (guiderResult.value) {
                             answer.value = guiderResult.value.toLowerCase();
@@ -1458,10 +1458,10 @@ export async function generateBonds(engine, card, guider, autosave) {
 
                     if (guider) {
                         const guiderResult = await guider.askOption("How receptive to sex is " + name + " towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase(), [
-                            "Not receptive",
-                            "Slightly receptive",
-                            "Moderately receptive",
-                            "Very receptive",
+                            "not receptive",
+                            "slightly receptive",
+                            "moderately receptive",
+                            "very receptive",
                         ], answer.value.toLowerCase());
                         if (guiderResult.value) {
                             answer.value = guiderResult.value.toLowerCase();
@@ -1567,7 +1567,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                     if (condition !== "true") {
                         strangerSectionProneToInitiatingAffection.body.push(`if (${condition}) {`);
                     }
-                    strangerSectionProneToInitiatingAffection.body.push(`return {probability: ${probability}, options: ${JSON.stringify(card.config.affectionShowcases)}};`);
+                    strangerSectionProneToInitiatingAffection.body.push(`return ${probability};`);
                     if (condition !== "true") {
                         strangerSectionProneToInitiatingAffection.body.push(`}`);
                     }
@@ -1635,7 +1635,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                     if (condition !== "true") {
                         strangerSectionProneToInitiatingIntimateAffection.body.push(`if (${condition}) {`);
                     }
-                    strangerSectionProneToInitiatingIntimateAffection.body.push(`return {probability: ${probability}, options: ${JSON.stringify(card.config.intimateAffectionShowcases)}};`);
+                    strangerSectionProneToInitiatingIntimateAffection.body.push(`return ${probability};`);
                     if (condition !== "true") {
                         strangerSectionProneToInitiatingIntimateAffection.body.push(`}`);
                     }
@@ -1838,7 +1838,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                 const familySectionOpenToSex = insertSection(familySectionBase.body, "openToSex", (s) => {
                     s.head.push(`openToSex: (char, other) => {`);
                     s.foot.push(`},`);
-                    s.foot.push(`openToSexResponses: openToSex,`);
+                    s.foot.push(`openToSexResponses: sexOpenTo,`);
                 });
 
                 const familySectionProneToInitiatingAffection = insertSection(familySectionBase.body, "proneToInitiatingAffection", (s) => {
@@ -2211,7 +2211,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                             if (condition !== "true") {
                                 familySectionProneToInitiatingAffection.body.push(`if (${condition}) {`);
                             }
-                            familySectionProneToInitiatingAffection.body.push(`return {probability: ${probability}, options: ${JSON.stringify(card.config.affectionShowcases)}};`);
+                            familySectionProneToInitiatingAffection.body.push(`return ${probability};`);
                             if (condition !== "true") {
                                 familySectionProneToInitiatingAffection.body.push(`}`);
                             }
@@ -2279,7 +2279,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                             if (condition !== "true") {
                                 familySectionProneToInitiatingIntimateAffection.body.push(`if (${condition}) {`);
                             }
-                            familySectionProneToInitiatingIntimateAffection.body.push(`return {probability: ${probability}, options: ${JSON.stringify(card.config.intimateAffectionShowcases)}};`);
+                            familySectionProneToInitiatingIntimateAffection.body.push(`return ${probability};`);
                             if (condition !== "true") {
                                 familySectionProneToInitiatingIntimateAffection.body.push(`}`);
                             }

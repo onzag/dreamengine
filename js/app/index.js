@@ -9,6 +9,7 @@ import './components/manage.js';
 import './components/license.js';
 import './components/other-attributions.js';
 import './components/play.js';
+import '../api.js';
 
 import { EngineWorkerClient } from "../worker-sandbox/client.js";
 
@@ -166,13 +167,15 @@ otherAttributionsLink?.addEventListener('click', () => showCreditsOverlay('app-o
 
 // Toggle full screen on alt+Enter
 document.addEventListener("keydown", async (e) => {
-    if (e.key === "Enter" && e.altKey) {
-        window.API.toggleFullScreen();
-        // Force focus on body to trigger repaint
+    if (window.API.mode !== "web") {
+        if (e.key === "Enter" && e.altKey) {
+            window.API.toggleFullScreen();
+            // Force focus on body to trigger repaint
 
-    }
-    if (e.key === "F12") {
-        window.API.openDevTools();
+        }
+        if (e.key === "F12") {
+            window.API.openDevTools();
+        }
     }
     if (e.key === "Escape" && !HAS_ACTIVE_DIALOG) {
         exitGame();
@@ -279,6 +282,7 @@ let INFERENCE_ADAPTER_ERROR = null;
 async function initialChecks() {
     // Check if the engine has any API keys configured, if not show the settings overlay
     const apiKey = await window.API.getConfigValue('secret');
+    const host = await window.API.getConfigValue('host');
     if (!apiKey) {
         HAS_ACTIVE_DIALOG = true;
         const dialog = document.createElement('app-dialog');
@@ -312,6 +316,11 @@ async function initialChecks() {
         const dialog = document.createElement('app-dialog');
         dialog.setAttribute('dialog-title', 'Could not Connect to Server');
         dialog.innerHTML = `<p>Failed to initialize the inference adapter. Please check your API key and host configuration, and ensure that your API key has the necessary permissions.</p><p>Error details: ${INFERENCE_ADAPTER_ERROR.message}</p>`;
+
+        if (window.API.mode === "web" && host.startsWith("wss")) {
+            dialog.innerHTML += `<br><br><p>Since you are using the web version and connecting to a secure WebSocket (wss://), you may need to accept the self-signed certificate in your browser before the connection can be established, at <a href="https://${host.replace("wss://", "")}" target="_blank">https://${host.replace("wss://", "")}</a> then restart the app</p>`;
+        }
+
         dialog.setAttribute("confirmation", "true");
         dialog.setAttribute("confirm-text", "Open Settings");
         dialog.setAttribute("cancel-text", "Ignore");
