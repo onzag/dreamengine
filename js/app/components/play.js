@@ -276,6 +276,7 @@ class PlayOverlay extends HTMLElement {
                     saveId: this.selectedSaveId,
                     character: this.selectedCharacter,
                     specialMode: this.selectedSpecialMode,
+                    voiceName: this.userSelfName || '',
                 },
             }));
             this.startedGame = true;
@@ -599,6 +600,7 @@ class PlayOverlay extends HTMLElement {
             console.error('Failed to read user.name config:', err);
         }
         const selfName = (typeof userName === 'string' && userName.trim()) ? userName : 'Unnamed Dreamer';
+        this.userSelfName = selfName;
         const selfCharacter = {
             name: selfName,
             scriptKey: '__self__',

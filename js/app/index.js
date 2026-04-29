@@ -127,6 +127,7 @@ playBtn?.addEventListener('click', async () => {
         game.setAttribute('character-asset', character.asset || '');
         game.setAttribute('is-self-insert', isSelfInsert ? 'true' : 'false');
         game.setAttribute('special-mode', detail.specialMode || '');
+        game.setAttribute('voice-name', detail.voiceName || '');
         game.setAttribute('world-namespace', world.namespace || '');
         game.setAttribute('world-id', world.id || '');
         game.setAttribute('mode', detail.mode || '');

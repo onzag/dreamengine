@@ -71,10 +71,16 @@ class GameOverlay extends HTMLElement {
 
         // Wire up controls.
         const toggleBtn = this.root.getElementById('sidebar-toggle');
-        if (toggleBtn) toggleBtn.addEventListener('click', this.onToggleSidebar);
+        if (toggleBtn) {
+            toggleBtn.addEventListener('mouseenter', () => playHoverSound());
+            toggleBtn.addEventListener('click', this.onToggleSidebar);
+        }
 
         const submitBtn = this.root.getElementById('submit-btn');
-        if (submitBtn) submitBtn.addEventListener('click', this.onSubmit);
+        if (submitBtn) {
+            submitBtn.addEventListener('mouseenter', () => playHoverSound());
+            submitBtn.addEventListener('click', this.onSubmit);
+        }
 
         const exitBtn = this.root.getElementById('exit-btn');
         if (exitBtn) {
@@ -105,6 +111,7 @@ class GameOverlay extends HTMLElement {
     }
 
     onToggleSidebar() {
+        playConfirmSound();
         this.sidebarOpen = !this.sidebarOpen;
         const stage = this.root.querySelector('.game-stage');
         const toggle = this.root.getElementById('sidebar-toggle');
@@ -124,7 +131,17 @@ class GameOverlay extends HTMLElement {
     }
 
     onSubmit() {
-        // Intentional no-op for now.
+        const input = /** @type {HTMLTextAreaElement | null} */ (this.root.getElementById('game-input'));
+        const value = input?.value.trim() || '';
+        if (!value) return;
+
+        playConfirmSound();
+
+        if (input) {
+            input.value = '';
+            input.style.height = 'auto';
+            input.focus();
+        }
     }
 
     onExitClick() {
@@ -159,6 +176,18 @@ class GameOverlay extends HTMLElement {
         const worldNamespace = this.getAttribute('world-namespace') || '';
         const worldId = this.getAttribute('world-id') || '';
         const characterAsset = this.getAttribute('character-asset') || '';
+        const voiceName = this.getAttribute('voice-name') || '';
+
+        // Build the input placeholder (3rd-person, varies by mode).
+        let inputPlaceholder;
+        if (specialMode === 'narrator') {
+            inputPlaceholder = `Narrate ${characterName}'s actions\u2026`;
+        } else if (specialMode === 'schizophrenia') {
+            const voice = voiceName || 'a voice';
+            inputPlaceholder = `Speak inside ${characterName}'s head as ${voice}\u2026`;
+        } else {
+            inputPlaceholder = `What does ${characterName} do/say?`;
+        }
 
         // Resolve the world background image. System namespaces (those whose
         // name starts with '@') live under DREAMENGINE_DEFAULT_SCRIPTS_HOME;
@@ -239,7 +268,7 @@ class GameOverlay extends HTMLElement {
                             id="game-input"
                             class="game-input"
                             rows="1"
-                            placeholder="What do you do…"></textarea>
+                            placeholder="${escapeHtml(inputPlaceholder)}"></textarea>
                         <button id="submit-btn" class="game-submit" aria-label="Submit">
                             <svg viewBox="0 0 24 24" width="100%" height="100%" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <line x1="22" y1="2" x2="11" y2="13"></line>
