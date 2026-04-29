@@ -66,6 +66,23 @@ function playHoverSound() {
   hoverSound.play().catch(err => console.log('Hover sound play failed:', err));
 }
 
+/**
+ * 
+ * @param {string} src
+ * @param {number} volume
+ * @returns 
+ */
+function playSound(src, volume = 1) {
+  if (!fxEnabled || TEMP_SOUND_DISABLE) return;
+  const sound = new Audio(src);
+  sound.volume = volume;
+  sound.play().catch(err => console.log('Sound play failed:', err));
+  sound.addEventListener('ended', () => {
+    // release the audio element from memory once it's done playing
+    sound.src = '';
+  });
+}
+
 function playConfirmSound() {
   if (!fxEnabled || TEMP_SOUND_DISABLE) return;
   confirmSound.currentTime = 0;
@@ -263,5 +280,5 @@ async function startAmbienceWithFade(src, durationMs, volume = 0.75) {
 export {
   playCancelSound, playPauseSound, playHoverSound, playConfirmSound, toggleFX,
   toggleAmbience, isFXEnabled, isAmbienceEnabled, playAmbience, stopAmbience,
-  stopAmbienceWithFade, startAmbienceWithFade, setTempSoundDisable
+  stopAmbienceWithFade, startAmbienceWithFade, setTempSoundDisable, playSound
 };

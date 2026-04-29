@@ -1,4 +1,4 @@
-import { playCancelSound, playConfirmSound, playHoverSound, startAmbienceWithFade, stopAmbienceWithFade } from '../sound.js';
+import { playCancelSound, playConfirmSound, playHoverSound, playSound, startAmbienceWithFade, stopAmbienceWithFade } from '../sound.js';
 import './world-image.js';
 
 /**
@@ -122,11 +122,12 @@ class PlayOverlay extends HTMLElement {
 
     async disconnectedCallback() {
         document.removeEventListener('keydown', this.onDocumentKeydown);
-        // @ts-expect-error
-        document.querySelector('.sky').style.display = 'block';
-
-        await stopAmbienceWithFade(1000, 1);
-        await startAmbienceWithFade(['./sounds/dream-ambience.mp3'], 1000, 3);
+        if (!this.startedGame) {
+            // @ts-expect-error
+            document.querySelector('.sky').style.display = 'block';
+            await stopAmbienceWithFade(1000, 1);
+            await startAmbienceWithFade(['./sounds/dream-ambience.mp3'], 1000, 3);
+        }
     }
 
     // ── Step navigation ──────────────────────────────────────────────
@@ -171,7 +172,7 @@ class PlayOverlay extends HTMLElement {
         this.renderStep();
     }
 
-    onContinue() {
+    async onContinue() {
         if (!this.canContinue()) return;
         playConfirmSound();
         if (this.currentStepIndex < STEPS.length - 1) {
@@ -187,6 +188,29 @@ class PlayOverlay extends HTMLElement {
                     specialMode: this.selectedSpecialMode,
                 },
             }));
+            this.startedGame = true;
+
+            const lightFade = document.createElement('div');
+            lightFade.style.position = 'fixed';
+            lightFade.style.inset = '0';
+            lightFade.style.background = 'white';
+            lightFade.style.zIndex = '50';
+            lightFade.style.pointerEvents = 'none';
+            lightFade.style.opacity = '0';
+            lightFade.style.transition = 'opacity 1.5s ease';
+            lightFade.style.top = '0';
+            lightFade.style.left = '0';
+            lightFade.style.width = '100%';
+            lightFade.style.height = '100%';
+            this.shadowRoot?.appendChild(lightFade);
+            requestAnimationFrame(() => {
+                lightFade.style.opacity = '1';
+            });
+
+            setTimeout(() => {
+                playSound("./sounds/transition.mp3", 0.8);
+            }, 300);
+            await stopAmbienceWithFade(1000, 1);
         }
     }
 

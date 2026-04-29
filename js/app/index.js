@@ -9,6 +9,7 @@ import './components/manage.js';
 import './components/license.js';
 import './components/other-attributions.js';
 import './components/play.js';
+import './components/game.js';
 import '../api.js';
 
 import { EngineWorkerClient } from "../worker-sandbox/client.js";
@@ -113,6 +114,36 @@ playBtn?.addEventListener('click', async () => {
         setTimeout(() => {
             HAS_ACTIVE_DIALOG = false;
         }, 300);
+    });
+    overlay.addEventListener('start', (/** @type {any} */ e) => {
+        const detail = e.detail || {};
+        const world = detail.world || {};
+        const character = detail.character || {};
+        const isSelfInsert = character.scriptKey === '__self__';
+
+        const game = document.createElement('app-game');
+        game.setAttribute('character-name', character.name || '');
+        game.setAttribute('character-script-key', character.scriptKey || '');
+        game.setAttribute('is-self-insert', isSelfInsert ? 'true' : 'false');
+        game.setAttribute('special-mode', detail.specialMode || '');
+        game.setAttribute('world-namespace', world.namespace || '');
+        game.setAttribute('world-id', world.id || '');
+        game.setAttribute('mode', detail.mode || '');
+        game.setAttribute('save-id', detail.saveId || '');
+
+        game.addEventListener('exit', () => {
+            document.body.removeChild(game);
+            setTimeout(() => {
+                HAS_ACTIVE_DIALOG = false;
+            }, 300);
+        });
+
+        setTimeout(() => {
+            document.body.appendChild(game);
+            setTimeout(() => {
+                if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+            }, 300);
+        }, 4000);
     });
 });
 
