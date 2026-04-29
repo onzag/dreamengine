@@ -11,3 +11,19 @@ table thead {
 .none {
     color: #FF6B6B;
 }
+
+.world-image-container-parent {
+    width: 100%;
+    display: flex;
+    justify-content: flex-start;
+    align-items: flex-start;
+}
+.world-image-container {
+    width: 20vw;
+    height: 20vw;
+    min-width: 200px;
+    min-height: 200px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+}

@@ -475,7 +475,6 @@ export default async function runAllTriggersFor(engine, character, interactedCha
 
                 const allQuestionsToAsk = [...openToAffectionQuestions, ...openToIntimateAffectionQuestions, ...openToSexQuestions];
 
-
                 const otherFamilyRelation = getFamilyBondRelation(character, engine.deObject.characters[bond.towards]);
                 const otherRelationship = await getRelationship(engine.deObject, character, engine.deObject.characters[bond.towards]);
 

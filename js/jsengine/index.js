@@ -234,11 +234,11 @@ export class DEJSEngine {
     }
 
     /**
-     * @returns {Record<string, { id: string, namespace: string, description: string, type: string, exposeProperties: DEScriptExposeProperties }>} An object mapping script keys to their description, type, and exposeProperties, used for UI display and other purposes
+     * @returns {Record<string, { id: string, namespace: string, description: string, type: string, exposeProperties: DEScriptExposeProperties, exposeCharacters: DEScriptExposeCharacters }>} An object mapping script keys to their description, type, and exposeProperties, used for UI display and other purposes
      */
     getInfoMap() {
         /**
-         * @type {Record<string, { id: string, namespace: string, description: string, type: string, exposeProperties: DEScriptExposeProperties }>}
+         * @type {Record<string, { id: string, namespace: string, description: string, type: string, exposeProperties: DEScriptExposeProperties, exposeCharacters: DEScriptExposeCharacters }>}
          */
         const infoMap = {};
         for (const key in this.scriptCache) {
@@ -249,6 +249,7 @@ export class DEJSEngine {
                 description: script.description || "No description available.",
                 type: script.type || "No type specified.",
                 exposeProperties: script.exposeProperties || {},
+                exposeCharacters: script.exposeCharacters || {},
             };
         }
         return infoMap;
@@ -256,7 +257,7 @@ export class DEJSEngine {
 
     /**
      * @param {Array<{namespace: string, id: string}>} scripts 
-     * @returns {Record<string, { id: string, namespace: string, description: string, type: string, exposeProperties: DEScriptExposeProperties }>}
+     * @returns {Record<string, { id: string, namespace: string, description: string, type: string, exposeProperties: DEScriptExposeProperties, exposeCharacters: DEScriptExposeCharacters }>}
      */
     getInfoMapForScripts(scripts) {
         /**
@@ -284,7 +285,7 @@ export class DEJSEngine {
             collect(`${namespace}/${id}`);
         }
 
-        /** @type {Record<string, { id: string, namespace: string, description: string, type: string, exposeProperties: DEScriptExposeProperties }>} */
+        /** @type {Record<string, { id: string, namespace: string, description: string, type: string, exposeProperties: DEScriptExposeProperties, exposeCharacters: DEScriptExposeCharacters }>} */
         const infoMap = {};
         for (const key of keys) {
             const script = this.scriptCache[key];
@@ -295,6 +296,7 @@ export class DEJSEngine {
                 description: script.description || "No description available.",
                 type: script.type || "No type specified.",
                 exposeProperties: script.exposeProperties || {},
+                exposeCharacters: script.exposeCharacters || {},
             };
         }
         return infoMap;

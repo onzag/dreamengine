@@ -103,19 +103,37 @@ function describeFamilyContext(relationshipKey, romanticInterestKey, familyKey) 
  * they can be substituted at runtime by the engine).
  * @param {import('./base.js').CardTypeGuider | null} guider
  * @param {{reasonYes: string[], reasonNo: string[]}} modifierInfo
- * @param {string} valueAnswer - "not" | "slight" | "moderate" | "very"
+ * @param {string} valueAnswer - "not" | "slight" | "moderate" | "very" this refers to the answer to the question on how receptive they are
  * @param {string} name
  * @param {string} contextReplacement
  * @param {string} guiderQuestion
  * @param {{values: string[]}} lastReasonsGiven - the last reason that was given for this modifier (if any), so it can be shown as the default option to the guider
+ * @param {string} attractionLevel - "n/a" | "slight" | "moderate" | "strong" this refers to the level of attraction that char has towards other, this is used to choose the correct reasonYes/reasonNo options to show to the guider
  * @returns {Promise<string | null>}
  */
-async function chooseReason(guider, modifierInfo, valueAnswer, name, contextReplacement, guiderQuestion, lastReasonsGiven) {
+async function chooseReason(guider, modifierInfo, valueAnswer, name, contextReplacement, guiderQuestion, lastReasonsGiven, attractionLevel) {
     if (!guider) return null;
     const reasons = valueAnswer === "not" ? modifierInfo.reasonNo : modifierInfo.reasonYes;
-    const optionsForGuider = reasons.map(r =>
-        r.replace(/{{char}}/g, name).replace(/{{other}}/g, "the other character").replace("[]", contextReplacement)
-    );
+    const attractionToShow = attractionLevel === "n/a" ? "" : attractionLevel === "slight" ? "slightly" : attractionLevel === "moderate" ? "moderately" : "very";
+    
+    /**
+     * @type {number[]}
+     */
+    const removedIndexes = [];
+    const optionsForGuider = (attractionToShow === "" ? reasons.map(r =>
+        r.replace(" who is {} attractive for {{char}}", "").replace(", and {} attractive for {{char}}", "").replace(/{{char}}/g, name).replace(/{{other}}/g, "the other character").replace("[]", contextReplacement)
+    ) : reasons.map(r =>
+        r.replace(/{{char}}/g, name).replace(/{{other}}/g, "the other character").replace("[]", contextReplacement).replace("{}", attractionToShow)
+    )).filter((v, index) => {
+        const willPass = !v.includes("{}");
+        if (!willPass) {
+            removedIndexes.push(index);
+        }
+        return willPass;
+    });
+
+    const reasonsWithoutRemoved = reasons.filter((_, index) => !removedIndexes.includes(index));
+
     const valueInLastReasonsGiven = lastReasonsGiven.values.find(v => optionsForGuider.includes(v));
     const guiderResult = await guider.askOption(guiderQuestion, optionsForGuider, valueInLastReasonsGiven || optionsForGuider[0]);
     if (guiderResult.value) {
@@ -124,8 +142,8 @@ async function chooseReason(guider, modifierInfo, valueAnswer, name, contextRepl
         }
         lastReasonsGiven.values.push(guiderResult.value);
         const reasonIndex = optionsForGuider.indexOf(guiderResult.value);
-        const originalReason = reasons[reasonIndex];
-        return originalReason.replace("[]", contextReplacement);
+        const originalReason = reasonsWithoutRemoved[reasonIndex];
+        return originalReason.replace("[]", contextReplacement).replace("{}", attractionToShow);
     }
     return null;
 }
@@ -1282,13 +1300,16 @@ export async function generateBonds(engine, card, guider, autosave) {
             reasonYes: [
                 "they are around friends, and that makes it more comfortable",
                 "they are around friends, it would be better in a more private setting",
-                "{{other}} is a [], which makes {{char}} feel comfortable",
-                "{{other}} is a [], it would be better if they knew each other better",
+                "{{other}} is a [], and {} attractive for {{char}}, which makes {{char}} feel comfortable",
+                "{{other}} is a [], and {} attractive for {{char}}, it would be better if they knew each other better",
+                "{{other}} is a [], and {} attractive for {{char}}",
+                "{{other}} is a [], but {} attractive for {{char}}"
             ],
             reasonNo: [
                 "they are around friends, and that makes it uncomfortable",
                 "they are around friends, it would be possible in a more private setting",
-                "{{other}} is a [], it would be possible if they knew each other better",
+                "{{other}} is a [], and {} attractive for {{char}}, it would be possible if they knew each other better",
+                "{{other}} is a [], therefore it is inappropriate",
                 "{{char}} will never allow it",
             ]
         },
@@ -1297,36 +1318,47 @@ export async function generateBonds(engine, card, guider, autosave) {
             reasonYes: [
                 "they are around family, and that makes it more comfortable",
                 "they are around family, it would be better in a more private setting",
-                "{{other}} is a [], which makes {{char}} feel comfortable",
-                "{{other}} is a [], it would be better if they knew each other better",
+                "{{other}} is a [], and {} attractive for {{char}}, which makes {{char}} feel comfortable",
+                "{{other}} is a [], and {} attractive for {{char}}, it would be better if they knew each other better",
+                "{{other}} is a [], and {} attractive for {{char}}",
+                "{{other}} is a [], but {} attractive for {{char}}"
             ],
             reasonNo: [
                 "they are around family, and that makes it uncomfortable",
                 "they are around family, it would be possible in a more private setting",
                 "{{other}} is a [], it would be possible if they knew each other better",
+                "{{other}} is a [], therefore it is inappropriate",
                 "{{char}} will never allow it",
             ]
         },
         "In private": {
             condition: "DE.utils.isAloneWith(char, other) && DE.utils.isInPrivateLocation(char)",
             reasonYes: [
-                "{{char}} is alone with {{other}}, who is a [], which makes {{char}} feel comfortable",
-                "{{char}} is alone with {{other}}, who is a [], it would be better if they knew each other better",
+                "{{char}} is alone with {{other}}, a [] who is {} attractive for {{char}}",
+                "{{char}} is alone with {{other}}, a [] who is {} attractive for {{char}}, it would be better if they knew each other better",
+                "{{char}} is alone with {{other}}, a [], this makes {{char}} feel comfortable",
+                "{{other}} is a [], and {} attractive for {{char}}",
+                "{{other}} is a [], but {} attractive for {{char}}"
             ],
             reasonNo: [
                 "{{char}} is alone with {{other}}, who is a [], which makes {{char}} feel uncomfortable",
+                "{{other}} is a [], therefore it is inappropriate",
                 "{{char}} will never allow it",
             ],
         },
         "In public": {
             condition: "true",
             reasonYes: [
-                "{{char}} is in public with {{other}}, who is a [], which makes {{char}} feel comfortable",
-                "{{char}} is in public with {{other}}, who is a [], it would be better in a more private location",
-                "{{char}} is in public with {{other}}, who is a [], it would be better if they knew each other better",
+                "being in public makes {{char}} feel comfortable",
+                "they are in public, it would be better in a more private location",
+                "they are in public, it would be better if they knew each other better",
+                "{{other}} is a [], and {} attractive for {{char}}",
+                "{{other}} is a [], but {} attractive for {{char}}"
             ],
             reasonNo: [
+                "they are in public, it would be possible in a more private location",
                 "{{char}} is in public with {{other}}, who is a [], which makes {{char}} feel uncomfortable",
+                "{{other}} is a [], therefore it is inappropriate",
                 "{{char}} will never allow it",
             ],
         },
@@ -1408,7 +1440,8 @@ export async function generateBonds(engine, card, guider, autosave) {
             let internalFineTuneToUse = fineTune.endsWith("_a") ? FINE_TUNE_WITH_ATTRACTION_POTENTIALS_STRANGER : ["n/a"];
 
             for (const deeperFineTune of internalFineTuneToUse) {
-                if (hasSpecialComment(strangerSectionBase.body, fineTune + (deeperFineTune !== "n/a" ? "_" + deeperFineTune : ""))) {
+                const fineTuneComment = fineTune + (deeperFineTune !== "n/a" ? "_" + deeperFineTune : "");
+                if (hasSpecialComment(strangerSectionBase.body, fineTuneComment)) {
                     continue;
                 }
 
@@ -1503,6 +1536,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                         describeStrangerContext(strangerKey),
                         "What is the reason for " + name + " being " + answerTrimmed + " to affection from this other character when they are " + intimateModifier.toLowerCase() + "?",
                         lastReasonsGiven,
+                        deeperFineTune,
                     );
 
                     strangerSectionOpenToAffection.body.push(`return {value: ${JSON.stringify(valueAnswer)}, reason: ${reason ? toTemplateLiteralNoInfo(reason) : "null"}};`);
@@ -1598,6 +1632,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                         describeStrangerContext(strangerKey),
                         "What is the reason for " + name + " being " + answerTrimmed + " to intimate affection from this other character when they are " + intimateModifier.toLowerCase() + "?",
                         lastReasonsGiven,
+                        deeperFineTune,
                     );
                     strangerSectionOpenToIntimateAffection.body.push(`return {value: ${JSON.stringify(valueAnswer)}, reason: ${reason ? toTemplateLiteralNoInfo(reason) : "null"}};`);
                     if (condition !== "true") {
@@ -1691,6 +1726,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                         describeStrangerContext(strangerKey),
                         "What is the reason for " + name + " being " + answerTrimmed + " to sex with this other character when they are " + intimateModifier.toLowerCase() + "?",
                         lastReasonsGiven,
+                        deeperFineTune,
                     );
                     strangerSectionOpenToSex.body.push(`return {value: ${JSON.stringify(valueAnswer)}, reason: ${reason ? toTemplateLiteralNoInfo(reason) : "null"}};`);
                     if (condition !== "true") {
@@ -1987,7 +2023,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                     }
                 }
 
-                insertSpecialComment(strangerSectionDescription.body, fineTune + (deeperFineTune !== "n/a" ? "_" + deeperFineTune : ""));
+                insertSpecialComment(strangerSectionBase.body, fineTuneComment);
                 // @ts-ignore
                 if (fineTuneConditions[fineTune] === "true") {
                     // @ts-ignore
@@ -2194,6 +2230,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                                 describeFamilyContext(relationshipKey, romanticInterestKey, familyKey),
                                 "What is the reason for " + name + " being " + answerTrimmed + " to affection from this other character when they are " + intimateModifier.toLowerCase() + "?",
                                 lastReasonsGiven,
+                                deeperFineTune,
                             );
                             familySectionOpenToAffection.body.push(`return {value: ${JSON.stringify(valueAnswer)}, reason: ${reason ? toTemplateLiteralNoInfo(reason) : "null"}};`);
                             if (condition !== "true") {
@@ -2285,6 +2322,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                                 describeFamilyContext(relationshipKey, romanticInterestKey, familyKey),
                                 "What is the reason for " + name + " being " + answerTrimmed + " to intimate affection from this other character when they are " + intimateModifier.toLowerCase() + "?",
                                 lastReasonsGiven,
+                                deeperFineTune,
                             );
                             familySectionOpenToIntimateAffection.body.push(`return {value: ${JSON.stringify(valueAnswer)}, reason: ${reason ? toTemplateLiteralNoInfo(reason) : "null"}};`);
                             if (condition !== "true") {
@@ -2376,6 +2414,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                                 describeFamilyContext(relationshipKey, romanticInterestKey, familyKey),
                                 "What is the reason for " + name + " being " + answerTrimmed + " to sex with this other character when they are " + intimateModifier.toLowerCase() + "?",
                                 lastReasonsGiven,
+                                deeperFineTune,
                             );
                             familySectionOpenToSex.body.push(`return {value: ${JSON.stringify(valueAnswer)}, reason: ${reason ? toTemplateLiteralNoInfo(reason) : "null"}};`);
                             if (condition !== "true") {

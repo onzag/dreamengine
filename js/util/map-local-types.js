@@ -15,7 +15,7 @@ const localDEPathAtHomeDir = path.join(process.env.HOME || process.env.USERPROFI
  * and don't need to be re-declared in the registry entry.
  */
 const BASE_DESCRIPT_MEMBERS = new Set([
-    'type', 'description', 'exposeProperties',
+    'type', 'description', 'exposeProperties', 'exposeCharacters',
     'initialize', 'onWorldInitialized', 'onInferencePrepareToExecute',
     'onInferenceExecuted', 'onSceneStarted', 'onSceneReady', 'onWander',
 ]);

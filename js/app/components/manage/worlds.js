@@ -103,7 +103,7 @@ class AppManageWorlds extends HTMLElement {
         const worldElements = infoMapForNamespace.map(worldInfo => `
                 <div class="world-item" data-world-file="${worldInfo.namespace}/${worldInfo.id}" data-world-namespace="${worldInfo.namespace}">
                     <div class="world-icon">
-                        <app-world-image image-url="assets/${worldInfo.namespace}/${worldInfo.id}/world"></app-world-image>
+                        <app-world-image image-url="assets/${worldInfo.namespace}/${worldInfo.id}/image"></app-world-image>
                     </div>
                     <div class="world-name">
                         ${formatName(worldInfo.id)}
@@ -116,18 +116,13 @@ class AppManageWorlds extends HTMLElement {
             item.addEventListener('click', (e) => this.onWorldSelected(e));
             item.addEventListener('mouseenter', (e) => {
                 playHoverSound();
-                // @ts-expect-error
-                e.currentTarget.querySelector("svg path").setAttribute("fill", "#FF6B6B");
             });
-            item.addEventListener('mouseleave', (e) => {
-                // @ts-expect-error
-                e.currentTarget.querySelector("svg path").setAttribute("fill", "#ccc");
-            });
-        });
+        }); 
     }
 
     async reloadWorldNamespaces() {
         const infoMap = await window.ENGINE_WORKER_CLIENT.jsEngineGetInfoMap();
+        console.log(infoMap);
         const allNamespaces = Array.from(new Set(Object.values(infoMap).filter(info => info.type === "world").map(info => info.namespace)));
         if (allNamespaces.length === 0) {
             const hasNewButton = this.getAttribute("no-new-button") !== "true";

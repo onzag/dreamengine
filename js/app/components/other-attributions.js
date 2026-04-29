@@ -1,4 +1,4 @@
-import './overlay.js';
+import './dark-overlay.js';
 import "./profile-image.js";
 import { playCancelSound, playConfirmSound, playHoverSound, playPauseSound } from '../sound.js';
 
@@ -35,7 +35,7 @@ class OtherAttributions extends HTMLElement {
         this.render();
 
         // @ts-expect-error
-        this.root.querySelector('app-overlay').addEventListener('confirm', this.onCloseOtherAttributions);
+        this.root.querySelector('app-dark-overlay').addEventListener('confirm', this.onCloseOtherAttributions);
     }
 
     onCloseOtherAttributions() {
@@ -81,11 +81,11 @@ class OtherAttributions extends HTMLElement {
                 opacity: 0.7;
             }
         </style>
-        <app-overlay overlay-title="Other Attributions" confirm-text="Close">
+        <app-dark-overlay overlay-title="Other Attributions" confirm-text="Close">
             <div class="attrib-content">
                 ${attribItems}
             </div>
-        </app-overlay>`;
+        </app-dark-overlay>`;
     }
 }
 

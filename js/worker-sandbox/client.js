@@ -187,14 +187,14 @@ export class EngineWorkerClient {
      */
     getRawScriptSource(args) { return this.#call("getRawScriptSource", args); }
     /**
-     * @returns {Promise<Record<string, { id: string, namespace: string, description: string, type: string, exposeProperties: DEScriptExposeProperties }>>}
+     * @returns {Promise<Record<string, { id: string, namespace: string, description: string, type: string, exposeProperties: DEScriptExposeProperties, exposeCharacters: DEScriptExposeCharacters }>>} An object mapping script keys to their description, type, and exposeProperties/Characters, used for UI display and other purposes
      */
     jsEngineGetInfoMap() {
         return this.#call("jsEngineGetInfoMap");
     }
     /**
      * @param {{ scripts: Array<{namespace: string, id: string}> }} args
-     * @returns {Promise<Record<string, { id: string, namespace: string, description: string, type: string, exposeProperties: DEScriptExposeProperties }>>}
+     * @returns {Promise<Record<string, { id: string, namespace: string, description: string, type: string, exposeProperties: DEScriptExposeProperties, exposeCharacters: DEScriptExposeCharacters }>>}
      */
     jsEngineGetInfoMapForScripts(args) {
         return this.#call("jsEngineGetInfoMapForScripts", args);

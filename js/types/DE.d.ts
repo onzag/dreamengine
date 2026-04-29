@@ -3652,6 +3652,11 @@ declare type DEScriptExposeProperties = Record<string, {
     propertyLocation: "world" | "characters" | "items";
 }>;
 
+declare type DEScriptExposeCharacters = Record<string, {
+    asset?: string;
+    description?: string;
+}>;
+
 declare interface DEScript {
     type: "world" | "characters" | "world-mechanic" | "character-mechanic" | "misc";
 
@@ -3665,6 +3670,11 @@ declare interface DEScript {
      * and are meant to be used by the UI
      */
     exposeProperties?: DEScriptExposeProperties;
+
+    /**
+     * Exposes a character to make it playable
+     */
+    exposeCharacters?: DEScriptExposeCharacters;
 
     /**
      * Initialize gets called when the script is loaded, before the world is initialized, this is useful for setting up any necessary properties, functions, or other things that need to be in place before the world starts

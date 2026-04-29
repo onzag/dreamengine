@@ -300,21 +300,6 @@ class CharacterOverlay extends HTMLElement {
         this.root.innerHTML = `
             <style>
                 @import "./components/character.css";
-                .character-profile-image-container-parent {
-                    width: 100%;
-                    display: flex;
-                    justify-content: flex-start;
-                    align-items: flex-start;
-                }
-                .character-profile-image-container {
-                    width: 20vw;
-                    height: 20vw;
-                    min-width: 200px;
-                    min-height: 200px;
-                    display: flex;
-                    align-items: flex-start;
-                    justify-content: center;
-                }
             </style>
             <app-overlay
                 overlay-title="Working on: ${(this.currentCharacterNamespace.replace("@", "(System|ReadOnly) ") + " / " + this.currentCharacterId).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')}"

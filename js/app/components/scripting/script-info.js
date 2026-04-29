@@ -7,7 +7,7 @@ class ScriptInfo extends HTMLElement {
         this.scriptId = "";
         /** @type {string} */
         this.scriptNamespace = "";
-        /** @type {Record<string, { id: string, namespace: string, description: string, type: string, exposeProperties: object }> | null} */
+        /** @type {Record<string, { id: string, namespace: string, description: string, type: string, exposeProperties: object, exposeCharacters: object }> | null} */
         this.infoMap = null;
     }
 
@@ -86,6 +86,19 @@ class ScriptInfo extends HTMLElement {
                                         <span class="prop-type">${this.#esc(/** @type {any} */(prop).type)}</span>
                                         <span class="prop-location">${this.#esc(/** @type {any} */(prop).propertyLocation)}</span>
                                         ${/** @type {any} */ (prop).description ? `<span class="prop-desc">${this.#esc(/** @type {any} */(prop).description)}</span>` : ''}
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    ` : ''}
+                    ${Object.keys(info.exposeCharacters).length > 0 ? `
+                        <div class="section">
+                            <div class="label">Exposed Characters</div>
+                            <div class="props-list">
+                                ${Object.entries(info.exposeCharacters).map(([name, char]) => `
+                                    <div class="props-item">
+                                        <span class="prop-name">${this.#esc(name)}</span>
+                                        ${/** @type {any} */ (char).description ? `<span class="prop-desc">${this.#esc(/** @type {any} */(char).description)}</span>` : ''}
                                     </div>
                                 `).join('')}
                             </div>
