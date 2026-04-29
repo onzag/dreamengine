@@ -33,7 +33,7 @@ class GameOverlay extends HTMLElement {
         this.onExitClick = this.onExitClick.bind(this);
 
         /** @type {boolean} */
-        this.sidebarOpen = true;
+        this.sidebarOpen = false;
     }
 
     async connectedCallback() {
@@ -101,7 +101,7 @@ class GameOverlay extends HTMLElement {
         document.querySelector('.ambience').style.zIndex = ''; // delete z-index override to restore normal stacking
 
         await stopAmbienceWithFade(1000, 3);
-        await startAmbienceWithFade(['./sounds/awakening-ambience.mp3'], 1000, 1);
+        await startAmbienceWithFade(['./sounds/dream-ambience.mp3'], 1000, 3);
     }
 
     onToggleSidebar() {
@@ -189,7 +189,7 @@ class GameOverlay extends HTMLElement {
         this.root.innerHTML = `
         <link rel="stylesheet" href="components/game.css">
         <div class="game-root" data-bg-url="${escapeHtml(worldBgUrl)}" style="background-image: url(&quot;${escapeHtml(worldBgUrl)}&quot;);">
-            <div class="game-stage sidebar-open">
+            <div class="game-stage">
                 <!-- Sidebar (starts open; serves as a toolbox) -->
                 <aside class="game-sidebar" aria-label="Game sidebar">
                     <div class="game-sidebar-inner">
@@ -219,7 +219,7 @@ class GameOverlay extends HTMLElement {
                 </aside>
 
                 <!-- Toggle arrow (sits between sidebar and main) -->
-                <button id="sidebar-toggle" class="sidebar-toggle" aria-expanded="true" aria-label="Toggle sidebar">
+                <button id="sidebar-toggle" class="sidebar-toggle" aria-expanded="false" aria-label="Toggle sidebar">
                     <svg class="toggle-arrow" viewBox="0 0 24 24" width="100%" height="100%" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
                         <polyline points="15 6 9 12 15 18"></polyline>
                     </svg>
@@ -228,7 +228,10 @@ class GameOverlay extends HTMLElement {
                 <!-- Main playfield (shrinks to fit alongside the sidebar) -->
                 <main class="game-main">
                     <div class="game-background" data-bg-url="${escapeHtml(worldBgUrl)}" style="background-image: url(&quot;${escapeHtml(worldBgUrl)}&quot;);">
-                        <div class="game-background-message">Starting dream...</div>
+                        <div class="game-background-message">
+                            <div class="game-background-message-title">Starting dream...</div>
+                            ${worldId ? `<div class="game-background-message-subtitle">${escapeHtml(worldId)}</div>` : ''}
+                        </div>
                     </div>
 
                     <div class="game-input-bar">

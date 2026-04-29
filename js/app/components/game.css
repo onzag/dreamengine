@@ -254,12 +254,24 @@
 .game-background-message {
     position: relative;
     z-index: 1;
-    font-size: 4vh;
     color: rgba(234, 243, 255, 0.88);
+    user-select: none;
+    text-align: center;
+    text-shadow: 0 0.3vh 1vh rgba(10, 25, 50, 0.75);
+}
+
+.game-background-message-title {
+    font-size: 4vh;
     letter-spacing: 0.18em;
     text-transform: uppercase;
-    user-select: none;
-    text-shadow: 0 0.3vh 1vh rgba(10, 25, 50, 0.75);
+}
+
+.game-background-message-subtitle {
+    margin-top: 1vh;
+    font-size: 2.2vh;
+    letter-spacing: 0.08em;
+    color: rgba(220, 232, 250, 0.7);
+    font-style: italic;
 }
 
 /* ── Input bar ──────────────────────────────────────────────────── */

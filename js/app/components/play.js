@@ -617,7 +617,7 @@ class PlayOverlay extends HTMLElement {
             {
                 id: 'narrator',
                 label: 'Use narrator mode',
-                description: "As a narrator you become part of the Story Master, you will not play directly as the character but instead narrate their lives, affecting how they behave. Your words cannot affect other characters and you should write in 3rd person. You will know their mental states and how they feel about things, but ultimately you have the final word about how they live.",
+                description: "As a narrator you become part of the Story Master, you will not play directly as the character but instead narrate their lives, affecting how they behave. Your words cannot affect other characters and you should write in 3rd person. You will know the mental states of your character and how they feel about things, and ultimately you have the final word about how they live.",
             },
             {
                 id: 'schizophrenia',
