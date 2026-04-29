@@ -607,7 +607,7 @@
 }
 
 .character-card-name {
-    font-size: 2.2vh;
+    font-size: 3vh;
     text-align: center;
     color: #fff1de;
     letter-spacing: 0.04em;
@@ -621,6 +621,40 @@
     letter-spacing: 0.02em;
     line-height: 1.4;
     max-width: 24vh;
+}
+
+.character-card-details {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.6vh;
+    margin-top: 0.4vh;
+    max-width: 24vh;
+}
+
+.character-detail-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4vh;
+    padding: 0.4vh 0.9vh;
+    border-radius: 1vh;
+    background: rgba(0, 0, 0, 0.28);
+    border: 1px solid rgba(255, 200, 150, 0.25);
+    color: rgba(255, 230, 200, 0.85);
+    letter-spacing: 0.02em;
+    max-width: calc(100% - 5vh);
+    height: auto;
+    text-align: center;
+    font-size: 2vh;
+}
+
+.character-detail-icon {
+    font-size: 1.5vh;
+    line-height: 1;
+}
+
+.character-detail-value {
+    font-weight: 500;
 }
 
 /* ── Placeholder pane (kept for empty states) ── */

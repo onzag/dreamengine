@@ -124,6 +124,7 @@ playBtn?.addEventListener('click', async () => {
         const game = document.createElement('app-game');
         game.setAttribute('character-name', character.name || '');
         game.setAttribute('character-script-key', character.scriptKey || '');
+        game.setAttribute('character-asset', character.asset || '');
         game.setAttribute('is-self-insert', isSelfInsert ? 'true' : 'false');
         game.setAttribute('special-mode', detail.specialMode || '');
         game.setAttribute('world-namespace', world.namespace || '');

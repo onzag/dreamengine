@@ -3655,6 +3655,9 @@ declare type DEScriptExposeProperties = Record<string, {
 declare type DEScriptExposeCharacters = Record<string, {
     asset?: string;
     description?: string;
+    details: {
+        [key: string]: string | number | boolean;
+    };
 }>;
 
 declare interface DEScript {

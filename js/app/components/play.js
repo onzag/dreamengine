@@ -27,6 +27,96 @@ function formatName(name) {
     return name.replace(/[-_]/g, match => `<span class="separator">${match}</span>`);
 }
 
+/**
+ * Format an arbitrary character detail key/value pair into a chip.
+ * Special-cases `sex` and `gender` to use emojis, `years` to suffix " years",
+ * and booleans to "Yes" / "No".
+ *
+ * @param {string} key
+ * @param {string | number | boolean} rawValue
+ * @returns {{ icon?: string, label: string, value: string } | null}
+ */
+function formatCharacterDetail(key, rawValue) {
+    if (rawValue === undefined || rawValue === null || rawValue === '') return null;
+
+    const normKey = String(key).toLowerCase();
+
+    // Sex — biological symbols.
+    if (normKey === 'sex') {
+        const v = String(rawValue).toLowerCase();
+        let icon = '❓';
+        if (v === 'male') icon = '♂️';
+        else if (v === 'female') icon = '♀️';
+        else if (v === 'intersex') icon = '⚥';
+        else if (v === 'none') icon = '🚫';
+        return { icon, label: `Sex: ${capitalize(String(rawValue))}`, value: capitalize(String(rawValue)) };
+    }
+
+    // Gender — person glyphs to differentiate from sex.
+    if (normKey === 'gender') {
+        const v = String(rawValue).toLowerCase();
+        let icon = '❓';
+        if (v === 'male') icon = '👨';
+        else if (v === 'female') icon = '👩';
+        else if (v === 'ambiguous') icon = '🧑';
+        else if (v === 'none') icon = '🚫';
+        return { icon, label: `Gender: ${capitalize(String(rawValue))}`, value: capitalize(String(rawValue)) };
+    }
+
+    // Booleans — Yes / No.
+    if (typeof rawValue === 'boolean') {
+        return {
+            icon: rawValue ? '✅' : '❌',
+            label: capitalize(normKey),
+            value: rawValue ? 'Yes' : 'No',
+        };
+    }
+
+    // Years — append unit.
+    if (normKey === 'years' || normKey === 'age') {
+        return {
+            icon: '🎂',
+            label: capitalize(normKey),
+            value: `${rawValue} years`,
+        };
+    }
+
+    // Generic fallback — no emoji, just "Key: value" text.
+    return { label: capitalize(normKey), value: `${capitalize(normKey)}: ${rawValue}` };
+}
+
+/**
+ * @param {string} s
+ */
+function capitalize(s) {
+    if (!s) return '';
+    return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/**
+ * @param {Record<string, string | number | boolean> | null | undefined} details
+ * @returns {string}
+ */
+function renderCharacterDetails(details) {
+    if (!details || typeof details !== 'object') return '';
+    const chips = [];
+    for (const [key, value] of Object.entries(details)) {
+        const formatted = formatCharacterDetail(key, value);
+        if (!formatted) continue;
+        const iconHTML = formatted.icon
+            ? `<span class="character-detail-icon">${formatted.icon}</span>`
+            : '';
+        chips.push(`
+            <span class="character-detail-chip" title="${escapeHTML(formatted.label)}">
+                ${iconHTML}
+                <span class="character-detail-value">${escapeHTML(formatted.value)}</span>
+            </span>
+        `);
+    }
+    if (chips.length === 0) return '';
+    return `<div class="character-card-details">${chips.join('')}</div>`;
+}
+
 const STEPS = [
     { id: 'world', label: 'World' },
     { id: 'mode', label: 'Mode' },
@@ -54,7 +144,7 @@ class PlayOverlay extends HTMLElement {
         this.selectedMode = null;
         /** @type {string | null} */
         this.selectedSaveId = null;
-        /** @type {{ name: string, scriptKey: string } | null} */
+        /** @type {{ name: string, scriptKey: string, asset: string | null } | null} */
         this.selectedCharacter = null;
         /** @type {'narrator' | 'schizophrenia' | null} */
         this.selectedSpecialMode = null;
@@ -474,6 +564,8 @@ class PlayOverlay extends HTMLElement {
                     description: def?.description || '',
                     // @ts-ignore
                     asset: def?.asset || null,
+                    // @ts-ignore
+                    details: def?.details || null,
                 });
             }
         }
@@ -552,14 +644,18 @@ class PlayOverlay extends HTMLElement {
             const imageHTML = c.asset
                 ? `<app-asset-image image-url="${escapeHTML(c.asset)}" default-image="./images/default-profile.png"></app-asset-image>`
                 : `<img class="character-default" src="./images/default-profile.png" />`;
+            const details = /** @type {any} */ (c).details;
+            const detailsHTML = renderCharacterDetails(details);
             return `
                 <div class="character-card${isSelf ? ' self-insert' : ''}${disabled ? ' disabled' : ''}"
                      data-name="${escapeHTML(c.name)}"
                      data-script-key="${escapeHTML(c.scriptKey)}"
+                     data-asset="${escapeHTML(c.asset || '')}"
                      ${disabled ? 'data-disabled="true"' : ''}>
                     <div class="character-card-image">${imageHTML}</div>
                     <div class="character-card-name">${escapeHTML(c.name)}</div>
                     ${c.description ? `<div class="character-card-desc">${escapeHTML(c.description)}</div>` : ''}
+                    ${detailsHTML}
                     ${disabled ? '<div class="character-card-disabled-note">Not available with this mode</div>' : ''}
                 </div>
             `;
@@ -605,7 +701,8 @@ class PlayOverlay extends HTMLElement {
                 if (card.getAttribute('data-disabled') === 'true') return;
                 const name = card.getAttribute('data-name') || '';
                 const scriptKey = card.getAttribute('data-script-key') || '';
-                this.selectedCharacter = { name, scriptKey };
+                const asset = card.getAttribute('data-asset') || '';
+                this.selectedCharacter = { name, scriptKey, asset: asset || null };
                 pane.querySelectorAll('.character-card').forEach(c => c.classList.remove('selected'));
                 card.classList.add('selected');
                 playConfirmSound();

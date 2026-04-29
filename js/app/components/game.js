@@ -1,4 +1,6 @@
-import { startAmbienceWithFade, stopAmbienceWithFade } from '../sound.js';
+import { playCancelSound, playConfirmSound, playHoverSound, startAmbienceWithFade, stopAmbienceWithFade } from '../sound.js';
+import './world-image.js';
+import './dialog.js';
 
 /**
  * The main in-dream game UI. Renders a transition ("falling asleep" white
@@ -28,6 +30,7 @@ class GameOverlay extends HTMLElement {
         this.onToggleSidebar = this.onToggleSidebar.bind(this);
         this.onSubmit = this.onSubmit.bind(this);
         this.onInputKeydown = this.onInputKeydown.bind(this);
+        this.onExitClick = this.onExitClick.bind(this);
 
         /** @type {boolean} */
         this.sidebarOpen = true;
@@ -35,6 +38,27 @@ class GameOverlay extends HTMLElement {
 
     async connectedCallback() {
         this.render();
+
+        // @ts-ignore
+        document.querySelector('.fx').style.zIndex = '50'; // ensure fx controls are above the game UI
+        // @ts-ignore
+        document.querySelector('.ambience').style.zIndex = '50'; // ensure fx controls are above the game UI
+
+        // Probe the world background and fall back to the default image if
+        // the world's image asset 404s. Background images set via CSS have no
+        // error event, so we check it by loading through a throwaway Image().
+        const bg = /** @type {HTMLElement | null} */ (this.root.querySelector('.game-background'));
+        const bgRoot = /** @type {HTMLElement | null} */ (this.root.querySelector('.game-root'));
+        const probedUrl = bg?.dataset.bgUrl;
+        const fallbackUrl = './images/default-world.png';
+        if (bg && bgRoot && probedUrl && probedUrl !== fallbackUrl) {
+            const probe = new Image();
+            probe.onerror = () => {
+                bg.style.backgroundImage = `url('${fallbackUrl}')`;
+                bgRoot.style.backgroundImage = `url('${fallbackUrl}')`;
+            };
+            probe.src = probedUrl;
+        }
 
         const lightFade = this.root.querySelector('.light-fade');
         if (lightFade) {
@@ -52,6 +76,12 @@ class GameOverlay extends HTMLElement {
         const submitBtn = this.root.getElementById('submit-btn');
         if (submitBtn) submitBtn.addEventListener('click', this.onSubmit);
 
+        const exitBtn = this.root.getElementById('exit-btn');
+        if (exitBtn) {
+            exitBtn.addEventListener('mouseenter', () => playHoverSound());
+            exitBtn.addEventListener('click', this.onExitClick);
+        }
+
         const input = /** @type {HTMLTextAreaElement | null} */ (this.root.getElementById('game-input'));
         if (input) {
             input.addEventListener('input', () => {
@@ -63,10 +93,15 @@ class GameOverlay extends HTMLElement {
     }
 
     async disconnectedCallback() {
-        await stopAmbienceWithFade(1000, 3);
-        await startAmbienceWithFade(['./sounds/awakening-ambience.mp3'], 1000, 1);
         // @ts-expect-error
         document.querySelector('.sky').style.display = 'block';
+        // @ts-ignore
+        document.querySelector('.fx').style.zIndex = ''; // delete z-index override to restore normal stacking
+        // @ts-ignore
+        document.querySelector('.ambience').style.zIndex = ''; // delete z-index override to restore normal stacking
+
+        await stopAmbienceWithFade(1000, 3);
+        await startAmbienceWithFade(['./sounds/awakening-ambience.mp3'], 1000, 1);
     }
 
     onToggleSidebar() {
@@ -92,12 +127,55 @@ class GameOverlay extends HTMLElement {
         // Intentional no-op for now.
     }
 
+    onExitClick() {
+        // Avoid stacking multiple confirm dialogs.
+        if (document.querySelector('app-dialog')) return;
+
+        const dialog = document.createElement('app-dialog');
+        dialog.setAttribute('dialog-title', 'Wake up?');
+        dialog.setAttribute('confirmation', 'true');
+        dialog.setAttribute('confirm-text', 'Wake up');
+        dialog.setAttribute('cancel-text', 'Stay');
+        dialog.setAttribute('extra-z-index', '100'); // ensure the dialog appears above all other elements
+        dialog.textContent = 'Are you sure you want to leave the dream? Any unsaved progress will be lost.';
+
+        dialog.addEventListener('confirm', () => {
+            playConfirmSound();
+            this.dispatchEvent(new CustomEvent('exit', { bubbles: true, composed: true }));
+            document.body.removeChild(dialog);
+        });
+        dialog.addEventListener('cancel', () => {
+            playCancelSound();
+            document.body.removeChild(dialog);
+        });
+
+        document.body.appendChild(dialog);
+    }
+
     render() {
         const characterName = this.getAttribute('character-name') || 'Unnamed Dreamer';
         const isSelfInsert = this.getAttribute('is-self-insert') === 'true';
         const specialMode = this.getAttribute('special-mode') || '';
         const worldNamespace = this.getAttribute('world-namespace') || '';
         const worldId = this.getAttribute('world-id') || '';
+        const characterAsset = this.getAttribute('character-asset') || '';
+
+        // Resolve the world background image. System namespaces (those whose
+        // name starts with '@') live under DREAMENGINE_DEFAULT_SCRIPTS_HOME;
+        // user namespaces live under DREAMENGINE_HOME. Falls back to the
+        // built-in default-world image if no world is set or if the world's
+        // image asset 404s (handled in connectedCallback via a probe).
+        const fallbackBgUrl = './images/default-world.png';
+        let worldBgUrl = fallbackBgUrl;
+        if (worldNamespace && worldId) {
+            const isSystem = worldNamespace.startsWith('@');
+            const base = isSystem
+                ? window.DREAMENGINE_DEFAULT_SCRIPTS_HOME
+                : window.DREAMENGINE_HOME;
+            // Normalize Windows backslashes to forward slashes — CSS url()
+            // treats `\` as an escape character (so `\e` becomes U+000E etc.).
+            worldBgUrl = `${base}/assets/${worldNamespace}/${worldId}/image`.replace(/\\/g, '/');
+        }
 
         const subtitleParts = [];
         if (specialMode === 'narrator') subtitleParts.push('Narrator');
@@ -110,17 +188,32 @@ class GameOverlay extends HTMLElement {
 
         this.root.innerHTML = `
         <link rel="stylesheet" href="components/game.css">
-        <div class="game-root">
+        <div class="game-root" data-bg-url="${escapeHtml(worldBgUrl)}" style="background-image: url(&quot;${escapeHtml(worldBgUrl)}&quot;);">
             <div class="game-stage sidebar-open">
                 <!-- Sidebar (starts open; serves as a toolbox) -->
                 <aside class="game-sidebar" aria-label="Game sidebar">
                     <div class="game-sidebar-inner">
                         <div class="game-sidebar-header">
+                            ${characterAsset ? `
+                                <div class="game-sidebar-portrait">
+                                    <app-asset-image image-url="${escapeHtml(characterAsset)}" default-image="./images/default-profile.png"></app-asset-image>
+                                </div>
+                            ` : ''}
                             <div class="game-sidebar-title">${escapeHtml(characterName)}</div>
                             ${subtitleParts.length ? `<div class="game-sidebar-subtitle">${escapeHtml(subtitleParts.join(' · '))}</div>` : ''}
                         </div>
                         <div class="game-sidebar-content">
                             <!-- intentionally empty for now -->
+                        </div>
+                        <div class="game-sidebar-footer">
+                            <button id="exit-btn" class="game-sidebar-exit" type="button" aria-label="Exit game">
+                                <svg viewBox="0 0 24 24" width="2.2vh" height="2.2vh" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                                    <polyline points="16 17 21 12 16 7"></polyline>
+                                    <line x1="21" y1="12" x2="9" y2="12"></line>
+                                </svg>
+                                <span>Wake up</span>
+                            </button>
                         </div>
                     </div>
                 </aside>
@@ -134,8 +227,8 @@ class GameOverlay extends HTMLElement {
 
                 <!-- Main playfield (shrinks to fit alongside the sidebar) -->
                 <main class="game-main">
-                    <div class="game-background">
-                        <div class="game-background-message">Starting world…</div>
+                    <div class="game-background" data-bg-url="${escapeHtml(worldBgUrl)}" style="background-image: url(&quot;${escapeHtml(worldBgUrl)}&quot;);">
+                        <div class="game-background-message">Starting dream...</div>
                     </div>
 
                     <div class="game-input-bar">

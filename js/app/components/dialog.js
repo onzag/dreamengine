@@ -119,7 +119,7 @@ class Dialog extends HTMLElement {
             padding: 5vh;
             border-radius: 1vh;
             box-shadow: 0 0 2vh rgba(0, 0, 0, 0.5);
-            z-index: 50;
+            z-index: ${parseInt(this.getAttribute('extra-z-index') || '50')};
             left: 50%;
             transform: translate(-50%, -50%);
             top: 50%;
@@ -134,7 +134,7 @@ class Dialog extends HTMLElement {
             height: 100%;
             background: rgba(0, 0, 0, 0.5);
             backdrop-filter: blur(4px);
-            z-index: 35;
+            z-index: ${parseInt(this.getAttribute('extra-z-index') || '35')};
         }
         .dialog-title {
             font-size: 5vh;
