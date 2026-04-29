@@ -24,7 +24,6 @@ class ScriptInfo extends HTMLElement {
             this.infoMap = await window.ENGINE_WORKER_CLIENT.jsEngineGetInfoMapForScripts({
                 scripts: [{ namespace: this.scriptNamespace, id: this.scriptId }]
             });
-            console.log(this.infoMap);
         } catch (err) {
             console.error("Failed to fetch script info:", err);
             this.infoMap = null;

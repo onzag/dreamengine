@@ -122,7 +122,6 @@ class AppManageWorlds extends HTMLElement {
 
     async reloadWorldNamespaces() {
         const infoMap = await window.ENGINE_WORKER_CLIENT.jsEngineGetInfoMap();
-        console.log(infoMap);
         const allNamespaces = Array.from(new Set(Object.values(infoMap).filter(info => info.type === "world").map(info => info.namespace)));
         if (allNamespaces.length === 0) {
             const hasNewButton = this.getAttribute("no-new-button") !== "true";

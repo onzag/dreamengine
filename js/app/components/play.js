@@ -54,6 +54,12 @@ class PlayOverlay extends HTMLElement {
         this.selectedMode = null;
         /** @type {string | null} */
         this.selectedSaveId = null;
+        /** @type {{ name: string, scriptKey: string } | null} */
+        this.selectedCharacter = null;
+        /** @type {'narrator' | 'schizophrenia' | null} */
+        this.selectedSpecialMode = null;
+        /** @type {Array<{ name: string, scriptKey: string, namespace: string, description: string, asset: string | null }> | null} */
+        this.characterCache = null;
     }
 
     async connectedCallback() {
@@ -87,10 +93,10 @@ class PlayOverlay extends HTMLElement {
             continueBtn.addEventListener('click', () => this.onContinue());
         }
 
+        this.renderStep();
+
         await stopAmbienceWithFade(1000, 3);
         await startAmbienceWithFade(['./sounds/awakening-ambience.mp3'], 1000, 1);
-
-        await this.renderStep();
     }
 
     /**
@@ -132,7 +138,8 @@ class PlayOverlay extends HTMLElement {
             if (this.selectedMode === 'load') return !!this.selectedSaveId;
             return false;
         }
-        return false; // step 3 placeholder
+        if (this.currentStepIndex === 2) return !!this.selectedCharacter;
+        return false;
     }
 
     updateFooter() {
@@ -176,6 +183,8 @@ class PlayOverlay extends HTMLElement {
                     world: this.selectedWorld,
                     mode: this.selectedMode,
                     saveId: this.selectedSaveId,
+                    character: this.selectedCharacter,
+                    specialMode: this.selectedSpecialMode,
                 },
             }));
         }
@@ -190,7 +199,7 @@ class PlayOverlay extends HTMLElement {
         } else if (this.currentStepIndex === 1) {
             this.renderModeStep(body);
         } else if (this.currentStepIndex === 2) {
-            this.renderCharacterStep(body);
+            await this.renderCharacterStep(body);
         }
 
         this.updateFooter();
@@ -299,6 +308,9 @@ class PlayOverlay extends HTMLElement {
                 this.selectedWorld = { namespace: ns, id };
                 pane.querySelectorAll('.world-card').forEach(c => c.classList.remove('selected'));
                 card.classList.add('selected');
+                // a different world invalidates downstream choices
+                this.characterCache = null;
+                this.selectedCharacter = null;
                 playConfirmSound();
                 this.updateFooter();
             });
@@ -397,23 +409,248 @@ class PlayOverlay extends HTMLElement {
         });
     }
 
-    // ── Step 3: Character (placeholder) ──────────────────────────────
+    // ── Step 3: Character ────────────────────────────────────────────
+
+    /**
+     * Collect every `exposeCharacters` entry across the world script and all
+     * of its dependencies.
+     * @returns {Promise<Array<{ name: string, scriptKey: string, namespace: string, description: string, asset: string | null }>>}
+     */
+    async loadCharactersForSelectedWorld() {
+        if (this.characterCache) return this.characterCache;
+        if (!this.selectedWorld) return [];
+
+        let infoMap = {};
+        try {
+            infoMap = await window.ENGINE_WORKER_CLIENT.jsEngineGetInfoMapForScripts({
+                scripts: [{ namespace: this.selectedWorld.namespace, id: this.selectedWorld.id }],
+            });
+        } catch (err) {
+            console.error('Failed to load script dependency map:', err);
+            return [];
+        }
+
+        /** @type {Array<{ name: string, scriptKey: string, namespace: string, description: string, asset: string | null }>} */
+        const characters = [];
+        const seen = new Set();
+
+        for (const [scriptKey, info] of Object.entries(infoMap)) {
+            // @ts-ignore
+            const exposeCharacters = info.exposeCharacters || {};
+            for (const [name, def] of Object.entries(exposeCharacters)) {
+                const dedupKey = `${scriptKey}::${name}`;
+                if (seen.has(dedupKey)) continue;
+                seen.add(dedupKey);
+                characters.push({
+                    name,
+                    scriptKey,
+                    // @ts-ignore
+                    namespace: info.namespace,
+                    // @ts-ignore
+                    description: def?.description || '',
+                    // @ts-ignore
+                    asset: def?.asset || null,
+                });
+            }
+        }
+
+        characters.sort((a, b) => a.name.localeCompare(b.name));
+        this.characterCache = characters;
+        return characters;
+    }
 
     /**
      * @param {Element} body
      */
-    renderCharacterStep(body) {
+    async renderCharacterStep(body) {
         body.innerHTML = `
             <div class="step-pane">
                 <div class="step-heading">
                     <h2>Choose your character</h2>
-                    <p class="step-sub">Character selection is coming soon.</p>
+                    <p class="step-sub">Pick the character you want to play as.</p>
                 </div>
-                <div class="placeholder-pane">
-                    Nothing here yet — this step will let you pick the character you want to play as.
-                </div>
+                <div class="world-loading">Loading characters…</div>
             </div>
         `;
+
+        const exposed = await this.loadCharactersForSelectedWorld();
+
+        // Self-insert option, always available and listed first.
+        let userName = null;
+        try {
+            userName = await window.API.getConfigValue('user.name');
+        } catch (err) {
+            console.error('Failed to read user.name config:', err);
+        }
+        const selfName = (typeof userName === 'string' && userName.trim()) ? userName : 'Unnamed Dreamer';
+        const selfCharacter = {
+            name: selfName,
+            scriptKey: '__self__',
+            namespace: '',
+            description: 'A self-insert: play as yourself.',
+            asset: 'profile',
+            isSelf: true,
+        };
+
+        const characters = [selfCharacter, ...exposed];
+
+        const pane = body.querySelector('.step-pane');
+        if (!pane) return;
+
+        const SPECIAL_MODES = [
+            {
+                id: 'narrator',
+                label: 'Use narrator mode',
+                description: "As a narrator you become part of the Story Master, you will not play directly as the character but instead narrate their lives, affecting how they behave. Your words cannot affect other characters and you should write in 3rd person. You will know their mental states and how they feel about things, but ultimately you have the final word about how they live.",
+            },
+            {
+                id: 'schizophrenia',
+                label: 'Use schizophrenia mode',
+                description: `You become a voice in the character's head (named "${selfName}") that they hear directly, and none else but that character can hear you and may reply back.`,
+            },
+        ];
+
+        const specialHTML = SPECIAL_MODES.map(m => `
+            <label class="special-mode-toggle" data-mode="${m.id}">
+                <input type="checkbox" data-mode="${m.id}" ${this.selectedSpecialMode === m.id ? 'checked' : ''} />
+                <span class="special-mode-label">${escapeHTML(m.label)}</span>
+            </label>
+        `).join('');
+
+        const activeMode = SPECIAL_MODES.find(m => m.id === this.selectedSpecialMode);
+        const messageHTML = activeMode
+            ? `<div class="special-mode-message">${escapeHTML(activeMode.description)}</div>`
+            : '';
+
+        const cardsHTML = characters.map(c => {
+            const isSelf = !!(/** @type {any} */ (c).isSelf);
+            const disabled = isSelf && this.selectedSpecialMode !== null;
+            const imageHTML = c.asset
+                ? `<app-asset-image image-url="${escapeHTML(c.asset)}" default-image="./images/default-profile.png"></app-asset-image>`
+                : `<img class="character-default" src="./images/default-profile.png" />`;
+            return `
+                <div class="character-card${isSelf ? ' self-insert' : ''}${disabled ? ' disabled' : ''}"
+                     data-name="${escapeHTML(c.name)}"
+                     data-script-key="${escapeHTML(c.scriptKey)}"
+                     ${disabled ? 'data-disabled="true"' : ''}>
+                    <div class="character-card-image">${imageHTML}</div>
+                    <div class="character-card-name">${escapeHTML(c.name)}</div>
+                    ${c.description ? `<div class="character-card-desc">${escapeHTML(c.description)}</div>` : ''}
+                    ${disabled ? '<div class="character-card-disabled-note">Not available with this mode</div>' : ''}
+                </div>
+            `;
+        }).join('');
+
+        pane.innerHTML = `
+            <div class="step-heading">
+                <h2>Choose your character</h2>
+                <p class="step-sub">Pick the character you want to play as.</p>
+            </div>
+            <div class="special-modes">
+                ${specialHTML}
+                ${messageHTML}
+            </div>
+            <div class="character-grid">${cardsHTML}</div>
+        `;
+
+        pane.querySelectorAll('.special-mode-toggle input[type="checkbox"]').forEach(input => {
+            input.addEventListener('change', () => {
+                const cb = /** @type {HTMLInputElement} */ (input);
+                const mode = /** @type {'narrator' | 'schizophrenia'} */ (cb.getAttribute('data-mode'));
+                if (cb.checked) {
+                    this.selectedSpecialMode = mode;
+                    // self-insert is incompatible with the special modes
+                    if (this.selectedCharacter && this.selectedCharacter.scriptKey === '__self__') {
+                        this.selectedCharacter = null;
+                    }
+                    playConfirmSound();
+                } else if (this.selectedSpecialMode === mode) {
+                    this.selectedSpecialMode = null;
+                    playCancelSound();
+                }
+                this.applySpecialModeState(pane, SPECIAL_MODES);
+            });
+        });
+
+        pane.querySelectorAll('.character-card').forEach(card => {
+            card.addEventListener('mouseenter', () => {
+                if (card.getAttribute('data-disabled') === 'true') return;
+                playHoverSound();
+            });
+            card.addEventListener('click', () => {
+                if (card.getAttribute('data-disabled') === 'true') return;
+                const name = card.getAttribute('data-name') || '';
+                const scriptKey = card.getAttribute('data-script-key') || '';
+                this.selectedCharacter = { name, scriptKey };
+                pane.querySelectorAll('.character-card').forEach(c => c.classList.remove('selected'));
+                card.classList.add('selected');
+                playConfirmSound();
+                this.updateFooter();
+            });
+
+            if (this.selectedCharacter &&
+                card.getAttribute('data-name') === this.selectedCharacter.name &&
+                card.getAttribute('data-script-key') === this.selectedCharacter.scriptKey) {
+                card.classList.add('selected');
+            }
+        });
+    }
+
+    /**
+     * Update the character pane in-place when a special mode toggle changes,
+     * without re-rendering the whole step (which causes flicker).
+     *
+     * @param {Element} pane
+     * @param {Array<{ id: string, label: string, description: string }>} specialModes
+     */
+    applySpecialModeState(pane, specialModes) {
+        // 1. Sync each checkbox so only the active mode is checked.
+        pane.querySelectorAll('.special-mode-toggle input[type="checkbox"]').forEach(input => {
+            const cb = /** @type {HTMLInputElement} */ (input);
+            cb.checked = cb.getAttribute('data-mode') === this.selectedSpecialMode;
+        });
+
+        // 2. Update the description message in place.
+        const modesContainer = pane.querySelector('.special-modes');
+        if (modesContainer) {
+            let messageEl = modesContainer.querySelector('.special-mode-message');
+            const activeMode = specialModes.find(m => m.id === this.selectedSpecialMode);
+            if (activeMode) {
+                if (!messageEl) {
+                    messageEl = document.createElement('div');
+                    messageEl.className = 'special-mode-message';
+                    modesContainer.appendChild(messageEl);
+                }
+                messageEl.textContent = activeMode.description;
+            } else if (messageEl) {
+                messageEl.remove();
+            }
+        }
+
+        // 3. Disable / re-enable the self-insert card without rebuilding it.
+        const selfCard = pane.querySelector('.character-card.self-insert');
+        if (selfCard) {
+            const shouldDisable = this.selectedSpecialMode !== null;
+            selfCard.classList.toggle('disabled', shouldDisable);
+            if (shouldDisable) {
+                selfCard.setAttribute('data-disabled', 'true');
+                if (!selfCard.querySelector('.character-card-disabled-note')) {
+                    const note = document.createElement('div');
+                    note.className = 'character-card-disabled-note';
+                    note.textContent = 'Not available with this mode';
+                    selfCard.appendChild(note);
+                }
+                if (selfCard.classList.contains('selected')) {
+                    selfCard.classList.remove('selected');
+                }
+            } else {
+                selfCard.removeAttribute('data-disabled');
+                const note = selfCard.querySelector('.character-card-disabled-note');
+                if (note) note.remove();
+            }
+        }
+
+        this.updateFooter();
     }
 
     render() {

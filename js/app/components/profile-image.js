@@ -1,5 +1,5 @@
 /** @type {Map<string, number>} */
-const profileImageCacheVersions = new Map();
+export const profileImageCacheVersions = new Map();
 
 /**
  * Bump the cache-buster for a specific image URL so any subsequently rendered
