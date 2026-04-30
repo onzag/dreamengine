@@ -131,6 +131,37 @@
     padding: 2vh 3vh;
 }
 
+/* ── In-dream character stats (sidebar) ── */
+.game-character-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6vh;
+    justify-content: center;
+}
+
+.game-character-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5vh;
+    padding: 0.4vh 1vh;
+    border-radius: 1vh;
+    background: rgba(0, 0, 0, 0.32);
+    border: 1px solid rgba(180, 210, 240, 0.25);
+    color: rgba(225, 235, 250, 0.9);
+    font-size: 1.7vh;
+    letter-spacing: 0.02em;
+    line-height: 1.2;
+}
+
+.game-character-chip-icon {
+    font-size: 1.6vh;
+    line-height: 1;
+}
+
+.game-character-chip-value {
+    font-weight: 500;
+}
+
 .game-sidebar-footer {
     padding: 1.6vh 3vh 2.4vh 3vh;
     border-top: 1px solid rgba(180, 210, 240, 0.22);
@@ -225,30 +256,52 @@
 }
 
 /* Background image (placeholder: default-world image). Sits inside main so
-   it shrinks naturally when the sidebar is open. */
+   it shrinks naturally when the sidebar is open. The image is rendered by
+   <app-asset-image> as a child element so that animating it does not affect
+   the .game-background-message overlay. */
 .game-background {
     position: absolute;
     inset: 0;
-    background-image: url('../images/default-world.png');
-    background-size: cover;
-    background-position: center;
-    background-repeat: no-repeat;
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 0;
+    overflow: hidden;
 }
 
-/* Cool morning-blue wash on top of the image so the theme bleeds through
-   without overpowering the world art. */
-.game-background-loading::after {
-    content: '';
+.game-background-image {
     position: absolute;
     inset: 0;
-    background:
-        radial-gradient(ellipse at 30% 18%, rgba(255, 220, 170, 0.18) 0%, rgba(255, 220, 170, 0) 60%),
-        linear-gradient(180deg, rgba(140, 180, 220, 0.12) 0%, rgba(30, 55, 95, 0.28) 100%);
-    pointer-events: none;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+    transform-origin: center center;
+}
+
+/* Strip the world-image's portrait-style framing so it can act as a true
+   edge-to-edge background. */
+.game-background-image::part(asset-image-container) {
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    background-color: transparent;
+}
+
+.game-background-image::part(asset-image) {
+    border: none;
+    border-radius: 0;
+    object-fit: cover;
+    width: 100%;
+    height: 100%;
+}
+
+.game-background-loading {
+    animation: bg-slow-zoom 8s ease-out 1s forwards;
+}
+
+@keyframes bg-slow-zoom {
+    from { transform: scale(1); }
+    to   { transform: scale(1.1); }
 }
 
 .game-background-message {
@@ -272,6 +325,132 @@
     letter-spacing: 0.08em;
     color: rgba(220, 232, 250, 0.7);
     font-style: italic;
+}
+
+/* ── Initial-scene picker ───────────────────────────────────────────
+   Mounted in place of the loading message, on top of the world
+   background. Reuses the input-bar's translucent / blurred surface
+   so it feels native to the play screen. */
+.game-scene-picker {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1.6vh;
+    width: min(70vh, 90%);
+    max-height: 80%;
+    padding: 2vh 2.2vh;
+    border-radius: 1.6vh;
+    background: rgba(10, 20, 40, 0.45);
+    border: 1px solid rgba(200, 220, 240, 0.35);
+    backdrop-filter: blur(18px) saturate(180%);
+    -webkit-backdrop-filter: blur(18px) saturate(180%);
+    box-shadow: 0 0.6vh 2.4vh rgba(0, 0, 0, 0.45);
+    color: #eaf3ff;
+}
+
+.game-scene-picker-title {
+    font-size: 2.6vh;
+    text-align: center;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: rgba(234, 243, 255, 0.95);
+    text-shadow: 0 0.2vh 0.6vh rgba(10, 25, 50, 0.7);
+}
+
+.game-scene-picker-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1vh;
+    overflow-y: auto;
+    padding-right: 0.4vh;
+}
+
+.game-scene-option {
+    text-align: left;
+    padding: 1.2vh 1.4vh;
+    border-radius: 1vh;
+    background: rgba(20, 35, 60, 0.45);
+    border: 1px solid rgba(200, 220, 240, 0.25);
+    color: #eaf3ff;
+    cursor: pointer;
+    font: inherit;
+    transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+
+.game-scene-option:hover {
+    background: rgba(60, 100, 150, 0.55);
+    border-color: rgba(230, 240, 255, 0.7);
+}
+
+.game-scene-option:active {
+    transform: translateY(0);
+}
+
+.game-scene-option-title {
+    font-size: 2vh;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    margin-bottom: 0.5vh;
+}
+
+.game-scene-option-desc {
+    font-size: 1.6vh;
+    line-height: 1.4;
+    color: rgba(220, 232, 250, 0.8);
+    font-style: italic;
+}
+
+.game-scene-option.selected {
+    background: rgba(80, 140, 210, 0.55);
+    border-color: rgba(230, 240, 255, 0.95);
+    box-shadow: 0 0 0 0.2vh rgba(140, 190, 240, 0.45) inset, 0 0.3vh 1.2vh rgba(60, 110, 180, 0.4);
+}
+
+.game-scene-option.selected .game-scene-option-desc {
+    color: rgba(240, 248, 255, 0.95);
+    font-style: normal;
+}
+
+.game-scene-picker-footer {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 0.4vh;
+}
+
+.game-scene-picker-begin {
+    padding: 1vh 2.4vh;
+    border-radius: 1vh;
+    border: 1px solid rgba(200, 220, 240, 0.55);
+    background: rgba(80, 130, 180, 0.55);
+    color: #eaf3ff;
+    font: inherit;
+    font-size: 2vh;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+
+.game-scene-picker-begin:hover {
+    background: rgba(120, 170, 215, 0.7);
+    border-color: rgba(230, 240, 255, 0.9);
+    transform: translateY(-0.2vh);
+}
+
+.game-scene-picker-begin:active {
+    transform: translateY(0);
+}
+
+.game-scene-picker-begin:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    background: rgba(80, 100, 120, 0.3);
+    border-color: rgba(150, 170, 190, 0.3);
+    transform: none;
 }
 
 /* ── Input bar ──────────────────────────────────────────────────── */
@@ -342,6 +521,18 @@
 
 .game-submit:active {
     transform: translateY(0);
+}
+
+.game-submit:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    background: rgba(80, 100, 120, 0.25);
+    border-color: rgba(150, 170, 190, 0.3);
+    transform: none;
+}
+
+.game-submit:disabled svg {
+    opacity: 0.5;
 }
 
 .light-fade {

@@ -79,7 +79,20 @@ export class EngineWorkerClient {
                     this.#pending.delete(msg.id);
                     if (msg.error) {
                         console.error(`[EngineWorker] RPC #${msg.id} rejected:`, msg.error);
-                        p.reject(new Error(msg.error));
+                        // Reconstruct an Error that preserves the worker-side
+                        // name, message, and stack trace so callers (and the
+                        // UI) see where the error actually originated rather
+                        // than just the onmessage line in this file.
+                        const info = msg.error;
+                        let rejectionError;
+                        if (info && typeof info === "object") {
+                            rejectionError = new Error(info.message || "Worker RPC error");
+                            if (info.name) rejectionError.name = info.name;
+                            if (info.stack) rejectionError.stack = info.stack;
+                        } else {
+                            rejectionError = new Error(String(info));
+                        }
+                        p.reject(rejectionError);
                     } else {
                         p.resolve(msg.result);
                     }
@@ -156,13 +169,18 @@ export class EngineWorkerClient {
     setWorldRulesDisabled(args) { return this.#call("setWorldRulesDisabled", args); }
     enableSchizophreniaModeForUser() { return this.#call("enableSchizophreniaModeForUser"); }
 
-    /** @param {{ user: any }} args */
+    /** @param {{ user: DEMinimalCharacterReference | null, playMode: "player" | "narrator" | "voice-in-the-head" }} args */
     initialize(args) { return this.#call("initialize", args); }
+    /** @param {{ newName: string | null }} args */
+    completeDisruptedInitializationDueToNameConflict(args) { return this.#call("completeDisruptedInitializationDueToNameConflict", args); }
+    endSimulation() { return this.#call("endSimulation"); }
+    /** @param {{ characterName: string }} args */
+    assumeCharacterIdentity(args) { return this.#call("assumeCharacterIdentity", args); }
     /** @param {{ json: string }} args */
     initializeFromJSONState(args) { return this.#call("initializeFromJSONState", args); }
     /** @param {{ commandText: string }} args */
     executeCommand(args) { return this.#call("executeCommand", args); }
-    requestTalkingTurnFromUser() { return this.#call("requestTalkingTurnFromUser"); }
+    requestTurn() { return this.#call("requestTurn"); }
 
     // ── DEJSEngine methods ──────────────────────────────────────────
 
@@ -172,6 +190,7 @@ export class EngineWorkerClient {
     jsEngineImportScripts(args) { return this.#call("jsEngineImportScripts", args); }
     jsEnginePreloadAllScripts() { return this.#call("jsEnginePreloadAllScripts"); }
     jsEngineRecreate() { return this.#call("jsEngineRecreate"); }
+    jsEngineClearExecutionOrder() { return this.#call("jsEngineClearExecutionOrder"); }
     jsEngineInitialize() { return this.#call("jsEngineInitialize"); }
     jsEngineUnload() { return this.#call("jsEngineUnload"); }
     /** @param {{ characterName: string }} args */
@@ -223,6 +242,33 @@ export class EngineWorkerClient {
      * @returns {Promise<any>}
      */
     queryDEObject(args) { return this.#call("queryDEObject", args); }
+
+    /**
+     * 
+     * @param {object} args
+     * @param {string|string[]} args.path - path of template to call on the worker
+     * @param {string} args.characterName - name of character to call template on 
+     * @returns {Promise<string>} The resulting string from the template
+     */
+    callCharOnlyTemplate(args) { return this.#call("callCharOnlyTemplate", args); }
+
+    /**
+     * 
+     * @param {object} args
+     * @param {string|string[]} args.path - path of template to call on the worker
+     * @param {string} args.characterName - name of character to call template on
+     * @param {string} args.otherName - name of other character to call template on
+     * @returns {Promise<string>} The resulting string from the template
+     */
+    callCharAndOtherTemplate(args) { return this.#call("callCharAndOtherTemplate", args); }
+
+    /**
+     * 
+     * @param {object} args
+     * @param {string} args.sceneName scene name to start
+     * @returns {Promise<void>}
+     */
+    startScene(args) { return this.#call("startScene", args); }
 
     // ── CardType Wizard ─────────────────────────────────────────────
 

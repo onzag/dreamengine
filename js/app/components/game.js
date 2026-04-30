@@ -34,6 +34,13 @@ class GameOverlay extends HTMLElement {
 
         /** @type {boolean} */
         this.sidebarOpen = false;
+
+        /**
+         * @type {Promise<void>}
+         */
+        this.lightFadePromise = new Promise(resolve => {
+            this.lightFadeResolve = resolve;
+        });
     }
 
     async connectedCallback() {
@@ -44,17 +51,18 @@ class GameOverlay extends HTMLElement {
         // @ts-ignore
         document.querySelector('.ambience').style.zIndex = '50'; // ensure fx controls are above the game UI
 
-        // Probe the world background and fall back to the default image if
-        // the world's image asset 404s. Background images set via CSS have no
-        // error event, so we check it by loading through a throwaway Image().
-        const bg = /** @type {HTMLElement | null} */ (this.root.querySelector('.game-background'));
+        // Probe the .game-root background (the blurred backdrop behind the
+        // main playfield) and fall back to the default image if the asset
+        // 404s. Background images set via CSS have no error event, so we
+        // check it by loading through a throwaway Image(). The main
+        // .game-background uses <app-asset-image>, which handles its own
+        // fallback via the `default-image` attribute.
         const bgRoot = /** @type {HTMLElement | null} */ (this.root.querySelector('.game-root'));
-        const probedUrl = bg?.dataset.bgUrl;
+        const probedUrl = bgRoot?.dataset.bgUrl;
         const fallbackUrl = './images/default-world.png';
-        if (bg && bgRoot && probedUrl && probedUrl !== fallbackUrl) {
+        if (bgRoot && probedUrl && probedUrl !== fallbackUrl) {
             const probe = new Image();
             probe.onerror = () => {
-                bg.style.backgroundImage = `url('${fallbackUrl}')`;
                 bgRoot.style.backgroundImage = `url('${fallbackUrl}')`;
             };
             probe.src = probedUrl;
@@ -66,6 +74,9 @@ class GameOverlay extends HTMLElement {
                 lightFade.classList.add('fade-out');
                 await new Promise(resolve => setTimeout(resolve, 1100));
                 lightFade.remove();
+                setTimeout(() => {
+                    this.lightFadeResolve();
+                }, 1000); // delay the resolve to ensure the fade-out has fully completed before allowing any dependent actions (like error dialogs) to proceed
             }, 1000); // slight delay to ensure the element is visible before starting the fade
         }
 
@@ -78,7 +89,8 @@ class GameOverlay extends HTMLElement {
 
         const submitBtn = this.root.getElementById('submit-btn');
         if (submitBtn) {
-            submitBtn.addEventListener('mouseenter', () => playHoverSound());
+            submitBtn.setAttribute('disabled', '');
+            submitBtn.addEventListener('mouseenter', () => { if (!submitBtn.hasAttribute('disabled')) playHoverSound(); });
             submitBtn.addEventListener('click', this.onSubmit);
         }
 
@@ -96,6 +108,538 @@ class GameOverlay extends HTMLElement {
             });
             input.addEventListener('keydown', this.onInputKeydown);
         }
+
+        this.prepareGame();
+    }
+
+    async prepareGame(comeFromConflictError = false, newName = null) {
+        try {
+            if (!comeFromConflictError) {
+                await window.ENGINE_WORKER_CLIENT.jsEngineClearExecutionOrder();
+                await window.ENGINE_WORKER_CLIENT.jsEngineImportScript({
+                    namespace: this.getAttribute('world-namespace') || '',
+                    id: this.getAttribute('world-id') || '',
+                });
+
+                const isSelfInsert = this.getAttribute('is-self-insert') === 'true';
+                const specialMode = this.getAttribute('special-mode') || '';
+                /** @type {"player" | "narrator" | "voice-in-the-head"} */
+                const playMode = specialMode === 'narrator'
+                    ? 'narrator'
+                    : specialMode === 'schizophrenia'
+                        ? 'voice-in-the-head'
+                        : 'player';
+
+                /** @type {DEMinimalCharacterReference | null} */
+                let user = null;
+                if (isSelfInsert) {
+                    // Pull every DEMinimalCharacterReference field from the user
+                    // config. When picking an existing character we leave `user`
+                    // null and let the engine assume that character's identity
+                    // afterwards.
+                    const cfg = window.API.getConfigValue;
+                    const [
+                        name, sex, gender,
+                        heightCm, weightKg, ageYears,
+                        carryingCapacityLiters, carryingCapacityKg,
+                        maintenanceCaloriesPerDay, maintenanceHydrationLitersPerDay,
+                        rangeMeters, locomotionSpeedMetersPerSecond,
+                        shortDescription, shortDescriptionTopNakedAdd, shortDescriptionBottomNakedAdd,
+                        stealth, perception, attractiveness, charisma,
+                        tier, tierValue, powerGrowthRate,
+                        species, speciesType, race, groupBelonging,
+                    ] = await Promise.all([
+                        cfg('user.name'), cfg('user.sex'), cfg('user.gender'),
+                        cfg('user.heightCm'), cfg('user.weightKg'), cfg('user.ageYears'),
+                        cfg('user.carryingCapacityLiters'), cfg('user.carryingCapacityKg'),
+                        cfg('user.maintenanceCaloriesPerDay'), cfg('user.maintenanceHydrationLitersPerDay'),
+                        cfg('user.rangeMeters'), cfg('user.locomotionSpeedMetersPerSecond'),
+                        cfg('user.shortDescription'), cfg('user.shortDescriptionTopNakedAdd'), cfg('user.shortDescriptionBottomNakedAdd'),
+                        cfg('user.stealth'), cfg('user.perception'), cfg('user.attractiveness'), cfg('user.charisma'),
+                        cfg('user.tier'), cfg('user.tierValue'), cfg('user.powerGrowthRate'),
+                        cfg('user.species'), cfg('user.speciesType'), cfg('user.race'), cfg('user.groupBelonging'),
+                    ]);
+
+                    user = {
+                        name,
+                        sex: sex || "male",
+                        gender: gender || sex || "male",
+                        heightCm: Number(heightCm),
+                        weightKg: Number(weightKg),
+                        ageYears: Number(ageYears),
+                        carryingCapacityLiters: Number(carryingCapacityLiters),
+                        carryingCapacityKg: Number(carryingCapacityKg),
+                        maintenanceCaloriesPerDay: Number(maintenanceCaloriesPerDay),
+                        maintenanceHydrationLitersPerDay: Number(maintenanceHydrationLitersPerDay),
+                        rangeMeters: Number(rangeMeters),
+                        locomotionSpeedMetersPerSecond: Number(locomotionSpeedMetersPerSecond),
+                        shortDescription: shortDescription || '',
+                        shortDescriptionTopNakedAdd: shortDescriptionTopNakedAdd || null,
+                        shortDescriptionBottomNakedAdd: shortDescriptionBottomNakedAdd || null,
+                        stealth: Number(stealth),
+                        perception: Number(perception),
+                        attractiveness: Number(attractiveness),
+                        charisma: Number(charisma),
+                        tier,
+                        tierValue: Number(tierValue),
+                        powerGrowthRate: Number(powerGrowthRate),
+                        species: species || 'human',
+                        speciesType: speciesType || 'humanoid',
+                        race: race || null,
+                        groupBelonging: groupBelonging || [],
+                    };
+
+
+                    console.log('User config values retrieved for self-insert:', user);
+                }
+
+                await window.ENGINE_WORKER_CLIENT.initialize({ user, playMode });
+            } else {
+                await window.ENGINE_WORKER_CLIENT.completeDisruptedInitializationDueToNameConflict({ newName });
+            }
+
+            // check if we are taking a character's identity (i.e. not a self-insert but sharing a name with an existing character), and if so, assume that identity to get the correct starting location and inventory
+            const characterName = this.getAttribute('character-name') || '';
+            const isSelfInsert = this.getAttribute('is-self-insert') === 'true';
+            if (!isSelfInsert && characterName) {
+                await window.ENGINE_WORKER_CLIENT.assumeCharacterIdentity({ characterName });
+            }
+
+            this.onCharacterUpdateUI();
+            this.onInitialSceneSelect();
+        } catch (error) {
+            await this.lightFadePromise; // ensure the light fade has completed before showing the error dialog, so it appears above the fade
+
+            // Name conflict errors are recoverable: the engine reports them by
+            // including "Name Conflict" in the error message. We then prompt
+            // the user to pick a different name and resume initialization.
+            const message = (error && /** @type {Error} */ (error).message) || String(error);
+            // @ts-ignore
+            const isNameConflictError = /name conflict/i.test(message);
+
+            if (isNameConflictError) {
+                this.askForNewNameAndRetry();
+            } else {
+                // @ts-ignore
+                this.displayFatalError('Failed to load the world script. Please check that the world exists and is valid.', error);
+                console.error('Error loading world script:', error);
+            }
+        }
+    }
+
+    async onInitialSceneSelect() {
+        try {
+            const actualUserName = await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                path: ["user", "name"],
+            });
+            const currentSelectedScene = await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                path: ["world", "selectedScene"],
+            });
+            if (!currentSelectedScene) {
+                const allInitialScenes = await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                    path: ["world", "initialScenes"],
+                });
+
+                /**
+                 * @type {Record<string, string>}
+                 */
+                const sceneOptions = {};
+                for (const sceneName of allInitialScenes) {
+                    const result = await window.ENGINE_WORKER_CLIENT.callCharOnlyTemplate({ path: ["world", "scenes", sceneName, "narration"], characterName: actualUserName });
+                    sceneOptions[sceneName] = result;
+                }
+
+                const selectedScene = await this.promptInitialSceneSelection(sceneOptions);
+
+                await window.ENGINE_WORKER_CLIENT.startScene({ sceneName: selectedScene });
+            }
+        } catch (error) {
+            // @ts-ignore
+            this.displayFatalError('Failed to select the initial scene.', error);
+            console.error('Error selecting initial scene:', error);
+        }
+    }
+
+    /**
+     * Render the initial-scene picker as an in-place overlay on top of the
+     * world background (replacing the "Entering dream..." message). Resolves
+     * with the chosen scene name once the player picks one. The picker reuses
+     * the same translucent / backdrop-blurred surface style as the input bar
+     * so it feels native to the play screen.
+     *
+     * @param {Record<string, string>} sceneOptions - sceneName -> narration preview
+     * @returns {Promise<string>}
+     */
+    promptInitialSceneSelection(sceneOptions) {
+        return new Promise(resolve => {
+            const background = this.root.querySelector('.game-background');
+            if (!background) {
+                // Fallback: nothing to mount onto. Resolve with the first key
+                // (or empty) so the caller can proceed.
+                resolve(Object.keys(sceneOptions)[0] || '');
+                return;
+            }
+
+            // Hide the loading message; the picker takes its place.
+            const loadingMessage = background.querySelector('.game-background-message');
+            if (loadingMessage) /** @type {HTMLElement} */ (loadingMessage).style.display = 'none';
+
+            const picker = document.createElement('div');
+            picker.className = 'game-scene-picker';
+
+            const heading = document.createElement('div');
+            heading.className = 'game-scene-picker-title';
+            heading.textContent = 'How does the dream begin?';
+            picker.appendChild(heading);
+
+            const list = document.createElement('div');
+            list.className = 'game-scene-picker-list';
+            picker.appendChild(list);
+
+            /** @type {string | null} */
+            let selectedScene = null;
+            /** @type {HTMLButtonElement | null} */
+            let selectedOption = null;
+
+            const footer = document.createElement('div');
+            footer.className = 'game-scene-picker-footer';
+
+            const beginBtn = document.createElement('button');
+            beginBtn.type = 'button';
+            beginBtn.className = 'game-scene-picker-begin';
+            beginBtn.textContent = 'Begin';
+            beginBtn.disabled = true;
+            footer.appendChild(beginBtn);
+
+            const finish = () => {
+                if (!selectedScene) return;
+                playConfirmSound();
+                picker.remove();
+                if (loadingMessage) loadingMessage.remove();
+                resolve(selectedScene);
+            };
+
+            beginBtn.addEventListener('mouseenter', () => { if (!beginBtn.disabled) playHoverSound(); });
+            beginBtn.addEventListener('click', finish);
+
+            for (const [sceneName, narration] of Object.entries(sceneOptions)) {
+                const option = document.createElement('button');
+                option.type = 'button';
+                option.className = 'game-scene-option';
+                option.setAttribute('data-scene', sceneName);
+
+                const title = document.createElement('div');
+                title.className = 'game-scene-option-title';
+                title.textContent = sceneName;
+                option.appendChild(title);
+
+                const desc = document.createElement('div');
+                desc.className = 'game-scene-option-desc';
+                desc.textContent = narration;
+                option.appendChild(desc);
+
+                option.addEventListener('mouseenter', () => playHoverSound());
+                option.addEventListener('click', () => {
+                    if (selectedOption === option) return;
+                    playConfirmSound();
+                    if (selectedOption) selectedOption.classList.remove('selected');
+                    option.classList.add('selected');
+                    selectedOption = option;
+                    selectedScene = sceneName;
+                    beginBtn.disabled = false;
+                });
+                list.appendChild(option);
+            }
+
+            picker.appendChild(footer);
+            background.appendChild(picker);
+        });
+    }
+
+    async onCharacterUpdateUI() {
+        try {
+            const actualUserName = await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                path: ["user", "name"],
+            });
+            if (typeof actualUserName !== 'string' || !actualUserName) return;
+
+            const userCharacter = await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                path: ["characters", actualUserName],
+                pick: ["name", "gender", "sex", "ageYears", "heightCm", "weightKg", "species", "speciesType"],
+            });
+            if (!userCharacter || typeof userCharacter !== 'object') return;
+
+            // Keep the sidebar title in sync with the engine-side name (it may
+            // differ from the original `character-name` attribute after a rename
+            // or identity assumption).
+            const titleEl = this.root.querySelector('.game-sidebar-title');
+            if (titleEl && titleEl.textContent !== actualUserName) {
+                titleEl.textContent = actualUserName;
+            }
+
+            // Keep the input placeholder in sync with the engine-side name. The
+            // wording mirrors render() and varies by special-mode.
+            const input = /** @type {HTMLTextAreaElement | null} */ (this.root.getElementById('game-input'));
+            if (input) {
+                const specialMode = this.getAttribute('special-mode') || '';
+                const voiceName = this.getAttribute('voice-name') || '';
+                let inputPlaceholder;
+                if (specialMode === 'narrator') {
+                    inputPlaceholder = `Narrate ${actualUserName}'s actions\u2026`;
+                } else if (specialMode === 'schizophrenia') {
+                    const voice = voiceName || 'a voice';
+                    inputPlaceholder = `Speak inside ${actualUserName}'s head as ${voice}\u2026`;
+                } else {
+                    inputPlaceholder = `What does ${actualUserName} do/say?`;
+                }
+                if (input.placeholder !== inputPlaceholder) {
+                    input.placeholder = inputPlaceholder;
+                }
+            }
+
+            const content = this.root.querySelector('.game-sidebar-content');
+            if (!content) return;
+
+            // Stable container for character stats. Created once, then chips are
+            // added/updated/removed in place so re-entrant calls don't churn the
+            // DOM or wipe other future sidebar sections.
+            let stats = content.querySelector('.game-character-stats');
+            if (!stats) {
+                stats = document.createElement('div');
+                stats.className = 'game-character-stats';
+                content.prepend(stats);
+            }
+
+            /** @type {Array<[string, string | number | null | undefined]>} */
+            const fields = [
+                ['sex', /** @type {any} */ (userCharacter).sex],
+                ['gender', /** @type {any} */ (userCharacter).gender],
+                ['age', /** @type {any} */ (userCharacter).ageYears],
+                ['height', /** @type {any} */ (userCharacter).heightCm],
+                ['weight', /** @type {any} */ (userCharacter).weightKg],
+                ['speciesType', /** @type {any} */ (userCharacter).speciesType],
+                ['species', /** @type {any} */ (userCharacter).species],
+            ];
+
+            const seen = new Set();
+            for (const [key, raw] of fields) {
+                const formatted = formatGameStat(key, raw);
+                if (!formatted) continue;
+                seen.add(key);
+
+                let chip = stats.querySelector(`.game-character-chip[data-key="${key}"]`);
+                if (!chip) {
+                    chip = document.createElement('span');
+                    chip.className = 'game-character-chip';
+                    chip.setAttribute('data-key', key);
+                    chip.innerHTML = `<span class="game-character-chip-icon"></span><span class="game-character-chip-value"></span>`;
+                    stats.appendChild(chip);
+                }
+                chip.setAttribute('title', formatted.label);
+                const iconEl = chip.querySelector('.game-character-chip-icon');
+                const valueEl = chip.querySelector('.game-character-chip-value');
+                if (iconEl && iconEl.textContent !== formatted.icon) iconEl.textContent = formatted.icon;
+                if (valueEl && valueEl.textContent !== formatted.value) valueEl.textContent = formatted.value;
+            }
+
+            // Drop chips for fields no longer present (e.g. after schema change).
+            for (const chip of Array.from(stats.querySelectorAll('.game-character-chip'))) {
+                const key = chip.getAttribute('data-key') || '';
+                if (!seen.has(key)) chip.remove();
+            }
+        } catch (error) {
+            // @ts-ignore
+            this.displayProblematicWarning('Failed to update character stats in the sidebar. The game can continue, but some character information may be missing or outdated.', error);
+            console.error('Error updating character UI:', error);
+        }
+    }
+
+    async askForNewNameAndRetry() {
+        // Don't stack dialogs.
+        if (document.querySelector('app-dialog[data-name-conflict="true"]')) return;
+
+        const currentName = this.getAttribute('character-name') || '';
+
+        const dialog = document.createElement('app-dialog');
+        dialog.setAttribute('dialog-title', 'Name already taken');
+        dialog.setAttribute('confirmation', 'true');
+        dialog.setAttribute('confirm-text', 'Continue');
+        dialog.setAttribute('cancel-text', 'Wake up');
+        dialog.setAttribute('extra-z-index', '100');
+        dialog.dataset.nameConflict = 'true';
+
+        const escapedName = escapeHtml(currentName);
+
+        dialog.innerHTML = `
+            <p style="margin: 0 0 1.2vh 0;">
+                A character in this world already shares the name ${escapedName}. Please pick a different name to use for this dream.
+            </p>
+            <app-overlay-input
+                label="Your name"
+                input-placeholder="Enter a different name"
+                input-data-location="newName"
+                input-default-value="${escapedName}"
+            ></app-overlay-input>
+        `;
+
+        const nameInput = dialog.querySelector('app-overlay-input[input-data-location="newName"]');
+        if (nameInput && currentName) {
+            nameInput.setAttribute('value', currentName);
+        }
+
+        dialog.addEventListener('confirm', () => {
+            // @ts-ignore
+            const chosen = (nameInput?.getValue?.() || '').trim();
+            if (!chosen || chosen === currentName) {
+                // Reject empty names and no-op renames; keep the dialog open
+                // so the user can adjust the input.
+                return;
+            }
+            playConfirmSound();
+            if (dialog.parentNode) dialog.parentNode.removeChild(dialog);
+            // Reflect the new name on the host so the rest of the UI (input
+            // placeholder, sidebar title, etc.) stays in sync if it re-reads.
+            this.setAttribute('character-name', chosen);
+            this.prepareGame(true, chosen);
+        });
+
+        dialog.addEventListener('cancel', () => {
+            playCancelSound();
+            if (dialog.parentNode) dialog.parentNode.removeChild(dialog);
+            // The user chose not to rename — there is no way forward, so wake up.
+            this.dispatchEvent(new CustomEvent('exit', { bubbles: true, composed: true }));
+        });
+
+        document.body.appendChild(dialog);
+    }
+
+    /**
+     * Show a non-recoverable error dialog. The dream cannot continue from
+     * this state, so the only available action is "Wake up", which exits
+     * the game (same effect as the sidebar exit button). The error's stack
+     * trace (if any) is rendered in a selectable, scrollable preformatted
+     * block so the user can copy it for a bug report.
+     *
+     * @param {string} message
+     * @param {Error} [error]
+     */
+    displayFatalError(message, error) {
+        // Avoid stacking multiple fatal-error dialogs.
+        if (document.querySelector('app-dialog[data-fatal="true"]')) return;
+
+        const dialog = document.createElement('app-dialog');
+        dialog.setAttribute('dialog-title', 'Something went wrong');
+        dialog.setAttribute('confirmation', 'true');
+        dialog.setAttribute('confirm-text', 'Wake up');
+        dialog.setAttribute('cancel-text-disable', 'true');
+        dialog.setAttribute('extra-z-index', '100');
+        dialog.dataset.fatal = 'true';
+
+        const body = document.createElement('div');
+        const msg = document.createElement('p');
+        msg.textContent = message;
+        msg.style.margin = '0 0 1.2vh 0';
+        body.appendChild(msg);
+
+        if (error) {
+            const details = document.createElement('pre');
+            details.textContent = error.stack || `${error.name || 'Error'}: ${error.message || String(error)}`;
+            details.style.cssText = [
+                'max-height: 30vh',
+                'overflow: auto',
+                'padding: 1vh 1.2vh',
+                'margin: 0',
+                'background: rgba(0, 0, 0, 0.35)',
+                'border: 1px solid rgba(255, 255, 255, 0.15)',
+                'border-radius: 0.6vh',
+                'font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+                'font-size: 1.5vh',
+                'line-height: 1.4',
+                'white-space: pre-wrap',
+                'word-break: break-word',
+                'user-select: text',
+                '-webkit-user-select: text',
+                'color: #ffd9d9',
+            ].join(';');
+            body.appendChild(details);
+        }
+
+        dialog.appendChild(body);
+
+        const exit = () => {
+            playConfirmSound();
+            this.dispatchEvent(new CustomEvent('exit', { bubbles: true, composed: true }));
+            if (dialog.parentNode) dialog.parentNode.removeChild(dialog);
+        };
+        // Both confirm and cancel (Escape / backdrop click) wake up.
+        dialog.addEventListener('confirm', exit);
+        dialog.addEventListener('cancel', exit);
+
+        document.body.appendChild(dialog);
+    }
+
+    /**
+     * Show a non-recoverable error dialog. The dream cannot continue from
+     * this state, so the only available action is "Wake up", which exits
+     * the game (same effect as the sidebar exit button). The error's stack
+     * trace (if any) is rendered in a selectable, scrollable preformatted
+     * block so the user can copy it for a bug report.
+     *
+     * @param {string} message
+     * @param {Error} [error]
+     */
+    displayProblematicWarning(message, error) {
+        // Avoid stacking multiple problematic-warning dialogs.
+        if (document.querySelector('app-dialog[data-fatal="true"]')) return;
+
+        const dialog = document.createElement('app-dialog');
+        dialog.setAttribute('dialog-title', 'Warning');
+        dialog.setAttribute('confirmation', 'true');
+        dialog.setAttribute('confirm-text', 'Ok');
+        dialog.setAttribute('cancel-text-disable', 'true');
+        dialog.setAttribute('extra-z-index', '100');
+        dialog.dataset.fatal = 'true';
+
+        const body = document.createElement('div');
+        const msg = document.createElement('p');
+        msg.textContent = message;
+        msg.style.margin = '0 0 1.2vh 0';
+        body.appendChild(msg);
+
+        if (error) {
+            const details = document.createElement('pre');
+            details.textContent = error.stack || `${error.name || 'Error'}: ${error.message || String(error)}`;
+            details.style.cssText = [
+                'max-height: 30vh',
+                'overflow: auto',
+                'padding: 1vh 1.2vh',
+                'margin: 0',
+                'background: rgba(0, 0, 0, 0.35)',
+                'border: 1px solid rgba(255, 255, 255, 0.15)',
+                'border-radius: 0.6vh',
+                'font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+                'font-size: 1.5vh',
+                'line-height: 1.4',
+                'white-space: pre-wrap',
+                'word-break: break-word',
+                'user-select: text',
+                '-webkit-user-select: text',
+                'color: #ffd9d9',
+            ].join(';');
+            body.appendChild(details);
+        }
+
+        dialog.appendChild(body);
+
+        const exit = () => {
+            playConfirmSound();
+            if (dialog.parentNode) dialog.parentNode.removeChild(dialog);
+        };
+        // Both confirm and cancel (Escape / backdrop click) wake up.
+        dialog.addEventListener('confirm', exit);
+        dialog.addEventListener('cancel', exit);
+
+        document.body.appendChild(dialog);
     }
 
     async disconnectedCallback() {
@@ -108,6 +652,20 @@ class GameOverlay extends HTMLElement {
 
         await stopAmbienceWithFade(1000, 3);
         await startAmbienceWithFade(['./sounds/dream-ambience.mp3'], 1000, 3);
+    }
+
+    /**
+     * @param {boolean} [enabled] - If provided, sets the state explicitly; otherwise toggles.
+     */
+    toggleSubmitBtn(enabled) {
+        const submitBtn = this.root.getElementById('submit-btn');
+        if (!submitBtn) return;
+        const shouldEnable = enabled !== undefined ? enabled : submitBtn.hasAttribute('disabled');
+        if (shouldEnable) {
+            submitBtn.removeAttribute('disabled');
+        } else {
+            submitBtn.setAttribute('disabled', '');
+        }
     }
 
     onToggleSidebar() {
@@ -193,9 +751,16 @@ class GameOverlay extends HTMLElement {
         // name starts with '@') live under DREAMENGINE_DEFAULT_SCRIPTS_HOME;
         // user namespaces live under DREAMENGINE_HOME. Falls back to the
         // built-in default-world image if no world is set or if the world's
-        // image asset 404s (handled in connectedCallback via a probe).
+        // image asset 404s (handled in connectedCallback via a probe for
+        // .game-root, and via the <app-asset-image> default for .game-background).
         const fallbackBgUrl = './images/default-world.png';
         let worldBgUrl = fallbackBgUrl;
+        // Asset path consumed by <app-asset-image> (e.g. "assets/@ns/id/image").
+        // Empty string means "no world set", which causes the component to
+        // immediately load its default image.
+        const worldAssetPath = (worldNamespace && worldId)
+            ? `assets/${worldNamespace}/${worldId}/image`
+            : '';
         if (worldNamespace && worldId) {
             const isSystem = worldNamespace.startsWith('@');
             const base = isSystem
@@ -256,9 +821,13 @@ class GameOverlay extends HTMLElement {
 
                 <!-- Main playfield (shrinks to fit alongside the sidebar) -->
                 <main class="game-main">
-                    <div class="game-background" data-bg-url="${escapeHtml(worldBgUrl)}" style="background-image: url(&quot;${escapeHtml(worldBgUrl)}&quot;);">
+                    <div class="game-background">
+                        <app-asset-image
+                            class="game-background-image game-background-loading"
+                            image-url="${escapeHtml(worldAssetPath)}"
+                            default-image="./images/default-world.png"></app-asset-image>
                         <div class="game-background-message">
-                            <div class="game-background-message-title">Starting dream...</div>
+                            <div class="game-background-message-title">Entering dream...</div>
                             ${worldId ? `<div class="game-background-message-subtitle">${escapeHtml(worldId)}</div>` : ''}
                         </div>
                     </div>
@@ -292,6 +861,63 @@ function escapeHtml(str) {
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;');
+}
+
+/**
+ * Format a single character stat for the in-dream sidebar. Returns null when
+ * the value is missing or unrecognized so the caller can skip it.
+ *
+ * @param {string} key
+ * @param {string | number | null | undefined} raw
+ * @returns {{ icon: string, label: string, value: string } | null}
+ */
+function formatGameStat(key, raw) {
+    if (raw === undefined || raw === null || raw === '') return null;
+
+    switch (key) {
+        case 'sex': {
+            const v = String(raw).toLowerCase();
+            const icon = v === 'male' ? '♂️'
+                : v === 'female' ? '♀️'
+                    : v === 'intersex' ? '⚥'
+                        : v === 'none' ? '🚫'
+                            : '❓';
+            const cap = String(raw).charAt(0).toUpperCase() + String(raw).slice(1);
+            return { icon, label: `Sex: ${cap}`, value: cap };
+        }
+        case 'gender': {
+            const v = String(raw).toLowerCase();
+            const icon = v === 'male' ? '👨'
+                : v === 'female' ? '👩'
+                    : v === 'ambiguous' ? '🧑'
+                        : '❓';
+            const cap = String(raw).charAt(0).toUpperCase() + String(raw).slice(1);
+            return { icon, label: `Gender: ${cap}`, value: cap };
+        }
+        case 'age':
+            return { icon: '🎂', label: `Age: ${raw} years`, value: `${raw}y` };
+        case 'height':
+            return { icon: '📏', label: `Height: ${raw} cm`, value: `${raw}cm` };
+        case 'weight':
+            return { icon: '⚖️', label: `Weight: ${raw} kg`, value: `${raw}kg` };
+        case 'species': {
+            const cap = String(raw).charAt(0).toUpperCase() + String(raw).slice(1);
+            return { icon: '🧬', label: `Species: ${cap}`, value: cap };
+        }
+        case 'speciesType': {
+            const v = String(raw).toLowerCase();
+            // humanoid = human-like creatures; feral = mythical/intelligent
+            // talking creatures; animal = standard mute animals.
+            const icon = v === 'humanoid' ? '🧍'
+                : v === 'feral' ? '🐉'
+                    : v === 'animal' ? '🐾'
+                        : '❓';
+            const labelMap = { humanoid: 'Humanoid', feral: 'Feral', animal: 'Animal' };
+            const display = labelMap[/** @type {keyof typeof labelMap} */ (v)] || String(raw);
+            return { icon, label: `Species type: ${display}`, value: display };
+        }
+    }
+    return null;
 }
 
 customElements.define('app-game', GameOverlay);

@@ -5,6 +5,8 @@
  * useless opaque "ErrorEvent".
  */
 
+import { getRelationship } from "../engine/util/character-info.js";
+
 // Catch truly unexpected things (runtime errors after init)
 self.onerror = (message, source, lineno, colno, error) => {
     const detail = error
@@ -215,8 +217,18 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
             return { ok: true };
         },
 
-        async initialize({ user }) {
-            await engine.initialize(user);
+        async initialize({ user, playMode }) {
+            await engine.initialize(user, playMode);
+            return { ok: true };
+        },
+
+        async endSimulation() {
+            await engine.endSimulation();
+            return { ok: true };
+        },
+
+        async assumeCharacterIdentity({ characterName }) {
+            await engine.assumeCharacterIdentity(characterName);
             return { ok: true };
         },
 
@@ -225,19 +237,29 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
             return { ok: true };
         },
 
+        async completeDisruptedInitializationDueToNameConflict({ newName }) {
+            await engine.completeDisruptedInitializationDueToNameConflict(newName);
+            return { ok: true };
+        },
+
         async executeCommand({ commandText }) {
             await engine.executeCommand(commandText);
             return { ok: true };
         },
 
-        async requestTalkingTurnFromUser() {
-            await engine.requestTalkingTurnFromUser();
+        async requestTurn() {
+            await engine.requestTurn();
             return { ok: true };
         },
 
         // ─── DEJSEngine methods ─────────────────────────────────────────
         async jsEngineImportScript({ namespace, id, options }) {
-            return await jsEngine.importScript(namespace, id, options);
+            // The imported script module contains functions (initialize,
+            // onInferenceExecuted, etc.) which are not structured-cloneable
+            // and therefore cannot cross the worker boundary. Callers on the
+            // main thread only need to know whether the import succeeded.
+            await jsEngine.importScript(namespace, id, options);
+            return { ok: true };
         },
 
         async jsEngineImportScripts({ scripts }) {
@@ -265,6 +287,11 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
             return { ok: true };
         },
 
+        async jsEngineClearExecutionOrder() {
+            await jsEngine.clearExecutionOrder();
+            return { ok: true };
+        },
+
         async jsEngineOnInferenceExecuted({ characterName }) {
             await jsEngine.onInferenceExecuted(characterName);
             return { ok: true };
@@ -289,6 +316,45 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
         async getRawScriptSource({ namespace, id }) {
             const { src } = await resolver(namespace, id);
             return { src };
+        },
+
+        async startScene({ sceneName }) {
+            await engine.startScene(sceneName);
+            return { ok: true };
+        },
+
+        async callCharOnlyTemplate({ path, characterName }) {
+            const template = await handlers.queryDEObject({ path });
+
+            if (typeof template === "string") {
+                return template; // simple string template, return as-is without calling
+            }
+
+
+            const char = engine.getDEObject().characters[characterName];
+            return await template({
+                char,
+            });
+        },
+
+        async callCharAndOtherTemplate({ path, characterName, otherName }) {
+            const template = await handlers.queryDEObject({ path });
+
+            if (typeof template === "string") {
+                return template; // simple string template, return as-is without calling
+            }
+
+            const char = engine.getDEObject().characters[characterName];
+            const other = engine.getDEObject().characters[otherName];
+            const otherFamilyRelationship = char.familyTies[otherName];
+            const de = engine.getDEObject();
+            const otherRelationship = await getRelationship(de, char, other);
+            return await template({
+                char,
+                other,
+                otherFamilyRelationship,
+                otherRelationship,
+            });
         },
 
         // ─── deObject partial query ─────────────────────────────────
@@ -369,6 +435,17 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
             // ── pick / skip at the top level of the target ──────────
             const pickSet = pick ? new Set(pick) : null;
             const skipSet = !pickSet && skip ? new Set(skip) : null;
+
+            // Preserve array-ness at the top level: arrays were being
+            // converted into `{0: ..., 1: ...}` objects because the result
+            // accumulator was always `{}`. pick/skip don't really apply to
+            // arrays, so when target is an array we just clone it through
+            // cloneFiltered (which already preserves arrays recursively).
+            if (Array.isArray(target)) {
+                return target
+                    .filter(item => typeof item !== "function")
+                    .map(item => cloneFiltered(item, 1));
+            }
 
             const result = {};
             for (const k of Object.keys(target)) {
@@ -596,8 +673,10 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
             } catch (err) {
                 console.error(`[Worker] RPC '${method}' failed:`);
                 console.error(err instanceof Error ? err : String(err));
-                const message = err instanceof Error ? err.message : String(err);
-                self.postMessage({ type: "rpcResponse", id, error: message });
+                const error = err instanceof Error
+                    ? { name: err.name, message: err.message, stack: err.stack }
+                    : { name: "Error", message: String(err), stack: undefined };
+                self.postMessage({ type: "rpcResponse", id, error });
             }
         }
     };

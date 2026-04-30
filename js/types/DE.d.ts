@@ -3102,8 +3102,7 @@ declare interface DEWorld {
      */
     currentLocationSlot: string;
     /**
-     * The selected scene id that was selected as the initial scene
-     * for the world at the beginning of the simulation
+     * The selected scene id that was selected last
      */
     selectedScene: string | null;
     /**
@@ -3642,6 +3641,12 @@ declare interface DEObject {
      * List of interests that characters can have
      */
     interests: Record<string, DECharacterInterest>;
+    /**
+     * The current play mode of the game'
+     * 
+     * TODO implement these
+     */
+    playMode: "player" | "narrator" | "voice-in-the-head";
 }
 
 declare type DE = DEObject;

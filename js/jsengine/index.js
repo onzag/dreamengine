@@ -91,6 +91,16 @@ export class DEJSEngine {
             if (!this.__panthomImports && !this.scriptOrder.includes(key)) {
                 console.log("Adding cached script to execution order:", key);
                 this.scriptOrder.push(key);
+
+                // find other scripts that this script imports
+                const deps = this.dependencyTree[key];
+                if (deps) {
+                    for (const dep of deps) {
+                        if (!this.scriptOrder.includes(dep)) {
+                            await this.importScript(dep.split('/')[0], dep.split('/')[1]);
+                        }
+                    }
+                }
             }
             return this.scriptCache[key];
         }
@@ -218,6 +228,11 @@ export class DEJSEngine {
         this.scriptCache = {};
         this.scriptOrder = [];
         this.dependencyTree = {};
+    }
+
+    async clearExecutionOrder() {
+        console.log("Clearing script execution order...");
+        this.scriptOrder = [];
     }
 
     async preloadAllScripts() {

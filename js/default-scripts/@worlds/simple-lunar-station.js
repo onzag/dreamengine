@@ -14,8 +14,10 @@ engine.exports = {
             locationSlot: "Common Area",
             narration: (info) => {
                 const others = DE.utils.templateUtils.allWorldCharactersButUser();
-                const user = DE.user;
-                return `${user.name} is a visitor to the Lunar Station, eager to explore this small outpost in space, yet ${DE.utils.templateUtils.formatPronoun([user.name])} didn't expect to find someone else here, but it so happens that ${DE.utils.templateUtils.formatAnd(others.map((n) => n.name))} ${DE.utils.templateUtils.formatVerbToBe(others)} also visiting the station at this time, now they face each other in the common area near the airlock`;
+                if (!others || others.length === 0) {
+                    return `${info.char.name} is a visitor to the Lunar Station, eager to explore this small outpost in space. The entire station is empty and quiet, allowing ${info.char.name} to explore their surroundings on their solitude in space.`;
+                }
+                return `${info.char.name} is a visitor to the Lunar Station, eager to explore this small outpost in space, yet ${DE.utils.templateUtils.formatPronoun([info.char.name])} didn't expect to find someone else here, but it so happens that ${DE.utils.templateUtils.formatAnd(others.map((n) => n.name))} ${DE.utils.templateUtils.formatVerbToBe(others)} also visiting the station at this time, now they face each other in the common area near the airlock`;
             },
             charactersStart: true,
             engagedCharacters: ["Dema"],

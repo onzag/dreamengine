@@ -179,7 +179,7 @@ export const deEngineUtilsFn = (DE) => ({
         const id = connectionDef.from + " to " + connectionDef.to;
         const existingConnection = DE.world.connections[id];
         DE.world.connections[id] = connectionDef;
-        if (existingConnection.state) {
+        if (existingConnection && existingConnection.state) {
             DE.world.connections[id].state = existingConnection.state;
         }
         return DE.world.connections[id];

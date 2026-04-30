@@ -286,7 +286,7 @@ class PlayOverlay extends HTMLElement {
             lightFade.style.inset = '0';
             lightFade.style.background = 'white';
             lightFade.style.zIndex = '50';
-            lightFade.style.pointerEvents = 'none';
+            lightFade.style.pointerEvents = 'auto';
             lightFade.style.opacity = '0';
             lightFade.style.transition = 'opacity 1.5s ease';
             lightFade.style.top = '0';

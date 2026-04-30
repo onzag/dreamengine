@@ -47,33 +47,6 @@ function serializationReplacer(root) {
 }
 
 /**
- * @typedef {Object} DEngineInteraction
- * @property {string} name name of the character that is about to interact
- * @property {string | null} invoker who invoked this interaction, null if none and it was their own initiative
- */
-
-/**
- * @param {*} obj 
- * @param {*} parent
- * @param {(parent: any, value: any) => void} objChecker
- */
-function checkObjectRecursively(parent, obj, objChecker) {
-    if (typeof obj !== "object" || obj === null) {
-        return;
-    }
-    if (Array.isArray(obj)) {
-        for (const item of obj) {
-            checkObjectRecursively(obj, item, objChecker);
-        }
-        return;
-    }
-    objChecker(parent, obj);
-    for (const key in obj) {
-        checkObjectRecursively(obj, obj[key], objChecker);
-    }
-}
-
-/**
  * @param {*} obj 
  * @param {*} parent
  * @param {(parent: any, value: any) => Promise<void>} objChecker
@@ -92,6 +65,78 @@ async function checkObjectRecursivelyAsync(parent, obj, objChecker) {
     for (const key in obj) {
         await checkObjectRecursivelyAsync(obj, obj[key], objChecker);
     }
+}
+
+/**
+ * @param {DEMinimalCharacterReference} character 
+ * @return {DEMinimalCharacterReference}
+ */
+function repairPotentialUserWithDefaults(character) {
+    return ({
+        ...character,
+        
+        ageYears: character.ageYears || 30,
+        attractiveness: typeof character.attractiveness === "number" ? character.attractiveness : 0.5,
+        carryingCapacityKg: typeof character.carryingCapacityKg === "number" ? character.carryingCapacityKg : 20,
+        carryingCapacityLiters: typeof character.carryingCapacityLiters === "number" ? character.carryingCapacityLiters : 20,
+        charisma: typeof character.charisma === "number" ? character.charisma : 0.5,
+        gender: character.gender || "ambiguous",
+        groupBelonging: character.groupBelonging || [],
+        heightCm: character.heightCm || 170,
+        locomotionSpeedMetersPerSecond: typeof character.locomotionSpeedMetersPerSecond === "number" ? character.locomotionSpeedMetersPerSecond : 1.4,
+        maintenanceCaloriesPerDay: character.maintenanceCaloriesPerDay || 2000,
+        maintenanceHydrationLitersPerDay: character.maintenanceHydrationLitersPerDay || 2,
+        name: character.name || "Player",
+        perception: typeof character.perception === "number" ? character.perception : 0.5,
+        powerGrowthRate: typeof character.powerGrowthRate === "number" ? character.powerGrowthRate : 1,
+        race: character.race || null,
+        rangeMeters: typeof character.rangeMeters === "number" ? character.rangeMeters : 10000,
+        sex: character.sex || "intersex",
+        shortDescription: character.shortDescription || "An odd humanoid creature with indistinguishable features a body covered by stars looking like a cosmic entity and no face",
+        shortDescriptionBottomNakedAdd: character.shortDescriptionBottomNakedAdd || "Not wearing anything on the lower half of their body showing no genitals or anus",
+        shortDescriptionTopNakedAdd: character.shortDescriptionTopNakedAdd || "Not wearing anything on the upper half of their body showing no male or female characteristics",
+        species: character.species || "unknown",
+        speciesType: character.speciesType || "humanoid",
+        stealth: typeof character.stealth === "number" ? character.stealth : 0.5,
+        tier: character.tier || "galactic",
+        tierValue: typeof character.tierValue === "number" ? character.tierValue : 100,
+        weightKg: typeof character.weightKg === "number" ? character.weightKg : 70,
+    });
+}
+
+/**
+ * @param {DECompleteCharacterReference} character
+ * @returns {DEMinimalCharacterReference}
+ */
+function minimizeCharacterFromComplete(character) {
+    return {
+        name: character.name,
+        sex: character.sex,
+        gender: character.gender,
+        heightCm: character.heightCm,
+        weightKg: character.weightKg,
+        ageYears: character.ageYears,
+        carryingCapacityLiters: character.carryingCapacityLiters,
+        carryingCapacityKg: character.carryingCapacityKg,
+        maintenanceCaloriesPerDay: character.maintenanceCaloriesPerDay,
+        rangeMeters: character.rangeMeters,
+        locomotionSpeedMetersPerSecond: character.locomotionSpeedMetersPerSecond,
+        maintenanceHydrationLitersPerDay: character.maintenanceHydrationLitersPerDay,
+        shortDescription: character.shortDescription,
+        shortDescriptionTopNakedAdd: character.shortDescriptionTopNakedAdd,
+        shortDescriptionBottomNakedAdd: character.shortDescriptionBottomNakedAdd,
+        stealth: character.stealth,
+        perception: character.perception,
+        attractiveness: character.attractiveness,
+        charisma: character.charisma,
+        tier: character.tier,
+        tierValue: character.tierValue,
+        powerGrowthRate: character.powerGrowthRate,
+        species: character.species,
+        speciesType: character.speciesType,
+        race: character.race,
+        groupBelonging: [...character.groupBelonging],
+    };
 }
 
 /**
@@ -338,30 +383,32 @@ export class DEngine {
 
         return JSON.stringify(this.deObject, serializationReplacer(this.deObject));
     }
+
     /**
-     * @param {DEMinimalCharacterReference} user
+     * @param {DEMinimalCharacterReference|null} user
+     * @param {"player" | "narrator" | "voice-in-the-head"} playMode
      */
-    async initialize(user) {
+    async initialize(user, playMode = "player") {
         /**
          * @type {DETimeDescription}
          */
         const defaultTimeDEFormat = millisecondsToTime((new Date()).getTime());
         this.deObject = {
-            user: user,
+            user: user ? repairPotentialUserWithDefaults(user) : repairPotentialUserWithDefaults(/**@type {DEMinimalCharacterReference} */ ({ name: "Player" })),
             world: {
                 connections: {},
-                // @ts-ignore
-                currentLocation: null,
-                // @ts-ignore
-                currentLocationSlot: null,
+                currentLocation: /** @type {string} */ (/** @type {unknown} */ (null)),
+                currentLocationSlot: /** @type {string} */ (/** @type {unknown} */ (null)),
                 scenes: {},
                 initialScenes: [],
                 locations: {},
                 lore: "",
-                properties: {},
+                state: {},
                 selectedScene: null,
+                temp: {},
             },
             characters: {},
+            bonds: {},
             worldNames: {
                 mal: [],
                 fem: [],
@@ -371,32 +418,60 @@ export class DEngine {
             stateFor: {},
             initialTime: defaultTimeDEFormat,
             currentTime: { ...defaultTimeDEFormat },
-            social: {
-                bonds: {},
-            },
-            // @ts-ignore
-            utils: undefined,
             gameOver: false,
             worldRules: {},
-            actionAccumulators: {},
-            internal: {},
             narrationStyle: {
                 maxParagraphs: 5,
                 minParagraphs: 2,
                 narrativeBias: 0.2,
             },
+            playMode,
+            importantEvents: {},
+            interests: {},
+            internalState: {},
+            state: {},
+            utils:  /** @type {*} */ (/** @type {unknown} */ (null)),
         }
         // @ts-ignore
         this.deObject.utils = deEngineUtilsFn(this.deObject);
 
         this.user = user;
-        this.userCharacter = createCharacterFromUser(user);
+        this.userCharacter = user ? createCharacterFromUser(repairPotentialUserWithDefaults(user)) : null;
 
         if (!this.jsEngine) {
             throw new Error("JS Engine not set, cannot import scripts");
         }
 
         await this.runInitializationScripts();
+    }
+
+    async endSimulation() {
+        if (!this.deObject) {
+            throw new Error("DEngine not initialized");
+        }
+
+        this.deObject = null;
+        this.user = null;
+        this.userCharacter = null;
+    }
+
+    /**
+     * @param {string} characterName 
+     */
+    async assumeCharacterIdentity(characterName) {
+        if (!this.deObject) {
+            throw new Error("DEngine not initialized");
+        }
+
+        if (!this.deObject.characters[characterName]) {
+            throw new Error(`Character with name ${characterName} does not exist so its identity cannot be assumed.`);
+        }
+
+        this.userCharacter = this.deObject.characters[characterName];
+        this.user = minimizeCharacterFromComplete(this.userCharacter);
+
+        this.deObject.world.currentLocation = this.deObject.stateFor[characterName].location;
+        this.deObject.world.currentLocationSlot = this.deObject.stateFor[characterName].locationSlot;
     }
 
     async runInitializationScripts() {
@@ -431,16 +506,7 @@ export class DEngine {
 
             for (const script of scripts) {
                 console.log(`Initializing script ${script.scriptKey} of type ${type}`);
-                // @ts-ignore typescript continues to bug
                 script.script.initialize && await script.script.initialize(this.deObject);
-            }
-
-            if (type === "world" && this.userCharacter) {
-                const stateForUserChar = this.deObject.stateFor[this.userCharacter.name];
-                if (!stateForUserChar) {
-                    const randomLocation = this.pickRandomLocationForCharacter(this.userCharacter);
-                    this.addCharacter(this.userCharacter, randomLocation.location, randomLocation.locationSlot);
-                }
             }
 
             if (type === "characters") {
@@ -489,6 +555,42 @@ export class DEngine {
                         };
                     }
                 }
+            }
+        }
+
+        await this.completeDisruptedInitializationDueToNameConflict(null);
+    }
+
+    /**
+     * 
+     * @param {string | null} newName 
+     */
+    async completeDisruptedInitializationDueToNameConflict(newName) {
+        if (!this.deObject) {
+            throw new Error("DEngine not initialized");
+        }
+
+        const orderOfExecution = [
+            "world",
+            "characters",
+            "world-mechanic",
+            "character-mechanic",
+            "misc",
+        ];
+
+        if (this.userCharacter && this.user) {
+            if (newName) {
+                this.user.name = newName;
+                this.userCharacter.name = newName;
+            }
+            const stateForUserChar = this.deObject.stateFor[this.userCharacter.name];
+            if (!stateForUserChar) {
+                const randomLocation = this.pickRandomLocationForCharacter(this.userCharacter);
+                const allNamesInLowerCase = Object.keys(this.deObject.characters).map(name => name.toLowerCase());
+                if (allNamesInLowerCase.includes(this.userCharacter.name.toLowerCase())) {
+                    throw new Error(`Name Conflict, The player and a character in the world share the same name ${this.userCharacter.name}, which is not allowed. Please change the player's name to be different.`);
+                }
+                this.addCharacter(this.userCharacter, randomLocation.location, randomLocation.locationSlot);
             }
         }
 
@@ -636,7 +738,9 @@ export class DEngine {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         }
-        if (this.deObject.characters[character.name]) {
+
+        const allNamesInLowerCase = Object.keys(this.deObject.characters).map(name => name.toLowerCase());
+        if (allNamesInLowerCase.includes(character.name.toLowerCase())) {
             throw new Error(`Character with name ${character.name} already exists.`);
         }
 
@@ -1054,7 +1158,7 @@ export class DEngine {
         }
     }
 
-    async requestTalkingTurnFromUser() {
+    async requestTurn() {
         this.talkingTurnRequested = true;
     }
 

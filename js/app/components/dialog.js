@@ -85,7 +85,7 @@ class Dialog extends HTMLElement {
             const cancelText = this.getAttribute('cancel-text') || 'No';
             dialogButtons = `
             <div class="dialog-buttons">
-                <div id="cancel-btn">${cancelText}</div>
+                ${this.getAttribute('cancel-text-disable') === 'true' ? '<div id="cancel-btn"></div>' : `<div id="cancel-btn">${cancelText}</div>`}
                 <div id="confirm-btn">${confirmText}</div>
             </div>
             `;
