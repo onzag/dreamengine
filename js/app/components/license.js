@@ -46,7 +46,7 @@ class License extends HTMLElement {
         </style>
         <app-dark-overlay overlay-title="License" confirm-text="Close">
             <div class="license-content">
-                <p>This program is published under the <strong>GNU General Public License v3.0 (GPLv3)</strong>.</p>
+                <p>This program is published under the <strong>GNU Affero General Public License v3.0 (AGPLv3)</strong>.</p>
                 <p>All derivative works must remain open source under the same license terms unless agreed by the developer.</p>
                 <p>For alternative licensing agreements, please contact the developer.</p>
             </div>
