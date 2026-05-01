@@ -435,7 +435,9 @@ engine.exports = {
             maxVolumeLiters: 0,
             maxWeightKg: 0,
             ownWeatherSystem: [vaccuumWeatherSystem],
-            state: {},
+            state: {
+                asset: "surface_of_the_moon.jpg",
+            },
             temp: {},
             parent: null,
             slots: {
@@ -476,7 +478,7 @@ engine.exports = {
         });
 
         DE.utils.newLocation("Lunar Station", {
-            description: "A small lunar station orbiting the Moon. The station serves as a research outpost and habitat for astronauts and scientists studying the lunar environment. The station is equipped with life support systems, scientific laboratories, living quarters, and communication facilities",
+            description: "A small lunar station on the Moon. The station serves as a research outpost and habitat for astronauts and scientists studying the lunar environment. The station is equipped with life support systems, scientific laboratories, living quarters, and communication facilities",
             entrances: [
                 {
                     autoLocks: true,
@@ -508,7 +510,9 @@ engine.exports = {
             maxWeightKg: 2000,
             ownWeatherSystem: [],
             parent: "Surface of the Moon",
-            state: {},
+            state: {
+                asset: "image",
+            },
             temp: {},
             slots: {
                 "Common Area": {
@@ -519,7 +523,9 @@ engine.exports = {
                     ],
                     maxVolumeLiters: 2000,
                     maxWeightKg: 2000,
-                    state: {},
+                    state: {
+                        asset: "common_area.jpg",
+                    },
                     temp: {},
                 },
                 "Cooking Area": {
@@ -532,7 +538,9 @@ engine.exports = {
                     ],
                     maxVolumeLiters: 2000,
                     maxWeightKg: 2000,
-                    state: {},
+                    state: {
+                        asset: "cooking_area.jpg",
+                    },
                     temp: {},
                 },
             },
@@ -588,14 +596,18 @@ engine.exports = {
                 maxWeightKg: 500,
                 ownWeatherSystem: [],
                 parent: "Lunar Station",
-                state: {},
+                state: {
+                    asset: "bedroom.jpg",
+                },
                 temp: {},
                 slots: {
                     "Bedroom Area": {
                         description: "The bedroom area of the lunar station, featuring a bunk bed, a small desk, and a locker for personal belongings",
                         maxVolumeLiters: 2000,
                         maxWeightKg: 2000,
-                        state: {},
+                        state: {
+                            asset: "bedroom_area.jpg",
+                        },
                         temp: {},
                         items: [
                             {
