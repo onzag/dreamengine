@@ -21,8 +21,11 @@ class Dialog extends HTMLElement {
 
         playPauseSound();
         document.addEventListener("keydown", this.onDocumentKeydown);
-        // @ts-expect-error
-        this.root.querySelector('.backdrop').addEventListener('click', this.onBackdropClick);
+
+        if (this.getAttribute('no-cancel-on-backdrop-click') !== 'true') {
+            // @ts-expect-error
+            this.root.querySelector('.backdrop').addEventListener('click', this.onBackdropClick);
+        }
 
         if (this.getAttribute('confirmation') === 'true') {
             // @ts-expect-error

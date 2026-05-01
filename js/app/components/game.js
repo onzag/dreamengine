@@ -235,6 +235,29 @@ class GameOverlay extends HTMLElement {
             const currentSelectedScene = await window.ENGINE_WORKER_CLIENT.queryDEObject({
                 path: ["world", "selectedScene"],
             });
+            const themeSong = await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                path: ["world", "state", "theme"],
+            });
+
+            if (themeSong && themeSong.asset) {
+                const worldNamespace = this.getAttribute('world-namespace') || '';
+                const worldId = this.getAttribute('world-id') || '';
+                const isSystemAsset = worldNamespace.startsWith('@');
+                const base = isSystemAsset
+                    ? window.DREAMENGINE_DEFAULT_SCRIPTS_HOME
+                    : window.DREAMENGINE_HOME;
+
+                const themeUrl = `${base}/assets/${worldNamespace}/${worldId}/${themeSong.asset}`;
+                (async () => {
+                    await this.lightFadePromise; // ensure the light fade has completed before starting the ambience, so it doesn't play on top of the fade-out
+                    try {
+                        await startAmbienceWithFade([themeUrl], 1000, themeSong.volume || 1);
+                    } catch (error) {
+                        console.error('Error starting theme ambience:', error);
+                    }
+                })();
+            }
+
             if (!currentSelectedScene) {
                 const allInitialScenes = await window.ENGINE_WORKER_CLIENT.queryDEObject({
                     path: ["world", "initialScenes"],
@@ -465,6 +488,7 @@ class GameOverlay extends HTMLElement {
         dialog.setAttribute('confirmation', 'true');
         dialog.setAttribute('confirm-text', 'Continue');
         dialog.setAttribute('cancel-text', 'Wake up');
+        dialog.setAttribute('no-cancel-on-backdrop-click', 'true');
         dialog.setAttribute('extra-z-index', '100');
         dialog.dataset.nameConflict = 'true';
 
@@ -532,6 +556,7 @@ class GameOverlay extends HTMLElement {
         dialog.setAttribute('confirmation', 'true');
         dialog.setAttribute('confirm-text', 'Wake up');
         dialog.setAttribute('cancel-text-disable', 'true');
+        dialog.setAttribute('no-cancel-on-backdrop-click', 'true');
         dialog.setAttribute('extra-z-index', '100');
         dialog.dataset.fatal = 'true';
 
