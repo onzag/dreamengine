@@ -538,6 +538,100 @@
     gap: 3vh;
 }
 
+/* ── Party step ── */
+.party-summary {
+    margin-bottom: 3vh;
+    padding: 1.4vh 2vh;
+    border: 1px solid rgba(255, 200, 150, 0.25);
+    border-radius: 1vh;
+    background: rgba(0, 0, 0, 0.18);
+    color: rgba(255, 230, 200, 0.85);
+    font-size: 1.9vh;
+    letter-spacing: 0.05em;
+    text-align: center;
+}
+
+.character-card.party-card {
+    position: relative;
+}
+
+.character-card.party-card .party-selected-badge {
+    position: absolute;
+    top: 0.8vh;
+    right: 0.8vh;
+    padding: 0.3vh 1vh;
+    border-radius: 1vh;
+    font-size: 1.5vh;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    background: rgba(255, 184, 122, 0.85);
+    color: #2a1818;
+    opacity: 0;
+    transform: translateY(-0.4vh);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    pointer-events: none;
+}
+
+.character-card.party-card.selected .party-selected-badge {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* ── Party namespace (collapsible) ── */
+.party-namespace {
+    border: 1px solid rgba(255, 200, 150, 0.18);
+    border-radius: 1vh;
+    background: rgba(0, 0, 0, 0.18);
+    overflow: hidden;
+}
+
+.party-namespace-header {
+    display: flex;
+    align-items: center;
+    gap: 1.5vh;
+    padding: 1.6vh 2vh;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.2s ease, color 0.2s ease;
+}
+
+.party-namespace-header:hover {
+    background: rgba(255, 184, 122, 0.08);
+}
+
+.party-namespace-arrow {
+    display: inline-block;
+    font-size: 1.8vh;
+    color: rgba(255, 200, 150, 0.7);
+    transition: transform 0.2s ease;
+    width: 2vh;
+    text-align: center;
+}
+
+.party-namespace.expanded .party-namespace-arrow {
+    transform: rotate(90deg);
+}
+
+.party-namespace-count {
+    margin-left: auto;
+    font-size: 1.6vh;
+    color: rgba(255, 220, 180, 0.6);
+    letter-spacing: 0.05em;
+}
+
+.party-namespace-body {
+    padding: 0 2vh;
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0s;
+}
+
+.party-namespace.expanded .party-namespace-body {
+    padding: 2vh;
+    max-height: none;
+    border-top: 1px solid rgba(255, 200, 150, 0.18);
+}
+
 .character-card {
     display: flex;
     flex-direction: column;

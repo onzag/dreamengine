@@ -80,6 +80,13 @@ class Settings extends HTMLElement {
             const hard_desc = "Hard mode increases the challenge by removing the ability to undo inferences, making choices permanent; (single timeline)";
             const diff_array = [debug_desc, easy_desc, normal_desc, hard_desc];
 
+            // TODO implement the stability in game
+            const stability_desc_array = [
+                "Stable dreams are consistent and coherent, with a clear narrative and logical progression, making them easier to navigate and interact with.",
+                "Unstable dreams are unpredictable and may have sudden changes in setting, characters, or narrative, creating a more surreal and challenging experience.",
+                "Very unstable dreams are highly chaotic and fragmented, with little to no logical progression or consistency, making them difficult to navigate and interact with, and may lead to a dream collapse."
+            ];
+
             tabsContainer.innerHTML = `<app-overlay-section section-title="User">
             <div class="main-profile-image-container">
                 <app-profile-image image-url="profile" editable="true"></app-profile-image>
@@ -316,6 +323,14 @@ class Settings extends HTMLElement {
                     input-options-descriptions='${JSON.stringify(diff_array)}'
                     title="The difficulty level will affect the challenge and complexity of the game, choose based on your preferred gameplay experience."
                     input-data-location="difficulty"
+                ></app-overlay-select>
+                <app-overlay-select
+                    label="Dream Stability"
+                    input-options='["stable", "unstable", "very unstable"]'
+                    title="The stability of the dream, higher instability may lead to more unpredictable and surreal experiences and may lead to a dream collapse."
+                    input-data-location="user.dreamStability"
+                    input-options-descriptions='${JSON.stringify(stability_desc_array)}'
+                    input-default-value="stable"
                 ></app-overlay-select>
             </app-overlay-section>`;
         } else if (this.currentSectionIndex === 1 && tabsContainer) {

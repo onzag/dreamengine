@@ -227,8 +227,17 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
             return { ok: true };
         },
 
+        async getEngineScriptInfo() {
+            return engine.engineScriptInfo;
+        },
+
         async assumeCharacterIdentity({ characterName }) {
             await engine.assumeCharacterIdentity(characterName);
+            return { ok: true };
+        },
+
+        async addCharacterToParty({ characterName }) {
+            await engine.addCharacterToParty(characterName);
             return { ok: true };
         },
 

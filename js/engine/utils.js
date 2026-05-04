@@ -187,6 +187,7 @@ export const deEngineUtilsFn = (DE) => ({
     newCharacter(characterDef) {
         const currentCharacter = DE.characters[characterDef.name];
         if (!currentCharacter) {
+            DE.characters[characterDef.name] = characterDef;
             return characterDef;
         }
         DE.characters[characterDef.name] = {

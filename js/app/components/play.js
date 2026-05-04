@@ -121,6 +121,7 @@ const STEPS = [
     { id: 'world', label: 'World' },
     { id: 'mode', label: 'Mode' },
     { id: 'character', label: 'Character' },
+    { id: 'party', label: 'Party' },
 ];
 
 // Placeholder list — real save loading is not yet implemented.
@@ -148,6 +149,14 @@ class PlayOverlay extends HTMLElement {
         this.selectedCharacter = null;
         /** @type {'narrator' | 'schizophrenia' | null} */
         this.selectedSpecialMode = null;
+        /** @type {Array<{ namespace: string, id: string }>} */
+        this.selectedPartyCharacters = [];
+        /** @type {Record<string, Array<{ namespace: string, id: string }>> | null} */
+        this.partyCharacterRefs = null;
+        /** @type {Record<string, Array<{ namespace: string, id: string, description: string, metadata: Record<string, any> }>>} */
+        this.partyNamespaceCache = {};
+        /** @type {Set<string>} */
+        this.expandedPartyNamespaces = new Set();
         /** @type {Array<{ name: string, scriptKey: string, namespace: string, description: string, asset: string | null }> | null} */
         this.characterCache = null;
     }
@@ -230,6 +239,7 @@ class PlayOverlay extends HTMLElement {
             return false;
         }
         if (this.currentStepIndex === 2) return !!this.selectedCharacter;
+        if (this.currentStepIndex === 3) return true; // empty party = solo is allowed
         return false;
     }
 
@@ -276,6 +286,7 @@ class PlayOverlay extends HTMLElement {
                     saveId: this.selectedSaveId,
                     character: this.selectedCharacter,
                     specialMode: this.selectedSpecialMode,
+                    partyCharacters: this.selectedPartyCharacters,
                     voiceName: this.userSelfName || '',
                 },
             }));
@@ -315,9 +326,327 @@ class PlayOverlay extends HTMLElement {
             this.renderModeStep(body);
         } else if (this.currentStepIndex === 2) {
             await this.renderCharacterStep(body);
+        } else if (this.currentStepIndex === 3) {
+            await this.renderPartyStep(body);
         }
 
         this.updateFooter();
+    }
+
+    // ── Step 4: Party ────────────────────────────────────────────────
+
+    /**
+     * Lightweight first pass: collect just `namespace`/`id` of every character
+     * script, grouped by namespace. No per-character metadata is loaded — that
+     * happens lazily when a namespace is expanded.
+     *
+     * @returns {Promise<Record<string, Array<{ namespace: string, id: string }>>>}
+     */
+    async loadPartyCharacterRefs() {
+        if (this.partyCharacterRefs) return this.partyCharacterRefs;
+
+        let infoMap = {};
+        try {
+            infoMap = await window.ENGINE_WORKER_CLIENT.jsEngineGetInfoMap();
+        } catch (err) {
+            console.error('Failed to load info map for party characters:', err);
+            return {};
+        }
+
+        /** @type {Record<string, Array<{ namespace: string, id: string }>>} */
+        const grouped = {};
+        for (const info of Object.values(infoMap)) {
+            // @ts-ignore
+            if (info.type !== 'characters') continue;
+            // @ts-ignore
+            const ns = info.namespace;
+            // @ts-ignore
+            const id = info.id;
+            if (!grouped[ns]) grouped[ns] = [];
+            grouped[ns].push({ namespace: ns, id });
+        }
+        for (const ns of Object.keys(grouped)) {
+            grouped[ns].sort((a, b) => a.id.localeCompare(b.id));
+        }
+
+        this.partyCharacterRefs = grouped;
+        return grouped;
+    }
+
+    /**
+     * Lazily load full metadata (description + metadata fields) for every
+     * character in a single namespace. Cached per namespace.
+     *
+     * @param {string} namespace
+     * @returns {Promise<Array<{ namespace: string, id: string, description: string, metadata: Record<string, any> }>>}
+     */
+    async loadPartyNamespaceCharacters(namespace) {
+        if (this.partyNamespaceCache[namespace]) return this.partyNamespaceCache[namespace];
+
+        const refs = (this.partyCharacterRefs && this.partyCharacterRefs[namespace]) || [];
+        if (refs.length === 0) {
+            this.partyNamespaceCache[namespace] = [];
+            return [];
+        }
+
+        /** @type {Record<string, any>} */
+        let detailedMap = {};
+        try {
+            detailedMap = await window.ENGINE_WORKER_CLIENT.jsEngineGetInfoMapForScripts({
+                scripts: refs,
+            });
+        } catch (err) {
+            console.error(`Failed to load detailed info for namespace ${namespace}:`, err);
+        }
+
+        /** @type {Array<{ namespace: string, id: string, description: string, metadata: Record<string, any> }>} */
+        const result = [];
+        for (const info of Object.values(detailedMap)) {
+            // @ts-ignore
+            if (info.type !== 'characters') continue;
+            // @ts-ignore
+            if (info.namespace !== namespace) continue;
+            result.push({
+                // @ts-ignore
+                namespace: info.namespace,
+                // @ts-ignore
+                id: info.id,
+                // @ts-ignore
+                description: info.description || '',
+                // @ts-ignore
+                metadata: info.metadata || {},
+            });
+        }
+
+        result.sort((a, b) => a.id.localeCompare(b.id));
+        this.partyNamespaceCache[namespace] = result;
+        return result;
+    }
+
+    /**
+     * @param {Element} body
+     */
+    async renderPartyStep(body) {
+        body.innerHTML = `
+            <div class="step-pane">
+                <div class="step-heading">
+                    <h2>Choose your party</h2>
+                    <p class="step-sub">Select the characters that will start the story alongside you. Leave empty to spawn solo.</p>
+                </div>
+                <div class="world-loading">Loading namespaces…</div>
+            </div>
+        `;
+
+        const refsByNamespace = await this.loadPartyCharacterRefs();
+
+        const pane = body.querySelector('.step-pane');
+        if (!pane) return;
+
+        // Skip the namespace/id of the player's own chosen character.
+        const playerScriptKey = this.selectedCharacter?.scriptKey || '';
+
+        // Build filtered namespace list: drop namespaces that become empty
+        // once the player character is excluded.
+        /** @type {Record<string, Array<{ namespace: string, id: string }>>} */
+        const filtered = {};
+        for (const [ns, refs] of Object.entries(refsByNamespace)) {
+            const kept = refs.filter(r => `${r.namespace}/${r.id}` !== playerScriptKey);
+            if (kept.length > 0) filtered[ns] = kept;
+        }
+
+        const namespaces = Object.keys(filtered).sort((a, b) => {
+            const aSys = a.startsWith('@');
+            const bSys = b.startsWith('@');
+            if (aSys !== bSys) return aSys ? 1 : -1;
+            return a.localeCompare(b);
+        });
+
+        if (namespaces.length === 0) {
+            pane.innerHTML = `
+                <div class="step-heading">
+                    <h2>Choose your party</h2>
+                    <p class="step-sub">No additional characters are available. You will spawn solo.</p>
+                </div>
+                <div class="placeholder-pane">No characters available to add to your party.</div>
+            `;
+            return;
+        }
+
+        const groupsHTML = namespaces.map(ns => {
+            const isSystem = ns.startsWith('@');
+            const isExpanded = this.expandedPartyNamespaces.has(ns);
+            const count = filtered[ns].length;
+            const selectedInGroup = this.selectedPartyCharacters.filter(
+                c => c.namespace === ns
+            ).length;
+            return `
+                <div class="party-namespace${isExpanded ? ' expanded' : ''}" data-namespace="${escapeHTML(ns)}">
+                    <div class="party-namespace-header" data-namespace="${escapeHTML(ns)}">
+                        <span class="party-namespace-arrow">▶</span>
+                        <span class="world-group-name">${escapeHTML(namespaceLabel(ns))}</span>
+                        ${isSystem ? '<span class="world-group-tag">System</span>' : ''}
+                        <span class="party-namespace-count">${count} character${count === 1 ? '' : 's'}${selectedInGroup > 0 ? ` · ${selectedInGroup} selected` : ''}</span>
+                    </div>
+                    <div class="party-namespace-body"></div>
+                </div>
+            `;
+        }).join('');
+
+        const summary = this.selectedPartyCharacters.length === 0
+            ? 'No party members selected — you will spawn solo.'
+            : `${this.selectedPartyCharacters.length} party member${this.selectedPartyCharacters.length === 1 ? '' : 's'} selected.`;
+
+        pane.innerHTML = `
+            <div class="step-heading">
+                <h2>Choose your party</h2>
+                <p class="step-sub">Pick any number of characters to start the story alongside you, or none to spawn solo.</p>
+            </div>
+            <div class="party-summary">${escapeHTML(summary)}</div>
+            <div class="world-groups">${groupsHTML}</div>
+        `;
+
+        // Wire up namespace headers (collapse/expand with lazy load).
+        pane.querySelectorAll('.party-namespace-header').forEach(header => {
+            header.addEventListener('mouseenter', playHoverSound);
+            header.addEventListener('click', () => {
+                const ns = header.getAttribute('data-namespace') || '';
+                const group = /** @type {HTMLElement | null} */ (
+                    pane.querySelector(`.party-namespace[data-namespace="${CSS.escape(ns)}"]`)
+                );
+                if (!group) return;
+                if (this.expandedPartyNamespaces.has(ns)) {
+                    this.expandedPartyNamespaces.delete(ns);
+                    group.classList.remove('expanded');
+                    const bodyEl = group.querySelector('.party-namespace-body');
+                    if (bodyEl) bodyEl.innerHTML = '';
+                    playCancelSound();
+                } else {
+                    this.expandedPartyNamespaces.add(ns);
+                    group.classList.add('expanded');
+                    playConfirmSound();
+                    this.renderPartyNamespaceBody(pane, ns);
+                }
+            });
+        });
+
+        // Restore previously-expanded namespaces (e.g. user comes back to step).
+        for (const ns of Array.from(this.expandedPartyNamespaces)) {
+            if (filtered[ns]) this.renderPartyNamespaceBody(pane, ns);
+            else this.expandedPartyNamespaces.delete(ns);
+        }
+    }
+
+    /**
+     * Render (lazily loading metadata if needed) the cards inside one
+     * namespace's expanded body. Wires up the click handlers for selection.
+     *
+     * @param {Element} pane
+     * @param {string} ns
+     */
+    async renderPartyNamespaceBody(pane, ns) {
+        const group = /** @type {HTMLElement | null} */ (
+            pane.querySelector(`.party-namespace[data-namespace="${CSS.escape(ns)}"]`)
+        );
+        if (!group) return;
+        const bodyEl = group.querySelector('.party-namespace-body');
+        if (!bodyEl) return;
+
+        if (!this.partyNamespaceCache[ns]) {
+            bodyEl.innerHTML = `<div class="world-loading">Loading characters…</div>`;
+        }
+
+        const characters = await this.loadPartyNamespaceCharacters(ns);
+
+        // The user may have collapsed this namespace before the load resolved;
+        // bail out if so.
+        if (!this.expandedPartyNamespaces.has(ns)) return;
+
+        const playerScriptKey = this.selectedCharacter?.scriptKey || '';
+        const visible = characters.filter(c => `${c.namespace}/${c.id}` !== playerScriptKey);
+
+        if (visible.length === 0) {
+            bodyEl.innerHTML = `<div class="placeholder-pane">No characters in this namespace.</div>`;
+            return;
+        }
+
+        const items = visible.map(c => {
+            const isSelected = this.isPartyCharacterSelected(c);
+            const detailsHTML = renderCharacterDetails(c.metadata || {});
+            return `
+                <div class="character-card party-card${isSelected ? ' selected' : ''}"
+                     data-namespace="${escapeHTML(c.namespace)}"
+                     data-id="${escapeHTML(c.id)}">
+                    <div class="character-card-image">
+                        <app-asset-image image-url="assets/${escapeHTML(c.namespace)}/${escapeHTML(c.id)}/profile" default-image="./images/default-profile.png"></app-asset-image>
+                    </div>
+                    <div class="character-card-name">${formatName(escapeHTML(c.id))}</div>
+                    ${c.description ? `<div class="character-card-desc">${escapeHTML(c.description)}</div>` : ''}
+                    ${detailsHTML}
+                    <div class="party-selected-badge">✓ In party</div>
+                </div>
+            `;
+        }).join('');
+
+        bodyEl.innerHTML = `<div class="character-grid">${items}</div>`;
+
+        bodyEl.querySelectorAll('.party-card').forEach(card => {
+            card.addEventListener('mouseenter', playHoverSound);
+            card.addEventListener('click', () => {
+                const cns = card.getAttribute('data-namespace') || '';
+                const cid = card.getAttribute('data-id') || '';
+                const wasSelected = card.classList.contains('selected');
+                if (wasSelected) {
+                    this.selectedPartyCharacters = this.selectedPartyCharacters.filter(
+                        c => !(c.namespace === cns && c.id === cid)
+                    );
+                    card.classList.remove('selected');
+                    playCancelSound();
+                } else {
+                    this.selectedPartyCharacters.push({ namespace: cns, id: cid });
+                    card.classList.add('selected');
+                    playConfirmSound();
+                }
+                this.updatePartySummary(pane);
+                this.updatePartyNamespaceCount(pane, cns);
+                this.updateFooter();
+            });
+        });
+    }
+
+    /**
+     * @param {Element} pane
+     * @param {string} ns
+     */
+    updatePartyNamespaceCount(pane, ns) {
+        const refs = (this.partyCharacterRefs && this.partyCharacterRefs[ns]) || [];
+        const playerScriptKey = this.selectedCharacter?.scriptKey || '';
+        const count = refs.filter(r => `${r.namespace}/${r.id}` !== playerScriptKey).length;
+        const selectedInGroup = this.selectedPartyCharacters.filter(c => c.namespace === ns).length;
+        const header = pane.querySelector(`.party-namespace[data-namespace="${CSS.escape(ns)}"] .party-namespace-count`);
+        if (header) {
+            header.textContent = `${count} character${count === 1 ? '' : 's'}${selectedInGroup > 0 ? ` · ${selectedInGroup} selected` : ''}`;
+        }
+    }
+
+    /**
+     * @param {{ namespace: string, id: string }} c
+     */
+    isPartyCharacterSelected(c) {
+        return this.selectedPartyCharacters.some(
+            sel => sel.namespace === c.namespace && sel.id === c.id
+        );
+    }
+
+    /**
+     * @param {Element} pane
+     */
+    updatePartySummary(pane) {
+        const el = pane.querySelector('.party-summary');
+        if (!el) return;
+        const n = this.selectedPartyCharacters.length;
+        el.textContent = n === 0
+            ? 'No party members selected — you will spawn solo.'
+            : `${n} party member${n === 1 ? '' : 's'} selected.`;
     }
 
     // ── Step 1: World selection ──────────────────────────────────────
@@ -330,7 +659,7 @@ class PlayOverlay extends HTMLElement {
             <div class="step-pane">
                 <div class="step-heading">
                     <h2>Choose a world</h2>
-                    <p class="step-sub">Select the world you want to play in.</p>
+                    <p class="step-sub">Select the world you want to dream in.</p>
                 </div>
                 <div class="world-loading">Loading worlds…</div>
             </div>
@@ -374,7 +703,7 @@ class PlayOverlay extends HTMLElement {
             pane.innerHTML = `
                 <div class="step-heading">
                     <h2>Choose a world</h2>
-                    <p class="step-sub">Select the world you want to play in.</p>
+                    <p class="step-sub">Select the world you want to dream in.</p>
                 </div>
                 <div class="world-empty">
                     No worlds are available. You can create one from the Manage screen.
@@ -410,7 +739,7 @@ class PlayOverlay extends HTMLElement {
         pane.innerHTML = `
             <div class="step-heading">
                 <h2>Choose a world</h2>
-                <p class="step-sub">Select the world you want to play in.</p>
+                <p class="step-sub">Select the world you want to dream in.</p>
             </div>
             <div class="world-groups">${groupsHTML}</div>
         `;

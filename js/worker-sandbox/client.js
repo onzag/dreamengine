@@ -174,8 +174,14 @@ export class EngineWorkerClient {
     /** @param {{ newName: string | null }} args */
     completeDisruptedInitializationDueToNameConflict(args) { return this.#call("completeDisruptedInitializationDueToNameConflict", args); }
     endSimulation() { return this.#call("endSimulation"); }
+    /**
+     * @returns {Promise<import('../engine/index.js').EngineInitializationInfo>}
+     */
+    getEngineScriptInfo() { return this.#call("getEngineScriptInfo"); }
     /** @param {{ characterName: string }} args */
     assumeCharacterIdentity(args) { return this.#call("assumeCharacterIdentity", args); }
+    /** @param {{ characterName: string }} args */
+    addCharacterToParty(args) { return this.#call("addCharacterToParty", args); }
     /** @param {{ json: string }} args */
     initializeFromJSONState(args) { return this.#call("initializeFromJSONState", args); }
     /** @param {{ commandText: string }} args */
@@ -206,14 +212,14 @@ export class EngineWorkerClient {
      */
     getRawScriptSource(args) { return this.#call("getRawScriptSource", args); }
     /**
-     * @returns {Promise<Record<string, { id: string, namespace: string, description: string, type: string, exposeProperties: DEScriptExposeProperties, exposeCharacters: DEScriptExposeCharacters }>>} An object mapping script keys to their description, type, and exposeProperties/Characters, used for UI display and other purposes
+     * @returns {Promise<Record<string, { id: string, namespace: string, description: string, type: string, exposeProperties: DEScriptExposeProperties, exposeCharacters: DEScriptExposeCharacters, metadata?: Record<string, boolean | string | number | null> }>>} An object mapping script keys to their description, type, and exposeProperties/Characters, used for UI display and other purposes
      */
     jsEngineGetInfoMap() {
         return this.#call("jsEngineGetInfoMap");
     }
     /**
      * @param {{ scripts: Array<{namespace: string, id: string}> }} args
-     * @returns {Promise<Record<string, { id: string, namespace: string, description: string, type: string, exposeProperties: DEScriptExposeProperties, exposeCharacters: DEScriptExposeCharacters }>>}
+     * @returns {Promise<Record<string, { id: string, namespace: string, description: string, type: string, exposeProperties: DEScriptExposeProperties, exposeCharacters: DEScriptExposeCharacters, metadata?: Record<string, boolean | string | number> }>>} An object mapping script keys to their description, type, and exposeProperties/Characters, used for UI display and other purposes
      */
     jsEngineGetInfoMapForScripts(args) {
         return this.#call("jsEngineGetInfoMapForScripts", args);

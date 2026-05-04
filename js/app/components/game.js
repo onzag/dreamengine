@@ -16,6 +16,9 @@ import './dialog.js';
  *  - world-id                 Id of the chosen world script
  *  - mode                     "new" | "load"
  *  - save-id                  Save id when loading, otherwise empty
+ *  - party-characters         JSON-encoded Array<{namespace: string, id: string}>
+ *                             of additional party members chosen at setup. Empty
+ *                             array means "spawn solo".
  *
  * Audio:
  *  - The transition sound is played from <audio id="dreamFallSound"> if it
@@ -114,12 +117,22 @@ class GameOverlay extends HTMLElement {
 
     async prepareGame(comeFromConflictError = false, newName = null) {
         try {
+            const partyCharactersJson = this.getAttribute('party-characters') || '[]';
+            const partyCharacters = JSON.parse(partyCharactersJson);
+            console.log(partyCharacters);
             if (!comeFromConflictError) {
                 await window.ENGINE_WORKER_CLIENT.jsEngineClearExecutionOrder();
                 await window.ENGINE_WORKER_CLIENT.jsEngineImportScript({
                     namespace: this.getAttribute('world-namespace') || '',
                     id: this.getAttribute('world-id') || '',
                 });
+
+                for (const partyMember of partyCharacters) {
+                    await window.ENGINE_WORKER_CLIENT.jsEngineImportScript({
+                        namespace: partyMember.namespace,
+                        id: partyMember.id,
+                    });
+                }
 
                 const isSelfInsert = this.getAttribute('is-self-insert') === 'true';
                 const specialMode = this.getAttribute('special-mode') || '';
@@ -203,6 +216,18 @@ class GameOverlay extends HTMLElement {
             const isSelfInsert = this.getAttribute('is-self-insert') === 'true';
             if (!isSelfInsert && characterName) {
                 await window.ENGINE_WORKER_CLIENT.assumeCharacterIdentity({ characterName });
+            }
+
+            // adding characters that were added by those scripts as the party members, the reason is that
+            // a script can add many characters and not just one, so they all need to be added by name
+            // everything is dynamic so we don't necessarily know by the namespace and id
+            const engineScriptInfo = await window.ENGINE_WORKER_CLIENT.getEngineScriptInfo();
+            for (const partyMember of partyCharacters) {
+                for (const charInfo of engineScriptInfo.charactersAdded) {
+                    if (charInfo.byId === partyMember.id && charInfo.byNamespace === partyMember.namespace) {
+                        await window.ENGINE_WORKER_CLIENT.addCharacterToParty({ characterName: charInfo.name });
+                    }
+                }
             }
 
             this.onCharacterUpdateUI();
@@ -674,9 +699,15 @@ class GameOverlay extends HTMLElement {
         document.querySelector('.fx').style.zIndex = ''; // delete z-index override to restore normal stacking
         // @ts-ignore
         document.querySelector('.ambience').style.zIndex = ''; // delete z-index override to restore normal stacking
+        
+        this.stopEngine();
 
         await stopAmbienceWithFade(1000, 3);
         await startAmbienceWithFade(['./sounds/dream-ambience.mp3'], 1000, 3);
+    }
+
+    async stopEngine() {
+        await window.ENGINE_WORKER_CLIENT.endSimulation();
     }
 
     /**

@@ -132,6 +132,7 @@ playBtn?.addEventListener('click', async () => {
         game.setAttribute('world-id', world.id || '');
         game.setAttribute('mode', detail.mode || '');
         game.setAttribute('save-id', detail.saveId || '');
+        game.setAttribute('party-characters', JSON.stringify(detail.partyCharacters || []));
 
         game.addEventListener('exit', () => {
             document.body.removeChild(game);

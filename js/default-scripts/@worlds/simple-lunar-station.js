@@ -15,16 +15,29 @@ engine.exports = {
             narration: (info) => {
                 const others = DE.utils.templateUtils.allWorldCharactersButUser();
                 if (!others || others.length === 0) {
-                    return `${info.char.name} is a visitor to the Lunar Station, eager to explore this small outpost in space. The entire station is empty and quiet, allowing ${info.char.name} to explore their surroundings on their solitude in space.`;
+                    return `${info.char.name} is a visitor to the Lunar Station, eager to explore this small outpost in space. The entire station is empty and quiet, allowing ${info.char.name} to explore their surroundings in solitude in space.`;
                 }
-                return `${info.char.name} is a visitor to the Lunar Station, eager to explore this small outpost in space, yet ${DE.utils.templateUtils.formatPronoun([info.char.name])} didn't expect to find someone else here, but it so happens that ${DE.utils.templateUtils.formatAnd(others.map((n) => n.name))} ${DE.utils.templateUtils.formatVerbToBe(others)} also visiting the station at this time, now they face each other in the common area near the airlock`;
+
+                const dema = others.find((c) => c.name === "Dema");
+                const visitors = others.filter((c) => c.name !== "Dema");
+
+                if (dema && visitors.length === 0) {
+                    return `${info.char.name} is a visitor to the Lunar Station, eager to explore this small outpost in space. The robot Dema, keeper of the station, is currently awaiting ${DE.utils.templateUtils.formatPossessive([info.char.name])} arrival in the common area near the airlock, as Dema is responsible for welcoming visitors and assisting them with their needs during their stay at the station.`;
+                }
+
+                if (!dema && visitors.length > 0) {
+                    return `${info.char.name} is a visitor to the Lunar Station, eager to explore this small outpost in space, yet ${DE.utils.templateUtils.formatPronoun([info.char.name])} didn't expect to find ${DE.utils.templateUtils.formatPluralOrSingular(visitors, "other visitors", "another visitor")} here. As it happens, ${DE.utils.templateUtils.formatAnd(visitors.map((n) => n.name))} ${DE.utils.templateUtils.formatVerbToBe(visitors)} also visiting the station at this time, and they find themselves gathered in the common area near the airlock.`;
+                }
+
+                // Dema + other visitors
+                return `${info.char.name} is a visitor to the Lunar Station, eager to explore this small outpost in space. Dema, the station's keeper, is there in the common area near the airlock to welcome ${DE.utils.templateUtils.formatPossessive([info.char.name])} arrival. As it turns out, ${DE.utils.templateUtils.formatAnd(visitors.map((n) => n.name))} ${DE.utils.templateUtils.formatVerbToBe(visitors)} also visiting the station at this time, and they all find themselves gathered together in the common area under Dema's watchful eye.`;
             },
             charactersStart: true,
-            engagedCharacters: ["Dema"],
+            engagedCharacters: () => DE.utils.templateUtils.allWorldCharactersButUser(),
         });
 
         DE.world.initialScenes.push("Default Scene");
-        DE.world.state.theme = {asset: "luna.mp3", volume: 1};
+        DE.world.state.theme = {asset: "luna.mp3", volume: 1.3};
 
         DE.world.lore = "The world is set on a small lunar station orbiting the Moon. The station serves as a research outpost and habitat for astronauts and scientists studying the lunar environment. The station is equipped with life support systems, scientific laboratories, living quarters, and communication facilities. Outside the station, the barren surface of the Moon stretches out, dotted with craters and rocks. The sky above is a pitch-black void, with the Earth hanging in the distance. The silence is absolute, broken only by the faint hum of the station's machinery";
 

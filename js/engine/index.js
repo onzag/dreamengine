@@ -32,6 +32,15 @@ const INVALID_NAMES = ["system", "assistant", "user", "everyone", "nobody",
 const ROOT_SKIP_KEYS = new Set(['utils', 'functions']);
 
 /**
+ * @typedef {Object} EngineInitializationInfo
+ * @property {Array<{
+ *    byNamespace: string;
+ *    byId: string;
+ *    name: string;
+ * }>} charactersAdded
+ */
+
+/**
  * @param {DEObject} root
  * @returns {(this: any, key: string, value: any) => any}
  */
@@ -287,6 +296,13 @@ export class DEngine {
          */
         this.disabledWorldRules = false;
 
+        /**
+         * @type {EngineInitializationInfo}
+         */
+        this.engineScriptInfo = {
+            charactersAdded: [],
+        };
+
         this.getDEObject = this.getDEObject.bind(this);
     }
 
@@ -350,6 +366,9 @@ export class DEngine {
         if (this.initialized) {
             throw new Error("DEngine already initialized");
         }
+        this.engineScriptInfo = {
+            charactersAdded: [],
+        };
         this.deObject = JSON.parse(deObjectJSON);
         if (!this.deObject) {
             throw new Error("Invalid DEObject JSON");
@@ -389,12 +408,21 @@ export class DEngine {
      * @param {"player" | "narrator" | "voice-in-the-head"} playMode
      */
     async initialize(user, playMode = "player") {
+        if (this.initialized) {
+            throw new Error("DEngine already initialized");
+        }
+
+        this.engineScriptInfo = {
+            charactersAdded: [],
+        };
+        
         /**
          * @type {DETimeDescription}
          */
         const defaultTimeDEFormat = millisecondsToTime((new Date()).getTime());
         this.deObject = {
             user: user ? repairPotentialUserWithDefaults(user) : repairPotentialUserWithDefaults(/**@type {DEMinimalCharacterReference} */ ({ name: "Player" })),
+            party: [],
             world: {
                 connections: {},
                 currentLocation: /** @type {string} */ (/** @type {unknown} */ (null)),
@@ -453,12 +481,19 @@ export class DEngine {
         this.deObject = null;
         this.user = null;
         this.userCharacter = null;
+        this.initialized = false;
+        this.disabledWorldRules = false;
+        this.engineScriptInfo = {
+            charactersAdded: [],
+        };
+        this.executingCycle = false;
+        this.talkingTurnRequested = false;
     }
 
     /**
      * @param {string} characterName 
      */
-    async assumeCharacterIdentity(characterName) {
+    assumeCharacterIdentity(characterName) {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         }
@@ -472,6 +507,24 @@ export class DEngine {
 
         this.deObject.world.currentLocation = this.deObject.stateFor[characterName].location;
         this.deObject.world.currentLocationSlot = this.deObject.stateFor[characterName].locationSlot;
+    }
+
+    /**
+     * 
+     * @param {string} characterName 
+     * @returns 
+     */
+    addCharacterToParty(characterName) {
+        if (!this.deObject) {
+            throw new Error("DEngine not initialized");
+        }
+        if (!this.deObject.characters[characterName]) {
+            throw new Error(`Character with name ${characterName} does not exist so it cannot be added to the party.`);
+        }
+        if (this.deObject.party.includes(characterName)) {
+            return; // already in party
+        }
+        this.deObject.party.push(characterName);
     }
 
     async runInitializationScripts() {
@@ -492,6 +545,7 @@ export class DEngine {
             "world",
         ];
 
+        let currentCharacterNames = new Set(Object.keys(this.deObject.characters));
         for (const type of orderOfExecution) {
             /**
              * @type {Array<{script: DEScript, scriptKey: string}>}
@@ -507,6 +561,17 @@ export class DEngine {
             for (const script of scripts) {
                 console.log(`Initializing script ${script.scriptKey} of type ${type}`);
                 script.script.initialize && await script.script.initialize(this.deObject);
+                const newCharacterNames = new Set(Object.keys(this.deObject.characters));
+                // get the difference between the sets to find out which characters were added by this script
+                const addedCharacters = [...newCharacterNames].filter(x => !currentCharacterNames.has(x));
+                for (const charName of addedCharacters) {
+                    this.engineScriptInfo.charactersAdded.push({
+                        byNamespace: script.script.namespace,
+                        byId: script.script.id,
+                        name: charName,
+                    });
+                }
+                currentCharacterNames = newCharacterNames;
             }
 
             if (type === "characters") {
@@ -594,6 +659,7 @@ export class DEngine {
             }
         }
 
+        let currentCharacterNames = new Set(Object.keys(this.deObject.characters));
         for (const type of orderOfExecution) {
             /**
              * @type {DEScript[]}
@@ -603,8 +669,18 @@ export class DEngine {
                 this.jsEngine.scriptOrder.map(scriptKey => this.jsEngine.scriptCache[scriptKey]).filter(script => script.type === type);
 
             for (const script of scripts) {
-                // @ts-ignore typescript continues to bug
                 script.onWorldInitialized && await script.onWorldInitialized(this.deObject);
+                const newCharacterNames = new Set(Object.keys(this.deObject.characters));
+                // get the difference between the sets to find out which characters were added by this script
+                const addedCharacters = [...newCharacterNames].filter(x => !currentCharacterNames.has(x));
+                for (const charName of addedCharacters) {
+                    this.engineScriptInfo.charactersAdded.push({
+                        byNamespace: script.script.namespace,
+                        byId: script.script.id,
+                        name: charName,
+                    });
+                }
+                currentCharacterNames = newCharacterNames;
             }
         }
 
@@ -873,7 +949,9 @@ export class DEngine {
         this.deObject.world.currentLocation = sceneObject.location;
         this.deObject.world.currentLocationSlot = sceneObject.locationSlot;
 
-        const expectedParticipants = sceneObject.engagedCharacters ? [...sceneObject.engagedCharacters] : [];
+        const expectedParticipants = (sceneObject.engagedCharacters ? (
+            typeof sceneObject.engagedCharacters === "function" ? sceneObject.engagedCharacters() : sceneObject.engagedCharacters
+        ) : []).map((v) => typeof v === "string" ? v : v.name);
         expectedParticipants.push(this.userCharacter.name);
 
         // ensure these are at the given location, if not, teleport them there

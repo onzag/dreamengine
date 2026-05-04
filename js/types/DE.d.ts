@@ -3030,7 +3030,7 @@ declare interface DEScene {
      * make sure that the characters are spawned in the location with the user
      * otherwise they won't be able to interact
      */
-    engagedCharacters: Array<string>;
+    engagedCharacters: Array<string | DECompleteCharacterReference> | (() => Array<string | DECompleteCharacterReference>);
     /**
      * Whether the characters will interact first in the cycle, rather than the user
      * this is useful for scenes where the characters start by talking rather than
@@ -3584,6 +3584,7 @@ declare interface DEWorldRule {
 
 declare interface DEObject {
     user: DEMinimalCharacterReference;
+    party: string[];
     characters: Record<string, DECompleteCharacterReference>;
     bonds: Record<string, DEBondDescription>;
     worldNames: DENamePool;
@@ -3672,6 +3673,13 @@ declare interface DEScript {
      * Description for the script
      */
     description?: string;
+
+    /**
+     * Arbitrary meetadata
+     */
+    metadata?: {
+        [key: string]: boolean | string | number;
+    };
 
     /**
      * Exposes properties that serve as configuration, these are set by the UI

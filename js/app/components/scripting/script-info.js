@@ -7,7 +7,7 @@ class ScriptInfo extends HTMLElement {
         this.scriptId = "";
         /** @type {string} */
         this.scriptNamespace = "";
-        /** @type {Record<string, { id: string, namespace: string, description: string, type: string, exposeProperties: object, exposeCharacters: object }> | null} */
+        /** @type {Record<string, { id: string, namespace: string, description: string, type: string, exposeProperties: object, exposeCharacters: object, metadata?: Record<string, any> }> | null} */
         this.infoMap = null;
     }
 
