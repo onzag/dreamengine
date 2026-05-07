@@ -356,7 +356,13 @@ export async function talk(engine, character, options) {
             narrativeEffects.push(`'${character.name}' may stutter in dialogue, eg. saying "I... I don't know" instead of "I don't know" or "b-b-but I want to go" instead of "but I want to go"`);
         }
         if (baseVocabularyLimit?.intensityEffect === "CAPITALIZE_SCREAM") {
-            narrativeEffects.push(`'${character.name}' is currently screaming and their dialogue should be in all caps to reflect that`);
+            narrativeEffects.push(`'${character.name}' is currently screaming and their dialogue should be in ALL CAPS to reflect that`);
+        }
+        if (baseVocabularyLimit && baseVocabularyLimit.description) {
+            const description = typeof baseVocabularyLimit.description === "string" ? baseVocabularyLimit.description : await baseVocabularyLimit.description({char: character});
+            if (description) {
+                narrativeEffects.push(`'${character.name}' vocabulary limitation description: ${description}`);
+            }
         }
     }
 

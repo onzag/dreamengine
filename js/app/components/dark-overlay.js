@@ -42,7 +42,7 @@ class DarkOverlay extends HTMLElement {
         document.removeEventListener('keydown', this.onDocumentKeydown);
         // restore stars only if no other overlay remains
         const remainingOverlays = document.querySelectorAll(
-            'app-character, app-world, app-settings, app-play, app-manage, app-license, app-other-attributions, app-cardtype-wizard'
+            'app-character, app-world, app-settings, app-play, app-manage, app-license, app-other-attributions, app-cardtype-wizard, app-world-wizard'
         );
         if (remainingOverlays.length === 0) {
             const sky = document.querySelector('.sky');

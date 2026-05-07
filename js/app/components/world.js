@@ -1,5 +1,6 @@
 import { createCardStructureFrom, isCardTypeFile } from '../../cardtype/base.js';
 import { playCancelSound, playConfirmSound, playHoverSound, playPauseSound, setTempSoundDisable } from '../sound.js';
+import './wizard/world-wizard.js';
 
 /**
  * 
@@ -213,10 +214,10 @@ class WorldOverlay extends HTMLElement {
                 ${worldBuilderContent}`;
 
             tabsContainer.querySelector('#world-builder-btn')?.addEventListener('button-click', () => {
-                const builder = document.createElement('app-world-builder');
+                const builder = document.createElement('app-world-wizard');
                 builder.setAttribute('world-namespace', this.currentWorldNamespace);
                 builder.setAttribute('world-id', this.currentWorldId);
-                builder.addEventListener('builder-closed', () => this.renderSection());
+                builder.addEventListener('wizard-closed', () => this.renderSection());
                 document.body.appendChild(builder);
             });
         } else if (this.currentSectionIndex === 1) {

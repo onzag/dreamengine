@@ -1,7 +1,7 @@
 import { createCardStructureFrom, getJsCard, isCardTypeFile } from '../../../cardtype/base.js';
 import { playCancelSound, playConfirmSound, playHoverSound, setTempSoundDisable, startAmbienceWithFade, stopAmbienceWithFade } from '../../sound.js';
 
-class CardTypeWizard extends HTMLElement {
+export class CardTypeWizard extends HTMLElement {
     constructor() {
         super();
         this.root = this.attachShadow({ mode: 'open' });
@@ -343,6 +343,51 @@ class CardTypeWizard extends HTMLElement {
     createUIGuider() {
         const self = this;
 
+        const _highlightPhrases = [
+            'strongly physically attractive',
+            'moderately physically attractive',
+            'slightly physically attractive',
+            'non physically attractive',
+            'strongly attractive',
+            'moderately attractive',
+            'slightly attractive',
+            'hostile presence',
+            'sworn enemy',
+            'close friend',
+            'best friend',
+            'good friend',
+            'in private',
+            'in public',
+            'intimate affection',
+            'around friends',
+            'around family',
+            'acquaintance',
+            'antagonist',
+            'affection',
+            'unfriendly',
+            'unpleasant',
+            'stranger',
+            'ambiguous',
+            'intersex',
+            'hostile',
+            'friend',
+            'family',
+            'female',
+            'male',
+            'sex',
+        ];
+        const _highlightPattern = new RegExp(
+            '(' + _highlightPhrases.map(p => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')',
+            'gi'
+        );
+
+        /** @param {string} text */
+        function highlightKeywordsInQuestion(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML.replace(_highlightPattern, '<strong style="color:#e07070">$1</strong>');
+        }
+
         /**
          * Renders a question into the content area and returns a promise.
          * @param {string} question
@@ -366,7 +411,7 @@ class CardTypeWizard extends HTMLElement {
 
                 const questionLabel = document.createElement('div');
                 questionLabel.className = 'guider-label';
-                questionLabel.textContent = question;
+                questionLabel.innerHTML = highlightKeywordsInQuestion(question);
                 container.appendChild(questionLabel);
 
                 const inputArea = buildInputFn();
@@ -928,502 +973,7 @@ class CardTypeWizard extends HTMLElement {
     render() {
         this.root.innerHTML = `
       <style>
-        *::-webkit-scrollbar {
-            width: 10px !important;
-        }
-        *::-webkit-scrollbar-track {
-            background: rgba(0, 15, 30, 0.6) !important;
-        }
-        *::-webkit-scrollbar-thumb {
-            background: rgba(0, 60, 90, 0.8) !important;
-            border: 1px solid rgba(80, 180, 220, 0.3) !important;
-            border-radius: 5px !important;
-        }
-        *::-webkit-scrollbar-thumb:hover {
-            background: rgba(0, 80, 120, 0.9) !important;
-        }
-
-        .wizard-overlay {
-            position: fixed;
-            width: 100%;
-            height: 100%;
-            top: 0;
-            left: 0;
-            display: flex;
-            justify-content: flex-start;
-            flex-direction: column;
-            align-items: flex-start;
-            background: linear-gradient(
-                160deg,
-                #000000 0%,
-                #000508 6%,
-                #000a12 12%,
-                #00101a 20%,
-                #001420 28%,
-                #001825 36%,
-                #001a2a 44%,
-                #001c2f 52%,
-                #001e32 60%,
-                #002035 68%,
-                #002238 76%,
-                #00243b 84%,
-                #00263e 92%,
-                #002840 100%
-            );
-            color: #c8dce8;
-            z-index: 20;
-            box-sizing: border-box;
-        }
-
-        .wizard-title {
-            font-size: 3vh;
-            padding: 2vh 4vh;
-            border-bottom: solid 1px rgba(80, 180, 220, 0.25);
-            width: 100%;
-            background: linear-gradient(
-                to right,
-                rgba(0, 40, 70, 0.4),
-                rgba(0, 20, 40, 0.2)
-            );
-            box-sizing: border-box;
-            letter-spacing: 0.1em;
-            text-shadow: 0 0 12px rgba(60, 160, 220, 0.15);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-
-        .wizard-autosave {
-            font-size: 2vh;
-            color: rgba(100, 200, 240, 0.7);
-            opacity: 0;
-            transition: opacity 0.4s ease;
-            white-space: nowrap;
-        }
-
-        .wizard-autosave.visible {
-            opacity: 1;
-        }
-
-        .wizard-autosave.saved {
-            color: rgba(120, 240, 160, 0.7);
-        }
-
-        .wizard-content {
-            flex: 1;
-            width: 100%;
-            padding: 4vh;
-            overflow-y: auto;
-            box-sizing: border-box;
-            position: relative;
-        }
-
-        .wizard-buttons {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-end;
-            width: 100%;
-            padding: 2vh 4vh;
-            box-sizing: border-box;
-            border-top: solid 1px rgba(80, 180, 220, 0.25);
-            background: linear-gradient(
-                to right,
-                rgba(0, 20, 40, 0.2),
-                rgba(0, 40, 70, 0.4)
-            );
-        }
-
-        .wizard-buttons div {
-            font-size: 5vh;
-            cursor: pointer;
-            color: rgba(120, 200, 240, 0.7);
-            transition: color 0.2s ease, text-shadow 0.2s ease;
-        }
-        .wizard-buttons div:hover {
-            color: #60d0ff;
-            text-shadow: 0 0 14px rgba(60, 180, 255, 0.4);
-        }
-
-        .wizard-card-input {
-            padding: 4vh;
-            display: flex;
-            flex-direction: column;
-            gap: 3vh;
-        }
-
-        .card-textarea {
-            width: 100%;
-            min-height: 20vh;
-            font-size: 3vh;
-            font-family: 'Cabin Sketch', sans-serif;
-            font-weight: bold;
-            color: #c8dce8;
-            background: rgba(0, 10, 20, 0.6);
-            border: 1px solid rgba(80, 180, 220, 0.25);
-            border-radius: 0.5vh;
-            padding: 2vh;
-            box-sizing: border-box;
-            resize: none;
-            overflow: hidden;
-            outline: none;
-            transition: border-color 0.2s ease, box-shadow 0.2s ease;
-            box-shadow: inset 0 0 10px rgba(0, 40, 80, 0.3);
-        }
-
-        .card-textarea::placeholder {
-            color: rgba(120, 180, 220, 0.35);
-        }
-
-        .card-textarea:focus {
-            border-color: rgba(80, 180, 220, 0.5);
-            box-shadow: inset 0 0 14px rgba(0, 60, 120, 0.4);
-        }
-
-        .wizard-start-btn {
-            font-size: 4vh;
-            cursor: pointer;
-            color: rgba(120, 200, 240, 0.7);
-            transition: color 0.2s ease, text-shadow 0.2s ease;
-            text-align: center;
-            padding: 1.5vh 3vh;
-            border: 1px solid rgba(80, 180, 220, 0.25);
-            border-radius: 0.5vh;
-            background: linear-gradient(
-                to right,
-                rgba(0, 30, 55, 0.4),
-                rgba(0, 50, 80, 0.3)
-            );
-        }
-
-        .wizard-start-btn:hover {
-            color: #60d0ff;
-            text-shadow: 0 0 14px rgba(60, 180, 255, 0.4);
-            border-color: rgba(80, 180, 220, 0.5);
-            background: linear-gradient(
-                to right,
-                rgba(0, 40, 70, 0.5),
-                rgba(0, 60, 100, 0.4)
-            );
-        }
-
-        .buttons-container {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 1vh;
-        }
-
-        /* Guider question styles */
-        .guider-question {
-            display: flex;
-            flex-direction: column;
-            gap: 2.5vh;
-        }
-
-        .guider-label {
-            white-space: pre-line;
-            font-size: 3vh;
-            color: #c8dce8;
-            letter-spacing: 0.03em;
-            text-shadow: 0 0 8px rgba(60, 160, 220, 0.1);
-        }
-
-        .guider-submit-btn, .guider-try-again-btn {
-            flex: 1;
-            font-size: 3.5vh;
-            cursor: pointer;
-            color: rgba(120, 200, 240, 0.7);
-            transition: color 0.2s ease, text-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease;
-            text-align: center;
-            padding: 1.2vh 3vh;
-            border: 1px solid rgba(80, 180, 220, 0.25);
-            border-radius: 0.5vh;
-            background: linear-gradient(
-                to right,
-                rgba(0, 30, 55, 0.4),
-                rgba(0, 50, 80, 0.3)
-            );
-            margin-top: 1vh;
-        }
-
-        .guider-submit-btn:hover, .guider-try-again-btn:hover {
-            color: #60d0ff;
-            text-shadow: 0 0 14px rgba(60, 180, 255, 0.4);
-            border-color: rgba(80, 180, 220, 0.5);
-            background: linear-gradient(
-                to right,
-                rgba(0, 40, 70, 0.5),
-                rgba(0, 60, 100, 0.4)
-            );
-        }
-
-        /* askOption */
-        .guider-options {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 1.5vh;
-        }
-
-        .guider-option {
-            font-size: 2.5vh;
-            padding: 1vh 2.5vh;
-            border: 1px solid rgba(80, 180, 220, 0.2);
-            border-radius: 0.5vh;
-            cursor: pointer;
-            color: rgba(160, 210, 240, 0.6);
-            background: rgba(0, 15, 30, 0.4);
-            transition: all 0.2s ease;
-        }
-
-        .guider-option:hover {
-            color: #c8dce8;
-            border-color: rgba(80, 180, 220, 0.4);
-            background: rgba(0, 30, 55, 0.5);
-        }
-
-        .guider-option.selected {
-            color: #60d0ff;
-            border-color: rgba(80, 180, 220, 0.6);
-            background: rgba(0, 40, 70, 0.5);
-            text-shadow: 0 0 10px rgba(60, 180, 255, 0.3);
-            box-shadow: 0 0 8px rgba(60, 180, 255, 0.15);
-        }
-
-        /* askOpen / shared textarea */
-        .guider-textarea {
-            width: 100%;
-            min-height: 10vh;
-            font-size: 3vh;
-            font-family: 'Cabin Sketch', sans-serif;
-            font-weight: bold;
-            color: #c8dce8;
-            background: rgba(0, 10, 20, 0.6);
-            border: 1px solid rgba(80, 180, 220, 0.25);
-            border-radius: 0.5vh;
-            padding: 2vh;
-            box-sizing: border-box;
-            resize: none;
-            overflow: hidden;
-            outline: none;
-            transition: border-color 0.2s ease, box-shadow 0.2s ease;
-            box-shadow: inset 0 0 10px rgba(0, 40, 80, 0.3);
-        }
-
-        .guider-textarea::placeholder {
-            color: rgba(120, 180, 220, 0.35);
-        }
-
-        .guider-textarea:focus {
-            border-color: rgba(80, 180, 220, 0.5);
-            box-shadow: inset 0 0 14px rgba(0, 60, 120, 0.4);
-        }
-
-        /* askNumber / shared input */
-        .guider-input {
-            width: 100%;
-            font-size: 3vh;
-            font-family: 'Cabin Sketch', sans-serif;
-            font-weight: bold;
-            color: #c8dce8;
-            background: rgba(0, 10, 20, 0.6);
-            border: 1px solid rgba(80, 180, 220, 0.25);
-            border-radius: 0.5vh;
-            padding: 1.5vh 2vh;
-            box-sizing: border-box;
-            outline: none;
-            transition: border-color 0.2s ease, box-shadow 0.2s ease;
-            box-shadow: inset 0 0 10px rgba(0, 40, 80, 0.3);
-        }
-
-        .guider-input::placeholder {
-            color: rgba(120, 180, 220, 0.35);
-        }
-
-        .guider-input:focus {
-            border-color: rgba(80, 180, 220, 0.5);
-            box-shadow: inset 0 0 14px rgba(0, 60, 120, 0.4);
-        }
-
-        .guider-input option,
-        .guider-input optgroup {
-            background: #001520;
-            color: #c8dce8;
-        }
-
-        .guider-input optgroup {
-            font-style: normal;
-            font-weight: bold;
-            color: rgba(100, 200, 240, 0.8);
-            padding: 0.5vh 0;
-        }
-
-        .guider-input::-webkit-inner-spin-button,
-        .guider-input::-webkit-outer-spin-button {
-            -webkit-appearance: none;
-            margin: 0;
-        }
-
-        /* askBoolean */
-        .guider-boolean {
-            display: flex;
-            gap: 2vh;
-        }
-
-        .guider-bool-btn {
-            flex: 1;
-            font-size: 3vh;
-            text-align: center;
-            padding: 1.5vh 2vh;
-            border: 1px solid rgba(80, 180, 220, 0.2);
-            border-radius: 0.5vh;
-            cursor: pointer;
-            color: rgba(160, 210, 240, 0.6);
-            background: rgba(0, 15, 30, 0.4);
-            transition: all 0.2s ease;
-        }
-
-        .guider-bool-btn:hover {
-            color: #c8dce8;
-            border-color: rgba(80, 180, 220, 0.4);
-            background: rgba(0, 30, 55, 0.5);
-        }
-
-        .guider-bool-btn.selected {
-            color: #60d0ff;
-            border-color: rgba(80, 180, 220, 0.6);
-            background: rgba(0, 40, 70, 0.5);
-            text-shadow: 0 0 10px rgba(60, 180, 255, 0.3);
-            box-shadow: 0 0 8px rgba(60, 180, 255, 0.15);
-        }
-
-        /* askList */
-        .guider-list {
-            display: flex;
-            flex-direction: column;
-            gap: 1.5vh;
-        }
-
-        .guider-list-add-row {
-            display: flex;
-            gap: 1.5vh;
-            align-items: center;
-        }
-
-        .guider-list-add-row .guider-input {
-            flex: 1;
-            min-width: 0;
-        }
-
-        .guider-list-add-btn {
-            font-size: 3vh;
-            padding: 1.2vh 2vh;
-            border: 1px solid rgba(80, 180, 220, 0.25);
-            border-radius: 0.5vh;
-            cursor: pointer;
-            color: rgba(120, 200, 240, 0.7);
-            background: rgba(0, 15, 30, 0.4);
-            transition: all 0.2s ease;
-            flex-shrink: 0;
-        }
-
-        .guider-list-add-btn:hover {
-            color: #60d0ff;
-            border-color: rgba(80, 180, 220, 0.5);
-            background: rgba(0, 30, 55, 0.5);
-        }
-
-        .guider-list-items {
-            display: flex;
-            flex-direction: column;
-            gap: 0.8vh;
-        }
-
-        .guider-list-item {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 1vh 1.5vh;
-            border: 1px solid rgba(80, 180, 220, 0.15);
-            border-radius: 0.5vh;
-            background: rgba(0, 12, 24, 0.5);
-            color: #c8dce8;
-            font-size: 2.5vh;
-        }
-
-        .guider-list-item span {
-            flex: 1;
-        }
-
-        .guider-list-remove {
-            cursor: pointer;
-            color: rgba(255, 120, 120, 0.6);
-            font-size: 2.5vh;
-            padding: 0 1vh;
-            margin-left: 1vh;
-            transition: color 0.2s ease;
-            flex-shrink: 0;
-        }
-
-        .guider-list-remove:hover {
-            color: #ff6b6b;
-        }
-
-        /* Loading overlay */
-        .wizard-loading-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 30;
-            display: flex;
-            flex-direction: column;
-            gap: 2vh;
-            align-items: center;
-            justify-content: center;
-            background: transparent;
-            backdrop-filter: none;
-            opacity: 0;
-            pointer-events: none;
-            transition: opacity 0.2s ease, backdrop-filter 0.3s ease;
-        }
-
-        .wizard-loading-overlay.visible {
-            opacity: 1;
-            pointer-events: auto;
-            background: rgba(0, 5, 12, 0.45);
-            backdrop-filter: blur(3px);
-        }
-
-        .wizard-spinner {
-            width: 8vh;
-            height: 8vh;
-            border: 4px solid rgba(80, 180, 220, 0.15);
-            border-top: 4px solid rgba(100, 200, 255, 0.7);
-            border-radius: 50%;
-            opacity: 0;
-            transition: opacity 0.2s ease;
-        }
-
-        .wizard-loading-text {
-            font-size: 3vh;
-            color: rgba(160, 210, 240, 0.7);
-            opacity: 0;
-            transition: opacity 0.2s ease;
-        }
-
-        .wizard-loading-overlay.visible .wizard-loading-text {
-            opacity: 1;
-        }
-
-        .wizard-loading-overlay.visible .wizard-spinner {
-            opacity: 1;
-            animation: wizard-spin 0.9s linear infinite;
-        }
-
-        @keyframes wizard-spin {
-            to { transform: rotate(360deg); }
-        }
+        @import "./components/wizard/wizard.css";
       </style>
       <div class="wizard-overlay">
         <div class="wizard-title">

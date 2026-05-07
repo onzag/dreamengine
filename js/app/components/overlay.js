@@ -84,7 +84,7 @@ class Overlay extends HTMLElement {
     disconnectedCallback() {
         document.removeEventListener("keydown", this.onDocumentKeydown);
         // only show stars if no other overlay is still active
-        const remainingOverlays = document.querySelectorAll('app-character, app-world, app-settings, app-play, app-manage, app-license, app-other-attributions, app-cardtype-wizard');
+        const remainingOverlays = document.querySelectorAll('app-character, app-world, app-settings, app-play, app-manage, app-license, app-other-attributions, app-cardtype-wizard, app-world-wizard');
         if (remainingOverlays.length === 0) {
             // @ts-expect-error
             document.querySelector('.sky').style.display = 'block';

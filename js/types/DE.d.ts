@@ -636,6 +636,11 @@ declare interface DEVocabularyLimit {
      */
     mute: boolean;
     /**
+     * Description of the vocabulary limit for the character
+     * gets injected
+     */
+    description?: DEStringTemplateCharOnly;
+    /**
      * Includes, basic subject pronouns, object pronouns, possessive pronouns, reflexive pronouns, common verbs like "to be", "to have", "to do", etc...
      * and things used for base conjugation and basic grammar
      */

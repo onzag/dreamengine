@@ -1303,13 +1303,15 @@ export async function generateBonds(engine, card, guider, autosave) {
                 "{{other}} is a [], and {} attractive for {{char}}, which makes {{char}} feel comfortable",
                 "{{other}} is a [], and {} attractive for {{char}}, it would be better if they knew each other better",
                 "{{other}} is a [], and {} attractive for {{char}}",
-                "{{other}} is a [], but {} attractive for {{char}}"
+                "{{other}} is a [], but {} attractive for {{char}}",
+                "{{other}} is {} attractive for {{char}}"
             ],
             reasonNo: [
                 "they are around friends, and that makes it uncomfortable",
                 "they are around friends, it would be possible in a more private setting",
-                "{{other}} is a [], and {} attractive for {{char}}, it would be possible if they knew each other better",
+                "{{other}} is a [], it would be possible if they knew each other better",
                 "{{other}} is a [], therefore it is inappropriate",
+                "{{other}} is not attractive enough for this kind of interaction",
                 "{{char}} will never allow it",
             ]
         },
@@ -1321,13 +1323,15 @@ export async function generateBonds(engine, card, guider, autosave) {
                 "{{other}} is a [], and {} attractive for {{char}}, which makes {{char}} feel comfortable",
                 "{{other}} is a [], and {} attractive for {{char}}, it would be better if they knew each other better",
                 "{{other}} is a [], and {} attractive for {{char}}",
-                "{{other}} is a [], but {} attractive for {{char}}"
+                "{{other}} is a [], but {} attractive for {{char}}",
+                "{{other}} is {} attractive for {{char}}"
             ],
             reasonNo: [
                 "they are around family, and that makes it uncomfortable",
                 "they are around family, it would be possible in a more private setting",
                 "{{other}} is a [], it would be possible if they knew each other better",
                 "{{other}} is a [], therefore it is inappropriate",
+                "{{other}} is not attractive enough for this kind of interaction",
                 "{{char}} will never allow it",
             ]
         },
@@ -1337,12 +1341,17 @@ export async function generateBonds(engine, card, guider, autosave) {
                 "{{char}} is alone with {{other}}, a [] who is {} attractive for {{char}}",
                 "{{char}} is alone with {{other}}, a [] who is {} attractive for {{char}}, it would be better if they knew each other better",
                 "{{char}} is alone with {{other}}, a [], this makes {{char}} feel comfortable",
+                "{{other}} is a [], and {} attractive for {{char}}, which makes {{char}} feel comfortable",
+                "{{other}} is a [], and {} attractive for {{char}}, it would be better if they knew each other better",
                 "{{other}} is a [], and {} attractive for {{char}}",
-                "{{other}} is a [], but {} attractive for {{char}}"
+                "{{other}} is a [], but {} attractive for {{char}}",
+                "{{other}} is {} attractive for {{char}}"
             ],
             reasonNo: [
                 "{{char}} is alone with {{other}}, who is a [], which makes {{char}} feel uncomfortable",
+                "{{other}} is a [], it would be possible if they knew each other better",
                 "{{other}} is a [], therefore it is inappropriate",
+                "{{other}} is not attractive enough for this kind of interaction",
                 "{{char}} will never allow it",
             ],
         },
@@ -1352,13 +1361,18 @@ export async function generateBonds(engine, card, guider, autosave) {
                 "being in public makes {{char}} feel comfortable",
                 "they are in public, it would be better in a more private location",
                 "they are in public, it would be better if they knew each other better",
+                "{{other}} is a [], and {} attractive for {{char}}, which makes {{char}} feel comfortable",
+                "{{other}} is a [], and {} attractive for {{char}}, it would be better if they knew each other better",
                 "{{other}} is a [], and {} attractive for {{char}}",
-                "{{other}} is a [], but {} attractive for {{char}}"
+                "{{other}} is a [], but {} attractive for {{char}}",
+                "{{other}} is {} attractive for {{char}}"
             ],
             reasonNo: [
                 "they are in public, it would be possible in a more private location",
                 "{{char}} is in public with {{other}}, who is a [], which makes {{char}} feel uncomfortable",
+                "{{other}} is a [], it would be possible if they knew each other better",
                 "{{other}} is a [], therefore it is inappropriate",
+                "{{other}} is not attractive enough for this kind of interaction",
                 "{{char}} will never allow it",
             ],
         },

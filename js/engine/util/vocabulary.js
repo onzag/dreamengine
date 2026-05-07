@@ -83,6 +83,15 @@ export function mergeVocabularyLimits(a, b) {
      */
     const newOne = {
         mute: a.mute || b.mute,
+        description: async (info) => {
+            const aDesc = (a.description ? typeof a.description === "function" ? await a.description(info) : a.description : "").trim();
+            const bDesc = (b.description ? typeof b.description === "function" ? await b.description(info) : b.description : "").trim();
+
+            if (aDesc && bDesc) {
+                return aDesc + ". " + bDesc;
+            }
+            return aDesc || bDesc;
+        },
         vocabulary: newVocab,
         elongateWordsEffect: a.elongateWordsEffect || b.elongateWordsEffect,
         includeBaseVocabulary: a.includeBaseVocabulary || b.includeBaseVocabulary,
