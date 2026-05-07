@@ -3184,6 +3184,17 @@ declare interface DEUtils {
     isAttractedToWithLevelAsNumber(char1: string | DECompleteCharacterReference | null, potentialAttractiveChar2: string | DECompleteCharacterReference | null): number;
     isAttractedToWithReasoning(char1: string | DECompleteCharacterReference | null, potentialAttractiveChar2: string | DECompleteCharacterReference | null): { attracted: boolean, reasoning: string, level: "slight" | "moderate" | "strong" | false };
 
+    isWithinAttractionGroupForMale(char1: string | DECompleteCharacterReference | null, potentialAttractiveChar2: string | DECompleteCharacterReference | null): boolean;
+    isWithinAttractionGroupForFemale(char1: string | DECompleteCharacterReference | null, potentialAttractiveChar2: string | DECompleteCharacterReference | null): boolean;
+    isWithinAttractionGroupForAmbiguous(char1: string | DECompleteCharacterReference | null, potentialAttractiveChar2: string | DECompleteCharacterReference | null): boolean;
+
+    createVocabularyLimitFromPreset(presetName: string): DEVocabularyLimit;
+
+    isAloneWith(char1: string | DECompleteCharacterReference | null, char2: string | DECompleteCharacterReference | null): boolean;
+    isInPrivateLocation(char1: string | DECompleteCharacterReference | null): boolean;
+    isAroundFriendsOrBetter(char1: string | DECompleteCharacterReference | null, options: {exclude?: string | DECompleteCharacterReference | Array<string | DECompleteCharacterReference>, excludeFamily?: boolean}): boolean;
+    isAroundFamily(char1: string | DECompleteCharacterReference | null, options: {exclude?: string | DECompleteCharacterReference | Array<string | DECompleteCharacterReference>, excludeFamily?: boolean}): boolean;
+
     /**
      * To be used during questions and triggers mostly
      */
@@ -3710,18 +3721,23 @@ declare interface DEScript {
      */
     onWorldInitialized?(DE: DEObject): Promise<void> | void;
     /**
+     * Called after the world is initialized and the first scene has started, allowing for any necessary actions or preparations to be performed at this stage
+     * @param DE 
+     */
+    onWorldClockReady?(DE: DEObject): Promise<void> | void;
+    /**
      * Called before a character's inference is executed, allowing for any necessary preparations
      * @param DE 
-     * @param characterName 
+     * @param character 
      */
-    onInferencePrepareToExecute?(DE: DEObject, characterName: string): Promise<void> | void;
+    onInferencePrepareToExecute?(DE: DEObject, character: DECompleteCharacterReference): Promise<void> | void;
     /**
      * Called after a character's inference is executed, allowing for any necessary follow-up actions based on the inference results, the info parameter provides details about the inference results, such as the primary emotion detected, the emotional range, whether the character has died or reached a dead end, and a message describing the inference outcome
      * @param DE 
-     * @param characterName 
+     * @param character 
      * @param info 
      */
-    onInferenceExecuted?(DE: DEObject, characterName: string, info: {
+    onInferenceExecuted?(DE: DEObject, character: DECompleteCharacterReference, info: {
         primaryEmotion: DEEmotionNames,
         emotionalRange: DEEmotionNames[],
         hasDied: boolean,

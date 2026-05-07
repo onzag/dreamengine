@@ -383,13 +383,23 @@ export class DEngine {
         /**
          * @type {DEScript[]}
          */
-        const worldScripts =
+        const allScripts =
             // @ts-ignore typescript bugs
-            this.jsEngine.scriptOrder.map(scriptKey => this.jsEngine.scriptCache[scriptKey]).filter(script => script.type === "world");
+            this.jsEngine.scriptOrder.map(scriptKey => this.jsEngine.scriptCache[scriptKey]);
+
+        const worldScripts =
+            allScripts.filter(script => script.type === "world");
 
         for (const script of worldScripts) {
             // @ts-ignore typescript continues to bug
             script.initialize && await script.initialize(this.deObject);
+        }
+
+        const hasStartedClock = !!this.deObject.world.selectedScene;
+        if (hasStartedClock) {
+            for (const script of allScripts) {
+                script.onWorldClockReady && await script.onWorldClockReady(this.deObject);
+            }
         }
 
         this.initialized = true;
@@ -891,7 +901,9 @@ export class DEngine {
         }
 
         const randomId = crypto.randomUUID();
-        const sceneId = `INITIAL_SCENE_${randomId}_`;
+        const sceneId = `${optionName}_${randomId}`;
+
+        const isInitialScene = !this.deObject.world.selectedScene;
 
         /**
          * @type {string[]}
@@ -1016,6 +1028,19 @@ export class DEngine {
 
         this.deObject.world.selectedScene = optionName;
 
+        /**
+         * @type {DEScript[]}
+         */
+        const allScripts =
+            // @ts-ignore typescript bugs
+            this.jsEngine.scriptOrder.map(scriptKey => this.jsEngine.scriptCache[scriptKey]);
+
+        if (isInitialScene) {
+            for (const script of allScripts) {
+                script.onWorldClockReady && await script.onWorldClockReady(this.deObject);
+            }
+        }
+
         await this.informDEObjectUpdated();
 
         let index = 0;
@@ -1067,7 +1092,7 @@ export class DEngine {
         }
 
         scene.sceneStarted && await scene.sceneStarted(scene);
-        for (const script of Object.values(this.jsEngine.scriptCache)) {
+        for (const script of allScripts) {
             script.onSceneStarted && await script.onSceneStarted(this.deObject, scene);
         }
 
@@ -1079,10 +1104,11 @@ export class DEngine {
         }
 
         if (sceneObject.charactersStart) {
-            const randomizedList = ([...sceneObject.engagedCharacters]).sort(() => Math.random() - 0.5);
+            const randomizedList = ([...(typeof sceneObject.engagedCharacters === "function" ? sceneObject.engagedCharacters() : sceneObject.engagedCharacters)]).sort(() => Math.random() - 0.5);
             for (const participantName of randomizedList) {
+                const participant = typeof participantName === "string" ? this.deObject.characters[participantName] : participantName;
                 this.informCycleState("info", "Running all triggers for " + participantName + "...");
-                const triggersResult = await runAllTriggersFor(this, this.deObject.characters[participantName], lastItemChangesInfo.interactedCharacters);
+                const triggersResult = await runAllTriggersFor(this, participant, lastItemChangesInfo.interactedCharacters);
 
                 const nextActionsProduced = this.deObject.internalState.NEXT_ACTIONS || [];
                 delete this.deObject.internalState.NEXT_ACTIONS;
@@ -1103,10 +1129,10 @@ export class DEngine {
                 }
 
                 this.informCycleState("info", "Pre-calculating initial states for " + participantName + " and the world...");
-                await calculateStateChange(this, this.deObject.characters[participantName], lastItemChangesInfo.interactedCharacters);
+                await calculateStateChange(this, participant, lastItemChangesInfo.interactedCharacters);
 
                 this.informCycleState("info", "Pre-calculating initial bonds for " + participantName + "...");
-                await calculateBondsChangesDueToMessages(this, this.deObject.characters[participantName], lastItemChangesInfo.interactedCharacters);
+                await calculateBondsChangesDueToMessages(this, participant, lastItemChangesInfo.interactedCharacters);
 
                 /**
                  * @type {string[]}
@@ -1123,11 +1149,11 @@ export class DEngine {
                     await addMessageForStoryMaster(messagesAccum);
                 }
 
-                for (const script of Object.values(this.jsEngine.scriptCache)) {
-                    script.onInferencePrepareToExecute && await script.onInferencePrepareToExecute(this.deObject, participantName);
+                for (const script of allScripts) {
+                    script.onInferencePrepareToExecute && await script.onInferencePrepareToExecute(this.deObject, participant);
                 }
 
-                const talkResult = await talk(this, this.deObject.characters[participantName], {
+                const talkResult = await talk(this, participant, {
                     doNotMove: true,
                     injectedActions: nextActionsProduced,
                     microInjections: triggersResult.microInjections,
@@ -1137,15 +1163,15 @@ export class DEngine {
                 await addMessageForStoryMaster(talkResult.addedMessagesForStoryMaster);
 
                 if (!talkResult.hasDeadEnded) {
-                    const worldRulesResult = await testWorldRulesOn(this, this.deObject.characters[participantName]);
+                    const worldRulesResult = await testWorldRulesOn(this, participant);
                     await addMessageForStoryMaster(worldRulesResult.addedMessagesForStoryMaster);
 
                     this.informCycleState("info", "Pre-calculating item changes and effects...");
-                    lastItemChangesInfo = await calculateItemChanges(this, this.deObject.characters[participantName]);
+                    lastItemChangesInfo = await calculateItemChanges(this, participant);
                 }
 
-                for (const script of Object.values(this.jsEngine.scriptCache)) {
-                    script.onInferenceExecuted && await script.onInferenceExecuted(this.deObject, participantName, {
+                for (const script of allScripts) {
+                    script.onInferenceExecuted && await script.onInferenceExecuted(this.deObject, participant, {
                         emotionalRange: talkResult.emotionalRange,
                         primaryEmotion: talkResult.primaryEmotion,
                         hasDeadEnded: talkResult.hasDeadEnded,
@@ -1204,7 +1230,7 @@ export class DEngine {
 
         scene.sceneReady && await scene.sceneReady(scene);
 
-        for (const script of Object.values(this.jsEngine.scriptCache)) {
+        for (const script of allScripts) {
             script.onSceneReady && await script.onSceneReady(this.deObject, scene);
         }
 

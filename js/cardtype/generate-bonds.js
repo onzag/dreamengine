@@ -102,20 +102,80 @@ function describeFamilyContext(relationshipKey, romanticInterestKey, familyKey) 
  * string with `[]` replaced (but with `{{char}}`/`{{other}}` still present so
  * they can be substituted at runtime by the engine).
  * @param {import('./base.js').CardTypeGuider | null} guider
- * @param {{reasonYes: string[], reasonNo: string[]}} modifierInfo
+ * @param {{
+ *    reasonYes: string[],
+ *    reasonNo: string[],
+ *    animalYes: string[],
+ *    animalNo: string[],
+ *    feralYes: string[],
+ *    feralNo: string[],
+ *    familyYes: string[],
+ *    familyNo: string[],
+ *    maleYes: string[],
+ *    maleNo: string[],
+ *    femaleYes: string[],
+ *    femaleNo: string[],
+ *    ambiguousYes: string[],
+ *    ambiguousNo: string[],
+ * }} modifierInfo
  * @param {string} valueAnswer - "not" | "slight" | "moderate" | "very" this refers to the answer to the question on how receptive they are
  * @param {string} name
  * @param {string} contextReplacement
  * @param {string} guiderQuestion
  * @param {{values: string[]}} lastReasonsGiven - the last reason that was given for this modifier (if any), so it can be shown as the default option to the guider
  * @param {string} attractionLevel - "n/a" | "slight" | "moderate" | "strong" this refers to the level of attraction that char has towards other, this is used to choose the correct reasonYes/reasonNo options to show to the guider
+ * @param {string} fineTune the fine tune used, eg. humanoid_character_male_a
  * @returns {Promise<string | null>}
  */
-async function chooseReason(guider, modifierInfo, valueAnswer, name, contextReplacement, guiderQuestion, lastReasonsGiven, attractionLevel) {
+async function chooseReason(guider, modifierInfo, valueAnswer, name, contextReplacement, guiderQuestion, lastReasonsGiven, attractionLevel, fineTune) {
     if (!guider) return null;
-    const reasons = valueAnswer === "not" ? modifierInfo.reasonNo : modifierInfo.reasonYes;
     const attractionToShow = attractionLevel === "n/a" ? "" : attractionLevel === "slight" ? "slightly" : attractionLevel === "moderate" ? "moderately" : "very";
-    
+
+    const gender = fineTune.includes("female") ? "female" : fineTune.includes("male") ? "male" : (fineTune.includes("ambiguous") ? "ambiguous" : "unknown");
+    const isAnimal = fineTune.includes("animal");
+    const isFeral = fineTune.includes("feral");
+    const isFamily = fineTune.includes("family");
+
+    const reasons = []
+
+    if (valueAnswer === "not") {
+        if (isAnimal) {
+            reasons.push(...modifierInfo.animalNo);
+        } else if (isFeral) {
+            reasons.push(...modifierInfo.feralNo);
+        } else if (isFamily) {
+            reasons.push(...modifierInfo.familyNo);
+        }
+
+        if (gender === "male") {
+            reasons.push(...modifierInfo.maleNo);
+        } else if (gender === "female") {
+            reasons.push(...modifierInfo.femaleNo);
+        } else if (gender === "ambiguous") {
+            reasons.push(...modifierInfo.ambiguousNo);
+        }
+
+        reasons.push(...modifierInfo.reasonNo);
+    } else {
+        if (isAnimal) {
+            reasons.push(...modifierInfo.animalYes);
+        } else if (isFeral) {
+            reasons.push(...modifierInfo.feralYes);
+        } else if (isFamily) {
+            reasons.push(...modifierInfo.familyYes);
+        }
+
+        if (gender === "male") {
+            reasons.push(...modifierInfo.maleYes);
+        } else if (gender === "female") {
+            reasons.push(...modifierInfo.femaleYes);
+        } else if (gender === "ambiguous") {
+            reasons.push(...modifierInfo.ambiguousYes);
+        }
+
+        reasons.push(...modifierInfo.reasonYes);
+    }
+
     /**
      * @type {number[]}
      */
@@ -564,9 +624,21 @@ export async function generateBonds(engine, card, guider, autosave) {
     }
 
 
+    /**
+     * @type {string[]}
+     */
     let selectedFineTunes = card.config.bondsFineTunes || defaultFineTunes;
+    /**
+     * @type {string[]}
+     */
     let selectedFamilyFineTunes = card.config.bondsFamilyFineTunes || defaultFamilyFineTunes;
+    /**
+     * @type {string[]}
+     */
     let selectedFineTunesAfterRomanticInterest = card.config.bondsFineTunesAfterRomanticInterest || defaultFineTunesAfterRomanticInterest;
+    /**
+     * @type {string[]}
+     */
     let selectedFamilyFineTunesAfterRomanticInterest = card.config.bondsFamilyFineTunesAfterRomanticInterest || defaultFamilyFineTunesAfterRomanticInterest;
 
     const selectFineTunes = async () => {
@@ -1266,7 +1338,7 @@ export async function generateBonds(engine, card, guider, autosave) {
      * @param {"n/a" | "slight" | "moderate" | "strong"} v 
      * @returns {string}
      */
-    const getDeeperFineTuneDescription = (fineTuneRaw, v) => {
+    const getFineTuneValueWithAttractionLevel = (fineTuneRaw, v) => {
         const newValue = (fineTuneRaw[0].toLowerCase() + fineTuneRaw.slice(1));
         if (!v || v === "n/a") {
             return newValue;
@@ -1286,12 +1358,57 @@ export async function generateBonds(engine, card, guider, autosave) {
      * @param {"n/a" | "slight" | "moderate" | "strong"} v 
      * @returns {string}
      */
-    const getDeeperFineTuneCondition = (fineTuneConditionRaw, v) => {
+    const getAttractionLevelCondition = (fineTuneConditionRaw, v) => {
         if (!v || v === "n/a") {
             return fineTuneConditionRaw;
         }
 
         return fineTuneConditionRaw.replace("[]", JSON.stringify(v));
+    }
+
+    const BASIC_MODIFIERS_INTIMACY_ALL = {
+        animalYes: [
+            "{{other}} is an animal, which makes it okay for {{char}}",
+        ],
+        animalNo: [
+            "{{other}} is an animal, which makes it not okay for {{char}}",
+        ],
+        feralYes: [
+            "{{other}} is a beast or feral creature, which makes it okay for {{char}}",
+        ],
+        feralNo: [
+            "{{other}} is a beast or feral creature, which makes it not okay for {{char}}",
+        ],
+        familyYes: [
+            "{{other}} is a family member, which makes it okay for {{char}}",
+        ],
+        familyNo: [
+            "{{other}} is a family member, which makes it not okay for {{char}}",
+        ],
+        maleYes: [
+            "{{other}} is male, which makes it okay for {{char}}",
+            "{{other}} is male and a [], which makes it okay for {{char}}",
+        ],
+        maleNo: [
+            "{{other}} is male, which makes it not okay for {{char}}",
+            "{{other}} is male and a [], which makes it not okay for {{char}}",
+        ],
+        femaleYes: [
+            "{{other}} is female, which makes it okay for {{char}}",
+            "{{other}} is female and a [], which makes it okay for {{char}}",
+        ],
+        femaleNo: [
+            "{{other}} is female, which makes it not okay for {{char}}",
+            "{{other}} is female and a [], which makes it not okay for {{char}}",
+        ],
+        ambiguousYes: [
+            "{{other}} is of ambiguous gender, which makes it okay for {{char}}",
+            "{{other}} is of ambiguous gender and a [], which makes it okay for {{char}}",
+        ],
+        ambiguousNo: [
+            "{{other}} is of ambiguous gender, which makes it not okay for {{char}}",
+            "{{other}} is of ambiguous gender and a [], which makes it not okay for {{char}}",
+        ],
     }
 
     const MODIFIERS_INTIMACY = {
@@ -1313,7 +1430,8 @@ export async function generateBonds(engine, card, guider, autosave) {
                 "{{other}} is a [], therefore it is inappropriate",
                 "{{other}} is not attractive enough for this kind of interaction",
                 "{{char}} will never allow it",
-            ]
+            ],
+            ...BASIC_MODIFIERS_INTIMACY_ALL,
         },
         "In public around family": {
             condition: "DE.utils.isAroundFamily(char, {exclude: other})",
@@ -1333,7 +1451,8 @@ export async function generateBonds(engine, card, guider, autosave) {
                 "{{other}} is a [], therefore it is inappropriate",
                 "{{other}} is not attractive enough for this kind of interaction",
                 "{{char}} will never allow it",
-            ]
+            ],
+            ...BASIC_MODIFIERS_INTIMACY_ALL,
         },
         "In private": {
             condition: "DE.utils.isAloneWith(char, other) && DE.utils.isInPrivateLocation(char)",
@@ -1354,6 +1473,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                 "{{other}} is not attractive enough for this kind of interaction",
                 "{{char}} will never allow it",
             ],
+            ...BASIC_MODIFIERS_INTIMACY_ALL,
         },
         "In public": {
             condition: "true",
@@ -1375,6 +1495,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                 "{{other}} is not attractive enough for this kind of interaction",
                 "{{char}} will never allow it",
             ],
+            ...BASIC_MODIFIERS_INTIMACY_ALL,
         },
     };
 
@@ -1444,22 +1565,22 @@ export async function generateBonds(engine, card, guider, autosave) {
             /**
              * @type {string}
              */
-            let fineTuneValueOriginal =
+            let fineTuneAsDescription =
                 // @ts-ignore
                 fineTunesDescriptions[fineTune];
 
             /**
              * @type {Array<"n/a" | "slight" | "moderate" | "strong">}
              */
-            let internalFineTuneToUse = fineTune.endsWith("_a") ? FINE_TUNE_WITH_ATTRACTION_POTENTIALS_STRANGER : ["n/a"];
+            let attractionLevelsToUse = fineTune.endsWith("_a") ? FINE_TUNE_WITH_ATTRACTION_POTENTIALS_STRANGER : ["n/a"];
 
-            for (const deeperFineTune of internalFineTuneToUse) {
-                const fineTuneComment = fineTune + (deeperFineTune !== "n/a" ? "_" + deeperFineTune : "");
+            for (const attractionLevel of attractionLevelsToUse) {
+                const fineTuneComment = fineTune + (attractionLevel !== "n/a" ? "_" + attractionLevel : "");
                 if (hasSpecialComment(strangerSectionBase.body, fineTuneComment)) {
                     continue;
                 }
 
-                const fineTuneValue = getDeeperFineTuneDescription(fineTuneValueOriginal, deeperFineTune);
+                const fineTuneValue = getFineTuneValueWithAttractionLevel(fineTuneAsDescription, attractionLevel);
 
                 const actualStrangerValue = strangerValue.replace("{}", fineTuneValue);
 
@@ -1471,7 +1592,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                 // @ts-ignore
                 if (fineTuneConditions[fineTune] !== "true") {
                     // @ts-ignore
-                    strangerSectionOpenToAffection.body.push(`if (${getDeeperFineTuneCondition(fineTuneConditions[fineTune], deeperFineTune)}) {`);
+                    strangerSectionOpenToAffection.body.push(`if (${getAttractionLevelCondition(fineTuneConditions[fineTune], attractionLevel)}) {`);
                 }
 
                 /**
@@ -1550,7 +1671,8 @@ export async function generateBonds(engine, card, guider, autosave) {
                         describeStrangerContext(strangerKey),
                         "What is the reason for " + name + " being " + answerTrimmed + " to affection from this other character when they are " + intimateModifier.toLowerCase() + "?",
                         lastReasonsGiven,
-                        deeperFineTune,
+                        attractionLevel,
+                        fineTune,
                     );
 
                     strangerSectionOpenToAffection.body.push(`return {value: ${JSON.stringify(valueAnswer)}, reason: ${reason ? toTemplateLiteralNoInfo(reason) : "null"}};`);
@@ -1575,7 +1697,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                 // @ts-ignore
                 if (fineTuneConditions[fineTune] !== "true") {
                     // @ts-ignore
-                    strangerSectionOpenToIntimateAffection.body.push(`if (${getDeeperFineTuneCondition(fineTuneConditions[fineTune], deeperFineTune)}) {`);
+                    strangerSectionOpenToIntimateAffection.body.push(`if (${getAttractionLevelCondition(fineTuneConditions[fineTune], attractionLevel)}) {`);
                 }
 
                 for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
@@ -1646,7 +1768,8 @@ export async function generateBonds(engine, card, guider, autosave) {
                         describeStrangerContext(strangerKey),
                         "What is the reason for " + name + " being " + answerTrimmed + " to intimate affection from this other character when they are " + intimateModifier.toLowerCase() + "?",
                         lastReasonsGiven,
-                        deeperFineTune,
+                        attractionLevel,
+                        fineTune,
                     );
                     strangerSectionOpenToIntimateAffection.body.push(`return {value: ${JSON.stringify(valueAnswer)}, reason: ${reason ? toTemplateLiteralNoInfo(reason) : "null"}};`);
                     if (condition !== "true") {
@@ -1670,7 +1793,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                 // @ts-ignore
                 if (fineTuneConditions[fineTune] !== "true") {
                     // @ts-ignore
-                    strangerSectionOpenToSex.body.push(`if (${getDeeperFineTuneCondition(fineTuneConditions[fineTune], deeperFineTune)}) {`);
+                    strangerSectionOpenToSex.body.push(`if (${getAttractionLevelCondition(fineTuneConditions[fineTune], attractionLevel)}) {`);
                 }
 
                 for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
@@ -1740,7 +1863,8 @@ export async function generateBonds(engine, card, guider, autosave) {
                         describeStrangerContext(strangerKey),
                         "What is the reason for " + name + " being " + answerTrimmed + " to sex with this other character when they are " + intimateModifier.toLowerCase() + "?",
                         lastReasonsGiven,
-                        deeperFineTune,
+                        attractionLevel,
+                        fineTune,
                     );
                     strangerSectionOpenToSex.body.push(`return {value: ${JSON.stringify(valueAnswer)}, reason: ${reason ? toTemplateLiteralNoInfo(reason) : "null"}};`);
                     if (condition !== "true") {
@@ -1764,7 +1888,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                 // @ts-ignore
                 if (fineTuneConditions[fineTune] !== "true") {
                     // @ts-ignore
-                    strangerSectionProneToInitiatingAffection.body.push(`if (${getDeeperFineTuneCondition(fineTuneConditions[fineTune], deeperFineTune)}) {`);
+                    strangerSectionProneToInitiatingAffection.body.push(`if (${getAttractionLevelCondition(fineTuneConditions[fineTune], attractionLevel)}) {`);
                 }
 
                 for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
@@ -1838,7 +1962,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                 // @ts-ignore
                 if (fineTuneConditions[fineTune] !== "true") {
                     // @ts-ignore
-                    strangerSectionProneToInitiatingIntimateAffection.body.push(`if (${getDeeperFineTuneCondition(fineTuneConditions[fineTune], deeperFineTune)}) {`);
+                    strangerSectionProneToInitiatingIntimateAffection.body.push(`if (${getAttractionLevelCondition(fineTuneConditions[fineTune], attractionLevel)}) {`);
                 }
                 for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
                     const proneToInitiatingIntimateAffectionQuestion = "How likely is " + name + " to initiate romantic or sexual physical affection towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "?";
@@ -1910,7 +2034,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                 // @ts-ignore
                 if (fineTuneConditions[fineTune] !== "true") {
                     // @ts-ignore
-                    strangerSectionProneToInitiatingSex.body.push(`if (${getDeeperFineTuneCondition(fineTuneConditions[fineTune], deeperFineTune)}) {`);
+                    strangerSectionProneToInitiatingSex.body.push(`if (${getAttractionLevelCondition(fineTuneConditions[fineTune], attractionLevel)}) {`);
                 }
                 for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
                     const proneToInitiatingSexQuestion = "How likely is " + name + " to initiate sex towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "?";
@@ -2003,6 +2127,9 @@ export async function generateBonds(engine, card, guider, autosave) {
                     if (guidanceGiven) {
                         baseInstructions += "\n\n# MANDATORY REQUIREMENTS — ACTIVE OVERRIDE:\n\nThe following requirements MUST be reflected in your answer. Treat them as hard constraints that take absolute priority over any conflicting instruction above. Do NOT ignore or dilute them:\n\n" + guidanceGiven;
                     }
+
+                    baseInstructions += "\n\nAnswer in present tense, future tense is allowed to specify potential behaviors that " + name + " might do";
+                    
                     await prime();
                     const descriptionQuestion = await generator.next({
                         maxCharacters: 200,
@@ -2044,7 +2171,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                     strangerSectionDescription.body.push(`return ${toTemplateLiteral(descriptionValue)};`);
                 } else {
                     // @ts-ignore
-                    strangerSectionDescription.body.push(`if (${getDeeperFineTuneCondition(fineTuneConditions[fineTune], deeperFineTune)}) {`);
+                    strangerSectionDescription.body.push(`if (${getAttractionLevelCondition(fineTuneConditions[fineTune], attractionLevel)}) {`);
                     strangerSectionDescription.body.push(`return ${toTemplateLiteral(descriptionValue)};`);
                     strangerSectionDescription.body.push(`}`);
                 }
@@ -2086,17 +2213,19 @@ export async function generateBonds(engine, card, guider, autosave) {
                 const familySectionOpenToAffection = insertSection(familySectionBase.body, "openToAffection", (s) => {
                     s.head.push(`openToAffection: (char, other) => {`);
                     s.foot.push(`},`);
+                    s.foot.push(`openToAffectionResponses,`);
                 });
 
                 const familySectionOpenToIntimateAffection = insertSection(familySectionBase.body, "openToIntimateAffection", (s) => {
                     s.head.push(`openToIntimateAffection: (char, other) => {`);
                     s.foot.push(`},`);
+                    s.foot.push(`openToIntimateAffectionResponses,`);
                 });
 
                 const familySectionOpenToSex = insertSection(familySectionBase.body, "openToSex", (s) => {
                     s.head.push(`openToSex: (char, other) => {`);
                     s.foot.push(`},`);
-                    s.foot.push(`openToSexResponses: sexOpenTo,`);
+                    s.foot.push(`openToSexResponses,`);
                 });
 
                 const familySectionProneToInitiatingAffection = insertSection(familySectionBase.body, "proneToInitiatingAffection", (s) => {
@@ -2129,32 +2258,35 @@ export async function generateBonds(engine, card, guider, autosave) {
                 }
 
                 for (const fineTune of fineTuneListToUse) {
-                    let fineTuneValueOriginal =
+                    /**
+                     * @type {string}
+                     */
+                    let fineTuneAsDescription =
                         // @ts-ignore
                         (familyKey === "family" ? fineTuneDescriptionsFamily : fineTunesDescriptions)[fineTune];
 
                     /**
                      * @type {Array<"n/a" | "slight" | "moderate" | "strong">}
                      */
-                    let internalFineTuneToUse = fineTune.endsWith("_a") ? FINE_TUNE_WITH_ATTRACTION_POTENTIALS_BASIC_FRIENDSHIP_FOESHIP : ["n/a"];
+                    let attractionLevelsToUse = fineTune.endsWith("_a") ? FINE_TUNE_WITH_ATTRACTION_POTENTIALS_BASIC_FRIENDSHIP_FOESHIP : ["n/a"];
                     if (fineTune.endsWith("_a")) {
                         if (romanticInterestKey === "slightRomanticInterest_10_20") {
-                            internalFineTuneToUse = FINE_TUNE_WITH_ATTRACTION_POTENTIALS_SLIGHT_ROMANTIC_INTEREST;
+                            attractionLevelsToUse = FINE_TUNE_WITH_ATTRACTION_POTENTIALS_SLIGHT_ROMANTIC_INTEREST;
                         } else if (romanticInterestKey === "romanticInterest_20_35") {
-                            internalFineTuneToUse = FINE_TUNE_WITH_ATTRACTION_POTENTIALS_ROMANTIC_INTEREST;
+                            attractionLevelsToUse = FINE_TUNE_WITH_ATTRACTION_POTENTIALS_ROMANTIC_INTEREST;
                         } else if (romanticInterestKey === "strongRomanticInterest_35_50") {
-                            internalFineTuneToUse = FINE_TUNE_WITH_ATTRACTION_POTENTIALS_STRONG_ROMANTIC_INTEREST;
+                            attractionLevelsToUse = FINE_TUNE_WITH_ATTRACTION_POTENTIALS_STRONG_ROMANTIC_INTEREST;
                         } else if (romanticInterestKey === "deepInLove_50_100") {
-                            internalFineTuneToUse = FINE_TUNE_WITH_ATTRACTION_POTENTIALS_STRONG_ROMANTIC_INTEREST;
+                            attractionLevelsToUse = FINE_TUNE_WITH_ATTRACTION_POTENTIALS_STRONG_ROMANTIC_INTEREST;
                         }
                     }
 
-                    for (const deeperFineTune of internalFineTuneToUse) {
-                        const fineTuneValue = getDeeperFineTuneDescription(fineTuneValueOriginal, deeperFineTune);
+                    for (const attractionLevel of attractionLevelsToUse) {
+                        const fineTuneValue = getFineTuneValueWithAttractionLevel(fineTuneAsDescription, attractionLevel);
 
                         const actualFamilyValue = familyValue.replace("{}", fineTuneValue);
 
-                        if (hasSpecialComment(familySectionDescription.body, fineTune + (deeperFineTune !== "n/a" ? "_" + deeperFineTune : ""))) {
+                        if (hasSpecialComment(familySectionDescription.body, fineTune + (attractionLevel !== "n/a" ? "_" + attractionLevel : ""))) {
                             continue;
                         }
 
@@ -2166,7 +2298,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                         // @ts-ignore
                         if (fineTuneConditions[fineTune] !== "true") {
                             // @ts-ignore
-                            familySectionOpenToAffection.body.push(`if (${getDeeperFineTuneCondition(fineTuneConditions[fineTune], deeperFineTune)}) {`);
+                            familySectionOpenToAffection.body.push(`if (${getAttractionLevelCondition(fineTuneConditions[fineTune], attractionLevel)}) {`);
                         }
 
                         /**
@@ -2244,7 +2376,8 @@ export async function generateBonds(engine, card, guider, autosave) {
                                 describeFamilyContext(relationshipKey, romanticInterestKey, familyKey),
                                 "What is the reason for " + name + " being " + answerTrimmed + " to affection from this other character when they are " + intimateModifier.toLowerCase() + "?",
                                 lastReasonsGiven,
-                                deeperFineTune,
+                                attractionLevel,
+                                fineTune,
                             );
                             familySectionOpenToAffection.body.push(`return {value: ${JSON.stringify(valueAnswer)}, reason: ${reason ? toTemplateLiteralNoInfo(reason) : "null"}};`);
                             if (condition !== "true") {
@@ -2268,7 +2401,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                         // @ts-ignore
                         if (fineTuneConditions[fineTune] !== "true") {
                             // @ts-ignore
-                            familySectionOpenToIntimateAffection.body.push(`if (${getDeeperFineTuneCondition(fineTuneConditions[fineTune], deeperFineTune)}) {`);
+                            familySectionOpenToIntimateAffection.body.push(`if (${getAttractionLevelCondition(fineTuneConditions[fineTune], attractionLevel)}) {`);
                         }
                         for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
                             const openToIntimateAffectionQuestion = "How receptive to intimate affection is " + name + " towards " + actualFamilyValue + " when they are " + intimateModifier.toLowerCase() + "?";
@@ -2336,7 +2469,8 @@ export async function generateBonds(engine, card, guider, autosave) {
                                 describeFamilyContext(relationshipKey, romanticInterestKey, familyKey),
                                 "What is the reason for " + name + " being " + answerTrimmed + " to intimate affection from this other character when they are " + intimateModifier.toLowerCase() + "?",
                                 lastReasonsGiven,
-                                deeperFineTune,
+                                attractionLevel,
+                                fineTune,
                             );
                             familySectionOpenToIntimateAffection.body.push(`return {value: ${JSON.stringify(valueAnswer)}, reason: ${reason ? toTemplateLiteralNoInfo(reason) : "null"}};`);
                             if (condition !== "true") {
@@ -2360,7 +2494,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                         // @ts-ignore
                         if (fineTuneConditions[fineTune] !== "true") {
                             // @ts-ignore
-                            familySectionOpenToSex.body.push(`if (${getDeeperFineTuneCondition(fineTuneConditions[fineTune], deeperFineTune)}) {`);
+                            familySectionOpenToSex.body.push(`if (${getAttractionLevelCondition(fineTuneConditions[fineTune], attractionLevel)}) {`);
                         }
                         for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
                             const openToSexQuestion = "How receptive to sex is " + name + " towards " + actualFamilyValue + " when they are " + intimateModifier.toLowerCase() + "?";
@@ -2428,7 +2562,8 @@ export async function generateBonds(engine, card, guider, autosave) {
                                 describeFamilyContext(relationshipKey, romanticInterestKey, familyKey),
                                 "What is the reason for " + name + " being " + answerTrimmed + " to sex with this other character when they are " + intimateModifier.toLowerCase() + "?",
                                 lastReasonsGiven,
-                                deeperFineTune,
+                                attractionLevel,
+                                fineTune,
                             );
                             familySectionOpenToSex.body.push(`return {value: ${JSON.stringify(valueAnswer)}, reason: ${reason ? toTemplateLiteralNoInfo(reason) : "null"}};`);
                             if (condition !== "true") {
@@ -2452,7 +2587,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                         // @ts-ignore
                         if (fineTuneConditions[fineTune] !== "true") {
                             // @ts-ignore
-                            familySectionProneToInitiatingAffection.body.push(`if (${getDeeperFineTuneCondition(fineTuneConditions[fineTune], deeperFineTune)}) {`);
+                            familySectionProneToInitiatingAffection.body.push(`if (${getAttractionLevelCondition(fineTuneConditions[fineTune], attractionLevel)}) {`);
                         }
                         for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
                             const proneToInitiatingAffectionQuestion = "How likely is " + name + " to initiate non-romantic physical affection towards " + actualFamilyValue + " when they are " + intimateModifier.toLowerCase() + "?";
@@ -2524,7 +2659,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                         // @ts-ignore
                         if (fineTuneConditions[fineTune] !== "true") {
                             // @ts-ignore
-                            familySectionProneToInitiatingIntimateAffection.body.push(`if (${getDeeperFineTuneCondition(fineTuneConditions[fineTune], deeperFineTune)}) {`);
+                            familySectionProneToInitiatingIntimateAffection.body.push(`if (${getAttractionLevelCondition(fineTuneConditions[fineTune], attractionLevel)}) {`);
                         }
                         for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
                             const proneToInitiatingIntimateAffectionQuestion = "How likely is " + name + " to initiate romantic or sexual physical affection towards " + actualFamilyValue + " when they are " + intimateModifier.toLowerCase() + "?";
@@ -2596,7 +2731,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                         // @ts-ignore
                         if (fineTuneConditions[fineTune] !== "true") {
                             // @ts-ignore
-                            familySectionProneToInitiatingSex.body.push(`if (${getDeeperFineTuneCondition(fineTuneConditions[fineTune], deeperFineTune)}) {`);
+                            familySectionProneToInitiatingSex.body.push(`if (${getAttractionLevelCondition(fineTuneConditions[fineTune], attractionLevel)}) {`);
                         }
                         for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
                             const proneToInitiatingSexQuestion = "How likely is " + name + " to initiate sex towards " + actualFamilyValue + " when they are " + intimateModifier.toLowerCase() + "?";
@@ -2688,6 +2823,10 @@ export async function generateBonds(engine, card, guider, autosave) {
                             if (guidanceGiven) {
                                 baseInstructions += "\n\n# MANDATORY REQUIREMENTS — ACTIVE OVERRIDE:\n\nThe following requirements MUST be reflected in your answer. Treat them as hard constraints that take absolute priority over any conflicting instruction above. Do NOT ignore or dilute them:\n\n" + guidanceGiven;
                             }
+
+                            
+                            baseInstructions += "\n\nAnswer in present tense, future tense is allowed to specify potential behaviors that " + name + " might do";
+
                             await prime();
                             const descriptionQuestion = await generator.next({
                                 maxCharacters: 200,
@@ -2722,14 +2861,14 @@ export async function generateBonds(engine, card, guider, autosave) {
                             }
                         }
 
-                        insertSpecialComment(familySectionDescription.body, fineTune + (deeperFineTune !== "n/a" ? "_" + deeperFineTune : ""));
+                        insertSpecialComment(familySectionDescription.body, fineTune + (attractionLevel !== "n/a" ? "_" + attractionLevel : ""));
                         // @ts-ignore
                         if (fineTuneConditions[fineTune] === "true") {
                             // @ts-ignore
                             familySectionDescription.body.push(`return ${toTemplateLiteral(descriptionValue)};`);
                         } else {
                             // @ts-ignore
-                            familySectionDescription.body.push(`if (${getDeeperFineTuneCondition(fineTuneConditions[fineTune], deeperFineTune)}) {`);
+                            familySectionDescription.body.push(`if (${getAttractionLevelCondition(fineTuneConditions[fineTune], attractionLevel)}) {`);
                             familySectionDescription.body.push(`return ${toTemplateLiteral(descriptionValue)};`);
                             familySectionDescription.body.push(`}`);
                         }
