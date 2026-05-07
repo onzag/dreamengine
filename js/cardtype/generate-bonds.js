@@ -485,6 +485,7 @@ export async function generateBonds(engine, card, guider, autosave) {
             return -1;
         }
 
+        // second we make sure that any_family_character is second last
         if (a === "any_family_character") {
             return 1;
         }
@@ -510,7 +511,6 @@ export async function generateBonds(engine, card, guider, autosave) {
             return 1;
         } return 0;
     }
-
 
     if (isAsexualValue) {
         defaultFineTunes = ([
@@ -1282,11 +1282,41 @@ export async function generateBonds(engine, card, guider, autosave) {
         },
     };
 
+    const SETTINGS_ORDER_FIRST_LAYER = [
+        "foe_n100_n50",
+        "unfriendly_n20_n10",
+        "unpleasant_n10_0",
+        "acquaintance_0_10",
+        "friendly_10_20",
+        "goodFriend_20_35",
+        "closeFriend_35_50",
+        "bestFriend_50_100",
+    ];
+
+    const SETTINGS_ORDER_SECOND_LAYER = [
+        "noRomanticInterest_0_10",
+        "slightRomanticInterest_10_20",
+        "romanticInterest_20_35",
+        "strongRomanticInterest_35_50",
+        "deepInLove_50_100",
+    ];
+
+    const SETTINGS_ORDER_THIRD_LAYER = [
+        "nonFamily",
+        "family",
+    ];
+
     const STRANGERS = {
         "strangerNeutral_n5_5": "a stranger, {} that " + name + " just met and has no feelings towards them either positive or negative",
         "strangerGood_5_100": "a stranger, {} that " + name + " just met but has already formed a good impression of and has positive feelings towards them",
         "strangerBad_n100_n5": "a stranger, {} that " + name + " just met but has already formed a bad impression of and has negative feelings towards them",
     };
+
+    const STRANGERS_ORDER = [
+        "strangerNeutral_n5_5",
+        "strangerGood_5_100",
+        "strangerBad_n100_n5",
+    ];
 
     const FINE_TUNE_WITH_ATTRACTION_POTENTIAL_TO_DESCRIPTION = [
         "SLIGHTLY Physically Attractive for " + name + ", a minor level of attraction but there nonetheless",
@@ -1506,7 +1536,13 @@ export async function generateBonds(engine, card, guider, autosave) {
         "In public",
     ];
 
-    for (const [strangerKey, strangerValue] of Object.entries(STRANGERS)) {
+    for (const strangerKey of STRANGERS_ORDER) {
+        /**
+         * @type {string}
+         */
+        const strangerValue =
+            // @ts-ignore
+            STRANGERS[strangerKey];
 
         const strangerSectionBase = insertSection(optionsSection.body, strangerKey, (s) => {
             s.head.push(`${strangerKey}: {`);
@@ -1561,6 +1597,10 @@ export async function generateBonds(engine, card, guider, autosave) {
             s.foot.push(`},`);
         });
 
+        if (!card.config.tuneInfos) {
+            card.config.tuneInfos = {};
+        }
+
         for (const fineTune of selectedFineTunes) {
             /**
              * @type {string}
@@ -1595,20 +1635,19 @@ export async function generateBonds(engine, card, guider, autosave) {
                     strangerSectionOpenToAffection.body.push(`if (${getAttractionLevelCondition(fineTuneConditions[fineTune], attractionLevel)}) {`);
                 }
 
-                /**
-                 * @type {{value: string, done: boolean} | null}
-                 */
-                let lastAnswerValue = null;
-                /**
-                 * @type {{values: string[]}}
-                 */
-                let lastReasonsGiven = { values: [] };
                 for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
+                    const fineTuneCommentWithIntimacyModifier = fineTuneComment + "_" + intimateModifier;
+                    let fineTuneReference = card.config.tuneInfos[fineTuneCommentWithIntimacyModifier];
+                    if (!fineTuneReference) {
+                        fineTuneReference = { id: fineTuneCommentWithIntimacyModifier, fineTune: fineTune, attractionLevel: attractionLevel, intimacyModifier: intimateModifier };
+                        card.config.tuneInfos[fineTuneCommentWithIntimacyModifier] = fineTuneReference;
+                    }
+
                     const openToAffectionQuestion = "How receptive to affection is " + name + " towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "?";
 
-                    !lastAnswerValue ? await prime() : null;
+                    !fineTuneReference.openToAffection ? await prime() : null;
                     // @ts-ignore
-                    const answer = !lastAnswerValue ? await generator.next({
+                    const answer = fineTuneReference.openToAffection ? { value: fineTuneReference.openToAffection, done: false } : await generator.next({
                         maxCharacters: 50,
                         maxSafetyCharacters: 100,
                         maxParagraphs: 1,
@@ -1617,11 +1656,15 @@ export async function generateBonds(engine, card, guider, autosave) {
                         stopAt: [],
                         instructions: "Answer with one of the following options: 'Not receptive', 'Slightly receptive', 'Moderately receptive', 'Very receptive'. Consider the nature of the relationship and the specific modifier of intimacy when determining the level of openness to affection.",
                         grammar: createGrammarFromList(engine, ["Not receptive", "Slightly receptive", "Moderately receptive", "Very receptive"]).grammar,
-                    }) : lastAnswerValue;
-                    lastAnswerValue = answer;
+                    });
 
                     if (answer.done) {
                         throw new Error("Generator ended unexpectedly while generating openToAffection for " + strangerKey);
+                    }
+
+                    // only save stranger neutral as a baseline
+                    if (strangerKey === "strangerNeutral_n5_5") {
+                        fineTuneReference.openToAffection = answer.value;
                     }
 
                     if (guider) {
@@ -1670,10 +1713,15 @@ export async function generateBonds(engine, card, guider, autosave) {
                         name,
                         describeStrangerContext(strangerKey),
                         "What is the reason for " + name + " being " + answerTrimmed + " to affection from this other character when they are " + intimateModifier.toLowerCase() + "?",
-                        lastReasonsGiven,
+                        fineTuneReference.openToAffectionReason ? {values: [fineTuneReference.openToAffectionReason]} : {values: []},
                         attractionLevel,
                         fineTune,
                     );
+
+                    // only save stranger neutral as a baseline
+                    if (strangerKey === "strangerNeutral_n5_5") {
+                        fineTuneReference.openToAffectionReason = reason;
+                    }
 
                     strangerSectionOpenToAffection.body.push(`return {value: ${JSON.stringify(valueAnswer)}, reason: ${reason ? toTemplateLiteralNoInfo(reason) : "null"}};`);
                     if (condition !== "true") {
@@ -1701,11 +1749,18 @@ export async function generateBonds(engine, card, guider, autosave) {
                 }
 
                 for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
+                    const fineTuneCommentWithIntimacyModifier = fineTuneComment + "_" + intimateModifier;
+                    let fineTuneReference = card.config.tuneInfos[fineTuneCommentWithIntimacyModifier];
+                    if (!fineTuneReference) {
+                        fineTuneReference = { id: fineTuneCommentWithIntimacyModifier, fineTune: fineTune, attractionLevel: attractionLevel, intimacyModifier: intimateModifier };
+                        card.config.tuneInfos[fineTuneCommentWithIntimacyModifier] = fineTuneReference;
+                    }
+
                     const openToIntimateAffectionQuestion = "How receptive to intimate affection is " + name + " towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "?";
 
-                    !lastAnswerValue ? await prime() : null;
+                    !fineTuneReference.openToIntimateAffection ? await prime() : null;
                     // @ts-ignore
-                    const answer = !lastAnswerValue ? await generator.next({
+                    const answer = fineTuneReference.openToIntimateAffection ? { value: fineTuneReference.openToIntimateAffection, done: false } : await generator.next({
                         maxCharacters: 50,
                         maxSafetyCharacters: 100,
                         maxParagraphs: 1,
@@ -1714,12 +1769,15 @@ export async function generateBonds(engine, card, guider, autosave) {
                         stopAt: [],
                         instructions: "Answer with one of the following options: 'Not receptive', 'Slightly receptive', 'Moderately receptive', 'Very receptive'. Consider the nature of the relationship and the specific modifier of intimacy when determining the level of openness to intimate affection.",
                         grammar: createGrammarFromList(engine, ["Not receptive", "Slightly receptive", "Moderately receptive", "Very receptive"]).grammar,
-                    }) : lastAnswerValue;
-                    // @ts-ignore
-                    lastAnswerValue = answer;
+                    });
 
                     if (answer.done) {
                         throw new Error("Generator ended unexpectedly while generating openToIntimateAffection for " + strangerKey);
+                    }
+
+                    // only save stranger neutral as a baseline
+                    if (strangerKey === "strangerNeutral_n5_5") {
+                        fineTuneReference.openToIntimateAffection = answer.value;
                     }
 
                     if (guider) {
@@ -1767,10 +1825,16 @@ export async function generateBonds(engine, card, guider, autosave) {
                         name,
                         describeStrangerContext(strangerKey),
                         "What is the reason for " + name + " being " + answerTrimmed + " to intimate affection from this other character when they are " + intimateModifier.toLowerCase() + "?",
-                        lastReasonsGiven,
+                        fineTuneReference.openToIntimateAffectionReason ? {values: [fineTuneReference.openToIntimateAffectionReason]} : {values: []},
                         attractionLevel,
                         fineTune,
                     );
+
+                    // only save stranger neutral as a baseline
+                    if (strangerKey === "strangerNeutral_n5_5") {
+                        fineTuneReference.openToIntimateAffectionReason = reason;
+                    }
+
                     strangerSectionOpenToIntimateAffection.body.push(`return {value: ${JSON.stringify(valueAnswer)}, reason: ${reason ? toTemplateLiteralNoInfo(reason) : "null"}};`);
                     if (condition !== "true") {
                         strangerSectionOpenToIntimateAffection.body.push(`}`);
@@ -1797,10 +1861,17 @@ export async function generateBonds(engine, card, guider, autosave) {
                 }
 
                 for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
+                    const fineTuneCommentWithIntimacyModifier = fineTuneComment + "_" + intimateModifier;
+                    let fineTuneReference = card.config.tuneInfos[fineTuneCommentWithIntimacyModifier];
+                    if (!fineTuneReference) {
+                        fineTuneReference = { id: fineTuneCommentWithIntimacyModifier, fineTune: fineTune, attractionLevel: attractionLevel, intimacyModifier: intimateModifier };
+                        card.config.tuneInfos[fineTuneCommentWithIntimacyModifier] = fineTuneReference;
+                    }
+
                     const openToSexQuestion = "How receptive to sex is " + name + " towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "?";
-                    !lastAnswerValue ? await prime() : null;
+                    !fineTuneReference.openToSex ? await prime() : null;
                     // @ts-ignore
-                    const answer = !lastAnswerValue ? await generator.next({
+                    const answer = fineTuneReference.openToSex ? { value: fineTuneReference.openToSex, done: false } : await generator.next({
                         maxCharacters: 50,
                         maxSafetyCharacters: 100,
                         maxParagraphs: 1,
@@ -1809,12 +1880,15 @@ export async function generateBonds(engine, card, guider, autosave) {
                         stopAt: [],
                         instructions: "Answer with one of the following options: 'Not receptive', 'Slightly receptive', 'Moderately receptive', 'Very receptive'. Consider the nature of the relationship and the specific modifier of intimacy when determining the level of openness to sex.",
                         grammar: createGrammarFromList(engine, ["Not receptive", "Slightly receptive", "Moderately receptive", "Very receptive"]).grammar,
-                    }) : lastAnswerValue;
-                    // @ts-ignore
-                    lastAnswerValue = answer;
+                    });
 
                     if (answer.done) {
                         throw new Error("Generator ended unexpectedly while generating openToSex for " + strangerKey);
+                    }
+
+                    // only save stranger neutral as a baseline
+                    if (strangerKey === "strangerNeutral_n5_5") {
+                        fineTuneReference.openToSex = answer.value;
                     }
 
                     if (guider) {
@@ -1862,10 +1936,16 @@ export async function generateBonds(engine, card, guider, autosave) {
                         name,
                         describeStrangerContext(strangerKey),
                         "What is the reason for " + name + " being " + answerTrimmed + " to sex with this other character when they are " + intimateModifier.toLowerCase() + "?",
-                        lastReasonsGiven,
+                        fineTuneReference.openToSexReason ? {values: [fineTuneReference.openToSexReason]} : {values: []},
                         attractionLevel,
                         fineTune,
                     );
+
+                    // only save stranger neutral as a baseline
+                    if (strangerKey === "strangerNeutral_n5_5") {
+                        fineTuneReference.openToSexReason = reason;
+                    }
+
                     strangerSectionOpenToSex.body.push(`return {value: ${JSON.stringify(valueAnswer)}, reason: ${reason ? toTemplateLiteralNoInfo(reason) : "null"}};`);
                     if (condition !== "true") {
                         strangerSectionOpenToSex.body.push(`}`);
@@ -1892,10 +1972,17 @@ export async function generateBonds(engine, card, guider, autosave) {
                 }
 
                 for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
+                    const fineTuneCommentWithIntimacyModifier = fineTuneComment + "_" + intimateModifier;
+                    let fineTuneReference = card.config.tuneInfos[fineTuneCommentWithIntimacyModifier];
+                    if (!fineTuneReference) {
+                        fineTuneReference = { id: fineTuneCommentWithIntimacyModifier, fineTune: fineTune, attractionLevel: attractionLevel, intimacyModifier: intimateModifier };
+                        card.config.tuneInfos[fineTuneCommentWithIntimacyModifier] = fineTuneReference;
+                    }
+
                     const proneToInitiatingAffectionQuestion = "How likely is " + name + " to initiate non-romantic physical affection towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "?";
-                    !lastAnswerValue ? await prime() : null;
+                    !fineTuneReference.proneToInitiatingAffection ? await prime() : null;
                     // @ts-ignore
-                    const answer = !lastAnswerValue ? await generator.next({
+                    const answer = fineTuneReference.proneToInitiatingAffection ? fineTuneReference.proneToInitiatingAffection : await generator.next({
                         maxCharacters: 50,
                         maxSafetyCharacters: 100,
                         maxParagraphs: 1,
@@ -1904,9 +1991,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                         stopAfter: probabilityGrammar.stopAfter,
                         stopAt: [],
                         grammar: probabilityGrammar.grammar,
-                    }) : lastAnswerValue;
-                    // @ts-ignore
-                    lastAnswerValue = answer;
+                    });
 
                     if (answer.done) {
                         throw new Error("Generator ended unexpectedly while generating proneToInitiatingAffection for " + strangerKey);
@@ -1965,9 +2050,16 @@ export async function generateBonds(engine, card, guider, autosave) {
                     strangerSectionProneToInitiatingIntimateAffection.body.push(`if (${getAttractionLevelCondition(fineTuneConditions[fineTune], attractionLevel)}) {`);
                 }
                 for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
+                    const fineTuneCommentWithIntimacyModifier = fineTuneComment + "_" + intimateModifier;
+                    let fineTuneReference = card.config.tuneInfos[fineTuneCommentWithIntimacyModifier];
+                    if (!fineTuneReference) {
+                        fineTuneReference = { id: fineTuneCommentWithIntimacyModifier, fineTune: fineTune, attractionLevel: attractionLevel, intimacyModifier: intimateModifier };
+                        card.config.tuneInfos[fineTuneCommentWithIntimacyModifier] = fineTuneReference;
+                    }
+
                     const proneToInitiatingIntimateAffectionQuestion = "How likely is " + name + " to initiate romantic or sexual physical affection towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "?";
-                    !lastAnswerValue ? await prime() : null;
-                    const answer = !lastAnswerValue ? await generator.next({
+                    !fineTuneReference.proneToInitiatingIntimateAffection ? await prime() : null;
+                    const answer = fineTuneReference.proneToInitiatingIntimateAffection ? { value: fineTuneReference.proneToInitiatingIntimateAffection, done: false } : await generator.next({
                         maxCharacters: 50,
                         maxSafetyCharacters: 100,
                         maxParagraphs: 1,
@@ -1976,12 +2068,14 @@ export async function generateBonds(engine, card, guider, autosave) {
                         stopAfter: probabilityGrammar.stopAfter,
                         stopAt: [],
                         grammar: probabilityGrammar.grammar,
-                    }) : lastAnswerValue;
-                    // @ts-ignore
-                    lastAnswerValue = answer;
+                    });
 
                     if (answer.done) {
                         throw new Error("Generator ended unexpectedly while generating proneToInitiatingIntimateAffection for " + strangerKey);
+                    }
+
+                    if (strangerKey === "strangerNeutral_n5_5") {
+                        fineTuneReference.proneToInitiatingIntimateAffection = answer.value;
                     }
 
                     if (guider) {
@@ -2037,9 +2131,16 @@ export async function generateBonds(engine, card, guider, autosave) {
                     strangerSectionProneToInitiatingSex.body.push(`if (${getAttractionLevelCondition(fineTuneConditions[fineTune], attractionLevel)}) {`);
                 }
                 for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
+                    const fineTuneCommentWithIntimacyModifier = fineTuneComment + "_" + intimateModifier;
+                    let fineTuneReference = card.config.tuneInfos[fineTuneCommentWithIntimacyModifier];
+                    if (!fineTuneReference) {
+                        fineTuneReference = { id: fineTuneCommentWithIntimacyModifier, fineTune: fineTune, attractionLevel: attractionLevel, intimacyModifier: intimateModifier };
+                        card.config.tuneInfos[fineTuneCommentWithIntimacyModifier] = fineTuneReference;
+                    }
+
                     const proneToInitiatingSexQuestion = "How likely is " + name + " to initiate sex towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "?";
-                    !lastAnswerValue ? await prime() : null;
-                    const answer = !lastAnswerValue ? await generator.next({
+                    !fineTuneReference.proneToInitiatingSex ? await prime() : null;
+                    const answer = fineTuneReference.proneToInitiatingSex ? { value: fineTuneReference.proneToInitiatingSex, done: false } : await generator.next({
                         maxCharacters: 50,
                         maxSafetyCharacters: 100,
                         maxParagraphs: 1,
@@ -2048,12 +2149,14 @@ export async function generateBonds(engine, card, guider, autosave) {
                         stopAfter: probabilityGrammar.stopAfter,
                         stopAt: [],
                         grammar: probabilityGrammar.grammar,
-                    }) : lastAnswerValue;
-                    // @ts-ignore
-                    lastAnswerValue = answer;
+                    });
 
                     if (answer.done) {
                         throw new Error("Generator ended unexpectedly while generating proneToInitiatingSex for " + strangerKey);
+                    }
+
+                    if (strangerKey === "strangerNeutral_n5_5") {
+                        fineTuneReference.proneToInitiatingSex = answer.value;
                     }
 
                     if (guider) {
@@ -2181,21 +2284,39 @@ export async function generateBonds(engine, card, guider, autosave) {
         }
     }
 
-    for (const [relationshipKey, relationshipValue] of Object.entries(SETTINGS)) {
+    for (const relationshipKey of SETTINGS_ORDER_FIRST_LAYER) {
+        /**
+         * @type {object}
+         */
+        const relationshipValue =
+            // @ts-ignore
+            SETTINGS[relationshipKey];
 
         const relationshipsSection = insertSection(optionsSection.body, relationshipKey, (s) => {
             s.head.push(`${relationshipKey}: {`);
             s.foot.push(`},`);
         });
 
-        for (const [romanticInterestKey, romanticInterestValue] of Object.entries(relationshipValue)) {
+        for (const romanticInterestKey of SETTINGS_ORDER_SECOND_LAYER) {
+            /**
+             * @type {{family: string, nonFamily: string}}
+             */
+            const romanticInterestValue =
+                // @ts-ignore
+                relationshipValue[romanticInterestKey];
 
             const romanticInterestSection = insertSection(relationshipsSection.body, romanticInterestKey, (s) => {
                 s.head.push(`${romanticInterestKey}: {`);
                 s.foot.push(`},`);
             });
 
-            for (const [familyKey, familyValue] of Object.entries(romanticInterestValue)) {
+            for (const familyKey of SETTINGS_ORDER_THIRD_LAYER) {
+                /**
+                 * @type {string}
+                 */
+                const familyValue =
+                    // @ts-ignore
+                    romanticInterestValue[familyKey];
 
                 const familySectionBase = insertSection(romanticInterestSection.body, familyKey, (s) => {
                     s.head.push(`${familyKey}: {`);

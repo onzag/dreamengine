@@ -33,14 +33,36 @@ export function createCardStructureFrom(jsContent) {
      * @type {string | null}
      */
     let sectionId = null;
+
+    let configAcumulator = '';
+    let cardAcumulator = '';
+
+    let isInConfig = false;
+    let isInCard = false;
+
     for (const line of splittedLines) {
         const trimmedLine = line.trim();
-        if (trimmedLine === '//@placeholder' || !trimmedLine) {
+        if (trimmedLine === '//@placeholder') {
             // skip
+        } else if (!trimmedLine) {
+            if (isInConfig) {
+                baseFile.config = JSON.parse(configAcumulator);
+            }
+            if (isInCard) {
+                baseFile.card = cardAcumulator;
+            }
+            isInConfig = false;
+            isInCard = false;
+        } else if (trimmedLine.startsWith("//") && isInConfig) {
+            configAcumulator += line.substring(2);
+        } else if (trimmedLine.startsWith("//") && isInCard) {
+            cardAcumulator += line.substring(2);
         } else if (trimmedLine.startsWith('//@config:') && !sectionId) {
-            baseFile.config = JSON.parse(line.replace('//@config:', '').trim());
+            configAcumulator = line.substring('//@config:'.length).trim();
+            isInConfig = true;
         } else if (trimmedLine.startsWith('//@card:') && !sectionId) {
-            baseFile.card = JSON.parse(line.replace('//@card:', '').trim());
+            cardAcumulator = line.substring('//@card:'.length).trim();
+            isInCard = true;
         } else if (trimmedLine === '//@imports' && !sectionId) {
             isInImports = true;
             isInHead = false;
@@ -130,8 +152,8 @@ export function isCardTypeFile(jsContent) {
  * @returns {string}
  */
 export function getJsCard(base, baseTabCount = 0, noImportsNorCardAndConfig = false) {
-    let endResult = noImportsNorCardAndConfig ? "" : `//@config: ${JSON.stringify(base.config)}` +
-        `\n//@card: ${JSON.stringify(base.card)}` + "\n\n";
+    let endResult = noImportsNorCardAndConfig ? "" : `//@config: ${JSON.stringify(base.config, null, 2).split("\n").join("\n//")}` + "\n\n" +
+        `//@card: ${JSON.stringify(base.card, null, 2).split("\n").join("\n//")}` + "\n\n";
 
     const elementsInOrder = noImportsNorCardAndConfig ? [
         "//@head",
