@@ -52,6 +52,45 @@ export function weightedRandom(items, getWeight, seed = null) {
 }
 
 /**
+ * Selects a random item from an array based on weighted probabilities.
+ * Each item should have a numeric property that represents its relative likelihood.
+ * 
+ * @template T
+ * @param {T[]} items - Array of items to choose from
+ * @param {(item: T) => number} getWeight - Function that returns the weight/likelihood for each item
+ * @param {number | null} [seed=null] - Optional seed for reproducible results
+ * @returns {T | null} The selected item, or null if array is empty
+ * 
+ * @example
+ * const weather = [
+ *   { type: 'sunny', likelyhood: 60 },
+ *   { type: 'cloudy', likelyhood: 30 },
+ *   { type: 'rainy', likelyhood: 10 }
+ * ];
+ * const selected = weightedRandom(weather, w => w.likelyhood);
+ */
+export function weightedRandomWithNullsIfNoWeight(items, getWeight, seed = null) {
+    if (items.length === 0) return null;
+
+    const totalWeight = items.reduce((sum, item) => sum + getWeight(item), 0);
+    
+    if (totalWeight <= 0) return null; // Return null if all weights are 0 or negative
+    
+    const rand = (seed === null ? Math.random() : mulberry32(seed)()) * totalWeight;
+    
+    let cumulative = 0;
+    for (const item of items) {
+        cumulative += getWeight(item);
+        if (rand < cumulative) {
+            return item;
+        }
+    }
+    
+    // Fallback (should rarely happen due to floating point precision)
+    return items[items.length - 1] ;
+}
+
+/**
  * Simplified version when items have a 'likelihood' property
  * 
  * @template T

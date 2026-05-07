@@ -708,7 +708,7 @@ export async function generateAffectiveStates(engine, card, guider, autosave) {
 
         for (const act of intimateAffectionForMalesParsed) {
             intimateAffectionActs.body.push(`{`)
-            await generateIntimateAction(act, true, false, false, "DE.utils.isWithinAttractionGroupForMale(char, other) ? 1 : 0");
+            await generateIntimateAction(act, true, false, false, "DE.utils.isWithinAttractionGroupFor('male', char, other) ? 1 : 0");
             intimateAffectionActs.body.push(`},`)
         }
 
@@ -787,7 +787,7 @@ export async function generateAffectiveStates(engine, card, guider, autosave) {
 
         for (const act of intimateAffectionForFemalesParsed) {
             intimateAffectionActs.body.push(`{`)
-            await generateIntimateAction(act, true, false, false, "DE.utils.isWithinAttractionGroupForFemale(char, other) ? 1 : 0");
+            await generateIntimateAction(act, true, false, false, "DE.utils.isWithinAttractionGroupFor('female', char, other) ? 1 : 0");
             intimateAffectionActs.body.push(`},`)
         }
 
@@ -866,7 +866,7 @@ export async function generateAffectiveStates(engine, card, guider, autosave) {
 
         for (const act of intimateAffectionForAmbiguousParsed) {
             intimateAffectionActs.body.push(`{`)
-            await generateIntimateAction(act, true, false, false, "DE.utils.isWithinAttractionGroupForAmbiguous(char, other) ? 1 : 0");
+            await generateIntimateAction(act, true, false, false, "DE.utils.isWithinAttractionGroupFor('ambiguous', char, other) ? 1 : 0");
             intimateAffectionActs.body.push(`},`)
         }
 
@@ -911,7 +911,7 @@ export async function generateAffectiveStates(engine, card, guider, autosave) {
 
         for (const act of sexActsForMalesParsed) {
             sexActsSection.body.push(`{`)
-            await generateIntimateAction(act, false, true, true, "DE.utils.isWithinAttractionGroupForMale(char, other) ? 1 : 0");
+            await generateIntimateAction(act, false, true, true, "DE.utils.isWithinAttractionGroupFor('male', char, other) ? 1 : 0");
             sexActsSection.body.push(`},`)
         }
 
@@ -950,7 +950,7 @@ export async function generateAffectiveStates(engine, card, guider, autosave) {
 
         for (const act of sexActsForFemalesParsed) {
             sexActsSection.body.push(`{`)
-            await generateIntimateAction(act, false, true, true, "DE.utils.isWithinAttractionGroupForFemale(char, other) ? 1 : 0");
+            await generateIntimateAction(act, false, true, true, "DE.utils.isWithinAttractionGroupFor('female', char, other) ? 1 : 0");
             sexActsSection.body.push(`},`)
         }
 
@@ -989,7 +989,7 @@ export async function generateAffectiveStates(engine, card, guider, autosave) {
 
         for (const act of sexActsForAmbiguousParsed) {
             sexActsSection.body.push(`{`)
-            await generateIntimateAction(act, false, true, true, "DE.utils.isWithinAttractionGroupForAmbiguous(char, other) ? 1 : 0");
+            await generateIntimateAction(act, false, true, true, "DE.utils.isWithinAttractionGroupFor('ambiguous', char, other) ? 1 : 0");
             sexActsSection.body.push(`},`)
         }
 

@@ -684,8 +684,7 @@ declare interface DEIntimateAction {
      */
     action: DEStringTemplateCharAndOther;
     /**
-     * Probability to trigger, subject to things like libido (for sexual actions)
-     * and other circumstances
+     * Probability to trigger, an action, used as a weighted random against other actions if there are multiple contenders, higher means more likely to trigger
      */
     probability: (char: DECompleteCharacterReference, other: DECompleteCharacterReference) => number;
     /**
@@ -830,11 +829,8 @@ declare interface DEBondIntimacyInfo {
      */
     openToAffectionResponses: Array<DEIntimateOpenActivity>;
     /**
-     * Whether the character in question with another, the options are what types of affection they will be prone to initiating
+     * The likelyhood of the character to initiate an affectionate action with the other, and the actions they may perform
      * Make sure to keep in mind the circumstances
-     * @param char 
-     * @param other 
-     * @returns 
      */
     proneToInitiatingAffection: { probability: (char: DECompleteCharacterReference, other: DECompleteCharacterReference) => PromiseOrNot<number>, actions: DEIntimateAction[] };
     /**
@@ -854,11 +850,8 @@ declare interface DEBondIntimacyInfo {
      */
     openToIntimateAffectionResponses: Array<DEIntimateOpenActivity>;
     /**
-     * Whether the character in question with another, the options are what types of intimate affection they will be prone to initiating
+     * The likelyhood of the character to initiate an intimate affectionate action with the other, and the actions they may perform
      * Make sure to keep in mind the circumstances
-     * @param char 
-     * @param other 
-     * @returns 
      */
     proneToInitiatingIntimateAffection: { probability: (char: DECompleteCharacterReference, other: DECompleteCharacterReference) => PromiseOrNot<number>, actions: DEIntimateAction[] };
     /**
@@ -878,11 +871,8 @@ declare interface DEBondIntimacyInfo {
      */
     openToSexResponses: Array<DEIntimateOpenActivity>;
     /**
-     * Whether the character in question with another, the options are what types of sex they will be prone to initiating
+     * The likelyhood of the character to initiate a sexual action with the other, and the actions they may perform
      * Make sure to keep in mind the circumstances
-     * @param char 
-     * @param other 
-     * @returns 
      */
     proneToInitiatingSex: { probability: (char: DECompleteCharacterReference, other: DECompleteCharacterReference) => PromiseOrNot<number>, actions: DEIntimateAction[] };
 };
@@ -3184,16 +3174,14 @@ declare interface DEUtils {
     isAttractedToWithLevelAsNumber(char1: string | DECompleteCharacterReference | null, potentialAttractiveChar2: string | DECompleteCharacterReference | null): number;
     isAttractedToWithReasoning(char1: string | DECompleteCharacterReference | null, potentialAttractiveChar2: string | DECompleteCharacterReference | null): { attracted: boolean, reasoning: string, level: "slight" | "moderate" | "strong" | false };
 
-    isWithinAttractionGroupForMale(char1: string | DECompleteCharacterReference | null, potentialAttractiveChar2: string | DECompleteCharacterReference | null): boolean;
-    isWithinAttractionGroupForFemale(char1: string | DECompleteCharacterReference | null, potentialAttractiveChar2: string | DECompleteCharacterReference | null): boolean;
-    isWithinAttractionGroupForAmbiguous(char1: string | DECompleteCharacterReference | null, potentialAttractiveChar2: string | DECompleteCharacterReference | null): boolean;
+    isWithinAttractionGroupFor(option: "male" | "female" | "ambiguous", char1: string | DECompleteCharacterReference | null, potentialAttractiveChar2: string | DECompleteCharacterReference | null): boolean;
 
     createVocabularyLimitFromPreset(presetName: string): DEVocabularyLimit;
 
     isAloneWith(char1: string | DECompleteCharacterReference | null, char2: string | DECompleteCharacterReference | null): boolean;
     isInPrivateLocation(char1: string | DECompleteCharacterReference | null): boolean;
     isAroundFriendsOrBetter(char1: string | DECompleteCharacterReference | null, options: {exclude?: string | DECompleteCharacterReference | Array<string | DECompleteCharacterReference>, excludeFamily?: boolean}): boolean;
-    isAroundFamily(char1: string | DECompleteCharacterReference | null, options: {exclude?: string | DECompleteCharacterReference | Array<string | DECompleteCharacterReference>, excludeFamily?: boolean}): boolean;
+    isAroundFamily(char1: string | DECompleteCharacterReference | null, options: {exclude?: string | DECompleteCharacterReference | Array<string | DECompleteCharacterReference>}): boolean;
 
     /**
      * To be used during questions and triggers mostly

@@ -926,6 +926,163 @@ export const deEngineUtilsFn = (DE) => ({
         return stateInfo.relieving;
     },
 
+    createVocabularyLimitFromPreset(presetName) {
+        // TODO implement presets const vocabularyLimits = [
+                //     "moaning",
+                //     "gagging",
+                //     "panting",
+                //     "whimpering",
+                //     "crying",
+                //     "crying and moaning",
+                //     "screaming",
+                //     "screaming and moaning",
+                //     "mute",
+                //     "none",
+                //     "normal",
+                // ];
+        return {
+            mute: false,
+        }
+    },
+
+    isAloneWith(char1, char2) {
+        if (char1 === null || char2 === null) {
+            console.warn(`Cannot check if alone with because one of the characters is null`);
+            return false;
+        }
+
+        const char1Ref = typeof char1 === "string" ? DE.characters[char1] : char1;
+        const char2Ref = typeof char2 === "string" ? DE.characters[char2] : char2;
+        if (!char1Ref || !char2Ref) {
+            console.warn(`Character reference not found when checking if alone with`);
+            return false;
+        }
+
+        const char1Location = DE.stateFor[char1Ref.name].location;
+        const char2Location = DE.stateFor[char2Ref.name].location;
+
+        if (char1Location !== char2Location) {
+            return false;
+        }
+
+        for (const member of Object.keys(DE.stateFor)) {
+            if (member !== char1Ref.name && member !== char2Ref.name) {
+                if (DE.stateFor[member].location === char1Location) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    },
+
+    isAroundFamily(char1, options) {
+        const char1Ref = typeof char1 === "string" ? DE.characters[char1] : char1;
+        if (!char1Ref) {
+            console.warn(`Character reference not found when checking if around family`);
+            return false;
+        }
+
+        const char1Location = DE.stateFor[char1Ref.name].location;
+
+        const excludes = options?.exclude || [];
+        const excludesAsAssuredArray = (Array.isArray(excludes) ? excludes : [excludes]).map(e => typeof e === "string" ? e : e.name);
+
+        for (const member of Object.keys(DE.stateFor)) {
+            if (member !== char1Ref.name || excludesAsAssuredArray.includes(member)) {
+                continue;
+            }
+            if (DE.stateFor[member].location === char1Location) {
+                const familyTie = char1Ref.familyTies[member];
+                if (familyTie) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    },
+
+    isInPrivateLocation(char) {
+        const charRef = typeof char === "string" ? DE.characters[char] : char;
+        if (!charRef) {
+            console.warn(`Character reference not found when checking if in private location`);
+            return false;
+        }
+
+        const charLocation = DE.stateFor[charRef.name].location;
+        const locationRef = DE.world.locations[charLocation];
+        if (!locationRef) {
+            console.warn(`Location reference for ${charLocation} not found when checking if in private location`);
+            return false;
+        }
+
+        return locationRef.isPrivate || false;
+    },
+
+    isAroundFriendsOrBetter(char1, options) {
+        const char1Ref = typeof char1 === "string" ? DE.characters[char1] : char1;
+        if (!char1Ref) {
+            console.warn(`Character reference not found when checking if around friends or better`);
+            return false;
+        }
+
+        if (!char1Ref.bonds) {
+            console.warn(`Character ${char1Ref.name} does not have a bond system, cannot check if around friends or better`);
+            return false;
+        }
+
+        const char1Location = DE.stateFor[char1Ref.name].location;
+
+        const excludes = options?.exclude || [];
+        const excludesAsAssuredArray = (Array.isArray(excludes) ? excludes : [excludes]).map(e => typeof e === "string" ? e : e.name);
+
+        for (const member of Object.keys(DE.stateFor)) {
+            if (member !== char1Ref.name && !excludesAsAssuredArray.includes(member) && (options.excludeFamily ? !char1Ref.familyTies[member] : true)) {
+                if (DE.stateFor[member].location === char1Location) {
+                    const bondTowards = DE.bonds[char1Ref.name].active.find(b => b.towards === member);
+                    if (!bondTowards) {
+                        continue;
+                    }
+
+                    const friendsThreshold = char1Ref.bonds.bondGraduation.friend;
+                    if (bondTowards.bond >= friendsThreshold) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    },
+
+    isWithinAttractionGroupFor(opt, char1, char2) {
+        const char1Ref = typeof char1 === "string" ? DE.characters[char1] : char1;
+        const char2Ref = typeof char2 === "string" ? DE.characters[char2] : char2;
+
+        if (!char1Ref || !char2Ref) {
+            console.warn(`Character reference not found when checking if within attraction group for ambiguous`);
+            return false;
+        }
+
+        if (char2Ref.gender !== opt) {
+            return false;
+        }
+
+        for (const attraction of char1Ref.attractions) {
+            if (
+                attraction.towards &&
+                (attraction.towards.includes(opt) || attraction.towards === "any") &&
+                attraction.ageRange && attraction.ageRange[0] <= char2Ref.ageYears && char2Ref.ageYears <= attraction.ageRange[1] &&
+                (!attraction.speciesType || attraction.speciesType === char2Ref.speciesType) &&
+                (!attraction.species || attraction.species.includes(char2Ref.species)) &&
+                (!attraction.group || char2Ref.groupBelonging.includes(attraction.group)) &&
+                (!attraction.sex || attraction.sex.includes(char2Ref.sex))
+            ) {
+                return true;
+            }
+        }
+        return false;
+    },
+
     templateUtils: {
         breakDownCharactersAndCausesTemplate(info) {
             return async (info2) => {
