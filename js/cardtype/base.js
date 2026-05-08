@@ -42,9 +42,8 @@ export function createCardStructureFrom(jsContent) {
 
     for (const line of splittedLines) {
         const trimmedLine = line.trim();
-        if (trimmedLine === '//@placeholder') {
-            // skip
-        } else if (!trimmedLine) {
+
+        if (!trimmedLine || trimmedLine.startsWith('//@')) {
             if (isInConfig) {
                 baseFile.config = JSON.parse(configAcumulator);
             }
@@ -53,10 +52,18 @@ export function createCardStructureFrom(jsContent) {
             }
             isInConfig = false;
             isInCard = false;
-        } else if (trimmedLine.startsWith("//") && isInConfig) {
-            configAcumulator += line.substring(2);
+        }
+
+        if (trimmedLine === '//@placeholder' || !trimmedLine) {
+            // skip
+        } if (trimmedLine.startsWith("//") && isInConfig) {
+            // Preserve newlines between continuation lines so that the
+            // pretty-printed JSON survives a round-trip byte-for-byte.
+            // Concatenating without a separator would collapse multi-line
+            // JSON to one line and cause re-encoding to grow the file.
+            configAcumulator += "\n" + line.substring(2);
         } else if (trimmedLine.startsWith("//") && isInCard) {
-            cardAcumulator += line.substring(2);
+            cardAcumulator += "\n" + line.substring(2);
         } else if (trimmedLine.startsWith('//@config:') && !sectionId) {
             configAcumulator = line.substring('//@config:'.length).trim();
             isInConfig = true;
@@ -138,7 +145,7 @@ export function isCardTypeFile(jsContent) {
         return true;
     }
     const splittedLines = jsContent.split('\n');
-    const basicChecksPass = splittedLines.length > 2 && splittedLines[0].startsWith('//@config:') && splittedLines[1].startsWith('//@card:');
+    const basicChecksPass = splittedLines.length > 2 && splittedLines[0].startsWith('//@config:');
     if (!basicChecksPass) return false;
     // check for imports, head, body or foot comments
     const trimmedLines = splittedLines.map(line => line.trim());
@@ -153,7 +160,7 @@ export function isCardTypeFile(jsContent) {
  */
 export function getJsCard(base, baseTabCount = 0, noImportsNorCardAndConfig = false) {
     let endResult = noImportsNorCardAndConfig ? "" : `//@config: ${JSON.stringify(base.config, null, 2).split("\n").join("\n//")}` + "\n\n" +
-        `//@card: ${JSON.stringify(base.card, null, 2).split("\n").join("\n//")}` + "\n\n";
+        `//@card: ${JSON.stringify(base.card)}` + "\n\n";
 
     const elementsInOrder = noImportsNorCardAndConfig ? [
         "//@head",
@@ -177,6 +184,14 @@ export function getJsCard(base, baseTabCount = 0, noImportsNorCardAndConfig = fa
     for (const element of elementsInOrder) {
         if (typeof element === 'string') {
             const trimmedLine = element.trim();
+
+            if (!trimmedLine) {
+                if (!endResult.endsWith('\n\n')) {
+                    endResult += '\n';
+                }
+                continue;
+            }
+
             let alreadyReduced = false;
             if (trimmedLine.startsWith("}") || trimmedLine.startsWith(")") || trimmedLine.startsWith("]")) {
                 tabCount = Math.max(tabCount - 1, 0);
