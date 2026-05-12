@@ -75,18 +75,152 @@ const RELATIONSHIP_KEY_DESCRIPTIONS = {
     "bestFriend_50_100": "best friend",
 };
 
-/** @type {Record<string, string>} */
+/** @type {Record<string, Record<string, [string, string | null]}>>} */
+const RELATIONSHIP_KEY_INFO_MAP = {
+    "foe_n100_n50": {
+        "noRomanticInterest_0_10": ["hostile_n50_n35", "noRomanticInterest_0_10"],
+        "slightRomanticInterest_10_20": ["hostile_n50_n35", "slightRomanticInterest_10_20"],
+        "romanticInterest_20_35": ["hostile_n50_n35", "romanticInterest_20_35"],
+        "strongRomanticInterest_35_50": ["hostile_n50_n35", "strongRomanticInterest_35_50"],
+        "deepInLove_50_100": ["hostile_n50_n35", "deepInLove_50_100"],
+    },
+    "hostile_n50_n35": {
+        "noRomanticInterest_0_10": ["antagonistic_n35_n20", "noRomanticInterest_0_10"],
+        "slightRomanticInterest_10_20": ["antagonistic_n35_n20", "slightRomanticInterest_10_20"],
+        "romanticInterest_20_35": ["antagonistic_n35_n20", "romanticInterest_20_35"],
+        "strongRomanticInterest_35_50": ["antagonistic_n35_n20", "strongRomanticInterest_35_50"],
+        "deepInLove_50_100": ["antagonistic_n35_n20", "deepInLove_50_100"],
+    },
+    "antagonistic_n35_n20": {
+        "noRomanticInterest_0_10": ["unfriendly_n20_n10", "noRomanticInterest_0_10"],
+        "slightRomanticInterest_10_20": ["unfriendly_n20_n10", "slightRomanticInterest_10_20"],
+        "romanticInterest_20_35": ["unfriendly_n20_n10", "romanticInterest_20_35"],
+        "strongRomanticInterest_35_50": ["unfriendly_n20_n10", "strongRomanticInterest_35_50"],
+        "deepInLove_50_100": ["unfriendly_n20_n10", "deepInLove_50_100"],
+    },
+    "unfriendly_n20_n10": {
+        "noRomanticInterest_0_10": ["unpleasant_n10_0", "noRomanticInterest_0_10"],
+        "slightRomanticInterest_10_20": ["unpleasant_n10_0", "slightRomanticInterest_10_20"],
+        "romanticInterest_20_35": ["unpleasant_n10_0", "romanticInterest_20_35"],
+        "strongRomanticInterest_35_50": ["unpleasant_n10_0", "strongRomanticInterest_35_50"],
+        "deepInLove_50_100": ["unpleasant_n10_0", "deepInLove_50_100"],
+    },
+    "unpleasant_n10_0": {
+        "noRomanticInterest_0_10": ["strangerBad_n100_n5", null],
+        "slightRomanticInterest_10_20": ["unpleasant_n10_0", "noRomanticInterest_0_10"],
+        "romanticInterest_20_35": ["unpleasant_n10_0", "slightRomanticInterest_10_20"],
+        "strongRomanticInterest_35_50": ["unpleasant_n10_0", "romanticInterest_20_35"],
+        "deepInLove_50_100": ["unpleasant_n10_0", "strongRomanticInterest_35_50"],
+    },
+    "acquaintance_0_10": {
+        "noRomanticInterest_0_10": ["strangerGood_5_100", null],
+        "slightRomanticInterest_10_20": ["acquaintance_0_10", "noRomanticInterest_0_10"],
+        "romanticInterest_20_35": ["acquaintance_0_10", "slightRomanticInterest_10_20"],
+        "strongRomanticInterest_35_50": ["acquaintance_0_10", "romanticInterest_20_35"],
+        "deepInLove_50_100": ["acquaintance_0_10", "strongRomanticInterest_35_50"],
+    },
+    "friendly_10_20": {
+        "noRomanticInterest_0_10": ["acquaintance_0_10", "noRomanticInterest_0_10"],
+        "slightRomanticInterest_10_20": ["acquaintance_0_10", "slightRomanticInterest_10_20"],
+        "romanticInterest_20_35": ["acquaintance_0_10", "romanticInterest_20_35"],
+        "strongRomanticInterest_35_50": ["acquaintance_0_10", "strongRomanticInterest_35_50"],
+        "deepInLove_50_100": ["acquaintance_0_10", "deepInLove_50_100"],
+    },
+    "goodFriend_20_35": {
+        "noRomanticInterest_0_10": ["friendly_10_20", "noRomanticInterest_0_10"],
+        "slightRomanticInterest_10_20": ["friendly_10_20", "slightRomanticInterest_10_20"],
+        "romanticInterest_20_35": ["friendly_10_20", "romanticInterest_20_35"],
+        "strongRomanticInterest_35_50": ["friendly_10_20", "strongRomanticInterest_35_50"],
+        "deepInLove_50_100": ["friendly_10_20", "deepInLove_50_100"],
+    },
+    "closeFriend_35_50": {
+        "noRomanticInterest_0_10": ["goodFriend_20_35", "noRomanticInterest_0_10"],
+        "slightRomanticInterest_10_20": ["goodFriend_20_35", "slightRomanticInterest_10_20"],
+        "romanticInterest_20_35": ["goodFriend_20_35", "romanticInterest_20_35"],
+        "strongRomanticInterest_35_50": ["goodFriend_20_35", "strongRomanticInterest_35_50"],
+        "deepInLove_50_100": ["goodFriend_20_35", "deepInLove_50_100"],
+    },
+    "bestFriend_50_100": {
+        "noRomanticInterest_0_10": ["closeFriend_35_50", "noRomanticInterest_0_10"],
+        "slightRomanticInterest_10_20": ["closeFriend_35_50", "slightRomanticInterest_10_20"],
+        "romanticInterest_20_35": ["closeFriend_35_50", "romanticInterest_20_35"],
+        "strongRomanticInterest_35_50": ["closeFriend_35_50", "strongRomanticInterest_35_50"],
+        "deepInLove_50_100": ["closeFriend_35_50", "deepInLove_50_100"],
+    },
+}
+
+/** @type {Record<string, Record<string, string>>} */
 const RELATIONSHIP_KEY_INFO_OBTAINED_FROM = {
-    "foe_n100_n50": "\n\nThe answers were obtained from the same question for hostile relationships",
-    "hostile_n50_n35": "\n\nThe answers were obtained from the same question for antagonistic relationships",
-    "antagonistic_n35_n20": "\n\nThe answers were obtained from the same question for unfriendly relationships",
-    "unfriendly_n20_n10": "\n\nThe answers were obtained from the same question for unpleasant relationships",
-    "unpleasant_n10_0": "\n\nThe answers were obtained from the same question for stranger relationships with a bad impression",
-    "acquaintance_0_10": "\n\nThe answers were obtained from the same question for stranger relationships with a good impression",
-    "friendly_10_20": "\n\nThe answers were obtained from the same question for acquaintance relationships",
-    "goodFriend_20_35": "\n\nThe answers were obtained from the same question for friendly relationships",
-    "closeFriend_35_50": "\n\nThe answers were obtained from the same question for good friend relationships",
-    "bestFriend_50_100": "\n\nThe answers were obtained from the same question for close friend relationships",
+    "foe_n100_n50": {
+        "noRomanticInterest_0_10": "\n\nThe answers were obtained from the same question for hostile relationships with no romantic interest",
+        "slightRomanticInterest_10_20": "\n\nThe answers were obtained from the same question for hostile relationships with slight romantic interest",
+        "romanticInterest_20_35": "\n\nThe answers were obtained from the same question for hostile relationships with romantic interest",
+        "strongRomanticInterest_35_50": "\n\nThe answers were obtained from the same question for hostile relationships with strong romantic interest",
+        "deepInLove_50_100": "\n\nThe answers were obtained from the same question for hostile relationships with deep love",
+    },
+    "hostile_n50_n35": {
+        "noRomanticInterest_0_10": "\n\nThe answers were obtained from the same question for antagonistic relationships with no romantic interest",
+        "slightRomanticInterest_10_20": "\n\nThe answers were obtained from the same question for antagonistic relationships with slight romantic interest",
+        "romanticInterest_20_35": "\n\nThe answers were obtained from the same question for antagonistic relationships with romantic interest",
+        "strongRomanticInterest_35_50": "\n\nThe answers were obtained from the same question for antagonistic relationships with strong romantic interest",
+        "deepInLove_50_100": "\n\nThe answers were obtained from the same question for antagonistic relationships with deep love",
+    },
+    "antagonistic_n35_n20": {
+        "noRomanticInterest_0_10": "\n\nThe answers were obtained from the same question for unfriendly relationships with no romantic interest",
+        "slightRomanticInterest_10_20": "\n\nThe answers were obtained from the same question for unfriendly relationships with slight romantic interest",
+        "romanticInterest_20_35": "\n\nThe answers were obtained from the same question for unfriendly relationships with romantic interest",
+        "strongRomanticInterest_35_50": "\n\nThe answers were obtained from the same question for unfriendly relationships with strong romantic interest",
+        "deepInLove_50_100": "\n\nThe answers were obtained from the same question for unfriendly relationships with deep love",
+    },
+    "unfriendly_n20_n10": {
+        "noRomanticInterest_0_10": "\n\nThe answers were obtained from the same question for unpleasant relationships with no romantic interest",
+        "slightRomanticInterest_10_20": "\n\nThe answers were obtained from the same question for unpleasant relationships with slight romantic interest",
+        "romanticInterest_20_35": "\n\nThe answers were obtained from the same question for unpleasant relationships with romantic interest",
+        "strongRomanticInterest_35_50": "\n\nThe answers were obtained from the same question for unpleasant relationships with strong romantic interest",
+        "deepInLove_50_100": "\n\nThe answers were obtained from the same question for unpleasant relationships with deep love",
+    },
+    "unpleasant_n10_0": {
+        "noRomanticInterest_0_10": "\n\nThe answers were obtained from the same question for stranger relationships with a bad impression",
+        "slightRomanticInterest_10_20": "\n\nThe answers were obtained from the same question for unpleasant relationships with no romantic interest",
+        "romanticInterest_20_35": "\n\nThe answers were obtained from the same question for unpleasant relationships with slight romantic interest",
+        "strongRomanticInterest_35_50": "\n\nThe answers were obtained from the same question for unpleasant relationships with romantic interest",
+        "deepInLove_50_100": "\n\nThe answers were obtained from the same question for unpleasant relationships with strong romantic interest",
+    },
+    "acquaintance_0_10": {
+        "noRomanticInterest_0_10": "\n\nThe answers were obtained from the same question for stranger relationships with a good impression",
+        "slightRomanticInterest_10_20": "\n\nThe answers were obtained from the same question for acquaintance relationships with no romantic interest",
+        "romanticInterest_20_35": "\n\nThe answers were obtained from the same question for acquaintance relationships with slight romantic interest",
+        "strongRomanticInterest_35_50": "\n\nThe answers were obtained from the same question for acquaintance relationships with romantic interest",
+        "deepInLove_50_100": "\n\nThe answers were obtained from the same question for acquaintance relationships with strong romantic interest",
+    },
+    "friendly_10_20": {
+        "noRomanticInterest_0_10": "\n\nThe answers were obtained from the same question for acquaintance relationships with no romantic interest",
+        "slightRomanticInterest_10_20": "\n\nThe answers were obtained from the same question for acquaintance relationships with slight romantic interest",
+        "romanticInterest_20_35": "\n\nThe answers were obtained from the same question for acquaintance relationships with romantic interest",
+        "strongRomanticInterest_35_50": "\n\nThe answers were obtained from the same question for acquaintance relationships with strong romantic interest",
+        "deepInLove_50_100": "\n\nThe answers were obtained from the same question for acquaintance relationships with deep love",
+    },
+    "goodFriend_20_35": {
+        "noRomanticInterest_0_10": "\n\nThe answers were obtained from the same question for friendly relationships with no romantic interest",
+        "slightRomanticInterest_10_20": "\n\nThe answers were obtained from the same question for friendly relationships with slight romantic interest",
+        "romanticInterest_20_35": "\n\nThe answers were obtained from the same question for friendly relationships with romantic interest",
+        "strongRomanticInterest_35_50": "\n\nThe answers were obtained from the same question for friendly relationships with strong romantic interest",
+        "deepInLove_50_100": "\n\nThe answers were obtained from the same question for friendly relationships with deep love",
+    },
+    "closeFriend_35_50": {
+        "noRomanticInterest_0_10": "\n\nThe answers were obtained from the same question for good friend relationships with no romantic interest",
+        "slightRomanticInterest_10_20": "\n\nThe answers were obtained from the same question for good friend relationships with slight romantic interest",
+        "romanticInterest_20_35": "\n\nThe answers were obtained from the same question for good friend relationships with romantic interest",
+        "strongRomanticInterest_35_50": "\n\nThe answers were obtained from the same question for good friend relationships with strong romantic interest",
+        "deepInLove_50_100": "\n\nThe answers were obtained from the same question for good friend relationships with deep love",
+    },
+    "bestFriend_50_100": {
+        "noRomanticInterest_0_10": "\n\nThe answers were obtained from the same question for close friend relationships with no romantic interest",
+        "slightRomanticInterest_10_20": "\n\nThe answers were obtained from the same question for close friend relationships with slight romantic interest",
+        "romanticInterest_20_35": "\n\nThe answers were obtained from the same question for close friend relationships with romantic interest",
+        "strongRomanticInterest_35_50": "\n\nThe answers were obtained from the same question for close friend relationships with strong romantic interest",
+        "deepInLove_50_100": "\n\nThe answers were obtained from the same question for close friend relationships with deep love",
+    },
 };
 
 /** @type {Record<string, string>} */
@@ -113,13 +247,21 @@ function describeStrangerContext(strangerKey) {
  * @param {string} relationshipKey
  * @param {string} romanticInterestKey
  * @param {string} familyKey - "family" or "nonFamily"
+ * @param {boolean} negativeScenario - whether this description is for a negative scenario (e.g. to be used in a reasonNo) or not (e.g. to be used in a reasonYes), this is needed because in some cases the same relationship/romantic-interest/family keys can lead to different descriptions depending on whether it's a negative or positive scenario
  * @returns {string}
  */
-function describeFamilyContext(relationshipKey, romanticInterestKey, familyKey) {
+function describeFamilyContext(relationshipKey, romanticInterestKey, familyKey, negativeScenario) {
     const r = RELATIONSHIP_KEY_DESCRIPTIONS[relationshipKey] || "character";
-    const ri = ROMANTIC_INTEREST_KEY_DESCRIPTIONS[romanticInterestKey] || "is not a romantic interest";
-    const fam = familyKey === "family" ? "is family" : "is not family";
-    return `${r} who ${ri} and ${fam}`;
+    const ri = romanticInterestKey === "noRomanticInterest_0_10" && !negativeScenario ? "" : ((ROMANTIC_INTEREST_KEY_DESCRIPTIONS[romanticInterestKey] || (negativeScenario ? "is not a romantic interest" : "")));
+    const fam = familyKey === "family" ? "is family" : (negativeScenario ? "is not family" : "");
+    let base = `${r}`;
+    if (ri) {
+        base += ` who ${ri}`;
+    }
+    if (fam) {
+        base += (ri ? " and " : " who ") + fam;
+    }
+    return base;
 }
 
 /**
@@ -219,6 +361,14 @@ async function chooseReason(guider, modifierInfo, valueAnswer, name, contextRepl
         return willPass;
     });
 
+    // monkey patch bad grammar
+    for (const option of optionsForGuider) {
+        if (option.includes("a acquaintance")) {
+            const index = optionsForGuider.indexOf(option);
+            optionsForGuider[index] = option.replace("a acquaintance", "an acquaintance");
+        }
+    }
+
     const reasonsWithoutRemoved = reasons.filter((_, index) => !removedIndexes.includes(index));
 
     const selectedValuesProcessed = selectedValue.values.map(v => {
@@ -257,6 +407,53 @@ function getBestMatchInOptions(values, options) {
         if (index !== -1) {
             return options[index];
         }
+    }
+
+    // second strategy split into words and check for word similarity, the highest similarity wins
+    // Tokenize each normalized string into a set of meaningful words (drop
+    // very short stopword-like tokens), then score each (value, option) pair
+    // by Jaccard similarity (|intersection| / |union|). The option with the
+    // highest score wins; ties are broken by the first value that achieved
+    // that score. A small minimum threshold avoids returning an option that
+    // shares essentially nothing with any value.
+    /** @param {string} s */
+    const tokenize = (s) => new Set(
+        s.split(/[^a-z0-9]+/i)
+            .map(w => w.trim().toLowerCase())
+            .filter(w => w.length > 2)
+    );
+
+    const valueTokenSets = normalizedValues.map(tokenize);
+    const optionTokenSets = normalizedOptions.map(tokenize);
+
+    let bestScore = 0;
+    let bestOptionIndex = -1;
+
+    for (const valueTokens of valueTokenSets) {
+        if (valueTokens.size === 0) continue;
+        for (let i = 0; i < optionTokenSets.length; i++) {
+            const optTokens = optionTokenSets[i];
+            if (optTokens.size === 0) continue;
+
+            let intersectionSize = 0;
+            for (const t of valueTokens) {
+                if (optTokens.has(t)) intersectionSize++;
+            }
+            if (intersectionSize === 0) continue;
+
+            const unionSize = valueTokens.size + optTokens.size - intersectionSize;
+            const score = intersectionSize / unionSize;
+
+            if (score > bestScore) {
+                bestScore = score;
+                bestOptionIndex = i;
+            }
+        }
+    }
+
+    const MIN_SIMILARITY = 0.2;
+    if (bestOptionIndex !== -1 && bestScore >= MIN_SIMILARITY) {
+        return options[bestOptionIndex];
     }
 
     return null;
@@ -2538,24 +2735,46 @@ export async function generateBonds(engine, card, guider, autosave) {
                          */
                         const getFineTuneReference = (intimateModifier) => {
                             const fineTuneCommentWithIntimacyModifier = fineTuneComment + "_" + intimateModifier;
+
+                            if (
+                                card.config.tuneInfos[fineTuneCommentWithIntimacyModifier] &&
+                                card.config.tuneInfos[fineTuneCommentWithIntimacyModifier][relationshipKey] &&
+                                card.config.tuneInfos[fineTuneCommentWithIntimacyModifier][relationshipKey][romanticInterestKey]
+                            ) {
+                                return card.config.tuneInfos[fineTuneCommentWithIntimacyModifier][relationshipKey][romanticInterestKey];
+                            }
+
                             let fineTuneReference = card.config.tuneInfos[fineTuneCommentWithIntimacyModifier];
-                            if (relationshipKey === "unpleasant_n10_0" && fineTuneReference) {
-                                fineTuneReference = {
-                                    ...fineTuneReference,
-                                    ...fineTuneReference["strangerBad_n100_n5"], // copy stranger bad moderate as a baseline for unpleasant neutral moderate;
-                                }
-                            } else if (relationshipKey === "acquaintance_0_10" && fineTuneReference) {
-                                fineTuneReference = {
-                                    ...fineTuneReference,
-                                    ...fineTuneReference["strangerGood_5_100"], // copy stranger good moderate as a baseline for unpleasant neutral moderate;
+
+                            if (fineTuneReference) {
+                                const sourceOfFineTuneInfo = RELATIONSHIP_KEY_INFO_MAP[relationshipKey][romanticInterestKey];
+                                if (sourceOfFineTuneInfo[1] === null) {
+                                    if (fineTuneReference[sourceOfFineTuneInfo[0]]) {
+                                        fineTuneReference = {
+                                            ...fineTuneReference,
+                                            ...fineTuneReference[sourceOfFineTuneInfo[0]],
+                                        }
+                                    }
+                                } else {
+                                    if (fineTuneReference[sourceOfFineTuneInfo[0]] && fineTuneReference[sourceOfFineTuneInfo[0]][sourceOfFineTuneInfo[1]]) {
+                                        fineTuneReference = {
+                                            ...fineTuneReference,
+                                            ...fineTuneReference[sourceOfFineTuneInfo[0]][sourceOfFineTuneInfo[1]],
+                                        }
+                                    }
                                 }
                             }
+
                             if (!fineTuneReference) {
                                 // must be a family case, in fact must be the first family case with acquaintance_0_10
                                 // TODO try to get answers from somewhere else
                                 throw new Error(fineTuneCommentWithIntimacyModifier);
                             }
-                            card.config.tuneInfos[fineTuneCommentWithIntimacyModifier] = fineTuneReference;
+
+                            if (!card.config.tuneInfos[fineTuneCommentWithIntimacyModifier][relationshipKey]) {
+                                card.config.tuneInfos[fineTuneCommentWithIntimacyModifier][relationshipKey] = {};
+                            }
+                            card.config.tuneInfos[fineTuneCommentWithIntimacyModifier][relationshipKey][romanticInterestKey] = fineTuneReference;
 
                             return fineTuneReference;
                         }
@@ -2581,7 +2800,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                             }
 
                             if (guider) {
-                                const messageAboutAnswersFrom = RELATIONSHIP_KEY_INFO_OBTAINED_FROM[relationshipKey] || "";
+                                const messageAboutAnswersFrom = RELATIONSHIP_KEY_INFO_OBTAINED_FROM[relationshipKey][romanticInterestKey] || "";
                                 const guiderResult = await guider.askOption("How receptive to affection is " + name + " towards " + actualFamilyValue + " when they are " + intimateModifier.toLowerCase() + "? " + messageAboutAnswersFrom, [
                                     "not receptive",
                                     "slightly receptive",
@@ -2621,7 +2840,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                                 familySectionOpenToAffection.body.push(`if (${condition}) {`);
                             }
 
-                            const messageAboutAnswersFrom = RELATIONSHIP_KEY_INFO_OBTAINED_FROM[relationshipKey] || "";
+                            const messageAboutAnswersFrom = RELATIONSHIP_KEY_INFO_OBTAINED_FROM[relationshipKey][romanticInterestKey] || "";
 
                             /**
                              * @type {string | null}
@@ -2631,7 +2850,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                                 modifierInfo,
                                 valueAnswer,
                                 name,
-                                describeFamilyContext(relationshipKey, romanticInterestKey, familyKey),
+                                describeFamilyContext(relationshipKey, romanticInterestKey, familyKey, valueAnswer === "not"),
                                 "What is the reason for " + name + " being " + answerTrimmed + " to affection from this other character when they are " + intimateModifier.toLowerCase() + "?" + messageAboutAnswersFrom,
                                 fineTuneReference.openToAffectionReason ? { values: [fineTuneReference.openToAffectionReason] } : { values: [] },
                                 attractionLevel,
@@ -2686,7 +2905,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                             }
 
                             if (guider) {
-                                const messageAboutAnswersFrom = RELATIONSHIP_KEY_INFO_OBTAINED_FROM[relationshipKey] || "";
+                                const messageAboutAnswersFrom = RELATIONSHIP_KEY_INFO_OBTAINED_FROM[relationshipKey][romanticInterestKey] || "";
                                 const guiderResult = await guider.askOption("How receptive to intimate affection is " + name + " towards " + actualFamilyValue + " when they are " + intimateModifier.toLowerCase() + "? " + messageAboutAnswersFrom, [
                                     "not receptive",
                                     "slightly receptive",
@@ -2726,7 +2945,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                                 familySectionOpenToIntimateAffection.body.push(`if (${condition}) {`);
                             }
 
-                            const messageAboutAnswersFrom = RELATIONSHIP_KEY_INFO_OBTAINED_FROM[relationshipKey] || "";
+                            const messageAboutAnswersFrom = RELATIONSHIP_KEY_INFO_OBTAINED_FROM[relationshipKey][romanticInterestKey] || "";
 
                             /**
                              * @type {string | null}
@@ -2736,7 +2955,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                                 modifierInfo,
                                 valueAnswer,
                                 name,
-                                describeFamilyContext(relationshipKey, romanticInterestKey, familyKey),
+                                describeFamilyContext(relationshipKey, romanticInterestKey, familyKey, valueAnswer === "not"),
                                 "What is the reason for " + name + " being " + answerTrimmed + " to intimate affection from this other character when they are " + intimateModifier.toLowerCase() + "?" + messageAboutAnswersFrom,
                                 fineTuneReference.openToIntimateAffectionReason ? { values: [fineTuneReference.openToIntimateAffectionReason] } : { values: [] },
                                 attractionLevel,
@@ -2789,7 +3008,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                             }
 
                             if (guider) {
-                                const messageAboutAnswersFrom = RELATIONSHIP_KEY_INFO_OBTAINED_FROM[relationshipKey] || "";
+                                const messageAboutAnswersFrom = RELATIONSHIP_KEY_INFO_OBTAINED_FROM[relationshipKey][romanticInterestKey] || "";
                                 const guiderResult = await guider.askOption("How receptive to sex is " + name + " towards " + actualFamilyValue + " when they are " + intimateModifier.toLowerCase() + "? " + messageAboutAnswersFrom, [
                                     "not receptive",
                                     "slightly receptive",
@@ -2829,7 +3048,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                                 familySectionOpenToSex.body.push(`if (${condition}) {`);
                             }
 
-                            const messageAboutAnswersFrom = RELATIONSHIP_KEY_INFO_OBTAINED_FROM[relationshipKey] || "";
+                            const messageAboutAnswersFrom = RELATIONSHIP_KEY_INFO_OBTAINED_FROM[relationshipKey][romanticInterestKey] || "";
 
                             /**
                              * @type {string | null}
@@ -2839,7 +3058,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                                 modifierInfo,
                                 valueAnswer,
                                 name,
-                                describeFamilyContext(relationshipKey, romanticInterestKey, familyKey),
+                                describeFamilyContext(relationshipKey, romanticInterestKey, familyKey, valueAnswer === "not"),
                                 "What is the reason for " + name + " being " + answerTrimmed + " to sex with this other character when they are " + intimateModifier.toLowerCase() + "?" + messageAboutAnswersFrom,
                                 fineTuneReference.openToSexReason ? { values: [fineTuneReference.openToSexReason] } : { values: [] },
                                 attractionLevel,
@@ -2967,7 +3186,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                             }
 
                             if (guider) {
-                                const messageAboutAnswersFrom = RELATIONSHIP_KEY_INFO_OBTAINED_FROM[relationshipKey] || "";
+                                const messageAboutAnswersFrom = RELATIONSHIP_KEY_INFO_OBTAINED_FROM[relationshipKey][romanticInterestKey] || "";
                                 const guiderResult = await guider.askOption(
                                     proneToInitiatingIntimateAffectionQuestion + messageAboutAnswersFrom,
                                     PROBABILITY_OPTIONS,
@@ -3042,7 +3261,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                             }
 
                             if (guider) {
-                                const messageAboutAnswersFrom = RELATIONSHIP_KEY_INFO_OBTAINED_FROM[relationshipKey] || "";
+                                const messageAboutAnswersFrom = RELATIONSHIP_KEY_INFO_OBTAINED_FROM[relationshipKey][romanticInterestKey] || "";
                                 const guiderResult = await guider.askOption(
                                     proneToInitiatingSexQuestion + messageAboutAnswersFrom,
                                     PROBABILITY_OPTIONS,
