@@ -6,7 +6,47 @@
 import { DEngine } from '../index.js';
 import { BaseInferenceAdapter } from './base.js';
 
-function cheapRID() {
+const DUMMY_SENTENCES = [
+    "The wind carried whispers of forgotten names across the empty plaza.",
+    "She tilted her head, weighing the silence as if it were a coin.",
+    "Rain tapped against the window in a rhythm only the lonely understood.",
+    "He laughed, and for a moment the room felt warmer than it had any right to be.",
+    "The map was wrong, but the road kept going anyway.",
+    "Somewhere beyond the trees, a bell rang once and then thought better of it.",
+    "Her boots left no prints on the snow, which troubled neither of them.",
+    "The cat watched the experiment with the patient skepticism of a senior researcher.",
+    "He counted the stars twice, just to be sure none had wandered off.",
+    "A door opened where no door had been, and politely waited.",
+    "The tea had gone cold, but the conversation had not.",
+    "She drew a circle in the dust and dared the world to step inside.",
+    "Lightning split the sky like a careless signature.",
+    "He swore the painting had blinked, but only when no one was looking.",
+    "The clock struck thirteen and apologized immediately.",
+    "Her smile was the kind that made compasses second-guess themselves.",
+    "Smoke curled from the chimney in slow, deliberate questions.",
+    "The library smelled of paper, dust, and decisions yet to be made.",
+    "He offered a handshake; she offered a riddle. They settled on tea.",
+    "The river forgot its name once a year, and tonight was the night.",
+    "Stars blinked in Morse code, but no one had bothered to learn the alphabet.",
+    "The shadow on the wall did not match the figure standing in the room.",
+];
+
+/**
+ * Optional dependency: `gbnf` is declared as an optionalDependency in
+ * package.json, so it may or may not be installed at runtime. We attempt a
+ * dynamic ESM import using a relative path that resolves identically under
+ * both electron (file://) and the web server (which mounts node_modules/gbnf
+ * at /node_modules/gbnf). The promise always resolves — to the module
+ * namespace if available, or to `null` if not — so callers can simply
+ * `await` it before using grammar features.
+ *
+ * @type {Promise<any | null>}
+ */
+const gbnfModulePromise = import('../../../node_modules/gbnf/dist/index.js')
+    .then((mod) => mod)
+    .catch(() => null);
+
+export function cheapRID() {
     return Math.random().toString(36).substring(2) + Date.now().toString(36);
 }
 
@@ -15,14 +55,15 @@ function cheapRID() {
  * @param {string} text 
  * @returns {string}
  */
-function replaceMultipleNewLines(text) {
+export function replaceMultipleNewLines(text) {
     return text.replace(/\n{3,}/g, "\n\n");
 }
 
 /**
  * @param {string} text 
+ * @returns {string}
  */
-function getLastParagraphChunkOf(text) {
+export function getLastParagraphChunkOf(text) {
     // get the last paragraph of the text
     const lastParagraph = text.split("\n\n").slice(-1)[0];
     // we want to always cut it, so it always starts with ... so we always want to cut it a bit shorter
@@ -44,6 +85,7 @@ export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
      *    host?: string;
      *    apiKey?: string;
      *    secret?: string;
+     *    useExperimentalTestMode?: boolean;
      * }} options
      */
     constructor(parent, options) {
@@ -58,12 +100,6 @@ export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
          */
         this.rejectInitializePromise = null;
 
-        /**
-         * The function that takes in streamed data
-         * @type {((data: string | number, done: boolean, err: string | null) => void) | null}
-         */
-        this.streamingAwaiter = null;
-
         this.connected = false;
         /**
          * @type {string | null}
@@ -71,7 +107,21 @@ export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
         this.reason = null;
 
         this.onData = this.onData.bind(this);
+
+        /**
+         * @type {{ host?: string; apiKey?: string; secret?: string; useExperimentalTestMode?: boolean; }}
+         */
         this.options = options;
+
+        if (this.options.useExperimentalTestMode) {
+            this.contextWindowSize = 4096; // we can set this to whatever we want in test mode, since it doesn't actually connect to a model, we will just use it for testing the behavior when the context window is exceeded
+            this.doSupportsParallelRequests = true; // we can also set this to whatever we want in test mode, since it doesn't actually connect to a model, we will just use it for testing the behavior when parallel requests are not supported
+            this.endToken = "<|endoftext|>"; // we can also set this to whatever we want in test mode, since it doesn't actually connect to a model, we will just use it for testing the behavior when an end token is defined
+        } else {
+            this.contextWindowSize = 4096; // default context window size, will be updated when the server sends the ready message
+            this.doSupportsParallelRequests = false; // we will update this when the server sends the ready message
+            this.endToken = null; // we will update this when the server sends the ready message, but by default we will assume there is no end token
+        }
 
         /**
          * @type {Object.<string, [(data: any) => void, (err: any) => void]>}
@@ -85,11 +135,12 @@ export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
      * @returns {Promise<number>}
      */
     async countTokens(text) {
+        if (this.options.useExperimentalTestMode) {
+            return text.length / 4; // this is a very rough approximation, but it should be sufficient for our purposes in test mode
+        }
+
         if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
             throw new Error("WebSocket is not open");
-        }
-        if (this.streamingAwaiter) {
-            throw new Error("Another inference is already in progress");
         }
 
         const rid = cheapRID();
@@ -110,6 +161,10 @@ export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
     }
 
     async ensureInitialized() {
+        if (this.options.useExperimentalTestMode) {
+            return;
+        }
+
         if (this.connected) {
             return;
         }
@@ -125,6 +180,12 @@ export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
     }
 
     async initialize() {
+        if (this.options.useExperimentalTestMode) {
+            await gbnfModulePromise; // Ensure the optional gbnf library has finished loading (or failing to load)
+            console.warn("InferenceAdapterLlamaUncensored: Running in experimental test mode, which does not connect to a server and uses a very rough approximation for token counting. This mode is only for testing purposes and should not be used for production.");
+            return;
+        }
+
         if (this.connected) {
             return;
         }
@@ -279,10 +340,13 @@ export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
         options,
     ) {
         const { messages, messagesTrail, system, stateInjections, visibleEnviroment, narrativeEffects, grammar } = options;
-        await this.ensureInitialized();
 
-        if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
-            throw new Error("WebSocket is not open");
+        if (!this.options.useExperimentalTestMode) {
+            await this.ensureInitialized();
+
+            if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+                throw new Error("WebSocket is not open");
+            }
         }
 
         let systemPrompt = replaceMultipleNewLines(system + visibleEnviroment).trim();
@@ -358,7 +422,6 @@ RULE: Spoken dialogue should be done in first person, and start with the charact
                 }
             ],
             trail: assistantPromptTrail,
-            startCountingFromToken: null,
             maxParagraphs: 5,
             maxCharacters: 1000,
             maxSafetyCharacters: 5000,
@@ -370,6 +433,15 @@ RULE: Spoken dialogue should be done in first person, and start with the charact
         };
 
         const rid = cheapRID();
+        if (this.options.useExperimentalTestMode) {
+            return yield* this.runInferenceInTestMode(payload);
+        }
+
+        // making typescript happy
+        if (!this.socket) {
+            throw new Error("WebSocket is not initialized");
+        }
+
         this.socket.send(JSON.stringify({ action: "infer", payload, rid }));
 
         let collectedMessage = "";
@@ -424,13 +496,13 @@ RULE: Spoken dialogue should be done in first person, and start with the charact
         options,
     ) {
         const { system, contextInfoBefore, messages, contextInfoAfter, remarkLastStoryFragmentForAnalysis } = options;
-        await this.ensureInitialized();
 
-        if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
-            throw new Error("WebSocket is not open");
-        }
-        if (this.streamingAwaiter) {
-            throw new Error("Another inference is already in progress");
+        if (!this.options.useExperimentalTestMode) {
+            await this.ensureInitialized();
+
+            if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+                throw new Error("WebSocket is not open");
+            }
         }
 
         let tokensExhaustedApprox = 512; // initial buffer
@@ -455,7 +527,11 @@ RULE: Spoken dialogue should be done in first person, and start with the charact
                 gear: gear,
             };
 
-            this.socket.send(JSON.stringify({ action: "analyze-prepare", payload, rid }));
+            if (!this.options.useExperimentalTestMode && this.socket) {
+                this.socket.send(JSON.stringify({ action: "analyze-prepare", payload, rid }));
+            } else {
+                // nothing really, test mode will simply ignore this payload and we will just proceed to questioning
+            }
         } else {
             // we need to find the last message that was authored by a character, and not the story master, and split there
             // everything added by the story master will be included
@@ -476,7 +552,9 @@ RULE: Spoken dialogue should be done in first person, and start with the charact
                     gear: gear,
                 };
 
-                this.socket.send(JSON.stringify({ action: "analyze-prepare", payload, rid }));
+                if (!this.options.useExperimentalTestMode && this.socket) {
+                    this.socket.send(JSON.stringify({ action: "analyze-prepare", payload, rid }));
+                }
             } else {
                 const payload = {
                     system: system,
@@ -484,17 +562,21 @@ RULE: Spoken dialogue should be done in first person, and start with the charact
                     gear: gear,
                 };
 
-                this.socket.send(JSON.stringify({ action: "analyze-prepare", payload, rid }));
+                if (!this.options.useExperimentalTestMode && this.socket) {
+                    this.socket.send(JSON.stringify({ action: "analyze-prepare", payload, rid }));
+                }
             }
         }
 
-        await new Promise((resolve, reject) => {
-            this.listener[rid] = [resolve, (err) => {
-                delete this.listener[rid];
-                reject(new Error(err));
-            }];
-        });
-        delete this.listener[rid];
+        if (!this.options.useExperimentalTestMode && this.socket) {
+            await new Promise((resolve, reject) => {
+                this.listener[rid] = [resolve, (err) => {
+                    delete this.listener[rid];
+                    reject(new Error(err));
+                }];
+            });
+            delete this.listener[rid];
+        }
 
         let nextQuestion = yield "ready";
         while (nextQuestion !== null) {
@@ -508,38 +590,44 @@ RULE: Spoken dialogue should be done in first person, and start with the charact
 
             console.log("\nAsking question: " + nextQuestion.nextQuestion);
 
+            const payload = {
+                question: (nextQuestion.contextInfo ? nextQuestion.contextInfo + "\n\n" : "") + "# Question:\n\n" + nextQuestion.nextQuestion + (nextQuestion.instructions ? ("\n\n# Instructions:\n\n" + nextQuestion.instructions) : ""),
+                stopAt: nextQuestion.stopAt,
+                stopAfter: nextQuestion.stopAfter,
+                maxParagraphs: nextQuestion.maxParagraphs,
+                maxCharacters: nextQuestion.maxCharacters,
+                maxSafetyCharacters: nextQuestion.maxSafetyCharacters,
+                trail: "# Answer:\n\n" + (nextQuestion.answerTrail || ""),
+                grammar: nextQuestion.grammar || null,
+            };
+
             // send the next question
-            this.socket.send(JSON.stringify({
-                action: "analyze-question",
-                rid,
-                payload: {
-                    question: (nextQuestion.contextInfo ? nextQuestion.contextInfo + "\n\n" : "") + "# Question:\n\n" + nextQuestion.nextQuestion + (nextQuestion.instructions ? ("\n\n# Instructions:\n\n" + nextQuestion.instructions) : ""),
-                    stopAt: nextQuestion.stopAt,
-                    stopAfter: nextQuestion.stopAfter,
-                    maxParagraphs: nextQuestion.maxParagraphs,
-                    maxCharacters: nextQuestion.maxCharacters,
-                    maxSafetyCharacters: nextQuestion.maxSafetyCharacters,
-                    trail: "# Answer:\n\n" + (nextQuestion.answerTrail || ""),
-                    grammar: nextQuestion.grammar || null,
+            if (!this.options.useExperimentalTestMode && this.socket) {
+                this.socket.send(JSON.stringify({
+                    action: "analyze-question",
+                    rid,
+                    payload,
+                }));
+
+                const data = await new Promise((resolve, reject) => {
+                    this.listener[rid] = [resolve, (err) => {
+                        delete this.listener[rid];
+                        reject(new Error(err));
+                    }];
+                });
+                delete this.listener[rid];
+
+                if (data.type === "error") {
+                    throw new Error(data.message);
+                } else if (data.type === "answer") {
+                    const answer = data.text;
+                    console.log("\nReceived answer: " + answer);
+                    nextQuestion = yield answer;
+                } else {
+                    throw new Error("Unexpected message type during questioning: " + data.type);
                 }
-            }));
-
-            const data = await new Promise((resolve, reject) => {
-                this.listener[rid] = [resolve, (err) => {
-                    delete this.listener[rid];
-                    reject(new Error(err));
-                }];
-            });
-            delete this.listener[rid];
-
-            if (data.type === "error") {
-                throw new Error(data.message);
-            } else if (data.type === "answer") {
-                const answer = data.text;
-                console.log("\nReceived answer: " + answer);
-                nextQuestion = yield answer;
             } else {
-                throw new Error("Unexpected message type during questioning: " + data.type);
+                yield* this.runInferenceInTestMode(payload, { oneshot: true });
             }
         }
     }
@@ -816,5 +904,233 @@ ${this.buildSystemCharacterDescription(character, { description, externalDescrip
 
     supportsParallelRequests() {
         return false || this.doSupportsParallelRequests;
+    }
+
+    /**
+     * Test-mode inference. Picks a random dummy sentence and emits it back
+     * to the caller. When `oneshot` is true, the whole sentence is sent as a
+     * single yield (used by the questioning agent which expects one string
+     * answer). Otherwise, the sentence is streamed 4 characters at a time
+     * with a tiny delay, mimicking token-by-token streaming for the story
+     * fragment generator (which expects `{type, content}` chunks).
+     *
+     * The optional `gbnf` dependency is awaited before any output is emitted
+     * so future grammar-driven logic can rely on it being ready. Actual
+     * grammar handling is intentionally not implemented yet.
+     *
+     * @param {{
+     *   messages: Array<{role: string, content: string}>,
+     *   trail: string,
+     *   maxParagraphs: number,
+     *   maxCharacters: number,
+     *   maxSafetyCharacters: number,
+     *   stopAt: string[],
+     *   stopAfter: string[],
+     *   grammar: string | null,
+     *   primaryEmotion: string,
+     *   activeStates: Array<{state: string, dominance: number}>,
+     * } | {
+     *   question: string,
+     *   stopAt: string[],
+     *   stopAfter: string[],
+     *   maxParagraphs: number,
+     *   maxCharacters: number,
+     *   maxSafetyCharacters: number,
+     *   trail: string,
+     *   grammar: string | null,
+     * }} _payload the inference payload describing what to generate; in test
+     *   mode the contents are ignored, but the shape is kept accurate so the
+     *   real implementation can plug in later without changing call sites.
+     * @param {{ oneshot?: boolean }} [opts]
+     * @returns {AsyncGenerator<any, void, any>}
+     */
+    async *runInferenceInTestMode(_payload, opts) {
+        const oneshot = !!(opts && opts.oneshot);
+
+        const GBNF = await gbnfModulePromise;
+
+        const grammarParsed = _payload.grammar ? GBNF.default(_payload.grammar) : null;
+
+        let contentsGenerated = "";
+
+        let currentTextCharLen = 0;
+        let currentSentence = DUMMY_SENTENCES[Math.floor(Math.random() * DUMMY_SENTENCES.length)] + "\n\n";
+        let currentSentenceIsRunningAtIndex = 0;
+        let sentencesAdded = 0;
+        while (!_payload.maxSafetyCharacters ? true : currentTextCharLen < _payload.maxSafetyCharacters) {
+            let prevChar = currentSentence[currentSentenceIsRunningAtIndex - 1] || "";
+
+            const canInsertCurrentSenteceNextChar = currentSentenceIsRunningAtIndex >= 1 || (prevChar === "\n" || prevChar === "" || prevChar === " " || prevChar === "\t");
+
+            let nextChar = canInsertCurrentSenteceNextChar ? currentSentence[currentSentenceIsRunningAtIndex] : " ";
+            let canEnd = true;
+
+            if (grammarParsed) {
+                const options = [...grammarParsed]
+                
+                canEnd = false;
+                const validChars = new Set();
+                const invalidChars = new Set();
+
+                for (const option of options) {
+                    if (option.type === "char") {
+                        let values = option.value;
+                        if (!Array.isArray(values)) {
+                            values = [values];
+                        }
+
+                        for (const value of values) {
+                            if (Array.isArray(value)) {
+                                const rangeStart = value[0];
+                                const rangeEnd = value[1];
+                                for (let i = rangeStart; i <= rangeEnd; i++) {
+                                    validChars.add(String.fromCharCode(i));
+                                }
+                            } else {
+                                validChars.add(String.fromCharCode(value));
+                            }
+                        }
+                    } else if (option.type === "char_exclude") {
+                        let values = option.value;
+                        if (!Array.isArray(values)) {
+                            values = [values];
+                        }
+
+                        for (const value of values) {
+                            if (Array.isArray(value)) {
+                                const rangeStart = value[0];
+                                const rangeEnd = value[1];
+                                for (let i = rangeStart; i <= rangeEnd; i++) {
+                                    invalidChars.add(String.fromCharCode(i));
+                                }
+                            } else {
+                                invalidChars.add(String.fromCharCode(value));
+                            }
+                        }
+                    } else if (option.type === "end") {
+                        canEnd = true;
+                    }
+                }
+
+                if (validChars.has(nextChar)) {
+                    // do nothing, nextChar is already valid
+                } else if (invalidChars.has(nextChar) || !validChars.has(nextChar)) {
+                    // pick a random valid char from the grammar
+                    if (!validChars.size) {
+                        // if there are no valid chars, basically we only know what is invalid
+                        if (invalidChars.has(nextChar)) {
+                            // Pick any character not in the invalid set. We sample from a
+                            // sequence of candidate ranges so the picker can produce more
+                            // than just printable ASCII (Latin-1 supplement, common
+                            // punctuation, and a slice of the BMP) while still being
+                            // bounded \u2014 no rejection-loop that could hang if a tight
+                            // invalid set covers an entire range. Each range is tried in
+                            // order; if every codepoint in a range is excluded we move
+                            // on, falling back to a guaranteed safe character.
+                            /** @type {Array<[number, number]>} */
+                            const candidateRanges = [
+                                [0x20, 0x7E],     // printable ASCII
+                                [0xA0, 0xFF],     // Latin-1 supplement
+                                [0x100, 0x17F],   // Latin Extended-A
+                                [0x2000, 0x206F], // general punctuation
+                                [0x3040, 0x30FF], // Hiragana + Katakana
+                            ];
+                            /** @type {string | null} */
+                            let picked = null;
+                            for (const [lo, hi] of candidateRanges) {
+                                // Build the allowed pool for this range by removing the
+                                // invalid chars; cheap because each range is small.
+                                /** @type {string[]} */
+                                const pool = [];
+                                for (let cp = lo; cp <= hi; cp++) {
+                                    const ch = String.fromCodePoint(cp);
+                                    if (!invalidChars.has(ch)) pool.push(ch);
+                                }
+                                if (pool.length > 0) {
+                                    picked = pool[Math.floor(Math.random() * pool.length)];
+                                    break;
+                                }
+                            }
+                            // Last-resort fallback: any char not invalid, scanning the
+                            // basic multilingual plane. Guaranteed to terminate.
+                            if (picked === null) {
+                                for (let cp = 0x20; cp <= 0xFFFF; cp++) {
+                                    const ch = String.fromCodePoint(cp);
+                                    if (!invalidChars.has(ch)) { picked = ch; break; }
+                                }
+                            }
+                            // If literally everything is excluded (pathological grammar),
+                            // keep the originally chosen char rather than spinning forever.
+                            nextChar = picked !== null ? picked : nextChar;
+                        } else {
+                            // continue the char must be valid because it's not in the invalid set, so do nothing
+                        }
+                    } else {
+                        // pick one char from the valid set at random
+                        const validCharsArray = Array.from(validChars);
+                        nextChar = validCharsArray[Math.floor(Math.random() * validCharsArray.length)];
+                    }
+                }
+            }
+
+            let justCompletedTheSentence = false;
+            if (nextChar === currentSentence[currentSentenceIsRunningAtIndex]) {
+                currentSentenceIsRunningAtIndex++;
+                if (currentSentenceIsRunningAtIndex >= currentSentence.length) {
+                    sentencesAdded++;
+                    justCompletedTheSentence = true;
+                    currentSentence = DUMMY_SENTENCES[Math.floor(Math.random() * DUMMY_SENTENCES.length)] + "\n\n";
+                    currentSentenceIsRunningAtIndex = 0;
+                }
+            } else {
+                currentSentenceIsRunningAtIndex = 0;
+                currentSentence = DUMMY_SENTENCES[Math.floor(Math.random() * DUMMY_SENTENCES.length)] + "\n\n";
+            }
+
+            if (justCompletedTheSentence && sentencesAdded >= 3 && canEnd) {
+                break;
+            }
+
+            if (_payload.maxCharacters && currentTextCharLen >= _payload.maxCharacters && (nextChar === "\n")) {
+                break;
+            }
+
+            if (_payload.maxParagraphs && contentsGenerated.split("\n").filter(line => line.trim() !== "").length === _payload.maxParagraphs && nextChar === "\n") {
+                break;
+            }
+
+            contentsGenerated += nextChar;
+
+            for (const stopAtOption of _payload.stopAt) {
+                if (contentsGenerated.endsWith(stopAtOption)) {
+                    contentsGenerated = contentsGenerated.replace(stopAtOption, "");
+                    break;
+                }
+            }
+
+            for (const stopAfterOption of _payload.stopAfter) {
+                if (contentsGenerated.endsWith(stopAfterOption)) {
+                    break;
+                }
+            }
+
+            currentTextCharLen += nextChar.length;
+        }
+
+        if (oneshot) {
+            yield contentsGenerated;
+            return;
+        }
+
+        const CHUNK_SIZE = 4;
+        const DELAY_MS = 20;
+        for (let i = 0; i < contentsGenerated.length; i += CHUNK_SIZE) {
+            const chunk = contentsGenerated.slice(i, i + CHUNK_SIZE);
+            await new Promise((resolve) => setTimeout(resolve, DELAY_MS));
+            const shouldContinue = yield { type: "text", content: chunk };
+            if (shouldContinue === false) {
+                break;
+            }
+        }
     }
 }

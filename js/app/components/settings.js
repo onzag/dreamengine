@@ -2,6 +2,20 @@ import './overlay.js';
 import "./profile-image.js";
 import { playCancelSound, playConfirmSound, playHoverSound, playPauseSound } from '../sound.js';
 
+// Optional dependency: `gbnf` is declared as an optionalDependency in
+// package.json, so it may or may not be present at runtime. We attempt a
+// dynamic ESM import of its bundled `dist/index.js` using a path that
+// resolves identically under both electron (file://) and the web server
+// (which mounts node_modules/gbnf at /node_modules/gbnf). If the import
+// fails (package not installed), the experimental test-mode toggle is
+// simply hidden.
+let gbnfAvailable = false;
+let gbnfDetected = false;
+const gbnfDetectionPromise = import('../../../node_modules/gbnf/dist/index.js')
+    .then(() => { gbnfAvailable = true; })
+    .catch(() => { /* optional dependency not installed */ })
+    .finally(() => { gbnfDetected = true; });
+
 class Settings extends HTMLElement {
     constructor() {
         super();
@@ -352,7 +366,23 @@ class Settings extends HTMLElement {
                     title="Allow connecting to inference servers with self-signed SSL certificates, only enable this if you are connecting to a trusted server with a self-signed certificate, enabling this will make your connection less secure and vulnerable"
                     input-data-location="allowSelfSigned"
                 ></app-overlay-input-boolean><div style="margin-top:1vh;color:#ff6b6b;font-size:3vh;">&#9888; The app must be restarted after changing the inference host, secret or self-signed SSL certificate settings.</div>`}
+                ${gbnfAvailable ? `<app-overlay-input-boolean
+                    label="Use experimental test mode"
+                    title="A developer mode that generates random sentences on inference, meant for expert testing"
+                    input-data-location="useExperimentalTestMode"
+                ></app-overlay-input-boolean><div style="margin-top:1vh;color:#ff6b6b;font-size:3vh;">&#9888; The test mode only produces random results, it is meant for expert testing and if you are seeing this, it means you installed the optional <strong>gbnf</strong> package.</div>` : ''}
             </app-overlay-section>`;
+
+            // If detection of the optional `gbnf` dependency is still in
+            // flight when the AI Settings tab is first opened, re-render
+            // once it completes so the experimental toggle can appear.
+            if (!gbnfDetected) {
+                gbnfDetectionPromise.then(() => {
+                    if (this.currentSectionIndex === 1 && this.isConnected) {
+                        this.renderSection();
+                    }
+                });
+            }
         };
     }
 

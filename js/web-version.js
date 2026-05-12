@@ -645,6 +645,25 @@ async function startWebServer(creds) {
         express.static(DREAMENGINE_HOME, { index: false, fallthrough: false }),
     );
 
+    // Expose optional ESM dependencies that the renderer imports via the
+    // same relative path it uses under electron file:// (e.g.
+    // `../../../node_modules/gbnf/dist/index.js` from
+    // js/app/components/settings.js). Only the specific package
+    // subdirectories we ship to the client are mounted; the rest of
+    // node_modules stays private to the server. Mounts silently no-op if the
+    // optional package is not installed.
+    const REPO_ROOT = path.resolve(SERVE_ROOT, '..');
+    const OPTIONAL_CLIENT_PACKAGES = ['gbnf'];
+    for (const pkg of OPTIONAL_CLIENT_PACKAGES) {
+        const pkgDir = path.join(REPO_ROOT, 'node_modules', pkg);
+        if (fs.existsSync(pkgDir)) {
+            app.use(
+                `/node_modules/${pkg}`,
+                express.static(pkgDir, { index: false, fallthrough: false }),
+            );
+        }
+    }
+
     // Expose the entire js/ folder. Each subdirectory's index.html (if any)
     // will be served as the directory default.
     app.use(express.static(SERVE_ROOT, { index: 'index.html' }));

@@ -1,3 +1,0 @@
-nltk
-PySide6
-websocket-client

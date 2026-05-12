@@ -70,6 +70,10 @@ const createWindow = () => {
     // win.webContents.openDevTools();
 }
 
+const ALLOWED_LIBRARY_PATHS = [
+    "gbnf",
+];
+
 const ALLOWED_BASE_PATHS = [
     "file://" + DREAMENGINE_HOME.replace(/\\/g, "/"),
     "file://" + __dirname.replace(/\\/g, "/"),
@@ -83,6 +87,11 @@ const ALLOWED_BASE_PATHS = [
     "wss://",
     "devtools://",
 ];
+
+for (const library of ALLOWED_LIBRARY_PATHS) {
+    ALLOWED_BASE_PATHS.push("file://" + __dirname.replace(/\\/g, "/").replace("/js", "/node_modules") + "/" + library.replace(/\\/g, "/"));
+    ALLOWED_BASE_PATHS.push("file:///" + __dirname.replace(/\\/g, "/").replace("/js", "/node_modules") + "/" + library.replace(/\\/g, "/"));
+}
 
 /**
  * Simple JS syntax highlighter that returns HTML with span classes.

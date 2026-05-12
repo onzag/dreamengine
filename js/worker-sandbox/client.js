@@ -229,6 +229,7 @@ export class EngineWorkerClient {
      *    host: string,
      *    secret: string,
      *    allowSelfSigned: boolean,
+     *    useExperimentalTestMode: boolean,
      * }} args
      */
     setupInferenceAdapter(args) { return this.#call("setupInferenceAdapter", args); }

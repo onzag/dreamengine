@@ -203,8 +203,8 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
             return { ok: true };
         },
 
-        async setupInferenceAdapter({ host, secret, allowSelfSigned }) {
-            engine.setInferenceAdapter(new InferenceAdapterLlamaUncensored(engine, { host, secret }));
+        async setupInferenceAdapter({ host, secret, allowSelfSigned, useExperimentalTestMode }) {
+            engine.setInferenceAdapter(new InferenceAdapterLlamaUncensored(engine, { host, secret, useExperimentalTestMode }));
             return { ok: true };
         },
 
