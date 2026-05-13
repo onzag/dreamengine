@@ -422,6 +422,17 @@
     display: none;
 }
 
+.stability-panel {
+    border-top: 1px solid rgba(255, 200, 150, 0.18);
+    padding-top: 3vh;
+    margin-top: 3vh;
+    animation: step-fade-in 220ms ease-out;
+}
+
+.stability-panel.hidden {
+    display: none;
+}
+
 .saves-panel-title {
     font-size: 2.2vh;
     text-transform: uppercase;

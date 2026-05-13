@@ -133,6 +133,7 @@ playBtn?.addEventListener('click', async () => {
         game.setAttribute('mode', detail.mode || '');
         game.setAttribute('save-id', detail.saveId || '');
         game.setAttribute('party-characters', JSON.stringify(detail.partyCharacters || []));
+        game.setAttribute('dream-stability', detail.dreamStability || 'stable');
 
         game.addEventListener('exit', () => {
             document.body.removeChild(game);

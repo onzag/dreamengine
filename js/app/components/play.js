@@ -147,6 +147,25 @@ const EXAMPLE_SAVES = [
     { id: 'save-3', name: 'Whispers Beneath the Hollow', timestamp: '2026-04-12 17:48' },
 ];
 
+const DREAM_STABILITY_OPTIONS = [
+    {
+        id: 'stable',
+        label: 'Stable',
+        description: 'Stable dreams are consistent and coherent, with a clear narrative and logical progression, making them easier to navigate and interact with.',
+    },
+    {
+        id: 'unstable',
+        label: 'Unstable',
+        description: 'Unstable dreams are unpredictable and may have sudden changes in setting, characters, or narrative, creating a more surreal and challenging experience.',
+    },
+    {
+        id: 'very unstable',
+        label: 'Very Unstable',
+        description: 'Very unstable dreams are highly chaotic and fragmented, with little to no logical progression or consistency, making them difficult to navigate and interact with, and may lead to a dream collapse.',
+    },
+];
+const DEFAULT_DREAM_STABILITY = 'stable';
+
 class PlayOverlay extends HTMLElement {
     constructor() {
         super();
@@ -161,6 +180,8 @@ class PlayOverlay extends HTMLElement {
         this.selectedMode = null;
         /** @type {string | null} */
         this.selectedSaveId = null;
+        /** @type {string} */
+        this.selectedDreamStability = DEFAULT_DREAM_STABILITY;
         /** @type {{ name: string, scriptKey: string, asset: string | null } | null} */
         this.selectedCharacter = null;
         /** @type {'narrator' | 'schizophrenia' | null} */
@@ -250,7 +271,7 @@ class PlayOverlay extends HTMLElement {
     canContinue() {
         if (this.currentStepIndex === 0) return !!this.selectedWorld;
         if (this.currentStepIndex === 1) {
-            if (this.selectedMode === 'new') return true;
+            if (this.selectedMode === 'new') return !!this.selectedDreamStability;
             if (this.selectedMode === 'load') return !!this.selectedSaveId;
             return false;
         }
@@ -303,6 +324,7 @@ class PlayOverlay extends HTMLElement {
                     character: this.selectedCharacter,
                     specialMode: this.selectedSpecialMode,
                     partyCharacters: this.selectedPartyCharacters,
+                    dreamStability: this.selectedDreamStability,
                     voiceName: this.userSelfName || '',
                 },
             }));
@@ -826,6 +848,19 @@ class PlayOverlay extends HTMLElement {
                         `).join('')}
                     </div>
                 </div>
+                <div class="stability-panel hidden">
+                    <div class="saves-panel-title">Dream Stability</div>
+                    <div class="saves-list">
+                        ${DREAM_STABILITY_OPTIONS.map(s => `
+                            <div class="save-item stability-item" data-stability-id="${escapeHTML(s.id)}">
+                                <div>
+                                    <div class="save-item-name">${escapeHTML(s.label)}</div>
+                                    <div class="save-item-meta">${escapeHTML(s.description)}</div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
             </div>
         `;
 
@@ -833,6 +868,7 @@ class PlayOverlay extends HTMLElement {
         if (!pane) return;
 
         const savesPanel = pane.querySelector('.saves-panel');
+        const stabilityPanel = pane.querySelector('.stability-panel');
 
         pane.querySelectorAll('.mode-card').forEach(card => {
             card.addEventListener('mouseenter', playHoverSound);
@@ -843,9 +879,15 @@ class PlayOverlay extends HTMLElement {
                 card.classList.add('selected');
                 if (mode === 'load') {
                     savesPanel?.classList.remove('hidden');
+                    stabilityPanel?.classList.add('hidden');
                 } else {
                     savesPanel?.classList.add('hidden');
+                    stabilityPanel?.classList.remove('hidden');
                     this.selectedSaveId = null;
+                    if (!this.selectedDreamStability) {
+                        this.selectedDreamStability = DEFAULT_DREAM_STABILITY;
+                    }
+                    this.syncStabilitySelection(pane);
                 }
                 playConfirmSound();
                 this.updateFooter();
@@ -855,6 +897,9 @@ class PlayOverlay extends HTMLElement {
                 card.classList.add('selected');
                 if (this.selectedMode === 'load') {
                     savesPanel?.classList.remove('hidden');
+                } else if (this.selectedMode === 'new') {
+                    stabilityPanel?.classList.remove('hidden');
+                    this.syncStabilitySelection(pane);
                 }
             }
         });
@@ -873,9 +918,31 @@ class PlayOverlay extends HTMLElement {
                 item.classList.add('selected');
             }
         });
+
+        pane.querySelectorAll('.stability-item').forEach(item => {
+            item.addEventListener('mouseenter', playHoverSound);
+            item.addEventListener('click', () => {
+                const id = item.getAttribute('data-stability-id') || DEFAULT_DREAM_STABILITY;
+                this.selectedDreamStability = id;
+                pane.querySelectorAll('.stability-item').forEach(s => s.classList.remove('selected'));
+                item.classList.add('selected');
+                playConfirmSound();
+                this.updateFooter();
+            });
+        });
     }
 
-    // ── Step 3: Character ────────────────────────────────────────────
+    /**
+     * @param {Element} pane
+     */
+    syncStabilitySelection(pane) {
+        pane.querySelectorAll('.stability-item').forEach(item => {
+            const id = item.getAttribute('data-stability-id');
+            item.classList.toggle('selected', id === this.selectedDreamStability);
+        });
+    }
+
+    // \u2500\u2500 Step 3: Character \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 
     /**
      * Collect every `exposeCharacters` entry across the world script and all
