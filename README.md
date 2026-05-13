@@ -2,6 +2,8 @@
 
 AI Simulation Engine created based on the RStory prototype, now written as an electron NodeJS app that can be used to create stories and mix and match them.
 
+<img width="891" height="590" alt="image" src="https://github.com/user-attachments/assets/eb3db331-5124-4572-96cb-969ded578db5" />
+
 ## Differences from Kobold / SillyTavern
 
 DreamEngine is made as a LLM Roleplay Simulation engine, not as a simple method to interact with language models in roleplay settings; therefore it is considerably more advanced than thin LLM clients that set up character cards.
