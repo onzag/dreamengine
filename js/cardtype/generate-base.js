@@ -70,7 +70,7 @@ export async function generateBase(engine, card, guider, autosave) {
         `# Character Card:\n\n${card.card}`
     );
 
-    const generator = inferenceAdapter.runQuestioningCustomAgentOn("cardtype-gen", {
+    const generator = inferenceAdapter.runQuestioningCustomAgentOn("cardtype-gen-base", {
         contextInfoAfter: null,
         contextInfoBefore: null,
         messages: [],

@@ -160,6 +160,18 @@ export class DEJSEngine {
 
         // @ts-ignore
         this.scriptCache[key] = engine.exports;
+
+        if (!engine.exports.metadata) {
+            engine.exports.metadata = {};
+        }
+
+        engine.exports.metadata.__placeholder = file.src.startsWith("//@placeholder");
+
+        if (file.src.startsWith("//@config") && !engine.exports.metadata.__placeholder) {
+            engine.exports.metadata.__in_progress = /"guidedWizardInProgress"\s*:\s*true/.test(file.src)
+                || /"automaticWizardInProgress"\s*:\s*true/.test(file.src);
+        }
+
         if (!this.__panthomImports) {
             console.log("Adding script to execution order:", key);
             this.scriptOrder.push(key);

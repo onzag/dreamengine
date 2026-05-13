@@ -94,6 +94,21 @@ function capitalize(s) {
 }
 
 /**
+ * Inspect a script's metadata for the standard placeholder / in-progress
+ * markers. Both indicate the script isn't ready and should be shown but
+ * disabled in selection UIs.
+ *
+ * @param {Record<string, any> | null | undefined} metadata
+ * @returns {{ disabled: boolean, reason: string }}
+ */
+function getScriptDisabledState(metadata) {
+    if (!metadata || typeof metadata !== 'object') return { disabled: false, reason: '' };
+    if (metadata.__placeholder) return { disabled: true, reason: 'Not ready — no content in the file.' };
+    if (metadata.__in_progress) return { disabled: true, reason: 'Not ready — still in progress.' };
+    return { disabled: false, reason: '' };
+}
+
+/**
  * @param {Record<string, string | number | boolean> | null | undefined} details
  * @returns {string}
  */
@@ -101,6 +116,7 @@ function renderCharacterDetails(details) {
     if (!details || typeof details !== 'object') return '';
     const chips = [];
     for (const [key, value] of Object.entries(details)) {
+        if (key.startsWith('__')) continue;
         const formatted = formatCharacterDetail(key, value);
         if (!formatted) continue;
         const iconHTML = formatted.icon
@@ -442,19 +458,7 @@ class PlayOverlay extends HTMLElement {
         const pane = body.querySelector('.step-pane');
         if (!pane) return;
 
-        // Skip the namespace/id of the player's own chosen character.
-        const playerScriptKey = this.selectedCharacter?.scriptKey || '';
-
-        // Build filtered namespace list: drop namespaces that become empty
-        // once the player character is excluded.
-        /** @type {Record<string, Array<{ namespace: string, id: string }>>} */
-        const filtered = {};
-        for (const [ns, refs] of Object.entries(refsByNamespace)) {
-            const kept = refs.filter(r => `${r.namespace}/${r.id}` !== playerScriptKey);
-            if (kept.length > 0) filtered[ns] = kept;
-        }
-
-        const namespaces = Object.keys(filtered).sort((a, b) => {
+        const namespaces = Object.keys(refsByNamespace).sort((a, b) => {
             const aSys = a.startsWith('@');
             const bSys = b.startsWith('@');
             if (aSys !== bSys) return aSys ? 1 : -1;
@@ -475,7 +479,7 @@ class PlayOverlay extends HTMLElement {
         const groupsHTML = namespaces.map(ns => {
             const isSystem = ns.startsWith('@');
             const isExpanded = this.expandedPartyNamespaces.has(ns);
-            const count = filtered[ns].length;
+            const count = refsByNamespace[ns].length;
             const selectedInGroup = this.selectedPartyCharacters.filter(
                 c => c.namespace === ns
             ).length;
@@ -531,7 +535,7 @@ class PlayOverlay extends HTMLElement {
 
         // Restore previously-expanded namespaces (e.g. user comes back to step).
         for (const ns of Array.from(this.expandedPartyNamespaces)) {
-            if (filtered[ns]) this.renderPartyNamespaceBody(pane, ns);
+            if (refsByNamespace[ns]) this.renderPartyNamespaceBody(pane, ns);
             else this.expandedPartyNamespaces.delete(ns);
         }
     }
@@ -561,27 +565,27 @@ class PlayOverlay extends HTMLElement {
         // bail out if so.
         if (!this.expandedPartyNamespaces.has(ns)) return;
 
-        const playerScriptKey = this.selectedCharacter?.scriptKey || '';
-        const visible = characters.filter(c => `${c.namespace}/${c.id}` !== playerScriptKey);
-
-        if (visible.length === 0) {
+        if (characters.length === 0) {
             bodyEl.innerHTML = `<div class="placeholder-pane">No characters in this namespace.</div>`;
             return;
         }
 
-        const items = visible.map(c => {
+        const items = characters.map(c => {
             const isSelected = this.isPartyCharacterSelected(c);
+            const { disabled, reason } = getScriptDisabledState(c.metadata);
             const detailsHTML = renderCharacterDetails(c.metadata || {});
             return `
-                <div class="character-card party-card${isSelected ? ' selected' : ''}"
+                <div class="character-card party-card${isSelected ? ' selected' : ''}${disabled ? ' disabled' : ''}"
                      data-namespace="${escapeHTML(c.namespace)}"
-                     data-id="${escapeHTML(c.id)}">
+                     data-id="${escapeHTML(c.id)}"
+                     ${disabled ? 'data-disabled="true"' : ''}>
                     <div class="character-card-image">
                         <app-asset-image image-url="assets/${escapeHTML(c.namespace)}/${escapeHTML(c.id)}/profile" default-image="./images/default-profile.png"></app-asset-image>
                     </div>
                     <div class="character-card-name">${formatName(escapeHTML(c.id))}</div>
                     ${c.description ? `<div class="character-card-desc">${escapeHTML(c.description)}</div>` : ''}
                     ${detailsHTML}
+                    ${disabled ? `<div class="character-card-disabled-note">${escapeHTML(reason)}</div>` : ''}
                     <div class="party-selected-badge">✓ In party</div>
                 </div>
             `;
@@ -590,8 +594,12 @@ class PlayOverlay extends HTMLElement {
         bodyEl.innerHTML = `<div class="character-grid">${items}</div>`;
 
         bodyEl.querySelectorAll('.party-card').forEach(card => {
-            card.addEventListener('mouseenter', playHoverSound);
+            card.addEventListener('mouseenter', () => {
+                if (card.getAttribute('data-disabled') === 'true') return;
+                playHoverSound();
+            });
             card.addEventListener('click', () => {
+                if (card.getAttribute('data-disabled') === 'true') return;
                 const cns = card.getAttribute('data-namespace') || '';
                 const cid = card.getAttribute('data-id') || '';
                 const wasSelected = card.classList.contains('selected');
@@ -600,6 +608,12 @@ class PlayOverlay extends HTMLElement {
                         c => !(c.namespace === cns && c.id === cid)
                     );
                     card.classList.remove('selected');
+                    // If the play-as character was this party member, clear it
+                    // so the next step doesn't keep a stale selection.
+                    const removedKey = `${cns}/${cid}`;
+                    if (this.selectedCharacter && this.selectedCharacter.scriptKey === removedKey) {
+                        this.selectedCharacter = null;
+                    }
                     playCancelSound();
                 } else {
                     this.selectedPartyCharacters.push({ namespace: cns, id: cid });
@@ -619,8 +633,7 @@ class PlayOverlay extends HTMLElement {
      */
     updatePartyNamespaceCount(pane, ns) {
         const refs = (this.partyCharacterRefs && this.partyCharacterRefs[ns]) || [];
-        const playerScriptKey = this.selectedCharacter?.scriptKey || '';
-        const count = refs.filter(r => `${r.namespace}/${r.id}` !== playerScriptKey).length;
+        const count = refs.length;
         const selectedInGroup = this.selectedPartyCharacters.filter(c => c.namespace === ns).length;
         const header = pane.querySelector(`.party-namespace[data-namespace="${CSS.escape(ns)}"] .party-namespace-count`);
         if (header) {
@@ -714,16 +727,21 @@ class PlayOverlay extends HTMLElement {
 
         const groupsHTML = namespaces.map(ns => {
             const isSystem = ns.startsWith('@');
-            const items = grouped[ns].map((w) => `
-                <div class="world-card"
+            const items = grouped[ns].map((w) => {
+                const { disabled, reason } = getScriptDisabledState(w.metadata);
+                return `
+                <div class="world-card${disabled ? ' disabled' : ''}"
                      data-namespace="${escapeHTML(ns)}"
-                     data-id="${escapeHTML(w.id)}">
+                     data-id="${escapeHTML(w.id)}"
+                     ${disabled ? 'data-disabled="true"' : ''}>
                     <div class="world-card-image">
                         <app-world-image image-url="assets/${escapeHTML(ns)}/${escapeHTML(w.id)}/image"></app-world-image>
                     </div>
                     <div class="world-card-name">${formatName(escapeHTML(w.id))}</div>
+                    ${disabled ? `<div class="character-card-disabled-note">${escapeHTML(reason)}</div>` : ''}
                 </div>
-            `).join('');
+            `;
+            }).join('');
 
             return `
                 <div class="world-group">
@@ -745,8 +763,12 @@ class PlayOverlay extends HTMLElement {
         `;
 
         pane.querySelectorAll('.world-card').forEach(card => {
-            card.addEventListener('mouseenter', playHoverSound);
+            card.addEventListener('mouseenter', () => {
+                if (card.getAttribute('data-disabled') === 'true') return;
+                playHoverSound();
+            });
             card.addEventListener('click', () => {
+                if (card.getAttribute('data-disabled') === 'true') return;
                 const ns = card.getAttribute('data-namespace') || '';
                 const id = card.getAttribute('data-id') || '';
                 this.selectedWorld = { namespace: ns, id };

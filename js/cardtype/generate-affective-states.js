@@ -54,7 +54,7 @@ export async function generateAffectiveStates(engine, card, guider, autosave) {
 
     const intimateHead = unshiftSection(newCharacterSection.head, "intimate-affection-showcases");
 
-    const generator = inferenceAdapter.runQuestioningCustomAgentOn("cardtype-gen", {
+    const generator = inferenceAdapter.runQuestioningCustomAgentOn("cardtype-gen-affective-states", {
         contextInfoAfter: null,
         contextInfoBefore: null,
         messages: [],

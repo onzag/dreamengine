@@ -160,7 +160,7 @@ export async function generateBasicStates(engine, card, guider, autosave) {
         `# Character Card:\n\n${card.card}`
     );
 
-    const generator = inferenceAdapter.runQuestioningCustomAgentOn("cardtype-gen", {
+    const generator = inferenceAdapter.runQuestioningCustomAgentOn("cardtype-gen-basic-states", {
         contextInfoAfter: null,
         contextInfoBefore: null,
         messages: [],

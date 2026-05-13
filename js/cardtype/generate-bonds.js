@@ -248,12 +248,13 @@ function describeStrangerContext(strangerKey) {
  * @param {string} romanticInterestKey
  * @param {string} familyKey - "family" or "nonFamily"
  * @param {boolean} negativeScenario - whether this description is for a negative scenario (e.g. to be used in a reasonNo) or not (e.g. to be used in a reasonYes), this is needed because in some cases the same relationship/romantic-interest/family keys can lead to different descriptions depending on whether it's a negative or positive scenario
+ * @param {boolean} intimateScenario - whether this description is for an intimate scenario
  * @returns {string}
  */
-function describeFamilyContext(relationshipKey, romanticInterestKey, familyKey, negativeScenario) {
+function describeFamilyContext(relationshipKey, romanticInterestKey, familyKey, negativeScenario, intimateScenario) {
     const r = RELATIONSHIP_KEY_DESCRIPTIONS[relationshipKey] || "character";
     const ri = romanticInterestKey === "noRomanticInterest_0_10" && !negativeScenario ? "" : ((ROMANTIC_INTEREST_KEY_DESCRIPTIONS[romanticInterestKey] || (negativeScenario ? "is not a romantic interest" : "")));
-    const fam = familyKey === "family" ? "is family" : (negativeScenario ? "is not family" : "");
+    const fam = familyKey === "family" ? "is family" : (negativeScenario && !intimateScenario ? "is not family" : "");
     let base = `${r}`;
     if (ri) {
         base += ` who ${ri}`;
@@ -480,7 +481,7 @@ export async function generateBonds(engine, card, guider, autosave) {
         `# Character Card:\n\n${card.card}`
     );
 
-    const generator = inferenceAdapter.runQuestioningCustomAgentOn("cardtype-gen", {
+    const generator = inferenceAdapter.runQuestioningCustomAgentOn("cardtype-gen-bonds", {
         contextInfoAfter: null,
         contextInfoBefore: null,
         messages: [],
@@ -2850,7 +2851,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                                 modifierInfo,
                                 valueAnswer,
                                 name,
-                                describeFamilyContext(relationshipKey, romanticInterestKey, familyKey, valueAnswer === "not"),
+                                describeFamilyContext(relationshipKey, romanticInterestKey, familyKey, valueAnswer === "not", false),
                                 "What is the reason for " + name + " being " + answerTrimmed + " to affection from this other character when they are " + intimateModifier.toLowerCase() + "?" + messageAboutAnswersFrom,
                                 fineTuneReference.openToAffectionReason ? { values: [fineTuneReference.openToAffectionReason] } : { values: [] },
                                 attractionLevel,
@@ -2955,7 +2956,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                                 modifierInfo,
                                 valueAnswer,
                                 name,
-                                describeFamilyContext(relationshipKey, romanticInterestKey, familyKey, valueAnswer === "not"),
+                                describeFamilyContext(relationshipKey, romanticInterestKey, familyKey, valueAnswer === "not", true),
                                 "What is the reason for " + name + " being " + answerTrimmed + " to intimate affection from this other character when they are " + intimateModifier.toLowerCase() + "?" + messageAboutAnswersFrom,
                                 fineTuneReference.openToIntimateAffectionReason ? { values: [fineTuneReference.openToIntimateAffectionReason] } : { values: [] },
                                 attractionLevel,
@@ -3058,7 +3059,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                                 modifierInfo,
                                 valueAnswer,
                                 name,
-                                describeFamilyContext(relationshipKey, romanticInterestKey, familyKey, valueAnswer === "not"),
+                                describeFamilyContext(relationshipKey, romanticInterestKey, familyKey, valueAnswer === "not", true),
                                 "What is the reason for " + name + " being " + answerTrimmed + " to sex with this other character when they are " + intimateModifier.toLowerCase() + "?" + messageAboutAnswersFrom,
                                 fineTuneReference.openToSexReason ? { values: [fineTuneReference.openToSexReason] } : { values: [] },
                                 attractionLevel,
@@ -3111,7 +3112,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                             }
 
                             if (guider) {
-                                const messageAboutAnswersFrom = RELATIONSHIP_KEY_INFO_OBTAINED_FROM[relationshipKey] || "";
+                                const messageAboutAnswersFrom = RELATIONSHIP_KEY_INFO_OBTAINED_FROM[relationshipKey][romanticInterestKey] || "";
                                 const guiderResult = await guider.askOption(
                                     proneToInitiatingAffectionQuestion + messageAboutAnswersFrom,
                                     PROBABILITY_OPTIONS,

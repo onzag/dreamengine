@@ -26,7 +26,7 @@ export async function generateActivities(engine, card, guider, autosave) {
         null,
     );
 
-    const generator2 = inferenceAdapter.runQuestioningCustomAgentOn("cardtype-gen", {
+    const generator2 = inferenceAdapter.runQuestioningCustomAgentOn("cardtype-gen-activities", {
         contextInfoAfter: null,
         contextInfoBefore: null,
         messages: [],

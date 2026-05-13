@@ -46,7 +46,7 @@ export async function generateBondTriggers(engine, card, guider, autosave) {
         initializeSection.body.push(`basicBondQuestions.addBasicBondQuestions(DE.characters[${JSON.stringify(card.config.name)}]);`);
     }
 
-    const generator = inferenceAdapter.runQuestioningCustomAgentOn("cardtype-gen", {
+    const generator = inferenceAdapter.runQuestioningCustomAgentOn("cardtype-gen-bond-triggers", {
         contextInfoAfter: null,
         contextInfoBefore: null,
         messages: [],

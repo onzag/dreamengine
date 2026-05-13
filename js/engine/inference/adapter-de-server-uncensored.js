@@ -31,6 +31,29 @@ const DUMMY_SENTENCES = [
     "The shadow on the wall did not match the figure standing in the room.",
 ];
 
+const DUMMY_SENTENCES_BONDS = [
+    "They feel deeply loved and cherished by OTHER CHARACTER.",
+    "There is a quiet warmth in their chest whenever OTHER CHARACTER is near.",
+    "They would do almost anything to keep OTHER CHARACTER safe.",
+    "OTHER CHARACTER has a way of making them feel seen without saying a word.",
+    "They trust OTHER CHARACTER more than they trust themselves.",
+    "A single glance from OTHER CHARACTER is enough to settle their nerves.",
+    "They find themselves thinking about OTHER CHARACTER at the strangest moments.",
+    "OTHER CHARACTER is the first person they want to tell when something goes wrong.",
+    "They feel a fierce, protective loyalty toward OTHER CHARACTER.",
+    "Spending time with OTHER CHARACTER feels like coming home.",
+    "They admire OTHER CHARACTER in ways they have never quite found the words for.",
+    "OTHER CHARACTER makes them want to be a better version of themselves.",
+    "There is a thread of understanding between them and OTHER CHARACTER that needs no explanation.",
+    "They would stand in front of danger without hesitation if OTHER CHARACTER were behind them.",
+    "OTHER CHARACTER is the kind of presence that makes silence feel comfortable.",
+    "They carry a deep, quiet gratitude for everything OTHER CHARACTER has done for them.",
+    "When OTHER CHARACTER laughs, something in them relaxes.",
+    "They have never felt less alone than when they are with OTHER CHARACTER.",
+    "OTHER CHARACTER knows things about them that no one else does.",
+    "They would grieve for a long time if OTHER CHARACTER were gone.",
+]
+
 /**
  * Optional dependency: `gbnf` is declared as an optionalDependency in
  * package.json, so it may or may not be installed at runtime. We attempt a
@@ -582,7 +605,7 @@ RULE: Spoken dialogue should be done in first person, and start with the charact
         while (nextQuestion !== null) {
             if (typeof nextQuestion === "undefined") {
                 console.error("Questioning agent received undefined, treating an invalid ready signal");
-                yield "ready";
+                nextQuestion = yield "ready";
                 continue;
             }
 
@@ -627,7 +650,12 @@ RULE: Spoken dialogue should be done in first person, and start with the charact
                     throw new Error("Unexpected message type during questioning: " + data.type);
                 }
             } else {
-                yield* this.runInferenceInTestMode(payload, { oneshot: true });
+                const gen = this.runInferenceInTestMode(payload, { oneshot: true, gear: gear });
+                const { value: answer } = await gen.next();
+                console.log("\nReceived answer (test mode): " + answer);
+                console.log("[test-mode] about to yield answer, awaiting consumer .next(payload)...");
+                nextQuestion = yield answer;
+                console.log("[test-mode] resumed after yield, nextQuestion =", nextQuestion);
             }
         }
     }
@@ -941,7 +969,7 @@ ${this.buildSystemCharacterDescription(character, { description, externalDescrip
      * }} _payload the inference payload describing what to generate; in test
      *   mode the contents are ignored, but the shape is kept accurate so the
      *   real implementation can plug in later without changing call sites.
-     * @param {{ oneshot?: boolean }} [opts]
+     * @param {{ oneshot?: boolean, gear?: string }} [opts]
      * @returns {AsyncGenerator<any, void, any>}
      */
     async *runInferenceInTestMode(_payload, opts) {
@@ -953,8 +981,10 @@ ${this.buildSystemCharacterDescription(character, { description, externalDescrip
 
         let contentsGenerated = "";
 
+        const DUMMY_SENTENCES_TO_USE = opts && opts.gear === "cardtype-gen-bonds" ? DUMMY_SENTENCES_BONDS : DUMMY_SENTENCES;
+
         let currentTextCharLen = 0;
-        let currentSentence = DUMMY_SENTENCES[Math.floor(Math.random() * DUMMY_SENTENCES.length)] + "\n\n";
+        let currentSentence = DUMMY_SENTENCES_TO_USE[Math.floor(Math.random() * DUMMY_SENTENCES_TO_USE.length)] + "\n\n";
         let currentSentenceIsRunningAtIndex = 0;
         let sentencesAdded = 0;
         while (!_payload.maxSafetyCharacters ? true : currentTextCharLen < _payload.maxSafetyCharacters) {
@@ -1079,12 +1109,12 @@ ${this.buildSystemCharacterDescription(character, { description, externalDescrip
                 if (currentSentenceIsRunningAtIndex >= currentSentence.length) {
                     sentencesAdded++;
                     justCompletedTheSentence = true;
-                    currentSentence = DUMMY_SENTENCES[Math.floor(Math.random() * DUMMY_SENTENCES.length)] + "\n\n";
+                    currentSentence = DUMMY_SENTENCES_TO_USE[Math.floor(Math.random() * DUMMY_SENTENCES_TO_USE.length)] + "\n\n";
                     currentSentenceIsRunningAtIndex = 0;
                 }
             } else {
                 currentSentenceIsRunningAtIndex = 0;
-                currentSentence = DUMMY_SENTENCES[Math.floor(Math.random() * DUMMY_SENTENCES.length)] + "\n\n";
+                currentSentence = DUMMY_SENTENCES_TO_USE[Math.floor(Math.random() * DUMMY_SENTENCES_TO_USE.length)] + "\n\n";
             }
 
             if (justCompletedTheSentence && sentencesAdded >= 3 && canEnd) {

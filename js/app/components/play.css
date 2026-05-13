@@ -334,6 +334,19 @@
     box-shadow: 0 0 2vh rgba(255, 184, 122, 0.45);
 }
 
+.world-card.disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    filter: grayscale(0.6);
+}
+
+.world-card.disabled:hover {
+    transform: none;
+    background: rgba(0, 0, 0, 0.18);
+    border-color: rgba(255, 200, 150, 0.18);
+    box-shadow: none;
+}
+
 .world-card-image {
     width: 16vh;
     height: 16vh;
