@@ -339,8 +339,12 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
                 return template; // simple string template, return as-is without calling
             }
 
-
             const char = engine.getDEObject().characters[characterName];
+
+            if (!char) {
+                throw new Error(`Character '${characterName}' not found in DE object`);
+            }
+
             return await template({
                 char,
             });

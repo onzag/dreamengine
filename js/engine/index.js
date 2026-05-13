@@ -514,7 +514,8 @@ export class DEngine {
 
         this.userCharacter = this.deObject.characters[characterName];
         this.user = minimizeCharacterFromComplete(this.userCharacter);
-
+        
+        this.deObject.user = this.user;
         this.deObject.world.currentLocation = this.deObject.stateFor[characterName].location;
         this.deObject.world.currentLocationSlot = this.deObject.stateFor[characterName].locationSlot;
     }
@@ -576,8 +577,8 @@ export class DEngine {
                 const addedCharacters = [...newCharacterNames].filter(x => !currentCharacterNames.has(x));
                 for (const charName of addedCharacters) {
                     this.engineScriptInfo.charactersAdded.push({
-                        byNamespace: script.script.namespace,
-                        byId: script.script.id,
+                        byNamespace: script.scriptKey.split("/")[0],
+                        byId: script.scriptKey.split("/")[1],
                         name: charName,
                     });
                 }
@@ -685,8 +686,8 @@ export class DEngine {
                 const addedCharacters = [...newCharacterNames].filter(x => !currentCharacterNames.has(x));
                 for (const charName of addedCharacters) {
                     this.engineScriptInfo.charactersAdded.push({
-                        byNamespace: script.script.namespace,
-                        byId: script.script.id,
+                        byNamespace: script.scriptKey.split("/")[0],
+                        byId: script.scriptKey.split("/")[1],
                         name: charName,
                     });
                 }

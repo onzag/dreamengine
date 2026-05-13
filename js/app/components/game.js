@@ -119,7 +119,7 @@ class GameOverlay extends HTMLElement {
         try {
             const partyCharactersJson = this.getAttribute('party-characters') || '[]';
             const partyCharacters = JSON.parse(partyCharactersJson);
-            console.log(partyCharacters);
+
             if (!comeFromConflictError) {
                 await window.ENGINE_WORKER_CLIENT.jsEngineClearExecutionOrder();
                 await window.ENGINE_WORKER_CLIENT.jsEngineImportScript({
@@ -211,13 +211,6 @@ class GameOverlay extends HTMLElement {
                 await window.ENGINE_WORKER_CLIENT.completeDisruptedInitializationDueToNameConflict({ newName });
             }
 
-            // check if we are taking a character's identity (i.e. not a self-insert but sharing a name with an existing character), and if so, assume that identity to get the correct starting location and inventory
-            const characterName = this.getAttribute('character-name') || '';
-            const isSelfInsert = this.getAttribute('is-self-insert') === 'true';
-            if (!isSelfInsert && characterName) {
-                await window.ENGINE_WORKER_CLIENT.assumeCharacterIdentity({ characterName });
-            }
-
             // adding characters that were added by those scripts as the party members, the reason is that
             // a script can add many characters and not just one, so they all need to be added by name
             // everything is dynamic so we don't necessarily know by the namespace and id
@@ -227,6 +220,23 @@ class GameOverlay extends HTMLElement {
                     if (charInfo.byId === partyMember.id && charInfo.byNamespace === partyMember.namespace) {
                         await window.ENGINE_WORKER_CLIENT.addCharacterToParty({ characterName: charInfo.name });
                     }
+                }
+            }
+
+            // check if we are taking a character's identity (i.e. not a self-insert but sharing a name with an existing character), and if so, assume that identity to get the correct starting location and inventory
+            const characterName = this.getAttribute('character-name') || '';
+            const isSelfInsert = this.getAttribute('is-self-insert') === 'true';
+            if (!isSelfInsert && characterName) {
+                if (characterName.startsWith('script://')) {
+                    const [namespace, id] = characterName.substring('script://'.length).split('/');
+                    const charInfo = engineScriptInfo.charactersAdded.find(c => c.byNamespace === namespace && c.byId === id);
+                    if (charInfo) {
+                        await window.ENGINE_WORKER_CLIENT.assumeCharacterIdentity({ characterName: charInfo.name });
+                    } else {
+                        throw new Error(`Character with script key ${namespace + "/" + id} not found among characters added by the world and party scripts.` + JSON.stringify(engineScriptInfo.charactersAdded));
+                    }
+                } else {
+                    await window.ENGINE_WORKER_CLIENT.assumeCharacterIdentity({ characterName });
                 }
             }
 

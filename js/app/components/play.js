@@ -120,8 +120,8 @@ function renderCharacterDetails(details) {
 const STEPS = [
     { id: 'world', label: 'World' },
     { id: 'mode', label: 'Mode' },
-    { id: 'character', label: 'Character' },
     { id: 'party', label: 'Party' },
+    { id: 'character', label: 'Character' },
 ];
 
 // Placeholder list — real save loading is not yet implemented.
@@ -238,8 +238,8 @@ class PlayOverlay extends HTMLElement {
             if (this.selectedMode === 'load') return !!this.selectedSaveId;
             return false;
         }
-        if (this.currentStepIndex === 2) return !!this.selectedCharacter;
-        if (this.currentStepIndex === 3) return true; // empty party = solo is allowed
+        if (this.currentStepIndex === 2) return true; // empty party = solo is allowed
+        if (this.currentStepIndex === 3) return !!this.selectedCharacter;
         return false;
     }
 
@@ -325,9 +325,9 @@ class PlayOverlay extends HTMLElement {
         } else if (this.currentStepIndex === 1) {
             this.renderModeStep(body);
         } else if (this.currentStepIndex === 2) {
-            await this.renderCharacterStep(body);
-        } else if (this.currentStepIndex === 3) {
             await this.renderPartyStep(body);
+        } else if (this.currentStepIndex === 3) {
+            await this.renderCharacterStep(body);
         }
 
         this.updateFooter();
@@ -939,7 +939,42 @@ class PlayOverlay extends HTMLElement {
             isSelf: true,
         };
 
-        const characters = [selfCharacter, ...exposed];
+        // Party-derived options: each character the user picked in the party
+        // step is also a valid "play as" choice.
+        /** @type {Array<{ name: string, scriptKey: string, namespace: string, description: string, asset: string | null, details: any, isSelf?: boolean, source: 'self' | 'party' | 'world' }>} */
+        const partyOptions = [];
+        if (this.selectedPartyCharacters.length > 0) {
+            // Load metadata for each unique namespace in the selected party.
+            const nsSet = new Set(this.selectedPartyCharacters.map(p => p.namespace));
+            await Promise.all(
+                Array.from(nsSet).map(ns => this.loadPartyNamespaceCharacters(ns))
+            );
+            for (const ref of this.selectedPartyCharacters) {
+                const cached = (this.partyNamespaceCache[ref.namespace] || [])
+                    .find(c => c.id === ref.id);
+                partyOptions.push({
+                    // the name is not really known nor exposed in the ref until the character is loaded
+                    name: ref.id,
+                    scriptKey: `${ref.namespace}/${ref.id}`,
+                    namespace: ref.namespace,
+                    description: cached?.description || '',
+                    asset: `assets/${ref.namespace}/${ref.id}/profile`,
+                    details: cached?.metadata || null,
+                    source: 'party',
+                });
+            }
+        }
+
+        /** @type {Array<{ name: string, scriptKey: string, namespace: string, description: string, asset: string | null, details: any, isSelf?: boolean, source: 'self' | 'party' | 'world' }>} */
+        const exposedOptions = exposed.map(c => ({
+            ...c,
+            // @ts-ignore
+            details: /** @type {any} */ (c).details,
+            source: /** @type {const} */ ('world'),
+        }));
+
+        /** @type {Array<{ name: string, scriptKey: string, namespace: string, description: string, asset: string | null, details: any, isSelf?: boolean, source: 'self' | 'party' | 'world' }>} */
+        const selfOptions = [{ ...selfCharacter, details: null, source: 'self' }];
 
         const pane = body.querySelector('.step-pane');
         if (!pane) return;
@@ -969,28 +1004,44 @@ class PlayOverlay extends HTMLElement {
             ? `<div class="special-mode-message">${escapeHTML(activeMode.description)}</div>`
             : '';
 
-        const cardsHTML = characters.map(c => {
-            const isSelf = !!(/** @type {any} */ (c).isSelf);
+        const renderCard = (/** @type {any} */ c) => {
+            const isSelf = !!c.isSelf;
             const disabled = isSelf && this.selectedSpecialMode !== null;
             const imageHTML = c.asset
                 ? `<app-asset-image image-url="${escapeHTML(c.asset)}" default-image="./images/default-profile.png"></app-asset-image>`
                 : `<img class="character-default" src="./images/default-profile.png" />`;
-            const details = /** @type {any} */ (c).details;
-            const detailsHTML = renderCharacterDetails(details);
+            const detailsHTML = renderCharacterDetails(c.details);
+            const displayName = c.source === 'party'
+                ? formatName(escapeHTML(c.name))
+                : escapeHTML(c.name);
+            const nameToUseInData = c.source === 'party' ? `script://${c.scriptKey}` : c.name;
             return `
                 <div class="character-card${isSelf ? ' self-insert' : ''}${disabled ? ' disabled' : ''}"
-                     data-name="${escapeHTML(c.name)}"
+                     data-name="${escapeHTML(nameToUseInData)}"
                      data-script-key="${escapeHTML(c.scriptKey)}"
                      data-asset="${escapeHTML(c.asset || '')}"
                      ${disabled ? 'data-disabled="true"' : ''}>
                     <div class="character-card-image">${imageHTML}</div>
-                    <div class="character-card-name">${escapeHTML(c.name)}</div>
+                    <div class="character-card-name">${displayName}</div>
                     ${c.description ? `<div class="character-card-desc">${escapeHTML(c.description)}</div>` : ''}
                     ${detailsHTML}
                     ${disabled ? '<div class="character-card-disabled-note">Not available with this mode</div>' : ''}
                 </div>
             `;
-        }).join('');
+        };
+
+        const sections = [
+            { title: 'Play as yourself', items: selfOptions },
+            { title: "Play as a party character", items: partyOptions },
+            { title: 'Play as a known world character', items: exposedOptions },
+        ].filter(s => s.items.length > 0);
+
+        const sectionsHTML = sections.map(s => `
+            <div class="character-section">
+                <div class="character-section-heading">${escapeHTML(s.title)}</div>
+                <div class="character-grid">${s.items.map(renderCard).join('')}</div>
+            </div>
+        `).join('');
 
         pane.innerHTML = `
             <div class="step-heading">
@@ -1001,7 +1052,7 @@ class PlayOverlay extends HTMLElement {
                 ${specialHTML}
                 ${messageHTML}
             </div>
-            <div class="character-grid">${cardsHTML}</div>
+            <div class="character-sections">${sectionsHTML}</div>
         `;
 
         pane.querySelectorAll('.special-mode-toggle input[type="checkbox"]').forEach(input => {
