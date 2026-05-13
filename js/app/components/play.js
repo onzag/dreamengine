@@ -156,12 +156,12 @@ const DREAM_STABILITY_OPTIONS = [
     {
         id: 'unstable',
         label: 'Unstable',
-        description: 'Unstable dreams are unpredictable and may have sudden changes in setting, characters, or narrative, creating a more surreal and challenging experience.',
+        description: 'Unstable dreams can become suddenly unpredictable and may have sudden changes in setting, characters, or narrative, creating a more surreal and challenging experience.',
     },
     {
         id: 'very unstable',
         label: 'Very Unstable',
-        description: 'Very unstable dreams are highly chaotic and fragmented, with little to no logical progression or consistency, making them difficult to navigate and interact with, and may lead to a dream collapse.',
+        description: 'Very unstable dreams can suddenly become chaotic and fragmented, with nightmarish elements, characters may become self aware, making them difficult to navigate and interact with, and may lead to a dream collapse.',
     },
 ];
 const DEFAULT_DREAM_STABILITY = 'stable';
@@ -368,6 +368,7 @@ class PlayOverlay extends HTMLElement {
             await this.renderCharacterStep(body);
         }
 
+        this.applyStabilityTheme();
         this.updateFooter();
     }
 
@@ -889,6 +890,7 @@ class PlayOverlay extends HTMLElement {
                     }
                     this.syncStabilitySelection(pane);
                 }
+                this.applyStabilityTheme();
                 playConfirmSound();
                 this.updateFooter();
             });
@@ -926,6 +928,7 @@ class PlayOverlay extends HTMLElement {
                 this.selectedDreamStability = id;
                 pane.querySelectorAll('.stability-item').forEach(s => s.classList.remove('selected'));
                 item.classList.add('selected');
+                this.applyStabilityTheme();
                 playConfirmSound();
                 this.updateFooter();
             });
@@ -940,6 +943,25 @@ class PlayOverlay extends HTMLElement {
             const id = item.getAttribute('data-stability-id');
             item.classList.toggle('selected', id === this.selectedDreamStability);
         });
+        this.applyStabilityTheme();
+    }
+
+    /**
+     * Tint the overlay background based on the chosen dream stability so the
+     * user sees a visual cue that unstable dreams will skew darker. Only
+     * applied when the user is on the "new game" path; otherwise revert to the
+     * default sunrise palette.
+     */
+    applyStabilityTheme() {
+        const overlay = this.root.querySelector('.play-overlay');
+        if (!overlay) return;
+        overlay.classList.remove('stability-unstable', 'stability-very-unstable');
+        if (this.selectedMode !== 'new') return;
+        if (this.selectedDreamStability === 'unstable') {
+            overlay.classList.add('stability-unstable');
+        } else if (this.selectedDreamStability === 'very unstable') {
+            overlay.classList.add('stability-very-unstable');
+        }
     }
 
     // \u2500\u2500 Step 3: Character \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500

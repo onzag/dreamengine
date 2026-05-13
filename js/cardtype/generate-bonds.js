@@ -2747,6 +2747,35 @@ export async function generateBonds(engine, card, guider, autosave) {
 
                             let fineTuneReference = card.config.tuneInfos[fineTuneCommentWithIntimacyModifier];
 
+                            if (!fineTuneReference) {
+                                // must be a family case, in fact must be the first family case with acquaintance_0_10
+                                // let's try to get answers from somewhere else, first get the suffix for the gender part
+                                const unfamilizedPart = fineTuneCommentWithIntimacyModifier.replace("family_character_", "");
+                                let matchingKey = Object.keys(card.config.tuneInfos).find(key => key.endsWith(unfamilizedPart) && key.startsWith(card.config.characterSpeciesType));
+                                if (!matchingKey) {
+                                    const unfamilizedPartWithoutAnyNA1 = unfamilizedPart.replace("any_", "ambiguous_");
+                                    matchingKey = Object.keys(card.config.tuneInfos).find(key => key.endsWith(unfamilizedPartWithoutAnyNA1) && key.startsWith(card.config.characterSpeciesType));
+                                    if (!matchingKey) {
+                                        const unfamilizedPartWithoutAnyNA2 = unfamilizedPart.replace("any_", "male_");
+                                        matchingKey = Object.keys(card.config.tuneInfos).find(key => key.endsWith(unfamilizedPartWithoutAnyNA2) && key.startsWith(card.config.characterSpeciesType));
+                                        if (!matchingKey) {
+                                            const unfamilizedPartWithoutAnyNA3 = unfamilizedPart.replace("any_", "female_");
+                                            matchingKey = Object.keys(card.config.tuneInfos).find(key => key.endsWith(unfamilizedPartWithoutAnyNA3) && key.startsWith(card.config.characterSpeciesType));
+                                        }
+                                    }
+                                }
+                                if (!matchingKey) {
+                                    matchingKey = Object.keys(card.config.tuneInfos).find(key => key.endsWith(unfamilizedPart));
+                                }
+
+                                if (matchingKey) {
+                                    fineTuneReference = card.config.tuneInfos[matchingKey];
+                                } else {
+                                    // TODO not throw this error make a new fine tune
+                                    throw new Error(fineTuneCommentWithIntimacyModifier);
+                                }
+                            }
+
                             if (fineTuneReference) {
                                 const sourceOfFineTuneInfo = RELATIONSHIP_KEY_INFO_MAP[relationshipKey][romanticInterestKey];
                                 if (sourceOfFineTuneInfo[1] === null) {
@@ -2766,12 +2795,9 @@ export async function generateBonds(engine, card, guider, autosave) {
                                 }
                             }
 
-                            if (!fineTuneReference) {
-                                // must be a family case, in fact must be the first family case with acquaintance_0_10
-                                // TODO try to get answers from somewhere else
-                                throw new Error(fineTuneCommentWithIntimacyModifier);
+                            if (!card.config.tuneInfos[fineTuneCommentWithIntimacyModifier]) {
+                                card.config.tuneInfos[fineTuneCommentWithIntimacyModifier] = {};
                             }
-
                             if (!card.config.tuneInfos[fineTuneCommentWithIntimacyModifier][relationshipKey]) {
                                 card.config.tuneInfos[fineTuneCommentWithIntimacyModifier][relationshipKey] = {};
                             }

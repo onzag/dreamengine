@@ -49,6 +49,45 @@
     color: #f0e6d8;
     z-index: 20;
     box-sizing: border-box;
+    transition: background 600ms ease;
+}
+
+/* Dream stability theme variants. The default sunrise palette above
+   represents a stable dream; unstable shifts the palette to cool blues
+   to hint at unfamiliar terrain, and very unstable goes nearly black to
+   warn of darker, chaotic content. */
+.play-overlay.stability-unstable {
+    background: linear-gradient(
+        to bottom,
+        #050714 0%,
+        #07101f 8%,
+        #0a182c 16%,
+        #0d2138 24%,
+        #112a45 32%,
+        #143350 42%,
+        #173b5b 52%,
+        #1c4869 62%,
+        #235576 72%,
+        #2a6485 82%,
+        #34728f 90%,
+        #4282a0 100%
+    );
+    color: #dde7f2;
+}
+
+.play-overlay.stability-very-unstable {
+    background: linear-gradient(
+        to bottom,
+        #000000 0%,
+        #030308 14%,
+        #06060e 28%,
+        #090916 42%,
+        #0c0c1f 56%,
+        #0f0f24 70%,
+        #131330 82%,
+        #181838 100%
+    );
+    color: #c4c0d4;
 }
 
 /* ── Header ── */

@@ -1966,7 +1966,7 @@ export async function generateBase(engine, card, guider, autosave) {
         }
 
         let maxAgeAttractionPotential = card.config.characterAge + 10;
-        if (card.config.speciesType === "humanoid" && card.config.characterAge <= 18) {
+        if (card.config.characterSpeciesType === "humanoid" && card.config.characterAge <= 18) {
             maxAgeAttractionPotential = card.config.characterAge + 3; // for very young characters we can make the max age of attraction closer to their age since it's more likely they would be attracted to people closer to their age
         }
 
@@ -2083,7 +2083,7 @@ export async function generateBase(engine, card, guider, autosave) {
 
                 newCharacterSection.body.push(`attractions: [`);
                 newCharacterSection.body.push(`// You can make these far more specific if needed, but these are for the social simulation and wander heuristics`);
-                if (card.config.speciesType === "humanoid") {
+                if (card.config.characterSpeciesType === "humanoid") {
                     newCharacterSection.body.push(`{towards: "male", ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], speciesType: "${card.config.characterSpeciesType}", "pickiness": ${pickinessMale}},`);
                     newCharacterSection.body.push(`{towards: "female", ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], speciesType: "${card.config.characterSpeciesType}", "pickiness": ${pickinessFemale}},`);
                     newCharacterSection.body.push(`{towards: "ambiguous", ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], speciesType: "${card.config.characterSpeciesType}", "pickiness": ${pickinessAmbiguous}},`);
