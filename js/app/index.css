@@ -139,6 +139,14 @@ html, body {
   width: 000vw;
   height: 100vh;
   transition: all 10s linear;
+  /* Promote the whole star field to a single compositor layer
+     so the ~2000+ children share one layer instead of each
+     getting its own (which previously thrashed the GPU).
+     NOTE: do NOT add `contain: paint` here — `.stars` is 0vw wide
+     and stars are positioned outside its box; `contain: paint`
+     would clip them all away. */
+  transform: translateZ(0);
+  will-change: transform;
 }
 
 .star {
@@ -146,9 +154,6 @@ html, body {
   border-radius: 50%;
   background-color: white;
   opacity: 0.8;
-  will-change: opacity;
-  contain: layout style paint;
-  backface-visibility: hidden;
 }
 
 .blink {
@@ -199,8 +204,9 @@ html, body {
   left: 0px;
   width: 120vw;
   height: 20vh;
-  transform: rotate(20deg);
+  transform: rotate(20deg) translateZ(0);
   transform-origin: top left;
+  will-change: transform;
 }
 
 .stars-cross-aux {
@@ -209,8 +215,9 @@ html, body {
   left: 10vw;
   width: 120vw;
   height: 10vh;
-  transform: rotate(20deg);
+  transform: rotate(20deg) translateZ(0);
   transform-origin: top left;
+  will-change: transform;
 }
 
 .stars-cross > .blur,
