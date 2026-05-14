@@ -1,4 +1,4 @@
-import { playCancelSound, playConfirmSound, playHoverSound, startAmbienceWithFade, stopAmbienceWithFade } from '../sound.js';
+import { playCancelSound, playConfirmSound, playHoverSound, stopAllAmbiencesAndStartNewOne } from '../sound.js';
 import './world-image.js';
 import './dialog.js';
 
@@ -286,7 +286,7 @@ class GameOverlay extends HTMLElement {
                 (async () => {
                     await this.lightFadePromise; // ensure the light fade has completed before starting the ambience, so it doesn't play on top of the fade-out
                     try {
-                        await startAmbienceWithFade([themeUrl], 1000, themeSong.volume || 1);
+                        await stopAllAmbiencesAndStartNewOne([{ src: themeUrl, volume: themeSong.volume || 1 }], 1000, 1000);
                     } catch (error) {
                         console.error('Error starting theme ambience:', error);
                     }
@@ -712,8 +712,7 @@ class GameOverlay extends HTMLElement {
         
         this.stopEngine();
 
-        await stopAmbienceWithFade(1000, 3);
-        await startAmbienceWithFade(['./sounds/dream-ambience.mp3'], 1000, 3);
+        await stopAllAmbiencesAndStartNewOne([{ src: './sounds/wake-up-ambience.mp3', volume: 3 }], 1000, 1000);
     }
 
     async stopEngine() {

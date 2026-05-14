@@ -16,7 +16,8 @@ import { EngineWorkerClient } from "../worker-sandbox/client.js";
 
 import {
     playConfirmSound, playHoverSound, toggleAmbience,
-    toggleFX, isAmbienceEnabled, isFXEnabled, startAmbienceWithFade, stopAmbienceWithFade
+    toggleFX, isAmbienceEnabled, isFXEnabled,
+    stopAllAmbiencesAndStartNewOne
 } from './sound.js';
 
 const initialPromise = new Promise((resolve) => {
@@ -184,14 +185,12 @@ async function showCreditsOverlay(tagName) {
     document.body.appendChild(overlay);
     overlay.addEventListener('close', async () => {
         document.body.removeChild(overlay);
-        await stopAmbienceWithFade(1000, 1.2);
-        await startAmbienceWithFade(['./sounds/dream-ambience.mp3'], 1000, 3);
+        await stopAllAmbiencesAndStartNewOne([{ src: './sounds/dream-ambience.mp3', volume: 3 }], 1000, 1000);
         setTimeout(() => {
             HAS_ACTIVE_DIALOG = false;
         }, 300);
     });
-    await stopAmbienceWithFade(1000, 3);
-    await startAmbienceWithFade(['./sounds/credits.mp3'], 2000, 1.2);
+    await stopAllAmbiencesAndStartNewOne([{ src: './sounds/credits.mp3', volume: 1.2 }], 1000, 2000);
 }
 
 const licenseLink = document.getElementById('license-link');
@@ -281,7 +280,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
     setTimeout(async () => {
         DOM_READY = true;
-        await startAmbienceWithFade(['./sounds/dream-ambience.mp3'], 2000, 3);
+        await stopAllAmbiencesAndStartNewOne([{ src: './sounds/dream-ambience.mp3', volume: 3 }], 1000, 1000);
         if (WORKER_READY && DOM_READY) {
             removeLoadingBlur();
         }

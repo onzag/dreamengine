@@ -1,4 +1,4 @@
-import { playCancelSound, playConfirmSound, playHoverSound, playSound, startAmbienceWithFade, stopAmbienceWithFade } from '../sound.js';
+import { playCancelSound, playConfirmSound, playHoverSound, playSound, stopAllAmbiencesAndStartNewOne } from '../sound.js';
 import './world-image.js';
 
 /**
@@ -150,18 +150,18 @@ const EXAMPLE_SAVES = [
 const DREAM_STABILITY_OPTIONS = [
     {
         id: 'stable',
-        label: 'Stable',
-        description: 'Stable dreams are consistent and coherent, with a clear narrative and logical progression, making them easier to navigate and interact with.',
+        label: 'Normal',
+        description: 'Normal dreams are consistent and coherent, with a clear narrative and logical progression, making them easier to navigate and interact with.',
     },
     {
         id: 'unstable',
-        label: 'Unstable',
-        description: 'Unstable dreams can become suddenly unpredictable and may have sudden changes in setting, characters, or narrative, creating a more surreal and challenging experience.',
+        label: 'Vivid Dream',
+        description: 'Vivid dreams may have sudden changes in setting, characters, or narrative, creating a more surreal and challenging experience. A vivid dream might turn into a lucid dream or nightmare.',
     },
     {
         id: 'very unstable',
-        label: 'Very Unstable',
-        description: 'Very unstable dreams can suddenly become chaotic and fragmented, with nightmarish elements, characters may become self aware, making them difficult to navigate and interact with, and may lead to a dream collapse.',
+        label: 'Astral Dream',
+        description: 'Astral dreams can suddenly become chaotic and fragmented, with nightmarish and lucid elements, characters may become self aware, making them difficult to navigate and interact with, and may lead to a dream collapse.',
     },
 ];
 const DEFAULT_DREAM_STABILITY = 'stable';
@@ -230,9 +230,6 @@ class PlayOverlay extends HTMLElement {
         }
 
         this.renderStep();
-
-        await stopAmbienceWithFade(1000, 3);
-        await startAmbienceWithFade(['./sounds/awakening-ambience.mp3'], 1000, 1);
     }
 
     /**
@@ -261,8 +258,7 @@ class PlayOverlay extends HTMLElement {
         if (!this.startedGame) {
             // @ts-expect-error
             document.querySelector('.sky').style.display = 'block';
-            await stopAmbienceWithFade(1000, 1);
-            await startAmbienceWithFade(['./sounds/dream-ambience.mp3'], 1000, 3);
+            await stopAllAmbiencesAndStartNewOne([{ src: './sounds/dream-ambience.mp3', volume: 3 }], 1000, 1000);
         }
     }
 
@@ -350,7 +346,7 @@ class PlayOverlay extends HTMLElement {
             setTimeout(() => {
                 playSound("./sounds/transition.mp3", 0.8);
             }, 300);
-            await stopAmbienceWithFade(1000, 1);
+            await stopAllAmbiencesAndStartNewOne([], 1000, 1000);
         }
     }
 
@@ -830,12 +826,12 @@ class PlayOverlay extends HTMLElement {
                 </div>
                 <div class="mode-options">
                     <div class="mode-card" data-mode="new">
-                        <div class="mode-card-title">New Game</div>
-                        <div class="mode-card-desc">Start a fresh story in this world.</div>
+                        <div class="mode-card-title">New Dream</div>
+                        <div class="mode-card-desc">Start a fresh dream in this world.</div>
                     </div>
                     <div class="mode-card" data-mode="load">
-                        <div class="mode-card-title">Load Saved Game</div>
-                        <div class="mode-card-desc">Continue from a previous session.</div>
+                        <div class="mode-card-title">Load Saved Dream</div>
+                        <div class="mode-card-desc">Continue from a previous dream.</div>
                     </div>
                 </div>
                 <div class="saves-panel hidden">
@@ -952,19 +948,30 @@ class PlayOverlay extends HTMLElement {
      * applied when the user is on the "new game" path; otherwise revert to the
      * default sunrise palette.
      */
-    applyStabilityTheme() {
+    async applyStabilityTheme() {
         const overlay = this.root.querySelector('.play-overlay');
         if (!overlay) return;
         overlay.classList.remove('stability-unstable', 'stability-very-unstable');
-        if (this.selectedMode !== 'new') return;
+        if (this.selectedMode !== 'new') {
+            await stopAllAmbiencesAndStartNewOne([{ src: './sounds/awakening-ambience.mp3', volume: 1 }], 1000, 1000);
+            return;
+        };
         if (this.selectedDreamStability === 'unstable') {
             overlay.classList.add('stability-unstable');
+
+            await stopAllAmbiencesAndStartNewOne([{ src: './sounds/awakening-lucid.mp3', volume: 1 }], 1000, 1000);
+
         } else if (this.selectedDreamStability === 'very unstable') {
             overlay.classList.add('stability-very-unstable');
+
+            // TODO different theme
+            await stopAllAmbiencesAndStartNewOne([{ src: './sounds/awakening-lucid.mp3', volume: 1 }], 1000, 1000);
+        } else {
+            await stopAllAmbiencesAndStartNewOne([{ src: './sounds/awakening-ambience.mp3', volume: 1 }], 1000, 1000);
         }
     }
 
-    // \u2500\u2500 Step 3: Character \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    // ── Step 3: Character ────────────────────────────────────────────────────────────────
 
     /**
      * Collect every `exposeCharacters` entry across the world script and all

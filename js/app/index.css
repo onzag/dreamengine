@@ -363,7 +363,7 @@ copyright {
   right: 1vh;
   width: 5vh;
   height: 5vh;
-  z-index: 3;
+  z-index: 10;
 }
 
 .ambience {
@@ -372,7 +372,7 @@ copyright {
   right: 6.5vh;
   width: 5vh;
   height: 5vh;
-  z-index: 3;
+  z-index: 10;
 }
 
 .fx svg, .ambience svg {

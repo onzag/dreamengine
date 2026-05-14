@@ -75,7 +75,7 @@ const RELATIONSHIP_KEY_DESCRIPTIONS = {
     "bestFriend_50_100": "best friend",
 };
 
-/** @type {Record<string, Record<string, [string, string | null]}>>} */
+/** @type {Record<string, Record<string, [string, string | null]>>} */
 const RELATIONSHIP_KEY_INFO_MAP = {
     "foe_n100_n50": {
         "noRomanticInterest_0_10": ["hostile_n50_n35", "noRomanticInterest_0_10"],

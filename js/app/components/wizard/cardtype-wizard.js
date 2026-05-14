@@ -1,5 +1,5 @@
 import { createCardStructureFrom, getJsCard, isCardTypeFile } from '../../../cardtype/base.js';
-import { playCancelSound, playConfirmSound, playHoverSound, setTempSoundDisable, startAmbienceWithFade, stopAmbienceWithFade } from '../../sound.js';
+import { playCancelSound, playConfirmSound, playHoverSound, setTempSoundDisable, stopAllAmbiencesAndStartNewOne } from '../../sound.js';
 
 export class CardTypeWizard extends HTMLElement {
     constructor() {
@@ -31,8 +31,7 @@ export class CardTypeWizard extends HTMLElement {
 
         this.initializeCard();
 
-        await stopAmbienceWithFade(1000, 3);
-        await startAmbienceWithFade(['./sounds/rem.mp3'], 1000, 1);
+        await stopAllAmbiencesAndStartNewOne([{ src: './sounds/rem.mp3', volume: 1 }], 1000, 1000);
     }
 
     async initializeCard() {
@@ -977,8 +976,7 @@ export class CardTypeWizard extends HTMLElement {
         document.removeEventListener('keydown', this.onDocumentKeydown);
         this.dispatchEvent(new CustomEvent('wizard-closed'));
 
-        await stopAmbienceWithFade(1000, 1);
-        await startAmbienceWithFade(['./sounds/dream-ambience.mp3'], 1000, 3);
+        await stopAllAmbiencesAndStartNewOne([{ src: './sounds/dream-ambience.mp3', volume: 3 }], 1000, 1000);
     }
 
     /** @param {KeyboardEvent} e */

@@ -1,5 +1,5 @@
 import { createCardStructureFrom, getJsCard, isCardTypeFile } from '../../../cardtype/base.js';
-import { playCancelSound, playConfirmSound, playHoverSound, setTempSoundDisable, startAmbienceWithFade, stopAmbienceWithFade } from '../../sound.js';
+import { playCancelSound, playHoverSound, setTempSoundDisable, stopAllAmbiencesAndStartNewOne } from '../../sound.js';
 import { CardTypeWizard } from './cardtype-wizard.js';
 
 export class WorldWizard extends CardTypeWizard {
@@ -20,8 +20,7 @@ export class WorldWizard extends CardTypeWizard {
 
         this.initializeWorldWizard();
 
-        await stopAmbienceWithFade(1000, 3);
-        await startAmbienceWithFade(['./sounds/dream-world.mp3'], 1000, 3);
+        await stopAllAmbiencesAndStartNewOne([{ src: './sounds/dream-world.mp3', volume: 3 }], 1000, 1000);
     }
 
     async initializeWorldWizard() {
