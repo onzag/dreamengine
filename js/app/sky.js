@@ -103,24 +103,55 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   // Diagonal accent layer 1 (top:10vh, rotate(20deg), box 120vw x 20vh).
-  // The original was small ellipses with `filter: blur(15px)` overlapping
-  // along a rotated band — visually this reads as nebulous gas clouds and
-  // galactic streaks. We mimic that with randomly sized & oriented soft
-  // ellipses drawn with additive blending so overlaps accumulate.
-  for (let i = 0; i < 150; i++) {
-    const ry = rand(35, 75);
-    crossBlurs.push({
-      x: Math.random(), y: Math.random(),
-      r: ry,                            // "radius" reused as the long axis
-      color: pickColor(),
-      baseAlpha: rand(0.025, 0.07),
-      blink: false, period: 1, phase: 0,
-      glow: rand(0.25, 0.6),            // aspect ratio (short/long)
-      glowColor: undefined,
-    });
-    // Stash a per-blur rotation in `phase` (re-used field, 0..2pi).
-    crossBlurs[crossBlurs.length - 1].phase = Math.random() * Math.PI * 2;
+  // To read as a continuous, faint nebula cloud rather than a bunch of
+  // discrete blobs we:
+  //   1. Pick a small number of "cloud centers" along the strip.
+  //   2. Around each center, scatter many large, near-circular soft blurs
+  //      with heavy overlap (gaussian-ish jitter, not uniform random).
+  //   3. Use very low per-blur alpha + additive blending so overlaps
+  //      accumulate into a smooth gradient instead of distinct shapes.
+  //
+  // gaussian-ish offset in [-1,1], biased toward 0 (sum of two uniforms).
+  const jitter = () => (Math.random() + Math.random() - 1);
 
+  /**
+   * @param {Star[]} blurList
+   * @param {number} clusterCount
+   * @param {number} blursPerCluster
+   * @param {number} clusterSpread   half-width of cluster (in box-fraction units)
+   * @param {number} sizeMin         long-axis radius min (px)
+   * @param {number} sizeMax         long-axis radius max (px)
+   * @param {number} alphaMin
+   * @param {number} alphaMax
+   */
+  function buildNebulaCluster(blurList, clusterCount, blursPerCluster, clusterSpread, sizeMin, sizeMax, alphaMin, alphaMax) {
+    for (let c = 0; c < clusterCount; c++) {
+      const cx = rand(0.05, 0.95);
+      const cy = rand(0.2, 0.8);
+      // Each cluster picks 1-2 dominant hues so the blob reads as one cloud
+      // with subtle color variation rather than rainbow confetti.
+      const hueA = pickColor();
+      const hueB = Math.random() < 0.5 ? hueA : pickColor();
+      for (let i = 0; i < blursPerCluster; i++) {
+        const dx = jitter() * clusterSpread;
+        const dy = jitter() * clusterSpread * 0.7;
+        blurList.push({
+          x: Math.min(1, Math.max(0, cx + dx)),
+          y: Math.min(1, Math.max(0, cy + dy)),
+          r: rand(sizeMin, sizeMax),
+          color: Math.random() < 0.5 ? hueA : hueB,
+          baseAlpha: rand(alphaMin, alphaMax),
+          blink: false, period: 1,
+          phase: Math.random() * Math.PI * 2,   // rotation
+          glow: rand(0.45, 0.8),                // aspect ratio (mildly elongated)
+          glowColor: undefined,
+        });
+      }
+    }
+  }
+
+  buildNebulaCluster(crossBlurs, 4, 140, 0.2, 55, 120, 0.004, 0.014);
+  for (let i = 0; i < 150; i++) {
     crossStars.push({
       x: Math.random(), y: Math.random(),
       r: 0.9, color: '#ffffff',
@@ -129,18 +160,8 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
   // Diagonal accent layer 2 (top:0, left:10vw, rotate(20deg), box 120vw x 10vh)
+  buildNebulaCluster(crossAuxBlurs, 2, 110, 0.24, 70, 140, 0.004, 0.014);
   for (let i = 0; i < 50; i++) {
-    const ry = rand(45, 90);
-    crossAuxBlurs.push({
-      x: Math.random(), y: Math.random(),
-      r: ry, color: pickColor(),
-      baseAlpha: rand(0.03, 0.08),
-      blink: false, period: 1, phase: 0,
-      glow: rand(0.25, 0.6),
-      glowColor: undefined,
-    });
-    crossAuxBlurs[crossAuxBlurs.length - 1].phase = Math.random() * Math.PI * 2;
-
     crossAuxStars.push({
       x: Math.random(), y: Math.random(),
       r: 1.0, color: '#ffffff',
@@ -201,14 +222,17 @@ document.addEventListener('DOMContentLoaded', function () {
         ctx.translate(x, y);
         ctx.rotate(rot);
         ctx.scale(aspect, 1);
-        // Very soft falloff: no opaque core, gradient fades from a low
-        // alpha center all the way to fully transparent. This makes the
-        // wisps feel like blurred gas rather than dim spheres.
+        // Very soft gaussian-ish falloff: low-alpha center, fades quickly
+        // and smoothly to fully transparent. With many overlapping passes
+        // (additive) this builds into a continuous cloud rather than
+        // showing the outline of any individual ellipse.
         const g = ctx.createRadialGradient(0, 0, 0, 0, 0, ry);
-        g.addColorStop(0,    s.color);
-        g.addColorStop(0.35, s.color.length === 7 ? s.color + '60' : s.color); // ~38%
-        g.addColorStop(0.7,  s.color.length === 7 ? s.color + '14' : s.color); // ~ 8%
-        g.addColorStop(1,    'rgba(0,0,0,0)');
+        const hex = s.color.length === 7 ? s.color : '#ffffff';
+        g.addColorStop(0.0,  hex + 'cc');
+        g.addColorStop(0.2,  hex + '70');
+        g.addColorStop(0.5,  hex + '20');
+        g.addColorStop(0.8,  hex + '06');
+        g.addColorStop(1.0,  'rgba(0,0,0,0)');
         ctx.globalAlpha = a;
         ctx.fillStyle = g;
         ctx.beginPath();
