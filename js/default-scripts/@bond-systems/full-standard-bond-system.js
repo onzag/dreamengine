@@ -22,25 +22,25 @@
 
 /**
  * @typedef {Object} FSSByFamilyTie
- * @property {FSSBase} family
- * @property {FSSBase} nonFamily
+ * @property {FSSBase} [family]
+ * @property {FSSBase} [nonFamily]
  */
 
 /**
  * @typedef {Object} FSSLoveDefinition
- * @property {FSSByFamilyTie} deepInLove_50_100
- * @property {FSSByFamilyTie} strongRomanticInterest_35_50
- * @property {FSSByFamilyTie} romanticInterest_20_35
- * @property {FSSByFamilyTie} slightRomanticInterest_10_20
+ * @property {FSSByFamilyTie} [deepInLove_50_100]
+ * @property {FSSByFamilyTie} [strongRomanticInterest_35_50]
+ * @property {FSSByFamilyTie} [romanticInterest_20_35]
+ * @property {FSSByFamilyTie} [slightRomanticInterest_10_20]
  * @property {FSSByFamilyTie} noRomanticInterest_0_10
  */
 
 /**
  * @typedef {Object} FSSCreepyLoveDefinition
- * @property {FSSByFamilyTie} sexualAbuseInterest_50_100
- * @property {FSSByFamilyTie} stalkingInterest_35_50
- * @property {FSSByFamilyTie} obsessiveInterest_20_35
- * @property {FSSByFamilyTie} creepyInterest_10_20
+ * @property {FSSByFamilyTie} [sexualAbuseInterest_50_100]
+ * @property {FSSByFamilyTie} [stalkingInterest_35_50]
+ * @property {FSSByFamilyTie} [obsessiveInterest_20_35]
+ * @property {FSSByFamilyTie} [creepyInterest_10_20]
  * @property {FSSByFamilyTie} noRomance_0_10
  */
 
@@ -358,13 +358,34 @@ engine.exports = {
 
             for (const [bondName, min, max] of RANGES) {
                 for (const [secondaryBondName, secondaryMin, secondaryMax] of SECOND_RANGES) {
+
+                    /**
+                     * @type {FSSByFamilyTie}
+                     */
+                    const secondRangeRule =
+                        // @ts-ignore
+                        standardForm[bondName][secondaryBondName]
+
                     for (const familyStatus of ["family", "nonFamily"]) {
                         /**
                          * @type {FSSBase}
                          */
                         const baseRule =
                             // @ts-ignore
-                            standardForm[bondName][secondaryBondName][familyStatus];
+                            secondRangeRule && secondRangeRule[familyStatus];
+
+                        if (!baseRule) {
+                            const lastSameFamilyRuleAddedArray = character.bonds.declarations.filter(d => d.familyBond === (familyStatus === "family") && d.minBondLevel === min && d.maxBondLevel === max && !d.strangerBond);
+                            const lastSameFamilyRuleAdded = lastSameFamilyRuleAddedArray.length > 0 ? lastSameFamilyRuleAddedArray[lastSameFamilyRuleAddedArray.length - 1] : null;
+
+                            if (lastSameFamilyRuleAdded) {
+                                lastSameFamilyRuleAdded.max2BondLevel = Math.max(lastSameFamilyRuleAdded.max2BondLevel, secondaryMax);
+                            } else {
+                                throw new Error(`Missing bond definition for ${bondName} ${secondaryBondName} ${familyStatus}, and could not find a previous rule to copy from`);
+                            }
+
+                            continue;
+                        }
 
                         character.bonds.declarations.push({
                             name: `${options.type}_${bondName}_${secondaryBondName}_non_stranger_${familyStatus}`,

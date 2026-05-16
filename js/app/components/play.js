@@ -953,20 +953,20 @@ class PlayOverlay extends HTMLElement {
         if (!overlay) return;
         overlay.classList.remove('stability-unstable', 'stability-very-unstable');
         if (this.selectedMode !== 'new') {
-            await stopAllAmbiencesAndStartNewOne([{ src: './sounds/awakening-ambience.mp3', volume: 1 }], 1000, 1000);
+            await stopAllAmbiencesAndStartNewOne([{ src: './sounds/awakening-ambience.mp3', volume: 1.5 }], 1000, 1000);
             return;
         };
         if (this.selectedDreamStability === 'unstable') {
             overlay.classList.add('stability-unstable');
 
-            await stopAllAmbiencesAndStartNewOne([{ src: './sounds/awakening-lucid.mp3', volume: 1 }], 1000, 1000);
+            await stopAllAmbiencesAndStartNewOne([{ src: './sounds/awakening-lucid.mp3', volume: 1.5 }], 1000, 1000);
 
         } else if (this.selectedDreamStability === 'very unstable') {
             overlay.classList.add('stability-very-unstable');
 
-            await stopAllAmbiencesAndStartNewOne([{ src: './sounds/awakening-astral.mp3', volume: 1 }], 1000, 1000);
+            await stopAllAmbiencesAndStartNewOne([{ src: './sounds/awakening-astral.mp3', volume: 2 }], 1000, 1000);
         } else {
-            await stopAllAmbiencesAndStartNewOne([{ src: './sounds/awakening-ambience.mp3', volume: 1 }], 1000, 1000);
+            await stopAllAmbiencesAndStartNewOne([{ src: './sounds/awakening-ambience.mp3', volume: 1.5 }], 1000, 1000);
         }
     }
 

@@ -48,7 +48,7 @@ export function createCardStructureFrom(jsContent) {
                 baseFile.config = JSON.parse(configAcumulator);
             }
             if (isInCard) {
-                baseFile.card = cardAcumulator;
+                baseFile.card = JSON.parse(cardAcumulator);
             }
             isInConfig = false;
             isInCard = false;
