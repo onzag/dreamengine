@@ -712,7 +712,7 @@ class GameOverlay extends HTMLElement {
         
         this.stopEngine();
 
-        await stopAllAmbiencesAndStartNewOne([{ src: './sounds/wake-up-ambience.mp3', volume: 3 }], 1000, 1000);
+        await stopAllAmbiencesAndStartNewOne([{ src: './sounds/dream-ambience.mp3', volume: 3 }], 1000, 1000);
     }
 
     async stopEngine() {

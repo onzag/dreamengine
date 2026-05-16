@@ -964,8 +964,7 @@ class PlayOverlay extends HTMLElement {
         } else if (this.selectedDreamStability === 'very unstable') {
             overlay.classList.add('stability-very-unstable');
 
-            // TODO different theme
-            await stopAllAmbiencesAndStartNewOne([{ src: './sounds/awakening-lucid.mp3', volume: 1 }], 1000, 1000);
+            await stopAllAmbiencesAndStartNewOne([{ src: './sounds/awakening-astral.mp3', volume: 1 }], 1000, 1000);
         } else {
             await stopAllAmbiencesAndStartNewOne([{ src: './sounds/awakening-ambience.mp3', volume: 1 }], 1000, 1000);
         }
