@@ -58,8 +58,9 @@ export default async function build(options = { doNotBuildLocals: false, doNotWr
         const deServerConfigPath = path.join(localDEPathAtHomeDir, 'config.json');
         if (!fs.existsSync(deServerConfigPath)) {
             const defaultConfig = JSON.stringify({
+                fullscreen: false,
                 host: 'wss://localhost:8765',
-                secret: 'dev-secret-12345678900abcdef'
+                secret: ''
             }, null, 4) + '\n';
             try {
                 await fsPromises.writeFile(deServerConfigPath, defaultConfig, 'utf8');
