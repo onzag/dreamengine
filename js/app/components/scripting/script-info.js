@@ -57,6 +57,7 @@ class ScriptInfo extends HTMLElement {
                     <app-overlay-button id="refresh-btn">Refresh</app-overlay-button>
                     <app-overlay-button id="view-btn">View Source</app-overlay-button>
                     ${isReadOnly || window.API.mode === "web" ? '' : '<app-overlay-button id="open-btn">Edit File</app-overlay-button>'}
+                    ${isReadOnly ? '' : '<app-overlay-button play-sound-on-click="false" id="delete-btn">Delete File</app-overlay-button>'}
                 </div>
                 ${info ? `
                     <div class="section">
@@ -152,6 +153,79 @@ class ScriptInfo extends HTMLElement {
                 console.error('Failed to view source:', err);
             }
         });
+
+        this.root.getElementById('delete-btn')?.addEventListener('button-click', () => {
+            this.#confirmAndDelete();
+        });
+    }
+
+    /**
+     * Prompt the user for confirmation and then delete the underlying script file.
+     * On success, dispatches `close` on the enclosing overlay host (app-script /
+     * app-character / app-world) and removes it so the parent list refreshes.
+     */
+    #confirmAndDelete() {
+        const key = `${this.scriptNamespace}/${this.scriptId}`;
+        const info = this.infoMap?.[key];
+        const type = info?.type || 'script';
+
+        const dialog = document.createElement('app-dialog');
+        dialog.setAttribute('dialog-title', 'Delete Script');
+        dialog.setAttribute('confirmation', 'true');
+        dialog.setAttribute('confirm-text', 'Delete');
+        dialog.setAttribute('cancel-text', 'Cancel');
+        dialog.innerHTML = `
+            <p>Are you sure you want to permanently delete
+            <strong>${this.#esc(this.scriptNamespace)}/${this.#esc(this.scriptId)}</strong>?</p>
+            <br>
+            <p>This will remove the underlying file from disk.
+            Any ${this.#esc(type)} or other scripts that depend on it may stop working.</p>
+            <br>
+            <p>This action cannot be undone.</p>
+        `;
+
+        const onCancel = () => {
+            document.body.removeChild(dialog);
+        };
+
+        const onConfirm = async () => {
+            // Prevent double-clicks while the deletion is in flight.
+            dialog.removeEventListener('confirm', onConfirm);
+            dialog.removeEventListener('cancel', onCancel);
+            try {
+                await window.API.deleteScriptFile(this.scriptNamespace, this.scriptId);
+                await window.JS_ENGINE_RECREATE();
+            } catch (err) {
+                console.error('Failed to delete script file:', err);
+                document.body.removeChild(dialog);
+                const errorDialog = document.createElement('app-dialog');
+                errorDialog.setAttribute('dialog-title', 'Error');
+                // @ts-ignore
+                errorDialog.textContent = (err && err.message) || 'Failed to delete script file.';
+                const closeError = () => document.body.removeChild(errorDialog);
+                errorDialog.addEventListener('cancel', closeError);
+                errorDialog.addEventListener('confirm', closeError);
+                document.body.appendChild(errorDialog);
+                return;
+            }
+
+            document.body.removeChild(dialog);
+
+            // Close the enclosing overlay (app-script / app-character / app-world)
+            // so the parent list view can reload and reflect the deletion.
+            const root = this.getRootNode();
+            // @ts-ignore - ShadowRoot exposes `host`
+            const host = root && root.host ? root.host : null;
+            if (host) {
+                host.dispatchEvent(new CustomEvent('close'));
+                host.remove();
+            }
+        };
+
+        dialog.addEventListener('confirm', onConfirm);
+        dialog.addEventListener('cancel', onCancel);
+
+        document.body.appendChild(dialog);
     }
 
     /**

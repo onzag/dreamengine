@@ -192,6 +192,8 @@ ipcMain.on('openDevTools', () => {
 });
 
 ipcMain.handle('viewSource', async (event, fileUrl) => {
+    console.log("Request to view source of:", fileUrl);
+
     if (typeof fileUrl !== 'string' || !fileUrl.startsWith('file:///')) {
         throw new Error('Invalid URL');
     }
@@ -235,7 +237,30 @@ pre { margin:0; padding:16px; line-height:1.5; white-space:pre-wrap; word-wrap:b
             javascript: false,
         },
     });
-    sourceWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
+
+    // data: URLs have a hard size limit (~2MB on Chromium) and encodeURIComponent
+    // explodes the byte count for non-ASCII source, so large files fail to load.
+    // Write the rendered HTML to a temp file inside DREAMENGINE_HOME (which is
+    // already in ALLOWED_BASE_PATHS) and load it from disk instead.
+    const tmpDir = path.join(DREAMENGINE_HOME, '.viewsource-tmp');
+    await fs.promises.mkdir(tmpDir, { recursive: true });
+    const tmpFile = path.join(
+        tmpDir,
+        `${Date.now()}-${Math.random().toString(36).slice(2)}-${fileName}.html`
+    );
+    await fs.promises.writeFile(tmpFile, html, 'utf-8');
+
+    const cleanup = () => {
+        fs.promises.unlink(tmpFile).catch(() => { /* best effort */ });
+    };
+    sourceWin.once('closed', cleanup);
+
+    try {
+        await sourceWin.loadFile(tmpFile);
+    } catch (err) {
+        cleanup();
+        throw err;
+    }
 });
 
 ipcMain.on('closeApp', () => {

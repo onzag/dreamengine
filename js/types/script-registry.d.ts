@@ -22,6 +22,58 @@ declare interface DEScriptRegistry {
     "@bond-systems/full-standard-bond-system": DEScript & {
         setup(DE: DEObject, character: DECompleteCharacterReference, options: FSS4DOptions | FSS4DCreepyOptions): DECompleteCharacterReference;
     };
+    "@bond-systems-preset/aromantic": DEScript & {
+        name: string;
+        applyToCharacter(DE: DEObject, character: DECompleteCharacterReference): void;
+    };
+    "@bond-systems-preset/asexual": DEScript & {
+        name: string;
+        applyToCharacter(DE: DEObject, character: DECompleteCharacterReference): void;
+    };
+    "@bond-systems-preset/basic": DEScript & {
+        name: string;
+        applyToCharacter(DE: DEObject, character: DECompleteCharacterReference): void;
+    };
+    "@bond-systems-preset/caretaker": DEScript & {
+        name: string;
+        applyToCharacter(DE: DEObject, character: DECompleteCharacterReference): void;
+    };
+    "@bond-systems-preset/codependent": DEScript & {
+        name: string;
+        applyToCharacter(DE: DEObject, character: DECompleteCharacterReference): void;
+    };
+    "@bond-systems-preset/dandere": DEScript & {
+        name: string;
+        applyToCharacter(DE: DEObject, character: DECompleteCharacterReference): void;
+    };
+    "@bond-systems-preset/deredere": DEScript & {
+        name: string;
+        applyToCharacter(DE: DEObject, character: DECompleteCharacterReference): void;
+    };
+    "@bond-systems-preset/flirtatious": DEScript & {
+        name: string;
+        applyToCharacter(DE: DEObject, character: DECompleteCharacterReference): void;
+    };
+    "@bond-systems-preset/himedere": DEScript & {
+        name: string;
+        applyToCharacter(DE: DEObject, character: DECompleteCharacterReference): void;
+    };
+    "@bond-systems-preset/kuudere": DEScript & {
+        name: string;
+        applyToCharacter(DE: DEObject, character: DECompleteCharacterReference): void;
+    };
+    "@bond-systems-preset/rivalrous": DEScript & {
+        name: string;
+        applyToCharacter(DE: DEObject, character: DECompleteCharacterReference): void;
+    };
+    "@bond-systems-preset/tsundere": DEScript & {
+        name: string;
+        applyToCharacter(DE: DEObject, character: DECompleteCharacterReference): void;
+    };
+    "@bond-systems-preset/yandere": DEScript & {
+        name: string;
+        applyToCharacter(DE: DEObject, character: DECompleteCharacterReference): void;
+    };
     "@characters/dema-basic": DEScript;
     "@worlds/simple-lunar-station": DEScript;
 }
