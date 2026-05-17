@@ -534,17 +534,14 @@ class GameOverlay extends HTMLElement {
                 A character in this world already shares the name ${escapedName}. Please pick a different name to use for this dream.
             </p>
             <app-overlay-input
+                id="new-name-input"
                 label="Your name"
                 input-placeholder="Enter a different name"
-                input-data-location="newName"
                 input-default-value="${escapedName}"
             ></app-overlay-input>
         `;
 
-        const nameInput = dialog.querySelector('app-overlay-input[input-data-location="newName"]');
-        if (nameInput && currentName) {
-            nameInput.setAttribute('value', currentName);
-        }
+        const nameInput = dialog.querySelector('app-overlay-input#new-name-input');
 
         dialog.addEventListener('confirm', () => {
             // @ts-ignore

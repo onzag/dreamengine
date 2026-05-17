@@ -51,9 +51,15 @@ export async function generateBase(engine, card, guider, autosave) {
         await autosave?.save();
     }
 
+    const metadataSection = insertSection(card.head, "metadata", (s) => {
+        s.head.push(`metadata: {`);
+        s.foot.push(`},`);
+    });
+
     if (!hasSpecialComment(card.head, "base-head")) {
         insertSpecialComment(card.head, "base-head");
         card.head.push(`engine.exports = {`);
+        card.head.push(`metadata,`);
         card.head.push(`type: "characters",`);
         card.foot.push(`};`);
         await autosave?.save();
@@ -153,6 +159,8 @@ export async function generateBase(engine, card, guider, autosave) {
         // we will need to get this sections when generating the bonds
         insertSection(newCharacterSection.foot, "options");
         newCharacterSection.foot.push(`}));`); // close setup
+
+        metadataSection.body.push(`__name: ${JSON.stringify(name)},`);
 
         await autosave?.save();
     } else {
@@ -697,6 +705,7 @@ export async function generateBase(engine, card, guider, autosave) {
 
         insertSpecialComment(newCharacterSection.body, "base-height");
         newCharacterSection.body.push(`heightCm: ${finalHeightCm},`);
+        metadataSection.body.push(`height: ${finalHeightCm},`);
 
         await autosave?.save();
     }
@@ -764,6 +773,7 @@ export async function generateBase(engine, card, guider, autosave) {
 
         insertSpecialComment(newCharacterSection.body, "base-gender");
         newCharacterSection.body.push(`gender: ${JSON.stringify(finalGender)},`);
+        metadataSection.body.push(`gender: ${JSON.stringify(finalGender)},`);
         await autosave?.save();
     }
 
@@ -834,6 +844,7 @@ export async function generateBase(engine, card, guider, autosave) {
 
         insertSpecialComment(newCharacterSection.body, "base-sex");
         newCharacterSection.body.push(`sex: ${JSON.stringify(finalSex)},`);
+        metadataSection.body.push(`sex: ${JSON.stringify(finalSex)},`);
         await autosave?.save();
     }
 
@@ -1061,6 +1072,7 @@ export async function generateBase(engine, card, guider, autosave) {
         insertSpecialComment(newCharacterSection.body, "base-age");
         newCharacterSection.body.push(`ageYears: ${howOldYears},`);
         card.config.characterAge = howOldYears;
+        metadataSection.body.push(`age: ${howOldYears},`);
         await autosave?.save();
     }
 
@@ -1092,6 +1104,7 @@ export async function generateBase(engine, card, guider, autosave) {
 
         insertSpecialComment(newCharacterSection.body, "base-weight");
         newCharacterSection.body.push(`weightKg: ${weightKgValue},`);
+        metadataSection.body.push(`weight: ${weightKgValue},`);
         await autosave?.save();
     }
 
@@ -1785,8 +1798,12 @@ export async function generateBase(engine, card, guider, autosave) {
         newCharacterSection.body.push(`species: ${JSON.stringify(actualSpecies)},`);
         newCharacterSection.body.push(`speciesType: "${speciesType}",`);
 
+        metadataSection.body.push(`species: ${JSON.stringify(actualSpecies)},`);
+        metadataSection.body.push(`speciesType: "${speciesType}",`);
+
         card.config.characterSpecies = actualSpecies;
         card.config.characterSpeciesType = speciesType;
+        
         await autosave?.save();
     }
 

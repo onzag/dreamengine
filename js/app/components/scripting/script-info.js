@@ -1,3 +1,5 @@
+import { playConfirmSound } from "../../sound.js";
+
 class ScriptInfo extends HTMLElement {
     constructor() {
         super();
@@ -58,6 +60,7 @@ class ScriptInfo extends HTMLElement {
                     <app-overlay-button id="view-btn">View Source</app-overlay-button>
                     ${isReadOnly || window.API.mode === "web" ? '' : '<app-overlay-button id="open-btn">Edit File</app-overlay-button>'}
                     ${isReadOnly ? '' : '<app-overlay-button play-sound-on-click="false" id="delete-btn">Delete File</app-overlay-button>'}
+                    ${isReadOnly ? '' : '<app-overlay-button play-sound-on-click="false" id="move-btn">Move/Rename File</app-overlay-button>'}
                 </div>
                 ${info ? `
                     <div class="section">
@@ -157,6 +160,10 @@ class ScriptInfo extends HTMLElement {
         this.root.getElementById('delete-btn')?.addEventListener('button-click', () => {
             this.#confirmAndDelete();
         });
+
+        this.root.getElementById('move-btn')?.addEventListener('button-click', () => {
+            this.#promptAndMove();
+        });
     }
 
     /**
@@ -210,9 +217,116 @@ class ScriptInfo extends HTMLElement {
             }
 
             document.body.removeChild(dialog);
+            playConfirmSound();
 
             // Close the enclosing overlay (app-script / app-character / app-world)
             // so the parent list view can reload and reflect the deletion.
+            const root = this.getRootNode();
+            // @ts-ignore - ShadowRoot exposes `host`
+            const host = root && root.host ? root.host : null;
+            if (host) {
+                host.dispatchEvent(new CustomEvent('close'));
+                host.remove();
+            }
+        };
+
+        dialog.addEventListener('confirm', onConfirm);
+        dialog.addEventListener('cancel', onCancel);
+
+        document.body.appendChild(dialog);
+    }
+
+    /**
+     * Show a dialog letting the user pick a new namespace and id for the script,
+     * then call `moveScriptFile`. On success, close the enclosing overlay so the
+     * parent list reloads at the new location.
+     */
+    #promptAndMove() {
+        const dialog = document.createElement('app-dialog');
+        dialog.setAttribute('dialog-title', 'Move / Rename Script');
+        dialog.setAttribute('confirmation', 'true');
+        dialog.setAttribute('confirm-text', 'Move');
+        dialog.setAttribute('cancel-text', 'Cancel');
+        dialog.innerHTML = `
+            <p>Choose a new namespace and id for
+            <strong>${this.#esc(this.scriptNamespace)}/${this.#esc(this.scriptId)}</strong>.</p>
+            <br>
+            <p>Namespaces and ids cannot start with "@" (reserved for system scripts).
+            Anything that imports this script by its old path will break.</p>
+            <br>
+            <app-overlay-input
+                label="New Namespace"
+                input-placeholder="e.g. my-scripts"
+                id="new-namespace-input"
+                input-default-value="${this.#esc(this.scriptNamespace)}"
+            ></app-overlay-input>
+            <app-overlay-input
+                label="New Script Name"
+                input-placeholder="e.g. my-script"
+                id="new-name-input"
+                input-default-value="${this.#esc(this.scriptId)}"
+            ></app-overlay-input>
+            <div class="error-msg" style="color:#FF6B6B; margin-top:1vh; min-height:2.5vh;"></div>
+        `;
+
+        const namespaceInput = dialog.querySelector('app-overlay-input#new-namespace-input');
+        const nameInput = dialog.querySelector('app-overlay-input#new-name-input');
+
+        const showError = (/** @type {string} */ msg) => {
+            const el = dialog.querySelector('.error-msg');
+            if (el) el.textContent = msg;
+        };
+
+        const onCancel = () => {
+            document.body.removeChild(dialog);
+        };
+
+        const onConfirm = async () => {
+            // @ts-ignore
+            const newNamespace = (namespaceInput?.getValue?.() || '').trim();
+            // @ts-ignore
+            const newId = (nameInput?.getValue?.() || '').trim();
+
+            if (!newNamespace || !newId) {
+                showError('Namespace and name are required.');
+                return;
+            }
+            if (newNamespace.startsWith('@') || newId.startsWith('@')) {
+                showError('Namespace and name cannot start with "@".');
+                return;
+            }
+            // Disallow path separators / weird characters that would break on disk.
+            if (/[\\\/]/.test(newNamespace) || /[\\\/]/.test(newId)) {
+                showError('Namespace and name cannot contain slashes.');
+                return;
+            }
+            if (newNamespace === this.scriptNamespace && newId === this.scriptId) {
+                showError('New location is the same as the current one.');
+                return;
+            }
+
+            // Prevent double-clicks while in flight.
+            dialog.removeEventListener('confirm', onConfirm);
+            dialog.removeEventListener('cancel', onCancel);
+
+            try {
+                await window.API.moveScriptFile(this.scriptNamespace, this.scriptId, newNamespace, newId);
+                await window.JS_ENGINE_RECREATE();
+            } catch (err) {
+                console.error('Failed to move script file:', err);
+                // Re-arm listeners so the user can correct and retry.
+                dialog.addEventListener('confirm', onConfirm);
+                dialog.addEventListener('cancel', onCancel);
+                // @ts-ignore
+                showError((err && err.message) || 'Failed to move script file.');
+                return;
+            }
+
+            document.body.removeChild(dialog);
+            playConfirmSound();
+
+            // Close the enclosing overlay so the parent list view can reload
+            // and reflect the move. The user can reopen at the new location.
             const root = this.getRootNode();
             // @ts-ignore - ShadowRoot exposes `host`
             const host = root && root.host ? root.host : null;

@@ -46,22 +46,18 @@ class ScriptOverlay extends HTMLElement {
                 <app-overlay-input
                     label="Script Name"
                     input-placeholder="e.g. my-script"
-                    input-data-location="name"
+                    id="name-input"
                 ></app-overlay-input>
                 <app-overlay-input
                     label="Namespace"
                     input-placeholder="e.g. my-scripts"
-                    input-data-location="namespace"
-                    ${lastNamespace ? `value="${lastNamespace}"` : ''}
+                    id="namespace-input"
+                    ${lastNamespace ? `input-default-value="${lastNamespace}"` : ''}
                 ></app-overlay-input>
             `;
 
-            const nameInput = dialog.querySelector('app-overlay-input[input-data-location="name"]');
-            const namespaceInput = dialog.querySelector('app-overlay-input[input-data-location="namespace"]');
-
-            if (lastNamespace && namespaceInput) {
-                namespaceInput.setAttribute('value', lastNamespace);
-            }
+            const nameInput = dialog.querySelector('app-overlay-input#name-input');
+            const namespaceInput = dialog.querySelector('app-overlay-input#namespace-input');
 
             dialog.addEventListener('confirm', async () => {
                 // @ts-ignore

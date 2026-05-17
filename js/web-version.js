@@ -558,6 +558,9 @@ async function startWebServer(creds) {
             }
 
             if (fs.existsSync(assetOldPath)) {
+                // Ensure both levels of the new asset path exist (assets/<newNamespace>/<newId>)
+                // before renaming — the namespace directory may not exist yet if the namespace changed.
+                fs.mkdirSync(path.dirname(assetNewPath), { recursive: true });
                 // rename the old assets directory to match the new script location, since assets are expected to be at .dreamengine/assets/<namespace>/<id>/ and this keeps them together with the script file as the source of truth
                 fs.renameSync(assetOldPath, assetNewPath);
             }

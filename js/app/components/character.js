@@ -84,24 +84,20 @@ class CharacterOverlay extends HTMLElement {
             dialog.setAttribute('cancel-text', 'Cancel');
             dialog.innerHTML = `
                 <app-overlay-input
+                    id="name-input"
                     label="Character Name"
                     input-placeholder="e.g. my-character"
-                    input-data-location="name"
                 ></app-overlay-input>
                 <app-overlay-input
+                    id="namespace-input"
                     label="Namespace"
                     input-placeholder="e.g. my-scripts"
-                    input-data-location="namespace"
-                    ${lastNamespace ? `value="${lastNamespace}"` : ''}
+                    ${lastNamespace ? `input-default-value="${lastNamespace}"` : ''}
                 ></app-overlay-input>
             `;
 
-            const nameInput = dialog.querySelector('app-overlay-input[input-data-location="name"]');
-            const namespaceInput = dialog.querySelector('app-overlay-input[input-data-location="namespace"]');
-
-            if (lastNamespace && namespaceInput) {
-                namespaceInput.setAttribute('value', lastNamespace);
-            }
+            const nameInput = dialog.querySelector('app-overlay-input#name-input');
+            const namespaceInput = dialog.querySelector('app-overlay-input#namespace-input');
 
             dialog.addEventListener('confirm', async () => {
                 // @ts-ignore

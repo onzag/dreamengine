@@ -81,6 +81,34 @@ function formatCharacterDetail(key, rawValue) {
         };
     }
 
+    // Height.
+    if (normKey === 'height') {
+        return { icon: '📏', label: `Height: ${rawValue} cm`, value: `${rawValue}cm` };
+    }
+
+    // Weight.
+    if (normKey === 'weight') {
+        return { icon: '⚖️', label: `Weight: ${rawValue} kg`, value: `${rawValue}kg` };
+    }
+
+    // Species.
+    if (normKey === 'species') {
+        const cap = capitalize(String(rawValue));
+        return { icon: '🧬', label: `Species: ${cap}`, value: cap };
+    }
+
+    // Species type — humanoid / feral / animal.
+    if (normKey === 'speciestype') {
+        const v = String(rawValue).toLowerCase();
+        const icon = v === 'humanoid' ? '🧍'
+            : v === 'feral' ? '🐉'
+            : v === 'animal' ? '🐾'
+            : '❓';
+        const labelMap = /** @type {Record<string, string>} */ ({ humanoid: 'Humanoid', feral: 'Feral', animal: 'Animal' });
+        const display = labelMap[v] || capitalize(String(rawValue));
+        return { icon, label: `Species type: ${display}`, value: display };
+    }
+
     // Generic fallback — no emoji, just "Key: value" text.
     return { label: capitalize(normKey), value: `${capitalize(normKey)}: ${rawValue}` };
 }

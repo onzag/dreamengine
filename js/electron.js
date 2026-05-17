@@ -373,13 +373,30 @@ ipcMain.handle('moveScriptFile', async (event, oldNamespace, oldId, newNamespace
 
     const oldPath = path.join(SCRIPT_FOLDER, oldNamespace, `${oldId}.js`);
     const newPath = path.join(SCRIPT_FOLDER, newNamespace, `${newId}.js`);
+    const assetOldPath = path.join(DREAMENGINE_HOME, 'assets', oldNamespace, oldId);
+    const assetNewPath = path.join(DREAMENGINE_HOME, 'assets', newNamespace, newId);
     if (!fs.existsSync(oldPath)) {
         throw new Error("Original script file does not exist");
     }
     if (fs.existsSync(newPath)) {
         throw new Error("New script file already exists");
     }
+
+    fs.mkdirSync(path.dirname(newPath), { recursive: true });
     fs.renameSync(oldPath, newPath);
+
+    if (fs.existsSync(assetNewPath)) {
+        // remove potentially already existing assets at the new location to avoid confusion, since the script file is the source of truth and the old assets are now orphaned
+        fs.rmSync(assetNewPath, { recursive: true, force: true });
+    }
+
+    if (fs.existsSync(assetOldPath)) {
+        // Ensure both levels of the new asset path exist (assets/<newNamespace>/<newId>)
+        // before renaming — the namespace directory may not exist yet if the namespace changed.
+        fs.mkdirSync(path.dirname(assetNewPath), { recursive: true });
+        // rename the old assets directory to match the new script location, since assets are expected to be at .dreamengine/assets/<namespace>/<id>/ and this keeps them together with the script file as the source of truth
+        fs.renameSync(assetOldPath, assetNewPath);
+    }
 });
 
 ipcMain.handle('deleteScriptFile', async (event, namespace, id) => {
