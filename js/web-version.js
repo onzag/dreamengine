@@ -541,6 +541,8 @@ async function startWebServer(creds) {
             requireUserScriptIds(newNamespace, newId);
             const oldPath = path.join(SCRIPT_FOLDER, oldNamespace, `${oldId}.js`);
             const newPath = path.join(SCRIPT_FOLDER, newNamespace, `${newId}.js`);
+            const assetOldPath = path.join(DREAMENGINE_HOME, 'assets', oldNamespace, oldId);
+            const assetNewPath = path.join(DREAMENGINE_HOME, 'assets', newNamespace, newId);
             if (!fs.existsSync(oldPath)) {
                 throw new Error('Original script file does not exist');
             }
@@ -549,6 +551,17 @@ async function startWebServer(creds) {
             }
             fs.mkdirSync(path.dirname(newPath), { recursive: true });
             fs.renameSync(oldPath, newPath);
+
+            if (fs.existsSync(assetNewPath)) {
+                // remove potentially already existing assets at the new location to avoid confusion, since the script file is the source of truth and the old assets are now orphaned
+                fs.rmSync(assetNewPath, { recursive: true, force: true });
+            }
+
+            if (fs.existsSync(assetOldPath)) {
+                // rename the old assets directory to match the new script location, since assets are expected to be at .dreamengine/assets/<namespace>/<id>/ and this keeps them together with the script file as the source of truth
+                fs.renameSync(assetOldPath, assetNewPath);
+            }
+
             res.json({ ok: true });
         } catch (err) {
             // @ts-ignore
@@ -565,6 +578,15 @@ async function startWebServer(creds) {
                 throw new Error('Script file does not exist');
             }
             fs.unlinkSync(scriptPath);
+            try {
+                const assetPath = path.join(DREAMENGINE_HOME, 'assets', namespace, id);
+                if (fs.existsSync(assetPath)) {
+                    fs.rmSync(assetPath, { recursive: true, force: true });
+                }
+            } catch (err) {
+                // Ignore asset deletion errors; the script file is the source of truth.
+                console.error("Failed to delete associated assets:", err);
+            }
             res.json({ ok: true });
         } catch (err) {
             // @ts-ignore

@@ -146,7 +146,7 @@ function highlightJS(code) {
 
 app.whenReady().then(() => {
     createWindow()
-    
+
     session.defaultSession.webRequest.onBeforeRequest((details, callback) => {
         const url = details.url;
         const isAllowed = ALLOWED_BASE_PATHS.some(basePath => url.startsWith(basePath));
@@ -397,6 +397,16 @@ ipcMain.handle('deleteScriptFile', async (event, namespace, id) => {
     }
 
     fs.unlinkSync(scriptPath);
+
+    try {
+        const assetsPath = path.join(DREAMENGINE_HOME, 'assets', namespace, id);
+        if (fs.existsSync(assetsPath)) {
+            // delete associated assets folder if it exists
+            fs.rmSync(assetsPath, { recursive: true, force: true });
+        }
+    } catch (err) {
+        console.error("Failed to delete associated assets:", err);
+    }
 });
 
 ipcMain.handle('updateScriptFile', async (event, namespace, id, content) => {
