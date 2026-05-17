@@ -45,10 +45,20 @@ export function createCardStructureFrom(jsContent) {
 
         if (!trimmedLine || trimmedLine.startsWith('//@')) {
             if (isInConfig) {
-                baseFile.config = JSON.parse(configAcumulator);
+                try {
+                    baseFile.config = JSON.parse(configAcumulator);
+                } catch (e) {
+                    console.error("Error parsing config JSON:", e);
+                    throw new Error("Error parsing config JSON");
+                }
             }
             if (isInCard) {
-                baseFile.card = JSON.parse(cardAcumulator);
+                try {
+                    baseFile.card = JSON.parse(cardAcumulator);
+                } catch (e) {
+                    console.error("Error parsing card JSON:", e);
+                    throw new Error("Error parsing card JSON");
+                }
             }
             isInConfig = false;
             isInCard = false;

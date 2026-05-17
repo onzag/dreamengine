@@ -2647,7 +2647,7 @@ export async function generateBonds(engine, card, guider, autosave) {
             let addAttractionRules = card.config.romanticShape[relationshipKey][romanticInterestKey].addAttractionRules;
             const forceFamily = card.config.romanticShape[relationshipKey][romanticInterestKey].forceFamily;
             if (guider && romanticInterestKey !== "noRomanticInterest_0_10" && wasUndefined) {
-                const guiderResult = await guider.askBoolean("Is " + name + " capable to develop a " + ROMANTIC_INTEREST_KEY_LABELS[romanticInterestKey] + " (beyond simple physical or superficial attraction) " + (" towards a " + RELATIONSHIP_KEY_DESCRIPTIONS[relationshipKey]).replace("a acquaintance", "an acquaintance") +  "?", addAttractionRules);
+                const guiderResult = await guider.askBoolean("Is " + name + " capable to develop a " + ROMANTIC_INTEREST_KEY_LABELS[romanticInterestKey] + " (beyond simple physical or superficial attraction) " + (" towards a " + RELATIONSHIP_KEY_DESCRIPTIONS[relationshipKey]).replace("a acquaintance", "an acquaintance") + "?", addAttractionRules);
                 addAttractionRules = guiderResult.value;
                 card.config.romanticShape[relationshipKey][romanticInterestKey].addAttractionRules = addAttractionRules;
                 await autosave?.save();
@@ -2672,7 +2672,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                 if (isNotValid) {
                     continue;
                 }
-                
+
                 /**
                  * @type {string}
                  */
@@ -2797,15 +2797,15 @@ export async function generateBonds(engine, card, guider, autosave) {
                                 card.config.tuneInfos[fineTuneCommentWithIntimacyModifier][relationshipKey] &&
                                 card.config.tuneInfos[fineTuneCommentWithIntimacyModifier][relationshipKey][romanticInterestKey]
                             ) {
-                                return card.config.tuneInfos[fineTuneCommentWithIntimacyModifier][relationshipKey][romanticInterestKey];
+                                return [
+                                    card.config.tuneInfos[fineTuneCommentWithIntimacyModifier][relationshipKey][romanticInterestKey],
+                                    card.config.tuneInfos[fineTuneCommentWithIntimacyModifier][relationshipKey][romanticInterestKey].origin || RELATIONSHIP_KEY_INFO_OBTAINED_FROM[relationshipKey][romanticInterestKey]
+                                ];
                             }
 
                             let fineTuneReference = card.config.tuneInfos[fineTuneCommentWithIntimacyModifier];
 
-                            if (!fineTuneReference) {
-                                // TODO
-                                throw new Error("Handle backtracking for missing fine tune reference for " + fineTuneCommentWithIntimacyModifier);
-                            }
+                            let fineTuneReferenceOrigin = "";
 
                             if (!fineTuneReference) {
                                 // must be a family case, in fact must be the first family case with acquaintance_0_10
@@ -2829,7 +2829,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                                 }
 
                                 if (matchingKey) {
-                                    fineTuneReference = {...card.config.tuneInfos[matchingKey]};
+                                    fineTuneReference = { ...card.config.tuneInfos[matchingKey] };
                                     for (const key in fineTuneReference) {
                                         if (typeof fineTuneReference[key] === "object" && fineTuneReference[key] !== null) {
                                             delete fineTuneReference[key];
@@ -2843,6 +2843,7 @@ export async function generateBonds(engine, card, guider, autosave) {
 
                             if (fineTuneReference) {
                                 const sourceOfFineTuneInfo = RELATIONSHIP_KEY_INFO_MAP[relationshipKey][romanticInterestKey];
+                                fineTuneReferenceOrigin = RELATIONSHIP_KEY_INFO_OBTAINED_FROM[relationshipKey][romanticInterestKey];
                                 if (sourceOfFineTuneInfo[1] === null) {
                                     if (fineTuneReference[sourceOfFineTuneInfo[0]]) {
                                         fineTuneReference = {
@@ -2856,18 +2857,33 @@ export async function generateBonds(engine, card, guider, autosave) {
                                         }
                                     }
                                 } else {
-                                    if (fineTuneReference[sourceOfFineTuneInfo[0]] && fineTuneReference[sourceOfFineTuneInfo[0]][sourceOfFineTuneInfo[1]]) {
-                                        fineTuneReference = {
-                                            ...fineTuneReference,
-                                            ...fineTuneReference[sourceOfFineTuneInfo[0]][sourceOfFineTuneInfo[1]],
+                                    if (fineTuneReference[sourceOfFineTuneInfo[0]]) {
+                                        let fineTuneAtTheRomanticInterest = fineTuneReference[sourceOfFineTuneInfo[0]][sourceOfFineTuneInfo[1]];
+                                        if (!fineTuneAtTheRomanticInterest) {
+                                            const indexAtLayer = SETTINGS_ORDER_SECOND_LAYER.indexOf(romanticInterestKey);
+                                            for (let i = indexAtLayer - 1; i >= 0; i--) {
+                                                const upperRomanticInterestKey = SETTINGS_ORDER_SECOND_LAYER[i];
+                                                if (fineTuneReference[sourceOfFineTuneInfo[0]][upperRomanticInterestKey]) {
+                                                    fineTuneAtTheRomanticInterest = fineTuneReference[sourceOfFineTuneInfo[0]][upperRomanticInterestKey];
+                                                    fineTuneReferenceOrigin = fineTuneReferenceOrigin.split("with")[0] + "with " + ROMANTIC_INTEREST_KEY_LABELS[upperRomanticInterestKey];
+                                                    break;
+                                                }
+                                            }
                                         }
-                                        for (const key in fineTuneReference) {
-                                            if (typeof fineTuneReference[key] === "object" && fineTuneReference[key] !== null) {
-                                                delete fineTuneReference[key];
+                                        if (fineTuneAtTheRomanticInterest) {
+                                            fineTuneReference = {
+                                                ...fineTuneReference,
+                                                ...fineTuneAtTheRomanticInterest,
+                                            }
+                                            for (const key in fineTuneReference) {
+                                                if (typeof fineTuneReference[key] === "object" && fineTuneReference[key] !== null) {
+                                                    delete fineTuneReference[key];
+                                                }
                                             }
                                         }
                                     }
                                 }
+                                fineTuneReference.origin = fineTuneReferenceOrigin;
                             }
 
                             if (!card.config.tuneInfos[fineTuneCommentWithIntimacyModifier]) {
@@ -2878,15 +2894,18 @@ export async function generateBonds(engine, card, guider, autosave) {
                             }
                             card.config.tuneInfos[fineTuneCommentWithIntimacyModifier][relationshipKey][romanticInterestKey] = fineTuneReference;
 
-                            return fineTuneReference;
+                            return [
+                                fineTuneReference,
+                                fineTuneReferenceOrigin
+                            ];
                         }
 
                         for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
-                            const fineTuneReference = getFineTuneReference(intimateModifier);
+                            const [fineTuneReference, messageAboutAnswersFrom] = getFineTuneReference(intimateModifier);
 
                             const openToAffectionQuestion = "How receptive to affection is " + name + " towards " + actualFamilyValue + " when they are " + intimateModifier.toLowerCase() + "?";
                             !fineTuneReference.openToAffection ? await prime() : null;
-                            const answer = fineTuneReference.openToAffection ? {value: fineTuneReference.openToAffection, done: false} : await generator.next({
+                            const answer = fineTuneReference.openToAffection ? { value: fineTuneReference.openToAffection, done: false } : await generator.next({
                                 maxCharacters: 50,
                                 maxSafetyCharacters: 100,
                                 maxParagraphs: 1,
@@ -2902,7 +2921,6 @@ export async function generateBonds(engine, card, guider, autosave) {
                             }
 
                             if (guider) {
-                                const messageAboutAnswersFrom = RELATIONSHIP_KEY_INFO_OBTAINED_FROM[relationshipKey][romanticInterestKey] || "";
                                 const guiderResult = await guider.askOption("How receptive to affection is " + name + " towards " + actualFamilyValue + " when they are " + intimateModifier.toLowerCase() + "? " + messageAboutAnswersFrom, [
                                     "not receptive",
                                     "slightly receptive",
@@ -2941,8 +2959,6 @@ export async function generateBonds(engine, card, guider, autosave) {
                             if (condition !== "true") {
                                 familySectionOpenToAffection.body.push(`if (${condition}) {`);
                             }
-
-                            const messageAboutAnswersFrom = RELATIONSHIP_KEY_INFO_OBTAINED_FROM[relationshipKey][romanticInterestKey] || "";
 
                             /**
                              * @type {string | null}
@@ -2987,7 +3003,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                         }
 
                         for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
-                            const fineTuneReference = getFineTuneReference(intimateModifier);
+                            const [fineTuneReference, messageAboutAnswersFrom] = getFineTuneReference(intimateModifier);
 
                             const openToIntimateAffectionQuestion = "How receptive to intimate affection is " + name + " towards " + actualFamilyValue + " when they are " + intimateModifier.toLowerCase() + "?";
                             !fineTuneReference.openToIntimateAffection ? await prime() : null;
@@ -3007,7 +3023,6 @@ export async function generateBonds(engine, card, guider, autosave) {
                             }
 
                             if (guider) {
-                                const messageAboutAnswersFrom = RELATIONSHIP_KEY_INFO_OBTAINED_FROM[relationshipKey][romanticInterestKey] || "";
                                 const guiderResult = await guider.askOption("How receptive to intimate affection is " + name + " towards " + actualFamilyValue + " when they are " + intimateModifier.toLowerCase() + "? " + messageAboutAnswersFrom, [
                                     "not receptive",
                                     "slightly receptive",
@@ -3046,8 +3061,6 @@ export async function generateBonds(engine, card, guider, autosave) {
                             if (condition !== "true") {
                                 familySectionOpenToIntimateAffection.body.push(`if (${condition}) {`);
                             }
-
-                            const messageAboutAnswersFrom = RELATIONSHIP_KEY_INFO_OBTAINED_FROM[relationshipKey][romanticInterestKey] || "";
 
                             /**
                              * @type {string | null}
@@ -3090,7 +3103,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                             familySectionOpenToSex.body.push(`if (${getAttractionLevelCondition(fineTuneConditions[fineTune], attractionLevel)}) {`);
                         }
                         for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
-                            const fineTuneReference = getFineTuneReference(intimateModifier);
+                            const [fineTuneReference, messageAboutAnswersFrom] = getFineTuneReference(intimateModifier);
 
                             const openToSexQuestion = "How receptive to sex is " + name + " towards " + actualFamilyValue + " when they are " + intimateModifier.toLowerCase() + "?";
                             !fineTuneReference.openToSex ? await prime() : null;
@@ -3110,7 +3123,6 @@ export async function generateBonds(engine, card, guider, autosave) {
                             }
 
                             if (guider) {
-                                const messageAboutAnswersFrom = RELATIONSHIP_KEY_INFO_OBTAINED_FROM[relationshipKey][romanticInterestKey] || "";
                                 const guiderResult = await guider.askOption("How receptive to sex is " + name + " towards " + actualFamilyValue + " when they are " + intimateModifier.toLowerCase() + "? " + messageAboutAnswersFrom, [
                                     "not receptive",
                                     "slightly receptive",
@@ -3149,8 +3161,6 @@ export async function generateBonds(engine, card, guider, autosave) {
                             if (condition !== "true") {
                                 familySectionOpenToSex.body.push(`if (${condition}) {`);
                             }
-
-                            const messageAboutAnswersFrom = RELATIONSHIP_KEY_INFO_OBTAINED_FROM[relationshipKey][romanticInterestKey] || "";
 
                             /**
                              * @type {string | null}
@@ -3193,7 +3203,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                             familySectionProneToInitiatingAffection.body.push(`if (${getAttractionLevelCondition(fineTuneConditions[fineTune], attractionLevel)}) {`);
                         }
                         for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
-                            const fineTuneReference = getFineTuneReference(intimateModifier);
+                            const [fineTuneReference, messageAboutAnswersFrom] = getFineTuneReference(intimateModifier);
 
                             const proneToInitiatingAffectionQuestion = "How likely is " + name + " to initiate non-romantic physical affection towards " + actualFamilyValue + " when they are " + intimateModifier.toLowerCase() + "?";
                             !fineTuneReference.proneToInitiatingAffection ? await prime() : null;
@@ -3213,7 +3223,6 @@ export async function generateBonds(engine, card, guider, autosave) {
                             }
 
                             if (guider) {
-                                const messageAboutAnswersFrom = RELATIONSHIP_KEY_INFO_OBTAINED_FROM[relationshipKey][romanticInterestKey] || "";
                                 const guiderResult = await guider.askOption(
                                     proneToInitiatingAffectionQuestion + messageAboutAnswersFrom,
                                     PROBABILITY_OPTIONS,
@@ -3268,7 +3277,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                             familySectionProneToInitiatingIntimateAffection.body.push(`if (${getAttractionLevelCondition(fineTuneConditions[fineTune], attractionLevel)}) {`);
                         }
                         for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
-                            const fineTuneReference = getFineTuneReference(intimateModifier);
+                            const [fineTuneReference, messageAboutAnswersFrom] = getFineTuneReference(intimateModifier);
 
                             const proneToInitiatingIntimateAffectionQuestion = "How likely is " + name + " to initiate romantic or sexual physical affection towards " + actualFamilyValue + " when they are " + intimateModifier.toLowerCase() + "?";
                             !fineTuneReference.proneToInitiatingIntimateAffection ? await prime() : null;
@@ -3288,7 +3297,6 @@ export async function generateBonds(engine, card, guider, autosave) {
                             }
 
                             if (guider) {
-                                const messageAboutAnswersFrom = RELATIONSHIP_KEY_INFO_OBTAINED_FROM[relationshipKey][romanticInterestKey] || "";
                                 const guiderResult = await guider.askOption(
                                     proneToInitiatingIntimateAffectionQuestion + messageAboutAnswersFrom,
                                     PROBABILITY_OPTIONS,
@@ -3343,7 +3351,7 @@ export async function generateBonds(engine, card, guider, autosave) {
                             familySectionProneToInitiatingSex.body.push(`if (${getAttractionLevelCondition(fineTuneConditions[fineTune], attractionLevel)}) {`);
                         }
                         for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
-                            const fineTuneReference = getFineTuneReference(intimateModifier);
+                            const [fineTuneReference, messageAboutAnswersFrom] = getFineTuneReference(intimateModifier);
 
                             const proneToInitiatingSexQuestion = "How likely is " + name + " to initiate sex towards " + actualFamilyValue + " when they are " + intimateModifier.toLowerCase() + "?";
                             !fineTuneReference.proneToInitiatingSex ? await prime() : null;
@@ -3363,7 +3371,6 @@ export async function generateBonds(engine, card, guider, autosave) {
                             }
 
                             if (guider) {
-                                const messageAboutAnswersFrom = RELATIONSHIP_KEY_INFO_OBTAINED_FROM[relationshipKey][romanticInterestKey] || "";
                                 const guiderResult = await guider.askOption(
                                     proneToInitiatingSexQuestion + messageAboutAnswersFrom,
                                     PROBABILITY_OPTIONS,
