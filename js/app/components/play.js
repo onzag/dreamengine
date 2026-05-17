@@ -481,7 +481,11 @@ class PlayOverlay extends HTMLElement {
             });
         }
 
-        result.sort((a, b) => a.id.localeCompare(b.id));
+        result.sort((a, b) => {
+            const nameA = (a.metadata && a.metadata.__name) ? String(a.metadata.__name) : a.id;
+            const nameB = (b.metadata && b.metadata.__name) ? String(b.metadata.__name) : b.id;
+            return nameA.localeCompare(nameB);
+        });
         this.partyNamespaceCache[namespace] = result;
         return result;
     }
@@ -629,7 +633,7 @@ class PlayOverlay extends HTMLElement {
                     <div class="character-card-image">
                         <app-asset-image image-url="assets/${escapeHTML(c.namespace)}/${escapeHTML(c.id)}/profile" default-image="./images/default-profile.png"></app-asset-image>
                     </div>
-                    <div class="character-card-name">${formatName(escapeHTML(c.id))}</div>
+                    <div class="character-card-name">${formatName(escapeHTML((c.metadata && c.metadata.__name) ? String(c.metadata.__name) : c.id))}</div>
                     ${c.description ? `<div class="character-card-desc">${escapeHTML(c.description)}</div>` : ''}
                     ${detailsHTML}
                     ${disabled ? `<div class="character-card-disabled-note">${escapeHTML(reason)}</div>` : ''}
