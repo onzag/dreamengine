@@ -106,6 +106,7 @@ openSettingsBtn?.addEventListener('click', async () => {
 
 const playBtn = document.getElementById('play-btn');
 playBtn?.addEventListener('click', async () => {
+    playConfirmSound();
     HAS_ACTIVE_DIALOG = true;
     await initialPromise;
     const overlay = document.createElement('app-play');

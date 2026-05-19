@@ -72,6 +72,7 @@ const createWindow = () => {
 
 const ALLOWED_LIBRARY_PATHS = [
     "gbnf",
+    "de-aria",
 ];
 
 const ALLOWED_BASE_PATHS = [

@@ -37,6 +37,7 @@
     "electron": "^39.2.7"
   },
   "dependencies": {
+    "de-aria": "github:onzag/de-aria",
     "electron-squirrel-startup": "^1.0.1",
     "typescript": "^6.0.3"
   },
