@@ -46,9 +46,9 @@ class License extends HTMLElement {
         </style>
         <app-dark-overlay overlay-title="License" confirm-text="Close">
             <div class="license-content">
-                <p>This program is published under the <strong>GNU Affero General Public License v3.0 (AGPLv3)</strong>.</p>
-                <p>All derivative works must remain open source under the same license terms unless agreed by the developer.</p>
-                <p>For alternative licensing agreements, please contact the developer.</p>
+                <p tabindex="0" data-de-aria-text="true">This program is published under the <strong>GNU Affero General Public License v3.0 (AGPLv3)</strong>.</p>
+                <p tabindex="0" data-de-aria-text="true">All derivative works must remain open source under the same license terms unless agreed by the developer.</p>
+                <p tabindex="0" data-de-aria-text="true">For alternative licensing agreements, please contact the developer.</p>
             </div>
         </app-dark-overlay>`;
     }

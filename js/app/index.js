@@ -28,9 +28,7 @@ const initialPromise = new Promise((resolve) => {
     });
 });
 
-let HAS_ACTIVE_DIALOG = false;
 function exitGame() {
-    HAS_ACTIVE_DIALOG = true;
     const dialog = document.createElement('app-dialog');
     dialog.setAttribute('dialog-title', 'Are you sure you want to exit?');
     dialog.setAttribute("confirmation", "true");
@@ -41,9 +39,6 @@ function exitGame() {
     });
     dialog.addEventListener('cancel', () => {
         document.body.removeChild(dialog);
-        setTimeout(() => {
-            HAS_ACTIVE_DIALOG = false;
-        }, 100);
     });
     document.body.appendChild(dialog);
 }
@@ -61,45 +56,33 @@ exitBtn?.addEventListener('click', function () {
 
 const newCharacterBtn = document.getElementById('new-character-btn');
 newCharacterBtn?.addEventListener('click', async () => {
-    HAS_ACTIVE_DIALOG = true;
     await initialPromise;
 
     const overlay = document.createElement("app-character");
     document.body.appendChild(overlay);
     overlay.addEventListener('close', () => {
         document.body.removeChild(overlay);
-        setTimeout(() => {
-            HAS_ACTIVE_DIALOG = false;
-        }, 300);
     });
 });
 
 const newWorldBtn = document.getElementById('new-world-btn');
 newWorldBtn?.addEventListener('click', async () => {
-    HAS_ACTIVE_DIALOG = true;
     await initialPromise;
 
     const overlay = document.createElement("app-world");
     document.body.appendChild(overlay);
     overlay.addEventListener('close', () => {
         document.body.removeChild(overlay);
-        setTimeout(() => {
-            HAS_ACTIVE_DIALOG = false;
-        }, 300);
     });
 });
 
 const openSettingsBtn = document.getElementById('open-settings-btn');
 openSettingsBtn?.addEventListener('click', async () => {
-    HAS_ACTIVE_DIALOG = true;
     await initialPromise;
     const overlay = document.createElement("app-settings");
     document.body.appendChild(overlay);
     overlay.addEventListener('close', () => {
         document.body.removeChild(overlay);
-        setTimeout(() => {
-            HAS_ACTIVE_DIALOG = false;
-        }, 300);
     });
 });
 
@@ -107,15 +90,11 @@ openSettingsBtn?.addEventListener('click', async () => {
 const playBtn = document.getElementById('play-btn');
 playBtn?.addEventListener('click', async () => {
     playConfirmSound();
-    HAS_ACTIVE_DIALOG = true;
     await initialPromise;
     const overlay = document.createElement('app-play');
     document.body.appendChild(overlay);
     overlay.addEventListener('cancel', () => {
         document.body.removeChild(overlay);
-        setTimeout(() => {
-            HAS_ACTIVE_DIALOG = false;
-        }, 300);
     });
     overlay.addEventListener('start', (/** @type {any} */ e) => {
         const detail = e.detail || {};
@@ -139,9 +118,6 @@ playBtn?.addEventListener('click', async () => {
 
         game.addEventListener('exit', () => {
             document.body.removeChild(game);
-            setTimeout(() => {
-                HAS_ACTIVE_DIALOG = false;
-            }, 300);
         });
 
         setTimeout(() => {
@@ -155,15 +131,11 @@ playBtn?.addEventListener('click', async () => {
 
 const manageBtn = document.getElementById('manage-btn');
 manageBtn?.addEventListener('click', async () => {
-    HAS_ACTIVE_DIALOG = true;
     await initialPromise;
     const overlay = document.createElement("app-manage");
     document.body.appendChild(overlay);
     overlay.addEventListener('close', () => {
         document.body.removeChild(overlay);
-        setTimeout(() => {
-            HAS_ACTIVE_DIALOG = false;
-        }, 300);
     });
 });
 
@@ -181,7 +153,6 @@ footerLinks.forEach(link => {
  */
 async function showCreditsOverlay(tagName) {
     makeHomeInert(true);
-    HAS_ACTIVE_DIALOG = true;
     await initialPromise;
     const overlay = document.createElement(tagName);
     document.body.appendChild(overlay);
@@ -189,9 +160,6 @@ async function showCreditsOverlay(tagName) {
         document.body.removeChild(overlay);
         makeHomeInert(false);
         await stopAllAmbiencesAndStartNewOne([{ src: './sounds/dream-ambience.mp3', volume: 3 }], 1000, 1000);
-        setTimeout(() => {
-            HAS_ACTIVE_DIALOG = false;
-        }, 300);
     });
     await stopAllAmbiencesAndStartNewOne([{ src: './sounds/credits.mp3', volume: 1.2 }], 1000, 2000);
 }
@@ -214,7 +182,20 @@ document.addEventListener("keydown", async (e) => {
             window.API.openDevTools();
         }
     }
-    if (e.key === "Escape" && !HAS_ACTIVE_DIALOG) {
+    if (
+        e.key === "Escape" &&
+        !document.querySelector('app-dialog') &&
+        !document.querySelector('app-character') &&
+        !document.querySelector('app-world') &&
+        !document.querySelector('app-settings') &&
+        !document.querySelector('app-manage') &&
+        !document.querySelector('app-license') &&
+        !document.querySelector('app-other-attributions') &&
+        !document.querySelector('app-cardtype-wizard') &&
+        !document.querySelector('app-world-wizard') &&
+        !document.querySelector('app-play') &&
+        !document.querySelector('app-game')
+    ) {
         exitGame();
     }
 });
@@ -338,7 +319,6 @@ async function initialChecks() {
     const apiKey = await window.API.getConfigValue('secret');
     const host = await window.API.getConfigValue('host');
     if (!apiKey) {
-        HAS_ACTIVE_DIALOG = true;
         const dialog = document.createElement('app-dialog');
         dialog.setAttribute('dialog-title', 'No API Key Configured');
         dialog.innerHTML = `<p>You have not configured an API key yet. You can enter your API key in the settings. Please note that you will need an API key to use the application even using local self-hosted mode.</p>`;
@@ -352,7 +332,6 @@ async function initialChecks() {
             settingsOverlay.addEventListener('close', () => {
                 document.body.removeChild(settingsOverlay);
                 setTimeout(() => {
-                    HAS_ACTIVE_DIALOG = false;
                     secondChecks();
                 }, 300);
             });
@@ -361,7 +340,6 @@ async function initialChecks() {
         dialog.addEventListener('cancel', () => {
             document.body.removeChild(dialog);
             setTimeout(() => {
-                HAS_ACTIVE_DIALOG = false;
                 secondChecks();
             }, 300);
         });
@@ -384,17 +362,11 @@ async function initialChecks() {
             document.body.appendChild(settingsOverlay);
             settingsOverlay.addEventListener('close', () => {
                 document.body.removeChild(settingsOverlay);
-                setTimeout(() => {
-                    HAS_ACTIVE_DIALOG = false;
-                }, 300);
             });
             document.body.removeChild(dialog);
         });
         dialog.addEventListener('cancel', () => {
             document.body.removeChild(dialog);
-            setTimeout(() => {
-                HAS_ACTIVE_DIALOG = false;
-            }, 300);
         });
         document.body.appendChild(dialog);
     } else {
@@ -422,7 +394,6 @@ async function secondChecks() {
         }
     }
     if (missingProperties.length > 0) {
-        HAS_ACTIVE_DIALOG = true;
         const dialog = document.createElement('app-dialog');
         dialog.setAttribute('dialog-title', 'Missing User Information');
         dialog.innerHTML = `<p>Some required user information is missing. Please enter it in the settings to ensure the best experience.</p>`;
@@ -435,17 +406,11 @@ async function secondChecks() {
             document.body.appendChild(settingsOverlay);
             settingsOverlay.addEventListener('close', () => {
                 document.body.removeChild(settingsOverlay);
-                setTimeout(() => {
-                    HAS_ACTIVE_DIALOG = false;
-                }, 300);
             });
             document.body.removeChild(dialog);
         });
         dialog.addEventListener('cancel', () => {
             document.body.removeChild(dialog);
-            setTimeout(() => {
-                HAS_ACTIVE_DIALOG = false;
-            }, 300);
         });
         document.body.appendChild(dialog);
     }
