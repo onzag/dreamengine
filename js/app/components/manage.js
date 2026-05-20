@@ -26,8 +26,9 @@ class ManageOverlay extends HTMLElement {
 
         // @ts-expect-error
         this.root.querySelector("app-overlay").addEventListener('cancel', () => {
-            this.remove();
             playCancelSound();
+
+            this.dispatchEvent(new CustomEvent('close'));
         });
 
         // @ts-expect-error

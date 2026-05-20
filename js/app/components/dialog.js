@@ -32,8 +32,6 @@ class Dialog extends HTMLElement {
             this.root.getElementById('confirm-btn').addEventListener('click', this.onAcceptButtonClick);
             // @ts-expect-error
             this.root.getElementById('cancel-btn').addEventListener('click', this.onCancelButtonClick);
-            // @ts-expect-error
-            this.root.getElementById('confirm-btn').focus();
 
             this.root.querySelectorAll('.dialog-buttons div').forEach(btn => {
                 btn.addEventListener('mouseenter', playHoverSound);
@@ -88,8 +86,8 @@ class Dialog extends HTMLElement {
             const cancelText = this.getAttribute('cancel-text') || 'No';
             dialogButtons = `
             <div class="dialog-buttons">
-                ${this.getAttribute('cancel-text-disable') === 'true' ? '<div id="cancel-btn"></div>' : `<div id="cancel-btn">${cancelText}</div>`}
-                <div id="confirm-btn">${confirmText}</div>
+                ${this.getAttribute('cancel-text-disable') === 'true' ? '<div id="cancel-btn"></div>' : `<div id="cancel-btn" role="button" tabindex="0" data-de-aria-key="c" data-de-aria-horizontal-alignment="end-outside">${cancelText}</div>`}
+                <div id="confirm-btn" role="button" tabindex="0" data-de-aria-key="k" data-de-aria-horizontal-alignment="end-outside">${confirmText}</div>
             </div>
             `;
         }
@@ -157,6 +155,7 @@ class Dialog extends HTMLElement {
             justify-content: space-between;
             align-items: flex-end;
             margin-top: 4vh;
+            position: relative;
         }
         .dialog-buttons div {
             font-size: 5vh;
@@ -167,8 +166,8 @@ class Dialog extends HTMLElement {
         }
       </style>
       <div class="backdrop"></div>
-      <div class="dialog">
-        <div class="dialog-title">
+      <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title">
+        <div class="dialog-title" id="dialog-title" tabindex="0" data-de-aria-text="true">
             ${title}
         </div>
         <div class="dialog-content">

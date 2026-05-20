@@ -126,6 +126,10 @@ html, body {
   transform: scale(1);
 }
 
+.sound-buttons, .menu, .footer-links {
+  position: relative;
+}
+
 .stars {
   position: absolute;
   top: 0px;

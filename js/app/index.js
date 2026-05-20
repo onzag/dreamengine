@@ -39,8 +39,10 @@ function exitGame() {
     });
     dialog.addEventListener('cancel', () => {
         document.body.removeChild(dialog);
+        makeHomeInert(false);
     });
     document.body.appendChild(dialog);
+    makeHomeInert(true);
 }
 
 // Get all menu buttons and add event listeners
@@ -60,8 +62,10 @@ newCharacterBtn?.addEventListener('click', async () => {
 
     const overlay = document.createElement("app-character");
     document.body.appendChild(overlay);
+    makeHomeInert(true);
     overlay.addEventListener('close', () => {
         document.body.removeChild(overlay);
+        makeHomeInert(false);
     });
 });
 
@@ -70,9 +74,11 @@ newWorldBtn?.addEventListener('click', async () => {
     await initialPromise;
 
     const overlay = document.createElement("app-world");
+    makeHomeInert(true);
     document.body.appendChild(overlay);
     overlay.addEventListener('close', () => {
         document.body.removeChild(overlay);
+        makeHomeInert(false);
     });
 });
 
@@ -80,9 +86,11 @@ const openSettingsBtn = document.getElementById('open-settings-btn');
 openSettingsBtn?.addEventListener('click', async () => {
     await initialPromise;
     const overlay = document.createElement("app-settings");
+    makeHomeInert(true);
     document.body.appendChild(overlay);
     overlay.addEventListener('close', () => {
         document.body.removeChild(overlay);
+        makeHomeInert(false);
     });
 });
 
@@ -93,14 +101,18 @@ playBtn?.addEventListener('click', async () => {
     await initialPromise;
     const overlay = document.createElement('app-play');
     document.body.appendChild(overlay);
+    makeHomeInert(true);
     overlay.addEventListener('cancel', () => {
         document.body.removeChild(overlay);
+        makeHomeInert(false);
     });
     overlay.addEventListener('start', (/** @type {any} */ e) => {
         const detail = e.detail || {};
         const world = detail.world || {};
         const character = detail.character || {};
         const isSelfInsert = character.scriptKey === '__self__';
+
+        overlay.setAttribute("inert", "true");
 
         const game = document.createElement('app-game');
         game.setAttribute('character-name', character.name || '');
@@ -118,10 +130,12 @@ playBtn?.addEventListener('click', async () => {
 
         game.addEventListener('exit', () => {
             document.body.removeChild(game);
+            makeHomeInert(false);
         });
 
         setTimeout(() => {
             document.body.appendChild(game);
+            makeSoundButtonsOnlyInert(false);
             setTimeout(() => {
                 if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
             }, 300);
@@ -134,8 +148,10 @@ manageBtn?.addEventListener('click', async () => {
     await initialPromise;
     const overlay = document.createElement("app-manage");
     document.body.appendChild(overlay);
+    makeHomeInert(true);
     overlay.addEventListener('close', () => {
         document.body.removeChild(overlay);
+        makeHomeInert(false);
     });
 });
 
@@ -287,6 +303,17 @@ function makeHomeInert(inert) {
     }
 }
 
+/**
+ * @param {boolean} inert 
+ */
+function makeSoundButtonsOnlyInert(inert) {
+    const soundButtons = document.querySelector('.sound-buttons');
+    if (soundButtons) {
+        // @ts-expect-error
+        soundButtons.inert = inert;
+    }
+}
+
 let LOADING_BLUR_OPEN = true;
 function removeLoadingBlur() {
     if (!LOADING_BLUR_OPEN) {
@@ -321,7 +348,7 @@ async function initialChecks() {
     if (!apiKey) {
         const dialog = document.createElement('app-dialog');
         dialog.setAttribute('dialog-title', 'No API Key Configured');
-        dialog.innerHTML = `<p>You have not configured an API key yet. You can enter your API key in the settings. Please note that you will need an API key to use the application even using local self-hosted mode.</p>`;
+        dialog.innerHTML = `<p tabindex="0" data-de-aria-text="true">You have not configured an API key yet. You can enter your API key in the settings. Please note that you will need an API key to use the application even using local self-hosted mode.</p>`;
         dialog.setAttribute("confirmation", "true");
         dialog.setAttribute("confirm-text", "Open Settings");
         dialog.setAttribute("cancel-text", "Ignore");
@@ -331,6 +358,7 @@ async function initialChecks() {
             document.body.appendChild(settingsOverlay);
             settingsOverlay.addEventListener('close', () => {
                 document.body.removeChild(settingsOverlay);
+                makeHomeInert(false);
                 setTimeout(() => {
                     secondChecks();
                 }, 300);
@@ -344,13 +372,14 @@ async function initialChecks() {
             }, 300);
         });
         document.body.appendChild(dialog);
+        makeHomeInert(true);
     } else if (INFERENCE_ADAPTER_ERROR) {
         const dialog = document.createElement('app-dialog');
         dialog.setAttribute('dialog-title', 'Could not Connect to Server');
-        dialog.innerHTML = `<p>Failed to initialize the inference adapter. Please check your API key and host configuration, and ensure that your API key has the necessary permissions.</p><p>Error details: ${INFERENCE_ADAPTER_ERROR.message}</p>`;
+        dialog.innerHTML = `<p tabindex="0" data-de-aria-text="true">Failed to initialize the inference adapter. Please check your API key and host configuration, and ensure that your API key has the necessary permissions.</p><br><p tabindex="0" data-de-aria-text="true">Error details: ${INFERENCE_ADAPTER_ERROR.message}</p>`;
 
         if (window.API.mode === "web" && host.startsWith("wss")) {
-            dialog.innerHTML += `<br><br><p>Since you are using the web version and connecting to a secure WebSocket (wss://), you may need to accept the self-signed certificate in your browser before the connection can be established, at <a href="https://${host.replace("wss://", "")}" target="_blank">https://${host.replace("wss://", "")}</a> then restart the app</p>`;
+            dialog.innerHTML += `<br><br><p tabindex="0" data-de-aria-text="true">Since you are using the web version and connecting to a secure WebSocket (wss://), you may need to accept the self-signed certificate in your browser before the connection can be established, at <a tabindex="0" data-de-aria-key="l" href="https://${host.replace("wss://", "")}" target="_blank">https://${host.replace("wss://", "")}</a> then restart the app</p>`;
         }
 
         dialog.setAttribute("confirmation", "true");
@@ -362,13 +391,16 @@ async function initialChecks() {
             document.body.appendChild(settingsOverlay);
             settingsOverlay.addEventListener('close', () => {
                 document.body.removeChild(settingsOverlay);
+                makeHomeInert(false);
             });
             document.body.removeChild(dialog);
         });
         dialog.addEventListener('cancel', () => {
             document.body.removeChild(dialog);
+            makeHomeInert(false);
         });
         document.body.appendChild(dialog);
+        makeHomeInert(true);
     } else {
         secondChecks();
     }
@@ -396,7 +428,7 @@ async function secondChecks() {
     if (missingProperties.length > 0) {
         const dialog = document.createElement('app-dialog');
         dialog.setAttribute('dialog-title', 'Missing User Information');
-        dialog.innerHTML = `<p>Some required user information is missing. Please enter it in the settings to ensure the best experience.</p>`;
+        dialog.innerHTML = `<p tabindex="0" data-de-aria-text="true">Some required user information is missing. Please enter it in the settings to ensure the best experience.</p>`;
         dialog.setAttribute("confirmation", "true");
         dialog.setAttribute("confirm-text", "Open Settings");
         dialog.setAttribute("cancel-text", "Ignore");
@@ -406,13 +438,16 @@ async function secondChecks() {
             document.body.appendChild(settingsOverlay);
             settingsOverlay.addEventListener('close', () => {
                 document.body.removeChild(settingsOverlay);
+                makeHomeInert(false);
             });
             document.body.removeChild(dialog);
         });
         dialog.addEventListener('cancel', () => {
             document.body.removeChild(dialog);
+            makeHomeInert(false);
         });
         document.body.appendChild(dialog);
+        makeHomeInert(true);
     }
 }
 

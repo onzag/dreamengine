@@ -152,6 +152,7 @@ class DarkOverlay extends HTMLElement {
                 overflow-y: auto;
             }
             .overlay-buttons {
+                position: "relative";
                 display: flex;
                 justify-content: flex-end;
                 align-items: flex-end;

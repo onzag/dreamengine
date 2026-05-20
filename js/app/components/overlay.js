@@ -123,7 +123,7 @@ class Overlay extends HTMLElement {
         let specialButtonHTML = "";
 
         if (this.getAttribute('special-button-text')) {
-            specialButtonHTML = `<div class="special-button">${this.getAttribute('special-button-text')}</div>`;
+            specialButtonHTML = `<div class="special-button" role="button" aria-disabled="false" tabindex="0" data-de-aria-key="s">${this.getAttribute('special-button-text')}</div>`;
         }
 
         this.root.innerHTML = `
@@ -221,17 +221,17 @@ class Overlay extends HTMLElement {
       </style>
       <div class="overlay">
         <div class="overlay-title">
-            <div class="overlay-title-text">
+            <div class="overlay-title-text" tabindex="0" data-de-aria-text="true">
                 ${title}
             </div>
             ${specialButtonHTML}
         </div>
-        <div class="overlay-content">
+        <div class="overlay-content" data-de-role="scroller">
             <slot></slot>
         </div>
         <div class="overlay-buttons">
-                ${cancelText ? `<div id="cancel-btn">${cancelText}</div>` : ''}
-                ${confirmText ? `<div id="confirm-btn">${confirmText}</div>` : ''}
+                ${cancelText ? `<div id="cancel-btn" role="button" aria-disabled="false" tabindex="0" data-de-aria-key="c" data-de-aria-horizontal-alignment="end-outside">${cancelText}</div>` : ''}
+                ${confirmText ? `<div id="confirm-btn" role="button" aria-disabled="false" tabindex="0" data-de-aria-key="k" data-de-aria-horizontal-alignment="start-outside">${confirmText}</div>` : ''}
             </div>
       </div>
     `;
@@ -271,7 +271,7 @@ class OverlaySection extends HTMLElement {
       </style>
       <div class="overlay-section">
         <div class="section-title">
-            <h2>${this.getAttribute('section-title') || 'Section Title'}</h2>
+            <h2 tabindex="0" data-de-aria-text="true">${this.getAttribute('section-title') || 'Section Title'}</h2>
         </div>
         <div class="section-content">
             <slot></slot>
@@ -541,7 +541,7 @@ class OverlayInput extends HTMLElement {
             }
         }
 
-        let inputItself = multiline ? `<textarea placeholder="${placeholder}"></textarea>` : `<input type="${type}" placeholder="${placeholder}" ${extraAttributes} />`;
+        let inputItself = multiline ? `<textarea placeholder="${placeholder}" tabindex="0" aria-label="${label}" data-de-aria-key="p"></textarea>` : `<input type="${type}" placeholder="${placeholder}" ${extraAttributes} tabindex="0" aria-label="${label}" data-de-aria-key="p" />`;
 
         this.root.innerHTML = `
       <style>
@@ -551,6 +551,7 @@ class OverlayInput extends HTMLElement {
             margin-bottom: 2vh;
             margin-top: 2vh;
             font-size: 4vh;
+            position: relative;
         }
         .overlay-input label {
             font-size: 4vh;
@@ -770,6 +771,7 @@ class OverlayInputSelect extends HTMLElement {
             margin-bottom: 2vh;
             margin-top: 2vh;
             font-size: 4vh;
+            position: relative;
         }
         .overlay-input label {
             font-size: 4vh;
@@ -807,7 +809,7 @@ class OverlayInputSelect extends HTMLElement {
       </style>
       <div class="overlay-input">
         <label>${label}</label>
-        <select value="">
+        <select value="" tabindex="0" aria-label="${label}" data-de-aria-key="p">
             ${options.map((opt, index) => `<option value="${opt}" title="${optionsDescriptions[index] || ''}">${opt.split("_").map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(" ")}</option>`).join('')}
         </select>
         <div class="error-message"></div>
@@ -842,7 +844,7 @@ class OverlayInputWarning extends HTMLElement {
             background-color: rgba(255, 107, 107, 0.1);
         }
       </style>
-      <div class="overlay-input-warning">
+      <div class="overlay-input-warning" tabindex="0" data-de-aria-text="true" role="alert">
         <slot></slot>
       </div>
     `;
@@ -943,8 +945,8 @@ class OverlayListInput extends HTMLElement {
         if (!list) return;
         list.innerHTML = this.items.map((item, index) => `
             <div class="list-item">
-                <span class="list-item-text">${item}</span>
-                <button class="remove-btn" data-index="${index}">✕</button>
+                <span class="list-item-text" tabindex="0" data-de-aria-text="true">${item}</span>
+                <button class="remove-btn" data-index="${index}" role="button" tabindex="0" aria-label="Remove item: ${item}" data-de-aria-key="x">✕</button>
             </div>
         `).join('');
 
@@ -969,6 +971,7 @@ class OverlayListInput extends HTMLElement {
             margin-bottom: 2vh;
             margin-top: 2vh;
             font-size: 4vh;
+            position: relative;
         }
         .overlay-input label {
             font-size: 4vh;
@@ -992,6 +995,7 @@ class OverlayListInput extends HTMLElement {
             display: flex;
             gap: 1vh;
             align-items: center;
+            position: relative;
         }
         .add-btn, .remove-btn {
             font-size: 3vh;
@@ -1043,8 +1047,8 @@ class OverlayListInput extends HTMLElement {
       <div class="overlay-input">
         <label>${label}</label>
         <div class="add-row">
-            <input class="new-item-input" type="text" placeholder="${placeholder}" />
-            <button class="add-btn">+</button>
+            <input class="new-item-input" type="text" placeholder="${placeholder}" tabindex="0" aria-label="Add new item to: ${label}" data-de-aria-key="p"/>
+            <button class="add-btn" role="button" tabindex="0" aria-label="Add new item to: ${label}" data-de-aria-key="e">+</button>
         </div>
         <div class="list-items"></div>
       </div>
@@ -1157,6 +1161,7 @@ class OverlayTabs extends HTMLElement {
             border-bottom: solid 2px #ccc;
             background-color: rgba(255,255,255, 0.1);
             overflow-x: auto;
+            position: relative;
         }
             .tabs::-webkit-scrollbar {
   height: 12px !important;
@@ -1190,9 +1195,9 @@ class OverlayTabs extends HTMLElement {
         }
       </style>
       <div class="tabs-container">
-      <div class="tabs">
+      <div class="tabs" role="tablist">
         ${sections.map((section, index) => `
-            <div class="tab ${index === current ? 'active' : ''}">${section}</div>
+            <div class="tab ${index === current ? 'active' : ''}" role="tab" data-de-aria-key="s" aria-selected="${index === current ? 'true' : 'false'}" tabindex="0" data-de-aria-action="click" data-de-aria-offset-y="0.5vh">${section}</div>
         `).join('')}
       </div>
       <slot></slot>
@@ -1275,7 +1280,7 @@ class OverlayButton extends HTMLElement {
             color: inherit;
         }
       </style>
-      <div class="overlay-button${this.getAttribute('disabled') === 'true' ? ' disabled' : ''}">
+      <div class="overlay-button${this.getAttribute('disabled') === 'true' ? ' disabled' : ''}" role="button" aria-disabled="${this.getAttribute('disabled') === 'true' ? 'true' : 'false'}" tabindex="0">
         <slot></slot>
       </div>
     `;
@@ -1369,6 +1374,7 @@ class OverlayInputBoolean extends HTMLElement {
             margin-bottom: 2vh;
             margin-top: 2vh;
             font-size: 4vh;
+            position: relative;
         }
         .overlay-input-boolean label {
             font-size: 4vh;
@@ -1382,7 +1388,7 @@ class OverlayInputBoolean extends HTMLElement {
         }
       </style>
       <div class="overlay-input-boolean">
-        <input type="checkbox" />
+        <input type="checkbox" tabindex="0" aria-label="${label}" data-de-aria-key="p"/>
         <label>${label}</label>
       </div>
     `;

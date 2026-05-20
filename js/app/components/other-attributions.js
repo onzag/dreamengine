@@ -80,6 +80,9 @@ class OtherAttributions extends HTMLElement {
                 font-style: italic;
                 opacity: 0.7;
             }
+            strong {
+               position: relative;
+            }
         </style>
         <app-dark-overlay overlay-title="Other Attributions" confirm-text="Close">
             <div class="attrib-content">
