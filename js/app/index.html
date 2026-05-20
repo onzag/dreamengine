@@ -1,10 +1,11 @@
 <!DOCTYPE html>
-<html>
+<html lang="en" dir="ltr">
 
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob:; media-src 'self'; connect-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self';">
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'self'; img-src 'self' data: blob:; media-src 'self'; connect-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self';">
   <title>Dream Engine</title>
   <link rel="icon" type="image/png" sizes="16x16" href="images/icon-16x16.png" />
   <link rel="icon" type="image/png" sizes="32x32" href="images/icon-32x32.png" />
@@ -17,13 +18,15 @@
 </head>
 
 <body>
-  <div id="loading-overlay" style="z-index: 1000;width:100vw;height:100vh;position:fixed;top:0;left:0;background-color:#000;display:flex;flex-direction:column;justify-content:center;align-items:center;font-family: monospace;color:#ccc;font-size: 8vh;text-align: center;">
+  <div id="loading-overlay"
+    aria-live="polite" aria-busy="true" aria-label="Loading, please wait"
+    style="z-index: 1000;width:100vw;height:100vh;position:fixed;top:0;left:0;background-color:#000;display:flex;flex-direction:column;justify-content:center;align-items:center;font-family: monospace;color:#ccc;font-size: 8vh;text-align: center;">
     <div style="animation: loadingPulse 1.5s ease-in-out infinite;">Loading...</div>
   </div>
   <div class="sky"></div>
 
   <div class="blur-underlay"></div>
-  
+
   <!-- Sound effects -->
   <audio id="hoverSound" preload="auto">
     <source src="sounds/hover.wav" type="audio/wav">
@@ -43,34 +46,47 @@
     <!-- <source src="sounds/dream-fall.mp3" type="audio/mpeg"> -->
   </audio>
 
+  <div class="sound-buttons" inert="true">
+    <div class="fx" tabindex="500" aria-label="Sound effects" role="region" data-de-aria-key="v" role="button"
+      data-de-aria-vertical-alignment="bottom-outside">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512">
+        <path fill="#ccc"
+          d="M64 224c0-88.4 71.6-160 160-160s160 71.6 160 160l0 37.5c-10-3.5-20.8-5.5-32-5.5l-16 0c-26.5 0-48 21.5-48 48l0 128c0 26.5 21.5 48 48 48l16 0c53 0 96-43 96-96l0-160C448 100.3 347.7 0 224 0S0 100.3 0 224L0 384c0 53 43 96 96 96l16 0c26.5 0 48-21.5 48-48l0-128c0-26.5-21.5-48-48-48l-16 0c-11.2 0-22 1.9-32 5.5L64 224z" />
+      </svg>
+    </div>
+    <div class="ambience" tabindex="501" aria-label="Ambience sounds" role="region" data-de-aria-key="a"
+      data-de-aria-vertical-alignment="bottom-outside">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+        <path fill="#ccc"
+          d="M468 7c7.6 6.1 12 15.3 12 25l0 304c0 44.2-43 80-96 80s-96-35.8-96-80 43-80 96-80c11.2 0 22 1.6 32 4.6l0-116.7-224 49.8 0 206.3c0 44.2-43 80-96 80s-96-35.8-96-80 43-80 96-80c11.2 0 22 1.6 32 4.6L128 96c0-15 10.4-28 25.1-31.2l288-64c9.5-2.1 19.4 .2 27 6.3z" />
+      </svg>
+    </div>
+  </div>
 
-  <div class="fx" tabindex="500" aria-label="Sound effects" role="region" data-de-aria-key="v" role="button" data-de-aria-vertical-alignment="bottom-outside">
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512">
-      <path fill="#ccc" d="M64 224c0-88.4 71.6-160 160-160s160 71.6 160 160l0 37.5c-10-3.5-20.8-5.5-32-5.5l-16 0c-26.5 0-48 21.5-48 48l0 128c0 26.5 21.5 48 48 48l16 0c53 0 96-43 96-96l0-160C448 100.3 347.7 0 224 0S0 100.3 0 224L0 384c0 53 43 96 96 96l16 0c26.5 0 48-21.5 48-48l0-128c0-26.5-21.5-48-48-48l-16 0c-11.2 0-22 1.9-32 5.5L64 224z"/>
-    </svg>
-  </div>
-  <div class="ambience" tabindex="501" aria-label="Ambience sounds" role="region" data-de-aria-key="a" data-de-aria-vertical-alignment="bottom-outside">
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-      <path fill="#ccc" d="M468 7c7.6 6.1 12 15.3 12 25l0 304c0 44.2-43 80-96 80s-96-35.8-96-80 43-80 96-80c11.2 0 22 1.6 32 4.6l0-116.7-224 49.8 0 206.3c0 44.2-43 80-96 80s-96-35.8-96-80 43-80 96-80c11.2 0 22 1.6 32 4.6L128 96c0-15 10.4-28 25.1-31.2l288-64c9.5-2.1 19.4 .2 27 6.3z"/>
-    </svg>
-  </div>
-  
-  <div class="content">
+  <div class="content" inert="true">
     <h1 class="title">Welcome&nbsp;&nbsp;Home</h1>
     <h2 class="subtitle">Where&nbsp;&nbsp;dreams&nbsp;&nbsp;come&nbsp;&nbsp;to&nbsp;&nbsp;life</h2>
     <section class="menu">
-      <div id="play-btn" class="menu-btn" role="button" tabindex="1" data-de-aria-key="p" data-de-aria-horizontal-alignment="end-outside">Play</div>
-      <div id="new-world-btn" class="menu-btn" role="button" tabindex="2" data-de-aria-key="n" data-de-aria-horizontal-alignment="end-outside">New World</div>
-      <div id="new-character-btn" class="menu-btn" role="button" tabindex="3" data-de-aria-key="c" data-de-aria-horizontal-alignment="end-outside">New Character</div>
-      <div id="manage-btn" class="menu-btn" role="button" tabindex="4" data-de-aria-key="m" data-de-aria-horizontal-alignment="end-outside">Manage</div>
-      <div id="open-settings-btn" class="menu-btn" role="button" tabindex="5" data-de-aria-key="s" data-de-aria-horizontal-alignment="end-outside">Settings</div>
-      <div id="exit-btn" class="menu-btn" role="button" tabindex="6" data-de-aria-key="e" data-de-aria-horizontal-alignment="end-outside">Exit</div>
+      <div id="play-btn" class="menu-btn" role="button" tabindex="3" data-de-aria-key="p"
+        data-de-aria-horizontal-alignment="end-outside">Play</div>
+      <div id="new-world-btn" class="menu-btn" role="button" tabindex="4" data-de-aria-key="n"
+        data-de-aria-horizontal-alignment="end-outside">New World</div>
+      <div id="new-character-btn" class="menu-btn" role="button" tabindex="5" data-de-aria-key="c"
+        data-de-aria-horizontal-alignment="end-outside">New Character</div>
+      <div id="manage-btn" class="menu-btn" role="button" tabindex="6" data-de-aria-key="m"
+        data-de-aria-horizontal-alignment="end-outside">Manage</div>
+      <div id="open-settings-btn" class="menu-btn" role="button" tabindex="7" data-de-aria-key="s"
+        data-de-aria-horizontal-alignment="end-outside">Settings</div>
+      <div id="exit-btn" class="menu-btn" role="button" tabindex="8" data-de-aria-key="e"
+        data-de-aria-horizontal-alignment="end-outside">Exit</div>
     </section>
     <footer class="footer">
       <copyright>&copy; 2026 OnzaSystems</copyright>
       <div>
-        <a id="license-link" role="button" tabindex="7" data-de-aria-key="l" data-de-aria-horizontal-alignment="end-outside">License</a>
-        <a id="attributions-link" role="button" tabindex="8" data-de-aria-key="o" data-de-aria-horizontal-alignment="end-outside">Other Attributions</a>
+        <a id="license-link" role="button" tabindex="9" data-de-aria-key="l"
+          data-de-aria-horizontal-alignment="end-outside">License</a>
+        <a id="attributions-link" role="button" tabindex="10" data-de-aria-key="o"
+          data-de-aria-horizontal-alignment="end-outside">Other Attributions</a>
       </div>
     </footer>
   </div>
@@ -78,4 +94,5 @@
 <script type="module" src="sky.js"></script>
 <script type="module" src="index.js"></script>
 <script type="module" src="../../node_modules/de-aria/js/index.js"></script>
+
 </html>
