@@ -38,13 +38,11 @@
 /* ===== Scroller overlay ===== */
 
 .de-aria-scroller {
-    background: rgba(0, 0, 0, 0.6);
+    background: rgba(0, 0, 0, 0.4);
     border: 0.2vh solid rgba(255, 255, 255, 0.55);
     border-radius: 1.2vh;
     box-shadow: 0 0.5vh 2vh rgba(0, 0, 0, 0.6);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    padding: 0.6vh;
+    padding: 0vh;
     z-index: 99999;
 }
 
@@ -55,6 +53,7 @@
     text-shadow: 0 0.2vh 0.4vh rgba(0, 0, 0, 0.9);
     pointer-events: none;
     user-select: none;
+    padding: 1vh;
 }
 
 /* Outline around the scrollable element itself while overlay is active */

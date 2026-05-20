@@ -172,13 +172,13 @@ class DarkOverlay extends HTMLElement {
         </style>
         <div class="overlay">
             <div class="overlay-title">
-                <div class="overlay-title-text">${title}</div>
+                <div class="overlay-title-text" tabindex="0" data-de-aria-text="true">${title}</div>
             </div>
-            <div class="overlay-content">
+            <div class="overlay-content" data-de-role="scroller">
                 <slot></slot>
             </div>
             <div class="overlay-buttons">
-                <div id="confirm-btn">${confirmText}</div>
+                <div id="confirm-btn" role="button" tabindex="0" data-de-aria-horizontal-alignment="start-outside">${confirmText}</div>
             </div>
         </div>
         `;

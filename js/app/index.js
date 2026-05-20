@@ -180,12 +180,14 @@ footerLinks.forEach(link => {
  * @param {string} tagName 
  */
 async function showCreditsOverlay(tagName) {
+    makeHomeInert(true);
     HAS_ACTIVE_DIALOG = true;
     await initialPromise;
     const overlay = document.createElement(tagName);
     document.body.appendChild(overlay);
     overlay.addEventListener('close', async () => {
         document.body.removeChild(overlay);
+        makeHomeInert(false);
         await stopAllAmbiencesAndStartNewOne([{ src: './sounds/dream-ambience.mp3', volume: 3 }], 1000, 1000);
         setTimeout(() => {
             HAS_ACTIVE_DIALOG = false;
@@ -288,6 +290,22 @@ window.addEventListener('DOMContentLoaded', () => {
     }, 500);
 });
 
+/**
+ * @param {boolean} inert 
+ */
+function makeHomeInert(inert) {
+    const content = document.querySelector('.content');
+    const soundButtons = document.querySelector('.sound-buttons');
+    if (soundButtons) {
+        // @ts-expect-error
+        soundButtons.inert = inert;
+    }
+    if (content) {
+        // @ts-expect-error
+        content.inert = inert;
+    }
+}
+
 let LOADING_BLUR_OPEN = true;
 function removeLoadingBlur() {
     if (!LOADING_BLUR_OPEN) {
@@ -298,6 +316,7 @@ function removeLoadingBlur() {
     if (loadingOverlay) {
         loadingOverlay.style.transition = 'opacity 1s ease';
         loadingOverlay.style.opacity = '0';
+        makeHomeInert(false);
         setTimeout(() => {
             if (loadingOverlay.parentNode) {
                 loadingOverlay.parentNode.removeChild(loadingOverlay);

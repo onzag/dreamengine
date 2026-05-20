@@ -46,9 +46,9 @@ class OtherAttributions extends HTMLElement {
     render() {
         const attribItems = Object.entries(ATTRIBS).map(([name, info]) => `
             <div class="attrib-item">
-                <p><strong><a href="${info.url}" target="_blank">${name}</a></strong></p>
-                <p>${info.for}</p>
-                <p class="attrib-license">${info.license}</p>
+                <p><strong><a href="${info.url}" target="_blank" tabindex="0" data-de-aria-horizontal-alignment="end-outside" data-de-aria-key="l">${name}</a></strong></p>
+                <p tabindex="0" data-de-aria-text="true">${info.for}</p>
+                <p class="attrib-license" tabindex="0" data-de-aria-text="true">${info.license}</p>
             </div>
         `).join('');
 
