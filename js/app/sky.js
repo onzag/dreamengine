@@ -175,8 +175,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function resize() {
     const rect = sky.getBoundingClientRect();
-    cssW = Math.max(1, rect.width);
-    cssH = Math.max(1, rect.height);
+    if (rect.width === 0 || rect.height === 0) return; // element is hidden, skip
+    cssW = rect.width;
+    cssH = rect.height;
     canvas.width = Math.floor(cssW * dpr);
     canvas.height = Math.floor(cssH * dpr);
     draw(performance.now());
@@ -331,11 +332,15 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   });
 
+  // Use ResizeObserver instead of window.resize so we also catch the sky
+  // element transitioning from display:none back to visible (at which point
+  // the window size may not have changed but the element's size has).
   let resizeTimer = 0;
-  window.addEventListener('resize', function () {
+  const ro = new ResizeObserver(function () {
     clearTimeout(resizeTimer);
     resizeTimer = window.setTimeout(resize, 100);
   });
+  ro.observe(sky);
 
   // Defer initial draw until after first paint so loading overlay shows.
   requestAnimationFrame(function () {
