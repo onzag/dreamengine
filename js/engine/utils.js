@@ -119,7 +119,6 @@ export const deEngineUtilsFn = (DE) => ({
          */
         const statefulLocation = {
             ...locationDef,
-            state: {},
             internalState: {
                 // @ts-ignore
                 currentWeather: null,

@@ -26,9 +26,9 @@ export class EngineWorkerClient {
     // ── Event callbacks (set by consumer) ───────────────────────────
     /** @type {(() => void) | null} */
     onDEObjectUpdated = null;
-    /** @type {((level: string, message: string) => void) | null} */
+    /** @type {((level: "info" | "warning" | "error", message: string) => void) | null} */
     onCycleInform = null;
-    /** @type {((deObject: any, data: any) => void) | null} */
+    /** @type {((data: any) => void) | null} */
     onInferringOverConversationMessage = null;
     /** @type {((data: {qid: number, questionType: string, question: string, options?: string[], defaultValue?: any}) => void) | null} */
     onCardTypeGuiderQuestion = null;
@@ -118,7 +118,7 @@ export class EngineWorkerClient {
                         this.onCycleInform?.(msg.data.level, msg.data.message);
                         break;
                     case "inferringOverConversationMessage":
-                        this.onInferringOverConversationMessage?.(msg.data.deObject, msg.data.data);
+                        this.onInferringOverConversationMessage?.(msg.data);
                         break;
                     case "cardTypeGuiderQuestion":
                         this.onCardTypeGuiderQuestion?.(msg.data);

@@ -2648,11 +2648,6 @@ declare interface DEConnection {
 }
 
 declare interface DEStatefulLocationDefinition extends DELocationDefinition {
-    /**
-     * Arbitrary properties of the location that can be used for various purposes
-     */
-    state: Record<string, any>;
-
     internalState: {
         // STATEFUL PROPERTIES
         /**

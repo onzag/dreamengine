@@ -148,7 +148,7 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
 
     // @ts-ignore
     engine.addInferringOverConversationMessageListener((deObject, data) => {
-        self.postMessage({ type: "event", event: "inferringOverConversationMessage", data: { deObject, data } });
+        self.postMessage({ type: "event", event: "inferringOverConversationMessage", data });
     });
 
     // ── RPC handler map ─────────────────────────────────────────────────

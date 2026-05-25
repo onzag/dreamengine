@@ -44,6 +44,9 @@ class GameOverlay extends HTMLElement {
         this.lightFadePromise = new Promise(resolve => {
             this.lightFadeResolve = resolve;
         });
+
+        /** @type {ReturnType<typeof setTimeout> | null} */
+        this._charUpdateTimer = null;
     }
 
     async connectedCallback() {
@@ -60,15 +63,28 @@ class GameOverlay extends HTMLElement {
         // check it by loading through a throwaway Image(). The main
         // .game-background uses <app-asset-image>, which handles its own
         // fallback via the `default-image` attribute.
+        //
+        // We also remember the outcome on `this._worldImageAssetDoesNotExist`
+        // so the later cascading lookup in updateLocation() can skip the
+        // world-level fallback without re-probing it.
         const bgRoot = /** @type {HTMLElement | null} */ (this.root.querySelector('.game-root'));
         const probedUrl = bgRoot?.dataset.bgUrl;
         const fallbackUrl = './images/default-world.png';
         if (bgRoot && probedUrl && probedUrl !== fallbackUrl) {
             const probe = new Image();
+            probe.onload = () => {
+                this._worldImageAssetDoesNotExist = false;
+            };
             probe.onerror = () => {
+                this._worldImageAssetDoesNotExist = true;
                 bgRoot.style.backgroundImage = `url('${fallbackUrl}')`;
+                bgRoot.dataset.bgUrl = fallbackUrl;
             };
             probe.src = probedUrl;
+        } else if (bgRoot && (!probedUrl || probedUrl === fallbackUrl)) {
+            // No world image to begin with: treat as missing so updateLocation
+            // doesn't bother probing the world-level fallback.
+            this._worldImageAssetDoesNotExist = true;
         }
 
         const lightFade = this.root.querySelector('.light-fade');
@@ -309,6 +325,10 @@ class GameOverlay extends HTMLElement {
 
                 const selectedScene = await this.promptInitialSceneSelection(sceneOptions);
 
+                window.ENGINE_WORKER_CLIENT.onDEObjectUpdated = this.onDEObjectUpdated.bind(this);
+                window.ENGINE_WORKER_CLIENT.onCycleInform = this.onCycleInform.bind(this);
+                window.ENGINE_WORKER_CLIENT.onInferringOverConversationMessage = this.onInferringOverConversationMessage.bind(this);
+
                 await window.ENGINE_WORKER_CLIENT.startScene({ sceneName: selectedScene });
             }
         } catch (error) {
@@ -316,6 +336,167 @@ class GameOverlay extends HTMLElement {
             this.displayFatalError('Failed to select the initial scene.', error);
             console.error('Error selecting initial scene:', error);
         }
+    }
+
+    onDEObjectUpdated() {
+        if (this._charUpdateTimer !== null) clearTimeout(this._charUpdateTimer);
+        this._charUpdateTimer = setTimeout(() => {
+            this._charUpdateTimer = null;
+            this.onCharacterUpdateUI();
+        }, 1000);
+
+        if (this._generalSceneUpdateTimer) clearTimeout(this._generalSceneUpdateTimer);
+        this._generalSceneUpdateTimer = setTimeout(() => {
+            this._generalSceneUpdateTimer = null;
+            this.updateLocation();
+            this.updatePresentCharacters();
+            this.updateStory();
+        }, 100);
+    }
+
+    async updateLocation() {
+        try {
+            const location = await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                path: ["world", "currentLocation"],
+            });
+            const locationSlot = await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                path: ["world", "currentLocationSlot"],
+            });
+
+            if (this._currentLocation === location && this._currentLocationSlot === locationSlot) {
+                return;
+            }
+
+            this._currentLocation = location;
+            this._currentLocationSlot = locationSlot;
+
+            const locationStateInfo = await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                path: ["world", "locations", location, "state"],
+                pick: ["asset"]
+            });
+
+            const locationSlotStateInfo = await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                path: ["world", "locations", location, "slots", locationSlot, "state"],
+                pick: ["asset"]
+            });
+
+            const worldNamespace = this.getAttribute('world-namespace') || '';
+            const worldId = this.getAttribute('world-id') || '';
+            const isSystemAsset = worldNamespace.startsWith('@');
+            const base = isSystemAsset ? window.DREAMENGINE_DEFAULT_SCRIPTS_HOME : window.DREAMENGINE_HOME;
+            const fallbackBgUrl = './images/default-world.png';
+
+            /**
+             * Build the asset path (consumed by <app-asset-image>) and the
+             * fully-resolved URL (consumed by the CSS background-image) for
+             * an asset name relative to this world's asset folder.
+             * @param {string} asset
+             */
+            const buildCandidate = (asset) => {
+                if (!asset || !worldNamespace || !worldId) return null;
+                const assetPath = `assets/${worldNamespace}/${worldId}/${asset}`;
+                const fullUrl = `${base}/${assetPath}`.replace(/\\/g, '/');
+                return { assetPath, fullUrl };
+            };
+
+            // Cascading fallback order:
+            //   1. slot asset, 2. location asset, 3. world image, 4. default.
+            /** @type {Array<{ assetPath: string, fullUrl: string, isWorldImage?: boolean }>} */
+            const candidates = [];
+            const slotCandidate = buildCandidate(locationSlotStateInfo?.asset);
+            if (slotCandidate) candidates.push(slotCandidate);
+            const locationCandidate = buildCandidate(locationStateInfo?.asset);
+            if (locationCandidate) candidates.push(locationCandidate);
+            if (!this._worldImageAssetDoesNotExist) {
+                const worldCandidate = buildCandidate('image');
+                if (worldCandidate) candidates.push({ ...worldCandidate, isWorldImage: true });
+            }
+
+            let chosenAssetPath = ''; // empty -> <app-asset-image> shows default
+            let chosenFullUrl = fallbackBgUrl;
+
+            for (const candidate of candidates) {
+                // eslint-disable-next-line no-await-in-loop
+                const ok = await this._probeImageExists(candidate.fullUrl);
+                if (ok) {
+                    chosenAssetPath = candidate.assetPath;
+                    chosenFullUrl = candidate.fullUrl;
+                    break;
+                }
+                if (candidate.isWorldImage) {
+                    // Remember so subsequent updateLocation() calls skip this step.
+                    this._worldImageAssetDoesNotExist = true;
+                }
+            }
+
+            // Apply to the blurred CSS-backed backdrop.
+            const bgRoot = /** @type {HTMLElement | null} */ (this.root.querySelector('.game-root'));
+            if (bgRoot) {
+                bgRoot.style.backgroundImage = `url("${chosenFullUrl}")`;
+                bgRoot.dataset.bgUrl = chosenFullUrl;
+            }
+
+            // Apply to the main <app-asset-image>. Passing an empty image-url
+            // makes the component immediately load its default-image.
+            const bgImage = this.root.querySelector('.game-background .game-background-image');
+            if (bgImage) {
+                bgImage.setAttribute('image-url', chosenAssetPath);
+            }
+        } catch (error) {
+            console.error('Error updating location:', error);
+        }
+    }
+
+    /**
+     * Probe whether an image URL loads successfully. Results are cached on
+     * this instance to avoid repeated network probes for the same URL.
+     * @param {string} url
+     * @returns {Promise<boolean>}
+     */
+    _probeImageExists(url) {
+        if (!url) return Promise.resolve(false);
+        if (!this._imageProbeCache) this._imageProbeCache = new Map();
+        const cached = this._imageProbeCache.get(url);
+        if (cached !== undefined) return cached;
+        const promise = new Promise(resolve => {
+            const probe = new Image();
+            probe.onload = () => resolve(true);
+            probe.onerror = () => resolve(false);
+            probe.src = url;
+        });
+        this._imageProbeCache.set(url, promise);
+        return promise;
+    }
+
+    async updatePresentCharacters() {
+        try {
+        } catch (error) {
+
+        }
+    }
+
+    async updateStory() {
+        try {
+
+        } catch (error) {
+            
+        }
+    }
+
+    /**
+     * @param {"info" | "warning" | "error"} level 
+     * @param {string} message 
+     */
+    onCycleInform(level, message) {
+        console.warn(`Cycle inform [${level}]: ${message}`);
+    }
+
+    /**
+     * 
+     * @param {{conversationId: string, messageId: string, text: string, hidden: boolean}} data 
+     */
+    onInferringOverConversationMessage(data) {
+        console.log(`Inferring-over conversation message [${data.conversationId} / ${data.messageId}]: ${data.text} (hidden: ${data.hidden})`);
     }
 
     /**
@@ -707,6 +888,10 @@ class GameOverlay extends HTMLElement {
         // @ts-ignore
         document.querySelector('.ambience').style.zIndex = ''; // delete z-index override to restore normal stacking
         
+        window.ENGINE_WORKER_CLIENT.onCycleInform = null;
+        window.ENGINE_WORKER_CLIENT.onInferringOverConversationMessage = null;
+        window.ENGINE_WORKER_CLIENT.onDEObjectUpdated = null;
+
         this.stopEngine();
 
         await stopAllAmbiencesAndStartNewOne([{ src: './sounds/dream-ambience.mp3', volume: 3 }], 1000, 1000);
