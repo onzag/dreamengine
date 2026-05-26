@@ -35,6 +35,8 @@ class AssetImage extends HTMLElement {
         super();
         /** @type {ShadowRoot} */
         this.root = this.attachShadow({ mode: 'open' });
+        /** @type {boolean} - true after the first image has been set, so subsequent changes crossfade */
+        this._hasShownImage = false;
     }
 
     static get observedAttributes() {
@@ -44,11 +46,11 @@ class AssetImage extends HTMLElement {
     connectedCallback() {
         this.render();
 
-        const img = /** @type {HTMLImageElement | null} */ (this.root.querySelector('.asset-image'));
-        if (img) {
+        // Wire up error fallback on both layers.
+        for (const img of /** @type {NodeListOf<HTMLImageElement>} */ (this.root.querySelectorAll('.asset-image'))) {
             img.addEventListener('error', () => {
                 const fallback = this.getAttribute('default-image') || './images/default-world.png';
-                if (img.src.endsWith(fallback)) return; // avoid loop
+                if (img.src === fallback || img.src.endsWith(fallback)) return; // avoid loop
                 img.src = fallback;
             });
         }
@@ -61,10 +63,54 @@ class AssetImage extends HTMLElement {
      */
     attributeChangedCallback(name, oldValue, newValue) {
         if (oldValue === newValue) return;
-        const img = /** @type {HTMLImageElement | null} */ (this.root.querySelector('.asset-image'));
-        if (!img) return;
         if (name === 'image-url') {
-            img.src = resolveAssetUrl(newValue || '');
+            this._transitionTo(resolveAssetUrl(newValue || ''));
+        }
+    }
+
+    /**
+     * Switch to a new image URL, crossfading if this is not the first image.
+     * @param {string} newSrc
+     */
+    _transitionTo(newSrc) {
+        const back  = /** @type {HTMLImageElement | null} */ (this.root.querySelector('.asset-image-back'));
+        const front = /** @type {HTMLImageElement | null} */ (this.root.querySelector('.asset-image-front'));
+        if (!back || !front) return;
+
+        if (!this._hasShownImage) {
+            // First image: show immediately with no fade.
+            back.src = newSrc || '';
+            this._hasShownImage = !!newSrc;
+            return;
+        }
+
+        // Subsequent changes: crossfade via the front layer.
+        // Reset front without transition so it starts fully transparent.
+        front.style.transition = 'none';
+        front.style.opacity = '0';
+        front.src = newSrc || '';
+
+        const doFade = () => {
+            // Force a reflow so the browser registers the opacity:0 before
+            // we add the transition and animate to opacity:1.
+            void front.offsetWidth;
+            front.style.transition = 'opacity 1000ms ease';
+            front.style.opacity = '1';
+
+            const onDone = () => {
+                front.removeEventListener('transitionend', onDone);
+                // Silently swap: back takes the new image, front resets.
+                back.src = newSrc || '';
+                front.style.transition = 'none';
+                front.style.opacity = '0';
+            };
+            front.addEventListener('transitionend', onDone, { once: true });
+        };
+
+        if (front.complete && front.naturalWidth > 0) {
+            doFade();
+        } else {
+            front.addEventListener('load', doFade, { once: true });
         }
     }
 
@@ -80,6 +126,8 @@ class AssetImage extends HTMLElement {
                     aspect-ratio: 1 / 1;
                 }
                 .asset-image {
+                    position: absolute;
+                    inset: 0;
                     width: 100%;
                     height: 100%;
                     border-radius: 10%;
@@ -88,6 +136,8 @@ class AssetImage extends HTMLElement {
                     box-sizing: border-box;
                     border: solid 1px black;
                 }
+                .asset-image-back  { z-index: 1; }
+                .asset-image-front { z-index: 2; opacity: 0; }
                 .asset-image-container {
                     width: 100%;
                     height: 100%;
@@ -101,9 +151,11 @@ class AssetImage extends HTMLElement {
                 }
             </style>
             <div class="asset-image-container" part="asset-image-container">
-                <img class="asset-image" part="asset-image" src="${resolved}" />
+                <img class="asset-image asset-image-back"  part="asset-image" src="${resolved}" />
+                <img class="asset-image asset-image-front" src="" />
             </div>
         `;
+        this._hasShownImage = !!resolved;
     }
 }
 

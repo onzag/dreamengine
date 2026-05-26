@@ -333,7 +333,7 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
         },
 
         async callCharOnlyTemplate({ path, characterName }) {
-            const template = await handlers.queryDEObject({ path });
+            const template = await handlers.queryDEObject({ path, _returnFunctions: true });
 
             if (typeof template === "string") {
                 return template; // simple string template, return as-is without calling
@@ -351,7 +351,7 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
         },
 
         async callCharAndOtherTemplate({ path, characterName, otherName }) {
-            const template = await handlers.queryDEObject({ path });
+            const template = await handlers.queryDEObject({ path, _returnFunctions: true });
 
             if (typeof template === "string") {
                 return template; // simple string template, return as-is without calling
@@ -379,10 +379,12 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
          * @param {string | string[]} [args.path]  - e.g. "characters.Alice" or ["world","locations"]
          * @param {string[]}          [args.pick]  - if set, only these keys are kept
          * @param {string[]}          [args.skip]  - if set, these keys are excluded (ignored when pick is provided)
+         * @param {boolean|Array<string|number|boolean>} [args.call]  - call the function, as a function, if found, usually meant for calling utilities
          * @param {number}            [args.depth] - max depth to recurse (0 = shallow / keys only). undefined = full depth
+         * @param {boolean}           [args._returnFunctions] - internal, returns functions without complaining of lack of call
          * @return {Promise<any>} The filtered sub-object at the target path
          */
-        async queryDEObject({ path, pick, skip, depth }) {
+        async queryDEObject({ path, pick, skip, depth, call, _returnFunctions }) {
             const de = engine.getDEObject();
 
             // ── navigate to the requested sub-object ────────────────
@@ -393,14 +395,32 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
             let target = de;
             for (const seg of segments) {
                 if (target == null || typeof target !== "object") {
-                    throw new Error(`Path segment "${seg}" is not reachable – parent is ${typeof target}`);
+                    throw new Error(`Path segment "${seg}" is not reachable - parent is ${typeof target}`);
                 }
                 target = target[seg];
             }
 
-            if (target == null || typeof target !== "object") {
+            if (target == null || (typeof target !== "object" && typeof target !== "function")) {
                 // primitive – return as-is, no filtering applicable
                 return target;
+            }
+
+            if (typeof target === "function") {
+                if (call) {
+                    if (typeof call === "boolean") {
+                        target = await target();
+                    } else if (Array.isArray(call)) {
+                        target = await target(...call);
+                    } else {
+                        throw new Error("Invalid 'call' parameter: must be boolean or array");
+                    }
+                } else if (!_returnFunctions) {
+                    throw new Error("Path " + JSON.stringify(path) + " is a function. Set call=true to execute it.");
+                } else {
+                    return target;
+                }
+            } else if (call) {
+                throw new Error("Path " + JSON.stringify(path) + " is not a function. 'call' parameter is invalid here.");
             }
 
             // ── filtered deep-copy ──────────────────────────────────
@@ -449,15 +469,25 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
             const pickSet = pick ? new Set(pick) : null;
             const skipSet = !pickSet && skip ? new Set(skip) : null;
 
-            // Preserve array-ness at the top level: arrays were being
-            // converted into `{0: ..., 1: ...}` objects because the result
-            // accumulator was always `{}`. pick/skip don't really apply to
-            // arrays, so when target is an array we just clone it through
-            // cloneFiltered (which already preserves arrays recursively).
             if (Array.isArray(target)) {
                 return target
                     .filter(item => typeof item !== "function")
-                    .map(item => cloneFiltered(item, 1));
+                    .map(item => {
+                        if (item !== null && typeof item === "object" && !Array.isArray(item)) {
+                            /**
+                             * @type {*}
+                             */
+                            const out = {};
+                            for (const k of Object.keys(item)) {
+                                if (typeof item[k] === "function") continue;
+                                if (pickSet && !pickSet.has(k)) continue;
+                                if (skipSet && skipSet.has(k)) continue;
+                                out[k] = cloneFiltered(item[k], 1);
+                            }
+                            return out;
+                        }
+                        return cloneFiltered(item, 1);
+                    });
             }
 
             const result = {};
@@ -468,6 +498,7 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
                 // @ts-ignore
                 result[k] = cloneFiltered(target[k], 1);
             }
+
             return result;
         },
 

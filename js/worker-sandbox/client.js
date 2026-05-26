@@ -254,6 +254,7 @@ export class EngineWorkerClient {
      * @param {string[]}          [args.pick]  - only return these keys at the target
      * @param {string[]}          [args.skip]  - exclude these keys at the target (ignored when pick is set)
      * @param {number}            [args.depth] - max depth to recurse (0 = keys only)
+     * @param {boolean|Array<string|number|boolean>} [args.call] - whether to call functions at the target, either a blanket boolean or an array of arguments (default: false)
      * @returns {Promise<any>}
      */
     queryDEObject(args) { return this.#call("queryDEObject", args); }

@@ -370,6 +370,14 @@ class GameOverlay extends HTMLElement {
             this._currentLocation = location;
             this._currentLocationSlot = locationSlot;
 
+            const worldNamespace = this.getAttribute('world-namespace') || '';
+            const worldId = this.getAttribute('world-id') || '';
+            const isSystemAsset = worldNamespace.startsWith('@');
+            const base = isSystemAsset
+                ? window.DREAMENGINE_DEFAULT_SCRIPTS_HOME
+                : window.DREAMENGINE_HOME;
+
+            // THEME SONG LOGIC:
             const locationStateInfo = await window.ENGINE_WORKER_CLIENT.queryDEObject({
                 path: ["world", "locations", location, "state"],
                 pick: ["asset"]
@@ -380,10 +388,48 @@ class GameOverlay extends HTMLElement {
                 pick: ["asset"]
             });
 
-            const worldNamespace = this.getAttribute('world-namespace') || '';
-            const worldId = this.getAttribute('world-id') || '';
-            const isSystemAsset = worldNamespace.startsWith('@');
-            const base = isSystemAsset ? window.DREAMENGINE_DEFAULT_SCRIPTS_HOME : window.DREAMENGINE_HOME;
+            const themeSongLocationSlot = await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                path: ["world", "locations", location, "slots", locationSlot, "theme"],
+            });
+
+            const themeSongLocation = await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                path: ["world", "locations", location, "theme"],
+            });
+
+            const themeSong = await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                path: ["world", "state", "theme"],
+            });
+
+            if (themeSongLocationSlot && themeSongLocationSlot.asset) {
+                const themeUrl = `${base}/assets/${worldNamespace}/${worldId}/${themeSongLocationSlot.asset}`;
+                (async () => {
+                    try {
+                        await stopAllAmbiencesAndStartNewOne([{ src: themeUrl, volume: themeSongLocationSlot.volume || 1 }], 1000, 1000);
+                    } catch (error) {
+                        console.error('Error starting theme ambience:', error);
+                    }
+                })();
+            } else if (themeSongLocation && themeSongLocation.asset) {
+                const themeUrl = `${base}/assets/${worldNamespace}/${worldId}/${themeSongLocation.asset}`;
+                (async () => {
+                    try {
+                        await stopAllAmbiencesAndStartNewOne([{ src: themeUrl, volume: themeSong.volume || 1 }], 1000, 1000);
+                    } catch (error) {
+                        console.error('Error starting theme ambience:', error);
+                    }
+                })();
+            } else if (themeSong && themeSong.asset) {
+                const themeUrl = `${base}/assets/${worldNamespace}/${worldId}/${themeSong.asset}`;
+                (async () => {
+                    try {
+                        await stopAllAmbiencesAndStartNewOne([{ src: themeUrl, volume: themeSong.volume || 1 }], 1000, 1000);
+                    } catch (error) {
+                        console.error('Error starting theme ambience:', error);
+                    }
+                })();
+            }
+
+            // WORLD IMAGE LOGIC:
             const fallbackBgUrl = './images/default-world.png';
 
             /**
@@ -470,6 +516,20 @@ class GameOverlay extends HTMLElement {
 
     async updatePresentCharacters() {
         try {
+            const location = await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                path: ["world", "currentLocation"],
+            });
+            const userName = await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                path: ["user", "name"],
+            });
+            const charactersAtLocation = (await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                path: ["utils", "templateUtils", "allCharactersAtLocation"],
+                call: [location],
+                pick: ["name", "gender"],
+            // @ts-ignore
+            })).filter((v) => v.name !== userName);
+
+            
         } catch (error) {
 
         }
@@ -479,7 +539,7 @@ class GameOverlay extends HTMLElement {
         try {
 
         } catch (error) {
-            
+
         }
     }
 
@@ -887,7 +947,7 @@ class GameOverlay extends HTMLElement {
         document.querySelector('.fx').style.zIndex = ''; // delete z-index override to restore normal stacking
         // @ts-ignore
         document.querySelector('.ambience').style.zIndex = ''; // delete z-index override to restore normal stacking
-        
+
         window.ENGINE_WORKER_CLIENT.onCycleInform = null;
         window.ENGINE_WORKER_CLIENT.onInferringOverConversationMessage = null;
         window.ENGINE_WORKER_CLIENT.onDEObjectUpdated = null;
