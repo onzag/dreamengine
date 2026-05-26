@@ -396,12 +396,45 @@ class GameOverlay extends HTMLElement {
                 pick: ["asset"]
             });
 
+            const userCharacterName = await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                path: ["user", "name"],
+            });
+
+            const locationSlotDescription = await window.ENGINE_WORKER_CLIENT.callCharOnlyTemplate({
+                path: ["world", "locations", location, "slots", locationSlot, "description"],
+                characterName: userCharacterName,
+            });
+
+            const locationGeneralInfo = await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                path: ["world", "locations", location],
+                pick: ["isPrivate", "isSafe", "isIndoors", "locationFullyBlocksWeather", "locationPartiallyBlocksWeather", "locationNegativelyExposesCharactersToWeather"],
+            });
+
+            const locationSlotGeneralInfo = await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                path: ["world", "locations", location, "slots", locationSlot],
+                pick: ["slotFullyBlocksWeather", "slotPartiallyBlocksWeather", "slotNegativelyExposesCharactersToWeather"],
+            });
+
+            const isPrivate = locationGeneralInfo?.isPrivate;
+            const isSafe = locationGeneralInfo?.isSafe;
+            const isIndoors = locationGeneralInfo?.isIndoors;
+
+            const weatherAtLocation = await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                path: ["world", "locations", location, "internalState", "currentWeather"],
+            });
+
+            const fullyBlocksCurrentWeather = (locationSlotGeneralInfo?.slotFullyBlocksWeather || locationGeneralInfo?.locationFullyBlocksWeather).includes(weatherAtLocation);
+            const partiallyBlocksCurrentWeather = !fullyBlocksCurrentWeather && (locationSlotGeneralInfo?.slotPartiallyBlocksWeather || locationGeneralInfo?.locationPartiallyBlocksWeather).includes(weatherAtLocation);
+            const negativelyExposesToCurrentWeather = !partiallyBlocksCurrentWeather && !fullyBlocksCurrentWeather && (locationSlotGeneralInfo?.slotNegativelyExposesCharactersToWeather || locationGeneralInfo?.locationNegativelyExposesCharactersToWeather).includes(weatherAtLocation);
+
+            
+
             const themeSongLocationSlot = await window.ENGINE_WORKER_CLIENT.queryDEObject({
-                path: ["world", "locations", location, "slots", locationSlot, "theme"],
+                path: ["world", "locations", location, "slots", locationSlot, "state", "theme"],
             });
 
             const themeSongLocation = await window.ENGINE_WORKER_CLIENT.queryDEObject({
-                path: ["world", "locations", location, "theme"],
+                path: ["world", "locations", location, "state", "theme"],
             });
 
             const themeSong = await window.ENGINE_WORKER_CLIENT.queryDEObject({
@@ -546,7 +579,7 @@ class GameOverlay extends HTMLElement {
                 day: 'numeric',
                 year: 'numeric',
                 timeZone: 'UTC',
-            });
+            }) + ",";
 
             const location = await window.ENGINE_WORKER_CLIENT.queryDEObject({
                 path: ["world", "currentLocation"],
@@ -740,7 +773,7 @@ class GameOverlay extends HTMLElement {
             const charactersAtLocation = await Promise.all((await window.ENGINE_WORKER_CLIENT.queryDEObject({
                 path: ["utils", "templateUtils", "allCharactersAtLocation"],
                 call: [location],
-                pick: ["name", "gender"],
+                pick: ["name", "gender", "heightCm", "species", "speciesType"],
                 // @ts-ignore
             })).filter((v) => v.name !== userName).map(async (char) => {
                 // for each character determine what slot they are at
@@ -829,6 +862,9 @@ class GameOverlay extends HTMLElement {
                 // Refresh text on every update in case data changed.
                 card.dataset.charDisplayName = char.name;
                 card.dataset.charGender = char.gender || '';
+                card.dataset.charHeightCm = char.heightCm != null ? String(char.heightCm) : '';
+                card.dataset.charSpecies = char.species || '';
+                card.dataset.charSpeciesType = char.speciesType || '';
                 card.dataset.charDescription = char.description || '';
 
                 // Resolve portrait: state asset > script default 'image' > default-profile fallback.
@@ -869,21 +905,43 @@ class GameOverlay extends HTMLElement {
 
         const tooltipImg = /** @type {Element | null} */ (tooltip.querySelector('.game-present-character-tooltip-image'));
         const descEl = tooltip.querySelector('.game-present-character-description');
-        const genderEl = tooltip.querySelector('.game-present-character-gender');
+        const statsEl = tooltip.querySelector('.game-present-character-stats');
         if (tooltipImg) {
             const imgUrl = card.dataset.charImageUrl || '';
             if (tooltipImg.getAttribute('image-url') !== imgUrl) tooltipImg.setAttribute('image-url', imgUrl);
             /** @type {HTMLElement} */ (tooltipImg).style.display = imgUrl ? '' : 'none';
         }
         if (descEl) descEl.textContent = card.dataset.charDescription || '';
-        if (genderEl) {
-            const g = card.dataset.charGender || '';
-            if (g) {
-                const stat = formatGameStat('gender', g);
-                genderEl.textContent = stat ? `Gender: ${stat.value} ${stat.icon}` : `Gender: ${g}`;
-                /** @type {HTMLElement} */ (genderEl).style.display = '';
-            } else {
-                /** @type {HTMLElement} */ (genderEl).style.display = 'none';
+        if (statsEl) {
+            /** @type {Array<[string, string | number | null | undefined]>} */
+            const fields = [
+                ['gender', card.dataset.charGender || ''],
+                ['height', card.dataset.charHeightCm ? Number(card.dataset.charHeightCm) : null],
+                ['species', card.dataset.charSpecies || ''],
+                ['speciesType', card.dataset.charSpeciesType || ''],
+            ];
+            const seen = new Set();
+            for (const [key, raw] of fields) {
+                const formatted = formatGameStat(key, raw);
+                if (!formatted) continue;
+                seen.add(key);
+                let chip = statsEl.querySelector(`.game-character-chip[data-key="${key}"]`);
+                if (!chip) {
+                    chip = document.createElement('span');
+                    chip.className = 'game-character-chip';
+                    chip.setAttribute('data-key', key);
+                    chip.innerHTML = `<span class="game-character-chip-icon"></span><span class="game-character-chip-value"></span>`;
+                    statsEl.appendChild(chip);
+                }
+                chip.setAttribute('title', formatted.label);
+                const iconEl = chip.querySelector('.game-character-chip-icon');
+                const valueEl = chip.querySelector('.game-character-chip-value');
+                if (iconEl && iconEl.textContent !== formatted.icon) iconEl.textContent = formatted.icon;
+                if (valueEl && valueEl.textContent !== formatted.value) valueEl.textContent = formatted.value;
+            }
+            for (const chip of Array.from(statsEl.querySelectorAll('.game-character-chip'))) {
+                const key = chip.getAttribute('data-key') || '';
+                if (!seen.has(key)) chip.remove();
             }
         }
 
@@ -1602,7 +1660,7 @@ class GameOverlay extends HTMLElement {
                             <div class="game-present-character-tooltip" role="tooltip" aria-hidden="true">
                                 <app-asset-image no-transition="true" class="game-present-character-tooltip-image" default-image="./images/default-profile.png"></app-asset-image>
                                 <div class="game-present-character-description"></div>
-                                <div class="game-present-character-gender"></div>
+                                <div class="game-present-character-stats"></div>
                             </div>
                         </div>
                     </div>

@@ -551,11 +551,12 @@
     word-break: break-word;
 }
 
-.game-present-character-tooltip .game-present-character-gender {
-    font-size: 1.9vh;
-    color: rgba(200, 218, 240, 0.78);
+.game-present-character-tooltip .game-present-character-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5vh;
+    justify-content: center;
     margin-top: 0.6vh;
-    line-height: 1.4;
 }
 
 /* ── In-dream character stats (sidebar) ── */
@@ -899,6 +900,10 @@
     opacity: 0;
     transition: opacity 0.8s ease 0.5s;
     backdrop-filter: blur(10px) saturate(110%);
+    /* backdrop-filter creates a stacking context; give it an explicit z-index
+       so absolutely-positioned children (e.g. the character tooltip) can
+       overflow above siblings like .game-input-bar (z-index: 2). */
+    z-index: 3;
 }
 
 .game-story-container.loaded {
