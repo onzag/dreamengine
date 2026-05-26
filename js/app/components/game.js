@@ -256,6 +256,9 @@ class GameOverlay extends HTMLElement {
                 }
             }
 
+            await this.lightFadePromise;
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
             this.onCharacterUpdateUI();
             this.onInitialSceneSelect();
         } catch (error) {
@@ -519,23 +522,181 @@ class GameOverlay extends HTMLElement {
 
     async updatePresentCharacters() {
         try {
+            const list = this.root.querySelector('.game-present-characters-list');
+            if (!list) return;
+
             const location = await window.ENGINE_WORKER_CLIENT.queryDEObject({
                 path: ["world", "currentLocation"],
+            });
+            const mySlot = await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                path: ["world", "currentLocationSlot"],
             });
             const userName = await window.ENGINE_WORKER_CLIENT.queryDEObject({
                 path: ["user", "name"],
             });
-            const charactersAtLocation = (await window.ENGINE_WORKER_CLIENT.queryDEObject({
+            const charactersAtLocation = await Promise.all((await window.ENGINE_WORKER_CLIENT.queryDEObject({
                 path: ["utils", "templateUtils", "allCharactersAtLocation"],
                 call: [location],
                 pick: ["name", "gender"],
                 // @ts-ignore
-            })).filter((v) => v.name !== userName);
+            })).filter((v) => v.name !== userName).map(async (char) => {
+                // for each character determine what slot they are at
+                const charSlot = await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                    path: ["stateFor", char.name, "locationSlot"],
+                });
+                const charDescription = await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                    path: ["utils", "templateUtils", "getExternalDescriptionOfCharacter"],
+                    call: [char.name, true, false],
+                });
+                return { ...char, slot: charSlot, description: charDescription };
+            }));
 
+            // Remove cards for characters no longer at this location.
+            // @ts-ignore
+            const currentNames = new Set(charactersAtLocation.map(c => c.name));
+            for (const card of Array.from(list.querySelectorAll('.game-present-character'))) {
+                if (!currentNames.has(/** @type {HTMLElement} */ (card).dataset.charName)) card.remove();
+            }
 
+            const emptyEl = list.querySelector('.game-present-characters-empty');
+            if (charactersAtLocation.length === 0) {
+                if (!emptyEl) {
+                    const el = document.createElement('div');
+                    el.className = 'game-present-characters-empty';
+                    el.textContent = 'No one else is here.';
+                    list.appendChild(el);
+                }
+                return;
+            }
+            if (emptyEl) emptyEl.remove();
+
+            const engineInfo = await window.ENGINE_WORKER_CLIENT.getEngineScriptInfo();
+
+            for (const char of charactersAtLocation) {
+                let card = /** @type {HTMLElement | null} */ (
+                    Array.from(list.querySelectorAll('.game-present-character'))
+                        .find(el => /** @type {HTMLElement} */ (el).dataset.charName === char.name)
+                );
+
+                if (!card) {
+                    card = document.createElement('div');
+                    card.className = 'game-present-character';
+                    card.dataset.charName = char.name;
+                    card.setAttribute('tabindex', '0');
+                    card.setAttribute('role', 'button');
+                    card.setAttribute('aria-expanded', 'false');
+
+                    const portrait = document.createElement('div');
+                    portrait.className = 'game-present-character-portrait';
+                    const img = document.createElement('app-asset-image');
+                    img.setAttribute('default-image', './images/default-profile.png');
+                    portrait.appendChild(img);
+                    card.appendChild(portrait);
+
+                    // Wire hover / focus / click → show the shared tooltip.
+                    // The tooltip lives OUTSIDE the scrolling list so it isn't
+                    // clipped (and so it doesn't trigger a horizontal
+                    // scrollbar via the overflow-x/y interaction).
+                    const show = () => {
+                        this._showPresentCharacterTooltip(/** @type {HTMLElement} */(card));
+                        playHoverSound();
+                    };
+                    const hide = () => {
+                        this._hidePresentCharacterTooltip(/** @type {HTMLElement} */(card));
+                    };
+                    card.addEventListener('mouseenter', show);
+                    card.addEventListener('mouseleave', hide);
+                    card.addEventListener('focus', show);
+                    card.addEventListener('blur', hide);
+
+                    list.appendChild(card);
+                }
+
+                // Refresh text on every update in case data changed.
+                card.dataset.charDisplayName = char.name;
+                card.dataset.charGender = char.gender || '';
+
+                // Resolve portrait: state asset > script default 'image' > default-profile fallback.
+                // eslint-disable-next-line no-await-in-loop
+                const assetImage = await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                    path: ["characters", char.name, "state", "asset"],
+                }) || "profile";
+
+                const charInfo = engineInfo.charactersAdded.find(c => c.name === char.name);
+                const img = card.querySelector('app-asset-image');
+                if (img) {
+                    const newUrl = charInfo
+                        ? `assets/${charInfo.byNamespace}/${charInfo.byId}/${assetImage}`
+                        : 'assets/default-profile.png';
+                    if (img.getAttribute('image-url') !== newUrl) img.setAttribute('image-url', newUrl);
+                }
+            }
         } catch (error) {
-
+            console.error('Error updating present characters:', error);
         }
+    }
+
+    /**
+     * Show the shared tooltip pinned next to the given character card.
+     * The tooltip is a single sibling of the scrolling list so it isn't
+     * clipped by the list's scroll container.
+     * @param {HTMLElement} card
+     */
+    _showPresentCharacterTooltip(card) {
+        const tooltip = /** @type {HTMLElement | null} */ (
+            this.root.querySelector('.game-present-character-tooltip')
+        );
+        const section = /** @type {HTMLElement | null} */ (
+            this.root.querySelector('.game-present-characters-section')
+        );
+        if (!tooltip || !section) return;
+
+        const nameEl = tooltip.querySelector('.game-present-character-name');
+        const genderEl = tooltip.querySelector('.game-present-character-gender');
+        if (nameEl) nameEl.textContent = card.dataset.charDisplayName || card.dataset.charName || '';
+        if (genderEl) {
+            const g = card.dataset.charGender || '';
+            genderEl.textContent = g;
+            /** @type {HTMLElement} */ (genderEl).style.display = g ? '' : 'none';
+        }
+
+        const sectionRect = section.getBoundingClientRect();
+        const cardRect = card.getBoundingClientRect();
+        // Position the tooltip relative to the section.
+        const top = (cardRect.top - sectionRect.top) + cardRect.height / 2;
+        const left = (cardRect.right - sectionRect.left) + 12; // 12px gap
+        tooltip.style.top = `${top}px`;
+        tooltip.style.left = `${left}px`;
+        tooltip.classList.add('visible');
+        tooltip.setAttribute('aria-hidden', 'false');
+        tooltip.dataset.forCharacter = card.dataset.charName || '';
+    }
+
+    /**
+     * Hide the shared tooltip — but only if the card asking to hide it is
+     * the one currently shown, and no other card is in the "active" (pinned)
+     * state.
+     * @param {HTMLElement} card
+     */
+    _hidePresentCharacterTooltip(card) {
+        const tooltip = /** @type {HTMLElement | null} */ (
+            this.root.querySelector('.game-present-character-tooltip')
+        );
+        if (!tooltip) return;
+        if (tooltip.dataset.forCharacter !== (card.dataset.charName || '')) return;
+        // Don't hide if this card is pinned active.
+        if (card.classList.contains('active')) return;
+        // Don't hide if another active card exists — re-pin to it.
+        const pinned = /** @type {HTMLElement | null} */ (
+            this.root.querySelector('.game-present-character.active')
+        );
+        if (pinned) {
+            this._showPresentCharacterTooltip(pinned);
+            return;
+        }
+        tooltip.classList.remove('visible');
+        tooltip.setAttribute('aria-hidden', 'true');
+        delete tooltip.dataset.forCharacter;
     }
 
     async updateStory() {
@@ -1168,6 +1329,16 @@ class GameOverlay extends HTMLElement {
                     </div>
 
                     <div class="game-story-container" inert="true">
+                        <div class="game-nav-bar-placeholder" aria-hidden="true"></div>
+                        <div class="game-present-characters-section">
+                            <div class="game-present-characters-list">
+                                <!-- populated by updatePresentCharacters() -->
+                            </div>
+                            <div class="game-present-character-tooltip" role="tooltip" aria-hidden="true">
+                                <div class="game-present-character-name"></div>
+                                <div class="game-present-character-gender"></div>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="game-input-bar">

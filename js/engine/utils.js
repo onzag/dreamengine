@@ -1,4 +1,4 @@
-import { getSurroundingCharacters, getPowerLevelFromCharacter, getRelationship } from "./util/character-info.js";
+import { getSurroundingCharacters, getPowerLevelFromCharacter, getRelationship, getExternalDescriptionOfCharacter } from "./util/character-info.js";
 import { generateIntSeedFromString, weightedRandomByLikelihood } from "../util/random.js";
 import { getCharacterVolume, getCharacterWeight } from "./util/weight-and-volume.js";
 
@@ -1184,6 +1184,9 @@ export const deEngineUtilsFn = (DE) => ({
                 return base;
             }
         },
+        getExternalDescriptionOfCharacter(char, onlyBasics, hideCurrentPosture) {
+            return getExternalDescriptionOfCharacter(DE, char.name, onlyBasics, hideCurrentPosture);
+        },
         allWorldCharacters() {
             return Object.keys(DE.stateFor).filter((charName) => !DE.stateFor[charName].deadEnded).map(name => DE.characters[name]);
         },
@@ -1416,6 +1419,15 @@ export const deEngineUtilsFn = (DE) => ({
                 }
             }
             return 0;
+        },
+        knowsNameOf(char, towardsChar) {
+            const bonds = DE.bonds[char.name].active;
+            for (const bond of bonds) {
+                if (bond.towards === towardsChar.name) {
+                    return bond.knowsName;
+                }
+            }
+            return false;
         },
         isAtSameLocation(char, char2) {
             return DE.stateFor[char.name].location === DE.stateFor[char2.name].location;

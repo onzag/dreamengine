@@ -3267,6 +3267,7 @@ declare interface DEUtils {
              */
             perObject: DEStringTemplateCharAndItem,
         }): DEStringTemplateCharAndCauses;
+        getExternalDescriptionOfCharacter(char: DECompleteCharacterReference, onlyBasics?: boolean, hideCurrentPosture?: boolean): Promise<string>;
         /**
          * The list of all characters available in the world, including the user
          * @returns eg. [Arya, Thalon, Mira, Dorian, Luna, Kiro]
@@ -3480,6 +3481,12 @@ declare interface DEUtils {
          * @returns eg. 50
          */
         getBondTowards(char: DECompleteCharacterReference, towardsChar: DECompleteCharacterReference): number;
+        /**
+         * Boolean indicating if the character
+         * knows the name of the questioned character
+         * @returns true or false
+         */
+        knowsNameOf(char: DECompleteCharacterReference, towardsChar: DECompleteCharacterReference): boolean;
         /**
          * Get the secondary bond value of our character towards the questioned character
          * @returns eg. 30

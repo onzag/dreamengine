@@ -379,7 +379,7 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
          * @param {string | string[]} [args.path]  - e.g. "characters.Alice" or ["world","locations"]
          * @param {string[]}          [args.pick]  - if set, only these keys are kept
          * @param {string[]}          [args.skip]  - if set, these keys are excluded (ignored when pick is provided)
-         * @param {boolean|Array<string|number|boolean>} [args.call]  - call the function, as a function, if found, usually meant for calling utilities
+         * @param {boolean|Array<string|number|boolean|{char: string}>} [args.call]  - call the function, as a function, if found, usually meant for calling utilities
          * @param {number}            [args.depth] - max depth to recurse (0 = shallow / keys only). undefined = full depth
          * @param {boolean}           [args._returnFunctions] - internal, returns functions without complaining of lack of call
          * @return {Promise<any>} The filtered sub-object at the target path
@@ -410,7 +410,12 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
                     if (typeof call === "boolean") {
                         target = await target();
                     } else if (Array.isArray(call)) {
-                        target = await target(...call);
+                        target = await target(...call.map(arg => {
+                            if (typeof arg === "object" && arg !== null && "char" in arg) {
+                                return engine.getDEObject().characters[arg.char];
+                            }
+                            return arg;
+                        }));
                     } else {
                         throw new Error("Invalid 'call' parameter: must be boolean or array");
                     }
