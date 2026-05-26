@@ -339,15 +339,10 @@ class GameOverlay extends HTMLElement {
     }
 
     onDEObjectUpdated() {
-        if (this._charUpdateTimer !== null) clearTimeout(this._charUpdateTimer);
-        this._charUpdateTimer = setTimeout(() => {
-            this._charUpdateTimer = null;
-            this.onCharacterUpdateUI();
-        }, 1000);
-
         if (this._generalSceneUpdateTimer) clearTimeout(this._generalSceneUpdateTimer);
         this._generalSceneUpdateTimer = setTimeout(() => {
             this._generalSceneUpdateTimer = null;
+            this.onCharacterUpdateUI();
             this.updateLocation();
             this.updatePresentCharacters();
             this.updateStory();
@@ -526,10 +521,10 @@ class GameOverlay extends HTMLElement {
                 path: ["utils", "templateUtils", "allCharactersAtLocation"],
                 call: [location],
                 pick: ["name", "gender"],
-            // @ts-ignore
+                // @ts-ignore
             })).filter((v) => v.name !== userName);
 
-            
+
         } catch (error) {
 
         }
@@ -662,6 +657,10 @@ class GameOverlay extends HTMLElement {
             });
             if (typeof actualUserName !== 'string' || !actualUserName) return;
 
+            const assetImage = await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                path: ["characters", actualUserName, "state", "asset"],
+            }) || "image";
+
             const userCharacter = await window.ENGINE_WORKER_CLIENT.queryDEObject({
                 path: ["characters", actualUserName],
                 pick: ["name", "gender", "sex", "ageYears", "heightCm", "weightKg", "species", "speciesType"],
@@ -674,6 +673,29 @@ class GameOverlay extends HTMLElement {
             const titleEl = this.root.querySelector('.game-sidebar-title');
             if (titleEl && titleEl.textContent !== actualUserName) {
                 titleEl.textContent = actualUserName;
+            }
+
+            // Update the sidebar portrait <app-asset-image> with the character's
+            // current asset. Falls back to default-profile.png if no asset or
+            // world coordinates are available (handled by the default-image attr).
+            const portraitImg = this.root.querySelector('.game-sidebar-portrait app-asset-image');
+            if (portraitImg) {
+                const engineInfo = await window.ENGINE_WORKER_CLIENT.getEngineScriptInfo();
+
+                // find that character to see its scriptKey that contains the asset
+                const charInfo = engineInfo.charactersAdded.find(c => c.name === actualUserName);
+                if (charInfo) {
+                    const portraitAssetPath = `assets/${charInfo.byNamespace}/${charInfo.byId}/${assetImage}`;
+                    portraitImg.setAttribute('image-url', portraitAssetPath);
+                } else {
+                    const userNameBySettings = await window.API.getConfigValue('user.name');
+                    if (this.getAttribute('is-self-insert') === 'true' && userNameBySettings === actualUserName) {
+                        // In self insert mode with the character name being our own, our image is likely the profile
+                        portraitImg.setAttribute('image-url', "profile");
+                    } else {
+                        portraitImg.setAttribute('image-url', ""); // fallback to default image
+                    }
+                }
             }
 
             // Keep the input placeholder in sync with the engine-side name. The
@@ -1095,11 +1117,9 @@ class GameOverlay extends HTMLElement {
                 <aside class="game-sidebar" aria-label="Game sidebar">
                     <div class="game-sidebar-inner">
                         <div class="game-sidebar-header">
-                            ${characterAsset ? `
-                                <div class="game-sidebar-portrait">
-                                    <app-asset-image image-url="${escapeHtml(characterAsset)}" default-image="./images/default-profile.png"></app-asset-image>
-                                </div>
-                            ` : ''}
+                            <div class="game-sidebar-portrait">
+                                <app-asset-image image-url="${characterAsset ? escapeHtml(characterAsset) : ''}" default-image="./images/default-profile.png"></app-asset-image>
+                            </div>
                             <div class="game-sidebar-title">${escapeHtml(characterName)}</div>
                             ${subtitleParts.length ? `<div class="game-sidebar-subtitle">${escapeHtml(subtitleParts.join(' · '))}</div>` : ''}
                         </div>

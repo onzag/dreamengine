@@ -189,6 +189,13 @@ export const deEngineUtilsFn = (DE) => ({
             DE.characters[characterDef.name] = characterDef;
             return characterDef;
         }
+
+        // this is a cheat way to know if it has been called by a script already, since a stored state only saves the character state
+        // this will prevent collisions
+        if (DE.characters[characterDef.name].name) {
+            throw new Error(`Character with name ${characterDef.name} already exists in the world, cannot create it again.`);
+        }
+
         DE.characters[characterDef.name] = {
             ...characterDef,
             state: currentCharacter.state,

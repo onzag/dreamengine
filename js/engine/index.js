@@ -83,7 +83,7 @@ async function checkObjectRecursivelyAsync(parent, obj, objChecker) {
 function repairPotentialUserWithDefaults(character) {
     return ({
         ...character,
-        
+
         ageYears: character.ageYears || 30,
         attractiveness: typeof character.attractiveness === "number" ? character.attractiveness : 0.5,
         carryingCapacityKg: typeof character.carryingCapacityKg === "number" ? character.carryingCapacityKg : 20,
@@ -381,25 +381,20 @@ export class DEngine {
         this.userCharacter = this.deObject.characters[this.user.name];
 
         /**
-         * @type {DEScript[]}
+         * @type {Array<{script: DEScript, scriptKey: string}>}
          */
         const allScripts =
             // @ts-ignore typescript bugs
-            this.jsEngine.scriptOrder.map(scriptKey => this.jsEngine.scriptCache[scriptKey]);
+            this.jsEngine.scriptOrder.map(scriptKey => ({ script: this.jsEngine.scriptCache[scriptKey], scriptKey }));
 
         const worldScripts =
-            allScripts.filter(script => script.type === "world");
+            allScripts.filter(script => script.script.type === "world");
 
-        for (const script of worldScripts) {
-            // @ts-ignore typescript continues to bug
-            script.initialize && await script.initialize(this.deObject);
-        }
+        await this.callFunctionInScripts(worldScripts, (script) => `Running initialize for script ${script.scriptKey} of type world`, "initialize", this.deObject);
 
         const hasStartedClock = !!this.deObject.world.selectedScene;
         if (hasStartedClock) {
-            for (const script of allScripts) {
-                script.onWorldClockReady && await script.onWorldClockReady(this.deObject);
-            }
+            await this.callFunctionInScripts(allScripts, (script) => `Running onWorldClockReady for script ${script.scriptKey}`, "onWorldClockReady", this.deObject);
         }
 
         this.initialized = true;
@@ -425,13 +420,13 @@ export class DEngine {
         this.engineScriptInfo = {
             charactersAdded: [],
         };
-        
+
         /**
          * @type {DETimeDescription}
          */
         const defaultTimeDEFormat = millisecondsToTime((new Date()).getTime());
         this.deObject = {
-            user: user ? repairPotentialUserWithDefaults(user) : repairPotentialUserWithDefaults(/**@type {DEMinimalCharacterReference} */ ({ name: "Player" })),
+            user: user ? repairPotentialUserWithDefaults(user) : repairPotentialUserWithDefaults(/**@type {DEMinimalCharacterReference} */({ name: "Player" })),
             party: [],
             world: {
                 connections: {},
@@ -514,7 +509,7 @@ export class DEngine {
 
         this.userCharacter = this.deObject.characters[characterName];
         this.user = minimizeCharacterFromComplete(this.userCharacter);
-        
+
         this.deObject.user = this.user;
         this.deObject.world.currentLocation = this.deObject.stateFor[characterName].location;
         this.deObject.world.currentLocationSlot = this.deObject.stateFor[characterName].locationSlot;
@@ -538,6 +533,36 @@ export class DEngine {
         this.deObject.party.push(characterName);
     }
 
+    /**
+     * @param {Array<{script: DEScript, scriptKey: string}>} scripts
+     * @param {(script: {script: DEScript, scriptKey: string}) => string} loopMessage
+     * @param {string} functionName 
+     * @param  {...any} args 
+     */
+    async callFunctionInScripts(scripts, loopMessage, functionName, ...args) {
+        if (!this.deObject) {
+            throw new Error("DEngine not initialized");
+        }
+        let currentCharacterNames = new Set(Object.keys(this.deObject.characters).filter((c) => !!this.deObject?.characters[c].name));
+        for (const script of scripts) {
+            if (script.script[functionName]) {
+                console.log(loopMessage(script));
+                await script.script[functionName](...args);
+            }
+            const newCharacterNames = new Set(Object.keys(this.deObject.characters).filter((c) => !!this.deObject?.characters[c].name));
+            // get the difference between the sets to find out which characters were added by this script
+            const addedCharacters = [...newCharacterNames].filter(x => !currentCharacterNames.has(x));
+            for (const charName of addedCharacters) {
+                this.engineScriptInfo.charactersAdded.push({
+                    byNamespace: script.scriptKey.split("/")[0],
+                    byId: script.scriptKey.split("/")[1],
+                    name: charName,
+                });
+            }
+            currentCharacterNames = newCharacterNames;
+        }
+    }
+
     async runInitializationScripts() {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
@@ -556,7 +581,6 @@ export class DEngine {
             "world",
         ];
 
-        let currentCharacterNames = new Set(Object.keys(this.deObject.characters));
         for (const type of orderOfExecution) {
             /**
              * @type {Array<{script: DEScript, scriptKey: string}>}
@@ -569,67 +593,51 @@ export class DEngine {
                 throw new Error(`At least one script of type ${type} is required.`);
             }
 
-            for (const script of scripts) {
-                console.log(`Initializing script ${script.scriptKey} of type ${type}`);
-                script.script.initialize && await script.script.initialize(this.deObject);
-                const newCharacterNames = new Set(Object.keys(this.deObject.characters));
-                // get the difference between the sets to find out which characters were added by this script
-                const addedCharacters = [...newCharacterNames].filter(x => !currentCharacterNames.has(x));
-                for (const charName of addedCharacters) {
-                    this.engineScriptInfo.charactersAdded.push({
-                        byNamespace: script.scriptKey.split("/")[0],
-                        byId: script.scriptKey.split("/")[1],
-                        name: charName,
-                    });
+            await this.callFunctionInScripts(scripts, (script) => `Initializing script ${script.scriptKey} of type ${type}`, "initialize", this.deObject);
+
+            for (const charName in this.deObject.characters) {
+                const character = this.deObject.characters[charName];
+                if (INVALID_NAMES.includes(character.name.toLowerCase())) {
+                    throw new Error(`Character name ${character.name} is invalid or reserved.`);
                 }
-                currentCharacterNames = newCharacterNames;
-            }
 
-            if (type === "characters") {
-                for (const charName in this.deObject.characters) {
-                    const character = this.deObject.characters[charName];
-                    if (INVALID_NAMES.includes(character.name.toLowerCase())) {
-                        throw new Error(`Character name ${character.name} is invalid or reserved.`);
-                    }
+                // ensure the character name starts with a capital letter and is a-z with spaces only
+                if (!/^[A-Z][a-zA-Z ]*$/.test(character.name)) {
+                    throw new Error(`Character name ${character.name} is invalid. It must start with a capital letter and contain only letters and spaces.`);
+                }
 
-                    // ensure the character name starts with a capital letter and is a-z with spaces only
-                    if (!/^[A-Z][a-zA-Z ]*$/.test(character.name)) {
-                        throw new Error(`Character name ${character.name} is invalid. It must start with a capital letter and contain only letters and spaces.`);
+                const charState = this.deObject.stateFor[charName];
+                if (!charState) {
+                    // adding a char state for this character by default
+                    const futureLocation = this.pickRandomLocationForCharacter(character);
+                    this.deObject.stateFor[charName] = {
+                        history: [],
+                        carrying: [],
+                        carryingCharactersDirectly: [],
+                        conversationId: null,
+                        dead: false,
+                        deadEnded: false,
+                        deadEndReason: null,
+                        id: crypto.randomUUID(),
+                        location: futureLocation.location,
+                        locationSlot: futureLocation.locationSlot,
+                        messageId: null,
+                        posture: "standing",
+                        seenCharacters: [],
+                        seenItems: [],
+                        states: [],
+                        time: this.deObject.initialTime,
+                        type: "BACKGROUND",
+                        wearing: [],
                     }
+                }
 
-                    const charState = this.deObject.stateFor[charName];
-                    if (!charState) {
-                        // adding a char state for this character by default
-                        const futureLocation = this.pickRandomLocationForCharacter(character);
-                        this.deObject.stateFor[charName] = {
-                            history: [],
-                            carrying: [],
-                            carryingCharactersDirectly: [],
-                            conversationId: null,
-                            dead: false,
-                            deadEnded: false,
-                            deadEndReason: null,
-                            id: crypto.randomUUID(),
-                            location: futureLocation.location,
-                            locationSlot: futureLocation.locationSlot,
-                            messageId: null,
-                            posture: "standing",
-                            seenCharacters: [],
-                            seenItems: [],
-                            states: [],
-                            time: this.deObject.initialTime,
-                            type: "BACKGROUND",
-                            wearing: [],
-                        }
-                    }
-
-                    const bonds = this.deObject.bonds[charName];
-                    if (!bonds) {
-                        this.deObject.bonds[charName] = {
-                            active: [],
-                            ex: [],
-                        };
-                    }
+                const bonds = this.deObject.bonds[charName];
+                if (!bonds) {
+                    this.deObject.bonds[charName] = {
+                        active: [],
+                        ex: [],
+                    };
                 }
             }
         }
@@ -670,32 +678,32 @@ export class DEngine {
             }
         }
 
-        let currentCharacterNames = new Set(Object.keys(this.deObject.characters));
+        let currentCharacterNames = new Set(Object.keys(this.deObject.characters).filter((c) => !!this.deObject?.characters[c].name));
         for (const type of orderOfExecution) {
             /**
-             * @type {DEScript[]}
+             * @type {Array<{script: DEScript, scriptKey: string}>}
              */
             const scripts =
                 // @ts-ignore typescript bugs
-                this.jsEngine.scriptOrder.map(scriptKey => this.jsEngine.scriptCache[scriptKey]).filter(script => script.type === type);
+                this.jsEngine.scriptOrder.map(scriptKey => ({ script: this.jsEngine.scriptCache[scriptKey], scriptKey })).filter(script => script.script.type === type);
 
-            for (const script of scripts) {
-                script.onWorldInitialized && await script.onWorldInitialized(this.deObject);
-                const newCharacterNames = new Set(Object.keys(this.deObject.characters));
-                // get the difference between the sets to find out which characters were added by this script
-                const addedCharacters = [...newCharacterNames].filter(x => !currentCharacterNames.has(x));
-                for (const charName of addedCharacters) {
-                    this.engineScriptInfo.charactersAdded.push({
-                        byNamespace: script.scriptKey.split("/")[0],
-                        byId: script.scriptKey.split("/")[1],
-                        name: charName,
-                    });
-                }
-                currentCharacterNames = newCharacterNames;
+            await this.callFunctionInScripts(scripts, (script) => `Running onWorldInitialized for script ${script.scriptKey} of type ${type}`, "onWorldInitialized", this.deObject);
+        }
+
+        // delete invalid characters that have not been owned by a script
+        for (const charName in this.deObject.characters) {
+            const character = this.deObject.characters[charName];
+            if (INVALID_NAMES.includes(character.name.toLowerCase())) {
+                throw new Error(`Character name ${character.name} is invalid or reserved.`);
+            }
+
+            if (!this.deObject.stateFor[charName] || !character.name) {
+                delete this.deObject.stateFor[charName];
+                delete this.deObject.bonds[charName];
+                delete this.deObject.characters[charName];
             }
         }
 
-        // this initializes the world but no characters have been added yet
         this.initialized = true;
     }
 
@@ -1030,20 +1038,18 @@ export class DEngine {
         this.deObject.world.selectedScene = optionName;
 
         /**
-         * @type {DEScript[]}
+         * @type {Array<{script: DEScript, scriptKey: string}>}
          */
         const allScripts =
             // @ts-ignore typescript bugs
-            this.jsEngine.scriptOrder.map(scriptKey => this.jsEngine.scriptCache[scriptKey]);
+            this.jsEngine.scriptOrder.map(scriptKey => ({ script: this.jsEngine.scriptCache[scriptKey], scriptKey }));
 
         if (isInitialScene) {
-            for (const script of allScripts) {
-                script.onWorldClockReady && await script.onWorldClockReady(this.deObject);
-            }
+            await this.callFunctionInScripts(allScripts, (script) => `Running onWorldClockReady for script ${script.scriptKey} at the end of initialization`, "onWorldClockReady", this.deObject);
         }
 
         await this.informDEObjectUpdated();
-        
+
         // TODO remove this early return
         return;
 
@@ -1096,9 +1102,7 @@ export class DEngine {
         }
 
         scene.sceneStarted && await scene.sceneStarted(scene);
-        for (const script of allScripts) {
-            script.onSceneStarted && await script.onSceneStarted(this.deObject, scene);
-        }
+        await this.callFunctionInScripts(allScripts, (script) => `Running onSceneStarted for script ${script.scriptKey} at the start of scene ${sceneId}`, "onSceneStarted", this.deObject, scene);
 
         this.informCycleState("info", "Pre-calculating item changes and effects...");
         let lastItemChangesInfo = await calculateItemChanges(this, this.userCharacter);
@@ -1153,9 +1157,7 @@ export class DEngine {
                     await addMessageForStoryMaster(messagesAccum);
                 }
 
-                for (const script of allScripts) {
-                    script.onInferencePrepareToExecute && await script.onInferencePrepareToExecute(this.deObject, participant);
-                }
+                await this.callFunctionInScripts(allScripts, (script) => `Running onInferencePrepareToExecute for script ${script.scriptKey} before ${participantName} starts their turn in scene ${sceneId}`, "onInferencePrepareToExecute", this.deObject, participant);
 
                 const talkResult = await talk(this, participant, {
                     doNotMove: true,
@@ -1174,15 +1176,13 @@ export class DEngine {
                     lastItemChangesInfo = await calculateItemChanges(this, participant);
                 }
 
-                for (const script of allScripts) {
-                    script.onInferenceExecuted && await script.onInferenceExecuted(this.deObject, participant, {
-                        emotionalRange: talkResult.emotionalRange,
-                        primaryEmotion: talkResult.primaryEmotion,
-                        hasDeadEnded: talkResult.hasDeadEnded,
-                        hasDied: talkResult.hasDied,
-                        message: talkResult.message,
-                    });
-                }
+                await this.callFunctionInScripts(allScripts, (script) => `Running onInferenceExecuted for script ${script.scriptKey} after ${participantName} finishes their turn in scene ${sceneId}`, "onInferenceExecuted", this.deObject, participant, {
+                    emotionalRange: talkResult.emotionalRange,
+                    primaryEmotion: talkResult.primaryEmotion,
+                    hasDeadEnded: talkResult.hasDeadEnded,
+                    hasDied: talkResult.hasDied,
+                    message: talkResult.message,
+                });
             }
         }
 
@@ -1234,9 +1234,7 @@ export class DEngine {
 
         scene.sceneReady && await scene.sceneReady(scene);
 
-        for (const script of allScripts) {
-            script.onSceneReady && await script.onSceneReady(this.deObject, scene);
-        }
+        await this.callFunctionInScripts(allScripts, (script) => `Running onSceneReady for script ${script.scriptKey} at the end of scene ${sceneId}`, "onSceneReady", this.deObject, scene);
 
         // Game on :)
     }
