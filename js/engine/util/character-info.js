@@ -652,18 +652,28 @@ export async function getExternalDescriptionOfCharacter(deObject, characterName,
 
     const hasItemsCoveringTopNakedness = !topNaked;
     if (!hasItemsCoveringTopNakedness && character.shortDescriptionTopNakedAdd) {
-        finalDescription += ` Not wearing any clothes on the upper body. ${character.shortDescriptionTopNakedAdd}`;
+        const lowercaseFirstLetter = character.shortDescriptionTopNakedAdd.charAt(0).toLowerCase();
+        const restOfString = character.shortDescriptionTopNakedAdd.slice(1);
+        finalDescription += ` Not wearing any clothes on the upper body, ${lowercaseFirstLetter + restOfString}`;
         if (!finalDescription.endsWith(".")) {
             finalDescription += ".";
         }
+    } else if (!hasItemsCoveringTopNakedness) {
+        finalDescription += ` Not wearing any clothes on the upper body.`;
     }
+
     const hasItemsCoveringBottomNakedness = !bottomNaked;
     if (!hasItemsCoveringBottomNakedness && character.shortDescriptionBottomNakedAdd) {
-        finalDescription += ` Not wearing any clothes on the lower body. ${character.shortDescriptionBottomNakedAdd}`;
+        const lowercaseFirstLetter = character.shortDescriptionBottomNakedAdd.charAt(0).toLowerCase();
+        const restOfString = character.shortDescriptionBottomNakedAdd.slice(1);
+        finalDescription += ` Not wearing any clothes on the lower body, ${lowercaseFirstLetter + restOfString}`;
         if (!finalDescription.endsWith(".")) {
             finalDescription += ".";
         }
+    } else if (!hasItemsCoveringBottomNakedness) {
+        finalDescription += ` Not wearing any clothes on the lower body.`;
     }
+
     if (characterState.wearing.length > 0) {
         finalDescription += " Wearing " + deObject.utils.templateUtils.formatAnd(characterState.wearing.map(item => item.amount >= 2 ? item.amount + " of " + item.description + " (" + getWearableFitment(deObject, item, characterName).fitment + ")" : item.description + " (" + getWearableFitment(deObject, item, characterName).fitment + ")")) + ".";
     } else {

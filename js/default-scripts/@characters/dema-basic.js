@@ -96,8 +96,8 @@ engine.exports = {
         const Dema = DE.utils.newCharacter(fss.setup(DE, {
             name: "Dema",
             shortDescription: "A human sized anthropomorphic robot with a blue and white color scheme and a reflective visor.",
-            shortDescriptionTopNakedAdd: "Without a shirt showing its sleek robotic body.",
-            shortDescriptionBottomNakedAdd: "Without any lower coverings revealing its articulated legs.",
+            shortDescriptionTopNakedAdd: "showing its sleek robotic body.",
+            shortDescriptionBottomNakedAdd: "revealing its articulated legs.",
             generalCharacterDescriptionInjection: {},
             actionPromptInjection: [],
             bonds: null,

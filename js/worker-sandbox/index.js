@@ -428,6 +428,11 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
                 throw new Error("Path " + JSON.stringify(path) + " is not a function. 'call' parameter is invalid here.");
             }
 
+            if (target == null || typeof target !== "object") {
+                // after calling, it might have become a primitive – return as-is, no filtering applicable
+                return target;
+            }
+
             // ── filtered deep-copy ──────────────────────────────────
             const hasDepth = typeof depth === "number";
 

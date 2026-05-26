@@ -546,10 +546,20 @@ class GameOverlay extends HTMLElement {
                 });
                 const charDescription = await window.ENGINE_WORKER_CLIENT.queryDEObject({
                     path: ["utils", "templateUtils", "getExternalDescriptionOfCharacter"],
-                    call: [char.name, true, false],
+                    call: [{char: char.name}, true, false],
                 });
                 return { ...char, slot: charSlot, description: charDescription };
             }));
+
+            // Sort: mySlot characters first (alphabetical by name),
+            // then remaining slots alphabetically, then by name within each slot.
+            charactersAtLocation.sort((a, b) => {
+                const aIsMy = a.slot === mySlot;
+                const bIsMy = b.slot === mySlot;
+                if (aIsMy !== bIsMy) return aIsMy ? -1 : 1;
+                if (a.slot !== b.slot) return (a.slot || '').localeCompare(b.slot || '');
+                return (a.name || '').localeCompare(b.name || '');
+            });
 
             // Remove cards for characters no longer at this location.
             // @ts-ignore
@@ -615,6 +625,7 @@ class GameOverlay extends HTMLElement {
                 // Refresh text on every update in case data changed.
                 card.dataset.charDisplayName = char.name;
                 card.dataset.charGender = char.gender || '';
+                card.dataset.charDescription = char.description || '';
 
                 // Resolve portrait: state asset > script default 'image' > default-profile fallback.
                 // eslint-disable-next-line no-await-in-loop
@@ -624,12 +635,13 @@ class GameOverlay extends HTMLElement {
 
                 const charInfo = engineInfo.charactersAdded.find(c => c.name === char.name);
                 const img = card.querySelector('app-asset-image');
+                const newUrl = charInfo
+                    ? `assets/${charInfo.byNamespace}/${charInfo.byId}/${assetImage}`
+                    : '';
                 if (img) {
-                    const newUrl = charInfo
-                        ? `assets/${charInfo.byNamespace}/${charInfo.byId}/${assetImage}`
-                        : 'assets/default-profile.png';
                     if (img.getAttribute('image-url') !== newUrl) img.setAttribute('image-url', newUrl);
                 }
+                card.dataset.charImageUrl = newUrl;
             }
         } catch (error) {
             console.error('Error updating present characters:', error);
@@ -651,22 +663,46 @@ class GameOverlay extends HTMLElement {
         );
         if (!tooltip || !section) return;
 
-        const nameEl = tooltip.querySelector('.game-present-character-name');
+        const tooltipImg = /** @type {Element | null} */ (tooltip.querySelector('.game-present-character-tooltip-image'));
+        const descEl = tooltip.querySelector('.game-present-character-description');
         const genderEl = tooltip.querySelector('.game-present-character-gender');
-        if (nameEl) nameEl.textContent = card.dataset.charDisplayName || card.dataset.charName || '';
+        if (tooltipImg) {
+            const imgUrl = card.dataset.charImageUrl || '';
+            if (tooltipImg.getAttribute('image-url') !== imgUrl) tooltipImg.setAttribute('image-url', imgUrl);
+            /** @type {HTMLElement} */ (tooltipImg).style.display = imgUrl ? '' : 'none';
+        }
+        if (descEl) descEl.textContent = card.dataset.charDescription || '';
         if (genderEl) {
             const g = card.dataset.charGender || '';
-            genderEl.textContent = g;
-            /** @type {HTMLElement} */ (genderEl).style.display = g ? '' : 'none';
+            if (g) {
+                const stat = formatGameStat('gender', g);
+                genderEl.textContent = stat ? `Gender: ${stat.value} ${stat.icon}` : `Gender: ${g}`;
+                /** @type {HTMLElement} */ (genderEl).style.display = '';
+            } else {
+                /** @type {HTMLElement} */ (genderEl).style.display = 'none';
+            }
         }
 
         const sectionRect = section.getBoundingClientRect();
         const cardRect = card.getBoundingClientRect();
-        // Position the tooltip relative to the section.
-        const top = (cardRect.top - sectionRect.top) + cardRect.height / 2;
         const left = (cardRect.right - sectionRect.left) + 12; // 12px gap
-        tooltip.style.top = `${top}px`;
         tooltip.style.left = `${left}px`;
+
+        // Desired vertical center: card midpoint, in section-relative coords.
+        const desiredCenter = (cardRect.top - sectionRect.top) + cardRect.height / 2;
+
+        // Measure the tooltip's natural height (it's in the DOM but opacity:0,
+        // so layout is already computed) then clamp against the viewport.
+        const tooltipH = tooltip.offsetHeight;
+        const margin = 8; // px gap from viewport edges
+        // Convert the section-relative center to an absolute screen y for clamping.
+        let screenCenter = sectionRect.top + desiredCenter;
+        screenCenter = Math.max(margin + tooltipH / 2,
+            Math.min(window.innerHeight - margin - tooltipH / 2, screenCenter));
+        // Convert back to section-relative coords. The CSS transform is -50%,
+        // so `top` must equal the desired center in section space.
+        const top = screenCenter - sectionRect.top;
+        tooltip.style.top = `${top}px`;
         tooltip.classList.add('visible');
         tooltip.setAttribute('aria-hidden', 'false');
         tooltip.dataset.forCharacter = card.dataset.charName || '';
@@ -1329,13 +1365,26 @@ class GameOverlay extends HTMLElement {
                     </div>
 
                     <div class="game-story-container" inert="true">
-                        <div class="game-nav-bar-placeholder" aria-hidden="true"></div>
+                        <div class="game-nav-bar">
+                            <div class="game-nav-bar-current-location-title">
+                                <div class="game-nav-bar-current-location-name">
+                                    <!-- populated by updateCurrentLocation() -->
+                                </div>
+                                <div class="game-nav-bar-current-location-slot-name">
+                                    <!-- populated by updateCurrentLocation() -->
+                                </div>
+                            </div>
+                            <div class="game-nav-bar-location-slots-images">
+                                <!-- populated by updateCurrentLocation() -->
+                            </div>
+                        </div>
                         <div class="game-present-characters-section">
                             <div class="game-present-characters-list">
                                 <!-- populated by updatePresentCharacters() -->
                             </div>
                             <div class="game-present-character-tooltip" role="tooltip" aria-hidden="true">
-                                <div class="game-present-character-name"></div>
+                                <app-asset-image class="game-present-character-tooltip-image" default-image="./images/default-profile.png"></app-asset-image>
+                                <div class="game-present-character-description"></div>
                                 <div class="game-present-character-gender"></div>
                             </div>
                         </div>
