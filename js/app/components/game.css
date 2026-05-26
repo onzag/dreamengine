@@ -32,10 +32,13 @@
 
 /* ── Sidebar ────────────────────────────────────────────────────── */
 .game-sidebar {
-    flex: 0 0 auto;
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 10;
     width: max(30vw, 400px);
     min-width: 0; /* allows the closed state to collapse to 0 */
-    height: 100vh;
+    height: 100%;
     box-sizing: border-box;
     overflow: hidden;
     background: linear-gradient(
@@ -62,6 +65,25 @@
     display: flex;
     flex-direction: column;
     flex-shrink: 0;
+}
+
+/* Backdrop: dims and blurs the playfield while the sidebar is open. */
+.game-stage::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 9; /* behind sidebar (10) */
+    background: rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(4px) saturate(80%);
+    -webkit-backdrop-filter: blur(4px) saturate(80%);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.35s ease;
+}
+
+.game-stage.sidebar-open::before {
+    opacity: 1;
+    pointer-events: auto; /* block interaction with the game beneath */
 }
 
 /* Collapsed: width animates to 0 (content stays full-width and gets clipped). */
@@ -595,4 +617,6 @@
 .fade-out {
     opacity: 0;
     backdrop-filter: blur(0);
-}   
+}
+
+
