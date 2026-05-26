@@ -342,11 +342,19 @@ class GameOverlay extends HTMLElement {
         if (this._generalSceneUpdateTimer) clearTimeout(this._generalSceneUpdateTimer);
         this._generalSceneUpdateTimer = setTimeout(() => {
             this._generalSceneUpdateTimer = null;
+            this.ensureGameableArea();
             this.onCharacterUpdateUI();
             this.updateLocation();
             this.updatePresentCharacters();
             this.updateStory();
         }, 100);
+    }
+
+    async ensureGameableArea() {
+        // @ts-ignore
+        this.shadowRoot.querySelector(".game-story-container").classList.add("loaded");
+        // @ts-ignore
+        this.shadowRoot.querySelector(".game-story-container").inert = false;
     }
 
     async updateLocation() {
@@ -1157,6 +1165,9 @@ class GameOverlay extends HTMLElement {
                             <div class="game-background-message-title">Entering dream...</div>
                             ${worldId ? `<div class="game-background-message-subtitle">${escapeHtml(worldId)}</div>` : ''}
                         </div>
+                    </div>
+
+                    <div class="game-story-container" inert="true">
                     </div>
 
                     <div class="game-input-bar">

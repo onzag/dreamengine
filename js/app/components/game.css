@@ -33,7 +33,7 @@
 /* ── Sidebar ────────────────────────────────────────────────────── */
 .game-sidebar {
     flex: 0 0 auto;
-    width: max(30vw, 200px);
+    width: max(30vw, 400px);
     min-width: 0; /* allows the closed state to collapse to 0 */
     height: 100vh;
     box-sizing: border-box;
@@ -56,7 +56,7 @@
 /* Inner wrapper keeps its full width so content doesn't reflow during the
    animation; the outer .game-sidebar simply crops it. */
 .game-sidebar-inner {
-    width: max(30vw, 200px);
+    width: max(30vw, 400px);
     height: 100%;
     box-sizing: border-box;
     display: flex;
@@ -203,7 +203,7 @@
 .sidebar-toggle {
     position: absolute;
     top: 50%;
-    left: max(30vw, 200px);
+    left: max(30vw, 400px);
     transform: translate(-50%, -50%);
     width: 4.4vh;
     height: 4.4vh;
@@ -253,6 +253,12 @@
     justify-content: flex-end;
     padding: 0 4vw 3vh 4vw;
     box-sizing: border-box;
+}
+
+@media (max-width: 900px) {
+    .game-main {
+        padding: 0;
+    }
 }
 
 /* Background image (placeholder: default-world image). Sits inside main so
@@ -453,6 +459,33 @@
     transform: none;
 }
 
+.game-story-container {
+    position: relative;
+    box-sizing: border-box;
+    display: flex;
+    border: 3px solid rgba(200, 220, 240, 0.35);
+    border-bottom-width: 6px;
+    margin-bottom: 2vh;
+    margin-top: 7.5vh;
+    height: 100%;
+    width: 100%;
+    opacity: 0;
+    transition: opacity 0.8s ease 0.5s;
+}
+
+.game-story-container.loaded {
+    opacity: 1;
+}
+
+@media (max-width: 900px) {
+    .game-story-container {
+        border-left: none !important;
+        border-right: none !important;
+        border-bottom: none !important;
+        margin-bottom: 0 !important;
+    }
+}
+
 /* ── Input bar ──────────────────────────────────────────────────── */
 .game-input-bar {
     position: relative;
@@ -469,6 +502,15 @@
     backdrop-filter: blur(18px) saturate(180%);
     -webkit-backdrop-filter: blur(18px) saturate(180%);
     box-shadow: 0 0.6vh 2.4vh rgba(0, 0, 0, 0.45);
+}
+
+@media (max-width: 900px) {
+    .game-input-bar {
+        border-radius: 0 !important;
+        border-left: none !important;
+        border-right: none !important;
+        border-bottom: none !important;
+    }
 }
 
 .game-input {
