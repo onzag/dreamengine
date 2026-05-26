@@ -376,6 +376,8 @@ class GameOverlay extends HTMLElement {
             this._currentLocation = location;
             this._currentLocationSlot = locationSlot;
 
+            this.updateCurrentLocation();
+
             const worldNamespace = this.getAttribute('world-namespace') || '';
             const worldId = this.getAttribute('world-id') || '';
             const isSystemAsset = worldNamespace.startsWith('@');
@@ -518,6 +520,175 @@ class GameOverlay extends HTMLElement {
         });
         this._imageProbeCache.set(url, promise);
         return promise;
+    }
+
+    /**
+     * Populate the top nav bar: current location & slot name on the left,
+     * and a horizontal strip of every slot's image (alphabetical) on the
+     * right. The current slot's thumbnail is highlighted. Hovering / focusing
+     * a thumbnail shows a bottom-anchored tooltip with a larger preview of
+     * that slot's image.
+     */
+    async updateCurrentLocation() {
+        try {
+            const location = await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                path: ["world", "currentLocation"],
+            });
+            const currentSlot = await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                path: ["world", "currentLocationSlot"],
+            });
+
+            const nameEl = this.root.querySelector('.game-nav-bar-current-location-name');
+            const slotNameEl = this.root.querySelector('.game-nav-bar-current-location-slot-name');
+            const slotsList = this.root.querySelector('.game-nav-bar-location-slots-images');
+            if (!nameEl || !slotNameEl || !slotsList) return;
+
+            if (nameEl.textContent !== (location || '')) nameEl.textContent = location || '';
+            if (slotNameEl.textContent !== (currentSlot || '')) slotNameEl.textContent = currentSlot || '';
+
+            if (!location) {
+                slotsList.innerHTML = '';
+                return;
+            }
+
+            const slotsObj = await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                path: ["world", "locations", location, "slots"],
+                depth: 0,
+            });
+            const slotNames = Object.keys(slotsObj || {}).sort((a, b) => a.localeCompare(b));
+
+            const worldNamespace = this.getAttribute('world-namespace') || '';
+            const worldId = this.getAttribute('world-id') || '';
+
+            // Resolve each slot's asset path (or '' if none).
+            /** @type {Array<{ name: string, assetPath: string }>} */
+            const slotEntries = [];
+            for (const slotName of slotNames) {
+                // eslint-disable-next-line no-await-in-loop
+                const stateInfo = await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                    path: ["world", "locations", location, "slots", slotName, "state"],
+                    pick: ["asset"],
+                });
+                const asset = stateInfo?.asset || '';
+                const assetPath = (asset && worldNamespace && worldId)
+                    ? `assets/${worldNamespace}/${worldId}/${asset}`
+                    : '';
+                slotEntries.push({ name: slotName, assetPath });
+            }
+
+            // Remove stale items.
+            const wantNames = new Set(slotEntries.map(s => s.name));
+            for (const item of Array.from(slotsList.querySelectorAll('.game-nav-bar-location-slot'))) {
+                if (!wantNames.has(/** @type {HTMLElement} */ (item).dataset.slotName || '')) item.remove();
+            }
+
+            for (const entry of slotEntries) {
+                let item = /** @type {HTMLElement | null} */ (
+                    Array.from(slotsList.querySelectorAll('.game-nav-bar-location-slot'))
+                        .find(el => /** @type {HTMLElement} */ (el).dataset.slotName === entry.name)
+                );
+
+                if (!item) {
+                    item = document.createElement('div');
+                    item.className = 'game-nav-bar-location-slot';
+                    item.dataset.slotName = entry.name;
+                    item.setAttribute('tabindex', '0');
+                    item.setAttribute('role', 'button');
+
+                    const img = document.createElement('app-asset-image');
+                    img.setAttribute('default-image', './images/default-world.png');
+                    item.appendChild(img);
+
+                    const show = () => {
+                        this._showLocationSlotTooltip(/** @type {HTMLElement} */(item));
+                        playHoverSound();
+                    };
+                    const hide = () => {
+                        this._hideLocationSlotTooltip(/** @type {HTMLElement} */(item));
+                    };
+                    item.addEventListener('mouseenter', show);
+                    item.addEventListener('mouseleave', hide);
+                    item.addEventListener('focus', show);
+                    item.addEventListener('blur', hide);
+
+                    slotsList.appendChild(item);
+                }
+
+                item.dataset.slotImageUrl = entry.assetPath;
+                const img = item.querySelector('app-asset-image');
+                if (img && img.getAttribute('image-url') !== entry.assetPath) {
+                    img.setAttribute('image-url', entry.assetPath);
+                }
+                item.classList.toggle('current', entry.name === currentSlot);
+            }
+
+            // Re-order DOM to match alphabetical sort order.
+            for (const entry of slotEntries) {
+                const item = slotsList.querySelector(
+                    `.game-nav-bar-location-slot[data-slot-name="${CSS.escape(entry.name)}"]`
+                );
+                if (item) slotsList.appendChild(item);
+            }
+        } catch (error) {
+            console.error('Error updating current location:', error);
+        }
+    }
+
+    /**
+     * Show the shared slot tooltip pinned below the given slot thumbnail.
+     * @param {HTMLElement} item
+     */
+    _showLocationSlotTooltip(item) {
+        const tooltip = /** @type {HTMLElement | null} */ (
+            this.root.querySelector('.game-nav-bar-location-slot-tooltip')
+        );
+        const navBar = /** @type {HTMLElement | null} */ (
+            this.root.querySelector('.game-nav-bar')
+        );
+        if (!tooltip || !navBar) return;
+
+        const tooltipImg = tooltip.querySelector('.game-nav-bar-location-slot-tooltip-image');
+        if (tooltipImg) {
+            const imgUrl = item.dataset.slotImageUrl || '';
+            if (tooltipImg.getAttribute('image-url') !== imgUrl) tooltipImg.setAttribute('image-url', imgUrl);
+        }
+
+        const navRect = navBar.getBoundingClientRect();
+        const itemRect = item.getBoundingClientRect();
+        // Horizontal: center under the thumbnail (nav-bar-relative).
+        const desiredCenterX = (itemRect.left - navRect.left) + itemRect.width / 2;
+        // Vertical: just below the nav bar.
+        const top = navRect.height + 8;
+
+        // We need to know the tooltip width to clamp horizontally to viewport.
+        // Make the tooltip measurable (it's already in DOM but transparent).
+        const tooltipW = tooltip.offsetWidth;
+        const margin = 8;
+        // Clamp the screen-space center so the tooltip stays on screen.
+        let screenCenterX = navRect.left + desiredCenterX;
+        screenCenterX = Math.max(margin + tooltipW / 2,
+            Math.min(window.innerWidth - margin - tooltipW / 2, screenCenterX));
+        const left = screenCenterX - navRect.left;
+
+        tooltip.style.top = `${top}px`;
+        tooltip.style.left = `${left}px`;
+        tooltip.classList.add('visible');
+        tooltip.setAttribute('aria-hidden', 'false');
+        tooltip.dataset.forSlot = item.dataset.slotName || '';
+    }
+
+    /**
+     * @param {HTMLElement} item
+     */
+    _hideLocationSlotTooltip(item) {
+        const tooltip = /** @type {HTMLElement | null} */ (
+            this.root.querySelector('.game-nav-bar-location-slot-tooltip')
+        );
+        if (!tooltip) return;
+        if (tooltip.dataset.forSlot !== (item.dataset.slotName || '')) return;
+        tooltip.classList.remove('visible');
+        tooltip.setAttribute('aria-hidden', 'true');
+        delete tooltip.dataset.forSlot;
     }
 
     async updatePresentCharacters() {
@@ -1376,6 +1547,9 @@ class GameOverlay extends HTMLElement {
                             </div>
                             <div class="game-nav-bar-location-slots-images">
                                 <!-- populated by updateCurrentLocation() -->
+                            </div>
+                            <div class="game-nav-bar-location-slot-tooltip" role="tooltip" aria-hidden="true">
+                                <app-asset-image class="game-nav-bar-location-slot-tooltip-image" default-image="./images/default-world.png"></app-asset-image>
                             </div>
                         </div>
                         <div class="game-present-characters-section">
