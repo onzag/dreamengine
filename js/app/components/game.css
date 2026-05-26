@@ -293,20 +293,33 @@
 }
 
 .game-nav-bar-location-slot-escape-button {
-    width: 14vh;
-    height: 14vh;
+    width: 8vh;
+    height: 8vh;
     box-sizing: border-box;
     border-radius: 100%;
-    background: #ccc;
+    background: radial-gradient(circle at 38% 38%, #1c3358 0%, #0d1e38 70%);
+    border: 0.75vh solid rgba(140, 185, 240, 0.45);
+    box-shadow:
+        0 0.2vh 0.8vh rgba(0, 0, 0, 0.55),
+        inset 0 0.15vh 0.4vh rgba(160, 210, 255, 0.1);
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #2c426b;
+    color: rgba(180, 215, 255, 0.85);
+    cursor: pointer;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+    flex-shrink: 0;
+    margin-left: 1vh;
 }
 
 .game-nav-bar-location-slot-escape-button:hover {
-    background: #ddd;
-    cursor: pointer;
+    border-color: rgba(160, 210, 255, 0.8);
+    box-shadow:
+        0 0.4vh 1.4vh rgba(0, 0, 0, 0.65),
+        0 0 1.2vh rgba(100, 170, 255, 0.35),
+        inset 0 0.15vh 0.4vh rgba(160, 210, 255, 0.18);
+    transform: scale(1.06);
+    color: rgba(220, 240, 255, 1);
 }
 
 .game-nav-bar-location-slot app-asset-image::part(asset-image-container) {

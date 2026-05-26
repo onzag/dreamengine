@@ -1701,6 +1701,23 @@ class GameOverlay extends HTMLElement {
                                     <!-- populated by updateCurrentLocation() -->
                                 </div>
                                 <div class="game-nav-bar-location-slot-escape-button" role="button" aria-label="Other locations" title="Other locations">
+                                    <svg viewBox="0 0 48 48" width="52%" height="52%" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                                        <!-- connection lines -->
+                                        <line x1="24" y1="24" x2="10" y2="12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.7"/>
+                                        <line x1="24" y1="24" x2="38" y2="12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.7"/>
+                                        <line x1="24" y1="24" x2="8" y2="32" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.7"/>
+                                        <line x1="24" y1="24" x2="40" y2="32" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.7"/>
+                                        <line x1="24" y1="24" x2="24" y2="40" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.7"/>
+                                        <!-- outer location nodes -->
+                                        <circle cx="10" cy="12" r="3.2" fill="currentColor" opacity="0.65"/>
+                                        <circle cx="38" cy="12" r="3.2" fill="currentColor" opacity="0.65"/>
+                                        <circle cx="8" cy="32" r="3.2" fill="currentColor" opacity="0.65"/>
+                                        <circle cx="40" cy="32" r="3.2" fill="currentColor" opacity="0.65"/>
+                                        <circle cx="24" cy="40" r="3.2" fill="currentColor" opacity="0.65"/>
+                                        <!-- center node (current location) -->
+                                        <circle cx="24" cy="24" r="5" fill="currentColor" opacity="0.95"/>
+                                        <circle cx="24" cy="24" r="3" fill="rgba(10,30,60,0.8)"/>
+                                    </svg>
                                 </div>
                             </div>
                             <div class="game-nav-bar-location-slot-tooltip" role="tooltip" aria-hidden="true">
