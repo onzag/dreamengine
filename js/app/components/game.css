@@ -159,27 +159,57 @@
    future thick nav bar. */
 .game-nav-bar {
     position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
+    top: -8.6vh;
+    left: -3px;
+    right: -3px;
     height: 14vh;
     z-index: 4;
+    text-shadow: 0 0 1px black, 0 0 1px black, 0 0 1px black, 0 0 1px black, 0 0 1px black;
+}
+
+@media (max-width: 900px) {
+    .game-nav-bar {
+        top: -8.6vh;
+        left: 0;
+        right: 0;
+    }
+}
+
+.game-nav-bar-current-location-info {
+    position: absolute;
+    bottom: 14vh;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: flex-start;
+    width: auto;
+    left: 0;
+    padding: 1vh 0;
+    min-width: 0;
+    flex: 0 1 auto;
+    color: #eaf3ff;
+}
+
+@media (max-width: 900px) {
+    .game-nav-bar-current-location-info {
+        left: 1vh;
+    }
 }
 
 .game-nav-bar-current-location-title {
-    position: absolute;
-    bottom: 14vh;
+    position: relative;
     display: flex;
     flex-direction: row;
     align-items: center;
     justify-content: center;
-    width: auto;
-    left: 0;
-    padding: 1vh 0;
     gap: 1vh;
-    min-width: 0;
-    flex: 0 1 auto;
     color: #eaf3ff;
+}
+
+.game-nav-bar-current-location-data {
+    display: flex;
+    flex-direction: row;
+    gap: 1vh;
 }
 
 .game-nav-bar-current-location-name {
@@ -255,10 +285,12 @@
     box-shadow: 0 0.3vh 1vh rgba(0, 0, 0, 0.5);
 }
 
-.game-nav-bar-location-slot.current {
+.game-nav-bar-location-slot app-asset-image::part(asset-image-container) {
+    border-color: #ccc;
+}
+
+.game-nav-bar-location-slot.current app-asset-image::part(asset-image-container) {
     border-color: rgba(255, 220, 130, 0.9);
-    box-shadow: 0 0 0 0.2vh rgba(255, 220, 130, 0.45),
-                0 0.3vh 1vh rgba(0, 0, 0, 0.5);
 }
 
 .game-nav-bar-location-slot app-asset-image {
@@ -312,20 +344,21 @@
     display: block;
     width: 100%;
     aspect-ratio: 16 / 9;
-    border-radius: 0.6vh;
+    border-radius: 2px;
     overflow: hidden;
 }
 
 .game-nav-bar-location-slot-tooltip .game-nav-bar-location-slot-tooltip-image::part(asset-image-container) {
     width: 100%;
     height: 100%;
+    border-radius: 2px;
 }
 
 .game-nav-bar-location-slot-tooltip .game-nav-bar-location-slot-tooltip-image::part(asset-image) {
     width: 100%;
     height: 100%;
     object-fit: cover;
-    border-radius: 0.6vh;
+    border-radius: 2px;
     border: none;
 }
 
@@ -336,7 +369,7 @@
 .game-present-characters-section {
     position: absolute;
     left: 0;
-    top: 14vh; /* flush below the nav placeholder */
+    top: 6.7vh;
     bottom: 0;
     width: 12vh;
     z-index: 3;
@@ -473,7 +506,7 @@
     color: #eaf3ff;
     opacity: 0;
     pointer-events: none;
-    z-index: 5;
+    z-index: 6;
     transition: opacity 0.14s ease, transform 0.18s ease;
     white-space: normal;
     display: flex;
@@ -714,14 +747,14 @@
 }
 
 .game-background-message-title {
-    font-size: 4vh;
+    font-size: 8vh;
     letter-spacing: 0.18em;
     text-transform: uppercase;
 }
 
 .game-background-message-subtitle {
     margin-top: 1vh;
-    font-size: 2.2vh;
+    font-size: 4.4vh;
     letter-spacing: 0.08em;
     color: rgba(220, 232, 250, 0.7);
     font-style: italic;
@@ -858,15 +891,14 @@
     box-sizing: border-box;
     display: flex;
     border: 3px solid rgba(200, 220, 240, 0.35);
-    border-left: none !important;
-    border-right: none !important;
     border-bottom-width: 6px;
     margin-bottom: 2vh;
-    margin-top: 7.5vh;
+    margin-top: 18vh;
     height: 100%;
     width: 100%;
     opacity: 0;
     transition: opacity 0.8s ease 0.5s;
+    backdrop-filter: blur(10px) saturate(110%);
 }
 
 .game-story-container.loaded {
@@ -876,6 +908,8 @@
 @media (max-width: 900px) {
     .game-story-container {
         border-bottom: none !important;
+        border-left: none !important;
+        border-right: none !important;
         margin-bottom: 0 !important;
     }
 }

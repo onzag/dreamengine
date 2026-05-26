@@ -77,7 +77,7 @@ class AssetImage extends HTMLElement {
         const front = /** @type {HTMLImageElement | null} */ (this.root.querySelector('.asset-image-front'));
         if (!back || !front) return;
 
-        if (!this._hasShownImage) {
+        if (!this._hasShownImage || this.getAttribute("no-transition") === "true") {
             // First image: show immediately with no fade.
             back.src = newSrc || '';
             this._hasShownImage = !!newSrc;

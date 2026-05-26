@@ -531,12 +531,40 @@ class GameOverlay extends HTMLElement {
      */
     async updateCurrentLocation() {
         try {
+            const currentTime = await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                path: ["currentTime", "time"],
+            });
+
+            const timeAsDate = new Date(currentTime);
+
+            // format as UTC time for the given locale, with month and day
+            const locale = 'en-US';
+            const formattedTime = timeAsDate.toLocaleString(locale, {
+                hour: '2-digit',
+                minute: '2-digit',
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+                timeZone: 'UTC',
+            });
+
             const location = await window.ENGINE_WORKER_CLIENT.queryDEObject({
                 path: ["world", "currentLocation"],
             });
             const currentSlot = await window.ENGINE_WORKER_CLIENT.queryDEObject({
                 path: ["world", "currentLocationSlot"],
             });
+
+            const weatherAtLocation = await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                path: ["world", "locations", location, "internalState", "currentWeather"],
+            });
+
+            const weatherText = this.root.querySelector('.game-nav-bar-current-location-weather');
+            if (weatherAtLocation) {
+                if (weatherText && weatherText.textContent !== weatherAtLocation) weatherText.textContent = weatherAtLocation;
+            } else {
+                if (weatherText) weatherText.textContent = '';
+            }
 
             const nameEl = this.root.querySelector('.game-nav-bar-current-location-name');
             const slotNameEl = this.root.querySelector('.game-nav-bar-current-location-slot-name');
@@ -545,6 +573,9 @@ class GameOverlay extends HTMLElement {
 
             if (nameEl.textContent !== (location || '')) nameEl.textContent = location || '';
             if (slotNameEl.textContent !== (currentSlot || '')) slotNameEl.textContent = currentSlot || '';
+
+            const timeEl = this.root.querySelector('.game-nav-bar-current-location-time');
+            if (timeEl && timeEl.textContent !== formattedTime) timeEl.textContent = formattedTime;
 
             if (!location) {
                 slotsList.innerHTML = '';
@@ -597,6 +628,7 @@ class GameOverlay extends HTMLElement {
 
                     const img = document.createElement('app-asset-image');
                     img.setAttribute('default-image', './images/default-world.png');
+                    img.setAttribute('no-transition', 'true');
                     item.appendChild(img);
 
                     const show = () => {
@@ -771,6 +803,7 @@ class GameOverlay extends HTMLElement {
                     portrait.className = 'game-present-character-portrait';
                     const img = document.createElement('app-asset-image');
                     img.setAttribute('default-image', './images/default-profile.png');
+                    img.setAttribute('no-transition', 'true');
                     portrait.appendChild(img);
                     card.appendChild(portrait);
 
@@ -1537,19 +1570,29 @@ class GameOverlay extends HTMLElement {
 
                     <div class="game-story-container" inert="true">
                         <div class="game-nav-bar">
-                            <div class="game-nav-bar-current-location-title">
-                                <div class="game-nav-bar-current-location-name">
-                                    <!-- populated by updateCurrentLocation() -->
+                            <div class="game-nav-bar-current-location-info">
+                                <div class="game-nav-bar-current-location-data">
+                                    <div class="game-nav-bar-current-location-time">
+                                        <!-- populated by updateCurrentLocation() -->
+                                    </div>
+                                    <div class="game-nav-bar-current-location-weather">
+                                        <!-- populated by updateCurrentLocation() -->
+                                    </div>
                                 </div>
-                                <div class="game-nav-bar-current-location-slot-name">
-                                    <!-- populated by updateCurrentLocation() -->
+                                <div class="game-nav-bar-current-location-title">
+                                    <div class="game-nav-bar-current-location-name">
+                                        <!-- populated by updateCurrentLocation() -->
+                                    </div>
+                                    <div class="game-nav-bar-current-location-slot-name">
+                                        <!-- populated by updateCurrentLocation() -->
+                                    </div>
                                 </div>
                             </div>
                             <div class="game-nav-bar-location-slots-images">
                                 <!-- populated by updateCurrentLocation() -->
                             </div>
                             <div class="game-nav-bar-location-slot-tooltip" role="tooltip" aria-hidden="true">
-                                <app-asset-image class="game-nav-bar-location-slot-tooltip-image" default-image="./images/default-world.png"></app-asset-image>
+                                <app-asset-image no-transition="true" class="game-nav-bar-location-slot-tooltip-image" default-image="./images/default-world.png"></app-asset-image>
                             </div>
                         </div>
                         <div class="game-present-characters-section">
@@ -1557,7 +1600,7 @@ class GameOverlay extends HTMLElement {
                                 <!-- populated by updatePresentCharacters() -->
                             </div>
                             <div class="game-present-character-tooltip" role="tooltip" aria-hidden="true">
-                                <app-asset-image class="game-present-character-tooltip-image" default-image="./images/default-profile.png"></app-asset-image>
+                                <app-asset-image no-transition="true" class="game-present-character-tooltip-image" default-image="./images/default-profile.png"></app-asset-image>
                                 <div class="game-present-character-description"></div>
                                 <div class="game-present-character-gender"></div>
                             </div>
