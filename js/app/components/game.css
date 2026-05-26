@@ -362,6 +362,23 @@
     border: none;
 }
 
+.game-nav-bar-location-slot-tooltip .game-nav-bar-location-slot-tooltip-description {
+    margin-top: 0.7vh;
+    font-size: 1.7vh;
+    color: rgba(200, 218, 240, 0.82);
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.game-nav-bar-location-slot-tooltip .game-nav-bar-location-slot-tooltip-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5vh;
+    justify-content: center;
+    margin-top: 0.6vh;
+}
+
 /* ── Present characters (NPCs at current location) ──────────────
    A vertical strip pinned flush to the left edge of the playfield,
    below the nav placeholder. Cards stack from the bottom upward and

@@ -396,39 +396,6 @@ class GameOverlay extends HTMLElement {
                 pick: ["asset"]
             });
 
-            const userCharacterName = await window.ENGINE_WORKER_CLIENT.queryDEObject({
-                path: ["user", "name"],
-            });
-
-            const locationSlotDescription = await window.ENGINE_WORKER_CLIENT.callCharOnlyTemplate({
-                path: ["world", "locations", location, "slots", locationSlot, "description"],
-                characterName: userCharacterName,
-            });
-
-            const locationGeneralInfo = await window.ENGINE_WORKER_CLIENT.queryDEObject({
-                path: ["world", "locations", location],
-                pick: ["isPrivate", "isSafe", "isIndoors", "locationFullyBlocksWeather", "locationPartiallyBlocksWeather", "locationNegativelyExposesCharactersToWeather"],
-            });
-
-            const locationSlotGeneralInfo = await window.ENGINE_WORKER_CLIENT.queryDEObject({
-                path: ["world", "locations", location, "slots", locationSlot],
-                pick: ["slotFullyBlocksWeather", "slotPartiallyBlocksWeather", "slotNegativelyExposesCharactersToWeather"],
-            });
-
-            const isPrivate = locationGeneralInfo?.isPrivate;
-            const isSafe = locationGeneralInfo?.isSafe;
-            const isIndoors = locationGeneralInfo?.isIndoors;
-
-            const weatherAtLocation = await window.ENGINE_WORKER_CLIENT.queryDEObject({
-                path: ["world", "locations", location, "internalState", "currentWeather"],
-            });
-
-            const fullyBlocksCurrentWeather = (locationSlotGeneralInfo?.slotFullyBlocksWeather || locationGeneralInfo?.locationFullyBlocksWeather).includes(weatherAtLocation);
-            const partiallyBlocksCurrentWeather = !fullyBlocksCurrentWeather && (locationSlotGeneralInfo?.slotPartiallyBlocksWeather || locationGeneralInfo?.locationPartiallyBlocksWeather).includes(weatherAtLocation);
-            const negativelyExposesToCurrentWeather = !partiallyBlocksCurrentWeather && !fullyBlocksCurrentWeather && (locationSlotGeneralInfo?.slotNegativelyExposesCharactersToWeather || locationGeneralInfo?.locationNegativelyExposesCharactersToWeather).includes(weatherAtLocation);
-
-            
-
             const themeSongLocationSlot = await window.ENGINE_WORKER_CLIENT.queryDEObject({
                 path: ["world", "locations", location, "slots", locationSlot, "state", "theme"],
             });
@@ -624,8 +591,20 @@ class GameOverlay extends HTMLElement {
             const worldNamespace = this.getAttribute('world-namespace') || '';
             const worldId = this.getAttribute('world-id') || '';
 
-            // Resolve each slot's asset path (or '' if none).
-            /** @type {Array<{ name: string, assetPath: string }>} */
+            const locationGeneralInfo = await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                path: ["world", "locations", location],
+                pick: ["isPrivate", "isSafe", "isIndoors", "locationFullyBlocksWeather", "locationPartiallyBlocksWeather", "locationNegativelyExposesCharactersToWeather"],
+            });
+            const isPrivate = !!locationGeneralInfo?.isPrivate;
+            const isSafe = !!locationGeneralInfo?.isSafe;
+            const isIndoors = !!locationGeneralInfo?.isIndoors;
+
+            const userCharacterName = await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                path: ["user", "name"],
+            });
+
+            // Resolve each slot's asset path and metadata.
+            /** @type {Array<{ name: string, assetPath: string, description: string, isPrivate: boolean, isSafe: boolean, isIndoors: boolean, fullyBlocksWeather: boolean, partiallyBlocksWeather: boolean, negativelyExposesWeather: boolean, weather: string }>} */
             const slotEntries = [];
             for (const slotName of slotNames) {
                 // eslint-disable-next-line no-await-in-loop
@@ -637,7 +616,24 @@ class GameOverlay extends HTMLElement {
                 const assetPath = (asset && worldNamespace && worldId)
                     ? `assets/${worldNamespace}/${worldId}/${asset}`
                     : '';
-                slotEntries.push({ name: slotName, assetPath });
+
+                // eslint-disable-next-line no-await-in-loop
+                const description = await window.ENGINE_WORKER_CLIENT.callCharOnlyTemplate({
+                    path: ["world", "locations", location, "slots", slotName, "description"],
+                    characterName: userCharacterName,
+                }) || '';
+
+                // eslint-disable-next-line no-await-in-loop
+                const slotGeneralInfo = await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                    path: ["world", "locations", location, "slots", slotName],
+                    pick: ["slotFullyBlocksWeather", "slotPartiallyBlocksWeather", "slotNegativelyExposesCharactersToWeather"],
+                });
+
+                const fullyBlocksWeather = !!(slotGeneralInfo?.slotFullyBlocksWeather || locationGeneralInfo?.locationFullyBlocksWeather || []).includes(weatherAtLocation);
+                const partiallyBlocksWeather = !fullyBlocksWeather && !!(slotGeneralInfo?.slotPartiallyBlocksWeather || locationGeneralInfo?.locationPartiallyBlocksWeather || []).includes(weatherAtLocation);
+                const negativelyExposesWeather = !partiallyBlocksWeather && !fullyBlocksWeather && !!(slotGeneralInfo?.slotNegativelyExposesCharactersToWeather || locationGeneralInfo?.locationNegativelyExposesCharactersToWeather || []).includes(weatherAtLocation);
+
+                slotEntries.push({ name: slotName, assetPath, description, isPrivate, isSafe, isIndoors, fullyBlocksWeather, partiallyBlocksWeather, negativelyExposesWeather, weather: weatherAtLocation || '' });
             }
 
             // Remove stale items.
@@ -680,6 +676,14 @@ class GameOverlay extends HTMLElement {
                 }
 
                 item.dataset.slotImageUrl = entry.assetPath;
+                item.dataset.slotDescription = entry.description;
+                item.dataset.slotIsPrivate = entry.isPrivate ? '1' : '';
+                item.dataset.slotIsSafe = entry.isSafe ? '1' : '';
+                item.dataset.slotIsIndoors = entry.isIndoors ? '1' : '';
+                item.dataset.slotFullyBlocksWeather = entry.fullyBlocksWeather ? '1' : '';
+                item.dataset.slotPartiallyBlocksWeather = entry.partiallyBlocksWeather ? '1' : '';
+                item.dataset.slotNegativelyExposesWeather = entry.negativelyExposesWeather ? '1' : '';
+                item.dataset.slotWeather = entry.weather;
                 const img = item.querySelector('app-asset-image');
                 if (img && img.getAttribute('image-url') !== entry.assetPath) {
                     img.setAttribute('image-url', entry.assetPath);
@@ -716,6 +720,48 @@ class GameOverlay extends HTMLElement {
         if (tooltipImg) {
             const imgUrl = item.dataset.slotImageUrl || '';
             if (tooltipImg.getAttribute('image-url') !== imgUrl) tooltipImg.setAttribute('image-url', imgUrl);
+        }
+
+        const descEl = tooltip.querySelector('.game-nav-bar-location-slot-tooltip-description');
+        if (descEl) {
+            const desc = item.dataset.slotDescription || '';
+            if (descEl.textContent !== desc) descEl.textContent = desc;
+            /** @type {HTMLElement} */ (descEl).style.display = desc ? '' : 'none';
+        }
+
+        const statsEl = tooltip.querySelector('.game-nav-bar-location-slot-tooltip-stats');
+        if (statsEl) {
+            const weather = item.dataset.slotWeather || '';
+            /** @type {Array<{ key: string, icon: string, label: string, value: string }>} */
+            // @ts-ignore
+            const chips = [
+                item.dataset.slotIsPrivate ? { key: 'private', icon: '🔒', label: 'Private', value: 'Private' } : null,
+                item.dataset.slotIsSafe ? { key: 'safe', icon: '🛡️', label: 'Safe', value: 'Safe' } : null,
+                item.dataset.slotIsIndoors ? { key: 'indoors', icon: '🏠', label: 'Indoors', value: 'Indoors' } : null,
+                item.dataset.slotFullyBlocksWeather && weather ? { key: 'weather-full', icon: '⛺', label: `Fully sheltered from ${weather}`, value: `Sheltered from ${weather}` } : null,
+                item.dataset.slotPartiallyBlocksWeather && weather ? { key: 'weather-partial', icon: '🌂', label: `Partially sheltered from ${weather}`, value: `Partial shelter from ${weather}` } : null,
+                item.dataset.slotNegativelyExposesWeather && weather ? { key: 'weather-exposed', icon: '⚠️', label: `Exposed to ${weather}`, value: `Exposed to ${weather}` } : null,
+            ].filter(/** @param {any} x */ x => x !== null);
+            const seen = new Set();
+            for (const chip of chips) {
+                seen.add(chip.key);
+                let el = statsEl.querySelector(`.game-character-chip[data-key="${chip.key}"]`);
+                if (!el) {
+                    el = document.createElement('span');
+                    el.className = 'game-character-chip';
+                    el.setAttribute('data-key', chip.key);
+                    el.innerHTML = `<span class="game-character-chip-icon"></span><span class="game-character-chip-value"></span>`;
+                    statsEl.appendChild(el);
+                }
+                el.setAttribute('title', chip.label);
+                const iconEl = el.querySelector('.game-character-chip-icon');
+                const valueEl = el.querySelector('.game-character-chip-value');
+                if (iconEl && iconEl.textContent !== chip.icon) iconEl.textContent = chip.icon;
+                if (valueEl && valueEl.textContent !== chip.value) valueEl.textContent = chip.value;
+            }
+            for (const el of Array.from(statsEl.querySelectorAll('.game-character-chip'))) {
+                if (!seen.has(el.getAttribute('data-key') || '')) el.remove();
+            }
         }
 
         const navRect = navBar.getBoundingClientRect();
@@ -1651,6 +1697,8 @@ class GameOverlay extends HTMLElement {
                             </div>
                             <div class="game-nav-bar-location-slot-tooltip" role="tooltip" aria-hidden="true">
                                 <app-asset-image no-transition="true" class="game-nav-bar-location-slot-tooltip-image" default-image="./images/default-world.png"></app-asset-image>
+                                <div class="game-nav-bar-location-slot-tooltip-description"></div>
+                                <div class="game-nav-bar-location-slot-tooltip-stats"></div>
                             </div>
                         </div>
                         <div class="game-present-characters-section">
