@@ -373,10 +373,12 @@ class GameOverlay extends HTMLElement {
                 return;
             }
 
+            const changedRootLocation = this._currentLocation !== location;
+
             this._currentLocation = location;
             this._currentLocationSlot = locationSlot;
 
-            this.updateCurrentLocation();
+            this.updateCurrentLocation(changedRootLocation);
 
             const worldNamespace = this.getAttribute('world-namespace') || '';
             const worldId = this.getAttribute('world-id') || '';
@@ -528,8 +530,9 @@ class GameOverlay extends HTMLElement {
      * right. The current slot's thumbnail is highlighted. Hovering / focusing
      * a thumbnail shows a bottom-anchored tooltip with a larger preview of
      * that slot's image.
+     * @param {boolean} changedRootLocation - whether the root location (as opposed to just the slot) has changed, which can be used as a hint to skip certain updates that only need to happen on a full location change. Note that this is just a hint and not guaranteed to be accurate, so the method should still work correctly if it's wrong or ignored.
      */
-    async updateCurrentLocation() {
+    async updateCurrentLocation(changedRootLocation) {
         try {
             const currentTime = await window.ENGINE_WORKER_CLIENT.queryDEObject({
                 path: ["currentTime", "time"],
@@ -639,7 +642,7 @@ class GameOverlay extends HTMLElement {
             // Remove stale items.
             const wantNames = new Set(slotEntries.map(s => s.name));
             for (const item of Array.from(slotsList.querySelectorAll('.game-nav-bar-location-slot'))) {
-                if (!wantNames.has(/** @type {HTMLElement} */ (item).dataset.slotName || '')) item.remove();
+                if (changedRootLocation || !wantNames.has(/** @type {HTMLElement} */ (item).dataset.slotName || '')) item.remove();
             }
 
             for (const entry of slotEntries) {
@@ -738,9 +741,10 @@ class GameOverlay extends HTMLElement {
                 item.dataset.slotIsPrivate ? { key: 'private', icon: '🔒', label: 'Private', value: 'Private' } : null,
                 item.dataset.slotIsSafe ? { key: 'safe', icon: '🛡️', label: 'Safe', value: 'Safe' } : null,
                 item.dataset.slotIsIndoors ? { key: 'indoors', icon: '🏠', label: 'Indoors', value: 'Indoors' } : null,
-                item.dataset.slotFullyBlocksWeather && weather ? { key: 'weather-full', icon: '⛺', label: `Fully sheltered from ${weather}`, value: `Sheltered from ${weather}` } : null,
-                item.dataset.slotPartiallyBlocksWeather && weather ? { key: 'weather-partial', icon: '🌂', label: `Partially sheltered from ${weather}`, value: `Partial shelter from ${weather}` } : null,
-                item.dataset.slotNegativelyExposesWeather && weather ? { key: 'weather-exposed', icon: '⚠️', label: `Exposed to ${weather}`, value: `Exposed to ${weather}` } : null,
+                item.dataset.slotFullyBlocksWeather && weather ? { key: 'weather-full', icon: '⛺', label: `Sheltered`, value: `Sheltered` } : null,
+                item.dataset.slotPartiallyBlocksWeather && weather ? { key: 'weather-partial', icon: '🌂', label: `Partially sheltered`, value: `Partially sheltered` } : null,
+                item.dataset.slotNegativelyExposesWeather && weather ? { key: 'weather-exposed', icon: '⚠️', label: `Negatively Exposed`, value: `Negatively Exposed` } : null,
+                !item.dataset.slotFullyBlocksWeather && !item.dataset.slotPartiallyBlocksWeather && !item.dataset.slotNegativelyExposesWeather && weather ? { key: 'weather-none', icon: '☀️', label: `Exposed`, value: `Exposed` } : null,
             ].filter(/** @param {any} x */ x => x !== null);
             const seen = new Set();
             for (const chip of chips) {
@@ -1692,8 +1696,12 @@ class GameOverlay extends HTMLElement {
                                     </div>
                                 </div>
                             </div>
-                            <div class="game-nav-bar-location-slots-images">
-                                <!-- populated by updateCurrentLocation() -->
+                            <div class="game-nav-bar-location-slots-images-container">
+                                <div class="game-nav-bar-location-slots-images">
+                                    <!-- populated by updateCurrentLocation() -->
+                                </div>
+                                <div class="game-nav-bar-location-slot-escape-button" role="button" aria-label="Other locations" title="Other locations">
+                                </div>
                             </div>
                             <div class="game-nav-bar-location-slot-tooltip" role="tooltip" aria-hidden="true">
                                 <app-asset-image no-transition="true" class="game-nav-bar-location-slot-tooltip-image" default-image="./images/default-world.png"></app-asset-image>

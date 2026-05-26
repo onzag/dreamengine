@@ -238,7 +238,7 @@
     text-overflow: ellipsis;
 }
 
-.game-nav-bar-location-slots-images {
+.game-nav-bar-location-slots-images-container {
     display: flex;
     align-items: center;
     gap: 0.8vh;
@@ -251,18 +251,25 @@
     scrollbar-color: rgba(180, 210, 240, 0.28) transparent;
 }
 
-.game-nav-bar-location-slots-images::-webkit-scrollbar {
+.game-nav-bar-location-slots-images-container::-webkit-scrollbar {
     height: 0.5vh;
 }
-.game-nav-bar-location-slots-images::-webkit-scrollbar-track {
+.game-nav-bar-location-slots-images-container::-webkit-scrollbar-track {
     background: transparent;
 }
-.game-nav-bar-location-slots-images::-webkit-scrollbar-thumb {
+.game-nav-bar-location-slots-images-container::-webkit-scrollbar-thumb {
     background: rgba(180, 210, 240, 0.28);
     border-radius: 0.4vh;
 }
-.game-nav-bar-location-slots-images::-webkit-scrollbar-thumb:hover {
+.game-nav-bar-location-slots-images-container::-webkit-scrollbar-thumb:hover {
     background: rgba(180, 210, 240, 0.5);
+}
+
+.game-nav-bar-location-slots-images {
+    display: flex;
+    align-items: center;
+    gap: 0.8vh;
+    height: 100%;
 }
 
 .game-nav-bar-location-slot {
@@ -283,6 +290,23 @@
     transform: translateY(-0.2vh);
     border-color: rgba(220, 235, 255, 0.6);
     box-shadow: 0 0.3vh 1vh rgba(0, 0, 0, 0.5);
+}
+
+.game-nav-bar-location-slot-escape-button {
+    width: 14vh;
+    height: 14vh;
+    box-sizing: border-box;
+    border-radius: 100%;
+    background: #ccc;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #2c426b;
+}
+
+.game-nav-bar-location-slot-escape-button:hover {
+    background: #ddd;
+    cursor: pointer;
 }
 
 .game-nav-bar-location-slot app-asset-image::part(asset-image-container) {
@@ -364,9 +388,10 @@
 
 .game-nav-bar-location-slot-tooltip .game-nav-bar-location-slot-tooltip-description {
     margin-top: 0.7vh;
-    font-size: 1.7vh;
-    color: rgba(200, 218, 240, 0.82);
-    line-height: 1.5;
+    font-size: 2vh;
+    color: rgba(225, 238, 255, 0.92);
+    line-height: 1.6;
+    letter-spacing: 0.01em;
     white-space: pre-wrap;
     word-break: break-word;
 }
@@ -566,6 +591,7 @@
     letter-spacing: 0.01em;
     white-space: pre-wrap;
     word-break: break-word;
+    text-shadow: 0 0 1px black, 0 0 1px black, 0 0 1px black, 0 0 1px black, 0 0 1px black;
 }
 
 .game-present-character-tooltip .game-present-character-stats {
@@ -761,7 +787,7 @@
     color: rgba(234, 243, 255, 0.88);
     user-select: none;
     text-align: center;
-    text-shadow: 0 0 1px black, 0 0 1px black, 0 0 1px black, 0 0 1px black, 0 0 1px black
+    text-shadow: 0 0 1px black, 0 0 1px black, 0 0 1px black, 0 0 1px black, 0 0 1px black;
 }
 
 .game-background-message-title {
