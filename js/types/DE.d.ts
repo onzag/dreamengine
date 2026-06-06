@@ -1,5 +1,7 @@
 declare type PromiseOrNot<T> = T | Promise<T>;
 
+declare type DECharacterTier = "insect" | "critter" | "human" | "apex" | "street_level" | "block_level" | "city_level" | "country_level" | "continental" | "planetary" | "stellar" | "galactic" | "universal" | "multiversal" | "limitless";
+
 declare interface DEMinimalCharacterReference {
     /**
      * Name of the character
@@ -97,8 +99,17 @@ declare interface DEMinimalCharacterReference {
 
     /**
      * A power scale string that represents the overall power level of the character
+     * 
+     * TODO implement combat system
      */
-    tier: "insect" | "critter" | "human" | "apex" | "street_level" | "block_level" | "city_level" | "country_level" | "continental" | "planetary" | "stellar" | "galactic" | "universal" | "multiversal" | "limitless";
+    tier: DECharacterTier;
+    /**
+     * The power scale string that represents the apparent power level of the character and how
+     * characters perceive their power level
+     * 
+     * TODO implement this in description
+     */
+    aparentTier?: DECharacterTier;
     /**
      * The numeric value on the power scale compared to others in the same power scale
      * A number from 0 to 100, where 0 it means barely makes it and 100 means in peak condition
@@ -113,6 +124,11 @@ declare interface DEMinimalCharacterReference {
      * TODO implement power scales in interactions
      */
     tierValue: number;
+    /**
+     * The numeric value on the power scale that represents the apparent power level of the character and how other character percieve their power
+     * level, not what really is
+     */
+    aparentTierValue?: number;
     /**
      * A 0 to 1 number that represents how fast the character can grow on their power scale, this is used to determine how much they grow after certain interactions or events, higher means faster growth
      * 0.25 is recommended for a standard human character
@@ -1343,6 +1359,8 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
 
     /**
      * A number from 0 to 1 that represents how likely is the character to resort to violence when facing conflicts or threats, higher means more likely to resort to violence
+     * 
+     * TODO implement this in combat system
      */
     violence: number;
 
@@ -1396,6 +1414,10 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
      */
     socialSimulation: {
         /**
+         * Allows characters to have sex with each other once they reach a certain bond level
+         */
+        sexUnlocksAtBond?: number;
+        /**
          * Allows characters to have sex with each other once they reach a certain bond 2 level
          */
         sexUnlocksAtBond2?: number;
@@ -1403,6 +1425,34 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
          * A number from 0 to 1 that represents how much the character likes to gossip and talk about other characters, higher means more likely to gossip and talk about others, this is useful for characters that are nosy or enjoy social interactions that involve talking about others, it can also affect how they interact with other characters and how they perceive them based on the gossip they hear and spread
          */
         gossipTendency: number;
+    };
+
+    /**
+     * These simply create triggers that set up how the character would react upon experiencing
+     * one of these for the first time (or at least for a limited duration)
+     * 
+     * TODO implement
+     */
+    worldKnowledge: {
+        /**
+         * If false, the character considers that talking animals are not possible in the world
+         * this means that the character will be suprised if they ever encounter talking animals
+         */
+        talkingAnimals: boolean;
+        /**
+         * If false, the character considers that magic is not possible in the world
+         * this means that the character will be suprised if they ever encounter magic
+         */
+        magic: boolean;
+        /**
+         * If false, the character considers that advanced technology is not possible in the world
+         * this means that the character will be suprised if they ever encounter advanced technology
+         */
+        advancedTechnology: boolean;
+        /**
+         * If 
+         */
+
     };
 
     /**
