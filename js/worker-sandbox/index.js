@@ -36,12 +36,12 @@ self.onunhandledrejection = (e) => {
             import("../engine/index.js"),
             import("../jsengine/index.js"),
             import("../engine/inference/adapter-de-server-uncensored.js"),
-            import("../cardtype/generate-base.js"),
-            import("../cardtype/generate-bonds.js"),
-            import("../cardtype/generate-activities.js"),
-            import("../cardtype/generate-bond-triggers.js"),
-            import("../cardtype/generate-basic-states.js"),
-            import("../cardtype/generate-affective-states.js"),
+            import("../script-generation/generate-base.js"),
+            import("../script-generation/generate-bonds.js"),
+            import("../script-generation/generate-activities.js"),
+            import("../script-generation/generate-bond-triggers.js"),
+            import("../script-generation/generate-basic-states.js"),
+            import("../script-generation/generate-affective-states.js"),
         ]);
 
         workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, generateBase, generateBonds, generateAffectiveStates, generateActivities, generateBondTriggers, generateBasicStates });
@@ -516,7 +516,7 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
 
         /**
          * @param {object} args
-         * @param {import('../cardtype/base.js').CardTypeCard} args.currentCard
+         * @param {import('../script-generation/base.js').ScriptTypeGenerator} args.currentCard
          * @param {boolean} args.guided - whether to run the guider questions or skip straight to generation 
          */
         async continueCardTypeWizard({ currentCard, guided }) {
@@ -526,7 +526,7 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
             const { promise: cancelPromise, cancel } = createCancelToken();
             currentWizardCancel = cancel;
 
-            /** @type {import('../cardtype/base.js').CardTypeGuider | null} */
+            /** @type {import('../script-generation/base.js').ScriptTypeGuider | null} */
             const guider = guided ? createWorkerGuider(cancelPromise) : null;
 
             const autosave = createWorkerAutosave(currentCard, cancelPromise);
@@ -600,7 +600,7 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
      * Creates a guider that sends questions to the main thread via postMessage
      * and waits for answers (or cancellation).
      * @param {Promise<never>} cancelPromise
-     * @returns {import('../cardtype/base.js').CardTypeGuider}
+     * @returns {import('../script-generation/base.js').ScriptTypeGuider}
      */
     function createWorkerGuider(cancelPromise) {
         /**
@@ -614,7 +614,7 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
 
             self.postMessage({
                 type: "event",
-                event: "cardTypeGuiderQuestion",
+                event: "ScriptTypeGuiderQuestion",
                 data: { qid, questionType, question, ...extra }
             });
 
@@ -663,9 +663,9 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
     /**
      * Creates an autosave object that sends the currentCard to the main thread
      * and waits for acknowledgement (or cancellation).
-     * @param {import('../cardtype/base.js').CardTypeCard} currentCard
+     * @param {import('../script-generation/base.js').ScriptTypeGenerator} currentCard
      * @param {Promise<never>} cancelPromise
-     * @returns {import('../cardtype/base.js').CardTypeAutoSave}
+     * @returns {import('../script-generation/base.js').CardTypeAutoSave}
      */
     function createWorkerAutosave(currentCard, cancelPromise) {
         return {
@@ -692,7 +692,7 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
         const msg = e.data;
 
         // Handle guider answer from main thread
-        if (msg.type === "cardTypeGuiderAnswer") {
+        if (msg.type === "ScriptTypeGuiderAnswer") {
             const { qid, value } = msg;
             const resolve = pendingGuiderAnswers.get(qid);
             if (resolve) {

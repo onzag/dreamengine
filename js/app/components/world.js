@@ -1,4 +1,4 @@
-import { createCardStructureFrom, isCardTypeFile } from '../../cardtype/base.js';
+import { createCardStructureFrom, isCardTypeFile } from '../../script-generation/base.js';
 import { playCancelSound, playConfirmSound, playHoverSound, playPauseSound, setTempSoundDisable } from '../sound.js';
 import './wizard/world-wizard.js';
 

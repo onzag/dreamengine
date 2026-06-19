@@ -31,7 +31,7 @@ export class EngineWorkerClient {
     /** @type {((data: any) => void) | null} */
     onInferringOverConversationMessage = null;
     /** @type {((data: {qid: number, questionType: string, question: string, options?: string[], defaultValue?: any}) => void) | null} */
-    onCardTypeGuiderQuestion = null;
+    onScriptTypeGuiderQuestion = null;
     /** @type {((data: {sid: number, currentCard: any, jsContent: string}) => void) | null} */
     onCardTypeAutosave = null;
     /** @type {((data: {currentCard: any}) => void) | null} */
@@ -120,8 +120,8 @@ export class EngineWorkerClient {
                     case "inferringOverConversationMessage":
                         this.onInferringOverConversationMessage?.(msg.data);
                         break;
-                    case "cardTypeGuiderQuestion":
-                        this.onCardTypeGuiderQuestion?.(msg.data);
+                    case "ScriptTypeGuiderQuestion":
+                        this.onScriptTypeGuiderQuestion?.(msg.data);
                         break;
                     case "cardTypeAutosave":
                         this.onCardTypeAutosave?.(msg.data);
@@ -290,7 +290,7 @@ export class EngineWorkerClient {
 
     /**
      * Start or continue cardtype generation on the worker.
-     * @param {{ currentCard: import('../cardtype/base.js').CardTypeCard, guided: boolean }} args
+     * @param {{ currentCard: import('../script-generation/base.js').ScriptTypeGenerator, guided: boolean }} args
      */
     continueCardTypeWizard(args) { return this.#call("continueCardTypeWizard", args); }
 
@@ -304,7 +304,7 @@ export class EngineWorkerClient {
      * @param {{ qid: number, value: any }} args
      */
     sendGuiderAnswer({ qid, value }) {
-        this.#worker.postMessage({ type: "cardTypeGuiderAnswer", qid, value });
+        this.#worker.postMessage({ type: "ScriptTypeGuiderAnswer", qid, value });
     }
 
     /**

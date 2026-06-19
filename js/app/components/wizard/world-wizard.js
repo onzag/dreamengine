@@ -1,4 +1,4 @@
-import { createCardStructureFrom, getJsCard, isCardTypeFile } from '../../../cardtype/base.js';
+import { createCardStructureFrom, getJsCard, isCardTypeFile } from '../../../script-generation/base.js';
 import { playCancelSound, playHoverSound, setTempSoundDisable, stopAllAmbiencesAndStartNewOne } from '../../sound.js';
 import { CardTypeWizard } from './cardtype-wizard.js';
 
@@ -84,7 +84,7 @@ export class WorldWizard extends CardTypeWizard {
     }
 
     /**
-     * @param {import('../../../cardtype/base.js').CardTypeCard} parsedCard
+     * @param {import('../../../script-generation/base.js').ScriptTypeGenerator} parsedCard
      * @param {"guided"} mode
      * @param {boolean} isNewFile
      */
@@ -100,7 +100,7 @@ export class WorldWizard extends CardTypeWizard {
     }
 
     /**
-     * @param {import('../../../cardtype/base.js').CardTypeCard} parsedCard 
+     * @param {import('../../../script-generation/base.js').ScriptTypeGenerator} parsedCard 
      * @param {"guided"} mode
      */
     async continueProcess(parsedCard, mode) {
@@ -187,7 +187,7 @@ export class WorldWizard extends CardTypeWizard {
         };
 
         const cleanup = () => {
-            client.onCardTypeGuiderQuestion = null;
+            client.onScriptTypeGuiderQuestion = null;
             client.onCardTypeAutosave = null;
             client.onCardTypeWizardComplete = null;
         };
@@ -198,7 +198,7 @@ export class WorldWizard extends CardTypeWizard {
             client.cancelCardTypeGeneration();
         };
 
-        client.onCardTypeGuiderQuestion = onGuiderQuestion;
+        client.onScriptTypeGuiderQuestion = onGuiderQuestion;
         client.onCardTypeAutosave = onAutosave;
         client.onCardTypeWizardComplete = onComplete;
 

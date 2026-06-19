@@ -1,14 +1,13 @@
 /**
  * @param {string} jsContent
- * @returns {CardTypeCard}
+ * @returns {ScriptTypeGenerator}
  */
-export function createCardStructureFrom(jsContent) {
+export function parseScriptGeneratorFrom(jsContent) {
     /**
-     * @type {CardTypeCard}
+     * @type {ScriptTypeGenerator}
      */
     const baseFile = {
-        config: {},
-        card: '',
+        state: {},
         imports: [],
         head: [],
         body: [],
@@ -34,52 +33,36 @@ export function createCardStructureFrom(jsContent) {
      */
     let sectionId = null;
 
-    let configAcumulator = '';
-    let cardAcumulator = '';
+    let stateAcumulator = '';
 
-    let isInConfig = false;
-    let isInCard = false;
+    let isInState = false;
 
     for (const line of splittedLines) {
         const trimmedLine = line.trim();
 
         if (!trimmedLine || trimmedLine.startsWith('//@')) {
-            if (isInConfig) {
+            if (isInState) {
                 try {
-                    baseFile.config = JSON.parse(configAcumulator);
+                    baseFile.state = JSON.parse(stateAcumulator);
                 } catch (e) {
-                    console.error("Error parsing config JSON:", e);
-                    throw new Error("Error parsing config JSON");
+                    console.error("Error parsing state JSON:", e);
+                    throw new Error("Error parsing state JSON");
                 }
             }
-            if (isInCard) {
-                try {
-                    baseFile.card = JSON.parse(cardAcumulator);
-                } catch (e) {
-                    console.error("Error parsing card JSON:", e);
-                    throw new Error("Error parsing card JSON");
-                }
-            }
-            isInConfig = false;
-            isInCard = false;
+            isInState = false;
         }
 
         if (trimmedLine === '//@placeholder' || !trimmedLine) {
             // skip
-        } if (trimmedLine.startsWith("//") && isInConfig) {
+        } if (trimmedLine.startsWith("//") && isInState) {
             // Preserve newlines between continuation lines so that the
             // pretty-printed JSON survives a round-trip byte-for-byte.
             // Concatenating without a separator would collapse multi-line
             // JSON to one line and cause re-encoding to grow the file.
-            configAcumulator += "\n" + line.substring(2);
-        } else if (trimmedLine.startsWith("//") && isInCard) {
-            cardAcumulator += "\n" + line.substring(2);
-        } else if (trimmedLine.startsWith('//@config:') && !sectionId) {
-            configAcumulator = line.substring('//@config:'.length).trim();
-            isInConfig = true;
-        } else if (trimmedLine.startsWith('//@card:') && !sectionId) {
-            cardAcumulator = line.substring('//@card:'.length).trim();
-            isInCard = true;
+            stateAcumulator += "\n" + line.substring(2);
+        } else if (trimmedLine.startsWith('//@state:') && !sectionId) {
+            stateAcumulator = line.substring('//@state:'.length).trim();
+            isInState = true;
         } else if (trimmedLine === '//@imports' && !sectionId) {
             isInImports = true;
             isInHead = false;
@@ -106,7 +89,7 @@ export function createCardStructureFrom(jsContent) {
                 sectionId = foundSectionId;
                 accumulatedLinesOfSection = [];
             } else if (sectionId && foundSectionId === sectionId) {
-                const parsed = createCardStructureFrom(accumulatedLinesOfSection.join('\n'));
+                const parsed = parseScriptGeneratorFrom(accumulatedLinesOfSection.join('\n'));
                 const section = {
                     type: 'section',
                     commentId: sectionId,
@@ -150,12 +133,12 @@ export function createCardStructureFrom(jsContent) {
  * @param {string} jsContent 
  * @returns {boolean}
  */
-export function isCardTypeFile(jsContent) {
+export function isScriptTypeGeneratorFile(jsContent) {
     if (jsContent.startsWith("//@placeholder")) {
         return true;
     }
     const splittedLines = jsContent.split('\n');
-    const basicChecksPass = splittedLines.length > 2 && splittedLines[0].startsWith('//@config:');
+    const basicChecksPass = splittedLines.length > 2 && splittedLines[0].startsWith('//@state:');
     if (!basicChecksPass) return false;
     // check for imports, head, body or foot comments
     const trimmedLines = splittedLines.map(line => line.trim());
@@ -163,16 +146,15 @@ export function isCardTypeFile(jsContent) {
 }
 
 /**
- * @param {CardTypeCard} base
+ * @param {ScriptTypeGenerator} base
  * @param {number} baseTabCount
- * @param {boolean} noImportsNorCardAndConfig
+ * @param {boolean} noImportsNorState
  * @returns {string}
  */
-export function getJsCard(base, baseTabCount = 0, noImportsNorCardAndConfig = false) {
-    let endResult = noImportsNorCardAndConfig ? "" : `//@config: ${JSON.stringify(base.config, null, 2).split("\n").join("\n//")}` + "\n\n" +
-        `//@card: ${JSON.stringify(base.card)}` + "\n\n";
+export function getJsScriptFromGenerator(base, baseTabCount = 0, noImportsNorState = false) {
+    let endResult = noImportsNorState ? "" : `//@state: ${JSON.stringify(base.state, null, 2).split("\n").join("\n//")}` + "\n\n";
 
-    const elementsInOrder = noImportsNorCardAndConfig ? [
+    const elementsInOrder = noImportsNorState ? [
         "//@head",
         ...base.head,
         "//@body",
@@ -217,9 +199,8 @@ export function getJsCard(base, baseTabCount = 0, noImportsNorCardAndConfig = fa
             }
         } else {
             // it's a section
-            const sectionJs = getJsCard({
-                config: {},
-                card: '',
+            const sectionJs = getJsScriptFromGenerator({
+                state: {},
                 imports: [],
                 head: element.head,
                 body: element.body,
@@ -233,46 +214,40 @@ export function getJsCard(base, baseTabCount = 0, noImportsNorCardAndConfig = fa
 }
 
 /**
- * @typedef {Object} CardTypeGuider
- * @property {(question: string, options: string[], defaultValue?: string) => Promise<{value: string}>} askOption
- * @property {(question: string, defaultValue?: string) => Promise<{value: string}>} askOpen
- * @property {(question: string, defaultValue?: string) => Promise<{value: string | null}>} askAccept
- * @property {(question: string, defaultValue?: number) => Promise<{value: number}>} askNumber
- * @property {(question: string, defaultValue?: boolean) => Promise<{value: boolean}>} askBoolean
- * @property {(question: string, options: Record<string, string[]> | null, defaultValue?: string[]) => Promise<{value: string[]}>} askList
- * @property {(question: string, defaultValue?: string[]) => Promise<{value: string[]}>} askArbitraryList
- * @property {(question: string, defaultValue?: string[]) => Promise<{value: string[] | null}>} askAcceptArbitraryList
+ * @typedef {Object} ScriptTypeGuider
+ * @property {(id: string | {softid: string} | null, question: string, options: string[], defaultValue: string | (() => Promise<string>)) => Promise<{value: string}>} askOption
+ * @property {(id: string | {softid: string} | null, question: string, defaultValue: string | (() => Promise<string>)) => Promise<{value: string}>} askOpen
+ * @property {(id: string | {softid: string} | null, question: string, defaultValue: string | (() => Promise<string>)) => Promise<{value: string}>} askAccept
+ * @property {(id: string | {softid: string} | null, question: string, defaultValue: number | (() => Promise<number>)) => Promise<{value: number}>} askNumber
+ * @property {(id: string | {softid: string} | null, question: string, defaultValue: boolean | (() => Promise<boolean>)) => Promise<{value: boolean}>} askBoolean
+ * @property {(id: string | {softid: string} | null, question: string, options: Record<string, string[]> | null, defaultValue: string[] | (() => Promise<string[]>)) => Promise<{value: string[]}>} askList
+ * @property {(id: string | {softid: string} | null, question: string, defaultValue: string[] | (() => Promise<string[]>)) => Promise<{value: string[]}>} askArbitraryList
+ * @property {(id: string | {softid: string} | null, question: string, defaultValue: string[] | (() => Promise<string[]>)) => Promise<{value: string[]}>} askAcceptArbitraryList
  */
 
 /**
- * @typedef {Object} CardTypeAutoSave
- * @property {() => Promise<void>} save - A function that saves the current state of the card, for example to a file or database. This can be called after any change is made to the card to ensure that progress is not lost.
- */
-
-/**
- * @typedef {Object} CardTypeCard
- * @property {string} card
- * @property {*} config
- * @property {Array<CardTypeCardSection | string>} head
- * @property {Array<CardTypeCardSection | string>} body
- * @property {Array<CardTypeCardSection | string>} foot
+ * @typedef {Object} ScriptTypeGenerator
+ * @property {*} state
+ * @property {Array<ScriptTypeGeneratorSection | string>} head
+ * @property {Array<ScriptTypeGeneratorSection | string>} body
+ * @property {Array<ScriptTypeGeneratorSection | string>} foot
  * @property {Array<string>} imports
  */
 
 /**
- * @typedef {Object} CardTypeCardSection
+ * @typedef {Object} ScriptTypeGeneratorSection
  * @property {string} type - The type of the section, e.g. "section"
  * @property {string} commentId - The id of the comment that marks this section, e.g. "base-basics"
- * @property {Array<CardTypeCardSection | string>} head
- * @property {Array<CardTypeCardSection | string>} body
- * @property {Array<CardTypeCardSection | string>} foot
+ * @property {Array<ScriptTypeGeneratorSection | string>} head
+ * @property {Array<ScriptTypeGeneratorSection | string>} body
+ * @property {Array<ScriptTypeGeneratorSection | string>} foot
  */
 
 /**
  * 
- * @param {Array<CardTypeCardSection | string>} lines 
+ * @param {Array<ScriptTypeGeneratorSection | string>} lines 
  * @param {string} commentId 
- * @param {(section: CardTypeCardSection) => void} [defaultCreateFn] - Optional function to initialize the section
+ * @param {(section: ScriptTypeGeneratorSection) => void} [defaultCreateFn] - Optional function to initialize the section
  */
 export function insertSection(lines, commentId, defaultCreateFn) {
     const existingSection = getSection(lines, commentId);
@@ -295,9 +270,9 @@ export function insertSection(lines, commentId, defaultCreateFn) {
 
 /**
  * 
- * @param {Array<CardTypeCardSection | string>} lines 
+ * @param {Array<ScriptTypeGeneratorSection | string>} lines 
  * @param {string} commentId 
- * @param {(section: CardTypeCardSection) => void} [defaultCreateFn] - Optional function to initialize the section
+ * @param {(section: ScriptTypeGeneratorSection) => void} [defaultCreateFn] - Optional function to initialize the section
  */
 export function unshiftSection(lines, commentId, defaultCreateFn) {
     const existingSection = getSection(lines, commentId);
@@ -319,7 +294,7 @@ export function unshiftSection(lines, commentId, defaultCreateFn) {
 }
 
 /**
- * @param {Array<CardTypeCardSection | string>} lines 
+ * @param {Array<ScriptTypeGeneratorSection | string>} lines 
  * @param {string} commentId 
  */
 export function insertSpecialComment(lines, commentId) {
@@ -330,7 +305,7 @@ export function insertSpecialComment(lines, commentId) {
 }
 
 /**
- * @param {Array<CardTypeCardSection | string>} lines 
+ * @param {Array<ScriptTypeGeneratorSection | string>} lines 
  * @param {string} commentId 
  */
 export function unshiftSpecialComment(lines, commentId) {
@@ -342,7 +317,7 @@ export function unshiftSpecialComment(lines, commentId) {
 
 /**
  * 
- * @param {Array<CardTypeCardSection | string>} lines 
+ * @param {Array<ScriptTypeGeneratorSection | string>} lines 
  * @param {string} commentId 
  */
 export function hasSpecialComment(lines, commentId) {
@@ -352,9 +327,9 @@ export function hasSpecialComment(lines, commentId) {
 
 /**
  * 
- * @param {Array<CardTypeCardSection | string>} lines 
+ * @param {Array<ScriptTypeGeneratorSection | string>} lines 
  * @param {string} commentId
- * @return {CardTypeCardSection | null}
+ * @return {ScriptTypeGeneratorSection | null}
  */
 export function getSection(lines, commentId) {
     const found = lines.find(line => {

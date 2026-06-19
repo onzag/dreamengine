@@ -1,6 +1,6 @@
 import { DEngine } from '../engine/index.js';
 import { yesNoGrammar } from '../engine/util/grammar.js';
-import { createCardStructureFrom, getJsCard, getSection, hasSpecialComment, insertSection, insertSpecialComment, toTemplateLiteral, unshiftSection } from './base.js';
+import { getSection, hasSpecialComment, insertSection, insertSpecialComment, toTemplateLiteral, unshiftSection } from './base.js';
 import { replaceOtherCharNameWithPlaceholder } from './generate-bond-triggers.js';
 
 if (typeof process !== "undefined" && process.versions && process.versions.node) {
@@ -21,8 +21,8 @@ function formatOrHelper(list) {
 
 /**
  * @param {DEngine} engine
- * @param {import('./base.js').CardTypeCard} card
- * @param {import('./base.js').CardTypeGuider | null} guider
+ * @param {import('./base.js').ScriptTypeGenerator} card
+ * @param {import('./base.js').ScriptTypeGuider | null} guider
  * @param {import('./base.js').CardTypeAutoSave | null} autosave
  * @return {Promise<void>}
  */

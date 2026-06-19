@@ -288,7 +288,7 @@ function describeFamilyContext(relationshipKey, romanticInterestKey, familyKey, 
  * `{{char}}` and `{{other}}` for display only). Returns the chosen reason
  * string with `[]` replaced (but with `{{char}}`/`{{other}}` still present so
  * they can be substituted at runtime by the engine).
- * @param {import('./base.js').CardTypeGuider | null} guider
+ * @param {import('./base.js').ScriptTypeGuider | null} guider
  * @param {{
  *    reasonYes: string[],
  *    reasonNo: string[],
@@ -479,8 +479,8 @@ function getBestMatchInOptions(values, options) {
 
 /**
  * @param {DEngine} engine
- * @param {import('./base.js').CardTypeCard} card
- * @param {import('./base.js').CardTypeGuider | null} guider
+ * @param {import('./base.js').ScriptTypeGenerator} card
+ * @param {import('./base.js').ScriptTypeGuider | null} guider
  * @param {import('./base.js').CardTypeAutoSave | null} autosave
  * @return {Promise<void>}
  */

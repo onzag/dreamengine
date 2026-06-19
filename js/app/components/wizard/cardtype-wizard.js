@@ -1,4 +1,4 @@
-import { createCardStructureFrom, getJsCard, isCardTypeFile } from '../../../cardtype/base.js';
+import { createCardStructureFrom, getJsCard, isCardTypeFile } from '../../../script-generation/base.js';
 import { playCancelSound, playConfirmSound, playHoverSound, setTempSoundDisable, stopAllAmbiencesAndStartNewOne } from '../../sound.js';
 
 export class CardTypeWizard extends HTMLElement {
@@ -126,7 +126,7 @@ export class CardTypeWizard extends HTMLElement {
     }
 
     /**
-     * @param {import('../../../cardtype/base.js').CardTypeCard} parsedCard 
+     * @param {import('../../../script-generation/base.js').ScriptTypeGenerator} parsedCard 
      * @param {"automatic" | "guided"} mode 
      * @param {boolean} isNewFile
      */
@@ -182,7 +182,7 @@ export class CardTypeWizard extends HTMLElement {
     }
 
     /**
-     * @param {import('../../../cardtype/base.js').CardTypeCard} parsedCard 
+     * @param {import('../../../script-generation/base.js').ScriptTypeGenerator} parsedCard 
      * @param {"automatic" | "guided"} mode
      */
     async continueProcess(parsedCard, mode) {
@@ -269,7 +269,7 @@ export class CardTypeWizard extends HTMLElement {
         };
 
         const cleanup = () => {
-            client.onCardTypeGuiderQuestion = null;
+            client.onScriptTypeGuiderQuestion = null;
             client.onCardTypeAutosave = null;
             client.onCardTypeWizardComplete = null;
         };
@@ -280,7 +280,7 @@ export class CardTypeWizard extends HTMLElement {
             client.cancelCardTypeGeneration();
         };
 
-        client.onCardTypeGuiderQuestion = onGuiderQuestion;
+        client.onScriptTypeGuiderQuestion = onGuiderQuestion;
         client.onCardTypeAutosave = onAutosave;
         client.onCardTypeWizardComplete = onComplete;
 
@@ -353,7 +353,7 @@ export class CardTypeWizard extends HTMLElement {
     /**
      * Creates a UI-based guider that renders interactive questions into the wizard content area.
      * Each method returns a promise that resolves when the user submits their answer.
-     * @returns {import('../../../cardtype/base.js').CardTypeGuider}
+     * @returns {import('../../../script-generation/base.js').ScriptTypeGuider}
      */
     createUIGuider() {
         const self = this;

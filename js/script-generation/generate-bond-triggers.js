@@ -16,8 +16,8 @@ export function replaceOtherCharNameWithPlaceholder(text, charName) {
 
 /**
  * @param {DEngine} engine
- * @param {import('./base.js').CardTypeCard} card
- * @param {import('./base.js').CardTypeGuider | null} guider
+ * @param {import('./base.js').ScriptTypeGenerator} card
+ * @param {import('./base.js').ScriptTypeGuider | null} guider
  * @param {import('./base.js').CardTypeAutoSave | null} autosave
  * @return {Promise<void>}
  */

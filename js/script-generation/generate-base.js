@@ -36,34 +36,31 @@ export function replaceAllCharNameWithPlaceholder(str, charName) {
 
 /**
  * @param {DEngine} engine
- * @param {import('./base.js').CardTypeCard} card
- * @param {import('./base.js').CardTypeGuider | null} guider
- * @param {import('./base.js').CardTypeAutoSave | null} autosave
+ * @param {import('./base.js').ScriptTypeGenerator} scriptgenerator
+ * @param {import('./base.js').ScriptTypeGuider} guider
  * @return {Promise<void>}
  */
-export async function generateBase(engine, card, guider, autosave) {
-    card.config.version = 1;
-    
-    if (!hasSpecialComment(card.imports, "base-imports")) {
-        insertSpecialComment(card.imports, "base-imports");
-        card.imports.push(`const fss = await importScript("@bond-systems", "full-standard-bond-system");`);
-        card.imports.push(`await importScript("@bond-systems", "deteriorating-bonds");`);
-        await autosave?.save();
+export async function generateBase(engine, scriptgenerator, guider) {
+    scriptgenerator.state.version = 2;
+
+    if (!scriptgenerator.state.card) {
+        throw new Error("No card found in state");
     }
 
-    const metadataSection = insertSection(card.head, "metadata", (s) => {
-        s.head.push(`metadata: {`);
+    insertSpecialComment(scriptgenerator.imports, "base-imports");
+    scriptgenerator.imports.push(`const fss = await importScript("@bond-systems", "full-standard-bond-system");`);
+    scriptgenerator.imports.push(`await importScript("@bond-systems", "deteriorating-bonds");`);
+
+    const metadataSection = insertSection(scriptgenerator.head, "metadata", (s) => {
+        s.head.push(`const metadata = {`);
         s.foot.push(`},`);
     });
 
-    if (!hasSpecialComment(card.head, "base-head")) {
-        insertSpecialComment(card.head, "base-head");
-        card.head.push(`engine.exports = {`);
-        card.head.push(`metadata,`);
-        card.head.push(`type: "characters",`);
-        card.foot.push(`};`);
-        await autosave?.save();
-    }
+    insertSpecialComment(scriptgenerator.head, "base-head");
+    scriptgenerator.head.push(`engine.exports = {`);
+    scriptgenerator.head.push(`metadata,`);
+    scriptgenerator.head.push(`type: "characters",`);
+    scriptgenerator.foot.push(`};`);
 
     const inferenceAdapter = engine.inferenceAdapter;
     if (!inferenceAdapter) {
@@ -73,7 +70,7 @@ export async function generateBase(engine, card, guider, autosave) {
     const systemPrompt = inferenceAdapter.buildSystemPromptForQuestioningAgent(
         `You are a helpful assistant that will answer and assist in defining a character for a game based on their description, you are allowed free rein to interpret the character's description and generate the code that defines them in the game, you will be asked questions about the character and you should answer them as best as you can`,
         [],
-        `# Character Card:\n\n${card.card}`
+        `# Character Card:\n\n${scriptgenerator.state.card}`
     );
 
     const generator = inferenceAdapter.runQuestioningCustomAgentOn("cardtype-gen-base", {
@@ -94,158 +91,151 @@ export async function generateBase(engine, card, guider, autosave) {
         }
     }
 
-    const initializeSection = insertSection(card.body, "initialize", (s) => {
+    const initializeSection = insertSection(scriptgenerator.body, "initialize", (s) => {
         s.head.push(`initialize(DE) {`);
         s.foot.push(`},`);
     });
 
-    const onWorldClockReadySection = insertSection(card.body, "on-world-clock-ready-fss", (s) => {
+    const onWorldClockReadySection = insertSection(scriptgenerator.body, "on-world-clock-ready-fss", (s) => {
         s.head.push(`onWorldClockReady(DE) {`);
         s.foot.push(`},`);
     });
 
     const newCharacterSection = insertSection(initializeSection.body, "new-character");
 
-    let name = "";
-    if (!hasSpecialComment(card.head, "base-basics")) {
-        await prime();
-        const answer = await generator.next({
-            maxCharacters: 50,
-            maxSafetyCharacters: 50,
-            maxParagraphs: 1,
-            nextQuestion: "What is the character's name?",
-            stopAfter: [],
-            stopAt: [],
-            instructions: "Answer with just the character's name, no explanations or extra text",
-            grammar: "root ::= [A-Za-z ]+"
-        });
-
-        if (answer.done) {
-            throw new Error("Generator finished without producing output");
-        }
-
-        name = answer.value.trim();
-
-        if (guider) {
-            const nameByGuider = await guider.askOpen("What is the character's name?", name);
-            if (nameByGuider) {
-                name = nameByGuider.value.trim();
-            }
-        }
-
-        card.config.name = name;
-
-        const answerSmallOneSentenceDescription = await generator.next({
-            maxCharacters: 100,
-            maxSafetyCharacters: 100,
-            maxParagraphs: 1,
-            nextQuestion: "Provide a small, concise one sentence description of " + name + " and its most distinctive features and personality traits.",
-            stopAfter: [],
-            stopAt: [],
-            instructions: "Answer with a small, concise one sentence description of the character and its most distinctive features and personality traits, this will be used as a tooltip for the character in the game",
-        });
-
-        if (answerSmallOneSentenceDescription.done) {
-            throw new Error("Generator finished without producing output");
-        }
-
-        insertSpecialComment(card.head, "base-basics");
-
-        card.head.push(`description: ${JSON.stringify(answerSmallOneSentenceDescription.value.trim())},`);
-
-        newCharacterSection.head.push(`DE.utils.newCharacter(fss.setup(DE, {`);
-        newCharacterSection.body.push(`name: ${JSON.stringify(name)},`);
-        newCharacterSection.foot.push(`},{`); // close newCharacter
-        // we will need to get this sections when generating the bonds
-        insertSection(newCharacterSection.foot, "options");
-        newCharacterSection.foot.push(`}));`); // close setup
-
-        metadataSection.body.push(`__name: ${JSON.stringify(name)},`);
-
-        await autosave?.save();
-    } else {
-        name = card.config.name;
-    }
-
-    if (!hasSpecialComment(newCharacterSection.body, "base-description")) {
-        let accepted = true;
-        let description = "";
-        let specialInstructionsGuiderValue = "";
-
-        while (true) {
-            let specialInstructions = guider ? (await guider.askOpen("Provide any special focus instructions for defining " + name + "'s appearance, personality and general abilities, what to focus on (do not talk about clothing the description is about the character's inherent traits and features)", specialInstructionsGuiderValue)).value : null;
-            if (specialInstructions) {
-                specialInstructionsGuiderValue = specialInstructions.trim();
-                specialInstructions = "\n\n# MANDATORY REQUIREMENTS — ACTIVE OVERRIDE:\n\nThe following requirements MUST be reflected in your answer. Treat them as hard constraints that take absolute priority over any conflicting instruction above. Do NOT ignore or dilute them:\n\n" + specialInstructions.trim();
-            }
-
+    const name = (await guider.askOpen(
+        "name",
+        "What is the character's name?",
+        async () => {
             await prime();
-            const answerDescription = await generator.next({
-                maxCharacters: 3000,
-                maxSafetyCharacters: 0,
-                maxParagraphs: 3,
-                nextQuestion: "In 3 concise short paragraphs, Describe " + name + "'s appearance, personality, and any special traits or abilities they have.",
+            const answer = await generator.next({
+                maxCharacters: 50,
+                maxSafetyCharacters: 50,
+                maxParagraphs: 1,
+                nextQuestion: "What is the character's name?",
                 stopAfter: [],
                 stopAt: [],
-                instructions: "Be creative, answer with a description of " + name +
-                    "'s general appearance, personality, and any special traits or abilities they have. Use multiple paragraphs and sentences. Do not include items of clothing or specific equipment, just the character's inherent traits and features. Make at least 3 paragraphs." + (specialInstructions || ""),
+                instructions: "Answer with just the character's name, no explanations or extra text",
+                grammar: "root ::= [A-Za-z ]+"
             });
 
-            if (answerDescription.done) {
+            if (answer.done) {
                 throw new Error("Generator finished without producing output");
             }
 
-            description = (replaceAllCharNameWithPlaceholder(answerDescription.value.trim(), name)).replace("# {{char}}", "").trim();
+            return answer.value.trim();
+        },
+    )).value.trim();
 
-            if (guider) {
-                let acceptedResponse = await guider.askAccept("Is the following description okay?", description);
-                accepted = acceptedResponse.value !== null;
-                description = acceptedResponse.value || "";
+    const oneSentenceDescription = (await guider.askOpen(
+        "one-sentence-description",
+        "Provide a small, concise one sentence description of " + name + " and its most distinctive features and personality traits",
+        async () => {
+            await prime();
+
+            const answerSmallOneSentenceDescription = await generator.next({
+                maxCharacters: 100,
+                maxSafetyCharacters: 100,
+                maxParagraphs: 1,
+                nextQuestion: "Provide a small, concise one sentence description of " + name + " and its most distinctive features and personality traits.",
+                stopAfter: [],
+                stopAt: [],
+                instructions: "Answer with a small, concise one sentence description of the character and its most distinctive features and personality traits, this will be used as a tooltip for the character in the game",
+            });
+
+            if (answerSmallOneSentenceDescription.done) {
+                throw new Error("Generator finished without producing output");
             }
+
+            return answerSmallOneSentenceDescription.value.trim();
+        },
+    )).value.trim();
+
+    insertSpecialComment(scriptgenerator.head, "base-basics");
+
+    scriptgenerator.head.push(`description: ${JSON.stringify(oneSentenceDescription.trim())},`);
+
+    newCharacterSection.head.push(`DE.utils.newCharacter(fss.setup(DE, {`);
+    newCharacterSection.body.push(`name: ${JSON.stringify(name)},`);
+    newCharacterSection.foot.push(`},{`); // close newCharacter
+    // we will need to get this sections when generating the bonds
+    insertSection(newCharacterSection.foot, "options");
+    newCharacterSection.foot.push(`}));`); // close setup
+
+    metadataSection.body.push(`__name: ${JSON.stringify(name)},`);
+
+    {
+        let description = "";
+
+        while (true) {
+            const acceptedResponse = await guider.askAccept("character-description", "Is the following description okay?", async () => {
+                let specialInstructions = (await guider.askOpen({ softid: "character-description-special-instructions" }, "Provide any special focus instructions for defining " + name + "'s appearance, personality and general abilities, what to focus on (do not talk about clothing the description is about the character's inherent traits and features)", "")).value;
+                if (specialInstructions) {
+                    specialInstructions = "\n\n# MANDATORY REQUIREMENTS — ACTIVE OVERRIDE:\n\nThe following requirements MUST be reflected in your answer. Treat them as hard constraints that take absolute priority over any conflicting instruction above. Do NOT ignore or dilute them:\n\n" + specialInstructions.trim();
+                }
+
+                await prime();
+                const answerDescription = await generator.next({
+                    maxCharacters: 3000,
+                    maxSafetyCharacters: 0,
+                    maxParagraphs: 3,
+                    nextQuestion: "In 3 concise short paragraphs, Describe " + name + "'s appearance, personality, and any special traits or abilities they have.",
+                    stopAfter: [],
+                    stopAt: [],
+                    instructions: "Be creative, answer with a description of " + name +
+                        "'s general appearance, personality, and any special traits or abilities they have. Use multiple paragraphs and sentences. Do not include items of clothing or specific equipment, just the character's inherent traits and features. Make at least 3 paragraphs." + (specialInstructions || ""),
+                });
+
+                if (answerDescription.done) {
+                    throw new Error("Generator finished without producing output");
+                }
+
+                description = (replaceAllCharNameWithPlaceholder(answerDescription.value.trim(), name)).replace("# {{char}}", "").trim();
+
+                return description;
+            });
+
+            const accepted = acceptedResponse.value !== null;
+            description = acceptedResponse.value || "";
 
             if (accepted) {
                 break;
             }
         }
+
         insertSpecialComment(newCharacterSection.body, "base-description");
         newCharacterSection.body.push(`general: (info) => ${toTemplateLiteral(description)},`);
-        await autosave?.save();
     }
 
     let shortDescription = "";
-    if (!hasSpecialComment(newCharacterSection.body, "base-short-description")) {
-        let accepted = true;
-        let specialInstructionsGuiderValue = "";
-
+    {
         while (true) {
-            let specialInstructionsForShortDescription = guider ? (await guider.askOpen("Provide any special focus instructions for defining " + name + "'s external and physical description, what to focus on (do not talk about clothing the description is about the character's inherent traits and features)", specialInstructionsGuiderValue)).value : null;
-            if (specialInstructionsForShortDescription) {
-                specialInstructionsGuiderValue = specialInstructionsForShortDescription.trim();
-                specialInstructionsForShortDescription = "\n\n# MANDATORY REQUIREMENTS — ACTIVE OVERRIDE:\n\nThe following requirements MUST be reflected in your answer. Treat them as hard constraints that take absolute priority over any conflicting instruction above. Do NOT ignore or dilute them:\n\n" + specialInstructionsForShortDescription.trim();
-            }
+            const acceptedResponse = await guider.askAccept("character-short-description", "Is the following short description okay?", async () => {
+                let specialInstructionsForShortDescription = guider ? (await guider.askOpen({ softid: "character-short-description-special-instructions" }, "Provide any special focus instructions for defining " + name + "'s external and physical description, what to focus on (do not talk about clothing the description is about the character's inherent traits and features)", "")).value : null;
+                if (specialInstructionsForShortDescription) {
+                    specialInstructionsForShortDescription = "\n\n# MANDATORY REQUIREMENTS — ACTIVE OVERRIDE:\n\nThe following requirements MUST be reflected in your answer. Treat them as hard constraints that take absolute priority over any conflicting instruction above. Do NOT ignore or dilute them:\n\n" + specialInstructionsForShortDescription.trim();
+                }
 
-            await prime();
-            const answerShortDescription = await generator.next({
-                maxCharacters: 100,
-                maxSafetyCharacters: 0,
-                maxParagraphs: 1,
-                nextQuestion: "Provide a short one sentence description of " + name + " as they are perceived visually by others in the world, focusing on their most distinctive features",
-                stopAfter: [],
-                stopAt: [],
-                instructions: "Answer with a single sentence that provides a brief description of " + name + "'s appearance and personality. Use no more than 20 words. Do not include items of clothing or specific equipment, just the character's inherent traits and features. Do not include the character name in the description, just describe as an external observer would perceive them, focusing on their most distinctive features." + (specialInstructionsForShortDescription || ""),
+                await prime();
+                const answerShortDescription = await generator.next({
+                    maxCharacters: 100,
+                    maxSafetyCharacters: 0,
+                    maxParagraphs: 1,
+                    nextQuestion: "Provide a short one sentence description of " + name + " as they are perceived visually by others in the world, focusing on their most distinctive features",
+                    stopAfter: [],
+                    stopAt: [],
+                    instructions: "Answer with a single sentence that provides a brief description of " + name + "'s appearance and personality. Use no more than 20 words. Do not include items of clothing or specific equipment, just the character's inherent traits and features. Do not include the character name in the description, just describe as an external observer would perceive them, focusing on their most distinctive features." + (specialInstructionsForShortDescription || ""),
+                });
+
+                if (answerShortDescription.done) {
+                    throw new Error("Generator finished without producing output");
+                }
+
+                return answerShortDescription.value.trim();
             });
 
-            if (answerShortDescription.done) {
-                throw new Error("Generator finished without producing output");
-            }
-
-            shortDescription = answerShortDescription.value.trim();
-
-            if (guider) {
-                let acceptedResponse = await guider.askAccept("Is the following short description okay?", shortDescription);
-                accepted = acceptedResponse.value !== null;
-                shortDescription = acceptedResponse.value || "";
-            }
+            const accepted = acceptedResponse.value !== null;
+            shortDescription = acceptedResponse.value || "";
 
             if (accepted) {
                 break;
@@ -253,47 +243,39 @@ export async function generateBase(engine, card, guider, autosave) {
         }
         insertSpecialComment(newCharacterSection.body, "base-short-description");
         newCharacterSection.body.push(`shortDescription: ${JSON.stringify(shortDescription)},`);
-        card.config.shortDescription = shortDescription;
-        await autosave?.save();
-    } else {
-        shortDescription = card.config.shortDescription;
     }
 
-    if (!hasSpecialComment(newCharacterSection.body, "base-short-description-top-naked-add")) {
+    {
         let shortDescriptionTopNakedAdd = "";
-        let accepted = true;
-        let specialInstructionsForShortDescriptionAddGuiderValue = "";
 
         while (true) {
-            let specialInstructionsForShortDescriptionAdd = guider ? (await guider.askOpen("Provide any special focus instructions for defining the additions to " + name + "'s short description when they are not wearing any upper body clothing, what to focus on (how to describe their upper body's most distinctive features)", specialInstructionsForShortDescriptionAddGuiderValue)).value : null;
-            if (specialInstructionsForShortDescriptionAdd) {
-                specialInstructionsForShortDescriptionAddGuiderValue = specialInstructionsForShortDescriptionAdd.trim();
-                specialInstructionsForShortDescriptionAdd = "\n\n# MANDATORY REQUIREMENTS — ACTIVE OVERRIDE:\n\nThe following requirements MUST be reflected in your answer. Treat them as hard constraints that take absolute priority over any conflicting instruction above. Do NOT ignore or dilute them:\n\n" + specialInstructionsForShortDescriptionAdd.trim();
-            }
+            const acceptedResponse = await guider.askAccept("character-short-description-top-naked-add", "Is the following addition to the short description okay?", async () => {
+                let specialInstructionsForShortDescriptionAdd = (await guider.askOpen({ softid: "character-short-description-top-naked-add-special-instructions" }, "Provide any special focus instructions for defining the additions to " + name + "'s short description when they are not wearing any upper body clothing, what to focus on (how to describe their upper body's most distinctive features)", "")).value;
+                if (specialInstructionsForShortDescriptionAdd) {
+                    specialInstructionsForShortDescriptionAdd = "\n\n# MANDATORY REQUIREMENTS — ACTIVE OVERRIDE:\n\nThe following requirements MUST be reflected in your answer. Treat them as hard constraints that take absolute priority over any conflicting instruction above. Do NOT ignore or dilute them:\n\n" + specialInstructionsForShortDescriptionAdd.trim();
+                }
 
-            await prime();
-            const answerShortDescriptionTopNakedAdd = await generator.next({
-                maxCharacters: 100,
-                maxSafetyCharacters: 0,
-                maxParagraphs: 1,
-                nextQuestion: "Create a sentence that can be added at the end of the short description to describe " + name + " without any upper body clothing, focusing on their upper body's most distinctive features",
-                stopAfter: [],
-                stopAt: [],
-                contextInfo: "The short description is: " + JSON.stringify(shortDescription),
-                instructions: "Answer with a single sentence that can be appended to the short description to describe " + name + " without any upper body clothing, focusing on their upper body's most distinctive features. Do not include the character name in the description, just describe as an external observer would perceive them, focusing on their most distinctive features. Do not add details already mentioned in the short description, only add new details that would be visible when the character is not wearing any upper body clothing. If the character has boobs or a flat chest, nipples, etc... describe it" + (specialInstructionsForShortDescriptionAdd || ""),
+                await prime();
+                const answerShortDescriptionTopNakedAdd = await generator.next({
+                    maxCharacters: 100,
+                    maxSafetyCharacters: 0,
+                    maxParagraphs: 1,
+                    nextQuestion: "Create a sentence that can be added at the end of the short description to describe " + name + " without any upper body clothing, focusing on their upper body's most distinctive features",
+                    stopAfter: [],
+                    stopAt: [],
+                    contextInfo: "The short description is: " + JSON.stringify(shortDescription),
+                    instructions: "Answer with a single sentence that can be appended to the short description to describe " + name + " without any upper body clothing, focusing on their upper body's most distinctive features. Do not include the character name in the description, just describe as an external observer would perceive them, focusing on their most distinctive features. Do not add details already mentioned in the short description, only add new details that would be visible when the character is not wearing any upper body clothing. If the character has boobs or a flat chest, nipples, etc... describe it" + (specialInstructionsForShortDescriptionAdd || ""),
+                });
+
+                if (answerShortDescriptionTopNakedAdd.done) {
+                    throw new Error("Generator finished without producing output");
+                }
+
+                return answerShortDescriptionTopNakedAdd.value.trim();
             });
 
-            if (answerShortDescriptionTopNakedAdd.done) {
-                throw new Error("Generator finished without producing output");
-            }
-
-            shortDescriptionTopNakedAdd = answerShortDescriptionTopNakedAdd.value.trim();
-
-            if (guider) {
-                let acceptedResponse = await guider.askAccept("Is the following addition to the short description okay?", shortDescriptionTopNakedAdd);
-                accepted = acceptedResponse.value !== null;
-                shortDescriptionTopNakedAdd = acceptedResponse.value || "";
-            }
+            const accepted = acceptedResponse.value !== null;
+            shortDescriptionTopNakedAdd = acceptedResponse.value || "";
 
             if (accepted) {
                 break;
@@ -304,54 +286,48 @@ export async function generateBase(engine, card, guider, autosave) {
         newCharacterSection.body.push(`shortDescriptionTopNakedAdd: ${JSON.stringify(shortDescriptionTopNakedAdd)},`);
     }
 
-    if (!hasSpecialComment(newCharacterSection.body, "base-short-description-bottom-naked-add")) {
+    {
 
         let shortDescriptionBottomNakedAdd = "";
-        let accepted = true;
-        let specialInstructionsForShortDescriptionBottomAddGuiderValue = "";
 
         while (true) {
-            let specialInstructionsForShortDescriptionBottomAdd = guider ? (await guider.askOpen("Provide any special focus instructions for defining the additions to " + name + "'s short description when they are not wearing any lower body clothing, what to focus on (how to describe their lower body's most distinctive features)", specialInstructionsForShortDescriptionBottomAddGuiderValue)).value : null;
-            if (specialInstructionsForShortDescriptionBottomAdd) {
-                specialInstructionsForShortDescriptionBottomAddGuiderValue = specialInstructionsForShortDescriptionBottomAdd.trim();
-                specialInstructionsForShortDescriptionBottomAdd = "\n\n# MANDATORY REQUIREMENTS — ACTIVE OVERRIDE:\n\nThe following requirements MUST be reflected in your answer. Treat them as hard constraints that take absolute priority over any conflicting instruction above. Do NOT ignore or dilute them:\n\n" + specialInstructionsForShortDescriptionBottomAdd.trim();
-            }
+            const acceptedResponse = await guider.askAccept("character-short-description-bottom-naked-add", "Is the following addition to the short description okay?", async () => {
+                let specialInstructionsForShortDescriptionBottomAdd = (await guider.askOpen({ softid: "character-short-description-bottom-naked-add-special-instructions" }, "Provide any special focus instructions for defining the additions to " + name + "'s short description when they are not wearing any lower body clothing, what to focus on (how to describe their lower body's most distinctive features)", "")).value;
+                if (specialInstructionsForShortDescriptionBottomAdd) {
+                    specialInstructionsForShortDescriptionBottomAdd = "\n\n# MANDATORY REQUIREMENTS — ACTIVE OVERRIDE:\n\nThe following requirements MUST be reflected in your answer. Treat them as hard constraints that take absolute priority over any conflicting instruction above. Do NOT ignore or dilute them:\n\n" + specialInstructionsForShortDescriptionBottomAdd.trim();
+                }
 
-            await prime();
-            const answerShortDescriptionBottomNakedAdd = await generator.next({
-                maxCharacters: 100,
-                maxSafetyCharacters: 0,
-                maxParagraphs: 1,
-                nextQuestion: "Create a sentence that can be added at the end of the short description to describe " + name + " without any lower body clothing, focusing on their lower body's most distinctive features",
-                stopAfter: [],
-                stopAt: [],
-                contextInfo: "The short description is: " + JSON.stringify(shortDescription),
-                instructions: "Answer with a single sentence that can be appended to the short description to describe " + name + " without any lower body clothing, focusing on their lower body's most distinctive features. Do not include the character name in the description, just describe as an external observer would perceive them, focusing on their most distinctive features. Do not add details already mentioned in the short description, only add new details that would be visible when the character is not wearing any lower body clothing. If the character has a penis or vagina, describe it" + (specialInstructionsForShortDescriptionBottomAdd || ""),
+                await prime();
+                const answerShortDescriptionBottomNakedAdd = await generator.next({
+                    maxCharacters: 100,
+                    maxSafetyCharacters: 0,
+                    maxParagraphs: 1,
+                    nextQuestion: "Create a sentence that can be added at the end of the short description to describe " + name + " without any lower body clothing, focusing on their lower body's most distinctive features",
+                    stopAfter: [],
+                    stopAt: [],
+                    contextInfo: "The short description is: " + JSON.stringify(shortDescription),
+                    instructions: "Answer with a single sentence that can be appended to the short description to describe " + name + " without any lower body clothing, focusing on their lower body's most distinctive features. Do not include the character name in the description, just describe as an external observer would perceive them, focusing on their most distinctive features. Do not add details already mentioned in the short description, only add new details that would be visible when the character is not wearing any lower body clothing. If the character has a penis or vagina, describe it" + (specialInstructionsForShortDescriptionBottomAdd || ""),
+                });
+
+                if (answerShortDescriptionBottomNakedAdd.done) {
+                    throw new Error("Generator finished without producing output");
+                }
+
+                return answerShortDescriptionBottomNakedAdd.value.trim();
             });
 
-            if (answerShortDescriptionBottomNakedAdd.done) {
-                throw new Error("Generator finished without producing output");
+            const accepted = acceptedResponse.value !== null;
+            shortDescriptionBottomNakedAdd = acceptedResponse.value || "";
+
+            if (accepted) {
+                break;
             }
-
-            shortDescriptionBottomNakedAdd = answerShortDescriptionBottomNakedAdd.value.trim();
-
-            if (guider) {
-                let acceptedResponse = await guider.askAccept("Is the following addition to the short description okay?", shortDescriptionBottomNakedAdd);
-                accepted = acceptedResponse.value !== null;
-                shortDescriptionBottomNakedAdd = acceptedResponse.value || "";
-            }
-
-            if (accepted) break;
         }
         insertSpecialComment(newCharacterSection.body, "base-short-description-bottom-naked-add");
         newCharacterSection.body.push(`shortDescriptionBottomNakedAdd: ${JSON.stringify(shortDescriptionBottomNakedAdd)},`);
-        await autosave?.save();
     }
 
-    // don't need it anymore
-    delete card.config.shortDescription;
-
-    if (!hasSpecialComment(newCharacterSection.body, "base-empties")) {
+    {
         insertSpecialComment(newCharacterSection.body, "base-empties");
         newCharacterSection.body.push(`generalCharacterDescriptionInjection: {},`);
         newCharacterSection.body.push(`actionPromptInjection: [],`);
@@ -364,7 +340,6 @@ export async function generateBase(engine, card, guider, autosave) {
             newCharacterSection.body.push(`},`)
         newCharacterSection.body.push("triggers: [],");
         newCharacterSection.body.push("temp: {},"); // Temporary properties to use during inference cycles, they do not persist
-        await autosave?.save();
     }
 
 
@@ -375,167 +350,143 @@ export async function generateBase(engine, card, guider, autosave) {
         s.foot.push(`},`);
     });
 
-    if (!hasSpecialComment(emotionsSection.body, "base-emotions")) {
-        await prime();
-        const commonEmotions = await generator.next({
-            maxCharacters: 200,
-            maxSafetyCharacters: 0,
-            maxParagraphs: 1,
-            nextQuestion: "Provide a comma separated list of common emotions for " + name + " provide between 3 to 7 emotions",
-            stopAfter: emotionsGrammar.stopAfter,
-            stopAt: [],
-            grammar: emotionsGrammar.grammar,
-            instructions: "Pick from the list of following emotions: \"" + emotions.join(", ") + "\" and answer with a comma separated list of the emotions that are common for " + name,
-        });
+    {
+        const commonEmotions = await guider.askList(
+            "common-emotions",
+            "Which emotions are common for " + name + "?",
+            emotionsGrouped,
+            async () => {
+                await prime();
+                const commonEmotions = await generator.next({
+                    maxCharacters: 200,
+                    maxSafetyCharacters: 0,
+                    maxParagraphs: 1,
+                    nextQuestion: "Provide a comma separated list of common emotions for " + name + " provide between 3 to 7 emotions",
+                    stopAfter: emotionsGrammar.stopAfter,
+                    stopAt: [],
+                    grammar: emotionsGrammar.grammar,
+                    instructions: "Pick from the list of following emotions: \"" + emotions.join(", ") + "\" and answer with a comma separated list of the emotions that are common for " + name,
+                });
 
-        if (commonEmotions.done) {
-            throw new Error("Generator finished without producing output");
-        }
+                if (commonEmotions.done) {
+                    throw new Error("Generator finished without producing output");
+                }
 
-        let commonEmotionsList = commonEmotions.value.trim().split(",").map(e => e.trim().toLowerCase()).filter(e =>
-            // @ts-ignore
-            emotions.includes(e)
-        ).filter((e, i, arr) => arr.indexOf(e) === i); // remove duplicates
+                let commonEmotionsList = commonEmotions.value.trim().split(",").map(e => e.trim().toLowerCase()).filter(e =>
+                    // @ts-ignore
+                    emotions.includes(e)
+                ).filter((e, i, arr) => arr.indexOf(e) === i); // remove duplicates,
 
-        if (guider) {
-            const commonEmotionsByGuider = await guider.askList(
-                "Which emotions are common for " + name + "?",
-                emotionsGrouped,
-                commonEmotionsList,
-            );
-            if (commonEmotionsByGuider) {
-                commonEmotionsList = commonEmotionsByGuider.value;
+                return commonEmotionsList;
             }
-        }
+        );
 
         insertSpecialComment(emotionsSection.body, "base-emotions");
 
-        for (const emotion of commonEmotionsList) {
+        for (const emotion of commonEmotions.value) {
             emotionsSection.body.push(`${emotion}: {`);
             emotionsSection.body.push(`common: true,`);
             emotionsSection.body.push(`},`);
         }
-
-        card.config.commonEmotions = commonEmotionsList;
-        await autosave?.save();
     }
 
-    if (!hasSpecialComment(emotionsSection.body, "base-emotions-uncommon")) {
-        await prime();
-        const uncommonEmotions = await generator.next({
-            maxCharacters: 200,
-            maxSafetyCharacters: 0,
-            maxParagraphs: 1,
-            nextQuestion: "Provide a comma separated list of uncommon emotions for " + name + " provide between 3 to 7 emotions",
-            stopAfter: emotionsGrammar.stopAfter,
-            stopAt: [],
-            grammar: emotionsGrammar.grammar,
-            instructions: "Pick from the list of following emotions: \"" + emotions.join(", ") + "\" and answer with a comma separated list of the emotions that are uncommon for " + name,
-        });
+    {
+        const uncommonEmotions = await guider.askList("uncommon-emotions", "Which emotions are uncommon for " + name + "?", emotionsGrouped, async () => {
+            await prime();
+            const uncommonEmotions = await generator.next({
+                maxCharacters: 200,
+                maxSafetyCharacters: 0,
+                maxParagraphs: 1,
+                nextQuestion: "Provide a comma separated list of uncommon emotions for " + name + " provide between 3 to 7 emotions",
+                stopAfter: emotionsGrammar.stopAfter,
+                stopAt: [],
+                grammar: emotionsGrammar.grammar,
+                instructions: "Pick from the list of following emotions: \"" + emotions.join(", ") + "\" and answer with a comma separated list of the emotions that are uncommon for " + name,
+            });
 
-        if (uncommonEmotions.done) {
-            throw new Error("Generator finished without producing output");
-        }
-
-        let uncommonEmotionsList = uncommonEmotions.value.trim().split(",").map(e => e.trim().toLowerCase()).filter(e =>
-            // @ts-ignore
-            emotions.includes(e)
-        ).filter((e, i, arr) => arr.indexOf(e) === i); // remove duplicates
-
-        if (guider) {
-            const uncommonEmotionsByGuider = await guider.askList("Which emotions are uncommon for " + name + "?", emotionsGrouped, uncommonEmotionsList);
-            if (uncommonEmotionsByGuider) {
-                uncommonEmotionsList = uncommonEmotionsByGuider.value;
+            if (uncommonEmotions.done) {
+                throw new Error("Generator finished without producing output");
             }
-        }
+
+            let uncommonEmotionsList = uncommonEmotions.value.trim().split(",").map(e => e.trim().toLowerCase()).filter(e =>
+                // @ts-ignore
+                emotions.includes(e)
+            ).filter((e, i, arr) => arr.indexOf(e) === i); // remove duplicates
+            return uncommonEmotionsList;
+        });
 
         insertSpecialComment(emotionsSection.body, "base-emotions-uncommon");
 
-        const commonEmotionsList = card.config.commonEmotions || [];
+        const commonEmotionsList = scriptgenerator.state["common-emotions"] || [];
 
-        for (const emotion of uncommonEmotionsList) {
+        for (const emotion of uncommonEmotions.value) {
             if (commonEmotionsList.includes(emotion)) continue;
             emotionsSection.body.push(`${emotion}: {`);
             emotionsSection.body.push(`uncommon: true,`);
             emotionsSection.body.push(`},`);
         }
-
-        await autosave?.save();
     }
-
-    delete card.config.commonEmotions;
 
     let schizophrenia = 0;
-    if (!hasSpecialComment(newCharacterSection.body, "base-schizo")) {
-        await prime();
-        const hasSchizophrenia = await generator.next({
-            maxCharacters: 5,
-            maxSafetyCharacters: 0,
-            maxParagraphs: 1,
-            nextQuestion: "Does " + name + " have schizophrenia? Answer with yes or no.",
-            stopAfter: [],
-            stopAt: [],
-            grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`
-        });
-
-        if (hasSchizophrenia.done) {
-            throw new Error("Generator finished without producing output");
-        }
-
-        schizophrenia = hasSchizophrenia.value.trim().toLowerCase() === "yes" ? 1 : 0;
-
-        if (guider) {
-            const isActuallySchizophrenic = await guider.askBoolean("Does " + name + " have schizophrenia?", schizophrenia === 1);
-            if (!isActuallySchizophrenic.value) {
-                schizophrenia = 0;
-            } else {
-                schizophrenia = 1;
-            }
-        }
-
-        card.config.schizophrenia = schizophrenia;
-        insertSpecialComment(newCharacterSection.body, "base-schizo");
-        await autosave?.save();
-    } else {
-        schizophrenia = card.config.schizophrenia;
-    }
-
-    if (!hasSpecialComment(newCharacterSection.body, "base-schizo-details")) {
-        if (schizophrenia) {
-            let severity = 0;
-            if (typeof card.config.schizophreniaSeverity === "number") {
-                severity = card.config.schizophreniaSeverity;
-            } else {
-                let severityStr = "";
+    {
+        const isActuallySchizophrenic = await guider.askBoolean(
+            "schizophrenia-question",
+            "Does " + name + " have schizophrenia?",
+            async () => {
                 await prime();
-                const schizophreniaSeverity = await generator.next({
+                const hasSchizophrenia = await generator.next({
                     maxCharacters: 5,
                     maxSafetyCharacters: 0,
                     maxParagraphs: 1,
-                    nextQuestion: "What is the severity of " + name + "'s schizophrenia? Answer with mild, moderate, or severe.",
+                    nextQuestion: "Does " + name + " have schizophrenia? Answer with yes or no.",
                     stopAfter: [],
                     stopAt: [],
-                    grammar: `root ::= "mild" | "moderate" | "severe" | "MILD" | "MODERATE" | "SEVERE"`
+                    grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`
                 });
 
-                if (schizophreniaSeverity.done) {
+                if (hasSchizophrenia.done) {
                     throw new Error("Generator finished without producing output");
                 }
-                severityStr = schizophreniaSeverity.value.trim().toLowerCase();
 
-                const howSevere = guider ? await guider.askOption("How severe is the schizophrenia?", ["mild", "moderate", "severe", "guess"]) : null;
-
-                severityStr = howSevere ? howSevere.value.trim().toLowerCase() : severityStr;
-
-                let severity = 0;
-                if (severityStr === "mild") severity = 0.33;
-                else if (severityStr === "moderate") severity = 0.66;
-                else if (severityStr === "severe") severity = 1;
-
-                card.config.schizophreniaSeverity = severity;
+                return hasSchizophrenia.value.trim().toLowerCase() === "yes";
             }
+        );
 
-            let specialInstructionsForVoiceDescription = guider ? (await guider.askOpen("Provide any special focus instructions for defining the description of the voice that " + name + " hears as part of their schizophrenia, what to focus on (how to describe the voice and its interactions with " + name + ")")).value : null;
+        if (!isActuallySchizophrenic.value) {
+            schizophrenia = 0;
+        } else {
+            schizophrenia = 1;
+        }
+
+        insertSpecialComment(newCharacterSection.body, "base-schizo");
+    }
+
+    if (schizophrenia) {
+        const howSevere = await guider.askOption("schizophrenia-severity", "How severe is the schizophrenia?", ["mild", "moderate", "severe"], async () => {
+            await prime();
+            const schizophreniaSeverity = await generator.next({
+                maxCharacters: 5,
+                maxSafetyCharacters: 0,
+                maxParagraphs: 1,
+                nextQuestion: "What is the severity of " + name + "'s schizophrenia? Answer with mild, moderate, or severe.",
+                stopAfter: [],
+                stopAt: [],
+                grammar: `root ::= "mild" | "moderate" | "severe" | "MILD" | "MODERATE" | "SEVERE"`
+            });
+
+            if (schizophreniaSeverity.done) {
+                throw new Error("Generator finished without producing output");
+            }
+            return schizophreniaSeverity.value.trim().toLowerCase();
+        });
+
+        let severity = 0;
+        if (howSevere.value === "mild") severity = 0.33;
+        else if (howSevere.value === "moderate") severity = 0.66;
+        else if (howSevere.value === "severe") severity = 1;
+
+        const voiceDescription = (await guider.askOpen("schizophrenia-voice-description", "Description of the voice that " + name + " hears as part of their schizophrenia.", async () => {
+            let specialInstructionsForVoiceDescription = (await guider.askOpen(null, "Provide any special focus instructions for defining the description of the voice that " + name + " hears as part of their schizophrenia, what to focus on (how to describe the voice and its interactions with " + name + ")", "")).value;
             if (specialInstructionsForVoiceDescription) {
                 specialInstructionsForVoiceDescription = "\n\n# MANDATORY REQUIREMENTS — ACTIVE OVERRIDE:\n\nThe following requirements MUST be reflected in your answer. Treat them as hard constraints that take absolute priority over any conflicting instruction above. Do NOT ignore or dilute them:\n\n" + specialInstructionsForVoiceDescription.trim();
             }
@@ -555,22 +506,17 @@ export async function generateBase(engine, card, guider, autosave) {
                 throw new Error("Generator finished without producing output");
             }
 
-            const voiceDescription = replaceAllCharNameWithPlaceholder(schizophrenicVoiceDescription.value.trim(), name);
+            return replaceAllCharNameWithPlaceholder(schizophrenicVoiceDescription.value.trim(), name);
+        })).value.trim();
 
-            insertSpecialComment(newCharacterSection.body, "base-schizo-details");
-            newCharacterSection.body.push(`schizophrenia: ${severity},`);
-            newCharacterSection.body.push(`schizophrenicVoiceDescription: (info) => ${toTemplateLiteral(voiceDescription)},`);
-            await autosave?.save();
-        } else {
-            insertSpecialComment(newCharacterSection.body, "base-schizo-details");
-            newCharacterSection.body.push(`schizophrenia: 0,`);
-            newCharacterSection.body.push(`schizophrenicVoiceDescription: "",`);
-            await autosave?.save();
-        }
+        insertSpecialComment(newCharacterSection.body, "base-schizo-details");
+        newCharacterSection.body.push(`schizophrenia: ${severity},`);
+        newCharacterSection.body.push(`schizophrenicVoiceDescription: (info) => ${toTemplateLiteral(voiceDescription)},`);
+    } else {
+        insertSpecialComment(newCharacterSection.body, "base-schizo-details");
+        newCharacterSection.body.push(`schizophrenia: 0,`);
+        newCharacterSection.body.push(`schizophrenicVoiceDescription: "",`);
     }
-
-    delete card.config.schizophrenia;
-    delete card.config.schizophreniaSeverity;
 
     let doesHaveAutism = false;
     if (!hasSpecialComment(newCharacterSection.body, "base-autism")) {
@@ -1803,7 +1749,7 @@ export async function generateBase(engine, card, guider, autosave) {
 
         card.config.characterSpecies = actualSpecies;
         card.config.characterSpeciesType = speciesType;
-        
+
         await autosave?.save();
     }
 
