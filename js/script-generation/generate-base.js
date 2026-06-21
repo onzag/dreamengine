@@ -1826,32 +1826,29 @@ export async function generateBase(engine, scriptgenerator, guider) {
         newCharacterSection.body.push(`dislikesGroups: ${JSON.stringify(dislikeGroupsPrejudiceValue)}, // Up to you to make the character prejudiced against certain groups`);
     }
 
-    if (!hasSpecialComment(newCharacterSection.body, "base-attractions")) {
-        await prime();
-        const isAsexual = await generator.next({
-            maxCharacters: 5,
-            maxSafetyCharacters: 0,
-            maxParagraphs: 1,
-            nextQuestion: "Is " + name + " asexual, not sexually attracted to anyone? Answer with yes or no.",
-            stopAfter: [],
-            stopAt: [],
-            grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
-        });
+    {
+        const isAsexualValue = (await guider.askBoolean(
+            "asexual",
+            "Is " + name + " asexual, not sexually attracted to anyone?",
+            async () => {
+                await prime();
+                const isAsexual = await generator.next({
+                    maxCharacters: 5,
+                    maxSafetyCharacters: 0,
+                    maxParagraphs: 1,
+                    nextQuestion: "Is " + name + " asexual, not sexually attracted to anyone? Answer with yes or no.",
+                    stopAfter: [],
+                    stopAt: [],
+                    grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
+                });
 
-        if (isAsexual.done) {
-            throw new Error("Generator finished without producing output");
-        }
+                if (isAsexual.done) {
+                    throw new Error("Generator finished without producing output");
+                }
 
-        let isAsexualValue = isAsexual.value.trim().toLowerCase() === "yes";
-
-        if (guider) {
-            const isActuallyAsexual = await guider.askBoolean("Is " + name + " asexual, not sexually attracted to anyone?", isAsexualValue);
-            if (!isActuallyAsexual.value) {
-                isAsexualValue = false;
-            } else {
-                isAsexualValue = true;
-            }
-        }
+                return isAsexual.value.trim().toLowerCase() === "yes";
+            },
+        )).value;
 
         const age = scriptgenerator.state["age-years"];
         const speciesType = scriptgenerator.state["species-type"] || "none";
@@ -1863,13 +1860,12 @@ export async function generateBase(engine, scriptgenerator, guider) {
             minAgeAttractionPotential = Math.floor(age) - 1;
         }
 
-        if (guider && !isAsexualValue) {
-            const guidedMinAgeAttractionPotential = await guider.askNumber("What is the minimum age of attraction for " + name + "?", minAgeAttractionPotential);
-            if (guidedMinAgeAttractionPotential) {
-                minAgeAttractionPotential = guidedMinAgeAttractionPotential.value;
-            } else {
-                minAgeAttractionPotential = minAgeAttractionPotential;
-            }
+        if (!isAsexualValue) {
+            minAgeAttractionPotential = (await guider.askNumber(
+                "min-age-attraction",
+                "What is the minimum age of attraction for " + name + "?",
+                async () => minAgeAttractionPotential,
+            )).value;
         }
 
         let maxAgeAttractionPotential = age + 10;
@@ -1877,18 +1873,16 @@ export async function generateBase(engine, scriptgenerator, guider) {
             maxAgeAttractionPotential = age + 3; // for very young characters we can make the max age of attraction closer to their age since it's more likely they would be attracted to people closer to their age
         }
 
-        if (guider && !isAsexualValue) {
-            const guidedMaxAgeAttractionPotential = await guider.askNumber("What is the maximum age of attraction for " + name + "?", maxAgeAttractionPotential);
-            if (guidedMaxAgeAttractionPotential) {
-                maxAgeAttractionPotential = guidedMaxAgeAttractionPotential.value;
-            } else {
-                maxAgeAttractionPotential = maxAgeAttractionPotential;
-            }
+        if (!isAsexualValue) {
+            maxAgeAttractionPotential = (await guider.askNumber(
+                "max-age-attraction",
+                "What is the maximum age of attraction for " + name + "?",
+                async () => maxAgeAttractionPotential,
+            )).value;
         }
 
         /**
-         * 
-         * @param {string} which 
+         * @param {string} which
          */
         const determineOnePickiness = async (which) => {
             const options = [
@@ -1905,7 +1899,7 @@ export async function generateBase(engine, scriptgenerator, guider) {
                 "Neutral (not particularly picky or open, has a moderate range of attraction)",
                 "Somewhat picky (only attracted to someone moderately attractive)",
                 "Very picky (only attracted to the most handsome and attractive people)",
-            ]
+            ];
 
             const pickinessValues = [
                 0.1,
@@ -1913,36 +1907,35 @@ export async function generateBase(engine, scriptgenerator, guider) {
                 0.5,
                 0.7,
                 0.9,
-            ]
+            ];
 
-            const howPickyValue = await generator.next({
-                maxCharacters: 5,
-                maxSafetyCharacters: 0,
-                maxParagraphs: 1,
-                nextQuestion: "How picky is " + name + " towards having an attraction towards " + which + "?",
-                stopAfter: [],
-                stopAt: [],
-                instructions: "Answer with one of the following options: " + optionsExplained.map((option, index) => `\n${index + 1}. ${option}`).join(""),
-                grammar: `root ::= "Very picky" | "Somewhat picky" | "Neutral" | "Somewhat open" | "Very open"`,
-            });
+            const pickinessOption = (await guider.askOption(
+                "pickiness-" + which.replace(/[^a-z0-9]/gi, "-").toLowerCase(),
+                "How picky is " + name + " towards having an attraction towards " + which + "?\n" + optionsExplained.map((option, index) => `\n${index + 1}. ${option}`).join(""),
+                options,
+                async () => {
+                    await prime();
+                    const howPickyValue = await generator.next({
+                        maxCharacters: 5,
+                        maxSafetyCharacters: 0,
+                        maxParagraphs: 1,
+                        nextQuestion: "How picky is " + name + " towards having an attraction towards " + which + "?",
+                        stopAfter: [],
+                        stopAt: [],
+                        instructions: "Answer with one of the following options: " + optionsExplained.map((option, index) => `\n${index + 1}. ${option}`).join(""),
+                        grammar: `root ::= "Very picky" | "Somewhat picky" | "Neutral" | "Somewhat open" | "Very open"`,
+                    });
 
-            if (howPickyValue.done) {
-                throw new Error("Generator finished without producing output");
-            }
+                    if (howPickyValue.done) {
+                        throw new Error("Generator finished without producing output");
+                    }
 
-            let pickinessValue = pickinessValues[options.indexOf(howPickyValue.value.trim())];
+                    return howPickyValue.value.trim();
+                },
+            )).value;
 
-            if (guider) {
-                const howPickyValueGuided = await guider.askOption("How picky is " + name + " towards having an attraction towards " + which + "?\n" + optionsExplained.map((option, index) => `\n${index + 1}. ${option}`).join(""), options, howPickyValue.value.trim());
-                if (howPickyValueGuided) {
-                    howPickyValue.value = howPickyValueGuided.value.trim();
-                }
-
-                pickinessValue = pickinessValues[options.indexOf(howPickyValueGuided.value)];
-            }
-
-            return pickinessValue;
-        }
+            return pickinessValues[options.indexOf(pickinessOption)];
+        };
 
         /**
          * @type {Array<string>}
@@ -1954,31 +1947,28 @@ export async function generateBase(engine, scriptgenerator, guider) {
             insertSpecialComment(newCharacterSection.body, "base-attractions");
             newCharacterSection.body.push(`attractions: [`);
         } else {
-            await prime();
-            const findsAmbiguousGendersSexuallyAttractive = await generator.next({
-                maxCharacters: 5,
-                maxSafetyCharacters: 0,
-                maxParagraphs: 1,
-                nextQuestion: "Is " + name + " pansexual, bisexual or generally attracted to people regardless of their gender? Answer with yes or no.",
-                stopAfter: [],
-                stopAt: [],
-                grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
-            });
+            const findsAmbiguousGendersSexuallyAttractiveValue = (await guider.askBoolean(
+                "pansexual",
+                "Is " + name + " pansexual, bisexual or generally attracted to people regardless of their gender?",
+                async () => {
+                    await prime();
+                    const findsAmbiguousGendersSexuallyAttractive = await generator.next({
+                        maxCharacters: 5,
+                        maxSafetyCharacters: 0,
+                        maxParagraphs: 1,
+                        nextQuestion: "Is " + name + " pansexual, bisexual or generally attracted to people regardless of their gender? Answer with yes or no.",
+                        stopAfter: [],
+                        stopAt: [],
+                        grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
+                    });
 
-            if (findsAmbiguousGendersSexuallyAttractive.done) {
-                throw new Error("Generator finished without producing output");
-            }
+                    if (findsAmbiguousGendersSexuallyAttractive.done) {
+                        throw new Error("Generator finished without producing output");
+                    }
 
-            let findsAmbiguousGendersSexuallyAttractiveValue = findsAmbiguousGendersSexuallyAttractive.value.trim().toLowerCase() === "yes";
-
-            if (guider) {
-                const isActuallyFindsAmbiguousGendersSexuallyAttractive = await guider.askBoolean("Is " + name + " pansexual, bisexual or generally attracted to people regardless of their gender?", findsAmbiguousGendersSexuallyAttractiveValue);
-                if (!isActuallyFindsAmbiguousGendersSexuallyAttractive.value) {
-                    findsAmbiguousGendersSexuallyAttractiveValue = false;
-                } else {
-                    findsAmbiguousGendersSexuallyAttractiveValue = true;
-                }
-            }
+                    return findsAmbiguousGendersSexuallyAttractive.value.trim().toLowerCase() === "yes";
+                },
+            )).value;
 
             if (findsAmbiguousGendersSexuallyAttractiveValue) {
                 insertSpecialComment(newCharacterSection.body, "base-attractions");
@@ -2003,71 +1993,68 @@ export async function generateBase(engine, scriptgenerator, guider) {
                 attractions.push("male");
                 attractions.push("female");
             } else {
-                await prime();
-                const findsMalesSexuallyAttractive = await generator.next({
-                    maxCharacters: 5,
-                    maxSafetyCharacters: 0,
-                    maxParagraphs: 1,
-                    nextQuestion: "Does " + name + " find males sexually attractive? Answer with yes or no.",
-                    stopAfter: [],
-                    stopAt: [],
-                    grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
-                });
+                const findsMalesSexuallyAttractiveValue = (await guider.askBoolean(
+                    "finds-males-attractive",
+                    "Does " + name + " find males sexually attractive?",
+                    async () => {
+                        await prime();
+                        const findsMalesSexuallyAttractive = await generator.next({
+                            maxCharacters: 5,
+                            maxSafetyCharacters: 0,
+                            maxParagraphs: 1,
+                            nextQuestion: "Does " + name + " find males sexually attractive? Answer with yes or no.",
+                            stopAfter: [],
+                            stopAt: [],
+                            grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
+                        });
 
-                if (findsMalesSexuallyAttractive.done) {
-                    throw new Error("Generator finished without producing output");
-                }
+                        if (findsMalesSexuallyAttractive.done) {
+                            throw new Error("Generator finished without producing output");
+                        }
 
-                let findsMalesSexuallyAttractiveValue = findsMalesSexuallyAttractive.value.trim().toLowerCase() === "yes";
+                        return findsMalesSexuallyAttractive.value.trim().toLowerCase() === "yes";
+                    },
+                )).value;
+
                 let findsMalesSexuallyAttractiveLimitToSex = false;
-                if (guider) {
-                    const isActuallyFindsMalesSexuallyAttractive = await guider.askBoolean("Does " + name + " find males sexually attractive?", findsMalesSexuallyAttractiveValue);
-                    if (!isActuallyFindsMalesSexuallyAttractive.value) {
-                        findsMalesSexuallyAttractiveValue = false;
-                    } else {
-                        findsMalesSexuallyAttractiveValue = true;
-                    }
+                if (findsMalesSexuallyAttractiveValue) {
+                    findsMalesSexuallyAttractiveLimitToSex = (await guider.askBoolean(
+                        "finds-males-attractive-limit-to-sex",
+                        "Is " + name + "'s attraction towards males limited to biological sex only?",
+                        async () => false,
+                    )).value;
+                }
 
-                    if (findsMalesSexuallyAttractiveValue) {
-                        const isFindsMalesSexuallyAttractiveLimitedToSex = await guider.askBoolean("Is " + name + "'s attraction towards males limited to biological sex only?", false);
-                        if (isFindsMalesSexuallyAttractiveLimitedToSex.value) {
-                            findsMalesSexuallyAttractiveLimitToSex = true;
+                const findsFemalesSexuallyAttractiveValue = (await guider.askBoolean(
+                    "finds-females-attractive",
+                    "Does " + name + " find females sexually attractive?",
+                    async () => {
+                        await prime();
+                        const findsFemalesSexuallyAttractive = await generator.next({
+                            maxCharacters: 5,
+                            maxSafetyCharacters: 0,
+                            maxParagraphs: 1,
+                            nextQuestion: "Does " + name + " find females sexually attractive? Answer with yes or no.",
+                            stopAfter: [],
+                            stopAt: [],
+                            grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
+                        });
+
+                        if (findsFemalesSexuallyAttractive.done) {
+                            throw new Error("Generator finished without producing output");
                         }
-                    }
-                }
 
-                await prime();
-                const findsFemalesSexuallyAttractive = await generator.next({
-                    maxCharacters: 5,
-                    maxSafetyCharacters: 0,
-                    maxParagraphs: 1,
-                    nextQuestion: "Does " + name + " find females sexually attractive? Answer with yes or no.",
-                    stopAfter: [],
-                    stopAt: [],
-                    grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
-                });
+                        return findsFemalesSexuallyAttractive.value.trim().toLowerCase() === "yes";
+                    },
+                )).value;
 
-                if (findsFemalesSexuallyAttractive.done) {
-                    throw new Error("Generator finished without producing output");
-                }
-
-                let findsFemalesSexuallyAttractiveValue = findsFemalesSexuallyAttractive.value.trim().toLowerCase() === "yes";
                 let findsFemalesSexuallyAttractiveLimitToSex = false;
-
-                if (guider) {
-                    const isActuallyFindsFemalesSexuallyAttractive = await guider.askBoolean("Does " + name + " find females sexually attractive?", findsFemalesSexuallyAttractiveValue);
-                    if (!isActuallyFindsFemalesSexuallyAttractive.value) {
-                        findsFemalesSexuallyAttractiveValue = false;
-                    } else {
-                        findsFemalesSexuallyAttractiveValue = true;
-                    }
-
-                    if (findsFemalesSexuallyAttractiveValue) {
-                        const isFindsFemalesSexuallyAttractiveLimitedToSex = await guider.askBoolean("Is " + name + "'s attraction towards females limited to biological sex only?", false);
-                        if (isFindsFemalesSexuallyAttractiveLimitedToSex.value) {
-                            findsFemalesSexuallyAttractiveLimitToSex = true;
-                        }
-                    }
+                if (findsFemalesSexuallyAttractiveValue) {
+                    findsFemalesSexuallyAttractiveLimitToSex = (await guider.askBoolean(
+                        "finds-females-attractive-limit-to-sex",
+                        "Is " + name + "'s attraction towards females limited to biological sex only?",
+                        async () => false,
+                    )).value;
                 }
 
                 insertSpecialComment(newCharacterSection.body, "base-attractions");
@@ -2098,31 +2085,35 @@ export async function generateBase(engine, scriptgenerator, guider) {
         }
 
         if (!isAsexualValue) {
+            let indexAddExtraAttraction = 0;
             while (true) {
-                const additionalAttractions = await guider.askBoolean("Would you like to add an attraction towards a specific species that isn't covered?", false);
+                const additionalAttractions = await guider.askBoolean("extra-attraction-" + indexAddExtraAttraction, "Would you like to add an attraction towards a specific species that isn't covered?", false);
                 if (!additionalAttractions.value) {
                     break;
                 } else {
-                    const additionalAttractionSpecies = await guider.askOpen("What species is " + name + " attracted to?", "");
-                    const additionalAttractionAgeRangeMin = await guider.askNumber("What is the minimum age of attraction for " + name + " towards a " + additionalAttractionSpecies.value + "?", minAgeAttractionPotential);
-                    const additionalAttractionAgeRangeMax = await guider.askNumber("What is the maximum age of attraction for " + name + " towards a " + additionalAttractionSpecies.value + "?", maxAgeAttractionPotential);
-                    const additionalAttractionGender = await guider.askOption("What gender is " + name + " attracted to when it comes to a " + additionalAttractionSpecies.value + "?", ["male", "female", "ambiguous", "any"], "any");
-                    const additionalAttractionSex = await guider.askOption("Is " + name + "'s attraction towards a " + additionalAttractionSpecies.value + " limited to a specific biological sex?", ["male", "female", "intersex", "any"], "any");
+                    const additionalAttractionSpecies = await guider.askOpen("extra-attraction-" + indexAddExtraAttraction + "-species", "What species is " + name + " attracted to?", "");
+                    const additionalAttractionAgeRangeMin = await guider.askNumber("extra-attraction-" + indexAddExtraAttraction + "-age-min", "What is the minimum age of attraction for " + name + " towards a " + additionalAttractionSpecies.value + "?", minAgeAttractionPotential);
+                    const additionalAttractionAgeRangeMax = await guider.askNumber("extra-attraction-" + indexAddExtraAttraction + "-age-max", "What is the maximum age of attraction for " + name + " towards a " + additionalAttractionSpecies.value + "?", maxAgeAttractionPotential);
+                    const additionalAttractionGender = await guider.askOption("extra-attraction-" + indexAddExtraAttraction + "-gender", "What gender is " + name + " attracted to when it comes to a " + additionalAttractionSpecies.value + "?", ["male", "female", "ambiguous", "any"], "any");
+                    const additionalAttractionSex = await guider.askOption("extra-attraction-" + indexAddExtraAttraction + "-sex", "Is " + name + "'s attraction towards a " + additionalAttractionSpecies.value + " limited to a specific biological sex?", ["male", "female", "intersex", "any"], "any");
                     const additionalAttractionPickiness = await determineOnePickiness(additionalAttractionGender.value + " belonging to the species " + additionalAttractionSpecies.value);
                     newCharacterSection.body.push(`{towards: "${additionalAttractionGender.value}", pickiness: ${additionalAttractionPickiness}, ageRange: [${additionalAttractionAgeRangeMin.value}, ${additionalAttractionAgeRangeMax.value}], species: "${additionalAttractionSpecies.value}", "sex": "${additionalAttractionSex.value}"},`);
                 }
+
+                indexAddExtraAttraction++;
             }
 
+            let indexAddExtraAttractionSpeciesGroup = 0;
             while (true) {
-                const additionalAttractions = await guider.askBoolean("Would you like to add an attraction towards a specific species group that isn't covered?", false);
+                const additionalAttractions = await guider.askBoolean("extra-attraction-species-group-" + indexAddExtraAttractionSpeciesGroup, "Would you like to add an attraction towards a specific species group that isn't covered?", false);
                 if (!additionalAttractions.value) {
                     break;
                 } else {
-                    const additionalAttractionSpeciesGroup = await guider.askOption("What species group is " + name + " attracted to?", ["humanoid", "animal", "feral"].filter(card.config.characterSpeciesType), "");
-                    const additionalAttractionAgeRangeMin = await guider.askNumber("What is the minimum age of attraction for " + name + " towards a " + additionalAttractionSpeciesGroup.value + " creature?", minAgeAttractionPotential);
-                    const additionalAttractionAgeRangeMax = await guider.askNumber("What is the maximum age of attraction for " + name + " towards a " + additionalAttractionSpeciesGroup.value + " creature?", maxAgeAttractionPotential);
-                    const additionalAttractionGender = await guider.askOption("What gender is " + name + " attracted to when it comes to a " + additionalAttractionSpeciesGroup.value + " creature?", ["male", "female", "ambiguous", "any"], "any");
-                    const additionalAttractionSex = await guider.askOption("Is " + name + "'s attraction towards a " + additionalAttractionSpeciesGroup.value + " creature limited to a specific biological sex?", ["male", "female", "intersex", "any"], "any");
+                    const additionalAttractionSpeciesGroup = await guider.askOption("extra-attraction-species-group-" + indexAddExtraAttractionSpeciesGroup + "-group", "What species group is " + name + " attracted to?", ["humanoid", "animal", "feral"].filter(speciesType), "");
+                    const additionalAttractionAgeRangeMin = await guider.askNumber("extra-attraction-species-group-" + indexAddExtraAttractionSpeciesGroup + "-age-min", "What is the minimum age of attraction for " + name + " towards a " + additionalAttractionSpeciesGroup.value + " creature?", minAgeAttractionPotential);
+                    const additionalAttractionAgeRangeMax = await guider.askNumber("extra-attraction-species-group-" + indexAddExtraAttractionSpeciesGroup + "-age-max", "What is the maximum age of attraction for " + name + " towards a " + additionalAttractionSpeciesGroup.value + " creature?", maxAgeAttractionPotential);
+                    const additionalAttractionGender = await guider.askOption("extra-attraction-species-group-" + indexAddExtraAttractionSpeciesGroup + "-gender", "What gender is " + name + " attracted to when it comes to a " + additionalAttractionSpeciesGroup.value + " creature?", ["male", "female", "ambiguous", "any"], "any");
+                    const additionalAttractionSex = await guider.askOption("extra-attraction-species-group-" + indexAddExtraAttractionSpeciesGroup + "-sex", "Is " + name + "'s attraction towards a " + additionalAttractionSpeciesGroup.value + " creature limited to a specific biological sex?", ["male", "female", "intersex", "any"], "any");
 
                     /**
                      * @type {Record<string, string>}
@@ -2136,48 +2127,57 @@ export async function generateBase(engine, scriptgenerator, guider) {
                     const additionalAttractionPickiness = await determineOnePickiness("a " + additionalAttractionGender.value + " belonging to the species group " + speciesGroupDefinedForPickiness[additionalAttractionSpeciesGroup.value]);
                     newCharacterSection.body.push(`{towards: "${additionalAttractionGender.value}", pickiness: ${additionalAttractionPickiness}, ageRange: [${additionalAttractionAgeRangeMin.value}, ${additionalAttractionAgeRangeMax.value}], speciesGroup: "${additionalAttractionSpeciesGroup.value}", "sex": "${additionalAttractionSex.value}"},`);
                 }
+
+                indexAddExtraAttractionSpeciesGroup++;
             }
         }
 
         newCharacterSection.body.push(`],`);
     }
 
-    if (!hasSpecialComment(newCharacterSection.body, "base-libido")) {
-        if (card.config.isAsexual) {
+    {
+        const isAsexual = scriptgenerator.state["asexual"] || false;
+
+        if (isAsexual) {
             insertSpecialComment(newCharacterSection.body, "base-libido");
             newCharacterSection.body.push(`libido: 0, // Since ${name} is asexual, they have no libido`);
-            await autosave?.save();
             return;
         }
 
-        await prime();
-        const libidoValue = await generator.next({
-            maxCharacters: 5,
-            maxSafetyCharacters: 0,
-            maxParagraphs: 1,
-            nextQuestion: "From 1 to 10 how high is " + name + "'s libido? with 10 being extremely high and 1 being very low",
-            stopAfter: [],
-            stopAt: [],
-            grammar: "root ::= [1-9] | \"10\"",
-        });
+        const libidoValue = (await guider.askNumber(
+            "libido",
+            "From 1 to 10 how high is " + name + "'s libido? with 10 being extremely high and 1 being very low",
+            async () => {
+                await prime();
+                const libidoValue = await generator.next({
+                    maxCharacters: 100,
+                    maxSafetyCharacters: 0,
+                    maxParagraphs: 1,
+                    nextQuestion: "How high is " + name + "'s libido? answer with \"very high\", \"somewhat high\", \"average\", \"somewhat low\" or \"very low\"",
+                    stopAfter: [],
+                    stopAt: [],
+                    grammar: `root ::= "very high" | "somewhat high" | "average" | "somewhat low" | "very low"`,
+                });
 
-        if (libidoValue.done) {
-            throw new Error("Generator finished without producing output");
-        }
+                if (libidoValue.done) {
+                    throw new Error("Generator finished without producing output");
+                }
 
-        if (guider) {
-            const libidoValueAsked = await guider.askNumber(
-                "From 1 to 10 how high is " + name + "'s libido? with 10 being extremely high and 1 being very low",
-                parseInt(libidoValue.value.trim()),
-            );
-            if (libidoValueAsked) {
-                libidoValue.value = libidoValueAsked.value.toString();
-            }
-        }
+                const mapping = {
+                    "very high": 10,
+                    "somewhat high": 7,
+                    "average": 5,
+                    "somewhat low": 3,
+                    "very low": 1,
+                };
+
+                // @ts-ignore
+                return mapping[libidoValue.value.trim().toLowerCase()];
+            },
+        )).value;
 
         insertSpecialComment(newCharacterSection.body, "base-libido");
-        newCharacterSection.body.push(`libido: ${parseInt(libidoValue.value.trim()) / 10},`);
-        await autosave?.save();
+        newCharacterSection.body.push(`libido: ${libidoValue / 10},`);
     }
 
     const socialSimulationSection = insertSection(newCharacterSection.body, "social-simulation", (s) => {
@@ -2185,37 +2185,41 @@ export async function generateBase(engine, scriptgenerator, guider) {
         s.foot.push(`},`);
     });
 
-    if (!hasSpecialComment(socialSimulationSection.body, "base-gossip")) {
-        await prime();
-        const gossipValue = await generator.next({
-            maxCharacters: 5,
-            maxSafetyCharacters: 0,
-            maxParagraphs: 1,
-            nextQuestion: "From 1 to 10 how much does " + name + " like gossip and talking about others? with 10 being loving gossip and always talking about others, and 1 being hating gossip and never talking about others",
-            stopAfter: [],
-            stopAt: [],
-            grammar: "root ::= [1-9] | \"10\"",
-        });
+    {
+        const gossipValue = (await guider.askNumber(
+            "gossip",
+            "From 1 to 10 how much does " + name + " like gossip and talking about others? with 10 being loving gossip and always talking about others, and 1 being hating gossip and never talking about others",
+            async () => {
+                await prime();
+                const gossipValue = await generator.next({
+                    maxCharacters: 100,
+                    maxSafetyCharacters: 0,
+                    maxParagraphs: 1,
+                    nextQuestion: "How much does " + name + " like gossip and talking about others? answer with \"loves gossip\", \"somewhat likes gossip\", \"average\", \"somewhat dislikes gossip\" or \"hates gossip\"",
+                    stopAfter: [],
+                    stopAt: [],
+                    grammar: `root ::= "loves gossip" | "somewhat likes gossip" | "average" | "somewhat dislikes gossip" | "hates gossip"`,
+                });
 
-        if (gossipValue.done) {
-            throw new Error("Generator finished without producing output");
-        }
+                if (gossipValue.done) {
+                    throw new Error("Generator finished without producing output");
+                }
 
-        let gossipValueNum = parseInt(gossipValue.value.trim());
+                const mapping = {
+                    "loves gossip": 10,
+                    "somewhat likes gossip": 7,
+                    "average": 5,
+                    "somewhat dislikes gossip": 3,
+                    "hates gossip": 1,
+                };
 
-        if (guider) {
-            const gossipValueAsked = await guider.askNumber(
-                "From 1 to 10 how much does " + name + " like gossip and talking about others? with 10 being loving gossip and always talking about others, and 1 being hating gossip and never talking about others",
-                gossipValueNum,
-            );
-            if (gossipValueAsked) {
-                gossipValueNum = gossipValueAsked.value;
-            }
-        }
+                // @ts-ignore
+                return mapping[gossipValue.value.trim().toLowerCase()];
+            },
+        )).value;
 
         insertSpecialComment(socialSimulationSection.body, "base-gossip");
-        socialSimulationSection.body.push(`gossipTendency: ${gossipValueNum / 10},`);
-        await autosave?.save();
+        socialSimulationSection.body.push(`gossipTendency: ${gossipValue / 10},`);
     }
 
     if (primed) {
