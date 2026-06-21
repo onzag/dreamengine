@@ -1014,67 +1014,61 @@ export async function generateBase(engine, scriptgenerator, guider) {
         metadataSection.body.push(`weight: ${weightKgValue},`);
     }
 
-    if (!hasSpecialComment(newCharacterSection.body, "base-initiative")) {
+    {
         let initiative = 0.25;
         let strangerInitiative = 0.05;
         let strangerRejection = 0;
 
-        await prime();
-        const hightInitiative = await generator.next({
-            maxCharacters: 5,
-            maxSafetyCharacters: 0,
-            maxParagraphs: 1,
-            nextQuestion: "Does " + name + " have high initiative to take action in any situation? especially social scenarios?",
-            stopAfter: [],
-            stopAt: [],
-            grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
-        });
+        const highInitiativeValue = (await guider.askBoolean(
+            "high-initiative",
+            "Does " + name + " have high initiative to take action in any situation? especially social scenarios?",
+            async () => {
+                await prime();
+                const hightInitiative = await generator.next({
+                    maxCharacters: 5,
+                    maxSafetyCharacters: 0,
+                    maxParagraphs: 1,
+                    nextQuestion: "Does " + name + " have high initiative to take action in any situation? especially social scenarios?",
+                    stopAfter: [],
+                    stopAt: [],
+                    grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
+                });
 
-        if (hightInitiative.done) {
-            throw new Error("Generator finished without producing output");
-        }
+                if (hightInitiative.done) {
+                    throw new Error("Generator finished without producing output");
+                }
 
-        let highInitiativeValue = hightInitiative.value.trim().toLowerCase() === "yes";
-
-        if (guider) {
-            const isActuallyHighInitiative = await guider.askBoolean("Does " + name + " have high initiative to take action in any situation? especially social scenarios?", highInitiativeValue);
-            if (!isActuallyHighInitiative.value) {
-                highInitiativeValue = false;
-            } else {
-                highInitiativeValue = true;
-            }
-        }
+                return hightInitiative.value.trim().toLowerCase() === "yes";
+            },
+        )).value;
 
         if (highInitiativeValue) {
             initiative = 0.5;
             strangerInitiative = 0.1;
             strangerRejection = 0;
 
-            await prime();
-            const annoyinglySocial = await generator.next({
-                maxCharacters: 5,
-                maxSafetyCharacters: 0,
-                maxParagraphs: 1,
-                nextQuestion: "Is " + name + " annoyingly social, always trying to interact with others and be the center of attention?",
-                stopAfter: [],
-                stopAt: [],
-                grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
-            });
+            const annoyinglySocialValue = (await guider.askBoolean(
+                "annoyingly-social",
+                "Is " + name + " annoyingly social, always trying to interact with others and be the center of attention?",
+                async () => {
+                    await prime();
+                    const annoyinglySocial = await generator.next({
+                        maxCharacters: 5,
+                        maxSafetyCharacters: 0,
+                        maxParagraphs: 1,
+                        nextQuestion: "Is " + name + " annoyingly social, always trying to interact with others and be the center of attention?",
+                        stopAfter: [],
+                        stopAt: [],
+                        grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
+                    });
 
-            if (annoyinglySocial.done) {
-                throw new Error("Generator finished without producing output");
-            }
+                    if (annoyinglySocial.done) {
+                        throw new Error("Generator finished without producing output");
+                    }
 
-            let annoyinglySocialValue = annoyinglySocial.value.trim().toLowerCase() === "yes";
-
-            if (guider) {
-                const isActuallyAnnoyinglySocial = await guider.askBoolean("Is " + name + " annoyingly social, always trying to interact with others and be the center of attention?", annoyinglySocialValue);
-                if (!isActuallyAnnoyinglySocial.value) {
-                    annoyinglySocialValue = false;
-                } else {
-                    annoyinglySocialValue = true;
-                }
-            }
+                    return annoyinglySocial.value.trim().toLowerCase() === "yes";
+                },
+            )).value;
 
             if (annoyinglySocialValue) {
                 initiative = 0.75;
@@ -1082,62 +1076,56 @@ export async function generateBase(engine, scriptgenerator, guider) {
                 strangerRejection = 0;
             }
         } else {
-            await prime();
-            const shy = await generator.next({
-                maxCharacters: 5,
-                maxSafetyCharacters: 0,
-                maxParagraphs: 1,
-                nextQuestion: "Is " + name + " shy and reserved, preferring to stay in the background and avoid social interactions?",
-                stopAfter: [],
-                stopAt: [],
-                grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
-            });
+            const shyValue = (await guider.askBoolean(
+                "shy",
+                "Is " + name + " shy and reserved, preferring to stay in the background and avoid social interactions?",
+                async () => {
+                    await prime();
+                    const shy = await generator.next({
+                        maxCharacters: 5,
+                        maxSafetyCharacters: 0,
+                        maxParagraphs: 1,
+                        nextQuestion: "Is " + name + " shy and reserved, preferring to stay in the background and avoid social interactions?",
+                        stopAfter: [],
+                        stopAt: [],
+                        grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
+                    });
 
-            if (shy.done) {
-                throw new Error("Generator finished without producing output");
-            }
+                    if (shy.done) {
+                        throw new Error("Generator finished without producing output");
+                    }
 
-            let shyValue = shy.value.trim().toLowerCase() === "yes";
-
-            if (guider) {
-                const isActuallyShy = await guider.askBoolean("Is " + name + " shy and reserved, preferring to stay in the background and avoid social interactions?", shyValue);
-                if (!isActuallyShy.value) {
-                    shyValue = false;
-                } else {
-                    shyValue = true;
-                }
-            }
+                    return shy.value.trim().toLowerCase() === "yes";
+                },
+            )).value;
 
             if (shyValue) {
                 initiative = 0.1;
                 strangerInitiative = 0;
                 strangerRejection = 0.2;
             } else {
-                await prime();
-                const completelyAsocial = await generator.next({
-                    maxCharacters: 5,
-                    maxSafetyCharacters: 0,
-                    maxParagraphs: 1,
-                    nextQuestion: "Is " + name + " completely asocial, having no interest in interacting with others at all and preferring complete isolation?",
-                    stopAfter: [],
-                    stopAt: [],
-                    grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
-                });
+                const completelyAsocialValue = (await guider.askBoolean(
+                    "completely-asocial",
+                    "Is " + name + " completely asocial, having no interest in interacting with others at all and preferring complete isolation?",
+                    async () => {
+                        await prime();
+                        const completelyAsocial = await generator.next({
+                            maxCharacters: 5,
+                            maxSafetyCharacters: 0,
+                            maxParagraphs: 1,
+                            nextQuestion: "Is " + name + " completely asocial, having no interest in interacting with others at all and preferring complete isolation?",
+                            stopAfter: [],
+                            stopAt: [],
+                            grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
+                        });
 
-                if (completelyAsocial.done) {
-                    throw new Error("Generator finished without producing output");
-                }
+                        if (completelyAsocial.done) {
+                            throw new Error("Generator finished without producing output");
+                        }
 
-                let completelyAsocialValue = completelyAsocial.value.trim().toLowerCase() === "yes";
-
-                if (guider) {
-                    const isActuallyCompletelyAsocial = await guider.askBoolean("Is " + name + " completely asocial, having no interest in interacting with others at all and preferring complete isolation?", completelyAsocialValue);
-                    if (!isActuallyCompletelyAsocial.value) {
-                        completelyAsocialValue = false;
-                    } else {
-                        completelyAsocialValue = true;
-                    }
-                }
+                        return completelyAsocial.value.trim().toLowerCase() === "yes";
+                    },
+                )).value;
 
                 if (completelyAsocialValue) {
                     initiative = 0;
@@ -1151,256 +1139,281 @@ export async function generateBase(engine, scriptgenerator, guider) {
         newCharacterSection.body.push(`initiative: ${initiative},`);
         newCharacterSection.body.push(`strangerInitiative: ${strangerInitiative},`);
         newCharacterSection.body.push(`strangerRejection: ${strangerRejection},`);
-        newCharacterSection.body.push(`maintenanceCaloriesPerDay: 2000,`);
-        newCharacterSection.body.push(`maintenanceHydrationLitersPerDay: 2,`);
-        await autosave?.save();
     }
 
-    if (!hasSpecialComment(newCharacterSection.body, "base-stealth")) {
-        await prime();
-        const stealthValue = await generator.next({
-            maxCharacters: 5,
-            maxSafetyCharacters: 0,
-            maxParagraphs: 1,
-            nextQuestion: "From 1 to 10 how stealthy is " + name + "? with 10 being extremely stealthy and 1 being not stealthy at all",
-            stopAfter: [],
-            stopAt: [],
-            grammar: "root ::= [1-9] | \"10\"",
-        });
+    insertSpecialComment(newCharacterSection.body, "base-mantenience");
+    newCharacterSection.body.push(`maintenanceCaloriesPerDay: 2000,`);
+    newCharacterSection.body.push(`maintenanceHydrationLitersPerDay: 2,`);
 
-        if (stealthValue.done) {
-            throw new Error("Generator finished without producing output");
-        }
+    {
+        const stealthValue = (await guider.askNumber(
+            "stealth",
+            "From 1 to 10 how stealthy is " + name + "? with 10 being extremely stealthy and 1 being not stealthy at all",
+            async () => {
+                await prime();
+                const stealthValue = await generator.next({
+                    maxCharacters: 100,
+                    maxSafetyCharacters: 0,
+                    maxParagraphs: 1,
+                    nextQuestion: "How stealthy is " + name + "? answer with \"very stealthy\", \"somewhat stealthy\", \"not very stealthy\" or \"not stealthy at all\"",
+                    stopAfter: [],
+                    stopAt: [],
+                    grammar: `root ::= "very stealthy" | "somewhat stealthy" | "not very stealthy" | "not stealthy at all"`,
+                });
 
-        if (guider) {
-            const stealthValueAsked = await guider.askNumber(
-                "From 1 to 10 how stealthy is " + name + "? with 10 being extremely stealthy and 1 being not stealthy at all",
-                parseInt(stealthValue.value.trim()),
-            );
-            if (stealthValueAsked) {
-                stealthValue.value = stealthValueAsked.value.toString();
-            }
-        }
+                if (stealthValue.done) {
+                    throw new Error("Generator finished without producing output");
+                }
+
+                const mapping = {
+                    "very stealthy": 10,
+                    "somewhat stealthy": 7,
+                    "not very stealthy": 4,
+                    "not stealthy at all": 1,
+                };
+
+                // @ts-ignore
+                return mapping[stealthValue.value.trim().toLowerCase()];
+            },
+        )).value;
 
         insertSpecialComment(newCharacterSection.body, "base-stealth");
-        newCharacterSection.body.push(`stealth: ${parseInt(stealthValue.value.trim()) / 10},`);
-        await autosave?.save();
+        newCharacterSection.body.push(`stealth: ${stealthValue / 10},`);
     }
 
-    if (!hasSpecialComment(newCharacterSection.body, "base-perception")) {
-        await prime();
-        const perceptionValue = await generator.next({
-            maxCharacters: 5,
-            maxSafetyCharacters: 0,
-            maxParagraphs: 1,
-            nextQuestion: "From 1 to 10 how perceptive is " + name + "? with 10 being extremely perceptive and 1 being lost and clueless all the time",
-            stopAfter: [],
-            stopAt: [],
-            grammar: "root ::= [1-9] | \"10\"",
-        });
+    {
+        const perceptionValue = (await guider.askNumber(
+            "perception",
+            "From 1 to 10 how perceptive is " + name + "? with 10 being extremely perceptive and 1 being lost and clueless all the time",
+            async () => {
+                await prime();
+                const perceptionValue = await generator.next({
+                    maxCharacters: 100,
+                    maxSafetyCharacters: 0,
+                    maxParagraphs: 1,
+                    nextQuestion: "How perceptive is " + name + "? answer with \"very perceptive\", \"somewhat perceptive\", \"not very perceptive\" or \"not perceptive at all\"",
+                    stopAfter: [],
+                    stopAt: [],
+                    grammar: `root ::= "very perceptive" | "somewhat perceptive" | "not very perceptive" | "not perceptive at all"`,
+                });
 
-        if (perceptionValue.done) {
-            throw new Error("Generator finished without producing output");
-        }
+                if (perceptionValue.done) {
+                    throw new Error("Generator finished without producing output");
+                }
 
-        if (guider) {
-            const perceptionValueAsked = await guider.askNumber(
-                "From 1 to 10 how perceptive is " + name + "? with 10 being extremely perceptive and 1 being lost and clueless all the time",
-                parseInt(perceptionValue.value.trim()),
-            );
-            if (perceptionValueAsked) {
-                perceptionValue.value = perceptionValueAsked.value.toString();
-            }
-        }
+                const mapping = {
+                    "very perceptive": 10,
+                    "somewhat perceptive": 7,
+                    "not very perceptive": 4,
+                    "not perceptive at all": 1,
+                };
+
+                // @ts-ignore
+                return mapping[perceptionValue.value.trim().toLowerCase()];
+            },
+        )).value;
 
         insertSpecialComment(newCharacterSection.body, "base-perception");
-        newCharacterSection.body.push(`perception: ${parseInt(perceptionValue.value.trim()) / 10},`);
-        await autosave?.save();
+        newCharacterSection.body.push(`perception: ${perceptionValue / 10},`);
     }
 
-    if (!hasSpecialComment(newCharacterSection.body, "base-heroism")) {
-        await prime();
-        const heroismValue = await generator.next({
-            maxCharacters: 5,
-            maxSafetyCharacters: 0,
-            maxParagraphs: 1,
-            nextQuestion: "From 1 to 10 how heroic is " + name + "? with 10 being extremely heroic and always taking on threats and challenges, and 1 being more passive and avoiding trouble",
-            stopAfter: [],
-            stopAt: [],
-            grammar: "root ::= [1-9] | \"10\"",
-        });
+    {
+        const heroismValue = (await guider.askNumber(
+            "heroism",
+            "From 1 to 10 how heroic is " + name + "? with 10 being extremely heroic and always taking on threats and challenges, and 1 being more passive and avoiding trouble",
+            async () => {
+                await prime();
+                const heroismValue = await generator.next({
+                    maxCharacters: 100,
+                    maxSafetyCharacters: 0,
+                    maxParagraphs: 1,
+                    nextQuestion: "How heroic is " + name + "? answer with \"very heroic\", \"somewhat heroic\", \"not very heroic\" or \"not heroic at all\"",
+                    stopAfter: [],
+                    stopAt: [],
+                    grammar: `root ::= "very heroic" | "somewhat heroic" | "not very heroic" | "not heroic at all"`,
+                });
 
-        if (heroismValue.done) {
-            throw new Error("Generator finished without producing output");
-        }
+                if (heroismValue.done) {
+                    throw new Error("Generator finished without producing output");
+                }
 
-        if (guider) {
-            const heroismValueAsked = await guider.askNumber(
-                "From 1 to 10 how heroic is " + name + "? with 10 being extremely heroic and always taking on threats and challenges, and 1 being more passive and avoiding trouble",
-                parseInt(heroismValue.value.trim()),
-            );
-            if (heroismValueAsked) {
-                heroismValue.value = heroismValueAsked.value.toString();
-            }
-        }
+                const mapping = {
+                    "very heroic": 10,
+                    "somewhat heroic": 7,
+                    "not very heroic": 4,
+                    "not heroic at all": 1,
+                };
+
+                // @ts-ignore
+                return mapping[heroismValue.value.trim().toLowerCase()];
+            },
+        )).value;
 
         insertSpecialComment(newCharacterSection.body, "base-heroism");
-        newCharacterSection.body.push(`heroism: ${parseInt(heroismValue.value.trim()) / 10},`);
-        await autosave?.save();
+        newCharacterSection.body.push(`heroism: ${heroismValue / 10},`);
     }
 
-    if (!hasSpecialComment(newCharacterSection.body, "base-violence")) {
-        await prime();
-        const violenceValue = await generator.next({
-            maxCharacters: 5,
-            maxSafetyCharacters: 0,
-            maxParagraphs: 1,
-            nextQuestion: "From 1 to 10 how likely is " + name + " to resort to violence when facing conflicts or threats? with 10 being extremely likely and 1 being very unlikely",
-            stopAfter: [],
-            stopAt: [],
-            grammar: "root ::= [1-9] | \"10\"",
-        });
+    {
+        const violenceValue = (await guider.askNumber(
+            "violence",
+            "From 1 to 10 how likely is " + name + " to resort to violence when facing conflicts or threats? with 10 being extremely likely and 1 being very unlikely",
+            async () => {
+                await prime();
+                const violenceValue = await generator.next({
+                    maxCharacters: 100,
+                    maxSafetyCharacters: 0,
+                    maxParagraphs: 1,
+                    nextQuestion: "How likely is " + name + " to resort to violence when facing conflicts or threats? answer with \"very likely\", \"somewhat likely\", \"not very likely\" or \"not likely at all\"",
+                    stopAfter: [],
+                    stopAt: [],
+                    grammar: `root ::= "very likely" | "somewhat likely" | "not very likely" | "not likely at all"`,
+                });
 
-        if (violenceValue.done) {
-            throw new Error("Generator finished without producing output");
-        }
+                if (violenceValue.done) {
+                    throw new Error("Generator finished without producing output");
+                }
 
-        if (guider) {
-            const violenceValueAsked = await guider.askNumber(
-                "From 1 to 10 how likely is " + name + " to resort to violence when facing conflicts or threats? with 10 being extremely likely and 1 being very unlikely",
-                parseInt(violenceValue.value.trim()),
-            );
-            if (violenceValueAsked) {
-                violenceValue.value = violenceValueAsked.value.toString();
-            }
-        }
+                const mapping = {
+                    "very likely": 10,
+                    "somewhat likely": 7,
+                    "not very likely": 4,
+                    "not likely at all": 1,
+                };
+
+                // @ts-ignore
+                return mapping[violenceValue.value.trim().toLowerCase()];
+            },
+        )).value;
 
         insertSpecialComment(newCharacterSection.body, "base-violence");
-        newCharacterSection.body.push(`violence: ${parseInt(violenceValue.value.trim()) / 10},`);
-        await autosave?.save();
+        newCharacterSection.body.push(`violence: ${violenceValue / 10},`);
     }
 
-    if (!hasSpecialComment(newCharacterSection.body, "base-mute")) {
-        await prime();
-        const isMute = await generator.next({
-            maxCharacters: 5,
-            maxSafetyCharacters: 0,
-            maxParagraphs: 1,
-            nextQuestion: "Is " + name + " mute, unable to speak or communicate verbally?",
-            stopAfter: [],
-            stopAt: [],
-            grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
-            instructions: "If the character is an animal without speaking capabilities, answer yes, if the character is a human or humanoid that cannot speak for any reason answer yes; for animals, creatures or humanoids that can speak answer no",
-        });
+    {
+        const isMuteValue = (await guider.askBoolean(
+            "mute",
+            "Is " + name + " mute, unable to speak or communicate verbally?",
+            async () => {
+                await prime();
+                const isMute = await generator.next({
+                    maxCharacters: 5,
+                    maxSafetyCharacters: 0,
+                    maxParagraphs: 1,
+                    nextQuestion: "Is " + name + " mute, unable to speak or communicate verbally?",
+                    stopAfter: [],
+                    stopAt: [],
+                    grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
+                    instructions: "If the character is an animal without speaking capabilities, answer yes, if the character is a human or humanoid that cannot speak for any reason answer yes; for animals, creatures or humanoids that can speak answer no",
+                });
 
-        if (isMute.done) {
-            throw new Error("Generator finished without producing output");
-        }
+                if (isMute.done) {
+                    throw new Error("Generator finished without producing output");
+                }
 
-        let isMuteValue = isMute.value.trim().toLowerCase() === "yes";
+                return isMute.value.trim().toLowerCase() === "yes";
+            },
+        )).value;
 
-        if (guider) {
-            const isActuallyMute = await guider.askBoolean("Is " + name + " mute, unable to speak or communicate verbally?", isMuteValue);
-            if (!isActuallyMute.value) {
-                isMuteValue = false;
-            } else {
-                isMuteValue = true;
-            }
-        }
-
-        insertSpecialComment(newCharacterSection.body, "base-mute");
+        insertSpecialComment(newCharacterSection.body, "base-vocabulary-limit");
         if (isMuteValue) {
             newCharacterSection.body.push(`vocabularyLimit: {mute: true},`);
         }
-        await autosave?.save();
     }
 
 
-    if (!hasSpecialComment(newCharacterSection.body, "base-attractiveness")) {
-        await prime();
-        const attractivenessValue = await generator.next({
-            maxCharacters: 5,
-            maxSafetyCharacters: 0,
-            maxParagraphs: 1,
-            nextQuestion: "From 1 to 10 how attractive is " + name + "? with 10 being extremely attractive and 1 being very unattractive",
-            stopAfter: [],
-            stopAt: [],
-            grammar: "root ::= [1-9] | \"10\"",
-        });
+    {
+        const attractivenessValue = (await guider.askNumber(
+            "attractiveness",
+            "From 1 to 10 how attractive is " + name + "? with 10 being extremely attractive and 1 being very unattractive",
+            async () => {
+                await prime();
+                const attractivenessValue = await generator.next({
+                    maxCharacters: 100,
+                    maxSafetyCharacters: 0,
+                    maxParagraphs: 1,
+                    nextQuestion: "How attractive is " + name + "? answer with \"very attractive\", \"somewhat attractive\", \"not very attractive\" or \"not attractive at all\"",
+                    stopAfter: [],
+                    stopAt: [],
+                    grammar: `root ::= "very attractive" | "somewhat attractive" | "not very attractive" | "not attractive at all"`,
+                });
 
-        if (attractivenessValue.done) {
-            throw new Error("Generator finished without producing output");
-        }
+                if (attractivenessValue.done) {
+                    throw new Error("Generator finished without producing output");
+                }
 
-        let attractivenessValueNum = parseInt(attractivenessValue.value.trim());
+                const mapping = {
+                    "very attractive": 10,
+                    "somewhat attractive": 7,
+                    "not very attractive": 4,
+                    "not attractive at all": 1,
+                };
 
-        if (guider) {
-            const attractivenessValueAsked = await guider.askNumber(
-                "From 1 to 10 how attractive is " + name + "? with 10 being extremely attractive and 1 being very unattractive",
-                attractivenessValueNum,
-            );
-            if (attractivenessValueAsked) {
-                attractivenessValueNum = attractivenessValueAsked.value;
-            }
-        }
+                // @ts-ignore
+                return mapping[attractivenessValue.value.trim().toLowerCase()];
+            },
+        )).value;
 
         insertSpecialComment(newCharacterSection.body, "base-attractiveness");
-        newCharacterSection.body.push(`attractiveness: ${attractivenessValueNum / 10},`);
-        await autosave?.save();
+        newCharacterSection.body.push(`attractiveness: ${attractivenessValue / 10},`);
     }
 
-    if (!hasSpecialComment(newCharacterSection.body, "base-charisma")) {
-        await prime();
-        const charismaValue = await generator.next({
-            maxCharacters: 5,
-            maxSafetyCharacters: 0,
-            maxParagraphs: 1,
-            nextQuestion: "From 1 to 10 how charismatic is " + name + "? with 10 being extremely charismatic and able to easily charm and influence others, and 1 being very uncharismatic and awkward in social situations",
-            stopAfter: [],
-            stopAt: [],
-            grammar: "root ::= [1-9] | \"10\"",
-        });
+    {
+        const charismaValue = (await guider.askNumber(
+            "charisma",
+            "From 1 to 10 how charismatic is " + name + "? with 10 being extremely charismatic and able to easily charm and influence others, and 1 being very uncharismatic and awkward in social situations",
+            async () => {
+                await prime();
+                const charismaValue = await generator.next({
+                    maxCharacters: 100,
+                    maxSafetyCharacters: 0,
+                    maxParagraphs: 1,
+                    nextQuestion: "How charismatic is " + name + "? answer with \"very charismatic\", \"somewhat charismatic\", \"not very charismatic\" or \"not charismatic at all\"",
+                    stopAfter: [],
+                    stopAt: [],
+                    grammar: `root ::= "very charismatic" | "somewhat charismatic" | "not very charismatic" | "not charismatic at all"`,
+                });
 
-        if (charismaValue.done) {
-            throw new Error("Generator finished without producing output");
-        }
+                if (charismaValue.done) {
+                    throw new Error("Generator finished without producing output");
+                }
 
-        let charismaValueNum = parseInt(charismaValue.value.trim());
+                const mapping = {
+                    "very charismatic": 10,
+                    "somewhat charismatic": 7,
+                    "not very charismatic": 4,
+                    "not charismatic at all": 1,
+                };
 
-
-        if (guider) {
-            const charismaValueAsked = await guider.askNumber(
-                "From 1 to 10 how charismatic is " + name + "? with 10 being extremely charismatic and able to easily charm and influence others, and 1 being very uncharismatic and awkward in social situations",
-                charismaValueNum,
-            );
-            if (charismaValueAsked) {
-                charismaValueNum = charismaValueAsked.value;
-            }
-        }
+                // @ts-ignore
+                return mapping[charismaValue.value.trim().toLowerCase()];
+            },
+        )).value;
 
         insertSpecialComment(newCharacterSection.body, "base-charisma");
-        newCharacterSection.body.push(`charisma: ${charismaValueNum / 10},`);
-        await autosave?.save();
+        newCharacterSection.body.push(`charisma: ${charismaValue / 10},`);
     }
 
-    if (!hasSpecialComment(newCharacterSection.body, "base-family-ties")) {
-        insertSpecialComment(newCharacterSection.body, "base-family-ties");
-        newCharacterSection.body.push(`familyTies: {},`);
-        await autosave?.save();
-    }
+    insertSpecialComment(newCharacterSection.body, "base-family-ties");
+    newCharacterSection.body.push(`familyTies: {},`);
 
-    if (!hasSpecialComment(onWorldClockReadySection.body, "base-relationships") && guider) {
+    {
         let nextFamilyMemberToAdd = "";
+        let index = 0;
         do {
-            nextFamilyMemberToAdd = (await guider.askOption("Would you like to add a family member?", ["no", "parent", "sibling", "child", "spouse", "cousin", "uncle",
+            nextFamilyMemberToAdd = (await guider.askOption("family-member-to-add-" + index, "Would you like to add a family member?", ["no", "parent", "sibling", "child", "spouse", "cousin", "uncle",
                 "aunt", "grandparent", "grandchild", "niece", "nephew", "other", "step parent", "step child", "step sibling", "half sibling", "step grandparent", "step grandchild"], "no")).value;
             if (nextFamilyMemberToAdd && nextFamilyMemberToAdd !== "no") {
-                const familyMemberName = (await guider.askOpen("What is the name of the " + nextFamilyMemberToAdd + "?")).value;
+                const familyMemberName = (await guider.askOpen("family-member-to-add-" + index + "-name", "What is the name of the " + nextFamilyMemberToAdd + "?", "")).value;
                 const familyMemberRelation = nextFamilyMemberToAdd;
 
                 onWorldClockReadySection.body.push(`DE.utils.newFamilyRelation(${JSON.stringify(name)}, ${JSON.stringify(familyMemberName)}, ${JSON.stringify(familyMemberRelation)})`);
 
-                const wouldYouLikeToPreCreateBond = await guider.askBoolean("Would you like to pre-create a mutual bond between " + name + " and " + familyMemberName + "? if you don't they will consider each other as strangers unaware they are family", false);
+                const wouldYouLikeToPreCreateBond = await guider.askBoolean(
+                    "family-member-to-add-" + index + "-pre-create-bond",
+                    "Would you like to pre-create a mutual bond between " + name + " and " + familyMemberName + "? if you don't they will consider each other as strangers unaware they are family",
+                    false,
+                );
+
                 if (wouldYouLikeToPreCreateBond.value) {
                     const options = [
                         "sworn enemy",
@@ -1426,18 +1439,23 @@ export async function generateBase(engine, scriptgenerator, guider) {
                         45,
                         75,
                     ];
-                    const bondType = await guider.askOption("What type of bond " + name + " and " + familyMemberName + " share?", options, "good relationship");
+                    const bondType = await guider.askOption("family-member-to-add-" + index + "-bond-type", "What type of bond " + name + " and " + familyMemberName + " share?", options, "good relationship");
                     const bondValue = optionsValues[options.indexOf(bondType.value)];
                     onWorldClockReadySection.body.push(`DE.utils.newMutualBond(${JSON.stringify(name)}, ${JSON.stringify(familyMemberName)}, {stranger: false, bond: ${bondValue}, bond2: 0, knowsName: true, createdAt: DE.utils.timeShifter(DE.currentTime, {years: -DE.characters[${JSON.stringify(name)}].ageYears})})`);
                 }
             }
-        } while (nextFamilyMemberToAdd !== "no");
 
+            index++;
+        } while (nextFamilyMemberToAdd !== "no");
+    }
+
+    {
         let nextRelationshipToAdd = false;
+        let nextRelationshipIndex = 0;
         do {
-            nextRelationshipToAdd = (await guider.askBoolean("Would you like to add a non-family relationship?", false)).value;
+            nextRelationshipToAdd = (await guider.askBoolean("non-family-relationship-" + nextRelationshipIndex, "Would you like to add a non-family relationship?", false)).value;
             if (nextRelationshipToAdd) {
-                const personName = (await guider.askOpen("What is the name of the person/animal/creature that relationship is shared with?")).value;
+                const relationshipTargetName = (await guider.askOpen("non-family-relationship-" + nextRelationshipIndex + "-name", "What is the name of the person/animal/creature that relationship is shared with?", "")).value;
 
                 const options = [
                     "stranger",
@@ -1472,7 +1490,7 @@ export async function generateBase(engine, scriptgenerator, guider) {
                     75,
                 ];
 
-                const bondType = await guider.askOption("What type of bond " + name + " and " + personName + " share?", optionsWithPerCharacter, "friends");
+                const bondType = await guider.askOption("non-family-relationship-" + nextRelationshipIndex + "-bond-type", "What type of bond " + name + " and " + relationshipTargetName + " share?", optionsWithPerCharacter, "friends");
 
                 /**
                  * @type {number | null}
@@ -1481,17 +1499,17 @@ export async function generateBase(engine, scriptgenerator, guider) {
                 /**
                  * @type {number | null}
                  */
-                let bondValueForPerson = null;
+                let bondValueForTarget = null;
 
                 if (bondType.value === "select per character (each character sees the other differently)") {
-                    const bondTypeForCharacter = await guider.askOption("How does " + name + " see " + personName + "?", options, "friends");
-                    const bondTypeForPerson = await guider.askOption("How does " + personName + " see " + name + "?", options, "friends");
+                    const bondTypeForCharacter = await guider.askOption("non-family-relationship-" + nextRelationshipIndex + "-bond-type-for-character", "How does " + name + " see " + relationshipTargetName + "?", options, "friends");
+                    const bondTypeForTarget = await guider.askOption("non-family-relationship-" + nextRelationshipIndex + "-bond-type-for-target", "How does " + relationshipTargetName + " see " + name + "?", options, "friends");
                     bondValueForCharacter = optionsValues[options.indexOf(bondTypeForCharacter.value)];
-                    bondValueForPerson = optionsValues[options.indexOf(bondTypeForPerson.value)];
+                    bondValueForTarget = optionsValues[options.indexOf(bondTypeForTarget.value)];
                 } else {
                     const bondValue = optionsValues[options.indexOf(bondType.value)];
                     bondValueForCharacter = bondValue;
-                    bondValueForPerson = bondValue;
+                    bondValueForTarget = bondValue;
                 }
 
                 /**
@@ -1501,7 +1519,7 @@ export async function generateBase(engine, scriptgenerator, guider) {
                 /**
                  * @type {number}
                  */
-                let bond2ValueForPerson = 0;
+                let bond2ValueForTarget = 0;
 
                 const bond2Options = [
                     "no romantic interest",
@@ -1524,199 +1542,199 @@ export async function generateBase(engine, scriptgenerator, guider) {
                     75,
                 ];
 
-                const bond2Type = await guider.askOption("What type of romantic bond " + name + " and " + personName + " share?", bond2OptionsWithPerCharacter, "no romantic interest");
+                const bond2Type = await guider.askOption("non-family-relationship-" + nextRelationshipIndex + "-bond2-type", "What type of romantic bond " + name + " and " + relationshipTargetName + " share?", bond2OptionsWithPerCharacter, "no romantic interest");
 
                 if (bond2Type.value === "select per character (each character sees the other differently)") {
-                    const bond2TypeForCharacter = await guider.askOption("How does " + name + " see " + personName + " romantically?", bond2Options, "no romantic interest");
-                    const bond2TypeForPerson = await guider.askOption("How does " + personName + " see " + name + " romantically?", bond2Options, "no romantic interest");
+                    const bond2TypeForCharacter = await guider.askOption("non-family-relationship-" + nextRelationshipIndex + "-bond2-type-for-character", "How does " + name + " see " + relationshipTargetName + " romantically?", bond2Options, "no romantic interest");
+                    const bond2TypeForTarget = await guider.askOption("non-family-relationship-" + nextRelationshipIndex + "-bond2-type-for-target", "How does " + relationshipTargetName + " see " + name + " romantically?", bond2Options, "no romantic interest");
                     bond2ValueForCharacter = bond2Values[bond2Options.indexOf(bond2TypeForCharacter.value)];
-                    bond2ValueForPerson = bond2Values[bond2Options.indexOf(bond2TypeForPerson.value)];
+                    bond2ValueForTarget = bond2Values[bond2Options.indexOf(bond2TypeForTarget.value)];
                 } else {
                     const bond2Value = bond2Values[bond2Options.indexOf(bond2Type.value)];
                     bond2ValueForCharacter = bond2Value;
-                    bond2ValueForPerson = bond2Value;
+                    bond2ValueForTarget = bond2Value;
                 }
 
-                const bondTimeInYears = await guider.askNumber("How many years has " + name + " known " + personName + "?", 1);
+                const bondTimeInYears = await guider.askNumber("non-family-relationship-" + nextRelationshipIndex + "-bond-time", "How many years has " + name + " known " + relationshipTargetName + "?", 1);
 
-                onWorldClockReadySection.body.push(`DE.utils.newBond(${JSON.stringify(name)}, ${JSON.stringify(personName)}, {stranger: ${JSON.stringify(bondValueForCharacter === null)}, bond: ${bondValueForCharacter || 0}, bond2: ${bond2ValueForCharacter}, knowsName: true, createdAt: DE.utils.timeShifter(DE.currentTime, {years: -${bondTimeInYears}})}, {forceOverride: true});`);
-                onWorldClockReadySection.body.push(`DE.utils.newBond(${JSON.stringify(personName)}, ${JSON.stringify(name)}, {stranger: ${JSON.stringify(bondValueForPerson === null)}, bond: ${bondValueForPerson || 0}, bond2: ${bond2ValueForPerson}, knowsName: true, createdAt: DE.utils.timeShifter(DE.currentTime, {years: -${bondTimeInYears}})});`);
+                onWorldClockReadySection.body.push(`DE.utils.newBond(${JSON.stringify(name)}, ${JSON.stringify(relationshipTargetName)}, {stranger: ${JSON.stringify(bondValueForCharacter === null)}, bond: ${bondValueForCharacter || 0}, bond2: ${bond2ValueForCharacter}, knowsName: true, createdAt: DE.utils.timeShifter(DE.currentTime, {years: -${bondTimeInYears}})}, {forceOverride: true});`);
+                onWorldClockReadySection.body.push(`DE.utils.newBond(${JSON.stringify(relationshipTargetName)}, ${JSON.stringify(name)}, {stranger: ${JSON.stringify(bondValueForTarget === null)}, bond: ${bondValueForTarget || 0}, bond2: ${bond2ValueForTarget}, knowsName: true, createdAt: DE.utils.timeShifter(DE.currentTime, {years: -${bondTimeInYears}})});`);
             }
         } while (nextRelationshipToAdd);
 
         unshiftSpecialComment(onWorldClockReadySection.body, "base-relationships");
-
-        await autosave?.save();
     }
 
-    if (!hasSpecialComment(newCharacterSection.body, "base-likes")) {
-        await prime();
-        const likesList = await generator.next({
-            maxCharacters: 1000,
-            maxSafetyCharacters: 0,
-            maxParagraphs: 10,
-            nextQuestion: "List some hobbies, activities, interests, or conversation topics that " + name + " enjoys, at most 10 things. Examples: swimming, cooking, cats, astronomy, music, gardening, chess",
-            stopAfter: [],
-            stopAt: [],
-            instructions: "Answer with a comma-separated list of single lowercase words representing concrete hobbies, activities, subjects, or things that " + name + " likes. Each entry must be a noun or activity like: swimming, reading, cats, magic, cooking, astronomy, horses, painting, archery. Do NOT include emotional states, interpersonal situations, or multi-word phrases. Just single-word nouns or activities separated by commas.",
-            grammar: "root ::= item moreItems\nmoreItems ::= \", \" item moreItems | \"\"\nitem ::= [A-Za-z ]+"
-        });
+    {
+        /**
+         * @type {string[]}
+         */
+        let likesListParsedAndDeduped = [];
+        const likesListAsked = await guider.askList(
+            "likes-list",
+            "List some hobbies, activities, interests, or conversation topics that " + name + " enjoys. Examples: swimming, cooking, cats, astronomy, music, gardening, chess",
+            null,
+            async () => {
+                await prime();
+                const likesList = await generator.next({
+                    maxCharacters: 1000,
+                    maxSafetyCharacters: 0,
+                    maxParagraphs: 10,
+                    nextQuestion: "List some hobbies, activities, interests, or conversation topics that " + name + " enjoys, at most 10 things. Examples: swimming, cooking, cats, astronomy, music, gardening, chess",
+                    stopAfter: [],
+                    stopAt: [],
+                    instructions: "Answer with a comma-separated list of single lowercase words representing concrete hobbies, activities, subjects, or things that " + name + " likes. Each entry must be a noun or activity like: swimming, reading, cats, magic, cooking, astronomy, horses, painting, archery. Do NOT include emotional states, interpersonal situations, or multi-word phrases. Just single-word nouns or activities separated by commas.",
+                    grammar: "root ::= item moreItems\nmoreItems ::= \", \" item moreItems | \"\"\nitem ::= [A-Za-z ]+"
+                });
 
-        if (likesList.done) {
-            throw new Error("Generator finished without producing output");
-        }
+                if (likesList.done) {
+                    throw new Error("Generator finished without producing output");
+                }
 
-        let likesListParsedAndDeduped = likesList.value.trim().split(",").filter(item => item.trim() !== "").map(item => item.trim()).filter((item, index, self) => self.indexOf(item) === index); // trim items, filter out empty items and dedupe
-
-        if (guider) {
-            const likesListAsked = await guider.askList("List some hobbies, activities, interests, or conversation topics that " + name + " enjoys. Examples: swimming, cooking, cats, astronomy, music, gardening, chess", null, likesListParsedAndDeduped);
-            if (likesListAsked) {
-                likesListParsedAndDeduped = likesListAsked.value.map(item => item.trim().toLowerCase().split(" ").map(word => word.trim()).filter(word => word !== "").join(" ")).filter(item => item !== "").filter((item, index, self) => self.indexOf(item) === index);
-            }
+                return likesList.value.trim().split(",").filter(item => item.trim() !== "").map(item => item.trim())
+                    .filter((item, index, self) => self.indexOf(item) === index); // trim items, filter out empty items and dedupe
+            },
+        );
+        if (likesListAsked) {
+            likesListParsedAndDeduped = likesListAsked.value.map(item => item.trim().toLowerCase().split(" ").map(word => word.trim()).filter(word => word !== "").join(" ")).filter(item => item !== "").filter((item, index, self) => self.indexOf(item) === index);
         }
 
         insertSpecialComment(newCharacterSection.body, "base-likes");
         newCharacterSection.body.push(`likes: ${JSON.stringify(likesListParsedAndDeduped)}, // These are ids that need to be specified for the social simulation`);
-
-        if (!card.config.globalInterests) {
-            card.config.globalInterests = likesListParsedAndDeduped;
-        } else {
-            card.config.globalInterests = Array.from(new Set([...card.config.globalInterests, ...likesListParsedAndDeduped]));
-        }
-
-        await autosave?.save();
     }
 
-    if (!hasSpecialComment(newCharacterSection.body, "base-dislikes")) {
-        await prime();
-        const dislikesList = await generator.next({
-            maxCharacters: 1000,
-            maxSafetyCharacters: 0,
-            maxParagraphs: 10,
-            nextQuestion: "List some hobbies, activities, interests, or conversation topics that " + name + " dislikes, at most 10 things. Examples: swimming, cooking, cats, politics, math, spiders, crowds",
-            stopAfter: [],
-            stopAt: [],
-            instructions: "Answer with a comma-separated list of single lowercase words representing concrete hobbies, activities, subjects, or things that " + name + " dislikes. Each entry must be a noun or activity like: swimming, math, spiders, crowds, politics, mornings, heights, snakes, thunder. Do NOT include emotional states, interpersonal situations, or multi-word phrases. Just single-word nouns or activities separated by commas.",
-            grammar: "root ::= item moreItems\nmoreItems ::= \", \" item moreItems | \"\"\nitem ::= [A-Za-z ]+"
-        });
+    {
+        /**
+         * @type {string[]}
+         */
+        let dislikesListParsedAndDeduped = [];
 
-        if (dislikesList.done) {
-            throw new Error("Generator finished without producing output");
-        }
+        const likes = scriptgenerator.state["likes-list"];
 
-        let dislikesListParsedAndDeduped = dislikesList.value.trim().split(",").filter(item => item.trim() !== "").map(item => item.trim())
-            .filter((item, index, self) => self.indexOf(item) === index) // trim items, filter out empty items and dedupe
-            .filter(item => !card.config.globalInterests.includes(item)); // ensure there is no overlap with likes
+        const dislikesListAsked = await guider.askList(
+            "dislikes-list",
+            "List some hobbies, activities, interests, or conversation topics that " + name + " dislikes. Examples: swimming, cooking, cats, politics, math, spiders, crowds",
+            null,
+            async () => {
+                await prime();
+                const dislikesList = await generator.next({
+                    maxCharacters: 1000,
+                    maxSafetyCharacters: 0,
+                    maxParagraphs: 10,
+                    nextQuestion: "List some hobbies, activities, interests, or conversation topics that " + name + " dislikes, at most 10 things. Examples: swimming, cooking, cats, politics, math, spiders, crowds",
+                    stopAfter: [],
+                    stopAt: [],
+                    instructions: "Answer with a comma-separated list of single lowercase words representing concrete hobbies, activities, subjects, or things that " + name + " dislikes. Each entry must be a noun or activity like: swimming, math, spiders, crowds, politics, mornings, heights, snakes, thunder. Do NOT include emotional states, interpersonal situations, or multi-word phrases. Just single-word nouns or activities separated by commas.",
+                    grammar: "root ::= item moreItems\nmoreItems ::= \", \" item moreItems | \"\"\nitem ::= [A-Za-z ]+"
+                });
 
-        if (guider) {
-            const dislikesListAsked = await guider.askList("List some hobbies, activities, interests, or conversation topics that " + name + " dislikes. Examples: swimming, cooking, cats, politics, math, spiders, crowds", null, dislikesListParsedAndDeduped);
-            if (dislikesListAsked) {
-                dislikesListParsedAndDeduped = dislikesListAsked.value.map(item => item.trim().toLowerCase().split(" ").map(word => word.trim()).filter(word => word !== "").join(" ")).filter(item => item !== "").filter((item, index, self) => self.indexOf(item) === index).filter(item => !card.config.globalInterests.includes(item));
-            }
+                if (dislikesList.done) {
+                    throw new Error("Generator finished without producing output");
+                }
+
+                return dislikesList.value.trim().split(",").filter(item => item.trim() !== "").map(item => item.trim())
+                    .filter((item, index, self) => self.indexOf(item) === index) // trim items, filter out empty items and dedupe
+                    .filter(item => !likes.includes(item)); // ensure there is no overlap with likes
+            },
+        );
+        if (dislikesListAsked) {
+            dislikesListParsedAndDeduped = dislikesListAsked.value.map(item => item.trim().toLowerCase().split(" ").map(word => word.trim()).filter(word => word !== "").join(" ")).filter(item => item !== "").filter((item, index, self) => self.indexOf(item) === index).filter(item => !likes.includes(item));
         }
 
         insertSpecialComment(newCharacterSection.body, "base-dislikes");
         newCharacterSection.body.push(`dislikes: ${JSON.stringify(dislikesListParsedAndDeduped)}, // These are ids that need to be specified for the social simulation`);
-
-        if (!card.config.globalInterests) {
-            card.config.globalInterests = dislikesListParsedAndDeduped;
-        } else {
-            card.config.globalInterests = Array.from(new Set([...card.config.globalInterests, ...dislikesListParsedAndDeduped]));
-        }
-        await autosave?.save();
     }
 
-    if (!hasSpecialComment(newCharacterSection.body, "base-species")) {
-        await prime();
-        const species = await generator.next({
-            maxCharacters: 50,
-            maxSafetyCharacters: 0,
-            maxParagraphs: 1,
-            nextQuestion: "What species is " + name + "? answer in lowercase",
-            stopAfter: [],
-            stopAt: [],
-            grammar: "root ::= [a-z ]+",
-            instructions: "If the character is a regular human answer human, if the character is a regular animal answer with the type of animal like dog, cat, horse, etc; if the character is a creature or fantasy being answer with the type of creature like dragon, fairy, alien, etc",
-        });
-
-        if (species.done) {
-            throw new Error("Generator finished without producing output");
-        }
-
-        let actualSpecies = species.value.trim().toLowerCase();
-        let speciesType = "humanoid";
-
-        if (actualSpecies !== "human") {
+    {
+        const guidedSpecies = (await guider.askOpen("species", "What species is " + name + "?", async () => {
             await prime();
-            const isAnthro = await generator.next({
-                maxCharacters: 5,
+            const species = await generator.next({
+                maxCharacters: 50,
                 maxSafetyCharacters: 0,
                 maxParagraphs: 1,
-                nextQuestion: "Is " + name + " an anthropomorphic character/animal with human-like traits and characteristics? Answer with yes or no.",
+                nextQuestion: "What species is " + name + "? answer in lowercase",
                 stopAfter: [],
                 stopAt: [],
-                grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
-                instructions: "Some examples include beastmen, furry characters, and animals with human-like features or abilities. If the character is a regular human answer no, if the character is a regular animal answer no, if the character is an anthropomorphic animal or creature answer yes",
+                grammar: "root ::= [a-z ]+",
+                instructions: "If the character is a regular human answer human, if the character is a regular animal answer with the type of animal like dog, cat, horse, etc; if the character is a creature or fantasy being answer with the type of creature like dragon, fairy, alien, etc",
             });
 
-            if (isAnthro.done) {
+            if (species.done) {
                 throw new Error("Generator finished without producing output");
             }
 
-            const isAnthroValue = isAnthro.value.trim().toLowerCase() === "yes";
+            let actualSpecies = species.value.trim().toLowerCase();
 
-            if (isAnthroValue) {
-                actualSpecies = "anthro " + actualSpecies;
-            } else {
+            if (actualSpecies !== "human") {
                 await prime();
-                const isFeral = await generator.next({
+                const isAnthro = await generator.next({
                     maxCharacters: 5,
                     maxSafetyCharacters: 0,
                     maxParagraphs: 1,
-                    nextQuestion: "Is " + name + " an animal that walks in 4 legs but possesses human level intelligence and is capable of communicating with others through verbal language? Answer with yes or no.",
+                    nextQuestion: "Is " + name + " an anthropomorphic character/animal with human-like traits and characteristics? Answer with yes or no.",
                     stopAfter: [],
                     stopAt: [],
                     grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
-                    instructions: "If the character is a regular animal that walks on 4 legs and does not have human level intelligence or the ability to communicate with others through verbal language answer no, if the character is an animal that walks on 4 legs but has human level intelligence and can communicate with others through verbal language answer yes",
+                    instructions: "Some examples include beastmen, furry characters, and animals with human-like features or abilities. If the character is a regular human answer no, if the character is a regular animal answer no, if the character is an anthropomorphic animal or creature answer yes",
                 });
 
-                if (isFeral.done) {
+                if (isAnthro.done) {
                     throw new Error("Generator finished without producing output");
                 }
 
-                speciesType = isFeral.value.trim().toLowerCase() === "yes" ? "feral" : "animal";
-            }
-        }
+                const isAnthroValue = isAnthro.value.trim().toLowerCase() === "yes";
 
-        if (guider) {
-            const guidedSpecies = await guider.askOpen("What species is " + name + "?", actualSpecies);
-            if (guidedSpecies) {
-                actualSpecies = guidedSpecies.value.trim().toLowerCase();
+                if (isAnthroValue) {
+                    actualSpecies = "anthro " + actualSpecies;
+                }
             }
 
-            const guidedSpeciesType = await guider.askOption("What species type is " + name + "?", ["humanoid", "feral", "animal"], speciesType);
-            if (guidedSpeciesType) {
-                speciesType = guidedSpeciesType.value.trim().toLowerCase();
-            }
-        }
+            return actualSpecies;
+        })).value.trim().toLowerCase();
+
+        const guidedSpeciesType = await guider.askOption(
+            "species-type",
+            "What species type is " + name + "?",
+            ["humanoid", "feral", "animal"],
+            async () => {
+                if (guidedSpecies === "human") {
+                    return "humanoid";
+                } else if (guidedSpecies.startsWith("anthro ")) {
+                    return "humanoid";
+                } else {
+                    await prime();
+                    const isFeral = await generator.next({
+                        maxCharacters: 5,
+                        maxSafetyCharacters: 0,
+                        maxParagraphs: 1,
+                        nextQuestion: "Is " + name + " an animal that walks in 4 legs but possesses human level intelligence and is capable of communicating with others through verbal language? Answer with yes or no.",
+                        stopAfter: [],
+                        stopAt: [],
+                        grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
+                        instructions: "If the character is a regular animal that walks on 4 legs and does not have human level intelligence or the ability to communicate with others through verbal language answer no, if the character is an animal that walks on 4 legs but has human level intelligence and can communicate with others through verbal language answer yes",
+                    });
+
+                    if (isFeral.done) {
+                        throw new Error("Generator finished without producing output");
+                    }
+
+                    return isFeral.value.trim().toLowerCase() === "yes" ? "feral" : "animal";
+                }
+            },
+        );
 
         insertSpecialComment(newCharacterSection.body, "base-species");
-        newCharacterSection.body.push(`species: ${JSON.stringify(actualSpecies)},`);
-        newCharacterSection.body.push(`speciesType: "${speciesType}",`);
+        newCharacterSection.body.push(`species: ${JSON.stringify(guidedSpecies)},`);
+        newCharacterSection.body.push(`speciesType: "${guidedSpeciesType}",`);
 
-        metadataSection.body.push(`species: ${JSON.stringify(actualSpecies)},`);
-        metadataSection.body.push(`speciesType: "${speciesType}",`);
-
-        card.config.characterSpecies = actualSpecies;
-        card.config.characterSpeciesType = speciesType;
-
-        await autosave?.save();
+        metadataSection.body.push(`species: ${JSON.stringify(guidedSpecies)},`);
+        metadataSection.body.push(`speciesType: "${guidedSpeciesType}",`);
     }
 
     if (!hasSpecialComment(newCharacterSection.body, "base-race")) {
         await prime();
 
-        let speciesCantBe = card.config.characterSpecies;
+        let speciesCantBe = scriptgenerator.state["species"] || "none";
         if (speciesCantBe.split(" ").length > 1) {
             const lastWord = speciesCantBe.split(" ").slice(-1)[0];
             speciesCantBe = lastWord;
