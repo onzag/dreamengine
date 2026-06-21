@@ -1731,75 +1731,71 @@ export async function generateBase(engine, scriptgenerator, guider) {
         metadataSection.body.push(`speciesType: "${guidedSpeciesType}",`);
     }
 
-    if (!hasSpecialComment(newCharacterSection.body, "base-race")) {
-        await prime();
-
+    {
         let speciesCantBe = scriptgenerator.state["species"] || "none";
         if (speciesCantBe.split(" ").length > 1) {
             const lastWord = speciesCantBe.split(" ").slice(-1)[0];
             speciesCantBe = lastWord;
         }
 
-
-        const race = await generator.next({
-            maxCharacters: 50,
-            maxSafetyCharacters: 0,
-            maxParagraphs: 1,
-            nextQuestion: "What race is " + name + "? answer in lowercase",
-            stopAfter: [],
-            stopAt: [],
-            grammar: "root ::= [a-z ]+",
-            instructions: "If the character has no racial identity answer with none, IMPORTANT: the racial identity cannot be " + JSON.stringify(speciesCantBe) + ", answer with none if no further known.",
-        });
-
-        if (race.done) {
-            throw new Error("Generator finished without producing output");
-        }
-
         /**
          * @type {string | null}
          */
-        let raceValue = race.value.trim().toLowerCase();
+        let raceValue = (await guider.askOpen(
+            "race",
+            "What race is " + name + "?",
+            async () => {
+                await prime();
+                const race = await generator.next({
+                    maxCharacters: 50,
+                    maxSafetyCharacters: 0,
+                    maxParagraphs: 1,
+                    nextQuestion: "What race is " + name + "? answer in lowercase",
+                    stopAfter: [],
+                    stopAt: [],
+                    grammar: "root ::= [a-z ]+",
+                    instructions: "If the character has no racial identity answer with none, IMPORTANT: the racial identity cannot be " + JSON.stringify(speciesCantBe) + ", answer with none if no further known.",
+                });
 
-        if (guider) {
-            const guidedRace = await guider.askOpen("What race is " + name + "?", raceValue);
-            if (guidedRace) {
-                raceValue = guidedRace.value.trim().toLowerCase();
-            }
-        }
+                if (race.done) {
+                    throw new Error("Generator finished without producing output");
+                }
+
+                return race.value.trim().toLowerCase();
+            },
+        )).value.trim().toLowerCase();
 
         if (!raceValue || raceValue === "" || raceValue === "none" || raceValue === "n/a") {
             raceValue = null;
         }
         insertSpecialComment(newCharacterSection.body, "base-race");
         newCharacterSection.body.push(`race: ${JSON.stringify(raceValue)},`);
-        await autosave?.save();
     }
 
-    if (!hasSpecialComment(newCharacterSection.body, "base-group-belonging")) {
-        await prime();
-        const groupBelonging = await generator.next({
-            maxCharacters: 50,
-            maxSafetyCharacters: 0,
-            maxParagraphs: 1,
-            nextQuestion: "Does " + name + " belong to any specific group, organization, team, family, etc? if so which one? answer with the name of the group or organization in lowercase, if they don't belong to any group answer with none",
-            stopAfter: [],
-            stopAt: [],
-            grammar: "root ::= [a-z ]+ | \"none\"",
-        });
+    {
+        const finalGroupBelongingValue = (await guider.askList(
+            "group-belonging",
+            "Does " + name + " belong to any specific group, organization, team, family, etc? if so which ones?",
+            null,
+            async () => {
+                await prime();
+                const groupBelonging = await generator.next({
+                    maxCharacters: 50,
+                    maxSafetyCharacters: 0,
+                    maxParagraphs: 1,
+                    nextQuestion: "Does " + name + " belong to any specific group, organization, team, family, etc? if so which one? answer with the name of the group or organization in lowercase, if they don't belong to any group answer with none",
+                    stopAfter: [],
+                    stopAt: [],
+                    grammar: "root ::= [a-z ]+ | \"none\"",
+                });
 
-        if (groupBelonging.done) {
-            throw new Error("Generator finished without producing output");
-        }
+                if (groupBelonging.done) {
+                    throw new Error("Generator finished without producing output");
+                }
 
-        let finalGroupBelongingValue = [groupBelonging.value.trim().toLowerCase()].filter(item => item !== "" && item !== "none" && item !== "n/a");
-
-        if (guider) {
-            const guidedGroupBelonging = await guider.askList("Does " + name + " belong to any specific group, organization, team, family, etc? if so which ones?", null, finalGroupBelongingValue);
-            if (guidedGroupBelonging) {
-                finalGroupBelongingValue = guidedGroupBelonging.value.map(item => item.trim().toLowerCase()).filter(item => item !== "" && item !== "none" && item !== "n/a");
-            }
-        }
+                return [groupBelonging.value.trim().toLowerCase()].filter(item => item !== "" && item !== "none" && item !== "n/a");
+            },
+        )).value.map(item => item.trim().toLowerCase()).filter(item => item !== "" && item !== "none" && item !== "n/a");
 
         insertSpecialComment(newCharacterSection.body, "base-group-belonging");
         if (finalGroupBelongingValue.length > 0) {
@@ -1807,61 +1803,27 @@ export async function generateBase(engine, scriptgenerator, guider) {
         } else {
             newCharacterSection.body.push(`groupBelonging: ${JSON.stringify(finalGroupBelongingValue)},`);
         }
-        await autosave?.save();
     }
 
-    if (!hasSpecialComment(newCharacterSection.body, "base-prejudices-species")) {
-        if (guider) {
-            const dislikeSpeciesPrejudice = await guider.askList("Is " + name + " prejudiced against any species? if so which ones?", null, []);
-            insertSpecialComment(newCharacterSection.body, "base-prejudices-species");
-            if (dislikeSpeciesPrejudice) {
-                const dislikeSpeciesPrejudiceValue = dislikeSpeciesPrejudice.value.map(item => item.trim().toLowerCase()).filter(item => item !== "" && item !== "none" && item !== "n/a");
-                newCharacterSection.body.push(`dislikesSpecies: ${JSON.stringify(dislikeSpeciesPrejudiceValue)}, // Up to you to make the character prejudiced against certain species`);
-            } else {
-                newCharacterSection.body.push(`dislikesSpecies: [], // Up to you to make the character prejudiced against certain species`);
-            }
-            await autosave?.save();
-        } else {
-            insertSpecialComment(newCharacterSection.body, "base-prejudices-species");
-            newCharacterSection.body.push(`dislikesSpecies: [], // Up to you to make the character prejudiced against certain species`);
-            await autosave?.save();
-        }
+    {
+        const dislikeSpeciesPrejudice = await guider.askList("prejudices-species", "Is " + name + " prejudiced against any species? if so which ones?", null, async () => []);
+        const dislikeSpeciesPrejudiceValue = dislikeSpeciesPrejudice.value.map(item => item.trim().toLowerCase()).filter(item => item !== "" && item !== "none" && item !== "n/a");
+        insertSpecialComment(newCharacterSection.body, "base-prejudices-species");
+        newCharacterSection.body.push(`dislikesSpecies: ${JSON.stringify(dislikeSpeciesPrejudiceValue)}, // Up to you to make the character prejudiced against certain species`);
     }
 
-    if (!hasSpecialComment(newCharacterSection.body, "base-prejudices-races")) {
-        if (guider) {
-            const dislikeRacesPrejudice = await guider.askList("Is " + name + " prejudiced against any races? if so which ones?", null, []);
-            insertSpecialComment(newCharacterSection.body, "base-prejudices-races");
-            if (dislikeRacesPrejudice) {
-                const dislikeRacesPrejudiceValue = dislikeRacesPrejudice.value.map(item => item.trim().toLowerCase()).filter(item => item !== "" && item !== "none" && item !== "n/a");
-                newCharacterSection.body.push(`dislikesRaces: ${JSON.stringify(dislikeRacesPrejudiceValue)}, // Up to you to make the character racist`);
-            } else {
-                newCharacterSection.body.push(`dislikesRaces: [], // Up to you to make the character racist`);
-            }
-            await autosave?.save();
-        } else {
-            insertSpecialComment(newCharacterSection.body, "base-prejudices-races");
-            newCharacterSection.body.push(`dislikesRaces: [], // Up to you to make the character racist`);
-            await autosave?.save();
-        }
+    {
+        const dislikeRacesPrejudice = await guider.askList("prejudices-races", "Is " + name + " prejudiced against any races? if so which ones?", null, async () => []);
+        const dislikeRacesPrejudiceValue = dislikeRacesPrejudice.value.map(item => item.trim().toLowerCase()).filter(item => item !== "" && item !== "none" && item !== "n/a");
+        insertSpecialComment(newCharacterSection.body, "base-prejudices-races");
+        newCharacterSection.body.push(`dislikesRaces: ${JSON.stringify(dislikeRacesPrejudiceValue)}, // Up to you to make the character racist`);
     }
 
-    if (!hasSpecialComment(newCharacterSection.body, "base-prejudices-groups")) {
-        if (guider) {
-            const dislikeGroupsPrejudice = await guider.askList("Is " + name + " prejudiced against any groups, organizations, teams, families, etc?", null, []);
-            insertSpecialComment(newCharacterSection.body, "base-prejudices-groups");
-            if (dislikeGroupsPrejudice) {
-                const dislikeGroupsPrejudiceValue = dislikeGroupsPrejudice.value.map(item => item.trim().toLowerCase()).filter(item => item !== "" && item !== "none" && item !== "n/a");
-                newCharacterSection.body.push(`dislikesGroups: ${JSON.stringify(dislikeGroupsPrejudiceValue)}, // Up to you to make the character prejudiced against certain groups`);
-            } else {
-                newCharacterSection.body.push(`dislikesGroups: [], // Up to you to make the character prejudiced against certain groups`);
-            }
-            await autosave?.save();
-        } else {
-            insertSpecialComment(newCharacterSection.body, "base-prejudices-groups");
-            newCharacterSection.body.push(`dislikesGroups: [], // Up to you to make the character prejudiced against certain groups`);
-            await autosave?.save();
-        }
+    {
+        const dislikeGroupsPrejudice = await guider.askList("prejudices-groups", "Is " + name + " prejudiced against any groups, organizations, teams, families, etc?", null, async () => []);
+        const dislikeGroupsPrejudiceValue = dislikeGroupsPrejudice.value.map(item => item.trim().toLowerCase()).filter(item => item !== "" && item !== "none" && item !== "n/a");
+        insertSpecialComment(newCharacterSection.body, "base-prejudices-groups");
+        newCharacterSection.body.push(`dislikesGroups: ${JSON.stringify(dislikeGroupsPrejudiceValue)}, // Up to you to make the character prejudiced against certain groups`);
     }
 
     if (!hasSpecialComment(newCharacterSection.body, "base-attractions")) {
@@ -1891,10 +1853,14 @@ export async function generateBase(engine, scriptgenerator, guider) {
             }
         }
 
-        let minAgeAttractionPotential = (card.config.characterAge / 2) + 7; // the half your age plus seven rule is a common rule of thumb for the minimum age of attraction
-        if (minAgeAttractionPotential < card.config.characterAge) {
+        const age = scriptgenerator.state["age-years"];
+        const speciesType = scriptgenerator.state["species-type"] || "none";
+        const species = scriptgenerator.state["species"] || "none";
+
+        let minAgeAttractionPotential = (age / 2) + 7; // the half your age plus seven rule is a common rule of thumb for the minimum age of attraction
+        if (minAgeAttractionPotential < age) {
             // what is this a kid?... eh I guess it could be a dog or something.
-            minAgeAttractionPotential = Math.floor(card.config.characterAge) - 1;
+            minAgeAttractionPotential = Math.floor(age) - 1;
         }
 
         if (guider && !isAsexualValue) {
@@ -1906,9 +1872,9 @@ export async function generateBase(engine, scriptgenerator, guider) {
             }
         }
 
-        let maxAgeAttractionPotential = card.config.characterAge + 10;
-        if (card.config.characterSpeciesType === "humanoid" && card.config.characterAge <= 18) {
-            maxAgeAttractionPotential = card.config.characterAge + 3; // for very young characters we can make the max age of attraction closer to their age since it's more likely they would be attracted to people closer to their age
+        let maxAgeAttractionPotential = age + 10;
+        if (speciesType === "humanoid" && age <= 18) {
+            maxAgeAttractionPotential = age + 3; // for very young characters we can make the max age of attraction closer to their age since it's more likely they would be attracted to people closer to their age
         }
 
         if (guider && !isAsexualValue) {
@@ -1982,7 +1948,6 @@ export async function generateBase(engine, scriptgenerator, guider) {
          * @type {Array<string>}
          */
         let attractions = [];
-        const attractionAgeRange = [minAgeAttractionPotential, maxAgeAttractionPotential];
 
         if (isAsexualValue) {
             // no attractions
@@ -2024,14 +1989,15 @@ export async function generateBase(engine, scriptgenerator, guider) {
 
                 newCharacterSection.body.push(`attractions: [`);
                 newCharacterSection.body.push(`// You can make these far more specific if needed, but these are for the social simulation and wander heuristics`);
-                if (card.config.characterSpeciesType === "humanoid") {
-                    newCharacterSection.body.push(`{towards: "male", ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], speciesType: "${card.config.characterSpeciesType}", "pickiness": ${pickinessMale}},`);
-                    newCharacterSection.body.push(`{towards: "female", ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], speciesType: "${card.config.characterSpeciesType}", "pickiness": ${pickinessFemale}},`);
-                    newCharacterSection.body.push(`{towards: "ambiguous", ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], speciesType: "${card.config.characterSpeciesType}", "pickiness": ${pickinessAmbiguous}},`);
+
+                if (speciesType === "humanoid") {
+                    newCharacterSection.body.push(`{towards: "male", ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], speciesType: "${speciesType}", "pickiness": ${pickinessMale}},`);
+                    newCharacterSection.body.push(`{towards: "female", ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], speciesType: "${speciesType}", "pickiness": ${pickinessFemale}},`);
+                    newCharacterSection.body.push(`{towards: "ambiguous", ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], speciesType: "${speciesType}", "pickiness": ${pickinessAmbiguous}},`);
                 } else {
-                    newCharacterSection.body.push(`{towards: "male", ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], species: "${card.config.characterSpecies}", "pickiness": ${pickinessMale}},`);
-                    newCharacterSection.body.push(`{towards: "female", ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], speciesType: "${card.config.characterSpeciesType}", "pickiness": ${pickinessFemale}},`);
-                    newCharacterSection.body.push(`{towards: "ambiguous", ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], speciesType: "${card.config.characterSpeciesType}", "pickiness": ${pickinessAmbiguous}},`);
+                    newCharacterSection.body.push(`{towards: "male", ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], species: "${species}", "pickiness": ${pickinessMale}},`);
+                    newCharacterSection.body.push(`{towards: "female", ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], speciesType: "${speciesType}", "pickiness": ${pickinessFemale}},`);
+                    newCharacterSection.body.push(`{towards: "ambiguous", ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], speciesType: "${speciesType}", "pickiness": ${pickinessAmbiguous}},`);
                 }
                 attractions.push("ambiguous");
                 attractions.push("male");
@@ -2111,27 +2077,27 @@ export async function generateBase(engine, scriptgenerator, guider) {
                 if (findsMalesSexuallyAttractiveValue) {
                     const pickinessMale = await determineOnePickiness("males");
 
-                    if (card.config.characterSpeciesType === "humanoid") {
-                        newCharacterSection.body.push(`{towards: "male", pickiness: ${pickinessMale}, ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], speciesType: "${card.config.characterSpeciesType}"${findsMalesSexuallyAttractiveLimitToSex ? ', sex: "male"' : ''}},`);
+                    if (speciesType === "humanoid") {
+                        newCharacterSection.body.push(`{towards: "male", pickiness: ${pickinessMale}, ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], speciesType: "${speciesType}"${findsMalesSexuallyAttractiveLimitToSex ? ', sex: "male"' : ''}},`);
                     } else {
-                        newCharacterSection.body.push(`{towards: "male", pickiness: ${pickinessMale}, ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], species: "${card.config.characterSpecies}"${findsMalesSexuallyAttractiveLimitToSex ? ', sex: "male"' : ''}},`);
+                        newCharacterSection.body.push(`{towards: "male", pickiness: ${pickinessMale}, ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], species: "${species}"${findsMalesSexuallyAttractiveLimitToSex ? ', sex: "male"' : ''}},`);
                     }
                     attractions.push("male");
                 }
 
                 if (findsFemalesSexuallyAttractiveValue) {
                     const pickinessFemale = await determineOnePickiness("females");
-                    if (card.config.characterSpeciesType === "humanoid") {
-                        newCharacterSection.body.push(`{towards: "female", pickiness: ${pickinessFemale}, ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], speciesType: "${card.config.characterSpeciesType}"${findsFemalesSexuallyAttractiveLimitToSex ? ', sex: "female"' : ''}},`);
+                    if (speciesType === "humanoid") {
+                        newCharacterSection.body.push(`{towards: "female", pickiness: ${pickinessFemale}, ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], speciesType: "${speciesType}"${findsFemalesSexuallyAttractiveLimitToSex ? ', sex: "female"' : ''}},`);
                     } else {
-                        newCharacterSection.body.push(`{towards: "female", pickiness: ${pickinessFemale}, ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], species: "${card.config.characterSpecies}"${findsFemalesSexuallyAttractiveLimitToSex ? ', sex: "female"' : ''}},`);
+                        newCharacterSection.body.push(`{towards: "female", pickiness: ${pickinessFemale}, ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], species: "${species}"${findsFemalesSexuallyAttractiveLimitToSex ? ', sex: "female"' : ''}},`);
                     }
                     attractions.push("female");
                 }
             }
         }
 
-        if (!isAsexualValue && guider) {
+        if (!isAsexualValue) {
             while (true) {
                 const additionalAttractions = await guider.askBoolean("Would you like to add an attraction towards a specific species that isn't covered?", false);
                 if (!additionalAttractions.value) {
@@ -2174,11 +2140,6 @@ export async function generateBase(engine, scriptgenerator, guider) {
         }
 
         newCharacterSection.body.push(`],`);
-
-        card.config.isAsexual = isAsexualValue;
-        card.config.attractions = attractions;
-        card.config.attractionAgeRange = attractionAgeRange;
-        await autosave?.save();
     }
 
     if (!hasSpecialComment(newCharacterSection.body, "base-libido")) {
