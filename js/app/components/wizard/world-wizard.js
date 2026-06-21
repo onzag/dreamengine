@@ -1,6 +1,6 @@
 import { createCardStructureFrom, getJsCard, isCardTypeFile } from '../../../script-generation/base.js';
 import { playCancelSound, playHoverSound, setTempSoundDisable, stopAllAmbiencesAndStartNewOne } from '../../sound.js';
-import { CardTypeWizard } from './cardtype-wizard.js';
+import { CardTypeWizard } from './character-wizard.js';
 
 export class WorldWizard extends CardTypeWizard {
     async connectedCallback() {
