@@ -169,7 +169,7 @@ export async function generateBase(engine, scriptgenerator, guider) {
 
         while (true) {
             const acceptedResponse = await guider.askAccept("character-description", "Is the following description okay?", async () => {
-                let specialInstructions = (await guider.askOpen({ softid: "character-description-special-instructions" }, "Provide any special focus instructions for defining " + name + "'s appearance, personality and general abilities, what to focus on (do not talk about clothing the description is about the character's inherent traits and features)", "")).value;
+                let specialInstructions = (await guider.askOpen({ id: "character-description-special-instructions", reask: true, step: false }, "Provide any special focus instructions for defining " + name + "'s appearance, personality and general abilities, what to focus on (do not talk about clothing the description is about the character's inherent traits and features)", "")).value;
                 if (specialInstructions) {
                     specialInstructions = "\n\n# MANDATORY REQUIREMENTS — ACTIVE OVERRIDE:\n\nThe following requirements MUST be reflected in your answer. Treat them as hard constraints that take absolute priority over any conflicting instruction above. Do NOT ignore or dilute them:\n\n" + specialInstructions.trim();
                 }
@@ -211,7 +211,7 @@ export async function generateBase(engine, scriptgenerator, guider) {
     {
         while (true) {
             const acceptedResponse = await guider.askAccept("character-short-description", "Is the following short description okay?", async () => {
-                let specialInstructionsForShortDescription = guider ? (await guider.askOpen({ softid: "character-short-description-special-instructions" }, "Provide any special focus instructions for defining " + name + "'s external and physical description, what to focus on (do not talk about clothing the description is about the character's inherent traits and features)", "")).value : null;
+                let specialInstructionsForShortDescription = guider ? (await guider.askOpen({ id: "character-short-description-special-instructions", reask: true, step: false }, "Provide any special focus instructions for defining " + name + "'s external and physical description, what to focus on (do not talk about clothing the description is about the character's inherent traits and features)", "")).value : null;
                 if (specialInstructionsForShortDescription) {
                     specialInstructionsForShortDescription = "\n\n# MANDATORY REQUIREMENTS — ACTIVE OVERRIDE:\n\nThe following requirements MUST be reflected in your answer. Treat them as hard constraints that take absolute priority over any conflicting instruction above. Do NOT ignore or dilute them:\n\n" + specialInstructionsForShortDescription.trim();
                 }
@@ -250,7 +250,7 @@ export async function generateBase(engine, scriptgenerator, guider) {
 
         while (true) {
             const acceptedResponse = await guider.askAccept("character-short-description-top-naked-add", "Is the following addition to the short description okay?", async () => {
-                let specialInstructionsForShortDescriptionAdd = (await guider.askOpen({ softid: "character-short-description-top-naked-add-special-instructions" }, "Provide any special focus instructions for defining the additions to " + name + "'s short description when they are not wearing any upper body clothing, what to focus on (how to describe their upper body's most distinctive features)", "")).value;
+                let specialInstructionsForShortDescriptionAdd = (await guider.askOpen({ id: "character-short-description-top-naked-add-special-instructions", reask: true, step: false }, "Provide any special focus instructions for defining the additions to " + name + "'s short description when they are not wearing any upper body clothing, what to focus on (how to describe their upper body's most distinctive features)", "")).value;
                 if (specialInstructionsForShortDescriptionAdd) {
                     specialInstructionsForShortDescriptionAdd = "\n\n# MANDATORY REQUIREMENTS — ACTIVE OVERRIDE:\n\nThe following requirements MUST be reflected in your answer. Treat them as hard constraints that take absolute priority over any conflicting instruction above. Do NOT ignore or dilute them:\n\n" + specialInstructionsForShortDescriptionAdd.trim();
                 }
@@ -292,7 +292,7 @@ export async function generateBase(engine, scriptgenerator, guider) {
 
         while (true) {
             const acceptedResponse = await guider.askAccept("character-short-description-bottom-naked-add", "Is the following addition to the short description okay?", async () => {
-                let specialInstructionsForShortDescriptionBottomAdd = (await guider.askOpen({ softid: "character-short-description-bottom-naked-add-special-instructions" }, "Provide any special focus instructions for defining the additions to " + name + "'s short description when they are not wearing any lower body clothing, what to focus on (how to describe their lower body's most distinctive features)", "")).value;
+                let specialInstructionsForShortDescriptionBottomAdd = (await guider.askOpen({ id: "character-short-description-bottom-naked-add-special-instructions", reask: true, step: false }, "Provide any special focus instructions for defining the additions to " + name + "'s short description when they are not wearing any lower body clothing, what to focus on (how to describe their lower body's most distinctive features)", "")).value;
                 if (specialInstructionsForShortDescriptionBottomAdd) {
                     specialInstructionsForShortDescriptionBottomAdd = "\n\n# MANDATORY REQUIREMENTS — ACTIVE OVERRIDE:\n\nThe following requirements MUST be reflected in your answer. Treat them as hard constraints that take absolute priority over any conflicting instruction above. Do NOT ignore or dilute them:\n\n" + specialInstructionsForShortDescriptionBottomAdd.trim();
                 }
@@ -518,8 +518,7 @@ export async function generateBase(engine, scriptgenerator, guider) {
         newCharacterSection.body.push(`schizophrenicVoiceDescription: "",`);
     }
 
-    let doesHaveAutism = false;
-    if (!hasSpecialComment(newCharacterSection.body, "base-autism")) {
+    const doesHaveAutism = (await guider.askBoolean("autism", "Is " + name + " autistic?", async () => {
         await prime();
         const hasAutism = await generator.next({
             maxCharacters: 5,
@@ -535,263 +534,250 @@ export async function generateBase(engine, scriptgenerator, guider) {
             throw new Error("Generator finished without producing output");
         }
 
-        doesHaveAutism = hasAutism.value.trim().toLowerCase() === "yes";
+        return hasAutism.value.trim().toLowerCase() === "yes";
+    })).value;
 
-        if (guider) {
-            const isActuallyAutistic = await guider.askBoolean("Is " + name + " autistic?", doesHaveAutism);
-            if (!isActuallyAutistic.value) {
-                doesHaveAutism = false;
-            } else {
-                doesHaveAutism = true;
-            }
-        }
-
-        card.config.autism = doesHaveAutism ? 1 : 0;
-        insertSpecialComment(newCharacterSection.body, "base-autism");
-        await autosave?.save();
-    } else {
-        doesHaveAutism = card.config.autism === 1;
-    }
-
-    if (!hasSpecialComment(newCharacterSection.body, "base-autism-details")) {
-        if (doesHaveAutism) {
-            let severityStr = "";
-            await prime();
-            const autismSeverity = await generator.next({
-                maxCharacters: 5,
-                maxSafetyCharacters: 0,
-                maxParagraphs: 1,
-                nextQuestion: "What is the severity of " + name + "'s autism? Answer with mild, moderate, or severe.",
-                stopAfter: [],
-                stopAt: [],
-                grammar: `root ::= "mild" | "moderate" | "severe" | "MILD" | "MODERATE" | "SEVERE"`
-            });
-
-            if (autismSeverity.done) {
-                throw new Error("Generator finished without producing output");
-            }
-
-            severityStr = autismSeverity.value.trim().toLowerCase();
-
-            const howSevere = guider ? await guider.askOption("How severe is " + name + "'s autism?", ["mild", "moderate", "severe"], severityStr) : null;
-
-            severityStr = howSevere ? howSevere.value.trim().toLowerCase() : severityStr;
-
-            let severity = 0;
-            if (severityStr === "mild") severity = 0.33;
-            else if (severityStr === "moderate") severity = 0.66;
-            else if (severityStr === "severe") severity = 1;
-
-            insertSpecialComment(newCharacterSection.body, "base-autism-details");
-            newCharacterSection.body.push(`autism: ${severity},`);
-            await autosave?.save();
-        } else {
-            insertSpecialComment(newCharacterSection.body, "base-autism-details");
-            newCharacterSection.body.push(`autism: 0,`);
-            await autosave?.save();
-        }
-    }
-
-    delete card.config.autism;
-
-    if (!hasSpecialComment(newCharacterSection.body, "base-carrying-capacity")) {
-        await prime();
-        const carryingCapacityKg = await generator.next({
-            maxCharacters: 10,
-            maxSafetyCharacters: 0,
-            maxParagraphs: 1,
-            nextQuestion: "How many kilograms of weight could " + name + " lift? answer with an estimate number of kilograms that " + name + " could lift based on their physical description and traits.",
-            stopAfter: [],
-            stopAt: [],
-            grammar: `root ::= [0-9]+`
-        });
-
-        if (carryingCapacityKg.done) {
-            throw new Error("Generator finished without producing output");
-        }
-
-        const carryingCapacityAsked = guider ? await guider.askNumber(
-            "How many kilograms of weight could " + name + " lift? answer with an estimate number of kilograms that " + name + " could lift based on their physical description and traits. If you are unsure, provide your best guess.",
-            parseInt(carryingCapacityKg.value.trim()),
-        ) : null;
-
-        const finalCarryingCapacity = carryingCapacityAsked ? carryingCapacityAsked.value : parseInt(carryingCapacityKg.value.trim());
-
-        insertSpecialComment(newCharacterSection.body, "base-carrying-capacity");
-        newCharacterSection.body.push(`carryingCapacityKg: ${finalCarryingCapacity},`);
-
-        // double the volume of the potential weight lifted
-        newCharacterSection.body.push(`carryingCapacityLiters: ${finalCarryingCapacity * 2},`);
-
-        await autosave?.save();
-    }
-
-    if (!hasSpecialComment(newCharacterSection.body, "base-height")) {
-        await prime();
-        const heightCm = await generator.next({
-            maxCharacters: 10,
-            maxSafetyCharacters: 0,
-            maxParagraphs: 1,
-            nextQuestion: "How tall is " + name + "? answer with an estimate number of centimeters that " + name + " is tall based on their physical description and traits.",
-            stopAfter: [],
-            stopAt: [],
-            grammar: `root ::= [0-9]+`
-        });
-
-        if (heightCm.done) {
-            throw new Error("Generator finished without producing output");
-        }
-
-        const heightCmAsked = guider ? await guider.askNumber(
-            "How tall is " + name + "? answer with an estimate number of centimeters that " + name + " is tall based on their physical description and traits. If you are unsure, provide your best guess.",
-            parseInt(heightCm.value.trim()),
-        ) : null;
-
-        const finalHeightCm = heightCmAsked ? heightCmAsked.value : parseInt(heightCm.value.trim());
-
-        insertSpecialComment(newCharacterSection.body, "base-height");
-        newCharacterSection.body.push(`heightCm: ${finalHeightCm},`);
-        metadataSection.body.push(`height: ${finalHeightCm},`);
-
-        await autosave?.save();
-    }
-
-    if (!hasSpecialComment(newCharacterSection.body, "base-gender")) {
-        await prime();
-        const isAmb = await generator.next({
-            maxCharacters: 5,
-            maxSafetyCharacters: 0,
-            maxParagraphs: 1,
-            nextQuestion: "Does " + name + " identifies as agender, genderless or non-binary?",
-            stopAfter: [],
-            stopAt: [],
-            grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
-        });
-
-        if (isAmb.done) {
-            throw new Error("Generator finished without producing output");
-        }
-
-        let genderGuess = "ambiguous";
-        if (isAmb.value.trim().toLowerCase() !== "yes") {
-            await prime();
-            const isMale = await generator.next({
-                maxCharacters: 5,
-                maxSafetyCharacters: 0,
-                maxParagraphs: 1,
-                nextQuestion: "Does " + name + " identify as male?",
-                stopAfter: [],
-                stopAt: [],
-                grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
-                instructions: "This refers to gender identity, if the character is a transman answer yes, tomboys are not considered transmen so answer no for tomboys, answer yes for traps and femboys; follow the same rules for animals or creatures",
-            });
-
-            if (isMale.done) {
-                throw new Error("Generator finished without producing output");
-            }
-
-            if (isMale.value.trim().toLowerCase() === "yes") {
-                genderGuess = "male";
-            } else {
+    if (doesHaveAutism) {
+        const howSevere = (await guider.askOption(
+            "autism-severity",
+            "How severe is " + name + "'s autism?",
+            ["mild", "moderate", "severe"],
+            async () => {
                 await prime();
-                const isFemale = await generator.next({
+                const autismSeverity = await generator.next({
                     maxCharacters: 5,
                     maxSafetyCharacters: 0,
                     maxParagraphs: 1,
-                    nextQuestion: "Does " + name + " identify as female?",
+                    nextQuestion: "What is the severity of " + name + "'s autism? Answer with mild, moderate, or severe.",
                     stopAfter: [],
                     stopAt: [],
-                    grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
-                    instructions: "This refers to gender identity, if the character is a transwoman answer yes, femboys and traps are not considered transwomen so answer no for femboys and traps, answer no for tomboys; follow the same rules for animals or creatures",
+                    grammar: `root ::= "mild" | "moderate" | "severe" | "MILD" | "MODERATE" | "SEVERE"`
                 });
 
-                if (isFemale.done) {
+                if (autismSeverity.done) {
                     throw new Error("Generator finished without producing output");
                 }
 
-                genderGuess = isFemale.value.trim().toLowerCase() === "yes" ? "female" : "ambiguous";
+                return autismSeverity.value.trim().toLowerCase();
             }
-        }
+        )).value;
 
-        const finalGender = guider ? (await guider.askOption("What is " + name + "'s gender identity?", ["male", "female", "ambiguous"], genderGuess)).value : genderGuess;
+        let severity = 0;
+        if (howSevere === "mild") severity = 0.33;
+        else if (howSevere === "moderate") severity = 0.66;
+        else if (howSevere === "severe") severity = 1;
 
-        card.config.gender = finalGender;
+        insertSpecialComment(newCharacterSection.body, "base-autism");
+        newCharacterSection.body.push(`autism: ${severity},`);
+    } else {
+        insertSpecialComment(newCharacterSection.body, "base-autism");
+        newCharacterSection.body.push(`autism: 0,`);
+    }
+
+    {
+        const carryingCapacity = (await guider.askNumber(
+            "carrying-capacity",
+            "How many kilograms of weight could " + name + " lift? answer with an estimate number of kilograms that " + name + " could lift based on their physical description and traits. If you are unsure, provide your best guess.",
+            async () => {
+                await prime();
+                const carryingCapacityKg = await generator.next({
+                    maxCharacters: 10,
+                    maxSafetyCharacters: 0,
+                    maxParagraphs: 1,
+                    nextQuestion: "How many kilograms of weight could " + name + " lift? answer with an estimate number of kilograms that " + name + " could lift based on their physical description and traits.",
+                    stopAfter: [],
+                    stopAt: [],
+                    grammar: `root ::= [0-9]+`
+                });
+
+                if (carryingCapacityKg.done) {
+                    throw new Error("Generator finished without producing output");
+                }
+
+                return parseInt(carryingCapacityKg.value.trim());
+            }
+        )).value;
+
+        insertSpecialComment(newCharacterSection.body, "base-carrying-capacity");
+        newCharacterSection.body.push(`carryingCapacityKg: ${carryingCapacity},`);
+
+        // double the volume of the potential weight lifted
+        newCharacterSection.body.push(`carryingCapacityLiters: ${carryingCapacity * 2},`);
+    }
+
+    {
+        const heightCm = await guider.askNumber(
+            "height-cm",
+            "How tall is " + name + "? answer with an estimate number of centimeters that " + name + " is tall based on their physical description and traits. If you are unsure, provide your best guess.",
+            async () => {
+                await prime();
+                const heightCm = await generator.next({
+                    maxCharacters: 10,
+                    maxSafetyCharacters: 0,
+                    maxParagraphs: 1,
+                    nextQuestion: "How tall is " + name + "? answer with an estimate number of centimeters that " + name + " is tall based on their physical description and traits.",
+                    stopAfter: [],
+                    stopAt: [],
+                    grammar: `root ::= [0-9]+`
+                });
+
+                if (heightCm.done) {
+                    throw new Error("Generator finished without producing output");
+                }
+
+                return parseInt(heightCm.value.trim());
+            }
+        );
+
+        insertSpecialComment(newCharacterSection.body, "base-height");
+        newCharacterSection.body.push(`heightCm: ${heightCm},`);
+        metadataSection.body.push(`height: ${heightCm},`);
+    }
+
+    {
+        const finalGender = (await guider.askOption(
+            "gender",
+            "What is " + name + "'s gender identity?",
+            ["male", "female", "ambiguous"],
+            async () => {
+                await prime();
+                const isAmb = await generator.next({
+                    maxCharacters: 5,
+                    maxSafetyCharacters: 0,
+                    maxParagraphs: 1,
+                    nextQuestion: "Does " + name + " identifies as agender, genderless or non-binary?",
+                    stopAfter: [],
+                    stopAt: [],
+                    grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
+                });
+
+                if (isAmb.done) {
+                    throw new Error("Generator finished without producing output");
+                }
+
+                let genderGuess = "ambiguous";
+                if (isAmb.value.trim().toLowerCase() !== "yes") {
+                    await prime();
+                    const isMale = await generator.next({
+                        maxCharacters: 5,
+                        maxSafetyCharacters: 0,
+                        maxParagraphs: 1,
+                        nextQuestion: "Does " + name + " identify as male?",
+                        stopAfter: [],
+                        stopAt: [],
+                        grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
+                        instructions: "This refers to gender identity, if the character is a transman answer yes, tomboys are not considered transmen so answer no for tomboys, answer yes for traps and femboys; follow the same rules for animals or creatures",
+                    });
+
+                    if (isMale.done) {
+                        throw new Error("Generator finished without producing output");
+                    }
+
+                    if (isMale.value.trim().toLowerCase() === "yes") {
+                        genderGuess = "male";
+                    } else {
+                        await prime();
+                        const isFemale = await generator.next({
+                            maxCharacters: 5,
+                            maxSafetyCharacters: 0,
+                            maxParagraphs: 1,
+                            nextQuestion: "Does " + name + " identify as female?",
+                            stopAfter: [],
+                            stopAt: [],
+                            grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
+                            instructions: "This refers to gender identity, if the character is a transwoman answer yes, femboys and traps are not considered transwomen so answer no for femboys and traps, answer no for tomboys; follow the same rules for animals or creatures",
+                        });
+
+                        if (isFemale.done) {
+                            throw new Error("Generator finished without producing output");
+                        }
+
+                        genderGuess = isFemale.value.trim().toLowerCase() === "yes" ? "female" : "ambiguous";
+                    }
+                }
+
+                return genderGuess;
+            },
+        )).value;
 
         insertSpecialComment(newCharacterSection.body, "base-gender");
         newCharacterSection.body.push(`gender: ${JSON.stringify(finalGender)},`);
         metadataSection.body.push(`gender: ${JSON.stringify(finalGender)},`);
-        await autosave?.save();
     }
 
-    if (!hasSpecialComment(newCharacterSection.body, "base-sex")) {
-        await prime();
-        const hasNoSex = await generator.next({
-            maxCharacters: 5,
-            maxSafetyCharacters: 0,
-            maxParagraphs: 1,
-            nextQuestion: "Is " + name + " sexless as in they do not have a physical sex?",
-            stopAfter: [],
-            stopAt: [],
-            grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
-            instructions: "This refers to biological sex not gender identity",
-        });
-
-        if (hasNoSex.done) {
-            throw new Error("Generator finished without producing output");
-        }
-
-        let sexGuess = "none";
-        if (hasNoSex.value.trim().toLowerCase() !== "yes") {
-            await prime();
-            const isIntersex = await generator.next({
-                maxCharacters: 5,
-                maxSafetyCharacters: 0,
-                maxParagraphs: 1,
-                nextQuestion: "Is " + name + " clearly stated as intersex?",
-                stopAfter: [],
-                stopAt: [],
-                grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
-                instructions: "Femboys, traps, tomboys and transgender woman/men and similar tropes are not considered intersex, unless it is explicitly stated that the character is intersex",
-            });
-
-            if (isIntersex.done) {
-                throw new Error("Generator finished without producing output");
-            }
-
-            if (isIntersex.value.trim().toLowerCase() === "yes") {
-                sexGuess = "intersex";
-            } else {
+    {
+        const finalSex = (await guider.askOption(
+            "sex",
+            "What is " + name + "'s biological sex?",
+            ["male", "female", "intersex", "none"],
+            async () => {
                 await prime();
-                const isMale = await generator.next({
+                const hasNoSex = await generator.next({
                     maxCharacters: 5,
                     maxSafetyCharacters: 0,
                     maxParagraphs: 1,
-                    nextQuestion: "Is " + name + " male?",
+                    nextQuestion: "Is " + name + " sexless as in they do not have a physical sex?",
                     stopAfter: [],
                     stopAt: [],
                     grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
-                    // For a trans character to exist in the game, they need to have opposite gender and sex, it's the way that is handled in the game code
-                    // if not the character simply isn't transgender by as seen by the engine
-                    // this is so for simulation reasons, the gender/sex makes for 12 expressions of sex and gender identity
-                    instructions: "This refers to biological sex, if the character is a male animal or creature answer yes, if the character is a transwoman answer yes, if the character is a transmen answer no, if the character is a femboy or trap answer yes, if the character is a tomboy answer no",
+                    instructions: "This refers to biological sex not gender identity",
                 });
 
-                if (isMale.done) {
+                if (hasNoSex.done) {
                     throw new Error("Generator finished without producing output");
                 }
 
-                sexGuess = isMale.value.trim().toLowerCase() === "yes" ? "male" : "female";
-            }
-        }
+                let sexGuess = "none";
+                if (hasNoSex.value.trim().toLowerCase() !== "yes") {
+                    await prime();
+                    const isIntersex = await generator.next({
+                        maxCharacters: 5,
+                        maxSafetyCharacters: 0,
+                        maxParagraphs: 1,
+                        nextQuestion: "Is " + name + " clearly stated as intersex?",
+                        stopAfter: [],
+                        stopAt: [],
+                        grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
+                        instructions: "Femboys, traps, tomboys and transgender woman/men and similar tropes are not considered intersex, unless it is explicitly stated that the character is intersex",
+                    });
 
-        const finalSex = guider ? (await guider.askOption("What is " + name + "'s biological sex?", ["male", "female", "intersex", "none"], sexGuess)).value : sexGuess;
+                    if (isIntersex.done) {
+                        throw new Error("Generator finished without producing output");
+                    }
 
-        card.config.sex = finalSex;
+                    if (isIntersex.value.trim().toLowerCase() === "yes") {
+                        sexGuess = "intersex";
+                    } else {
+                        await prime();
+                        const isMale = await generator.next({
+                            maxCharacters: 5,
+                            maxSafetyCharacters: 0,
+                            maxParagraphs: 1,
+                            nextQuestion: "Is " + name + " male?",
+                            stopAfter: [],
+                            stopAt: [],
+                            grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
+                            // For a trans character to exist in the game, they need to have opposite gender and sex, it's the way that is handled in the game code
+                            // if not the character simply isn't transgender by as seen by the engine
+                            // this is so for simulation reasons, the gender/sex makes for 12 expressions of sex and gender identity
+                            instructions: "This refers to biological sex, if the character is a male animal or creature answer yes, if the character is a transwoman answer yes, if the character is a transmen answer no, if the character is a femboy or trap answer yes, if the character is a tomboy answer no",
+                        });
+
+                        if (isMale.done) {
+                            throw new Error("Generator finished without producing output");
+                        }
+
+                        sexGuess = isMale.value.trim().toLowerCase() === "yes" ? "male" : "female";
+                    }
+                }
+
+                return sexGuess;
+            },
+        )).value;
 
         insertSpecialComment(newCharacterSection.body, "base-sex");
         newCharacterSection.body.push(`sex: ${JSON.stringify(finalSex)},`);
         metadataSection.body.push(`sex: ${JSON.stringify(finalSex)},`);
-        await autosave?.save();
     }
 
     const sortedTiers = ["insect", "critter", "human", "apex", "street_level", "block_level", "city_level", "country_level", "continental", "planetary", "stellar", "galactic", "universal", "multiversal", "limitless"];
@@ -832,54 +818,49 @@ export async function generateBase(engine, scriptgenerator, guider) {
         "limitless": 1000000000,
     }
 
-    let highestTier = "human";
-    if (!hasSpecialComment(newCharacterSection.body, "base-tier")) {
-        /**
-         * @type {{[tier: string]: boolean}}
-         */
-        let tierAnswers = {};
+    const highestTier = (await guider.askOption(
+        "tier",
+        "What is " + name + "'s tier?",
+        sortedTiers,
+        async () => {
+            /**
+             * @type {{[tier: string]: boolean}}
+             */
+            let tierAnswers = {};
 
-        for (const [tier, question] of Object.entries(tierQuestions)) {
-            await prime();
-            const answer = await generator.next({
-                maxCharacters: 5,
-                maxSafetyCharacters: 0,
-                maxParagraphs: 1,
-                nextQuestion: question,
-                stopAfter: [],
-                stopAt: [],
-                grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
-            });
+            for (const [tier, question] of Object.entries(tierQuestions)) {
+                await prime();
+                const answer = await generator.next({
+                    maxCharacters: 5,
+                    maxSafetyCharacters: 0,
+                    maxParagraphs: 1,
+                    nextQuestion: question,
+                    stopAfter: [],
+                    stopAt: [],
+                    grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
+                });
 
-            if (answer.done) {
-                throw new Error("Generator finished without producing output");
+                if (answer.done) {
+                    throw new Error("Generator finished without producing output");
+                }
+
+                tierAnswers[tier] = answer.value.trim().toLowerCase() === "yes";
             }
 
-            tierAnswers[tier] = answer.value.trim().toLowerCase() === "yes";
-        }
-
-        // @ts-ignore
-        highestTier = sortedTiers.find(tier => tierAnswers[tier]);
-        if (!highestTier) {
-            highestTier = "human";
-        }
-
-        if (guider) {
-            const guidedTier = await guider.askOption("What is " + name + "'s tier?", sortedTiers, highestTier);
-            if (guidedTier) {
-                highestTier = guidedTier.value;
+            // @ts-ignore
+            let highestTier = sortedTiers.find(tier => tierAnswers[tier]);
+            if (!highestTier) {
+                highestTier = "human";
             }
+
+            return highestTier;
         }
+    )).value;
 
-        insertSpecialComment(newCharacterSection.body, "base-tier");
-        newCharacterSection.body.push(`tier: ${JSON.stringify(highestTier)},`);
-        card.config.highestTier = highestTier;
-        await autosave?.save();
-    } else {
-        highestTier = card.config.highestTier;
-    }
+    insertSpecialComment(newCharacterSection.body, "base-tier");
+    newCharacterSection.body.push(`tier: ${JSON.stringify(highestTier)},`);
 
-    if (!hasSpecialComment(newCharacterSection.body, "base-tier-value")) {
+    {
         let tierValue = 50;
         /**
          * @type {number}
@@ -888,89 +869,78 @@ export async function generateBase(engine, scriptgenerator, guider) {
             // @ts-ignore
             tierToBaseRange[highestTier];
 
-        await prime();
-        const answerIsBabyOrWeakened = await generator.next({
-            maxCharacters: 5,
-            maxSafetyCharacters: 0,
-            maxParagraphs: 1,
-            nextQuestion: "Is " + name + " a baby/cub or in a weakened state that makes them as weak as a baby in their power?",
-            stopAfter: [],
-            stopAt: [],
-            grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
-        });
-
-        if (answerIsBabyOrWeakened.done) {
-            throw new Error("Generator finished without producing output");
-        }
-
-        let isBabyOrWeakened = answerIsBabyOrWeakened.value.trim().toLowerCase() === "yes";
-
-        if (guider) {
-            const isActuallyBabyOrWeakened = await guider.askBoolean("is " + name + " a baby/cub or in a weakened state that makes them as weak as a baby in their power?", isBabyOrWeakened);
-            if (!isActuallyBabyOrWeakened.value) {
-                isBabyOrWeakened = false;
-            } else {
-                isBabyOrWeakened = true;
-            }
-        }
-
-        if (isBabyOrWeakened) {
-            tierValue = 5;
-            range = range / 10;
-        } else {
-            await prime();
-            const answerIsYoungOrWeakened = await generator.next({
-                maxCharacters: 5,
-                maxSafetyCharacters: 0,
-                maxParagraphs: 1,
-                nextQuestion: "Is " + name + " a child or in a weakened state (old, sick) that makes them as weak as a child in their power?",
-                stopAfter: [],
-                stopAt: [],
-                grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
-            });
-
-            if (answerIsYoungOrWeakened.done) {
-                throw new Error("Generator finished without producing output");
-            }
-
-            let isYoungOrWeakened = answerIsYoungOrWeakened.value.trim().toLowerCase() === "yes";
-            if (guider) {
-                const isActuallyYoungOrWeakened = await guider.askBoolean("is " + name + " a child or in a weakened state (old, sick) that makes them as weak as a child in their power?", isYoungOrWeakened);
-                if (!isActuallyYoungOrWeakened.value) {
-                    isYoungOrWeakened = false;
-                } else {
-                    isYoungOrWeakened = true;
-                }
-            }
-
-            if (isYoungOrWeakened) {
-                tierValue = 20;
-                range = range / 2;
-            } else {
+        const isBabyOrWeakened = (await guider.askBoolean(
+            "baby-or-weakened",
+            "is " + name + " a baby/cub or in a weakened state that makes them as weak as a baby in their power?",
+            async () => {
                 await prime();
-                const answerIsInPrime = await generator.next({
+                const answerIsBabyOrWeakened = await generator.next({
                     maxCharacters: 5,
                     maxSafetyCharacters: 0,
                     maxParagraphs: 1,
-                    nextQuestion: "Is " + name + " in their prime state posessing incredible athletic features?",
+                    nextQuestion: "Is " + name + " a baby/cub or in a weakened state that makes them as weak as a baby in their power?",
                     stopAfter: [],
                     stopAt: [],
                     grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
                 });
 
-                if (answerIsInPrime.done) {
+                if (answerIsBabyOrWeakened.done) {
                     throw new Error("Generator finished without producing output");
                 }
 
-                let isInPrime = answerIsInPrime.value.trim().toLowerCase() === "yes";
-                if (guider) {
-                    const isActuallyInPrime = await guider.askBoolean("is " + name + " in their prime state posessing incredible athletic features?", isInPrime);
-                    if (!isActuallyInPrime.value) {
-                        isInPrime = false;
-                    } else {
-                        isInPrime = true;
+                return answerIsBabyOrWeakened.value.trim().toLowerCase() === "yes";
+            },
+        )).value;
+
+        if (isBabyOrWeakened) {
+            tierValue = 5;
+            range = range / 10;
+        } else {
+            const isYoungOrWeakened = (await guider.askBoolean(
+                "young-or-weakened",
+                "is " + name + " a child or in a weakened state (old, sick) that makes them as weak as a child in their power?",
+                async () => {
+                    await prime();
+                    const answerIsYoungOrWeakened = await generator.next({
+                        maxCharacters: 5,
+                        maxSafetyCharacters: 0,
+                        maxParagraphs: 1,
+                        nextQuestion: "Is " + name + " a child or in a weakened state (old, sick) that makes them as weak as a child in their power?",
+                        stopAfter: [],
+                        stopAt: [],
+                        grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
+                    });
+
+                    if (answerIsYoungOrWeakened.done) {
+                        throw new Error("Generator finished without producing output");
                     }
-                }
+
+                    return answerIsYoungOrWeakened.value.trim().toLowerCase() === "yes";
+                },
+            )).value;
+
+            if (isYoungOrWeakened) {
+                tierValue = 20;
+                range = range / 2;
+            } else {
+                const isInPrime = (await guider.askBoolean("prime", "is " + name + " in their prime state posessing incredible athletic features?", async () => {
+                    await prime();
+                    const answerIsInPrime = await generator.next({
+                        maxCharacters: 5,
+                        maxSafetyCharacters: 0,
+                        maxParagraphs: 1,
+                        nextQuestion: "Is " + name + " in their prime state posessing incredible athletic features?",
+                        stopAfter: [],
+                        stopAt: [],
+                        grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
+                    });
+
+                    if (answerIsInPrime.done) {
+                        throw new Error("Generator finished without producing output");
+                    }
+
+                    return answerIsInPrime.value.trim().toLowerCase() === "yes";
+                })).value;
 
                 if (isInPrime) {
                     tierValue = 90;
@@ -984,74 +954,64 @@ export async function generateBase(engine, scriptgenerator, guider) {
         newCharacterSection.body.push(`powerGrowthRate: 0.25,`);
         newCharacterSection.body.push(`rangeMeters: ${range},`);
         newCharacterSection.body.push(`locomotionSpeedMetersPerSecond: ${range * 0.0015},`);
-        await autosave?.save();
     }
 
-    delete card.config.highestTier;
+    {
+        const howOldYears = (await guider.askNumber(
+            "age-years",
+            "How old is " + name + "?",
+            async () => {
+                await prime();
+                const answerHowOld = await generator.next({
+                    maxCharacters: 10,
+                    maxSafetyCharacters: 0,
+                    maxParagraphs: 1,
+                    nextQuestion: "How old is " + name + "? answer with an estimate number of years that " + name + " has lived based on their description and traits.",
+                    stopAfter: [],
+                    stopAt: [],
+                    grammar: `root ::= [0-9]+`
+                });
 
-    if (!hasSpecialComment(newCharacterSection.body, "base-age")) {
-        await prime();
-        const answerHowOld = await generator.next({
-            maxCharacters: 10,
-            maxSafetyCharacters: 0,
-            maxParagraphs: 1,
-            nextQuestion: "How old is " + name + "? answer with an estimate number of years that " + name + " has lived based on their description and traits.",
-            stopAfter: [],
-            stopAt: [],
-            grammar: `root ::= [0-9]+`
-        });
+                if (answerHowOld.done) {
+                    throw new Error("Generator finished without producing output");
+                }
 
-        if (answerHowOld.done) {
-            throw new Error("Generator finished without producing output");
-        }
-
-        let howOldYears = parseInt(answerHowOld.value.trim());
-
-        if (guider) {
-            const howOldAsked = await guider.askNumber(
-                "How old is " + name + "?",
-                howOldYears,
-            );
-            howOldYears = howOldAsked ? howOldAsked.value : howOldYears;
-        }
+                return parseInt(answerHowOld.value.trim());
+            },
+        )).value;
 
         insertSpecialComment(newCharacterSection.body, "base-age");
         newCharacterSection.body.push(`ageYears: ${howOldYears},`);
-        card.config.characterAge = howOldYears;
         metadataSection.body.push(`age: ${howOldYears},`);
-        await autosave?.save();
     }
 
-    if (!hasSpecialComment(newCharacterSection.body, "base-weight")) {
-        await prime();
-        const weightKg = await generator.next({
-            maxCharacters: 10,
-            maxSafetyCharacters: 0,
-            maxParagraphs: 1,
-            nextQuestion: "How much does " + name + " weight? answer with an estimate number of kilograms that " + name + " weights based on their physical description and traits.",
-            stopAfter: [],
-            stopAt: [],
-            grammar: `root ::= [0-9]+`
-        });
+    {
+        const weightKgValue = (await guider.askNumber(
+            "weight-kg",
+            "How much does " + name + " weight? answer with an estimate number of kilograms that " + name + " weights based on their physical description and traits.",
+            async () => {
+                await prime();
+                const weightKg = await generator.next({
+                    maxCharacters: 10,
+                    maxSafetyCharacters: 0,
+                    maxParagraphs: 1,
+                    nextQuestion: "How much does " + name + " weight? answer with an estimate number of kilograms that " + name + " weights based on their physical description and traits.",
+                    stopAfter: [],
+                    stopAt: [],
+                    grammar: `root ::= [0-9]+`
+                });
 
-        if (weightKg.done) {
-            throw new Error("Generator finished without producing output");
-        }
+                if (weightKg.done) {
+                    throw new Error("Generator finished without producing output");
+                }
 
-        let weightKgValue = parseInt(weightKg.value.trim());
-
-        if (guider) {
-            const weightKgAsked = await guider.askNumber(
-                "How much does " + name + " weight? answer with an estimate number of kilograms that " + name + " weights based on their physical description and traits.",
-                weightKgValue,
-            );
-            weightKgValue = weightKgAsked ? weightKgAsked.value : weightKgValue;
-        }
+                return parseInt(weightKg.value.trim());
+            },
+        )).value;
 
         insertSpecialComment(newCharacterSection.body, "base-weight");
         newCharacterSection.body.push(`weightKg: ${weightKgValue},`);
         metadataSection.body.push(`weight: ${weightKgValue},`);
-        await autosave?.save();
     }
 
     if (!hasSpecialComment(newCharacterSection.body, "base-initiative")) {
