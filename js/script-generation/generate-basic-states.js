@@ -1,5 +1,5 @@
 import { DEngine } from "../engine/index.js";
-import { createCardStructureFrom, getJsCard, getSection } from "./base.js";
+import { getSection } from "./base.js";
 import { replaceAllCharNameWithPlaceholder } from "./generate-base.js";
 
 export const BASIC_EMOTIONAL_STATES = [
@@ -117,10 +117,9 @@ function replaceOtherCharNameWithPlaceholder(text, charName) {
  * @param {DEngine} engine
  * @param {import('./base.js').ScriptTypeGenerator} card
  * @param {import('./base.js').ScriptTypeGuider | null} guider
- * @param {import('./base.js').CardTypeAutoSave | null} autosave
  * @return {Promise<void>}
  */
-export async function generateBasicStates(engine, card, guider, autosave) {
+export async function generateBasicStates(engine, card, guider) {
     throw new Error("TODO");
     // TODO remember the intimacy in the states, eg. Angry we may not want with intimacyMultiplierDirectionality and intimacyMultiplier
     const isAsexualValue = card.config.isAsexual;

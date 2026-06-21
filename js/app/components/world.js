@@ -1,4 +1,4 @@
-import { createCardStructureFrom, isCardTypeFile } from '../../script-generation/base.js';
+import { parseScriptGeneratorFrom, isScriptTypeGeneratorFile } from '../../script-generation/base.js';
 import { playCancelSound, playConfirmSound, playHoverSound, playPauseSound, setTempSoundDisable } from '../sound.js';
 import './wizard/world-wizard.js';
 
@@ -173,7 +173,7 @@ class WorldOverlay extends HTMLElement {
             const scriptSource = await window.ENGINE_WORKER_CLIENT.getRawScriptSource({ namespace: this.currentWorldNamespace, id: this.currentWorldId });
 
             const isNewFile = scriptSource.src.startsWith("//@placeholder");
-            const isCardType = isCardTypeFile(scriptSource.src);
+            const isCardType = isScriptTypeGeneratorFile(scriptSource.src);
 
             const infoMap = await window.ENGINE_WORKER_CLIENT.jsEngineGetInfoMap();
             const thisFileInfo = infoMap[this.currentWorldNamespace + "/" + this.currentWorldId];

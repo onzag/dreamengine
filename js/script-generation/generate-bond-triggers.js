@@ -1,6 +1,6 @@
 import { DEngine } from "../engine/index.js";
 import { createGrammarListFromList, parseListFromGrammarResponse } from "../engine/util/grammar.js";
-import { createCardStructureFrom, getJsCard, getSection, hasSpecialComment, insertSpecialComment, toTemplateLiteral, toTemplateLiteralNoInfo } from "./base.js";
+import { getSection, hasSpecialComment, insertSpecialComment, toTemplateLiteral, toTemplateLiteralNoInfo } from "./base.js";
 import { replaceAllCharNameWithPlaceholder } from "./generate-base.js";
 import { BASIC_EMOTIONAL_STATES, BASIC_EMOTIONAL_STATES_OPTIONS } from "./generate-basic-states.js";
 
@@ -18,10 +18,9 @@ export function replaceOtherCharNameWithPlaceholder(text, charName) {
  * @param {DEngine} engine
  * @param {import('./base.js').ScriptTypeGenerator} card
  * @param {import('./base.js').ScriptTypeGuider | null} guider
- * @param {import('./base.js').CardTypeAutoSave | null} autosave
  * @return {Promise<void>}
  */
-export async function generateBondTriggers(engine, card, guider, autosave) {
+export async function generateBondTriggers(engine, card, guider) {
     card.config.bondTriggers = card.config.bondTriggers || {};
 
     const initializeSection = getSection(card.body, "initialize");

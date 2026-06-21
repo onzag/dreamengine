@@ -1,4 +1,4 @@
-import { createCardStructureFrom, isCardTypeFile } from '../../script-generation/base.js';
+import { isScriptTypeGeneratorFile, parseScriptGeneratorFrom } from '../../script-generation/base.js';
 import { playCancelSound, playConfirmSound, playHoverSound, playPauseSound, setTempSoundDisable } from '../sound.js';
 import './profile-image.js';
 
@@ -173,7 +173,7 @@ class CharacterOverlay extends HTMLElement {
             const scriptSource = await window.ENGINE_WORKER_CLIENT.getRawScriptSource({ namespace: this.currentCharacterNamespace, id: this.currentCharacterId });
 
             const isNewFile = scriptSource.src.startsWith("//@placeholder");
-            const isCardType = isCardTypeFile(scriptSource.src);
+            const isCardType = isScriptTypeGeneratorFile(scriptSource.src);
 
             const infoMap = await window.ENGINE_WORKER_CLIENT.jsEngineGetInfoMap();
             const thisFileInfo = infoMap[this.currentCharacterNamespace + "/" + this.currentCharacterId];
@@ -217,26 +217,26 @@ class CharacterOverlay extends HTMLElement {
                 </app-overlay-section>`;
             } else {
                 try {
-                    const parsedCardType = createCardStructureFrom(scriptSource.src);
-                    if (parsedCardType.config.guidedWizardInProgress) {
+                    const parsedCardType = parseScriptGeneratorFrom(scriptSource.src);
+                    if (parsedCardType.state.guidedWizardInProgress) {
                         cardtypeWizardContent = `<app-overlay-section section-title="CardType Wizard">
                             <p>
                                 This character script is in progress of being created by the Guided Wizard.
                             </p>
                             <app-overlay-button id="guided-wizard-btn">Continue Guided Wizard</app-overlay-button>
                         </app-overlay-section>`;
-                    } else if (parsedCardType.config.automaticWizardInProgress) {
+                    } else if (parsedCardType.state.automaticWizardInProgress) {
                         cardtypeWizardContent = `<app-overlay-section section-title="CardType Wizard">
                             <p>
                                 This character script is in progress of being created by the Automatic Wizard.
                             </p>
                             <app-overlay-button id="auto-wizard-btn">Continue Automatic Wizard</app-overlay-button>
                         </app-overlay-section>`;
-                    } else if (parsedCardType.config.guidedWizardCompleted || parsedCardType.config.automaticWizardCompleted) {
+                    } else if (parsedCardType.state.guidedWizardCompleted || parsedCardType.state.automaticWizardCompleted) {
                         // TODO add more options here, for the states
                         cardtypeWizardContent = `<app-overlay-section section-title="CardType Wizard">
                             <p>
-                                This character script was created by the ${parsedCardType.config.guidedWizardCompleted ? 'Guided Wizard' : 'Automatic Wizard'}.
+                                This character script was created by the ${parsedCardType.state.guidedWizardCompleted ? 'Guided Wizard' : 'Automatic Wizard'}.
                             </p>
                         </app-overlay-section>`;
                     } else {

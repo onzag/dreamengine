@@ -23,10 +23,9 @@ function formatOrHelper(list) {
  * @param {DEngine} engine
  * @param {import('./base.js').ScriptTypeGenerator} card
  * @param {import('./base.js').ScriptTypeGuider | null} guider
- * @param {import('./base.js').CardTypeAutoSave | null} autosave
  * @return {Promise<void>}
  */
-export async function generateAffectiveStates(engine, card, guider, autosave) {
+export async function generateAffectiveStates(engine, card, guider) {
     const inferenceAdapter = engine.inferenceAdapter;
     if (!inferenceAdapter) {
         throw new Error("No inference adapter found on engine");

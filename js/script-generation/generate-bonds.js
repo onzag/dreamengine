@@ -1,6 +1,6 @@
 import { DEngine } from '../engine/index.js';
 import { createGrammarFromList } from '../engine/util/grammar.js';
-import { createCardStructureFrom, getJsCard, getSection, hasSpecialComment, insertSection, insertSpecialComment, toTemplateLiteral, toTemplateLiteralNoInfo } from './base.js';
+import { getSection, hasSpecialComment, insertSection, insertSpecialComment, toTemplateLiteral, toTemplateLiteralNoInfo } from './base.js';
 import { replaceOtherCharNameWithPlaceholder } from './generate-bond-triggers.js';
 
 if (typeof process !== "undefined" && process.versions && process.versions.node) {
@@ -481,10 +481,9 @@ function getBestMatchInOptions(values, options) {
  * @param {DEngine} engine
  * @param {import('./base.js').ScriptTypeGenerator} card
  * @param {import('./base.js').ScriptTypeGuider | null} guider
- * @param {import('./base.js').CardTypeAutoSave | null} autosave
  * @return {Promise<void>}
  */
-export async function generateBonds(engine, card, guider, autosave) {
+export async function generateBonds(engine, card, guider) {
     const inferenceAdapter = engine.inferenceAdapter;
     if (!inferenceAdapter) {
         throw new Error("No inference adapter found on engine");
