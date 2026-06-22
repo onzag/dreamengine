@@ -479,11 +479,11 @@ function getBestMatchInOptions(values, options) {
 
 /**
  * @param {DEngine} engine
- * @param {import('./base.js').ScriptTypeGenerator} card
- * @param {import('./base.js').ScriptTypeGuider | null} guider
+ * @param {import('./base.js').ScriptTypeGenerator} scriptgenerator
+ * @param {import('./base.js').ScriptTypeGuider} guider
  * @return {Promise<void>}
  */
-export async function generateBonds(engine, card, guider) {
+export async function generateBonds(engine, scriptgenerator, guider) {
     const inferenceAdapter = engine.inferenceAdapter;
     if (!inferenceAdapter) {
         throw new Error("No inference adapter found on engine");
@@ -494,7 +494,7 @@ export async function generateBonds(engine, card, guider) {
     const systemPrompt = inferenceAdapter.buildSystemPromptForQuestioningAgent(
         `You are a helpful assistant that will answer and assist in defining a character for a game based on their description, you are allowed free rein to interpret the character's description and generate the code that defines them in the game, you will be asked questions about the character and you should answer them as best as you can`,
         [],
-        `# Character Card:\n\n${card.card}`
+        `# Character Card:\n\n${scriptgenerator.state.card}`
     );
 
     const generator = inferenceAdapter.runQuestioningCustomAgentOn("cardtype-gen-bonds", {
@@ -515,10 +515,10 @@ export async function generateBonds(engine, card, guider) {
         }
     }
 
-    const isAsexualValue = card.config.isAsexual;
-    const name = card.config.name;
+    const isAsexualValue = scriptgenerator.state.asexual;
+    const name = scriptgenerator.state.name;
 
-    const initializeSection = getSection(card.body, "initialize");
+    const initializeSection = getSection(scriptgenerator.body, "initialize");
 
     if (initializeSection === null) {
         throw new Error("Initialize section not found");
@@ -537,8 +537,9 @@ export async function generateBonds(engine, card, guider) {
     }
 
     let isIncestuousValue = false;
-    if (!hasSpecialComment(optionsSection.body, "bonds-incestuous")) {
-        if (!isAsexualValue) {
+
+    if (!isAsexualValue) {
+        isIncestuousValue = (await guider.askBoolean("non-incestuous", "Should family relationships be excluded from romantic possibilities for " + name + "?", async () => {
             await prime();
             const isIncestuous = await generator.next({
                 maxCharacters: 5,
@@ -554,35 +555,18 @@ export async function generateBonds(engine, card, guider) {
                 throw new Error("Generator finished without producing output");
             }
 
-            isIncestuousValue = isIncestuous.value.trim().toLowerCase() === "yes";
-        }
+            return isIncestuous.value.trim().toLowerCase() !== "yes";
+        })).value;
+    }
 
-        if (guider) {
-            const guiderResponse = await guider.askBoolean("Should family relationships be excluded from romantic possibilities for " + name + "?", !isIncestuousValue);
-            if (guiderResponse.value === false) {
-                isIncestuousValue = true;
-            } else {
-                isIncestuousValue = false;
-            }
-        }
-
-        card.config.isIncestuous = isIncestuousValue;
-        insertSpecialComment(optionsSection.body, "bonds-incestuous");
-        await autosave?.save();
+    optionsSection.body.push(isAsexualValue ? `type: "4d_creepy",` : `type: "4d_standard",`);
+    if (isIncestuousValue) {
+        optionsSection.body.push(`familyCreepy: false,`);
     } else {
-        isIncestuousValue = card.config.isIncestuous || false;
+        optionsSection.body.push(`familyCreepy: true,`);
     }
 
-    if (!hasSpecialComment(optionsSection.body, "bonds-type")) {
-        optionsSection.body.push(isAsexualValue ? `type: "4d_creepy",` : `type: "4d_standard",`);
-        if (isIncestuousValue) {
-            optionsSection.body.push(`familyCreepy: false,`);
-        } else {
-            optionsSection.body.push(`familyCreepy: true,`);
-        }
-        insertSpecialComment(optionsSection.body, "bonds-type");
-        await autosave?.save();
-    }
+    const speciesType = scriptgenerator.state["species-type"];
 
     const fineTunesDescriptions = {
         "any_character": `Any character regardless of species, gender, or attraction`,
@@ -594,20 +578,20 @@ export async function generateBonds(engine, card, guider) {
         "humanoid_character_ambiguous_na": "A human or humanoid character with AMBIGUOUS gender (Non physically attractive for " + name + ")",
         "humanoid_character_ambiguous_a": "A human or humanoid character with AMBIGUOUS gender ([] for " + name + ")",
         "humanoid_character_any_na": `A human or humanoid character of any gender/sex (Non physically attractive for ${name})`,
-        "animal_character_male_na": card.config.characterSpeciesType === "animal" ? "Another animal, a MALE (Non physically attractive for " + name + ")" : "A MALE animal, a pet or wild creature without verbal capabilities (Non physically attractive for " + name + ")",
-        "animal_character_male_a": card.config.characterSpeciesType === "animal" ? "Another animal, a MALE ([] for " + name + ")" : "A MALE animal, a pet or wild creature without verbal capabilities ([] for " + name + ")",
-        "animal_character_female_na": card.config.characterSpeciesType === "animal" ? "Another animal, a FEMALE (Non physically attractive for " + name + ")" : "A FEMALE animal, a pet or wild creature without verbal capabilities (Non physically attractive for " + name + ")",
-        "animal_character_female_a": card.config.characterSpeciesType === "animal" ? "Another animal, a FEMALE ([] for " + name + ")" : "A FEMALE animal, a pet or wild creature without verbal capabilities ([] for " + name + ")",
-        "animal_character_ambiguous_na": card.config.characterSpeciesType === "animal" ? "Another animal with AMBIGUOUS gender (Non physically attractive for " + name + ")" : "An animal with AMBIGUOUS gender, a pet or wild creature without verbal capabilities (Non physically attractive for " + name + ")",
-        "animal_character_ambiguous_a": card.config.characterSpeciesType === "animal" ? "Another animal with AMBIGUOUS gender ([] for " + name + ")" : "An animal with AMBIGUOUS gender, a pet or wild creature without verbal capabilities ([] for " + name + ")",
-        "animal_character_any_na": card.config.characterSpeciesType === "animal" ? "Another animal of any gender/sex (Non physically attractive for " + name + ")" : "An animal of any gender/sex, a pet or wild creature without verbal capabilities (Non physically attractive for " + name + ")",
-        "feral_character_male_na": card.config.characterSpeciesType === "feral" ? "Another creature with evolved cognitive abilities but in a bestial or feral form, a MALE one (Non physically attractive for " + name + ")" : "A MALE creature with evolved cognitive abilities but in a bestial or feral form (Non physically attractive for " + name + ")",
-        "feral_character_male_a": card.config.characterSpeciesType === "feral" ? "Another creature with evolved cognitive abilities but in a bestial or feral form, a MALE one ([] for " + name + ")" : "A MALE creature with evolved cognitive abilities but in a bestial or feral form ([] for " + name + ")",
-        "feral_character_female_na": card.config.characterSpeciesType === "feral" ? "Another creature with evolved cognitive abilities but in a bestial or feral form, a FEMALE one (Non physically attractive for " + name + ")" : "A FEMALE creature with evolved cognitive abilities but in a bestial or feral form (Non physically attractive for " + name + ")",
-        "feral_character_female_a": card.config.characterSpeciesType === "feral" ? "Another creature with evolved cognitive abilities but in a bestial or feral form, a FEMALE one ([] for " + name + ")" : "A FEMALE creature with evolved cognitive abilities but in a bestial or feral form ([] for " + name + ")",
-        "feral_character_ambiguous_na": card.config.characterSpeciesType === "feral" ? "Another creature with evolved cognitive abilities but in a bestial or feral form, with AMBIGUOUS gender (Non physically attractive for " + name + ")" : "A creature with evolved cognitive abilities but in a bestial or feral form with AMBIGUOUS gender (Non physically attractive for " + name + ")",
-        "feral_character_ambiguous_a": card.config.characterSpeciesType === "feral" ? "Another creature with evolved cognitive abilities but in a bestial or feral form, with AMBIGUOUS gender ([] for " + name + ")" : "A creature with evolved cognitive abilities but in a bestial or feral form with AMBIGUOUS gender ([] for " + name + ")",
-        "feral_character_any_na": card.config.characterSpeciesType === "feral" ? "Another creature with evolved cognitive abilities but in a bestial or feral form of any gender/sex (Non physically attractive for " + name + ")" : "A creature with evolved cognitive abilities but in a bestial or feral form of any gender/sex (Non physically attractive for " + name + ")",
+        "animal_character_male_na": speciesType === "animal" ? "Another animal, a MALE (Non physically attractive for " + name + ")" : "A MALE animal, a pet or wild creature without verbal capabilities (Non physically attractive for " + name + ")",
+        "animal_character_male_a": speciesType === "animal" ? "Another animal, a MALE ([] for " + name + ")" : "A MALE animal, a pet or wild creature without verbal capabilities ([] for " + name + ")",
+        "animal_character_female_na": speciesType === "animal" ? "Another animal, a FEMALE (Non physically attractive for " + name + ")" : "A FEMALE animal, a pet or wild creature without verbal capabilities (Non physically attractive for " + name + ")",
+        "animal_character_female_a": speciesType === "animal" ? "Another animal, a FEMALE ([] for " + name + ")" : "A FEMALE animal, a pet or wild creature without verbal capabilities ([] for " + name + ")",
+        "animal_character_ambiguous_na": speciesType === "animal" ? "Another animal with AMBIGUOUS gender (Non physically attractive for " + name + ")" : "An animal with AMBIGUOUS gender, a pet or wild creature without verbal capabilities (Non physically attractive for " + name + ")",
+        "animal_character_ambiguous_a": speciesType === "animal" ? "Another animal with AMBIGUOUS gender ([] for " + name + ")" : "An animal with AMBIGUOUS gender, a pet or wild creature without verbal capabilities ([] for " + name + ")",
+        "animal_character_any_na": speciesType === "animal" ? "Another animal of any gender/sex (Non physically attractive for " + name + ")" : "An animal of any gender/sex, a pet or wild creature without verbal capabilities (Non physically attractive for " + name + ")",
+        "feral_character_male_na": speciesType === "feral" ? "Another creature with evolved cognitive abilities but in a bestial or feral form, a MALE one (Non physically attractive for " + name + ")" : "A MALE creature with evolved cognitive abilities but in a bestial or feral form (Non physically attractive for " + name + ")",
+        "feral_character_male_a": speciesType === "feral" ? "Another creature with evolved cognitive abilities but in a bestial or feral form, a MALE one ([] for " + name + ")" : "A MALE creature with evolved cognitive abilities but in a bestial or feral form ([] for " + name + ")",
+        "feral_character_female_na": speciesType === "feral" ? "Another creature with evolved cognitive abilities but in a bestial or feral form, a FEMALE one (Non physically attractive for " + name + ")" : "A FEMALE creature with evolved cognitive abilities but in a bestial or feral form (Non physically attractive for " + name + ")",
+        "feral_character_female_a": speciesType === "feral" ? "Another creature with evolved cognitive abilities but in a bestial or feral form, a FEMALE one ([] for " + name + ")" : "A FEMALE creature with evolved cognitive abilities but in a bestial or feral form ([] for " + name + ")",
+        "feral_character_ambiguous_na": speciesType === "feral" ? "Another creature with evolved cognitive abilities but in a bestial or feral form, with AMBIGUOUS gender (Non physically attractive for " + name + ")" : "A creature with evolved cognitive abilities but in a bestial or feral form with AMBIGUOUS gender (Non physically attractive for " + name + ")",
+        "feral_character_ambiguous_a": speciesType === "feral" ? "Another creature with evolved cognitive abilities but in a bestial or feral form, with AMBIGUOUS gender ([] for " + name + ")" : "A creature with evolved cognitive abilities but in a bestial or feral form with AMBIGUOUS gender ([] for " + name + ")",
+        "feral_character_any_na": speciesType === "feral" ? "Another creature with evolved cognitive abilities but in a bestial or feral form of any gender/sex (Non physically attractive for " + name + ")" : "A creature with evolved cognitive abilities but in a bestial or feral form of any gender/sex (Non physically attractive for " + name + ")",
     };
 
     /**
@@ -797,19 +781,23 @@ export async function generateBonds(engine, card, guider) {
         defaultFineTunesAfterRomanticInterest = [...defaultFineTunes];
         defaultFamilyFineTunesAfterRomanticInterest = [...defaultFamilyFineTunes];
     } else {
-        if (card.config.characterSpeciesType === "humanoid") {
+        const isAttractedToMales = !isAsexualValue && (scriptgenerator.state.pansexual || scriptgenerator.state["finds-males-attractive"]);
+        const isAttractedToFemales = !isAsexualValue && (scriptgenerator.state.pansexual || scriptgenerator.state["finds-females-attractive"]);
+        const isAttractedToAmbiguous = !isAsexualValue && scriptgenerator.state.pansexual;
+
+        if (speciesType === "humanoid") {
             defaultFineTunes.push("humanoid_character_male_na");
-            if (card.config.attractions.includes("male")) {
+            if (isAttractedToMales) {
                 defaultFineTunes.push("humanoid_character_male_a");
                 defaultFineTunesAfterRomanticInterest.push("humanoid_character_male_a");
             }
             defaultFineTunes.push("humanoid_character_female_na");
-            if (card.config.attractions.includes("female")) {
+            if (isAttractedToFemales) {
                 defaultFineTunes.push("humanoid_character_female_a");
                 defaultFineTunesAfterRomanticInterest.push("humanoid_character_female_a");
             }
             defaultFineTunes.push("humanoid_character_ambiguous_na");
-            if (card.config.attractions.includes("ambiguous")) {
+            if (isAttractedToAmbiguous) {
                 defaultFineTunes.push("humanoid_character_ambiguous_a");
                 defaultFineTunesAfterRomanticInterest.push("humanoid_character_ambiguous_a");
             }
@@ -817,19 +805,19 @@ export async function generateBonds(engine, card, guider) {
             defaultFineTunes.push("humanoid_character_any_na");
         }
 
-        if (card.config.characterSpeciesType === "animal") {
+        if (speciesType === "animal") {
             defaultFineTunes.push("animal_character_male_na");
-            if (card.config.attractions.includes("male")) {
+            if (isAttractedToMales) {
                 defaultFineTunes.push("animal_character_male_a");
                 defaultFineTunesAfterRomanticInterest.push("animal_character_male_a");
             }
             defaultFineTunes.push("animal_character_female_na");
-            if (card.config.attractions.includes("female")) {
+            if (isAttractedToFemales) {
                 defaultFineTunes.push("animal_character_female_a");
                 defaultFineTunesAfterRomanticInterest.push("animal_character_female_a");
             }
             defaultFineTunes.push("animal_character_ambiguous_na");
-            if (card.config.attractions.includes("ambiguous")) {
+            if (isAttractedToAmbiguous) {
                 defaultFineTunes.push("animal_character_ambiguous_a");
                 defaultFineTunesAfterRomanticInterest.push("animal_character_ambiguous_a");
             }
@@ -837,19 +825,19 @@ export async function generateBonds(engine, card, guider) {
             defaultFineTunes.push("animal_character_any_na");
         }
 
-        if (card.config.characterSpeciesType === "feral") {
+        if (speciesType === "feral") {
             defaultFineTunes.push("feral_character_male_na");
-            if (card.config.attractions.includes("male")) {
+            if (isAttractedToMales) {
                 defaultFineTunes.push("feral_character_male_a");
                 defaultFineTunesAfterRomanticInterest.push("feral_character_male_a");
             }
             defaultFineTunes.push("feral_character_female_na");
-            if (card.config.attractions.includes("female")) {
+            if (isAttractedToFemales) {
                 defaultFineTunes.push("feral_character_female_a");
                 defaultFineTunesAfterRomanticInterest.push("feral_character_female_a");
             }
             defaultFineTunes.push("feral_character_ambiguous_na");
-            if (card.config.attractions.includes("ambiguous")) {
+            if (isAttractedToAmbiguous) {
                 defaultFineTunes.push("feral_character_ambiguous_a");
                 defaultFineTunesAfterRomanticInterest.push("feral_character_ambiguous_a");
             }
@@ -864,17 +852,17 @@ export async function generateBonds(engine, card, guider) {
 
         if (isIncestuousValue) {
             defaultFamilyFineTunes.push("family_character_male_na");
-            if (card.config.attractions.includes("male")) {
+            if (isAttractedToMales) {
                 defaultFamilyFineTunes.push("family_character_male_a");
                 defaultFamilyFineTunesAfterRomanticInterest.push("family_character_male_a");
             }
             defaultFamilyFineTunes.push("family_character_female_na");
-            if (card.config.attractions.includes("female")) {
+            if (isAttractedToFemales) {
                 defaultFamilyFineTunes.push("family_character_female_a");
                 defaultFamilyFineTunesAfterRomanticInterest.push("family_character_female_a");
             }
             defaultFamilyFineTunes.push("family_character_ambiguous_na");
-            if (card.config.attractions.includes("ambiguous")) {
+            if (isAttractedToAmbiguous) {
                 defaultFamilyFineTunes.push("family_character_ambiguous_a");
                 defaultFamilyFineTunesAfterRomanticInterest.push("family_character_ambiguous_a");
             }
@@ -891,58 +879,31 @@ export async function generateBonds(engine, card, guider) {
         }
     }
 
+    const guiderBondFineTunesResult = await guider.askList(
+        "bonds-fine-tunes",
+        "Select the fine-tunes that best fit " + name + " and the relationships they can build, or add your own (these will be used to determine the types of bonds " + name + " forms with other characters, and how they interact with them)\n\n" +
+        "Note that these fine tunes will have no effect if no such bond or attraction can be formed based on the previously selected potential attractions for " + name,
+        fineTunesRecord,
+        // @ts-ignore
+        defaultFineTunes.filter((v) => v !== "any_character").map(key => fineTunesDesriptionsForList[key])
+    );
 
     /**
      * @type {string[]}
      */
-    let selectedFineTunes = card.config.bondsFineTunes || defaultFineTunes;
-    /**
-     * @type {string[]}
-     */
-    let selectedFamilyFineTunes = card.config.bondsFamilyFineTunes || defaultFamilyFineTunes;
-    /**
-     * @type {string[]}
-     */
-    let selectedFineTunesAfterRomanticInterest = card.config.bondsFineTunesAfterRomanticInterest || defaultFineTunesAfterRomanticInterest;
-    /**
-     * @type {string[]}
-     */
-    let selectedFamilyFineTunesAfterRomanticInterest = card.config.bondsFamilyFineTunesAfterRomanticInterest || defaultFamilyFineTunesAfterRomanticInterest;
-
-    const selectFineTunes = async () => {
-        if (guider) {
-            const value = await guider.askList(
-                "Select the fine-tunes that best fit " + name + " and the relationships they can build, or add your own (these will be used to determine the types of bonds " + name + " forms with other characters, and how they interact with them)\n\n" +
-                "Note that these fine tunes will have no effect if no such bond or attraction can be formed based on the previously selected potential attractions for " + name,
-                fineTunesRecord,
-                // @ts-ignore
-                selectedFineTunes.filter((v) => v !== "any_character").map(key => fineTunesDesriptionsForList[key])
-            );
-
-            selectedFineTunes = [];
-            value.value.map(val => {
-                // @ts-ignore
-                const foundKey = Object.keys(fineTunesDesriptionsForList).find(key => fineTunesDesriptionsForList[key] === val);
-                if (foundKey) {
-                    if (!selectedFineTunes.includes(foundKey)) {
-                        selectedFineTunes.push(foundKey);
-                    }
-                }
-            });
-
-            selectedFineTunes = selectedFineTunes.sort(sortAEndingFirst);
-            selectedFineTunes.push("any_character");
-
-            card.config.bondsFineTunes = selectedFineTunes;
-            await autosave?.save();
-        } else {
-            selectedFineTunes = defaultFineTunes;
+    let selectedFineTunes = [];
+    guiderBondFineTunesResult.value.map(val => {
+        // @ts-ignore
+        const foundKey = Object.keys(fineTunesDesriptionsForList).find(key => fineTunesDesriptionsForList[key] === val);
+        if (foundKey) {
+            if (!selectedFineTunes.includes(foundKey)) {
+                selectedFineTunes.push(foundKey);
+            }
         }
-    }
+    });
 
-    if (!card.config.bondsFineTunes) {
-        await selectFineTunes();
-    }
+    selectedFineTunes = selectedFineTunes.sort(sortAEndingFirst);
+    selectedFineTunes.push("any_character");
 
     const selectFineTunesAfterRomanticInterest = async () => {
         if (guider) {
