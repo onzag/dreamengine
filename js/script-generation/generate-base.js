@@ -607,7 +607,7 @@ export async function generateBase(engine, scriptgenerator, guider) {
     }
 
     {
-        const heightCm = await guider.askNumber(
+        const heightCm = (await guider.askNumber(
             "height-cm",
             "How tall is " + name + "? answer with an estimate number of centimeters that " + name + " is tall based on their physical description and traits. If you are unsure, provide your best guess.",
             async () => {
@@ -628,7 +628,7 @@ export async function generateBase(engine, scriptgenerator, guider) {
 
                 return parseInt(heightCm.value.trim());
             }
-        );
+        )).value;
 
         insertSpecialComment(newCharacterSection.body, "base-height");
         newCharacterSection.body.push(`heightCm: ${heightCm},`);
@@ -1729,7 +1729,7 @@ export async function generateBase(engine, scriptgenerator, guider) {
             return actualSpecies;
         })).value.trim().toLowerCase();
 
-        const guidedSpeciesType = await guider.askOption(
+        const guidedSpeciesType = (await guider.askOption(
             "species-type",
             "What species type is " + name + "?",
             ["humanoid", "feral", "animal"],
@@ -1758,7 +1758,7 @@ export async function generateBase(engine, scriptgenerator, guider) {
                     return isFeral.value.trim().toLowerCase() === "yes" ? "feral" : "animal";
                 }
             },
-        );
+        )).value;
 
         insertSpecialComment(newCharacterSection.body, "base-species");
         newCharacterSection.body.push(`species: ${JSON.stringify(guidedSpecies)},`);
@@ -1931,11 +1931,11 @@ export async function generateBase(engine, scriptgenerator, guider) {
             ];
 
             const optionsExplained = [
-                "Very open (very open to being attracted to a wide range of people)",
-                "Somewhat open (somewhat open to being attracted to a wide range of people)",
+                "Very open (very open to being attracted to a wide range of characters)",
+                "Somewhat open (somewhat open to being attracted to a wide range of characters)",
                 "Neutral (not particularly picky or open, has a moderate range of attraction)",
                 "Somewhat picky (only attracted to someone moderately attractive)",
-                "Very picky (only attracted to the most handsome and attractive people)",
+                "Very picky (only attracted to the most handsome and attractive characters)",
             ];
 
             const pickinessValues = [
@@ -1974,10 +1974,13 @@ export async function generateBase(engine, scriptgenerator, guider) {
             return pickinessValues[options.indexOf(pickinessOption)];
         };
 
+        const attractionsSection = insertSection(newCharacterSection.body, "base-attractions", (s) => {
+            s.head.push(`attractions: [`);
+            s.foot.push(`],`);
+        });
+
         if (isAsexualValue) {
             // no attractions
-            insertSpecialComment(newCharacterSection.body, "base-attractions");
-            newCharacterSection.body.push(`attractions: [`);
         } else {
             const findsAmbiguousGendersSexuallyAttractiveValue = (await guider.askBoolean(
                 "pansexual",
@@ -2003,23 +2006,18 @@ export async function generateBase(engine, scriptgenerator, guider) {
             )).value;
 
             if (findsAmbiguousGendersSexuallyAttractiveValue) {
-                insertSpecialComment(newCharacterSection.body, "base-attractions");
-
                 const pickinessMale = await determineOnePickiness("males");
                 const pickinessFemale = await determineOnePickiness("females");
                 const pickinessAmbiguous = await determineOnePickiness("ambiguous genders");
 
-                newCharacterSection.body.push(`attractions: [`);
-                newCharacterSection.body.push(`// You can make these far more specific if needed, but these are for the social simulation and wander heuristics`);
-
                 if (speciesType === "humanoid") {
-                    newCharacterSection.body.push(`{towards: "male", ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], speciesType: "${speciesType}", "pickiness": ${pickinessMale}},`);
-                    newCharacterSection.body.push(`{towards: "female", ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], speciesType: "${speciesType}", "pickiness": ${pickinessFemale}},`);
-                    newCharacterSection.body.push(`{towards: "ambiguous", ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], speciesType: "${speciesType}", "pickiness": ${pickinessAmbiguous}},`);
+                    attractionsSection.body.push(`{towards: "male", ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], speciesType: "${speciesType}", "pickiness": ${pickinessMale}},`);
+                    attractionsSection.body.push(`{towards: "female", ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], speciesType: "${speciesType}", "pickiness": ${pickinessFemale}},`);
+                    attractionsSection.body.push(`{towards: "ambiguous", ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], speciesType: "${speciesType}", "pickiness": ${pickinessAmbiguous}},`);
                 } else {
-                    newCharacterSection.body.push(`{towards: "male", ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], species: "${species}", "pickiness": ${pickinessMale}},`);
-                    newCharacterSection.body.push(`{towards: "female", ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], speciesType: "${speciesType}", "pickiness": ${pickinessFemale}},`);
-                    newCharacterSection.body.push(`{towards: "ambiguous", ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], speciesType: "${speciesType}", "pickiness": ${pickinessAmbiguous}},`);
+                    attractionsSection.body.push(`{towards: "male", ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], species: "${species}", "pickiness": ${pickinessMale}},`);
+                    attractionsSection.body.push(`{towards: "female", ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], speciesType: "${speciesType}", "pickiness": ${pickinessFemale}},`);
+                    attractionsSection.body.push(`{towards: "ambiguous", ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], speciesType: "${speciesType}", "pickiness": ${pickinessAmbiguous}},`);
                 }
             } else {
                 const findsMalesSexuallyAttractiveValue = (await guider.askBoolean(
@@ -2086,26 +2084,22 @@ export async function generateBase(engine, scriptgenerator, guider) {
                     )).value;
                 }
 
-                insertSpecialComment(newCharacterSection.body, "base-attractions");
-                newCharacterSection.body.push(`attractions: [`);
-                newCharacterSection.body.push(`// You can make these far more specific if needed`);
-
                 if (findsMalesSexuallyAttractiveValue) {
                     const pickinessMale = await determineOnePickiness("males");
 
                     if (speciesType === "humanoid") {
-                        newCharacterSection.body.push(`{towards: "male", pickiness: ${pickinessMale}, ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], speciesType: "${speciesType}"${findsMalesSexuallyAttractiveLimitToSex ? ', sex: "male"' : ''}},`);
+                        attractionsSection.body.push(`{towards: "male", pickiness: ${pickinessMale}, ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], speciesType: "${speciesType}"${findsMalesSexuallyAttractiveLimitToSex ? ', sex: "male"' : ''}},`);
                     } else {
-                        newCharacterSection.body.push(`{towards: "male", pickiness: ${pickinessMale}, ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], species: "${species}"${findsMalesSexuallyAttractiveLimitToSex ? ', sex: "male"' : ''}},`);
+                        attractionsSection.body.push(`{towards: "male", pickiness: ${pickinessMale}, ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], species: "${species}"${findsMalesSexuallyAttractiveLimitToSex ? ', sex: "male"' : ''}},`);
                     }
                 }
 
                 if (findsFemalesSexuallyAttractiveValue) {
                     const pickinessFemale = await determineOnePickiness("females");
                     if (speciesType === "humanoid") {
-                        newCharacterSection.body.push(`{towards: "female", pickiness: ${pickinessFemale}, ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], speciesType: "${speciesType}"${findsFemalesSexuallyAttractiveLimitToSex ? ', sex: "female"' : ''}},`);
+                        attractionsSection.body.push(`{towards: "female", pickiness: ${pickinessFemale}, ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], speciesType: "${speciesType}"${findsFemalesSexuallyAttractiveLimitToSex ? ', sex: "female"' : ''}},`);
                     } else {
-                        newCharacterSection.body.push(`{towards: "female", pickiness: ${pickinessFemale}, ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], species: "${species}"${findsFemalesSexuallyAttractiveLimitToSex ? ', sex: "female"' : ''}},`);
+                        attractionsSection.body.push(`{towards: "female", pickiness: ${pickinessFemale}, ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], species: "${species}"${findsFemalesSexuallyAttractiveLimitToSex ? ', sex: "female"' : ''}},`);
                     }
                 }
             }
@@ -2124,7 +2118,7 @@ export async function generateBase(engine, scriptgenerator, guider) {
                     const additionalAttractionGender = await guider.askOption("extra-attraction-" + indexAddExtraAttraction + "-gender", "What gender is " + name + " attracted to when it comes to a " + additionalAttractionSpecies.value + "?", ["male", "female", "ambiguous", "any"], "any");
                     const additionalAttractionSex = await guider.askOption("extra-attraction-" + indexAddExtraAttraction + "-sex", "Is " + name + "'s attraction towards a " + additionalAttractionSpecies.value + " limited to a specific biological sex?", ["male", "female", "intersex", "any"], "any");
                     const additionalAttractionPickiness = await determineOnePickiness(additionalAttractionGender.value + " belonging to the species " + additionalAttractionSpecies.value);
-                    newCharacterSection.body.push(`{towards: "${additionalAttractionGender.value}", pickiness: ${additionalAttractionPickiness}, ageRange: [${additionalAttractionAgeRangeMin.value}, ${additionalAttractionAgeRangeMax.value}], species: "${additionalAttractionSpecies.value}", "sex": "${additionalAttractionSex.value}"},`);
+                    attractionsSection.body.push(`{towards: "${additionalAttractionGender.value}", pickiness: ${additionalAttractionPickiness}, ageRange: [${additionalAttractionAgeRangeMin.value}, ${additionalAttractionAgeRangeMax.value}], species: "${additionalAttractionSpecies.value}", "sex": "${additionalAttractionSex.value}"},`);
                 }
 
                 indexAddExtraAttraction++;
@@ -2136,7 +2130,7 @@ export async function generateBase(engine, scriptgenerator, guider) {
                 if (!additionalAttractions.value) {
                     break;
                 } else {
-                    const additionalAttractionSpeciesGroup = await guider.askOption("extra-attraction-species-group-" + indexAddExtraAttractionSpeciesGroup + "-group", "What species group is " + name + " attracted to?", ["humanoid", "animal", "feral"].filter(speciesType), "");
+                    const additionalAttractionSpeciesGroup = await guider.askOption("extra-attraction-species-group-" + indexAddExtraAttractionSpeciesGroup + "-group", "What species group is " + name + " attracted to?", ["humanoid", "animal", "feral"].filter(v => v !== speciesType), "");
                     const additionalAttractionAgeRangeMin = await guider.askNumber("extra-attraction-species-group-" + indexAddExtraAttractionSpeciesGroup + "-age-min", "What is the minimum age of attraction for " + name + " towards a " + additionalAttractionSpeciesGroup.value + " creature?", minAgeAttractionPotential);
                     const additionalAttractionAgeRangeMax = await guider.askNumber("extra-attraction-species-group-" + indexAddExtraAttractionSpeciesGroup + "-age-max", "What is the maximum age of attraction for " + name + " towards a " + additionalAttractionSpeciesGroup.value + " creature?", maxAgeAttractionPotential);
                     const additionalAttractionGender = await guider.askOption("extra-attraction-species-group-" + indexAddExtraAttractionSpeciesGroup + "-gender", "What gender is " + name + " attracted to when it comes to a " + additionalAttractionSpeciesGroup.value + " creature?", ["male", "female", "ambiguous", "any"], "any");
@@ -2152,14 +2146,12 @@ export async function generateBase(engine, scriptgenerator, guider) {
                     }
 
                     const additionalAttractionPickiness = await determineOnePickiness("a " + additionalAttractionGender.value + " belonging to the species group " + speciesGroupDefinedForPickiness[additionalAttractionSpeciesGroup.value]);
-                    newCharacterSection.body.push(`{towards: "${additionalAttractionGender.value}", pickiness: ${additionalAttractionPickiness}, ageRange: [${additionalAttractionAgeRangeMin.value}, ${additionalAttractionAgeRangeMax.value}], speciesGroup: "${additionalAttractionSpeciesGroup.value}", "sex": "${additionalAttractionSex.value}"},`);
+                    attractionsSection.body.push(`{towards: "${additionalAttractionGender.value}", pickiness: ${additionalAttractionPickiness}, ageRange: [${additionalAttractionAgeRangeMin.value}, ${additionalAttractionAgeRangeMax.value}], speciesType: "${additionalAttractionSpeciesGroup.value}", "sex": "${additionalAttractionSex.value}"},`);
                 }
 
                 indexAddExtraAttractionSpeciesGroup++;
             }
         }
-
-        newCharacterSection.body.push(`],`);
     }
 
     {

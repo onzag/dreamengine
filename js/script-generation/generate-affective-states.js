@@ -178,7 +178,7 @@ export async function generateAffectiveStates(engine, scriptgenerator, guider) {
         );
     }
 
-    const intimateVerbality = (await guider.askNumber(
+    const intimateVerbality = scriptgenerator.state.mute ? 0 : (await guider.askNumber(
         "intimate-verbality",
         `How verbal is ${name} when seeking consent or communicating during intimate situations? (0 = body language only, 10 = very vocal/explicit).`,
         async () => {
@@ -212,10 +212,12 @@ export async function generateAffectiveStates(engine, scriptgenerator, guider) {
      * @param {boolean} addVocabLimit 
      * @param {boolean} continous
      * @param {string} probabilityCondition
+     * @param {import('./base.js').ScriptTypeGeneratorSection} section
      */
-    const generateIntimateAction = async (id, act, consentDefaultNo, addVocabLimit, continous, probabilityCondition) => {
-        intimateHead.body.push(`action: (info) => ${toTemplateLiteral(act)},`);
-        intimateHead.body.push(`probability: (char, other) => ${probabilityCondition},`);
+    const generateIntimateAction = async (id, act, consentDefaultNo, addVocabLimit, continous, probabilityCondition, section) => {
+        section.body.push(`{`)
+        section.body.push(`action: (info) => ${toTemplateLiteral(act)},`);
+        section.body.push(`probability: (char, other) => ${probabilityCondition},`);
 
         const actForInference = act.replace(/{{other}}/g, "other character").replace(/{{char}}/g, name);
 
@@ -266,7 +268,7 @@ export async function generateAffectiveStates(engine, scriptgenerator, guider) {
                 }
             )).value;
 
-            intimateHead.body.push(`vocabularyLimit: DE.utils.createVocabularyLimitFromPreset(${JSON.stringify(vocabLimit)}),`);
+            section.body.push(`vocabularyLimit: DE.utils.createVocabularyLimitFromPreset(${JSON.stringify(vocabLimit)}),`);
         }
 
         if (continous) {
@@ -298,11 +300,11 @@ export async function generateAffectiveStates(engine, scriptgenerator, guider) {
                 }
             )).value;
 
-            intimateHead.body.push(`fullfillCriteriaQuestions: [`);
+            section.body.push(`fullfillCriteriaQuestions: [`);
             criteriaQuestions.forEach(q => {
-                intimateHead.body.push(`(info) => ${toTemplateLiteral(q)},`);
+                section.body.push(`(info) => ${toTemplateLiteral(q)},`);
             });
-            intimateHead.body.push(`],`);
+            section.body.push(`],`);
         }
 
         const wouldAskForConsent = (await guider.askBoolean(
@@ -335,7 +337,7 @@ export async function generateAffectiveStates(engine, scriptgenerator, guider) {
         )).value;
 
         if (wouldAskForConsent) {
-            intimateHead.body.push(`consentMechanism: {`);
+            section.body.push(`consentMechanism: {`);
 
             const consentRequestingActions = (await guider.askArbitraryList(
                 id + "-consent-requesting-actions",
@@ -366,12 +368,12 @@ export async function generateAffectiveStates(engine, scriptgenerator, guider) {
                             maxCharacters: 3000,
                             maxSafetyCharacters: 3000,
                             maxParagraphs: 50,
-                            nextQuestion: `List ${verbalCount} specific verbal things ${name} would say or ask to seek consent before performing: "${actForInference}". These must be spoken words or phrases, not physical actions. Use OTHER_CHARACTER as a placeholder for the other character's name. Keep each listed item short, only 1 or 2 sentences at most.`,
+                            nextQuestion: `List ${verbalCount} verbal consent actions that ${name} would take before performing: "${actForInference}". Describe what ${name} would verbally do in general terms, not the exact words. Use OTHER_CHARACTER as a placeholder for the other character's name.`,
                             stopAfter: [],
                             stopAt: [],
-                            instructions: `List exactly ${verbalCount} short verbal consent phrases or questions that ${name} would use. Use OTHER_CHARACTER as a placeholder for the other character's name. The phrase or question ${name} would use SHOULD BE INCLUDED in the output, do not just say "asks for consent" or similar, we want the actual words or phrases that ${name} would say.`,
-                            answerTrail: `${name}'s verbal consent phrases:\n\n`,
-                            grammar: "root ::= list\nlist ::=" + (" bulletPoint").repeat(verbalCount) + "\nbulletPoint ::= \"- \" " + JSON.stringify(name) + " \" will \" (\"say\" | \"ask\") \" '\" sentence (\" \" sentence)? \"'\\n\"\nsentence ::= [a-zA-Z0-9 ,;'_-]+ (\".\" | \"!\" | \"?\")",
+                            instructions: `List exactly ${verbalCount} short verbal consent actions. Each item must describe what ${name} would verbally do in general terms — do NOT write the exact words or quotes. For example: "${name} will ask if they can kiss OTHER_CHARACTER" or "${name} will softly ask if OTHER_CHARACTER is comfortable". Do NOT use quoted speech or specific wording. Use OTHER_CHARACTER as a placeholder for the other character's name.`,
+                            answerTrail: `${name}'s verbal consent actions:\n\n`,
+                            grammar: "root ::= list\nlist ::=" + (" bulletPoint").repeat(verbalCount) + "\nbulletPoint ::= \"- \" " + JSON.stringify(name) + " \" will \" [a-zA-Z0-9 ,;'_-]+ \"\\n\"",
                         });
                         if (verbalResult.done) {
                             throw new Error("Generator finished without producing output");
@@ -388,12 +390,12 @@ export async function generateAffectiveStates(engine, scriptgenerator, guider) {
                             maxCharacters: 3000,
                             maxSafetyCharacters: 3000,
                             maxParagraphs: 50,
-                            nextQuestion: `List ${nonVerbalCount} specific non-verbal body language actions ${name} would perform to seek consent that clearly and unambiguously signal the intent to perform: "${actForInference}". These must be physical gestures or body language — not spoken words. The actions MUST be proportional in intensity and explicitness to the act itself: if the act is sexual or intimate (e.g. having sex, oral sex, penetration), the consent gesture must be equally suggestive and direct (e.g. inappropriate touching, grinding against them, guiding their hand to an intimate place, undressing in front of them, seductive body movements). Do NOT suggest vague or innocent gestures like "giving cute eyes", "smiling sweetly", or "blushing" for explicit acts — those do not communicate the act being asked about. Use OTHER_CHARACTER as a placeholder for the other character's name.`,
+                            nextQuestion: `List ${nonVerbalCount} non-verbal body language actions ${name} would perform to seek consent before performing: "${actForInference}". These must be physical gestures or body language — not spoken words. Each action should be proportional in intensity to the act, but described in general terms without excessive detail. Use OTHER_CHARACTER as a placeholder for the other character's name.`,
                             stopAfter: [],
                             stopAt: [],
-                            instructions: `List exactly ${nonVerbalCount} short non-verbal consent actions that ${name} would use. These must be physical gestures or body language only — not spoken words. CRITICAL: each gesture must be proportional to the explicitness of "${actForInference}". For sexual/intimate acts, gestures must be overtly sexual or seductive (suggestive touching, intimate caresses, guiding hands, removing clothing, grinding, etc.) so it is unambiguously clear what is being asked. Vague, cute, or innocent gestures are NOT acceptable when the act itself is explicit. Use OTHER_CHARACTER as a placeholder for the other character's name.`,
+                            instructions: `List exactly ${nonVerbalCount} short non-verbal consent actions that ${name} would use. These must be physical gestures or body language only — not spoken words. Each gesture should be proportional in intensity to the act being consented to, but keep descriptions general — do NOT over-specify body parts, exact positions, or precise movements. Use OTHER_CHARACTER as a placeholder for the other character's name.`,
                             answerTrail: `${name}'s non-verbal consent actions:\n\n`,
-                            grammar: "root ::= list\nlist ::=" + (" bulletPoint").repeat(nonVerbalCount) + "\nbulletPoint ::= \"- \" " + JSON.stringify(name) + " \" will \" sentence (\" \" sentence)? \"\\n\"\nsentence ::= [a-zA-Z0-9 ,;'_-]+ (\".\" | \"!\" | \"?\")",
+                            grammar: "root ::= list\nlist ::=" + (" bulletPoint").repeat(nonVerbalCount) + "\nbulletPoint ::= \"- \" " + JSON.stringify(name) + " \" will \" [a-zA-Z0-9 ,;'_-]+ \"\\n\"",
                         });
                         if (nonVerbalResult.done) {
                             throw new Error("Generator finished without producing output");
@@ -408,7 +410,7 @@ export async function generateAffectiveStates(engine, scriptgenerator, guider) {
                 }
             )).value;
 
-            intimateHead.body.push(`actionsAndChecks: [`);
+            section.body.push(`actionsAndChecks: [`);
             for (const consentRequestingAction of consentRequestingActions) {
                 const consentRequestingActionForInference = consentRequestingAction.replace(/{{other}}/g, "other character").replace(/{{char}}/g, name);
 
@@ -422,10 +424,10 @@ export async function generateAffectiveStates(engine, scriptgenerator, guider) {
                             maxCharacters: 100,
                             maxSafetyCharacters: 100,
                             maxParagraphs: 1,
-                            nextQuestion: `${name} performed the following consent request: "${consentRequestingActionForInference}". Write a single question that captures whether OTHER_CHARACTER gave consent in response to this specific request. The question should be broad enough to cover both verbal and non-verbal consent, but specific enough to be tied to this consent request and act.`,
+                            nextQuestion: `${name} performed the following consent request: "${consentRequestingActionForInference}". Write a single very short and vague question asking whether OTHER_CHARACTER consented. Focus only on the core intent (e.g. "has OTHER_CHARACTER consented to the kiss?" or "has OTHER_CHARACTER allowed the touch?"). Do NOT mention specific body parts, limbs, positions, or details of how the action was performed.`,
                             stopAfter: [],
                             stopAt: [],
-                            instructions: `Write a single short question ending with "?" that asks whether OTHER_CHARACTER consented after "${consentRequestingActionForInference}". Be broad enough to include verbal and non-verbal consent but specific to this request and act. Use OTHER_CHARACTER as a placeholder.`,
+                            instructions: `Write a single very short question ending with "?" that vaguely asks whether OTHER_CHARACTER consented. Keep it brief and general — do NOT include specific details like which hand, body part, position, or method. Example: "has OTHER_CHARACTER allowed the hug?" or "has OTHER_CHARACTER consented to the kiss?". Use OTHER_CHARACTER as a placeholder.`,
                             answerTrail: `Consent granted question: `,
                             grammar: `root ::= "has OTHER_CHARACTER " [A-Za-z0-9 ,.'!_]+ "?"`,
                         });
@@ -448,10 +450,10 @@ export async function generateAffectiveStates(engine, scriptgenerator, guider) {
                             maxCharacters: 100,
                             maxSafetyCharacters: 100,
                             maxParagraphs: 1,
-                            nextQuestion: `${name} performed the following consent request: "${consentRequestingActionForInference}". Write a single question that captures whether OTHER_CHARACTER gave a vague or ambiguous response — neither a clear yes nor a clear no — in response to this specific request.`,
+                            nextQuestion: `${name} performed the following consent request: "${consentRequestingActionForInference}". Write a single very short and vague question asking whether OTHER_CHARACTER has NOT reacted or shown no clear response — i.e. they neither accepted nor refused. Focus on absence of reaction or silence. Do NOT ask whether they gave a clear signal of consent. Example: "has OTHER_CHARACTER not reacted to the hug?" or "has OTHER_CHARACTER remained silent after the touch?".`,
                             stopAfter: [],
                             stopAt: [],
-                            instructions: `Write a single short question ending with "?" that asks whether OTHER_CHARACTER gave a vague or unclear response after "${consentRequestingActionForInference}". The question should capture non-committal or ambiguous signals. Use OTHER_CHARACTER as a placeholder.`,
+                            instructions: `Write a single very short question ending with "?" that asks whether OTHER_CHARACTER has shown NO clear reaction — not whether they consented. The question should capture silence, no reaction, or an unreadable response. Do NOT ask about clear signals or consent. Keep it vague and general, no specific details. Example: "has OTHER_CHARACTER not reacted to the hug?" or "has OTHER_CHARACTER shown no response to the touch?". Use OTHER_CHARACTER as a placeholder.`,
                             answerTrail: `Consent unspecified question: `,
                             grammar: `root ::= "has OTHER_CHARACTER " [A-Za-z0-9 ,.'!_]+ "?"`,
                         });
@@ -464,13 +466,13 @@ export async function generateAffectiveStates(engine, scriptgenerator, guider) {
                     }
                 )).value;
 
-                intimateHead.body.push(`{`);
-                intimateHead.body.push(`action: (info) => ${toTemplateLiteral(consentRequestingAction)},`);
-                intimateHead.body.push(`check: (info) => ${toTemplateLiteral(consentGrantedQuestion)},`);
-                intimateHead.body.push(`checkAmbiguousResponse: (info) => ${toTemplateLiteral(consentUnspecifiedQuestion)},`);
-                intimateHead.body.push(`},`);
+                section.body.push(`{`);
+                section.body.push(`action: (info) => ${toTemplateLiteral(consentRequestingAction)},`);
+                section.body.push(`check: (info) => ${toTemplateLiteral(consentGrantedQuestion)},`);
+                section.body.push(`checkAmbiguousResponse: (info) => ${toTemplateLiteral(consentUnspecifiedQuestion)},`);
+                section.body.push(`},`);
             }
-            intimateHead.body.push(`],`);
+            section.body.push(`],`);
 
             const insistence = (await guider.askNumber(
                 id + "-insistence",
@@ -506,7 +508,7 @@ export async function generateAffectiveStates(engine, scriptgenerator, guider) {
                 },
             )).value;
 
-            intimateHead.body.push(`insistence: ${insistence / 10},`);
+            section.body.push(`insistence: ${insistence / 10},`);
 
             const ignoreConsent = (await guider.askNumber(
                 id + "-ignore-consent",
@@ -542,11 +544,18 @@ export async function generateAffectiveStates(engine, scriptgenerator, guider) {
                 },
             )).value;
 
-            intimateHead.body.push(`ignoreConsentRejection: ${ignoreConsent / 10},`);
-
-            intimateHead.body.push(`},`);
+            section.body.push(`ignoreConsentRejection: ${ignoreConsent / 10},`);
+            section.body.push(`},`);
         }
+
+        section.body.push(`},`);
     }
+
+    const affectionActs = insertSection(intimateHead.body, "affection-showcases", (s) => {
+        s.head.push(`/** @type {DEIntimateAction[]} */`);
+        s.head.push(`const affectionActs = [`);
+        s.foot.push(`];`);
+    });
 
     {
         const affectionShowcasesActs = (await guider.askArbitraryList(
@@ -574,17 +583,9 @@ export async function generateAffectiveStates(engine, scriptgenerator, guider) {
             }
         )).value;
 
-        insertSpecialComment(intimateHead.body, "affection-showcases");
-        intimateHead.body.push(`/** @type {DEIntimateAction[]} */`);
-        intimateHead.body.push(`const affectionActs = [`)
-
         for (const act of affectionShowcasesActs) {
-            intimateHead.body.push(`{`)
-            await generateIntimateAction(act, act, true, false, false, "1");
-            intimateHead.body.push(`},`)
+            await generateIntimateAction(act, act, true, false, false, "1", affectionActs);
         }
-
-        intimateHead.body.push(`];`)
     }
 
     const intimateAffectionActs = insertSection(intimateHead.body, "intimate-affection-acts-section", (s) => {
@@ -658,12 +659,8 @@ export async function generateAffectiveStates(engine, scriptgenerator, guider) {
         insertSpecialComment(intimateAffectionActs.body, "intimate-affection-for-males");
 
         for (const act of intimateAffectionForMales) {
-            intimateAffectionActs.body.push(`{`)
-            await generateIntimateAction(act, act, true, false, false, "DE.utils.isWithinAttractionGroupFor('male', char, other) ? 1 : 0");
-            intimateAffectionActs.body.push(`},`)
+            await generateIntimateAction(act, act, true, false, false, "DE.utils.isWithinAttractionGroupFor('male', char, other) ? 1 : 0", intimateAffectionActs);
         }
-
-        intimateAffectionActs.body.push(`];`)
     }
 
     if (isAttractedToFemales) {
@@ -729,12 +726,8 @@ export async function generateAffectiveStates(engine, scriptgenerator, guider) {
         insertSpecialComment(intimateAffectionActs.body, "intimate-affection-for-females");
 
         for (const act of intimateAffectionForFemales) {
-            intimateAffectionActs.body.push(`{`)
-            await generateIntimateAction(act, act, true, false, false, "DE.utils.isWithinAttractionGroupFor('female', char, other) ? 1 : 0");
-            intimateAffectionActs.body.push(`},`)
+            await generateIntimateAction(act, act, true, false, false, "DE.utils.isWithinAttractionGroupFor('female', char, other) ? 1 : 0", intimateAffectionActs);
         }
-
-        intimateAffectionActs.body.push(`];`)
     }
 
     if (isAttractedToAmbiguous) {
@@ -800,12 +793,8 @@ export async function generateAffectiveStates(engine, scriptgenerator, guider) {
         insertSpecialComment(intimateAffectionActs.body, "intimate-affection-for-ambiguous");
 
         for (const act of intimateAffectionForAmbiguous) {
-            intimateAffectionActs.body.push(`{`)
-            await generateIntimateAction(act, act, true, false, false, "DE.utils.isWithinAttractionGroupFor('ambiguous', char, other) ? 1 : 0");
-            intimateAffectionActs.body.push(`},`)
+            await generateIntimateAction(act, act, true, false, false, "DE.utils.isWithinAttractionGroupFor('ambiguous', char, other) ? 1 : 0", intimateAffectionActs);
         }
-
-        intimateAffectionActs.body.push(`];`)
     }
 
     const sexActsSection = insertSection(intimateHead.body, "sex-acts-section", (s) => {
@@ -843,12 +832,8 @@ export async function generateAffectiveStates(engine, scriptgenerator, guider) {
         insertSpecialComment(sexActsSection.body, "sex-acts-for-males");
 
         for (const act of sexActsForMales) {
-            sexActsSection.body.push(`{`)
-            await generateIntimateAction(act, act, false, true, true, "DE.utils.isWithinAttractionGroupFor('male', char, other) ? 1 : 0");
-            sexActsSection.body.push(`},`)
+            await generateIntimateAction(act, act, false, true, true, "DE.utils.isWithinAttractionGroupFor('male', char, other) ? 1 : 0", sexActsSection);
         }
-
-        sexActsSection.body.push(`];`);
     }
 
     if (isAttractedToFemales) {
@@ -880,12 +865,8 @@ export async function generateAffectiveStates(engine, scriptgenerator, guider) {
         insertSpecialComment(sexActsSection.body, "sex-acts-for-females");
 
         for (const act of sexActsForFemales) {
-            sexActsSection.body.push(`{`)
-            await generateIntimateAction(act, act, false, true, true, "DE.utils.isWithinAttractionGroupFor('female', char, other) ? 1 : 0");
-            sexActsSection.body.push(`},`)
+            await generateIntimateAction(act, act, false, true, true, "DE.utils.isWithinAttractionGroupFor('female', char, other) ? 1 : 0", sexActsSection);
         }
-
-        sexActsSection.body.push(`];`);
     }
 
     if (isAttractedToAmbiguous) {
@@ -917,12 +898,8 @@ export async function generateAffectiveStates(engine, scriptgenerator, guider) {
         insertSpecialComment(sexActsSection.body, "sex-acts-for-ambiguous");
 
         for (const act of sexActsForAmbiguous) {
-            sexActsSection.body.push(`{`)
-            await generateIntimateAction(act, act, false, true, true, "DE.utils.isWithinAttractionGroupFor('ambiguous', char, other) ? 1 : 0");
-            sexActsSection.body.push(`},`)
+            await generateIntimateAction(act, act, false, true, true, "DE.utils.isWithinAttractionGroupFor('ambiguous', char, other) ? 1 : 0", sexActsSection);
         }
-
-        sexActsSection.body.push(`];`);
     }
 
     if (!hasSpecialComment(intimateHead.body, "affection-acts-open-to")) {

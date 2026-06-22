@@ -149,9 +149,10 @@ export function isScriptTypeGeneratorFile(jsContent) {
  * @param {ScriptTypeGenerator} base
  * @param {number} baseTabCount
  * @param {boolean} noImportsNorState
+ * @param {string[]} commentOutSections - array of section commentIds to comment out in the output
  * @returns {string}
  */
-export function getJsScriptFromGenerator(base, baseTabCount = 0, noImportsNorState = false) {
+export function getJsScriptFromGenerator(base, baseTabCount = 0, noImportsNorState = false, commentOutSections = []) {
     let endResult = noImportsNorState ? "" : `//@state: ${JSON.stringify(base.state, null, 2).split("\n").join("\n//")}` + "\n\n";
 
     const elementsInOrder = noImportsNorState ? [
@@ -199,13 +200,18 @@ export function getJsScriptFromGenerator(base, baseTabCount = 0, noImportsNorSta
             }
         } else {
             // it's a section
-            const sectionJs = getJsScriptFromGenerator({
+            let sectionJs = getJsScriptFromGenerator({
                 state: {},
                 imports: [],
                 head: element.head,
                 body: element.body,
                 foot: element.foot,
             }, baseTabCount + tabCount, true);
+            const commentOut = commentOutSections.includes(element.commentId);
+            if (commentOut) {
+                // consider the tabs when comment out
+                sectionJs = sectionJs.split('\n').map(line => line.replace(/^(\t*)/, '$1// ')).join('\n');
+            }
             endResult += `\t`.repeat(baseTabCount + tabCount) + `//@@${element.commentId}\n` + sectionJs + `\t`.repeat(baseTabCount + tabCount) + `//@@${element.commentId}\n\n`;
         }
     }

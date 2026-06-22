@@ -256,7 +256,7 @@ export class CardTypeWizard extends HTMLElement {
             data.currentCard.state.guidedWizardInProgress = false;
             data.currentCard.state.automaticWizardCompleted = true;
             data.currentCard.state.guidedWizardCompleted = true;
-            this.save(data.currentCard);
+            this.save(data.currentCard, true);
             this.endOverlay();
             cleanup();
         };
@@ -385,6 +385,7 @@ export class CardTypeWizard extends HTMLElement {
             'antagonist',
             'animals',
             'animal',
+            'affectionate',
             'affection',
             'non-romantic',
             'romantic',
@@ -404,6 +405,9 @@ export class CardTypeWizard extends HTMLElement {
             'male',
             'any gender/sex',
             'sexually',
+            'bisexual',
+            'pansexual',
+            'asexual',
             'sexual',
             'sex',
             'pet',
@@ -955,11 +959,12 @@ export class CardTypeWizard extends HTMLElement {
     /**
      * Shows the autosave indicator in the title bar as "Saving...".
      * @param {import('../../../script-generation/base.js').ScriptTypeGenerator} parsedCard 
+     * @param {boolean} completed
      */
-    async save(parsedCard) {
+    async save(parsedCard, completed = false) {
         // TODO prevent racing of many saves when questions are being fired too fast, somehow at startup or on non-guided mode
         this.lastSavedCard = parsedCard;
-        const jsContent = getJsScriptFromGenerator(parsedCard);
+        const jsContent = getJsScriptFromGenerator(parsedCard, undefined, undefined, completed ? [] : ["initialize"]);
         const characterId = this.getAttribute('character-id') || "";
         const characterNamespace = this.getAttribute('character-namespace') || "";
         this.showAutosaveStatus();
