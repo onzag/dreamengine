@@ -188,7 +188,6 @@ export class WorldWizard extends CardTypeWizard {
 
         const cleanup = () => {
             client.onScriptTypeGuiderQuestion = null;
-            client.onCardTypeAutosave = null;
             client.onCardTypeWizardComplete = null;
         };
 
@@ -199,7 +198,6 @@ export class WorldWizard extends CardTypeWizard {
         };
 
         client.onScriptTypeGuiderQuestion = onGuiderQuestion;
-        client.onCardTypeAutosave = onAutosave;
         client.onCardTypeWizardComplete = onComplete;
 
         // this.initOverlay();

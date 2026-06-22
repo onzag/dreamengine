@@ -52,8 +52,9 @@ export async function generateBase(engine, scriptgenerator, guider) {
     scriptgenerator.imports.push(`await importScript("@bond-systems", "deteriorating-bonds");`);
 
     const metadataSection = insertSection(scriptgenerator.head, "metadata", (s) => {
+        s.head.push(`/** @type {{[key: string]: string | number | boolean}} */`);
         s.head.push(`const metadata = {`);
-        s.foot.push(`},`);
+        s.foot.push(`};`);
     });
 
     insertSpecialComment(scriptgenerator.head, "base-head");
@@ -1393,6 +1394,42 @@ export async function generateBase(engine, scriptgenerator, guider) {
         newCharacterSection.body.push(`charisma: ${charismaValue / 10},`);
     }
 
+    {
+        const skepticismValue = (await guider.askNumber(
+            "skepticism",
+            "From 1 to 10 how skeptical is " + name + " towards new information, ideas, or experiences? with 10 being extremely paranoid and 1 being very trusting and gullible",
+            async () => {
+                await prime();
+                const skepticismValue = await generator.next({
+                    maxCharacters: 100,
+                    maxSafetyCharacters: 0,
+                    maxParagraphs: 1,
+                    nextQuestion: "How skeptical is " + name + " towards new information, ideas, or experiences? answer with \"very skeptical\", \"somewhat skeptical\", \"not very skeptical\" or \"not skeptical at all\"",
+                    stopAfter: [],
+                    stopAt: [],
+                    grammar: `root ::= "very skeptical" | "somewhat skeptical" | "not very skeptical" | "not skeptical at all"`,
+                });
+
+                if (skepticismValue.done) {
+                    throw new Error("Generator finished without producing output");
+                }
+
+                const mapping = {
+                    "very skeptical": 8,
+                    "somewhat skeptical": 6,
+                    "not very skeptical": 4,
+                    "not skeptical at all": 2,
+                };
+
+                // @ts-ignore
+                return mapping[skepticismValue.value.trim().toLowerCase()];
+            },
+        )).value;
+
+        insertSpecialComment(newCharacterSection.body, "base-skepticism");
+        newCharacterSection.body.push(`skepticism: ${skepticismValue / 10},`);
+    }
+
     insertSpecialComment(newCharacterSection.body, "base-family-ties");
     newCharacterSection.body.push(`familyTies: {},`);
 
@@ -1937,11 +1974,6 @@ export async function generateBase(engine, scriptgenerator, guider) {
             return pickinessValues[options.indexOf(pickinessOption)];
         };
 
-        /**
-         * @type {Array<string>}
-         */
-        let attractions = [];
-
         if (isAsexualValue) {
             // no attractions
             insertSpecialComment(newCharacterSection.body, "base-attractions");
@@ -1989,9 +2021,6 @@ export async function generateBase(engine, scriptgenerator, guider) {
                     newCharacterSection.body.push(`{towards: "female", ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], speciesType: "${speciesType}", "pickiness": ${pickinessFemale}},`);
                     newCharacterSection.body.push(`{towards: "ambiguous", ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], speciesType: "${speciesType}", "pickiness": ${pickinessAmbiguous}},`);
                 }
-                attractions.push("ambiguous");
-                attractions.push("male");
-                attractions.push("female");
             } else {
                 const findsMalesSexuallyAttractiveValue = (await guider.askBoolean(
                     "finds-males-attractive",
@@ -2069,7 +2098,6 @@ export async function generateBase(engine, scriptgenerator, guider) {
                     } else {
                         newCharacterSection.body.push(`{towards: "male", pickiness: ${pickinessMale}, ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], species: "${species}"${findsMalesSexuallyAttractiveLimitToSex ? ', sex: "male"' : ''}},`);
                     }
-                    attractions.push("male");
                 }
 
                 if (findsFemalesSexuallyAttractiveValue) {
@@ -2079,7 +2107,6 @@ export async function generateBase(engine, scriptgenerator, guider) {
                     } else {
                         newCharacterSection.body.push(`{towards: "female", pickiness: ${pickinessFemale}, ageRange: [${minAgeAttractionPotential}, ${maxAgeAttractionPotential}], species: "${species}"${findsFemalesSexuallyAttractiveLimitToSex ? ', sex: "female"' : ''}},`);
                     }
-                    attractions.push("female");
                 }
             }
         }

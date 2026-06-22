@@ -1365,6 +1365,14 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
     violence: number;
 
     /**
+     * A number from 0 to 1 that represents how skeptical the character is towards new information, ideas, or experiences, higher means more likely to be skeptical and question things rather than accepting them at face value
+     * A value too high may make a character rather paranoid and distrusting, while a value too low may make them gullible and naive, so be careful when setting this value
+     * 
+     * TODO implement this in talk.js
+     */
+    skepticism: number;
+
+    /**
      * A number from 0 to 1 that represents how much the character enjoys or seeks out sexual activities and interactions, higher means more likely to do it and repeat
      * do not make it 1, or the character will likely become insatiable
      */

@@ -29,6 +29,15 @@ export class CardTypeWizard extends HTMLElement {
             btn.addEventListener('mouseenter', playHoverSound);
         });
 
+        const prevBtn = this.root.querySelector('.wizard-prev-button');
+        if (prevBtn) {
+            prevBtn.addEventListener('mouseenter', playHoverSound);
+            prevBtn.addEventListener('click', () => {
+                playConfirmSound();
+                this.onPrevButtonClick();
+            });
+        }
+
         this.initializeCard();
 
         await stopAllAmbiencesAndStartNewOne([{ src: './sounds/rem.mp3', volume: 1 }], 1000, 1000);
@@ -164,7 +173,6 @@ export class CardTypeWizard extends HTMLElement {
                     if (!cardText) {
                         return;
                     }
-                    this.markUnsaved();
                     parsedCard.state.card = cardText;
                     if (mode === 'automatic') {
                         parsedCard.state.automaticWizardInProgress = true;
@@ -188,7 +196,7 @@ export class CardTypeWizard extends HTMLElement {
      */
     async continueProcess(parsedCard, mode) {
         const guided = mode === 'guided';
-        const guider = this.createGuider(parsedCard, guided);
+        const guider = this.createGuider(guided);
         const client = window.ENGINE_WORKER_CLIENT;
 
         const characterId = this.getAttribute('character-id');
@@ -199,11 +207,15 @@ export class CardTypeWizard extends HTMLElement {
             return;
         }
 
+        document.querySelector(".wizard-prev-button")?.classList.add("visible");
 
         // Wire up guider questions from worker → UI → answer back
         /** @param {any} data */
         const onGuiderQuestion = async (data) => {
-            const { id, qid, questionType, question, options, defaultValue } = data;
+            const { id, qid, questionType, question, options, defaultValue, currentCard } = data;
+
+            await this.save(currentCard);
+
             /** @type {{value: any}} */
             let result;
             switch (questionType) {
@@ -234,43 +246,23 @@ export class CardTypeWizard extends HTMLElement {
                 default:
                     result = { value: defaultValue };
             }
+
             client.sendGuiderAnswer({ qid, value: result.value });
-        };
-
-        let lastCard = parsedCard;
-
-        // Wire up autosave from worker → save file → ack back
-        /** @param {any} data */
-        const onAutosave = async (data) => {
-            const { sid, currentCard } = data;
-            const jsContent = getJsScriptFromGenerator(currentCard);
-            this.showAutosaveStatus();
-            lastCard = currentCard;
-            try {
-                await window.API.updateScriptFile(
-                    characterNamespace,
-                    characterId,
-                    jsContent
-                );
-            } catch (err) {
-                cleanup();
-                client.cancelCardTypeGeneration();
-                this.showError(err instanceof Error ? err.message : String(err));
-                return;
-            }
-            this.hideAutosaveStatus();
-            client.sendAutosaveAck({ sid });
         };
 
         /** @param {any} data */
         const onComplete = (data) => {
+            data.currentCard.state.automaticWizardInProgress = false;
+            data.currentCard.state.guidedWizardInProgress = false;
+            data.currentCard.state.automaticWizardCompleted = true;
+            data.currentCard.state.guidedWizardCompleted = true;
+            this.save(data.currentCard);
             this.endOverlay();
             cleanup();
         };
 
         const cleanup = () => {
             client.onScriptTypeGuiderQuestion = null;
-            client.onCardTypeAutosave = null;
             client.onCardTypeWizardComplete = null;
         };
 
@@ -281,13 +273,22 @@ export class CardTypeWizard extends HTMLElement {
         };
 
         client.onScriptTypeGuiderQuestion = onGuiderQuestion;
-        client.onCardTypeAutosave = onAutosave;
         client.onCardTypeWizardComplete = onComplete;
 
         this.initOverlay();
 
         try {
-            await client.continueCardTypeWizard({ currentCard: parsedCard, guided });
+            /**
+             * @type {import('../../../script-generation/base.js').ScriptTypeGenerator}
+             */
+            const copiedParsedCardWithoutCode = {
+                body: [],
+                foot: [],
+                imports: [],
+                head: [],
+                state: parsedCard.state || {},
+            };
+            await client.continueCardTypeWizard({ currentCard: copiedParsedCardWithoutCode, guided });
         } catch (err) {
             cleanup();
             this.showError(err instanceof Error ? err.message : String(err));
@@ -299,24 +300,14 @@ export class CardTypeWizard extends HTMLElement {
 
         console.log('CardTypeWizard process complete for character:', characterId);
 
-        lastCard.state.automaticWizardInProgress = false;
-        lastCard.state.guidedWizardInProgress = false;
-        lastCard.state.automaticWizardCompleted = true;
-        lastCard.state.guidedWizardCompleted = true;
-        const finalJsContent = getJsScriptFromGenerator(lastCard);
-        try {
-            await window.API.updateScriptFile(
-                characterNamespace,
-                characterId,
-                finalJsContent,
-            );
-        } catch (err) {
-            cleanup();
-            this.showError(err instanceof Error ? err.message : String(err));
-            return;
-        }
-
         this.showDone();
+    }
+
+    onPrevButtonClick() {
+        const client = window.ENGINE_WORKER_CLIENT;
+        if (client) {
+            client.goBackInCardTypeWizard();
+        }
     }
 
     showDone() {
@@ -353,11 +344,10 @@ export class CardTypeWizard extends HTMLElement {
     /**
      * Creates a UI-based guider that renders interactive questions into the wizard content area.
      * Each method returns a promise that resolves when the user submits their answer.
-     * @param {import('../../../script-generation/base.js').ScriptTypeGenerator} parsedCard
      * @param {boolean} isGuided
      * @returns {import('../../../script-generation/base.js').ScriptTypeGuider}
      */
-    createGuider(parsedCard, isGuided) {
+    createGuider(isGuided) {
         const self = this;
 
         const _highlightPhrases = [
@@ -437,14 +427,14 @@ export class CardTypeWizard extends HTMLElement {
          * @param {(container: HTMLElement) => any} extractValueFn - extracts the value on submit
          * @param {any} defaultValue
          * @param {boolean} [hasTryAgainOption]
-         * @returns {Promise<{value: any }>}
+         * @returns {Promise<any>}
          */
         function presentQuestion(question, buildInputFn, extractValueFn, defaultValue, hasTryAgainOption) {
             return new Promise((resolve) => {
                 self.endOverlay();
 
                 const contentArea = self.root.querySelector('.wizard-content');
-                if (!contentArea) { resolve({ value: defaultValue }); return; }
+                if (!contentArea) { resolve(defaultValue); return; }
 
                 contentArea.innerHTML = '';
 
@@ -471,9 +461,8 @@ export class CardTypeWizard extends HTMLElement {
                     tryAgainBtn.addEventListener('click', () => {
                         playCancelSound();
                         setTempSoundDisable();
-                        self.markUnsaved();
                         self.initOverlay();
-                        resolve({ value: null });
+                        resolve(null);
                     });
                     buttonsContainer.appendChild(tryAgainBtn);
                 }
@@ -485,9 +474,8 @@ export class CardTypeWizard extends HTMLElement {
                 submitBtn.addEventListener('click', () => {
                     playConfirmSound();
                     const value = extractValueFn(inputArea);
-                    self.markUnsaved();
                     self.initOverlay();
-                    resolve({ value });
+                    resolve(value);
                 });
                 buttonsContainer.appendChild(submitBtn);
 
@@ -499,7 +487,7 @@ export class CardTypeWizard extends HTMLElement {
          * @param {string} question
          * @param {string[]} [defaultValue]
          * @param {boolean} [hasTryAgainOption]
-         * @returns {Promise<{value: string[] | null}>}
+         * @returns {Promise<string[]>}
          */
         function presentArbitraryList(question, defaultValue, hasTryAgainOption) {
             return presentQuestion(
@@ -618,455 +606,317 @@ export class CardTypeWizard extends HTMLElement {
 
         return {
             async askOption(id, question, options, defaultValueFnOrValue) {
-                const actualId = typeof id === "object" && id !== null ? id.id : id;
-                const stateValue = actualId !== null ? parsedCard.state[actualId] : undefined;
-                const stepHasNotRanTechnically = !(parsedCard.state[".steps"] || []).includes(actualId);
-                const shouldAsk = (stepHasNotRanTechnically || stateValue === undefined) && isGuided;
-                const defaultValue = stateValue !== undefined ? stateValue : (typeof defaultValueFnOrValue === 'function' ? await defaultValueFnOrValue() : defaultValueFnOrValue);
+                const defaultValue = typeof defaultValueFnOrValue === 'function' ? await defaultValueFnOrValue() : defaultValueFnOrValue;
 
-                let finalValue;
-                if (shouldAsk) {
-                    finalValue = await presentQuestion(
-                        question,
-                        () => {
-                            const wrapper = document.createElement('div');
-                            wrapper.className = 'guider-options';
-                            options.forEach((opt, i) => {
-                                const optBtn = document.createElement('div');
-                                optBtn.className = 'guider-option';
-                                if (opt === defaultValue) optBtn.classList.add('selected');
-                                optBtn.textContent = opt;
-                                optBtn.addEventListener('mouseenter', playHoverSound);
-                                optBtn.addEventListener('click', () => {
-                                    wrapper.querySelectorAll('.guider-option').forEach(b => b.classList.remove('selected'));
-                                    optBtn.classList.add('selected');
-                                });
-                                wrapper.appendChild(optBtn);
+                const finalValue = await presentQuestion(
+                    question,
+                    () => {
+                        const wrapper = document.createElement('div');
+                        wrapper.className = 'guider-options';
+                        options.forEach((opt, i) => {
+                            const optBtn = document.createElement('div');
+                            optBtn.className = 'guider-option';
+                            if (opt === defaultValue) optBtn.classList.add('selected');
+                            optBtn.textContent = opt;
+                            optBtn.addEventListener('mouseenter', playHoverSound);
+                            optBtn.addEventListener('click', () => {
+                                wrapper.querySelectorAll('.guider-option').forEach(b => b.classList.remove('selected'));
+                                optBtn.classList.add('selected');
                             });
-                            return wrapper;
-                        },
-                        (inputArea) => {
-                            const selected = inputArea.querySelector('.guider-option.selected');
-                            return selected ? selected.textContent : (defaultValue ?? options[0]);
-                        },
-                        defaultValue
-                    );
-                } else {
-                    finalValue = defaultValue;
-                }
+                            wrapper.appendChild(optBtn);
+                        });
+                        return wrapper;
+                    },
+                    (inputArea) => {
+                        const selected = inputArea.querySelector('.guider-option.selected');
+                        return selected ? selected.textContent : (defaultValue ?? options[0]);
+                    },
+                    defaultValue
+                );
 
-                if (actualId !== null) {
-                    parsedCard.state[actualId] = finalValue;
-                    parsedCard.state[".steps"] = parsedCard.state[".steps"] || [];
-                    if (!parsedCard.state[".steps"].includes(actualId)) {
-                        parsedCard.state[".steps"].push(actualId);
-                    }
-                }
                 return { value: finalValue };
             },
 
             async askOpen(id, question, defaultValueFnOrValue) {
-                const actualId = typeof id === "object" && id !== null ? id.id : id;
-                const stateValue = actualId !== null ? parsedCard.state[actualId] : undefined;
-                const stepHasNotRanTechnically = !(parsedCard.state[".steps"] || []).includes(actualId);
-                const shouldAsk = (stepHasNotRanTechnically || stateValue === undefined) && isGuided;
-                const defaultValue = stateValue !== undefined ? stateValue : (typeof defaultValueFnOrValue === 'function' ? await defaultValueFnOrValue() : defaultValueFnOrValue);
+                const defaultValue = typeof defaultValueFnOrValue === 'function' ? await defaultValueFnOrValue() : defaultValueFnOrValue;
 
-                let finalValue;
-                if (shouldAsk) {
-                    finalValue = await presentQuestion(
-                        question,
-                        () => {
-                            const textarea = document.createElement('textarea');
-                            textarea.className = 'guider-textarea';
-                            textarea.placeholder = defaultValue || '';
-                            if (defaultValue) textarea.value = defaultValue;
-                            textarea.addEventListener('input', function () {
-                                this.style.height = 'auto';
-                                this.style.height = this.scrollHeight + 'px';
-                            });
+                const finalValue = await presentQuestion(
+                    question,
+                    () => {
+                        const textarea = document.createElement('textarea');
+                        textarea.className = 'guider-textarea';
+                        textarea.placeholder = defaultValue || '';
+                        if (defaultValue) textarea.value = defaultValue;
+                        textarea.addEventListener('input', function () {
+                            this.style.height = 'auto';
+                            this.style.height = this.scrollHeight + 'px';
+                        });
+                        requestAnimationFrame(() => {
+                            textarea.style.height = 'auto';
+                            textarea.style.height = textarea.scrollHeight + 'px';
+                        });
+                        setTimeout(() => {
                             requestAnimationFrame(() => {
                                 textarea.style.height = 'auto';
                                 textarea.style.height = textarea.scrollHeight + 'px';
                             });
-                            setTimeout(() => {
-                                requestAnimationFrame(() => {
-                                    textarea.style.height = 'auto';
-                                    textarea.style.height = textarea.scrollHeight + 'px';
-                                });
-                            }, 100);
-                            return textarea;
-                        },
-                        (inputArea) => {
-                            return /** @type {HTMLTextAreaElement} */ (inputArea).value || defaultValue || '';
-                        },
-                        defaultValue
-                    );
-                } else {
-                    finalValue = defaultValue;
-                }
-
-                if (actualId !== null) {
-                    parsedCard.state[actualId] = finalValue;
-                    parsedCard.state[".steps"] = parsedCard.state[".steps"] || [];
-                    if (!parsedCard.state[".steps"].includes(actualId)) {
-                        parsedCard.state[".steps"].push(actualId);
-                    }
-                }
+                        }, 100);
+                        return textarea;
+                    },
+                    (inputArea) => {
+                        return /** @type {HTMLTextAreaElement} */ (inputArea).value || defaultValue || '';
+                    },
+                    defaultValue
+                );
 
                 return { value: finalValue };
             },
 
             async askAccept(id, question, defaultValueFnOrValue) {
-                const actualId = typeof id === "object" && id !== null ? id.id : id;
-                const stateValue = actualId !== null ? parsedCard.state[actualId] : undefined;
-                const stepHasNotRanTechnically = !(parsedCard.state[".steps"] || []).includes(actualId);
-                const shouldAsk = (stepHasNotRanTechnically || stateValue === undefined) && isGuided;
-                const defaultValue = stateValue !== undefined ? stateValue : (typeof defaultValueFnOrValue === 'function' ? await defaultValueFnOrValue() : defaultValueFnOrValue);
+                const defaultValue = typeof defaultValueFnOrValue === 'function' ? await defaultValueFnOrValue() : defaultValueFnOrValue;
 
-                let finalValue;
-                if (shouldAsk) {
-                    finalValue = await presentQuestion(
-                        question,
-                        () => {
-                            const textarea = document.createElement('textarea');
-                            textarea.className = 'guider-textarea';
-                            textarea.placeholder = defaultValue || '';
-                            if (defaultValue) textarea.value = defaultValue;
-                            textarea.addEventListener('input', function () {
-                                this.style.height = 'auto';
-                                this.style.height = this.scrollHeight + 'px';
-                            });
+                const finalValue = await presentQuestion(
+                    question,
+                    () => {
+                        const textarea = document.createElement('textarea');
+                        textarea.className = 'guider-textarea';
+                        textarea.placeholder = defaultValue || '';
+                        if (defaultValue) textarea.value = defaultValue;
+                        textarea.addEventListener('input', function () {
+                            this.style.height = 'auto';
+                            this.style.height = this.scrollHeight + 'px';
+                        });
+                        requestAnimationFrame(() => {
+                            textarea.style.height = 'auto';
+                            textarea.style.height = textarea.scrollHeight + 'px';
+                        });
+                        setTimeout(() => {
                             requestAnimationFrame(() => {
                                 textarea.style.height = 'auto';
                                 textarea.style.height = textarea.scrollHeight + 'px';
                             });
-                            setTimeout(() => {
-                                requestAnimationFrame(() => {
-                                    textarea.style.height = 'auto';
-                                    textarea.style.height = textarea.scrollHeight + 'px';
-                                });
-                            }, 100);
-                            return textarea;
-                        },
-                        (inputArea) => {
-                            return /** @type {HTMLTextAreaElement} */ (inputArea).value || defaultValue || '';
-                        },
-                        defaultValue,
-                        true // hasTryAgainOption
-                    );
-                } else {
-                    finalValue = defaultValue;
-                }
-
-                if (actualId !== null) {
-                    parsedCard.state[actualId] = finalValue;
-                    parsedCard.state[".steps"] = parsedCard.state[".steps"] || [];
-                    if (!parsedCard.state[".steps"].includes(actualId)) {
-                        parsedCard.state[".steps"].push(actualId);
-                    }
-                }
+                        }, 100);
+                        return textarea;
+                    },
+                    (inputArea) => {
+                        return /** @type {HTMLTextAreaElement} */ (inputArea).value || defaultValue || '';
+                    },
+                    defaultValue,
+                    true // hasTryAgainOption
+                );
 
                 return { value: finalValue };
             },
 
             async askNumber(id, question, defaultValueFnOrValue) {
-                const actualId = typeof id === "object" && id !== null ? id.id : id;
-                const stateValue = actualId !== null ? parsedCard.state[actualId] : undefined;
-                const stepHasNotRanTechnically = !(parsedCard.state[".steps"] || []).includes(actualId);
-                const shouldAsk = (stepHasNotRanTechnically || stateValue === undefined) && isGuided;
-                const defaultValue = stateValue !== undefined ? stateValue : (typeof defaultValueFnOrValue === 'function' ? await defaultValueFnOrValue() : defaultValueFnOrValue);
+                const defaultValue = typeof defaultValueFnOrValue === 'function' ? await defaultValueFnOrValue() : defaultValueFnOrValue;
 
-                let finalValue;
-                if (shouldAsk) {
-                    finalValue = await presentQuestion(
-                        question,
-                        () => {
-                            const input = document.createElement('input');
-                            input.className = 'guider-input';
-                            input.type = 'number';
-                            if (defaultValue !== undefined) input.value = String(defaultValue);
-                            input.placeholder = defaultValue !== undefined ? String(defaultValue) : '0';
-                            return input;
-                        },
-                        (inputArea) => {
-                            const num = parseFloat(/** @type {HTMLInputElement} */(inputArea).value);
-                            return isNaN(num) ? (defaultValue ?? 0) : num;
-                        },
-                        defaultValue
-                    );
-                } else {
-                    finalValue = defaultValue;
-                }
-
-                if (actualId !== null) {
-                    parsedCard.state[actualId] = finalValue;
-                    parsedCard.state[".steps"] = parsedCard.state[".steps"] || [];
-                    if (!parsedCard.state[".steps"].includes(actualId)) {
-                        parsedCard.state[".steps"].push(actualId);
-                    }
-                }
+                const finalValue = await presentQuestion(
+                    question,
+                    () => {
+                        const input = document.createElement('input');
+                        input.className = 'guider-input';
+                        input.type = 'number';
+                        if (defaultValue !== undefined) input.value = String(defaultValue);
+                        input.placeholder = defaultValue !== undefined ? String(defaultValue) : '0';
+                        return input;
+                    },
+                    (inputArea) => {
+                        const num = parseFloat(/** @type {HTMLInputElement} */(inputArea).value);
+                        return isNaN(num) ? (defaultValue ?? 0) : num;
+                    },
+                    defaultValue
+                );
 
                 return { value: finalValue };
             },
 
             async askBoolean(id, question, defaultValueFnOrValue) {
-                const actualId = typeof id === "object" && id !== null ? id.id : id;
-                const stateValue = actualId !== null ? parsedCard.state[actualId] : undefined;
-                const stepHasNotRanTechnically = !(parsedCard.state[".steps"] || []).includes(actualId);
-                const shouldAsk = (stepHasNotRanTechnically || stateValue === undefined) && isGuided;
-                const defaultValue = stateValue !== undefined ? stateValue : (typeof defaultValueFnOrValue === 'function' ? await defaultValueFnOrValue() : defaultValueFnOrValue);
+                const defaultValue = typeof defaultValueFnOrValue === 'function' ? await defaultValueFnOrValue() : defaultValueFnOrValue;
 
-                let finalValue;
-                if (shouldAsk) {
-                    finalValue = await presentQuestion(
-                        question,
-                        () => {
-                            const wrapper = document.createElement('div');
-                            wrapper.className = 'guider-boolean';
+                const finalValue = await presentQuestion(
+                    question,
+                    () => {
+                        const wrapper = document.createElement('div');
+                        wrapper.className = 'guider-boolean';
 
-                            const yesBtn = document.createElement('div');
-                            yesBtn.className = 'guider-bool-btn';
-                            yesBtn.textContent = 'Yes';
-                            if (defaultValue === true) yesBtn.classList.add('selected');
+                        const yesBtn = document.createElement('div');
+                        yesBtn.className = 'guider-bool-btn';
+                        yesBtn.textContent = 'Yes';
+                        if (defaultValue === true) yesBtn.classList.add('selected');
 
-                            const noBtn = document.createElement('div');
-                            noBtn.className = 'guider-bool-btn';
-                            noBtn.textContent = 'No';
-                            if (defaultValue === false) noBtn.classList.add('selected');
+                        const noBtn = document.createElement('div');
+                        noBtn.className = 'guider-bool-btn';
+                        noBtn.textContent = 'No';
+                        if (defaultValue === false) noBtn.classList.add('selected');
 
-                            yesBtn.addEventListener('mouseenter', playHoverSound);
-                            noBtn.addEventListener('mouseenter', playHoverSound);
+                        yesBtn.addEventListener('mouseenter', playHoverSound);
+                        noBtn.addEventListener('mouseenter', playHoverSound);
 
-                            yesBtn.addEventListener('click', () => {
-                                yesBtn.classList.add('selected');
-                                noBtn.classList.remove('selected');
-                            });
-                            noBtn.addEventListener('click', () => {
-                                noBtn.classList.add('selected');
-                                yesBtn.classList.remove('selected');
-                            });
+                        yesBtn.addEventListener('click', () => {
+                            yesBtn.classList.add('selected');
+                            noBtn.classList.remove('selected');
+                        });
+                        noBtn.addEventListener('click', () => {
+                            noBtn.classList.add('selected');
+                            yesBtn.classList.remove('selected');
+                        });
 
-                            wrapper.appendChild(yesBtn);
-                            wrapper.appendChild(noBtn);
-                            return wrapper;
-                        },
-                        (inputArea) => {
-                            const yesBtn = inputArea.querySelector('.guider-bool-btn:first-child');
-                            return yesBtn?.classList.contains('selected') ?? (defaultValue ?? false);
-                        },
-                        defaultValue
-                    );
-                } else {
-                    finalValue = defaultValue;
-                }
-
-                if (actualId !== null) {
-                    parsedCard.state[actualId] = finalValue;
-                    parsedCard.state[".steps"] = parsedCard.state[".steps"] || [];
-                    if (!parsedCard.state[".steps"].includes(actualId)) {
-                        parsedCard.state[".steps"].push(actualId);
-                    }
-                }
+                        wrapper.appendChild(yesBtn);
+                        wrapper.appendChild(noBtn);
+                        return wrapper;
+                    },
+                    (inputArea) => {
+                        const yesBtn = inputArea.querySelector('.guider-bool-btn:first-child');
+                        return yesBtn?.classList.contains('selected') ?? (defaultValue ?? false);
+                    },
+                    defaultValue
+                );
 
                 return { value: finalValue };
             },
 
             // @ts-ignore
             async askArbitraryList(id, question, defaultValueFnOrValue) {
-                const actualId = typeof id === "object" && id !== null ? id.id : id;
-                const stateValue = actualId !== null ? parsedCard.state[actualId] : undefined;
-                const stepHasNotRanTechnically = !(parsedCard.state[".steps"] || []).includes(actualId);
-                const shouldAsk = (stepHasNotRanTechnically || stateValue === undefined) && isGuided;
-                const defaultValue = stateValue !== undefined ? stateValue : (typeof defaultValueFnOrValue === 'function' ? await defaultValueFnOrValue() : defaultValueFnOrValue);
+                const defaultValue = typeof defaultValueFnOrValue === 'function' ? await defaultValueFnOrValue() : defaultValueFnOrValue;
 
-                let finalValue;
-                if (shouldAsk) {
-                    finalValue = await presentArbitraryList(question, defaultValue, false);
-                } else {
-                    finalValue = defaultValue;
-                }
-
-                if (actualId !== null) {
-                    parsedCard.state[actualId] = finalValue;
-                    parsedCard.state[".steps"] = parsedCard.state[".steps"] || [];
-                    if (!parsedCard.state[".steps"].includes(actualId)) {
-                        parsedCard.state[".steps"].push(actualId);
-                    }
-                }
+                const finalValue = await presentArbitraryList(question, defaultValue, false);
 
                 return { value: finalValue };
             },
 
             async askAcceptArbitraryList(id, question, defaultValueFnOrValue) {
-                const actualId = typeof id === "object" && id !== null ? id.id : id;
-                const stateValue = actualId !== null ? parsedCard.state[actualId] : undefined;
-                const stepHasNotRanTechnically = !(parsedCard.state[".steps"] || []).includes(actualId);
-                const shouldAsk = (stepHasNotRanTechnically || stateValue === undefined) && isGuided;
-                const defaultValue = stateValue !== undefined ? stateValue : (typeof defaultValueFnOrValue === 'function' ? await defaultValueFnOrValue() : defaultValueFnOrValue);
-
-                let finalValue;
-                if (shouldAsk) {
-                    finalValue = await presentArbitraryList(question, defaultValue, true);
-                } else {
-                    finalValue = defaultValue;
-                }
-
-                if (actualId !== null) {
-                    parsedCard.state[actualId] = finalValue;
-                    parsedCard.state[".steps"] = parsedCard.state[".steps"] || [];
-                    if (!parsedCard.state[".steps"].includes(actualId)) {
-                        parsedCard.state[".steps"].push(actualId);
-                    }
-                } else {
-                    finalValue = defaultValue;
-                }
+                const defaultValue = typeof defaultValueFnOrValue === 'function' ? await defaultValueFnOrValue() : defaultValueFnOrValue;
+                const finalValue = await presentArbitraryList(question, defaultValue || undefined, true);
 
                 return { value: finalValue };
             },
 
             async askList(id, question, options, defaultValueFnOrValue) {
-                const actualId = typeof id === "object" && id !== null ? id.id : id;
-                const stateValue = actualId !== null ? parsedCard.state[actualId] : undefined;
-                const stepHasNotRanTechnically = !(parsedCard.state[".steps"] || []).includes(actualId);
-                const shouldAsk = (stepHasNotRanTechnically || stateValue === undefined) && isGuided;
-                const defaultValue = stateValue !== undefined ? stateValue : (typeof defaultValueFnOrValue === 'function' ? await defaultValueFnOrValue() : defaultValueFnOrValue);
+                const defaultValue = typeof defaultValueFnOrValue === 'function' ? await defaultValueFnOrValue() : defaultValueFnOrValue;
 
-                let finalValue;
-                if (shouldAsk) {
-                    finalValue = await presentQuestion(
-                        question,
-                        () => {
-                            const wrapper = document.createElement('div');
-                            wrapper.className = 'guider-list';
+                const finalValue = await presentQuestion(
+                    question,
+                    () => {
+                        const wrapper = document.createElement('div');
+                        wrapper.className = 'guider-list';
 
-                            /** @type {string[]} */
-                            const items = defaultValue ? [...defaultValue] : [];
+                        /** @type {string[]} */
+                        const items = defaultValue ? [...defaultValue] : [];
 
-                            const renderItems = () => {
-                                let listContainer = wrapper.querySelector('.guider-list-items');
-                                if (!listContainer) {
-                                    listContainer = document.createElement('div');
-                                    listContainer.className = 'guider-list-items';
-                                    wrapper.insertBefore(listContainer, wrapper.querySelector('.guider-list-add-row'));
-                                }
-                                listContainer.innerHTML = items.map((item, idx) => `
+                        const renderItems = () => {
+                            let listContainer = wrapper.querySelector('.guider-list-items');
+                            if (!listContainer) {
+                                listContainer = document.createElement('div');
+                                listContainer.className = 'guider-list-items';
+                                wrapper.insertBefore(listContainer, wrapper.querySelector('.guider-list-add-row'));
+                            }
+                            listContainer.innerHTML = items.map((item, idx) => `
                                 <div class="guider-list-item">
                                     <span>${item}</span>
                                     <div class="guider-list-remove" data-idx="${idx}">✕</div>
                                 </div>
                             `).join('');
-                                listContainer.querySelectorAll('.guider-list-remove').forEach(btn => {
-                                    btn.addEventListener('mouseenter', playHoverSound);
-                                    btn.addEventListener('click', () => {
-                                        const idx = parseInt(/** @type {HTMLElement} */(btn).dataset.idx || '0');
-                                        items.splice(idx, 1);
-                                        renderItems();
-                                        if (options) rebuildAddInput();
-                                    });
+                            listContainer.querySelectorAll('.guider-list-remove').forEach(btn => {
+                                btn.addEventListener('mouseenter', playHoverSound);
+                                btn.addEventListener('click', () => {
+                                    const idx = parseInt(/** @type {HTMLElement} */(btn).dataset.idx || '0');
+                                    items.splice(idx, 1);
+                                    renderItems();
+                                    if (options) rebuildAddInput();
                                 });
-                            };
-
-                            const addRow = document.createElement('div');
-                            addRow.className = 'guider-list-add-row';
-
-                            /** @type {HTMLInputElement | HTMLSelectElement} */
-                            let addInput;
-
-                            const rebuildAddInput = () => {
-                                const oldInput = addRow.querySelector('.guider-input');
-                                if (oldInput) oldInput.remove();
-
-                                if (options) {
-                                    const select = document.createElement('select');
-                                    select.className = 'guider-input';
-                                    let hasAny = false;
-                                    const groups = Object.keys(options);
-                                    for (const group of groups) {
-                                        const remaining = options[group].filter(o => !items.includes(o));
-                                        if (remaining.length === 0) continue;
-                                        hasAny = true;
-                                        const optgroup = document.createElement('optgroup');
-                                        optgroup.label = group;
-                                        remaining.forEach(opt => {
-                                            const o = document.createElement('option');
-                                            o.value = opt;
-                                            o.textContent = opt;
-                                            optgroup.appendChild(o);
-                                        });
-                                        select.appendChild(optgroup);
-                                    }
-                                    if (!hasAny) {
-                                        const placeholder = document.createElement('option');
-                                        placeholder.value = '';
-                                        placeholder.textContent = 'No more options';
-                                        placeholder.disabled = true;
-                                        placeholder.selected = true;
-                                        select.appendChild(placeholder);
-                                        select.disabled = true;
-                                    } else {
-                                        const placeholder = document.createElement('option');
-                                        placeholder.value = '';
-                                        placeholder.textContent = 'Select an option...';
-                                        placeholder.disabled = true;
-                                        placeholder.selected = true;
-                                        select.insertBefore(placeholder, select.firstChild);
-                                    }
-                                    addInput = select;
-                                } else {
-                                    const input = document.createElement('input');
-                                    input.className = 'guider-input';
-                                    input.type = 'text';
-                                    input.placeholder = 'Add item...';
-                                    addInput = input;
-                                }
-                                addRow.insertBefore(addInput, addRow.querySelector('.guider-list-add-btn'));
-                            };
-
-                            const addBtn = document.createElement('div');
-                            addBtn.className = 'guider-list-add-btn';
-                            addBtn.textContent = '+';
-                            addBtn.addEventListener('mouseenter', playHoverSound);
-                            addBtn.addEventListener('click', () => {
-                                const val = addInput.value.trim();
-                                if (!val) return;
-                                items.push(val);
-                                addInput.value = '';
-                                renderItems();
-                                if (options) rebuildAddInput();
                             });
+                        };
 
-                            addRow.appendChild(addBtn);
-                            wrapper.appendChild(addRow);
-                            rebuildAddInput();
+                        const addRow = document.createElement('div');
+                        addRow.className = 'guider-list-add-row';
 
-                            renderItems();
-                            return wrapper;
-                        },
-                        (inputArea) => {
-                            const itemEls = inputArea.querySelectorAll('.guider-list-item span');
-                            const result = Array.from(itemEls).map(el => el.textContent || '');
-                            const pending = inputArea.querySelector('.guider-list-add-row .guider-input');
-                            if (pending) {
-                                // @ts-ignore
-                                const val = pending.value.trim();
-                                if (val && !result.includes(val)) result.push(val);
+                        /** @type {HTMLInputElement | HTMLSelectElement} */
+                        let addInput;
+
+                        const rebuildAddInput = () => {
+                            const oldInput = addRow.querySelector('.guider-input');
+                            if (oldInput) oldInput.remove();
+
+                            if (options) {
+                                const select = document.createElement('select');
+                                select.className = 'guider-input';
+                                let hasAny = false;
+                                const groups = Object.keys(options);
+                                for (const group of groups) {
+                                    const remaining = options[group].filter(o => !items.includes(o));
+                                    if (remaining.length === 0) continue;
+                                    hasAny = true;
+                                    const optgroup = document.createElement('optgroup');
+                                    optgroup.label = group;
+                                    remaining.forEach(opt => {
+                                        const o = document.createElement('option');
+                                        o.value = opt;
+                                        o.textContent = opt;
+                                        optgroup.appendChild(o);
+                                    });
+                                    select.appendChild(optgroup);
+                                }
+                                if (!hasAny) {
+                                    const placeholder = document.createElement('option');
+                                    placeholder.value = '';
+                                    placeholder.textContent = 'No more options';
+                                    placeholder.disabled = true;
+                                    placeholder.selected = true;
+                                    select.appendChild(placeholder);
+                                    select.disabled = true;
+                                } else {
+                                    const placeholder = document.createElement('option');
+                                    placeholder.value = '';
+                                    placeholder.textContent = 'Select an option...';
+                                    placeholder.disabled = true;
+                                    placeholder.selected = true;
+                                    select.insertBefore(placeholder, select.firstChild);
+                                }
+                                addInput = select;
+                            } else {
+                                const input = document.createElement('input');
+                                input.className = 'guider-input';
+                                input.type = 'text';
+                                input.placeholder = 'Add item...';
+                                addInput = input;
                             }
-                            return result.length > 0 ? result : (defaultValue ?? []);
-                        },
-                        defaultValue
-                    );
-                } else {
-                    finalValue = defaultValue;
-                }
+                            addRow.insertBefore(addInput, addRow.querySelector('.guider-list-add-btn'));
+                        };
 
-                if (actualId !== null) {
-                    parsedCard.state[actualId] = finalValue;
-                    parsedCard.state[".steps"] = parsedCard.state[".steps"] || [];
-                    if (!parsedCard.state[".steps"].includes(actualId)) {
-                        parsedCard.state[".steps"].push(actualId);
-                    }
-                }
+                        const addBtn = document.createElement('div');
+                        addBtn.className = 'guider-list-add-btn';
+                        addBtn.textContent = '+';
+                        addBtn.addEventListener('mouseenter', playHoverSound);
+                        addBtn.addEventListener('click', () => {
+                            const val = addInput.value.trim();
+                            if (!val) return;
+                            items.push(val);
+                            addInput.value = '';
+                            renderItems();
+                            if (options) rebuildAddInput();
+                        });
+
+                        addRow.appendChild(addBtn);
+                        wrapper.appendChild(addRow);
+                        rebuildAddInput();
+
+                        renderItems();
+                        return wrapper;
+                    },
+                    (inputArea) => {
+                        const itemEls = inputArea.querySelectorAll('.guider-list-item span');
+                        const result = Array.from(itemEls).map(el => el.textContent || '');
+                        const pending = inputArea.querySelector('.guider-list-add-row .guider-input');
+                        if (pending) {
+                            // @ts-ignore
+                            const val = pending.value.trim();
+                            if (val && !result.includes(val)) result.push(val);
+                        }
+                        return result.length > 0 ? result : (defaultValue ?? []);
+                    },
+                    defaultValue
+                );
 
                 return { value: finalValue };
             }
@@ -1103,35 +953,37 @@ export class CardTypeWizard extends HTMLElement {
     }
 
     /**
-     * Marks the autosave status as unsaved.
-     */
-    markUnsaved() {
-        if (this._autosaveHideTimer) {
-            clearTimeout(this._autosaveHideTimer);
-            this._autosaveHideTimer = null;
-        }
-        const el = this.root.querySelector('.wizard-autosave');
-        if (el) {
-            el.textContent = 'Unsaved progress';
-            el.classList.add('visible');
-            el.classList.remove('saved');
-        }
-    }
-
-    /**
      * Shows the autosave indicator in the title bar as "Saving...".
+     * @param {import('../../../script-generation/base.js').ScriptTypeGenerator} parsedCard 
      */
+    async save(parsedCard) {
+        // TODO prevent racing of many saves when questions are being fired too fast, somehow at startup or on non-guided mode
+        this.lastSavedCard = parsedCard;
+        const jsContent = getJsScriptFromGenerator(parsedCard);
+        const characterId = this.getAttribute('character-id') || "";
+        const characterNamespace = this.getAttribute('character-namespace') || "";
+        this.showAutosaveStatus();
+        await window.API.updateScriptFile(
+            characterNamespace,
+            characterId,
+            jsContent
+        );
+        this.hideAutosaveStatus();
+    };
+
     showAutosaveStatus() {
         if (this._autosaveHideTimer) {
             clearTimeout(this._autosaveHideTimer);
             this._autosaveHideTimer = null;
         }
         const el = this.root.querySelector('.wizard-autosave');
+        const el2 = this.root.querySelector('.wizard-prev-button');
         if (el) {
             el.textContent = 'Saving...';
             el.classList.add('visible');
             el.classList.remove('saved');
         }
+        if (el2) el2.classList.remove('visible');
     }
 
     /**
@@ -1139,6 +991,7 @@ export class CardTypeWizard extends HTMLElement {
      */
     hideAutosaveStatus() {
         const el = this.root.querySelector('.wizard-autosave');
+        const el2 = this.root.querySelector('.wizard-prev-button');
         if (el) {
             el.textContent = 'Saved';
             el.classList.add('saved');
@@ -1148,6 +1001,7 @@ export class CardTypeWizard extends HTMLElement {
                 el.classList.remove('visible');
                 el.classList.remove('saved');
             }
+            if (el2) el2.classList.add('visible');
             this._autosaveHideTimer = null;
         }, 2000);
     }
@@ -1188,7 +1042,10 @@ export class CardTypeWizard extends HTMLElement {
       <div class="wizard-overlay">
         <div class="wizard-title">
             <span>CardType Wizard</span>
-            <span class="wizard-autosave"></span>
+            <div class="wizard-title-right">
+                <span class="wizard-autosave"></span>
+                <div class="wizard-prev-button">prev</div>
+            </div>
         </div>
         <div class="wizard-content">
             <slot></slot>

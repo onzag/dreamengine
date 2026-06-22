@@ -222,7 +222,7 @@ export function getJsScriptFromGenerator(base, baseTabCount = 0, noImportsNorSta
  * @property {(id: string | {id: string, reask: boolean, step: boolean} | null, question: string, defaultValue: boolean | (() => Promise<boolean>)) => Promise<{value: boolean}>} askBoolean
  * @property {(id: string | {id: string, reask: boolean, step: boolean} | null, question: string, options: Record<string, string[]> | null, defaultValue: string[] | (() => Promise<string[]>)) => Promise<{value: string[]}>} askList
  * @property {(id: string | {id: string, reask: boolean, step: boolean} | null, question: string, defaultValue: string[] | (() => Promise<string[]>)) => Promise<{value: string[]}>} askArbitraryList
- * @property {(id: string | {id: string, reask: boolean, step: boolean} | null, question: string, defaultValue: string[] | (() => Promise<string[]>)) => Promise<{value: string[]}>} askAcceptArbitraryList
+ * @property {(id: string | {id: string, reask: boolean, step: boolean} | null, question: string, defaultValue: string[] | (() => Promise<string[] | null>)) => Promise<{value: string[] | null}>} askAcceptArbitraryList
  */
 
 /**

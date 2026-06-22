@@ -32,8 +32,6 @@ export class EngineWorkerClient {
     onInferringOverConversationMessage = null;
     /** @type {((data: {qid: number, questionType: string, question: string, options?: string[], defaultValue?: any}) => void) | null} */
     onScriptTypeGuiderQuestion = null;
-    /** @type {((data: {sid: number, currentCard: any, jsContent: string}) => void) | null} */
-    onCardTypeAutosave = null;
     /** @type {((data: {currentCard: any}) => void) | null} */
     onCardTypeWizardComplete = null;
 
@@ -122,9 +120,6 @@ export class EngineWorkerClient {
                         break;
                     case "ScriptTypeGuiderQuestion":
                         this.onScriptTypeGuiderQuestion?.(msg.data);
-                        break;
-                    case "cardTypeAutosave":
-                        this.onCardTypeAutosave?.(msg.data);
                         break;
                     case "cardTypeWizardComplete":
                         this.onCardTypeWizardComplete?.(msg.data);
@@ -307,12 +302,8 @@ export class EngineWorkerClient {
         this.#worker.postMessage({ type: "ScriptTypeGuiderAnswer", qid, value });
     }
 
-    /**
-     * Acknowledge an autosave event from the worker.
-     * @param {{ sid: number }} args
-     */
-    sendAutosaveAck({ sid }) {
-        this.#worker.postMessage({ type: "cardTypeAutosaveAck", sid });
+    goBackInCardTypeWizard() {
+        this.#worker.postMessage({ type: "ScriptTypeGuiderGoBack" });
     }
 
     // ── Lifecycle ───────────────────────────────────────────────────

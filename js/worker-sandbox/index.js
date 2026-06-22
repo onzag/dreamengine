@@ -526,18 +526,29 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
             const { promise: cancelPromise, cancel } = createCancelToken();
             currentWizardCancel = cancel;
 
-            /** @type {import('../script-generation/base.js').ScriptTypeGuider | null} */
-            const guider = guided ? createWorkerGuider(cancelPromise) : null;
+            currentWizardGoBack = () => {
+                currentCard.state[".steps"] = currentCard.state[".steps"] || [];
+                if (currentCard.state[".steps"].length > 0) {
+                    currentCard.state[".steps"].pop();
+                }
+                currentCard.body = [];
+                currentCard.head = [];
+                currentCard.foot = [];
+                currentCard.imports = [];
 
-            const autosave = createWorkerAutosave(currentCard, cancelPromise);
+                return { currentCard, guided };
+            }
+
+            /** @type {import('../script-generation/base.js').ScriptTypeGuider} */
+            const guider = createWorkerGuider(currentCard, cancelPromise, guided);
 
             try {
-                await generateBase(engine, currentCard, guider, autosave);
-                await generateAffectiveStates(engine, currentCard, guider, autosave);
-                await generateBonds(engine, currentCard, guider, autosave);
-                await generateActivities(engine, currentCard, guider, autosave);
-                await generateBondTriggers(engine, currentCard, guider, autosave);
-                await generateBasicStates(engine, currentCard, guider, autosave);
+                await generateBase(engine, currentCard, guider);
+                await generateAffectiveStates(engine, currentCard, guider);
+                await generateBonds(engine, currentCard, guider);
+                await generateActivities(engine, currentCard, guider);
+                await generateBondTriggers(engine, currentCard, guider);
+                await generateBasicStates(engine, currentCard, guider);
 
                 self.postMessage({ type: "event", event: "cardTypeWizardComplete", data: { currentCard } });
             } catch (err) {
@@ -569,6 +580,11 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
 
     /** @type {(() => void) | null} */
     let currentWizardCancel = null;
+    
+    /**
+     * @type {(() => { currentCard: import('../script-generation/base.js').ScriptTypeGenerator, guided: boolean }) | null}
+     */
+    let currentWizardGoBack = null;
 
     function cancelCurrentWizard() {
         if (currentWizardCancel) {
@@ -599,92 +615,104 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
     /**
      * Creates a guider that sends questions to the main thread via postMessage
      * and waits for answers (or cancellation).
+     * @param {import('../script-generation/base.js').ScriptTypeGenerator} currentCard
      * @param {Promise<never>} cancelPromise
+     * @param {boolean} isGuided - whether to actually ask the questions or skip them (used when resuming a wizard with already answered questions)
      * @returns {import('../script-generation/base.js').ScriptTypeGuider}
      */
-    function createWorkerGuider(cancelPromise) {
+    function createWorkerGuider(currentCard, cancelPromise, isGuided) {
         /**
          * @param {string} questionType
          * @param {string} question
          * @param {any} extra
          * @returns {Promise<{value: any}>}
          */
-        function ask(questionType, question, extra) {
+        async function ask(questionType, question, extra) {
             const qid = ++guiderQuestionId;
 
-            self.postMessage({
-                type: "event",
-                event: "ScriptTypeGuiderQuestion",
-                data: { qid, questionType, question, ...extra }
-            });
+            const id = extra.id;
+            const defaultValueFnOrValue = extra.defaultValue;
 
-            const answerPromise = new Promise((resolve) => {
-                pendingGuiderAnswers.set(qid, resolve);
-            });
+            const actualId = typeof id === "object" && id !== null ? id.id : id;
+            const stateValue = actualId !== null ? currentCard.state[actualId] : undefined;
+            const stepHasNotRanTechnically = !(currentCard.state[".steps"] || []).includes(actualId);
+            const shouldAsk = (stepHasNotRanTechnically || stateValue === undefined) && isGuided;
+            const defaultValue = stateValue !== undefined ? stateValue : (typeof defaultValueFnOrValue === 'function' ? await defaultValueFnOrValue() : defaultValueFnOrValue);
 
-            return /** @type {Promise<{value: any}>} */ (Promise.race([
-                answerPromise,
-                cancelPromise
-            ]));
+            extra.defaultValue = defaultValue;
+
+            let finalAnswer;
+
+            if (shouldAsk) {
+                self.postMessage({
+                    type: "event",
+                    event: "ScriptTypeGuiderQuestion",
+                    data: { qid, questionType, question, currentCard, ...extra }
+                });
+
+                const answerPromise = new Promise((resolve) => {
+                    pendingGuiderAnswers.set(qid, resolve);
+                });
+
+                const receivedAnswer = await /** @type {Promise<{value: any}>} */ (Promise.race([
+                    answerPromise,
+                    cancelPromise
+                ]));
+
+
+
+                finalAnswer = receivedAnswer;
+            } else {
+                finalAnswer = defaultValue !== undefined ? { value: defaultValue } : { value: null };
+            }
+
+            if (finalAnswer) {
+                currentCard.state[actualId] = finalAnswer.value;
+                if (currentCard.state[".steps"] === undefined) {
+                    currentCard.state[".steps"] = [];
+                }
+                if (!currentCard.state[".steps"].includes(actualId)) {
+                    currentCard.state[".steps"].push(actualId);
+                }
+            }
+
+            return finalAnswer;
         }
 
         return {
-            async askOption(question, options, defaultValue) {
-                return ask("askOption", question, { options, defaultValue });
+            async askOption(id, question, options, defaultValue) {
+                return ask("askOption", question, { id, options, defaultValue });
             },
-            async askOpen(question, defaultValue) {
-                return ask("askOpen", question, { defaultValue });
+            async askOpen(id, question, defaultValue) {
+                return await ask("askOpen", question, { id, defaultValue });
             },
-            async askAccept(question, defaultValue) {
-                return ask("askAccept", question, { defaultValue });
+            async askAccept(id, question, defaultValue) {
+                return ask("askAccept", question, { id, defaultValue });
             },
-            async askNumber(question, defaultValue) {
-                return ask("askNumber", question, { defaultValue });
+            async askNumber(id, question, defaultValue) {
+                return ask("askNumber", question, { id, defaultValue });
             },
-            async askBoolean(question, defaultValue) {
-                return ask("askBoolean", question, { defaultValue });
+            async askBoolean(id, question, defaultValue) {
+                return ask("askBoolean", question, { id, defaultValue });
             },
-            async askList(question, options, defaultValue) {
-                return ask("askList", question, { options, defaultValue });
+            async askList(id, question, options, defaultValue) {
+                return ask("askList", question, { id, options, defaultValue });
             },
-            async askArbitraryList(question, defaultValue) {
-                return ask("askArbitraryList", question, { defaultValue });
+            async askArbitraryList(id, question, defaultValue) {
+                return ask("askArbitraryList", question, { id, defaultValue });
             },
-            async askAcceptArbitraryList(question, defaultValue) {
-                return ask("askAcceptArbitraryList", question, { defaultValue });
+            async askAcceptArbitraryList(id, question, defaultValue) {
+                return ask("askAcceptArbitraryList", question, { id, defaultValue });
             },
         };
     }
 
-    /** @type {Map<number, (ack: any) => void>} */
-    const pendingAutosaveAcks = new Map();
-    let autosaveId = 0;
-
-    /**
-     * Creates an autosave object that sends the currentCard to the main thread
-     * and waits for acknowledgement (or cancellation).
-     * @param {import('../script-generation/base.js').ScriptTypeGenerator} currentCard
-     * @param {Promise<never>} cancelPromise
-     * @returns {import('../script-generation/base.js').CardTypeAutoSave}
-     */
-    function createWorkerAutosave(currentCard, cancelPromise) {
-        return {
-            async save() {
-                const sid = ++autosaveId;
-
-                self.postMessage({
-                    type: "event",
-                    event: "cardTypeAutosave",
-                    data: { sid, currentCard }
-                });
-
-                const ackPromise = new Promise((resolve) => {
-                    pendingAutosaveAcks.set(sid, resolve);
-                });
-
-                await Promise.race([ackPromise, cancelPromise]);
-            }
-        };
+    function goBackInCardTypeWizard() {
+        const goBackValues = currentWizardGoBack ? currentWizardGoBack() : null;
+        if (goBackValues) {
+            cancelCurrentWizard();
+            handlers.continueCardTypeWizard(goBackValues);
+        }
     }
 
     // ── Message listener ────────────────────────────────────────────────
@@ -702,14 +730,8 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
             return;
         }
 
-        // Handle autosave acknowledgement from main thread
-        if (msg.type === "cardTypeAutosaveAck") {
-            const { sid } = msg;
-            const resolve = pendingAutosaveAcks.get(sid);
-            if (resolve) {
-                pendingAutosaveAcks.delete(sid);
-                resolve({ ok: true });
-            }
+        if (msg.type === "ScriptTypeGuiderGoBack") {
+            goBackInCardTypeWizard();
             return;
         }
 
