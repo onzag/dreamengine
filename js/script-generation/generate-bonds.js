@@ -288,7 +288,8 @@ function describeFamilyContext(relationshipKey, romanticInterestKey, familyKey, 
  * `{{char}}` and `{{other}}` for display only). Returns the chosen reason
  * string with `[]` replaced (but with `{{char}}`/`{{other}}` still present so
  * they can be substituted at runtime by the engine).
- * @param {import('./base.js').ScriptTypeGuider | null} guider
+ * @param {string} id - the id of the question, used for logging and for fine-tune references
+ * @param {import('./base.js').ScriptTypeGuider} guider
  * @param {{
  *    reasonYes: string[],
  *    reasonNo: string[],
@@ -314,8 +315,7 @@ function describeFamilyContext(relationshipKey, romanticInterestKey, familyKey, 
  * @param {string} fineTune the fine tune used, eg. humanoid_character_male_a
  * @returns {Promise<string | null>}
  */
-async function chooseReason(guider, modifierInfo, valueAnswer, name, contextReplacement, guiderQuestion, selectedValue, attractionLevel, fineTune) {
-    if (!guider) return null;
+async function chooseReason(id, guider, modifierInfo, valueAnswer, name, contextReplacement, guiderQuestion, selectedValue, attractionLevel, fineTune) {
     const attractionToShow = attractionLevel === "n/a" ? "" : attractionLevel === "slight" ? "slightly" : attractionLevel === "moderate" ? "moderately" : "very";
 
     const gender = fineTune.includes("female") ? "female" : fineTune.includes("male") ? "male" : (fineTune.includes("ambiguous") ? "ambiguous" : "unknown");
@@ -394,12 +394,20 @@ async function chooseReason(guider, modifierInfo, valueAnswer, name, contextRepl
     });
 
     const selectedPotentialValue = getBestMatchInOptions(selectedValuesProcessed, optionsForGuider);
-    const guiderResult = await guider.askOption(guiderQuestion, optionsForGuider, selectedPotentialValue || optionsForGuider[0]);
+
+    const guiderResult = await guider.askOption(
+        id,
+        guiderQuestion,
+        optionsForGuider,
+        selectedPotentialValue || optionsForGuider[0]
+    );
+
     if (guiderResult.value) {
         const reasonIndex = optionsForGuider.indexOf(guiderResult.value);
         const originalReason = reasonsWithoutRemoved[reasonIndex];
         return originalReason.replace("[]", contextReplacement).replace("{}", attractionToShow);
     }
+
     return null;
 }
 
@@ -905,156 +913,116 @@ export async function generateBonds(engine, scriptgenerator, guider) {
     selectedFineTunes = selectedFineTunes.sort(sortAEndingFirst);
     selectedFineTunes.push("any_character");
 
-    const selectFineTunesAfterRomanticInterest = async () => {
-        if (guider) {
-            const value = await guider.askList(
-                "Select the fine-tunes that best fit " + name + "'s romantic and sexual attractions they can build, or add your own (these will be used to determine the types of romantic bonds " + name + " forms with other characters, and how they interact with them)\n\n" +
-                "Note that these fine tunes will have no effect if no such bond or attraction can be formed based on the previously selected potential attractions for " + name,
-                fineTunesRecord,
-                // @ts-ignore
-                selectedFineTunesAfterRomanticInterest.filter((v) => v !== "any_character").map(key => fineTunesDesriptionsForList[key])
-            );
+    const fineTunesAfterRomanticInterestResult = await guider.askList(
+        "bonds-fine-tunes-after-romantic-interest",
+        "Select the fine-tunes that best fit " + name + "'s romantic and sexual attractions they can build, or add your own (these will be used to determine the types of romantic bonds " + name + " forms with other characters, and how they interact with them)\n\n" +
+        "Note that these fine tunes will have no effect if no such bond or attraction can be formed based on the previously selected potential attractions for " + name,
+        fineTunesRecord,
+        // @ts-ignore
+        defaultFineTunesAfterRomanticInterest.filter((v) => v !== "any_character").map(key => fineTunesDesriptionsForList[key])
+    );
 
-            selectedFineTunesAfterRomanticInterest = [];
-            value.value.map(val => {
-                // @ts-ignore
-                const foundKey = Object.keys(fineTunesDesriptionsForList).find(key => fineTunesDesriptionsForList[key] === val);
-                if (foundKey) {
-                    if (!selectedFineTunesAfterRomanticInterest.includes(foundKey)) {
-                        selectedFineTunesAfterRomanticInterest.push(foundKey);
-                    }
-                }
-            });
-
-            selectedFineTunesAfterRomanticInterest = selectedFineTunesAfterRomanticInterest.sort(sortAEndingFirst);
-            selectedFineTunesAfterRomanticInterest.push("any_character");
-
-            card.config.bondsFineTunesAfterRomanticInterest = selectedFineTunesAfterRomanticInterest;
-            await autosave?.save();
-        } else {
-            selectedFineTunesAfterRomanticInterest = defaultFineTunesAfterRomanticInterest;
-        }
-    }
-
-    if (!card.config.bondsFineTunesAfterRomanticInterest) {
-        await selectFineTunesAfterRomanticInterest();
-    }
-
-    const selectFamilyFineTunes = async () => {
-        if (guider) {
-            const value = await guider.askList(
-                "Select the fine-tunes that best fit " + name + "'s relationship with family, or add your own (these will be used to determine the types of bonds " + name + " forms with other family members, and how they interact with them)\n\n" +
-                "Note that these fine tunes will have no effect if no such bond can be formed for " + name,
-                fineTunesFamilyRecord,
-                // @ts-ignore
-                selectedFamilyFineTunes.filter((v) => v !== "any_family_character").map(key => fineTunesDescriptionsFamilyForList[key])
-            );
-
-            selectedFamilyFineTunes = [];
-            value.value.map(val => {
-                // @ts-ignore
-                const foundKey = Object.keys(fineTunesDescriptionsFamilyForList).find(key => fineTunesDescriptionsFamilyForList[key] === val);
-                if (foundKey) {
-                    if (!selectedFamilyFineTunes.includes(foundKey)) {
-                        selectedFamilyFineTunes.push(foundKey);
-                    }
-                }
-            });
-
-            selectedFamilyFineTunes = selectedFamilyFineTunes.sort(sortAEndingFirst);
-            if (!selectedFamilyFineTunes.includes("family_character_any_na")) {
-                selectedFamilyFineTunes.push("any_family_character");
-            }
-
-            card.config.bondsFamilyFineTunes = selectedFamilyFineTunes;
-            if (!isIncestuousValue) {
-                card.config.bondsFamilyFineTunesAfterRomanticInterest = selectedFamilyFineTunes;
-                selectedFamilyFineTunesAfterRomanticInterest = selectedFamilyFineTunes;
-            }
-            await autosave?.save();
-        } else {
-            selectedFamilyFineTunes = defaultFamilyFineTunes;
-            if (!isIncestuousValue) {
-                selectedFamilyFineTunesAfterRomanticInterest = defaultFamilyFineTunesAfterRomanticInterest;
+    /**
+     * @type {string[]}
+     */
+    let selectedFineTunesAfterRomanticInterest = [];
+    fineTunesAfterRomanticInterestResult.value.map(val => {
+        // @ts-ignore
+        const foundKey = Object.keys(fineTunesDesriptionsForList).find(key => fineTunesDesriptionsForList[key] === val);
+        if (foundKey) {
+            if (!selectedFineTunesAfterRomanticInterest.includes(foundKey)) {
+                selectedFineTunesAfterRomanticInterest.push(foundKey);
             }
         }
-    }
+    });
 
-    if (!card.config.bondsFamilyFineTunes) {
-        await selectFamilyFineTunes();
-    }
+    selectedFineTunesAfterRomanticInterest = selectedFineTunesAfterRomanticInterest.sort(sortAEndingFirst);
+    selectedFineTunesAfterRomanticInterest.push("any_character");
 
-    const selectFamilyFineTunesAfterRomanticInterest = async () => {
-        if (guider) {
-            const value = await guider.askList(
-                "Select the fine-tunes that best fit " + name + "'s relationship with family after they have a romantic interest, or add your own (these will be used to determine the types of bonds " + name + " forms with other family members, and how they interact with them)\n\n" +
-                "Note that these fine tunes will have no effect if no such bond can be formed for " + name,
-                fineTunesFamilyRecord,
-                // @ts-ignore
-                selectedFamilyFineTunesAfterRomanticInterest.filter((v) => v !== "any_family_character").map(key => fineTunesDescriptionsFamilyForList[key])
-            );
+    const familyFineTunesResult = await guider.askList(
+        "bonds-family-fine-tunes",
+        "Select the fine-tunes that best fit " + name + "'s relationship with family, or add your own (these will be used to determine the types of bonds " + name + " forms with other family members, and how they interact with them)\n\n" +
+        "Note that these fine tunes will have no effect if no such bond can be formed for " + name,
+        fineTunesFamilyRecord,
+        // @ts-ignore
+        defaultFamilyFineTunes.filter((v) => v !== "any_family_character").map(key => fineTunesDescriptionsFamilyForList[key])
+    );
 
-            selectedFamilyFineTunesAfterRomanticInterest = [];
-            value.value.map(val => {
-                // @ts-ignore
-                const foundKey = Object.keys(fineTunesDescriptionsFamilyForList).find(key => fineTunesDescriptionsFamilyForList[key] === val);
-                if (foundKey) {
-                    if (!selectedFamilyFineTunesAfterRomanticInterest.includes(foundKey)) {
-                        selectedFamilyFineTunesAfterRomanticInterest.push(foundKey);
-                    }
-                }
-            });
-
-            selectedFamilyFineTunesAfterRomanticInterest = selectedFamilyFineTunesAfterRomanticInterest.sort(sortAEndingFirst);
-            if (!selectedFamilyFineTunesAfterRomanticInterest.includes("family_character_any_na")) {
-                selectedFamilyFineTunesAfterRomanticInterest.push("any_family_character");
+    /**
+     * @type {string[]}
+     */
+    let selectedFamilyFineTunes = [];
+    familyFineTunesResult.value.map(val => {
+        // @ts-ignore
+        const foundKey = Object.keys(fineTunesDescriptionsFamilyForList).find(key => fineTunesDescriptionsFamilyForList[key] === val);
+        if (foundKey) {
+            if (!selectedFamilyFineTunes.includes(foundKey)) {
+                selectedFamilyFineTunes.push(foundKey);
             }
-
-            card.config.bondsFamilyFineTunesAfterRomanticInterest = selectedFamilyFineTunesAfterRomanticInterest;
-            await autosave?.save();
-        } else {
-            selectedFamilyFineTunesAfterRomanticInterest = defaultFamilyFineTunesAfterRomanticInterest;
         }
+    });
+
+    selectedFamilyFineTunes = selectedFamilyFineTunes.sort(sortAEndingFirst);
+    if (!selectedFamilyFineTunes.includes("family_character_any_na")) {
+        selectedFamilyFineTunes.push("any_family_character");
     }
 
-    if (!card.config.bondsFamilyFineTunesAfterRomanticInterest && isIncestuousValue) {
-        await selectFamilyFineTunesAfterRomanticInterest();
-    }
+    /**
+     * The reason they are the same even after romantic interest is because
+     * when non-incest it uses the creepy bond so the selected will remain in non-attractive for
+     * 
+     * @type {string[]}
+     */
+    let selectedFamilyFineTunesAfterRomanticInterest = selectedFamilyFineTunes;
+    if (isIncestuousValue) {
+        const familyFineTunesAfterRomanticInterestResult = await guider.askList(
+            "bonds-family-fine-tunes-after-romantic-interest",
+            "Select the fine-tunes that best fit " + name + "'s relationship with a family member after they have a romantic interest, or add your own (these will be used to determine the types of bonds " + name + " forms with other family members, and how they interact with them)\n\n" +
+            "Note that these fine tunes will have no effect if no such bond can be formed for " + name,
+            fineTunesFamilyRecord,
+            // @ts-ignore
+            defaultFamilyFineTunesAfterRomanticInterest.filter((v) => v !== "any_family_character").map(key => fineTunesDescriptionsFamilyForList[key])
+        );
 
-    let wouldUseViolenceTowardsEnemiesValue = false;
-    if (!hasSpecialComment(optionsSection.body, "bonds-violence")) {
-        await prime();
-        const wouldUseViolenceTowardsEnemies = await generator.next({
-            maxCharacters: 5,
-            maxSafetyCharacters: 100,
-            maxParagraphs: 1,
-            nextQuestion: "If " + name + " has an extremely hostile and abusive relationship with another character, would they be willing use violence towards that character if they had the opportunity? Answer with yes or no.",
-            stopAfter: [],
-            stopAt: [],
-            grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
+        selectedFamilyFineTunesAfterRomanticInterest = [];
+        familyFineTunesAfterRomanticInterestResult.value.map(val => {
+            // @ts-ignore
+            const foundKey = Object.keys(fineTunesDescriptionsFamilyForList).find(key => fineTunesDescriptionsFamilyForList[key] === val);
+            if (foundKey) {
+                if (!selectedFamilyFineTunesAfterRomanticInterest.includes(foundKey)) {
+                    selectedFamilyFineTunesAfterRomanticInterest.push(foundKey);
+                }
+            }
         });
 
-        if (wouldUseViolenceTowardsEnemies.done) {
-            throw new Error("Generator finished without producing output");
+        selectedFamilyFineTunesAfterRomanticInterest = selectedFamilyFineTunesAfterRomanticInterest.sort(sortAEndingFirst);
+        if (!selectedFamilyFineTunesAfterRomanticInterest.includes("family_character_any_na")) {
+            selectedFamilyFineTunesAfterRomanticInterest.push("any_family_character");
         }
-
-        wouldUseViolenceTowardsEnemiesValue = wouldUseViolenceTowardsEnemies.value.trim().toLowerCase() === "yes";
-
-        if (guider) {
-            const guiderResponse = await guider.askBoolean("Would " + name + " use violence towards people they have a hostile relationship with?", wouldUseViolenceTowardsEnemiesValue);
-            if (guiderResponse.value === false) {
-                wouldUseViolenceTowardsEnemiesValue = false;
-            } else {
-                wouldUseViolenceTowardsEnemiesValue = true;
-            }
-        }
-
-        card.config.wouldUseViolence = wouldUseViolenceTowardsEnemiesValue;
-        insertSpecialComment(optionsSection.body, "bonds-violence");
-        await autosave?.save();
-    } else {
-        wouldUseViolenceTowardsEnemiesValue = card.config.wouldUseViolence || false;
     }
+
+    const wouldUseViolenceTowardsEnemiesValue = (await guider.askBoolean(
+        "would-use-violence-towards-enemies",
+        "Would " + name + " use violence towards people they have a hostile relationship with?",
+        async () => {
+            await prime();
+            const wouldUseViolenceTowardsEnemies = await generator.next({
+                maxCharacters: 5,
+                maxSafetyCharacters: 100,
+                maxParagraphs: 1,
+                nextQuestion: "If " + name + " has an extremely hostile and abusive relationship with another character, would they be willing use violence towards that character if they had the opportunity? Answer with yes or no.",
+                stopAfter: [],
+                stopAt: [],
+                grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
+            });
+
+            if (wouldUseViolenceTowardsEnemies.done) {
+                throw new Error("Generator finished without producing output");
+            }
+
+            return wouldUseViolenceTowardsEnemies.value.trim().toLowerCase() === "yes";
+        }
+    )).value;
 
     const SETTINGS = {
         "foe_n100_n50": {
@@ -1840,10 +1808,6 @@ export async function generateBonds(engine, scriptgenerator, guider) {
             s.foot.push(`},`);
         });
 
-        if (!card.config.tuneInfos) {
-            card.config.tuneInfos = {};
-        }
-
         for (const fineTune of selectedFineTunes) {
             /**
              * @type {string}
@@ -1859,9 +1823,6 @@ export async function generateBonds(engine, scriptgenerator, guider) {
 
             for (const attractionLevel of attractionLevelsToUse) {
                 const fineTuneComment = fineTune + (attractionLevel !== "n/a" ? "_" + attractionLevel : "");
-                if (hasSpecialComment(strangerSectionBase.body, fineTuneComment)) {
-                    continue;
-                }
 
                 const fineTuneValue = getFineTuneValueWithAttractionLevel(fineTuneAsDescription, attractionLevel);
 
@@ -1879,76 +1840,37 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                 }
 
                 /**
-                 * @param {string} intimateModifier 
+                 * @param {string} intimateModifier
+                 * @param {string} key
                  */
-                const getFineTuneReference = (intimateModifier) => {
+                const getFineTuneReference = (intimateModifier, key) => {
                     const fineTuneCommentWithIntimacyModifier = fineTuneComment + "_" + intimateModifier;
-                    let fineTuneReference = card.config.tuneInfos[fineTuneCommentWithIntimacyModifier];
-                    if (!fineTuneReference) {
-                        if (strangerKey === "strangerNeutral_n5_5" && attractionLevel === "moderate") {
-                            // special case for stranger neutral moderate as a baseline for the rest of the strangers and fine tunes
-                            fineTuneReference = { ...card.config.tuneInfos[fineTune + "_slight_" + intimateModifier] }; // copy moderate to moderate for stranger neutral;
-                            fineTuneReference.id = fineTuneCommentWithIntimacyModifier;
-                            fineTuneReference.attractionLevel = attractionLevel;
-                            fineTuneReference.intimacyModifier = intimateModifier;
-                        } else if (strangerKey === "strangerNeutral_n5_5" && attractionLevel === "strong") {
-                            // special case for stranger neutral strong as a baseline for the rest of the strangers and fine tunes
-                            fineTuneReference = { ...card.config.tuneInfos[fineTune + "_moderate_" + intimateModifier] }; // copy moderate to moderate for stranger neutral;
-                            fineTuneReference.id = fineTuneCommentWithIntimacyModifier;
-                            fineTuneReference.attractionLevel = attractionLevel;
-                            fineTuneReference.intimacyModifier = intimateModifier;
-                        } else {
-                            fineTuneReference = { id: fineTuneCommentWithIntimacyModifier, fineTune: fineTune, attractionLevel: attractionLevel, intimacyModifier: intimateModifier };
-                        }
-                        card.config.tuneInfos[fineTuneCommentWithIntimacyModifier] = fineTuneReference;
+                    if (strangerKey === "strangerNeutral_n5_5" && attractionLevel === "moderate") {
+                        // special case pick it from itself but from the slight attraction level
+                        return scriptgenerator.state[strangerKey + "_" + fineTune + "_slight_" + intimateModifier + "_" + key];
+                    } else if (strangerKey === "strangerNeutral_n5_5" && attractionLevel === "strong") {
+                        // special case pick it from itself but from the moderate attraction level
+                        return scriptgenerator.state[strangerKey + "_" + fineTune + "_moderate_" + intimateModifier + "_" + key];
+                    } else {
+                        // normal case, pick it from the stranger neutral with the same fine tune and intimacy modifier
+                        return scriptgenerator.state["strangerNeutral_n5_5" + "_" + fineTuneCommentWithIntimacyModifier + "_" + key];
                     }
-                    return fineTuneReference;
                 }
 
                 for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
-                    const fineTuneReference = getFineTuneReference(intimateModifier);
+                    const fineTuneCommentWithIntimacyModifier = fineTuneComment + "_" + intimateModifier;
 
-                    const openToAffectionQuestion = "How receptive to affection is " + name + " towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "?";
+                    const messageAboutAnswersFrom = STRANGER_KEY_INFO_OBTAINED_FROM[strangerKey] || STRANGER_KEY_INFO_OBTAINED_FROM_STRANGERNEUTRAL_SPECIALCASE[attractionLevel] || "";
+                    const guiderResult = await guider.askOption(
+                        strangerKey + "_" + fineTuneCommentWithIntimacyModifier + "_open-to-affection",
+                        "How receptive to affection is " + name + " towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "?" + messageAboutAnswersFrom, [
+                        "not receptive",
+                        "slightly receptive",
+                        "moderately receptive",
+                        "very receptive",
+                    ], getFineTuneReference(intimateModifier, "open-to-affection") || "not receptive");
 
-                    !fineTuneReference.openToAffection ? await prime() : null;
-                    // @ts-ignore
-                    const answer = fineTuneReference.openToAffection ? { value: fineTuneReference.openToAffection, done: false } : await generator.next({
-                        maxCharacters: 50,
-                        maxSafetyCharacters: 100,
-                        maxParagraphs: 1,
-                        nextQuestion: openToAffectionQuestion,
-                        stopAfter: [],
-                        stopAt: [],
-                        instructions: "Answer with one of the following options: 'Not receptive', 'Slightly receptive', 'Moderately receptive', 'Very receptive'. Consider the nature of the relationship and the specific modifier of intimacy when determining the level of openness to affection.",
-                        grammar: createGrammarFromList(engine, ["Not receptive", "Slightly receptive", "Moderately receptive", "Very receptive"]).grammar,
-                    });
-
-                    if (answer.done) {
-                        throw new Error("Generator ended unexpectedly while generating openToAffection for " + strangerKey);
-                    }
-
-                    if (guider) {
-                        const messageAboutAnswersFrom = STRANGER_KEY_INFO_OBTAINED_FROM[strangerKey] || STRANGER_KEY_INFO_OBTAINED_FROM_STRANGERNEUTRAL_SPECIALCASE[attractionLevel] || "";
-                        const guiderResult = await guider.askOption("How receptive to affection is " + name + " towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "?" + messageAboutAnswersFrom, [
-                            "not receptive",
-                            "slightly receptive",
-                            "moderately receptive",
-                            "very receptive",
-                        ], answer.value.toLowerCase());
-                        if (guiderResult.value) {
-                            answer.value = guiderResult.value.toLowerCase();
-                        }
-                    }
-
-                    // only save stranger neutral as a baseline
-                    if (strangerKey === "strangerNeutral_n5_5") {
-                        fineTuneReference.openToAffection = answer.value;
-                    } else {
-                        fineTuneReference[strangerKey] = fineTuneReference[strangerKey] || {}
-                        fineTuneReference[strangerKey].openToAffection = answer.value;
-                    }
-
-                    const answerTrimmed = answer.value.trim().toLowerCase();
+                    const answerTrimmed = guiderResult.value.trim().toLowerCase();
                     if (answerTrimmed !== "not receptive") {
                         allIsNotReceptive = false;
                     }
@@ -1972,29 +1894,25 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                         strangerSectionOpenToAffection.body.push(`if (${condition}) {`);
                     }
 
-                    const messageAboutAnswersFrom = STRANGER_KEY_INFO_OBTAINED_FROM[strangerKey] || STRANGER_KEY_INFO_OBTAINED_FROM_STRANGERNEUTRAL_SPECIALCASE[attractionLevel] || "";
                     /**
                      * @type {string | null}
                      */
                     let reason = await chooseReason(
+                        strangerKey + "_" + fineTuneCommentWithIntimacyModifier + "_open-to-affection-reason",
                         guider,
                         modifierInfo,
                         valueAnswer,
                         name,
                         describeStrangerContext(strangerKey),
                         "What is the reason for " + name + " being " + answerTrimmed + " to affection from this other character when they are " + intimateModifier.toLowerCase() + "?" + messageAboutAnswersFrom,
-                        fineTuneReference.openToAffectionReason ? { values: [fineTuneReference.openToAffectionReason] } : { values: [] },
+                        {
+                            values: [
+                                getFineTuneReference(intimateModifier, "open-to-affection-reason"),
+                            ]
+                        },
                         attractionLevel,
                         fineTune,
                     );
-
-                    // only save stranger neutral as a baseline
-                    if (strangerKey === "strangerNeutral_n5_5") {
-                        fineTuneReference.openToAffectionReason = reason;
-                    } else {
-                        fineTuneReference[strangerKey] = fineTuneReference[strangerKey] || {}
-                        fineTuneReference[strangerKey].openToAffectionReason = reason;
-                    }
 
                     strangerSectionOpenToAffection.body.push(`return {value: ${JSON.stringify(valueAnswer)}, reason: ${reason ? toTemplateLiteralNoInfo(reason) : "null"}};`);
                     if (condition !== "true") {
