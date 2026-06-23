@@ -952,13 +952,13 @@ export async function generateAffectiveStates(engine, scriptgenerator, guider) {
                     async () => {
                         await prime();
                         const lovedReactionResult = await generator.next({
-                            maxCharacters: 400,
-                            maxSafetyCharacters: 400,
+                            maxCharacters: 200,
+                            maxSafetyCharacters: 200,
                             maxParagraphs: 1,
-                            nextQuestion: `OTHER_CHARACTER is someone ${name} loves or has positive feelings towards. OTHER_CHARACTER is currently performing unwanted sexual behaviours onto ${name} (specifically things like: ${reversedKinksList}) — these are things ${name} finds repulsive or simply does not enjoy. Describe how ${name} would react in this loving context. The reaction should be MILD: gently refusing, expressing discomfort softly, suggesting they do something else instead — making it clear they don't like it but without anger or hostility, since they care about OTHER_CHARACTER. Write the reaction as a short narrative description in 1-2 sentences. Use OTHER_CHARACTER as a placeholder for the other character's name.`,
+                            nextQuestion: `OTHER_CHARACTER is someone ${name} loves or has positive feelings towards. OTHER_CHARACTER is doing something sexual that ${name} dislikes. In a single short sentence, describe ${name}'s mild emotional reaction — their discomfort or gentle reluctance. Keep it vague, do not specify actions. Use OTHER_CHARACTER as a placeholder.`,
                             stopAfter: [],
                             stopAt: [],
-                            instructions: `Write a short 1-2 sentence, single paragraph, narrative describing ${name}'s mild, gentle reaction. ${name} should clearly communicate they don't like what OTHER_CHARACTER is doing and want to redirect to something else, but without anger or hostility — they love OTHER_CHARACTER. Use OTHER_CHARACTER as a placeholder for the other character's name. Do not include the unwanted acts by name. Do not specify dialogue only actions and narrative description.`,
+                            instructions: `Write a single short sentence describing ${name}'s mild emotional reaction of discomfort or reluctance. Do NOT describe specific actions or dialogue. Keep it general and focused on ${name}'s emotional state. Use OTHER_CHARACTER as a placeholder.`,
                             answerTrail: `${name}'s mild reaction (loving context) when OTHER_CHARACTER does unwanted things:\n\n`,
                             grammar: "root ::= " + JSON.stringify(name) + " \" will \" [a-zA-Z0-9 ,;.'_]+",
                         });
@@ -983,13 +983,13 @@ export async function generateAffectiveStates(engine, scriptgenerator, guider) {
                     async () => {
                         await prime();
                         const unlovedReactionResult = await generator.next({
-                            maxCharacters: 400,
-                            maxSafetyCharacters: 400,
+                            maxCharacters: 200,
+                            maxSafetyCharacters: 200,
                             maxParagraphs: 1,
-                            nextQuestion: `OTHER_CHARACTER is someone ${name} does NOT love or has neutral/negative feelings towards. OTHER_CHARACTER is currently performing unwanted sexual behaviours onto ${name} (specifically things like: ${reversedKinksList}) — these are things ${name} finds repulsive or simply does not enjoy. Describe how ${name} would react in this non-loving context. The reaction should be STRONG: firmly refusing, pushing back, expressing clear disgust, anger, or hostility, demanding it stop, possibly threatening or physically resisting. Write the reaction as a short narrative description in 1-2 sentences. Use OTHER_CHARACTER as a placeholder for the other character's name.`,
+                            nextQuestion: `OTHER_CHARACTER is someone ${name} does NOT love or has neutral/negative feelings towards. OTHER_CHARACTER is doing something sexual that ${name} finds repulsive. In a single short sentence, describe ${name}'s strong emotional reaction — their disgust, anger, or revulsion. Keep it vague, do not specify actions. Use OTHER_CHARACTER as a placeholder.`,
                             stopAfter: [],
                             stopAt: [],
-                            instructions: `Write a short 1-2 sentence, single paragraph, narrative describing ${name}'s strong, firm reaction. ${name} should clearly and forcefully reject what OTHER_CHARACTER is doing — with anger, disgust, or hostility appropriate to ${name}'s personality. Use OTHER_CHARACTER as a placeholder for the other character's name. Do not include the unwanted acts by name. Do not specify dialogue only actions and narrative description.`,
+                            instructions: `Write a single short sentence describing ${name}'s strong emotional reaction of disgust, anger, or revulsion. Do NOT describe specific actions or dialogue. Keep it general and focused on ${name}'s emotional state. Use OTHER_CHARACTER as a placeholder.`,
                             answerTrail: `${name}'s strong reaction (non-loving context) when OTHER_CHARACTER does unwanted things:\n\n`,
                             grammar: "root ::= " + JSON.stringify(name) + " \" will \" [a-zA-Z0-9 ,;.'_]+",
                         });
@@ -1011,7 +1011,7 @@ export async function generateAffectiveStates(engine, scriptgenerator, guider) {
 
             const listOfSexActs = (await guider.askArbitraryList(
                 "sex-acts-open-to-questions",
-                "Questions to determine if any sex acts are currently being performed by the other character towards our character",
+                "Questions to determine if any sex acts are currently being performed with the other character and " + name,
                 async () => {
                     return [
                         "is {{char}} currently being sexually penetrated by {{other}}?",

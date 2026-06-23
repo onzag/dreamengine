@@ -547,7 +547,7 @@ export async function generateBonds(engine, scriptgenerator, guider) {
     let isIncestuousValue = false;
 
     if (!isAsexualValue) {
-        isIncestuousValue = (await guider.askBoolean("non-incestuous", "Should family relationships be excluded from romantic possibilities for " + name + "?", async () => {
+        isIncestuousValue = !(await guider.askBoolean("non-incestuous", "Should family relationships be excluded from romantic possibilities for " + name + "?", async () => {
             await prime();
             const isIncestuous = await generator.next({
                 maxCharacters: 5,
@@ -713,6 +713,70 @@ export async function generateBonds(engine, scriptgenerator, guider) {
         ],
     };
 
+    let isAttractedToHumanoid = false;
+    let isAttractedToHumanoidMale = false;
+    let isAttractedToHumanoidFemale = false;
+    let isAttractedToHumanoidAmbiguous = false;
+    let isAttractedToHumanoidAny = false;
+
+    let isAttractedToAnimal = false;
+    let isAttractedToAnimalMale = false;
+    let isAttractedToAnimalFemale = false;
+    let isAttractedToAnimalAmbiguous = false;
+    let isAttractedToAnimalAny = false;
+
+    let isAttractedToFeral = false;
+    let isAttractedToFeralMale = false;
+    let isAttractedToFeralFemale = false;
+    let isAttractedToFeralAmbiguous = false;
+    let isAttractedToFeralAny = false;
+
+    if (!isAsexualValue) {
+        let index = 0;
+        while (scriptgenerator.state["extra-attraction-species-group-" + index]) {
+            const groupName = scriptgenerator.state["extra-attraction-species-group-" + index + "-group"];
+            const groupGender = scriptgenerator.state["extra-attraction-species-group-" + index + "-gender"];
+            if (groupName === "humanoid") {
+                isAttractedToHumanoid = true;
+
+                if (groupGender === "male") {
+                    isAttractedToHumanoidMale = true;
+                } else if (groupGender === "female") {
+                    isAttractedToHumanoidFemale = true;
+                } else if (groupGender === "ambiguous") {
+                    isAttractedToHumanoidAmbiguous = true;
+                } else if (groupGender === "any") {
+                    isAttractedToHumanoidAny = true;
+                }
+            } else if (groupName === "animal") {
+                isAttractedToAnimal = true;
+
+                if (groupGender === "male") {
+                    isAttractedToAnimalMale = true;
+                } else if (groupGender === "female") {
+                    isAttractedToAnimalFemale = true;
+                } else if (groupGender === "ambiguous") {
+                    isAttractedToAnimalAmbiguous = true;
+                } else if (groupGender === "any") {
+                    isAttractedToAnimalAny = true;
+                }
+            } else if (groupName === "feral") {
+                isAttractedToFeral = true;
+
+                if (groupGender === "male") {
+                    isAttractedToFeralMale = true;
+                } else if (groupGender === "female") {
+                    isAttractedToFeralFemale = true;
+                } else if (groupGender === "ambiguous") {
+                    isAttractedToFeralAmbiguous = true;
+                } else if (groupGender === "any") {
+                    isAttractedToFeralAny = true;
+                }
+            }
+            index++;
+        }
+    }
+
     /**
      * @type {string[]}
      */
@@ -809,6 +873,36 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                 defaultFineTunes.push("humanoid_character_ambiguous_a");
                 defaultFineTunesAfterRomanticInterest.push("humanoid_character_ambiguous_a");
             }
+            
+            if (isAttractedToFeral) {
+                if (isAttractedToFeralMale || isAttractedToFeralAny) {
+                    defaultFineTunes.push("feral_character_male_a");
+                    defaultFineTunesAfterRomanticInterest.push("feral_character_male_a");
+                }
+                if (isAttractedToFeralFemale || isAttractedToFeralAny) {
+                    defaultFineTunes.push("feral_character_female_a");
+                    defaultFineTunesAfterRomanticInterest.push("feral_character_female_a");
+                }
+                if (isAttractedToFeralAmbiguous || isAttractedToFeralAny) {
+                    defaultFineTunes.push("feral_character_ambiguous_a");
+                    defaultFineTunesAfterRomanticInterest.push("feral_character_ambiguous_a");
+                }
+            }
+
+            if (isAttractedToAnimal) {
+                if (isAttractedToAnimalMale || isAttractedToAnimalAny) {
+                    defaultFineTunes.push("animal_character_male_a");
+                    defaultFineTunesAfterRomanticInterest.push("animal_character_male_a");
+                }
+                if (isAttractedToAnimalFemale || isAttractedToAnimalAny) {
+                    defaultFineTunes.push("animal_character_female_a");
+                    defaultFineTunesAfterRomanticInterest.push("animal_character_female_a");
+                }
+                if (isAttractedToAnimalAmbiguous || isAttractedToAnimalAny) {
+                    defaultFineTunes.push("animal_character_ambiguous_a");
+                    defaultFineTunesAfterRomanticInterest.push("animal_character_ambiguous_a");
+                }
+            }
         } else {
             defaultFineTunes.push("humanoid_character_any_na");
         }
@@ -829,6 +923,36 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                 defaultFineTunes.push("animal_character_ambiguous_a");
                 defaultFineTunesAfterRomanticInterest.push("animal_character_ambiguous_a");
             }
+
+            if (isAttractedToHumanoid) {
+                if (isAttractedToHumanoidMale || isAttractedToHumanoidAny) {
+                    defaultFineTunes.push("humanoid_character_male_a");
+                    defaultFineTunesAfterRomanticInterest.push("humanoid_character_male_a");
+                }
+                if (isAttractedToHumanoidFemale || isAttractedToHumanoidAny) {
+                    defaultFineTunes.push("humanoid_character_female_a");
+                    defaultFineTunesAfterRomanticInterest.push("humanoid_character_female_a");
+                }
+                if (isAttractedToHumanoidAmbiguous || isAttractedToHumanoidAny) {
+                    defaultFineTunes.push("humanoid_character_ambiguous_a");
+                    defaultFineTunesAfterRomanticInterest.push("humanoid_character_ambiguous_a");
+                }
+            }
+
+            if (isAttractedToFeral) {
+                if (isAttractedToFeralMale || isAttractedToFeralAny) {
+                    defaultFineTunes.push("feral_character_male_a");
+                    defaultFineTunesAfterRomanticInterest.push("feral_character_male_a");
+                }
+                if (isAttractedToFeralFemale || isAttractedToFeralAny) {
+                    defaultFineTunes.push("feral_character_female_a");
+                    defaultFineTunesAfterRomanticInterest.push("feral_character_female_a");
+                }
+                if (isAttractedToFeralAmbiguous || isAttractedToFeralAny) {
+                    defaultFineTunes.push("feral_character_ambiguous_a");
+                    defaultFineTunesAfterRomanticInterest.push("feral_character_ambiguous_a");
+                }
+            }
         } else {
             defaultFineTunes.push("animal_character_any_na");
         }
@@ -848,6 +972,36 @@ export async function generateBonds(engine, scriptgenerator, guider) {
             if (isAttractedToAmbiguous) {
                 defaultFineTunes.push("feral_character_ambiguous_a");
                 defaultFineTunesAfterRomanticInterest.push("feral_character_ambiguous_a");
+            }
+
+            if (isAttractedToHumanoid) {
+                if (isAttractedToHumanoidMale || isAttractedToHumanoidAny) {
+                    defaultFineTunes.push("humanoid_character_male_a");
+                    defaultFineTunesAfterRomanticInterest.push("humanoid_character_male_a");
+                }
+                if (isAttractedToHumanoidFemale || isAttractedToHumanoidAny) {
+                    defaultFineTunes.push("humanoid_character_female_a");
+                    defaultFineTunesAfterRomanticInterest.push("humanoid_character_female_a");
+                }
+                if (isAttractedToHumanoidAmbiguous || isAttractedToHumanoidAny) {
+                    defaultFineTunes.push("humanoid_character_ambiguous_a");
+                    defaultFineTunesAfterRomanticInterest.push("humanoid_character_ambiguous_a");
+                }
+            }
+
+            if (isAttractedToAnimal) {
+                if (isAttractedToAnimalMale || isAttractedToAnimalAny) {
+                    defaultFineTunes.push("animal_character_male_a");
+                    defaultFineTunesAfterRomanticInterest.push("animal_character_male_a");
+                }
+                if (isAttractedToAnimalFemale || isAttractedToAnimalAny) {
+                    defaultFineTunes.push("animal_character_female_a");
+                    defaultFineTunesAfterRomanticInterest.push("animal_character_female_a");
+                }
+                if (isAttractedToAnimalAmbiguous || isAttractedToAnimalAny) {
+                    defaultFineTunes.push("animal_character_ambiguous_a");
+                    defaultFineTunesAfterRomanticInterest.push("animal_character_ambiguous_a");
+                }
             }
         } else {
             defaultFineTunes.push("feral_character_any_na");
