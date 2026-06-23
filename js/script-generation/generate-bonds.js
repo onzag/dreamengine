@@ -310,7 +310,7 @@ function describeFamilyContext(relationshipKey, romanticInterestKey, familyKey, 
  * @param {string} name
  * @param {string} contextReplacement
  * @param {string} guiderQuestion
- * @param {{values: string[]}} selectedValue - the selected values will be attempted in order
+ * @param {string} selectedValue - the selected value by default
  * @param {string} attractionLevel - "n/a" | "slight" | "moderate" | "strong" this refers to the level of attraction that char has towards other, this is used to choose the correct reasonYes/reasonNo options to show to the guider
  * @param {string} fineTune the fine tune used, eg. humanoid_character_male_a
  * @returns {Promise<string | null>}
@@ -389,11 +389,9 @@ async function chooseReason(id, guider, modifierInfo, valueAnswer, name, context
 
     const reasonsWithoutRemoved = reasons.filter((_, index) => !removedIndexes.includes(index));
 
-    const selectedValuesProcessed = selectedValue.values.map(v => {
-        return v.replace(/{{char}}/g, name).replace(/{{other}}/g, "the other character");
-    });
+    const selectedValueProcessed = selectedValue && selectedValue.replace(/{{char}}/g, name).replace(/{{other}}/g, "the other character");
 
-    const selectedPotentialValue = getBestMatchInOptions(selectedValuesProcessed, optionsForGuider);
+    const selectedPotentialValue = getBestMatchInOptions(selectedValueProcessed ? [selectedValueProcessed] : [], optionsForGuider);
 
     const guiderResult = await guider.askOption(
         id,
@@ -418,6 +416,10 @@ async function chooseReason(id, guider, modifierInfo, valueAnswer, name, context
  * @returns {string | null}
  */
 function getBestMatchInOptions(values, options) {
+    if (!options || options.length === 0) {
+        return values[0] || null;
+    }
+
     // exact match first
     for (const value of values) {
         if (options.includes(value)) {
@@ -873,7 +875,7 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                 defaultFineTunes.push("humanoid_character_ambiguous_a");
                 defaultFineTunesAfterRomanticInterest.push("humanoid_character_ambiguous_a");
             }
-            
+
             if (isAttractedToFeral) {
                 if (isAttractedToFeralMale || isAttractedToFeralAny) {
                     defaultFineTunes.push("feral_character_male_a");
@@ -2059,11 +2061,8 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                         name,
                         describeStrangerContext(strangerKey),
                         "What is the reason for " + name + " being " + answerTrimmed + " to affection from this other character when they are " + intimateModifier.toLowerCase() + "?" + messageAboutAnswersFrom,
-                        {
-                            values: [
-                                getFineTuneReference(intimateModifier, "open-to-affection-reason"),
-                            ]
-                        },
+
+                        getFineTuneReference(intimateModifier, "open-to-affection-reason"),
                         attractionLevel,
                         fineTune,
                     );
@@ -2141,11 +2140,7 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                         name,
                         describeStrangerContext(strangerKey),
                         "What is the reason for " + name + " being " + answerTrimmed + " to intimate affection from this other character when they are " + intimateModifier.toLowerCase() + "?" + messageAboutAnswersFrom,
-                        {
-                            values: [
-                                getFineTuneReference(intimateModifier, "open-to-intimate-affection-reason"),
-                            ]
-                        },
+                        getFineTuneReference(intimateModifier, "open-to-intimate-affection-reason"),
                         attractionLevel,
                         fineTune,
                     );
@@ -2223,11 +2218,7 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                         name,
                         describeStrangerContext(strangerKey),
                         "What is the reason for " + name + " being " + answerTrimmed + " to sex with this other character when they are " + intimateModifier.toLowerCase() + "?" + messageAboutAnswersFrom,
-                        {
-                            values: [
-                                getFineTuneReference(intimateModifier, "open-to-sex-reason"),
-                            ]
-                        },
+                        getFineTuneReference(intimateModifier, "open-to-sex-reason"),
                         attractionLevel,
                         fineTune,
                     );

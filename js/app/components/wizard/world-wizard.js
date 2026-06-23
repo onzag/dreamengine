@@ -105,7 +105,7 @@ export class WorldWizard extends CardTypeWizard {
      */
     async continueProcess(parsedCard, mode) {
         const guided = mode === 'guided';
-        const guider = this.createGuider(parsedCard, guided);
+        const guider = this.createGuider(guided);
         const client = window.ENGINE_WORKER_CLIENT;
 
         const worldId = this.getAttribute('world-id');
@@ -156,29 +156,6 @@ export class WorldWizard extends CardTypeWizard {
         };
 
         let lastCard = parsedCard;
-
-        // Wire up autosave from worker → save file → ack back
-        /** @param {any} data */
-        const onAutosave = async (data) => {
-            const { sid, currentCard } = data;
-            const jsContent = getJsScriptFromGenerator(currentCard);
-            this.showAutosaveStatus();
-            lastCard = currentCard;
-            try {
-                await window.API.updateScriptFile(
-                    worldNamespace,
-                    worldId,
-                    jsContent
-                );
-            } catch (err) {
-                cleanup();
-                client.cancelCardTypeGeneration();
-                this.showError(err instanceof Error ? err.message : String(err));
-                return;
-            }
-            this.hideAutosaveStatus();
-            client.sendAutosaveAck({ sid });
-        };
 
         /** @param {any} data */
         const onComplete = (data) => {
@@ -243,8 +220,12 @@ export class WorldWizard extends CardTypeWizard {
             <span>World Builder</span>
             <span class="wizard-autosave"></span>
         </div>
-        <div class="wizard-content">
-            <slot></slot>
+        <div class="wizard-content-world">
+            <app-overlay-tabs current="0" sections='["General", "Map", "Objects", "Characters"]'>              
+            </app-overlay-tabs>
+            <div class="wizard-content">
+                <slot></slot>
+            </div>
         </div>
         <div class="wizard-buttons">
             <div id="cancel-btn">Go Back</div>
