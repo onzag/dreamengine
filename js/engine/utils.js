@@ -501,7 +501,7 @@ export const deEngineUtilsFn = (DE) => ({
 
         const isFamilyMember = char1Ref.familyTies[char2Ref.name];
 
-        if ((isFamilyMember && !char1Ref.bonds.bond2DoesNotTrackAttractionForFamily) && !char1Ref.bonds.bond2DoesNotTrackAttraction) {
+        if (isFamilyMember ? !char1Ref.bonds.bond2DoesNotTrackAttractionForFamily : !char1Ref.bonds.bond2DoesNotTrackAttraction) {
             const bond2Value = DE.bonds[char1Ref.name].active.find(b => b.towards === char2Ref.name)?.bond2 || 0;
             if (bond2Value >= char1Ref.bonds.bond2Graduation.slight) {
                 actuallyFeelsAttractionRegardless = "slight";
@@ -531,7 +531,7 @@ export const deEngineUtilsFn = (DE) => ({
             if (actuallyFeelsAttractionRegardless) {
                 return { level, attracted: true, reasoning: `Despite ${char1Ref.name} not being attracted to ${explanation[char2Ref.speciesType] || "unknown reason"}, ${char1Ref.name} still feels ${actuallyFeelsAttractionRegardless} sexual/romantic attraction towards ${char2Ref.name}` };
             }
-            return { level: false, attracted: false, reasoning: `${char1Ref.name} is not romantically/sexually attracted to ${char2Ref.name} because  ${char1Ref.name} is not attracted to ${explanation[char2Ref.speciesType] || "unknown reason"}` };
+            return { level: false, attracted: false, reasoning: `${char1Ref.name} is not romantically/sexually attracted to ${char2Ref.name} because ${char1Ref.name} is not attracted to ${explanation[char2Ref.speciesType] || "unknown reason"}` };
         }
 
         char1Attractions = char1Attractions.filter(a => !a.species || a.species.includes(char2Ref.species));
@@ -626,7 +626,7 @@ export const deEngineUtilsFn = (DE) => ({
                 if (actuallyFeelsAttractionRegardless) {
                     return { level, attracted: true, reasoning: `Despite ${char2Ref.name} lacking charisma, ${char1Ref.name} still feels ${actuallyFeelsAttractionRegardless} sexual/romantic attraction towards ${char2Ref.name}` };
                 }
-                return { level: false, attracted: false, reasoning: `${char1Ref.name} is not romantically/sexually attracted to ${char2Ref.name} because ${char1Ref.name} lacks charisma` };
+                return { level: false, attracted: false, reasoning: `${char1Ref.name} is not romantically/sexually attracted to ${char2Ref.name} because ${char2Ref.name} lacks charisma` };
             }
         }
 

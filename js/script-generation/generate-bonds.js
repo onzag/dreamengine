@@ -2013,6 +2013,22 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                     }
                 }
 
+                /**
+                 * @param {string} key
+                 */
+                const getFineTuneReferenceNoIntimateModifier = (key) => {
+                    if (strangerKey === "strangerNeutral_n5_5" && attractionLevel === "moderate") {
+                        // special case pick it from itself but from the slight attraction level
+                        return scriptgenerator.state[strangerKey + "_" + fineTune + "_slight_" + key];
+                    } else if (strangerKey === "strangerNeutral_n5_5" && attractionLevel === "strong") {
+                        // special case pick it from itself but from the moderate attraction level
+                        return scriptgenerator.state[strangerKey + "_" + fineTune + "_moderate_" + key];
+                    } else {
+                        // normal case, pick it from the stranger neutral with the same fine tune and attraction level
+                        return scriptgenerator.state["strangerNeutral_n5_5" + "_" + fineTuneComment + "_" + key];
+                    }
+                }
+
                 for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
                     const fineTuneCommentWithIntimacyModifier = fineTuneComment + "_" + intimateModifier;
 
@@ -2248,10 +2264,11 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                     strangerSectionProneToInitiatingAffection.body.push(`if (${getAttractionLevelCondition(fineTuneConditions[fineTune], attractionLevel)}) {`);
                 }
 
+                const messageAboutAnswersFrom = STRANGER_KEY_INFO_OBTAINED_FROM[strangerKey] || STRANGER_KEY_INFO_OBTAINED_FROM_STRANGERNEUTRAL_SPECIALCASE[attractionLevel] || "";
+
                 for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
                     const fineTuneCommentWithIntimacyModifier = fineTuneComment + "_" + intimateModifier;
 
-                    const messageAboutAnswersFrom = STRANGER_KEY_INFO_OBTAINED_FROM[strangerKey] || STRANGER_KEY_INFO_OBTAINED_FROM_STRANGERNEUTRAL_SPECIALCASE[attractionLevel] || "";
                     const guiderResult = await guider.askOption(
                         strangerKey + "_" + fineTuneCommentWithIntimacyModifier + "_prone-to-initiating-affection",
                         "How likely is " + name + " to initiate non-romantic physical affection towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "?" + messageAboutAnswersFrom,
@@ -2303,7 +2320,6 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                 for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
                     const fineTuneCommentWithIntimacyModifier = fineTuneComment + "_" + intimateModifier;
 
-                    const messageAboutAnswersFrom = STRANGER_KEY_INFO_OBTAINED_FROM[strangerKey] || STRANGER_KEY_INFO_OBTAINED_FROM_STRANGERNEUTRAL_SPECIALCASE[attractionLevel] || "";
                     const guiderResult = await guider.askOption(
                         strangerKey + "_" + fineTuneCommentWithIntimacyModifier + "_prone-to-initiating-intimate-affection",
                         "How likely is " + name + " to initiate romantic or sexual physical affection towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "?" + messageAboutAnswersFrom,
@@ -2355,7 +2371,6 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                 for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
                     const fineTuneCommentWithIntimacyModifier = fineTuneComment + "_" + intimateModifier;
 
-                    const messageAboutAnswersFrom = STRANGER_KEY_INFO_OBTAINED_FROM[strangerKey] || STRANGER_KEY_INFO_OBTAINED_FROM_STRANGERNEUTRAL_SPECIALCASE[attractionLevel] || "";
                     const guiderResult = await guider.askOption(
                         strangerKey + "_" + fineTuneCommentWithIntimacyModifier + "_prone-to-initiating-sex",
                         "How likely is " + name + " to initiate sex towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "?" + messageAboutAnswersFrom,
@@ -2403,8 +2418,11 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                 let redoGuidance = false;
                 let descriptionValueUnprocessed = "";
                 let descriptionValue = "";
+                let originalReferenceDescription = getFineTuneReferenceNoIntimateModifier("description_accept");
                 while (true) {
+                    let redidGuidance = false;
                     if (redoGuidance) {
+                        redidGuidance = true;
                         const guiderResult = await guider.askOpen(
                             {
                                 id: strangerKey + "_" + fineTuneComment + "_description_guidance",
@@ -2421,9 +2439,9 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                     }
 
                     const isAnimalFineTune = fineTune.startsWith("animal_");
-                    let baseInstructions = "NEVER ask for clarification or more information. ALWAYS directly write the description short paragraph. Invent any specific details as needed. The response should use the word 'OTHER_CHARACTER' to refer to the other character name. Write in clear, direct, objective terms about how " + name + " views and relates to OTHER_CHARACTER — describe the nature of the relationship, attitudes, and behaviors concretely. Avoid flowery language, metaphors about physical sensations (e.g. warm feelings in the chest, fuzzy warmth), and purple prose. State facts about the relationship plainly: whether " + name + " has romantic or sexual interest in OTHER_CHARACTER or not, how they behave towards them, and what they expect from the relationship."
+                    let baseInstructions = "NEVER ask for clarification or more information. ALWAYS directly write the description short paragraph. Invent any specific details as needed. The response should use the word 'OTHER_CHARACTER' to refer to the other character name. Write in clear, direct, objective terms about how " + name + " views and relates to OTHER_CHARACTER — describe the nature of the relationship, attitudes, and behaviors concretely. Avoid flowery language, metaphors about physical sensations (e.g. warm feelings in the chest, fuzzy warmth), and purple prose. State facts about the relationship plainly: whether " + name + " has romantic or sexual interest in OTHER_CHARACTER or not, how they behave towards them, and what they expect from the relationship. Do not describe specific physical micro-actions or sensory body-part details (e.g. eyes tracking someone, 'blue orbs', specific hand gestures). Broad behavioral tendencies are fine (e.g. they may withdraw from their presence, they may act shyly around them)."
                     if (isAnimalFineTune && speciesType !== "animal") {
-                        baseInstructions = "NEVER ask for clarification or more information. ALWAYS directly write the description short paragraph. Invent any specific details as needed. The response should use the word 'OTHER_CHARACTER' to refer to the animal (pet or wild beast) in question. Write in clear, direct, objective terms about how " + name + " views and relates to OTHER_CHARACTER — describe their attitudes and behaviors concretely. Avoid flowery language and purple prose. State plainly whether " + name + " has any sexual feelings towards OTHER_CHARACTER or not, and describe how " + name + " would interact with this pet or wild animal, including whether they would want to care for it, be afraid of it, or want to befriend it."
+                        baseInstructions = "NEVER ask for clarification or more information. ALWAYS directly write the description short paragraph. Invent any specific details as needed. The response should use the word 'OTHER_CHARACTER' to refer to the animal (pet or wild beast) in question. Write in clear, direct, objective terms about how " + name + " views and relates to OTHER_CHARACTER — describe their attitudes and behaviors concretely. Avoid flowery language and purple prose. Do not describe specific physical micro-actions or sensory body-part details. Broad behavioral tendencies are fine (e.g. they may hide from it, they may want to approach it). State plainly whether " + name + " has any sexual feelings towards OTHER_CHARACTER or not, and describe how " + name + " would interact with this pet or wild animal, including whether they would want to care for it, be afraid of it, or want to befriend it."
                     }
                     if (guidanceGivenAllExtraInfo) {
                         baseInstructions += "\n\nThe following information has been provided based on the previous questions and answers:\n\n" + guidanceGivenAllExtraInfo;
@@ -2434,37 +2452,45 @@ export async function generateBonds(engine, scriptgenerator, guider) {
 
                     baseInstructions += "\n\nAnswer in present tense, future tense is allowed to specify potential behaviors that " + name + " might do";
 
-                    await prime();
-                    const descriptionQuestion = await generator.next({
-                        maxCharacters: 200,
-                        maxSafetyCharacters: 600,
-                        maxParagraphs: 1,
-                        nextQuestion: "Provide a concise and short one paragraph description of how " + name + " perceives and feels about " + actualStrangerValue + ". Focus on the emotional and psychological aspects of their perception, rather than physical details. This should capture the essence of their feelings and attitudes towards this person in a way that informs their interactions and relationship dynamics. Keep the paragraph short, ideally under 70 words.",
-                        stopAfter: [],
-                        stopAt: [],
-                        instructions: baseInstructions,
-                    });
+                    const guiderResult = await guider.askAccept(
+                        {id: strangerKey + "_" + fineTuneComment + "_description_accept", reask: redidGuidance, step: true},
+                        "Description of a relationship with " + actualStrangerValue + messageAboutAnswersFrom + (originalReferenceDescription ? "\n\nOriginal: " + originalReferenceDescription : ""),
+                        async () => {
+                            if (originalReferenceDescription && !redidGuidance) {
+                                return originalReferenceDescription;
+                            }
+                            await prime();
 
-                    if (descriptionQuestion.done) {
-                        throw new Error("Generator ended unexpectedly while generating description for " + strangerKey);
-                    }
-                    descriptionValueUnprocessed = descriptionQuestion.value.trim();
+                            while (true) {
+                                const descriptionQuestion = await generator.next({
+                                    maxCharacters: 200,
+                                    maxSafetyCharacters: 600,
+                                    maxParagraphs: 1,
+                                    nextQuestion: "Provide a concise and short one paragraph description of how " + name + " perceives and feels about " + actualStrangerValue + ". Focus on the emotional and psychological aspects of their perception, rather than physical details. This should capture the essence of their feelings and attitudes towards this person in a way that informs their interactions and relationship dynamics. Keep the paragraph short, ideally under 70 words.",
+                                    stopAfter: [],
+                                    stopAt: [],
+                                    instructions: baseInstructions,
+                                });
 
-                    if (descriptionValueUnprocessed.includes("OTHER_CHARACTER") || descriptionValueUnprocessed.includes("OTHER CHARACTER")) {
-                        descriptionValue = replaceOtherCharNameWithPlaceholder(descriptionValueUnprocessed, name);
-                        const guiderResult = await guider.askAccept(
-                            strangerKey + "_" + fineTuneComment + "_description_accept",
-                            "Description of a relationship with " + actualStrangerValue,
-                            descriptionValue,
-                        );
-                        if (guiderResult.value === null) {
-                            redoGuidance = true;
-                            descriptionValue = "";
-                            continue;
-                        } else {
-                            descriptionValue = guiderResult.value.trim();
-                            break;
-                        }
+                                if (descriptionQuestion.done) {
+                                    throw new Error("Generator ended unexpectedly while generating description for " + strangerKey);
+                                }
+
+                                if (!descriptionQuestion.value.includes("OTHER_CHARACTER") && !descriptionQuestion.value.includes("OTHER CHARACTER")) {
+                                    continue;
+                                }
+
+                                return replaceOtherCharNameWithPlaceholder(descriptionQuestion.value.trim(), name);
+                            }
+                        },
+                    );
+                    if (guiderResult.value === null) {
+                        redoGuidance = true;
+                        descriptionValue = "";
+                        continue;
+                    } else {
+                        descriptionValue = guiderResult.value.trim();
+                        break;
                     }
                 }
 
@@ -3310,9 +3336,9 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                             }
 
                             const isAnimalFineTune = fineTune.startsWith("animal_");
-                            let baseInstructions = "NEVER ask for clarification or more information. ALWAYS directly write the description paragraph. Invent any specific details as needed. The response should use the word 'OTHER_CHARACTER' to refer to the other character name. Write in clear, direct, objective terms about how " + name + " views and relates to OTHER_CHARACTER — describe the nature of the relationship, attitudes, and behaviors concretely. Avoid flowery language, metaphors about physical sensations (e.g. warm feelings in the chest, fuzzy warmth), and purple prose. State facts about the relationship plainly: whether " + name + " has romantic or sexual interest in OTHER_CHARACTER or not, how they behave towards them, and what they expect from the relationship.";
+                            let baseInstructions = "NEVER ask for clarification or more information. ALWAYS directly write the description paragraph. Invent any specific details as needed. The response should use the word 'OTHER_CHARACTER' to refer to the other character name. Write in clear, direct, objective terms about how " + name + " views and relates to OTHER_CHARACTER — describe the nature of the relationship, attitudes, and behaviors concretely. Avoid flowery language, metaphors about physical sensations (e.g. warm feelings in the chest, fuzzy warmth), and purple prose. State facts about the relationship plainly: whether " + name + " has romantic or sexual interest in OTHER_CHARACTER or not, how they behave towards them, and what they expect from the relationship. Do not describe specific physical micro-actions or sensory body-part details (e.g. eyes tracking someone, 'blue orbs', specific hand gestures). Broad behavioral tendencies are fine (e.g. they may withdraw from their presence, they may act shyly around them).";
                             if (isAnimalFineTune && card.config.characterSpeciesType !== "animal") {
-                                baseInstructions = "NEVER ask for clarification or more information. ALWAYS directly write the description paragraph. Invent any specific details as needed. The response should use the word 'OTHER_CHARACTER' to refer to the animal (pet or wild beast) in question. Write in clear, direct, objective terms about how " + name + " views and relates to OTHER_CHARACTER — describe their attitudes and behaviors concretely. Avoid flowery language and purple prose. State plainly whether " + name + " has any sexual feelings towards OTHER_CHARACTER or not, and describe how " + name + " would interact with this pet or wild animal, including whether they would want to care for it, be afraid of it, or want to befriend it."
+                                baseInstructions = "NEVER ask for clarification or more information. ALWAYS directly write the description paragraph. Invent any specific details as needed. The response should use the word 'OTHER_CHARACTER' to refer to the animal (pet or wild beast) in question. Write in clear, direct, objective terms about how " + name + " views and relates to OTHER_CHARACTER — describe their attitudes and behaviors concretely. Avoid flowery language and purple prose. Do not describe specific physical micro-actions or sensory body-part details. Broad behavioral tendencies are fine (e.g. they may hide from it, they may want to approach it). State plainly whether " + name + " has any sexual feelings towards OTHER_CHARACTER or not, and describe how " + name + " would interact with this pet or wild animal, including whether they would want to care for it, be afraid of it, or want to befriend it."
                             }
                             if (guidanceGivenAllExtraInfo) {
                                 baseInstructions += "\n\nThe following information has been provided based on the previous questions and answers:\n\n" + guidanceGivenAllExtraInfo;

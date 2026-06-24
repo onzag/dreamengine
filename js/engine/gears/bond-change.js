@@ -118,7 +118,7 @@ export default async function calculateBondsChangesDueToMessages(engine, charact
                     const followUpAnswer = followUp.value.trim().toLowerCase();
                     if (followUpAnswer === "yes") {
                         console.log("Undoing the bond shift for " + interactedCharacterName + " with the id " + shiftId + " based on the follow up question.");
-                        deObject.utils.shiftBond(deObject, character, otherCharacter, -toRecoverAmountBond, -toRecoverAmountBond2);
+                        deObject.utils.shiftBond(character, otherCharacter, -toRecoverAmountBond, -toRecoverAmountBond2);
                     }
                 }
             }
@@ -134,7 +134,7 @@ export default async function calculateBondsChangesDueToMessages(engine, charact
         const bond = engine.deObject.bonds[character.name].active.find(b => b.towards === interactedCharacterName);
         if (bond) {
             const otherCharacter = engine.deObject.characters[interactedCharacterName];
-            if (!deObject.utils.hasBondBeenShiftedThisCycle(deObject, character, otherCharacter)) {
+            if (!deObject.utils.hasBondBeenShiftedThisCycle(character, otherCharacter)) {
                 // neutral shift
                 const maxBondShift = (character.bonds.bondGraduation.goodFriend - character.bonds.bondGraduation.friend) / 2;
                 const minBondShift = (character.bonds.bondGraduation.unfriendly - character.bonds.bondGraduation.antagonistic) / 2;
@@ -163,7 +163,7 @@ export default async function calculateBondsChangesDueToMessages(engine, charact
                 }
 
                 if (bondChange !== 0) {
-                    deObject.utils.shiftBond(deObject, character, otherCharacter, bondChange, 0);
+                    deObject.utils.shiftBond(character, otherCharacter, bondChange, 0);
                 }
             }
         }
