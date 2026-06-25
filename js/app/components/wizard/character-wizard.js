@@ -1,5 +1,6 @@
 import { getJsScriptFromGenerator, isScriptTypeGeneratorFile, parseScriptGeneratorFrom } from '../../../script-generation/base.js';
 import { playCancelSound, playConfirmSound, playHoverSound, setTempSoundDisable, stopAllAmbiencesAndStartNewOne } from '../../sound.js';
+import './character-overview.js';
 
 export class CardTypeWizard extends HTMLElement {
     constructor() {
@@ -28,6 +29,14 @@ export class CardTypeWizard extends HTMLElement {
         this.root.querySelectorAll('.wizard-buttons div').forEach(btn => {
             btn.addEventListener('mouseenter', playHoverSound);
         });
+
+        const overviewBtn = this.root.querySelector('.wizard-overview-button');
+        if (overviewBtn) {
+            overviewBtn.addEventListener('mouseenter', playHoverSound);
+            overviewBtn.addEventListener('click', () => {
+                this.openOverview();
+            });
+        }
 
         const prevBtn = this.root.querySelector('.wizard-prev-button');
         if (prevBtn) {
@@ -308,6 +317,11 @@ export class CardTypeWizard extends HTMLElement {
         if (client) {
             client.goBackInCardTypeWizard();
         }
+    }
+
+    openOverview() {
+        const overview = document.createElement('app-character-overview');
+        document.body.appendChild(overview);
     }
 
     showDone() {
@@ -982,13 +996,11 @@ export class CardTypeWizard extends HTMLElement {
             this._autosaveHideTimer = null;
         }
         const el = this.root.querySelector('.wizard-autosave');
-        const el2 = this.root.querySelector('.wizard-prev-button');
         if (el) {
             el.textContent = 'Saving...';
             el.classList.add('visible');
             el.classList.remove('saved');
         }
-        if (el2) el2.classList.remove('visible');
     }
 
     /**
@@ -996,7 +1008,6 @@ export class CardTypeWizard extends HTMLElement {
      */
     hideAutosaveStatus() {
         const el = this.root.querySelector('.wizard-autosave');
-        const el2 = this.root.querySelector('.wizard-prev-button');
         if (el) {
             el.textContent = 'Saved';
             el.classList.add('saved');
@@ -1006,7 +1017,6 @@ export class CardTypeWizard extends HTMLElement {
                 el.classList.remove('visible');
                 el.classList.remove('saved');
             }
-            if (el2) el2.classList.add('visible');
             this._autosaveHideTimer = null;
         }, 2000);
     }
@@ -1049,6 +1059,7 @@ export class CardTypeWizard extends HTMLElement {
             <span>CardType Wizard</span>
             <div class="wizard-title-right">
                 <span class="wizard-autosave"></span>
+                <div class="wizard-overview-button">overview</div>
                 <div class="wizard-prev-button">prev</div>
             </div>
         </div>

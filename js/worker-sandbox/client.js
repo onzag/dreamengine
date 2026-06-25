@@ -295,6 +295,12 @@ export class EngineWorkerClient {
     cancelCardTypeGeneration() { return this.#call("cancelCardTypeGeneration"); }
 
     /**
+     * Provides the current state of the cardtype wizard on the worker.
+     * @returns {Promise<{state: any}>} The current state of the cardtype wizard
+     */
+    getCardTypeWizardState() { return this.#call("getCardTypeWizardState"); }
+
+    /**
      * Send an answer to a guider question on the worker.
      * @param {{ qid: number, value: any }} args
      */

@@ -63,13 +63,13 @@
 }
 
 .wizard-title-right {
-    display: grid;
+    display: flex;
     align-items: center;
-    justify-items: end;
+    gap: 1vh;
+    justify-content: flex-end;
 }
 
 .wizard-autosave {
-    grid-area: 1 / 1;
     font-size: 2vh;
     color: rgba(100, 200, 240, 0.7);
     opacity: 0;
@@ -87,10 +87,8 @@
 }
 
 .wizard-prev-button {
-    grid-area: 1 / 1;
     font-size: 2vh;
     color: rgba(100, 200, 240, 0.7);
-    opacity: 0;
     transition: opacity 0.4s ease;
     white-space: nowrap;
     cursor: pointer;
@@ -100,11 +98,24 @@
     user-select: none;
 }
 
-.wizard-prev-button.visible {
-    opacity: 1;
+.wizard-overview-button {
+    font-size: 2vh;
+    color: rgba(100, 200, 240, 0.7);
+    white-space: nowrap;
+    cursor: pointer;
+    padding: 0.4vh 1vh;
+    border: 1px solid rgba(100, 200, 240, 0.3);
+    border-radius: 4px;
+    user-select: none;
 }
 
-.wizard-prev-button.visible:hover {
+.wizard-overview-button:hover {
+    color: #60d0ff;
+    text-shadow: 0 0 14px rgba(60, 180, 255, 0.4);
+    border-color: rgba(80, 180, 220, 0.5);
+}
+
+.wizard-prev-button:hover {
     color: #60d0ff;
     text-shadow: 0 0 14px rgba(60, 180, 255, 0.4);
     border-color: rgba(80, 180, 220, 0.5);

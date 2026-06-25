@@ -151,6 +151,11 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
         self.postMessage({ type: "event", event: "inferringOverConversationMessage", data });
     });
 
+    /**
+     * @type {import('../script-generation/base.js').ScriptTypeGenerator | null}
+     */
+    let currentCardOfWizard = null;
+
     // ── RPC handler map ─────────────────────────────────────────────────
     /**
      * @type {Record<string, (args: any) => Promise<any>>}
@@ -520,6 +525,7 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
          * @param {boolean} args.guided - whether to run the guider questions or skip straight to generation 
          */
         async continueCardTypeWizard({ currentCard, guided }) {
+            currentCardOfWizard = currentCard;
             // Cancel any previous wizard run
             cancelCurrentWizard();
 
@@ -560,6 +566,7 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
                 if (currentWizardCancel === cancel) {
                     currentWizardCancel = null;
                 }
+                currentCardOfWizard = null;
             }
         },
 
@@ -569,6 +576,10 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
         async cancelCardTypeGeneration() {
             cancelCurrentWizard();
             return { ok: true };
+        },
+
+        async getCardTypeWizardState() {
+            return { state: currentCardOfWizard?.state };
         }
     };
 

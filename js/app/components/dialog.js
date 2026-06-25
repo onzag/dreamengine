@@ -114,7 +114,6 @@ class Dialog extends HTMLElement {
         .dialog {
             position: fixed;
             width: 90%;
-            max-width: 60vw;
             background: rgba(0, 0, 0, 0.5);
             color: white;
             padding: 5vh;
@@ -126,6 +125,9 @@ class Dialog extends HTMLElement {
             top: 50%;
             border: solid 2px black;
             box-shadow: 0 0 10px 2px rgba(100, 0, 200, 0.5);
+        }
+        .dialog-limited {
+            max-width: 60vw;
         }
         .backdrop {
             position: fixed;
@@ -166,7 +168,7 @@ class Dialog extends HTMLElement {
         }
       </style>
       <div class="backdrop"></div>
-      <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title">
+      <div class="dialog ${this.getAttribute("large") ? "" : "dialog-limited"}" role="dialog" aria-modal="true" aria-labelledby="dialog-title">
         <div class="dialog-title" id="dialog-title" tabindex="0" data-de-aria-text="true">
             ${title}
         </div>
