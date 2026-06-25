@@ -168,8 +168,9 @@ export async function generateBase(engine, scriptgenerator, guider) {
     {
         let description = "";
 
+        let reask = false;
         while (true) {
-            const acceptedResponse = await guider.askAccept("character-description", "Is the following description okay?", async () => {
+            const acceptedResponse = await guider.askAccept({id: "character-description", reask, step: true, recalcdefault: true}, "Is the following description okay?", async () => {
                 let specialInstructions = (await guider.askOpen({ id: "character-description-special-instructions", reask: true, step: false }, "Provide any special focus instructions for defining " + name + "'s appearance, personality and general abilities, what to focus on (do not talk about clothing the description is about the character's inherent traits and features)", "")).value;
                 if (specialInstructions) {
                     specialInstructions = "\n\n# MANDATORY REQUIREMENTS — ACTIVE OVERRIDE:\n\nThe following requirements MUST be reflected in your answer. Treat them as hard constraints that take absolute priority over any conflicting instruction above. Do NOT ignore or dilute them:\n\n" + specialInstructions.trim();
@@ -202,6 +203,8 @@ export async function generateBase(engine, scriptgenerator, guider) {
             if (accepted) {
                 break;
             }
+
+            reask = true;
         }
 
         insertSpecialComment(newCharacterSection.body, "base-description");
@@ -210,8 +213,9 @@ export async function generateBase(engine, scriptgenerator, guider) {
 
     let shortDescription = "";
     {
+        let reask = false;
         while (true) {
-            const acceptedResponse = await guider.askAccept("character-short-description", "Is the following short description okay?", async () => {
+            const acceptedResponse = await guider.askAccept({id: "character-short-description", reask, step: true, recalcdefault: true}, "Is the following short description okay?", async () => {
                 let specialInstructionsForShortDescription = guider ? (await guider.askOpen({ id: "character-short-description-special-instructions", reask: true, step: false }, "Provide any special focus instructions for defining " + name + "'s external and physical description, what to focus on (do not talk about clothing the description is about the character's inherent traits and features)", "")).value : null;
                 if (specialInstructionsForShortDescription) {
                     specialInstructionsForShortDescription = "\n\n# MANDATORY REQUIREMENTS — ACTIVE OVERRIDE:\n\nThe following requirements MUST be reflected in your answer. Treat them as hard constraints that take absolute priority over any conflicting instruction above. Do NOT ignore or dilute them:\n\n" + specialInstructionsForShortDescription.trim();
@@ -241,6 +245,8 @@ export async function generateBase(engine, scriptgenerator, guider) {
             if (accepted) {
                 break;
             }
+
+            reask = true;
         }
         insertSpecialComment(newCharacterSection.body, "base-short-description");
         newCharacterSection.body.push(`shortDescription: ${JSON.stringify(shortDescription)},`);
@@ -249,8 +255,9 @@ export async function generateBase(engine, scriptgenerator, guider) {
     {
         let shortDescriptionTopNakedAdd = "";
 
+        let reask = false;
         while (true) {
-            const acceptedResponse = await guider.askAccept("character-short-description-top-naked-add", "Is the following addition to the short description okay?", async () => {
+            const acceptedResponse = await guider.askAccept({id: "character-short-description-top-naked-add", reask, step: true, recalcdefault: true}, "Is the following addition to the short description okay?", async () => {
                 let specialInstructionsForShortDescriptionAdd = (await guider.askOpen({ id: "character-short-description-top-naked-add-special-instructions", reask: true, step: false }, "Provide any special focus instructions for defining the additions to " + name + "'s short description when they are not wearing any upper body clothing, what to focus on (how to describe their upper body's most distinctive features)", "")).value;
                 if (specialInstructionsForShortDescriptionAdd) {
                     specialInstructionsForShortDescriptionAdd = "\n\n# MANDATORY REQUIREMENTS — ACTIVE OVERRIDE:\n\nThe following requirements MUST be reflected in your answer. Treat them as hard constraints that take absolute priority over any conflicting instruction above. Do NOT ignore or dilute them:\n\n" + specialInstructionsForShortDescriptionAdd.trim();
@@ -281,6 +288,8 @@ export async function generateBase(engine, scriptgenerator, guider) {
             if (accepted) {
                 break;
             }
+
+            reask = true;
         }
 
         insertSpecialComment(newCharacterSection.body, "base-short-description-top-naked-add");
@@ -291,8 +300,9 @@ export async function generateBase(engine, scriptgenerator, guider) {
 
         let shortDescriptionBottomNakedAdd = "";
 
+        let reask = false;
         while (true) {
-            const acceptedResponse = await guider.askAccept("character-short-description-bottom-naked-add", "Is the following addition to the short description okay?", async () => {
+            const acceptedResponse = await guider.askAccept({id: "character-short-description-bottom-naked-add", reask, step: true, recalcdefault: true}, "Is the following addition to the short description okay?", async () => {
                 let specialInstructionsForShortDescriptionBottomAdd = (await guider.askOpen({ id: "character-short-description-bottom-naked-add-special-instructions", reask: true, step: false }, "Provide any special focus instructions for defining the additions to " + name + "'s short description when they are not wearing any lower body clothing, what to focus on (how to describe their lower body's most distinctive features)", "")).value;
                 if (specialInstructionsForShortDescriptionBottomAdd) {
                     specialInstructionsForShortDescriptionBottomAdd = "\n\n# MANDATORY REQUIREMENTS — ACTIVE OVERRIDE:\n\nThe following requirements MUST be reflected in your answer. Treat them as hard constraints that take absolute priority over any conflicting instruction above. Do NOT ignore or dilute them:\n\n" + specialInstructionsForShortDescriptionBottomAdd.trim();
@@ -323,6 +333,8 @@ export async function generateBase(engine, scriptgenerator, guider) {
             if (accepted) {
                 break;
             }
+
+            reask = true;
         }
         insertSpecialComment(newCharacterSection.body, "base-short-description-bottom-naked-add");
         newCharacterSection.body.push(`shortDescriptionBottomNakedAdd: ${JSON.stringify(shortDescriptionBottomNakedAdd)},`);

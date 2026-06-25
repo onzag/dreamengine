@@ -2418,7 +2418,7 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                 let redoGuidance = false;
                 let descriptionValueUnprocessed = "";
                 let descriptionValue = "";
-                let originalReferenceDescription = getFineTuneReferenceNoIntimateModifier("description_accept");
+                let originalReferenceDescription = getFineTuneReferenceNoIntimateModifier("description");
                 while (true) {
                     let redidGuidance = false;
                     if (redoGuidance) {
@@ -2453,7 +2453,7 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                     baseInstructions += "\n\nAnswer in present tense, future tense is allowed to specify potential behaviors that " + name + " might do";
 
                     const guiderResult = await guider.askAccept(
-                        {id: strangerKey + "_" + fineTuneComment + "_description_accept", reask: redidGuidance, step: true},
+                        { id: strangerKey + "_" + fineTuneComment + "_description", reask: redidGuidance, step: true, recalcdefault: true },
                         "Description of a relationship with " + actualStrangerValue + messageAboutAnswersFrom + (originalReferenceDescription ? "\n\nOriginal: " + originalReferenceDescription : ""),
                         async () => {
                             if (originalReferenceDescription && !redidGuidance) {
@@ -2461,27 +2461,41 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                             }
                             await prime();
 
-                            while (true) {
-                                const descriptionQuestion = await generator.next({
-                                    maxCharacters: 200,
-                                    maxSafetyCharacters: 600,
-                                    maxParagraphs: 1,
-                                    nextQuestion: "Provide a concise and short one paragraph description of how " + name + " perceives and feels about " + actualStrangerValue + ". Focus on the emotional and psychological aspects of their perception, rather than physical details. This should capture the essence of their feelings and attitudes towards this person in a way that informs their interactions and relationship dynamics. Keep the paragraph short, ideally under 70 words.",
-                                    stopAfter: [],
-                                    stopAt: [],
-                                    instructions: baseInstructions,
-                                });
+                            const descriptionBehaviour = await generator.next({
+                                maxCharacters: 200,
+                                maxSafetyCharacters: 600,
+                                maxParagraphs: 1,
+                                nextQuestion: "Provide a concise and short one sentence description of how " + name + " should act towards " + actualStrangerValue + ". Focus on the emotional and psychological aspects of their perception, rather than physical details. This should capture the essence of their feelings and attitudes towards this person in a way that informs their interactions and relationship dynamics.",
+                                stopAfter: [],
+                                stopAt: [],
+                                instructions: baseInstructions,
+                                grammar: "root ::= " + JSON.stringify("Regarding OTHER_CHARACTER " + name + " should act ") + " [a-zA-Z0-9 ,;.'_]+",
+                            });
 
-                                if (descriptionQuestion.done) {
-                                    throw new Error("Generator ended unexpectedly while generating description for " + strangerKey);
-                                }
-
-                                if (!descriptionQuestion.value.includes("OTHER_CHARACTER") && !descriptionQuestion.value.includes("OTHER CHARACTER")) {
-                                    continue;
-                                }
-
-                                return replaceOtherCharNameWithPlaceholder(descriptionQuestion.value.trim(), name);
+                            if (descriptionBehaviour.done) {
+                                throw new Error("Generator ended unexpectedly while generating description for " + strangerKey);
                             }
+
+                            const actualDescriptionBehavour = replaceOtherCharNameWithPlaceholder(descriptionBehaviour.value.trim(), name);
+
+                            const descriptionInternalFeelings = await generator.next({
+                                maxCharacters: 200,
+                                maxSafetyCharacters: 600,
+                                maxParagraphs: 1,
+                                nextQuestion: "Provide a concise and short one sentence description of how " + name + " feels internally towards " + actualStrangerValue + ". Focus on the emotional and psychological aspects of their perception, rather than physical details. This should capture the essence of their feelings towards this person in a way that informs their interactions and relationship dynamics.",
+                                stopAfter: [],
+                                stopAt: [],
+                                instructions: baseInstructions,
+                                grammar: "root ::= " + JSON.stringify(name + " feels that OTHER_CHARACTER is ") + " [a-zA-Z0-9 ,;.'_]+",
+                            });
+
+                            if (descriptionInternalFeelings.done) {
+                                throw new Error("Generator ended unexpectedly while generating description for " + strangerKey);
+                            }
+
+                            const actualDescriptionInternalFeelings = replaceOtherCharNameWithPlaceholder(descriptionInternalFeelings.value.trim(), name);
+
+                            return actualDescriptionBehavour + "\n\n" + actualDescriptionInternalFeelings;
                         },
                     );
                     if (guiderResult.value === null) {

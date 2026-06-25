@@ -634,11 +634,19 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
             const defaultValueFnOrValue = extra.defaultValue;
 
             const actualId = typeof id === "object" && id !== null ? id.id : id;
+            const reask = typeof id === "object" && id !== null ? !!id.reask : false;
+            const trackStep = typeof id === "object" && id !== null ? (id.step !== undefined ? !!id.step : true) : true;
+            const recalcdefault = typeof id === "object" && id !== null ? !!id.recalcdefault : false;
             const stateValue = actualId !== null ? currentCard.state[actualId] : undefined;
             const stepHasNotRanTechnically = !(currentCard.state[".steps"] || []).includes(actualId);
-            const shouldAsk = (stepHasNotRanTechnically || stateValue === undefined) && isGuided;
-            const defaultValue = stateValue !== undefined ? stateValue : (typeof defaultValueFnOrValue === 'function' ? await defaultValueFnOrValue() : defaultValueFnOrValue);
+            const shouldAsk = (reask || stepHasNotRanTechnically || stateValue === undefined) && isGuided;
+            let defaultValue = stateValue !== undefined ? stateValue : (typeof defaultValueFnOrValue === 'function' ? await defaultValueFnOrValue() : defaultValueFnOrValue);
 
+            // recalc default only has an effect if reask is true, otherwise it will be ignored
+            if (reask && recalcdefault) {
+                defaultValue = typeof defaultValueFnOrValue === 'function' ? await defaultValueFnOrValue() : defaultValueFnOrValue;
+            }
+            
             extra.defaultValue = defaultValue;
 
             let finalAnswer;
@@ -668,11 +676,13 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
 
             if (finalAnswer) {
                 currentCard.state[actualId] = finalAnswer.value;
-                if (currentCard.state[".steps"] === undefined) {
-                    currentCard.state[".steps"] = [];
-                }
-                if (!currentCard.state[".steps"].includes(actualId)) {
-                    currentCard.state[".steps"].push(actualId);
+                if (trackStep) {
+                    if (currentCard.state[".steps"] === undefined) {
+                        currentCard.state[".steps"] = [];
+                    }
+                    if (!currentCard.state[".steps"].includes(actualId)) {
+                        currentCard.state[".steps"].push(actualId);
+                    }
                 }
             }
 
