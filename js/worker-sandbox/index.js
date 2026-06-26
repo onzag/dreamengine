@@ -301,6 +301,11 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
             return { ok: true };
         },
 
+        async jsEngineUpdate({ namespace, id, options }) {
+            await jsEngine.update(namespace, id, options);
+            return { ok: true };
+        },
+
         async jsEngineClearExecutionOrder() {
             await jsEngine.clearExecutionOrder();
             return { ok: true };

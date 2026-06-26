@@ -103,8 +103,12 @@ pre { margin:0; padding:16px; line-height:1.5; white-space:pre-wrap; word-wrap:b
             // EventSource auto-reconnects on disconnect.
             try {
                 const es = new EventSource('/api/scripts/events', { withCredentials: true });
-                es.addEventListener('scripts-changed', () => {
-                    try { callback(); } catch (err) { console.error(err); }
+                es.addEventListener('scripts-changed', (event) => {
+                    try {
+                        const data = /** @type {MessageEvent} */ (event).data;
+                        const { namespace, id, options } = JSON.parse(data || '{}');
+                        callback(namespace, id, options ?? undefined);
+                    } catch (err) { console.error(err); }
                 });
                 es.onerror = (err) => {
                     console.warn('scripts-changed event stream error:', err);

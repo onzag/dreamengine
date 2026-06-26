@@ -17,15 +17,22 @@ class ScriptInfo extends HTMLElement {
         this.scriptId = this.getAttribute("script-id") || "";
         this.scriptNamespace = this.getAttribute("script-namespace") || "";
         this.renderLoading();
-        this.refresh();
+        this.refresh(true);
     }
 
-    async refresh() {
+    /**
+     * @param {boolean} initial 
+     */
+    async refresh(initial) {
         try {
-            await window.JS_ENGINE_RECREATE(
-                this.scriptNamespace,
-                this.scriptId,
-            );
+            if (!initial) {
+                // If this is a refresh (not the initial load), we want to update the JS engine
+                // so that any changes to the script file are reflected in the info we fetch.
+                await window.JS_ENGINE_UPDATE(
+                    this.scriptNamespace,
+                    this.scriptId,
+                );
+            }
             this.infoMap = await window.ENGINE_WORKER_CLIENT.jsEngineGetInfoMapForScripts({
                 scripts: [{ namespace: this.scriptNamespace, id: this.scriptId }]
             });
@@ -130,7 +137,7 @@ class ScriptInfo extends HTMLElement {
 
         this.root.getElementById('refresh-btn')?.addEventListener('button-click', () => {
             this.renderLoading();
-            this.refresh();
+            this.refresh(false);
         });
 
 
@@ -204,7 +211,7 @@ class ScriptInfo extends HTMLElement {
             dialog.removeEventListener('cancel', onCancel);
             try {
                 await window.API.deleteScriptFile(this.scriptNamespace, this.scriptId);
-                await window.JS_ENGINE_RECREATE(this.scriptNamespace, this.scriptId, {deleted: true});
+                await window.JS_ENGINE_UPDATE(this.scriptNamespace, this.scriptId, {deleted: true});
             } catch (err) {
                 console.error('Failed to delete script file:', err);
                 document.body.removeChild(dialog);
@@ -314,7 +321,7 @@ class ScriptInfo extends HTMLElement {
 
             try {
                 await window.API.moveScriptFile(this.scriptNamespace, this.scriptId, newNamespace, newId);
-                await window.JS_ENGINE_RECREATE(
+                await window.JS_ENGINE_UPDATE(
                     this.scriptNamespace,
                     this.scriptId,
                     { moved: { newNamespace, newId } }

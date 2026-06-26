@@ -107,10 +107,10 @@ contextBridge.exposeInMainWorld('API', {
     },
     /**
      * Register a callback for when script files change on disk.
-     * @param {() => void} callback
+     * @param {(namespace: string, id: string, options?: { deleted?: boolean, moved?: { newNamespace: string, newId: string } }) => void} callback
      */
     onScriptsChanged: (callback) => {
-        ipcRenderer.on('scripts-changed', () => callback());
+        ipcRenderer.on('scripts-changed', (_event, namespace, id, options) => callback(namespace, id, options));
     },
 
     /**

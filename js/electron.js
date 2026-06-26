@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import { execFile } from 'child_process';
 import { buildDreamEngineHomeSync } from './util/build-dreamengine-home.js';
 import buildTypes from './util/build-types.js';
+import { watchScripts } from './util/watch-scripts.js';
 
 // @ts-ignore
 const __filename = fileURLToPath(import.meta.url);
@@ -273,22 +274,14 @@ if (!fs.existsSync(SCRIPT_FOLDER)) {
     fs.mkdirSync(SCRIPT_FOLDER, { recursive: true });
 }
 
-// Watch the scripts folder for changes and notify the renderer
-/**
- * @type {NodeJS.Timeout|null}
- */
-let scriptChangeTimeout = null;
-fs.watch(SCRIPT_FOLDER, { recursive: true }, (eventType, filename) => {
-    if (!filename || !filename.endsWith('.js')) return;
-    // Debounce to avoid rapid-fire events
-    if (scriptChangeTimeout) clearTimeout(scriptChangeTimeout);
-    scriptChangeTimeout = setTimeout(() => {
-        scriptChangeTimeout = null;
-        const wins = BrowserWindow.getAllWindows();
-        for (const win of wins) {
-            win.webContents.send('scripts-changed');
-        }
-    }, 500);
+// Watch the scripts folder for changes and notify the renderer. The change
+// payload describes the affected script (namespace/id) and whether it was
+// deleted or moved, so renderers can make targeted decisions.
+watchScripts(SCRIPT_FOLDER, ({ namespace, id, options }) => {
+    const wins = BrowserWindow.getAllWindows();
+    for (const win of wins) {
+        win.webContents.send('scripts-changed', namespace, id, options);
+    }
 });
 
 ipcMain.handle('listScriptFiles', async (event) => {

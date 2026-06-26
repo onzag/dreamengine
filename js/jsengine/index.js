@@ -55,6 +55,13 @@ export class DEJSEngine {
 
         this.importScript = this.importScript.bind(this);
         this.__panthomImports = false; // internal flag to prevent adding scripts to order during bulk imports
+        this.__forceNextImport = false; // internal flag to force re-importing a script even if it's cached
+        /**
+         * Tracks recent update() calls to suppress duplicate events within a 1 s window.
+         * Key format: `<namespace>/<id>:<type>[:<newNamespace>/<newId>]`
+         * @type {Map<string, number>}
+         */
+        this.__recentUpdates = new Map();
 
         /**
          * @type {Record<string, Array<string>>} A dependency tree mapping script keys to arrays of script keys they depend on, used for determining execution order and detecting circular dependencies
@@ -87,8 +94,20 @@ export class DEJSEngine {
     async importScript(namespace, id, options) {
         const key = `${namespace}/${id}`;
 
+        let forcePanthomImport = false;
+        if (this.__forceNextImport) {
+            console.log(`Force importing script ${key}...`);
+            delete this.scriptCache[key];
+            delete this.dependencyTree[key];
+            const wasPanthomImported = !this.scriptOrder.includes(key);
+            forcePanthomImport = wasPanthomImported;
+            this.__forceNextImport = false;
+        }
+
+        const panthomImport = this.__panthomImports || forcePanthomImport;
+
         if (this.scriptCache[key]) {
-            if (!this.__panthomImports && !this.scriptOrder.includes(key)) {
+            if (!panthomImport && !this.scriptOrder.includes(key)) {
                 console.log("Adding cached script to execution order:", key);
                 this.scriptOrder.push(key);
 
@@ -105,7 +124,7 @@ export class DEJSEngine {
             return this.scriptCache[key];
         }
 
-        console.log(`Importing script ${key}...`);
+        console.log(`Importing script: ${key}`);
 
         /**
          * @type {{src: string, srcUrl: string}}
@@ -135,7 +154,21 @@ export class DEJSEngine {
          * @param {*} opts 
          */
         const importScriptOverride = async (ns, scriptId, opts) => {
+
+            // we force panthom imports for scripts that are imported by the other script
+            // if this script was imported as a panthom import and then updated, therefore
+            // calling the force re-import of the dependency, this also occurs for new files that
+            // are added
+            let setPanthomImports = false;
+            if (forcePanthomImport && !this.__panthomImports) {
+                setPanthomImports = true;
+                this.__panthomImports = true;
+            }
             const result = await this.importScript(ns, scriptId, opts);
+            if (setPanthomImports) {
+                this.__panthomImports = false;
+            }
+
             if (result) {
                 const depKey = `${ns}/${scriptId}`;
                 if (!this.dependencyTree[key]) {
@@ -167,12 +200,12 @@ export class DEJSEngine {
 
         engine.exports.metadata.__placeholder = file.src.startsWith("//@placeholder");
 
-        if (file.src.startsWith("//@config") && !engine.exports.metadata.__placeholder) {
+        if (file.src.startsWith("//@state") && !engine.exports.metadata.__placeholder) {
             engine.exports.metadata.__in_progress = /"guidedWizardInProgress"\s*:\s*true/.test(file.src)
                 || /"automaticWizardInProgress"\s*:\s*true/.test(file.src);
         }
 
-        if (!this.__panthomImports) {
+        if (!panthomImport) {
             console.log("Adding script to execution order:", key);
             this.scriptOrder.push(key);
         }
@@ -240,6 +273,84 @@ export class DEJSEngine {
         this.scriptCache = {};
         this.scriptOrder = [];
         this.dependencyTree = {};
+        this.__recentUpdates.clear();
+    }
+
+    /**
+     * @param {string} namespace 
+     * @param {string} id 
+     * @param {{ deleted?: boolean, moved?: { newNamespace: string, newId: string } }} options 
+     */
+    async update(namespace, id, options) {
+        console.log(`Updating script ${namespace}/${id}...`, options);
+        const key = `${namespace}/${id}`;
+
+        // Deduplicate: the UI may eagerly trigger the same update before the
+        // filesystem watcher fires. Ignore a second identical call within 1 s.
+        const updateKey = options?.deleted
+            ? `${key}:deleted`
+            : options?.moved
+                ? `${key}:moved:${options.moved.newNamespace}/${options.moved.newId}`
+                : `${key}:changed`;
+        const now = Date.now();
+        const lastSeen = this.__recentUpdates.get(updateKey);
+        if (lastSeen !== undefined && now - lastSeen < 1000) {
+            console.log(`Skipping duplicate update for ${updateKey} within 1 s window.`);
+            return;
+        }
+        this.__recentUpdates.set(updateKey, now);
+
+        if (options?.deleted) {
+            if (!this.scriptCache[key]) {
+                return;
+            }
+            console.log(`Script ${key} was deleted. Removing from cache and execution order.`);
+            delete this.scriptCache[key];
+            this.scriptOrder = this.scriptOrder.filter(k => k !== key);
+            delete this.dependencyTree[key];
+            return;
+        } else if (options?.moved) {
+            if (!this.scriptCache[key]) {
+                return;
+            }
+            const newKey = `${options.moved.newNamespace}/${options.moved.newId}`;
+            console.log(`Script ${key} was moved to ${newKey}. Updating cache and execution order.`);
+            if (this.scriptCache[key]) {
+                this.scriptCache[newKey] = this.scriptCache[key];
+                delete this.scriptCache[key];
+            }
+            this.scriptOrder = this.scriptOrder.map(k => (k === key ? newKey : k));
+            if (this.dependencyTree[key]) {
+                this.dependencyTree[newKey] = this.dependencyTree[key];
+                delete this.dependencyTree[key];
+            }
+        } else {
+            // new or updated script, it must be re-imported
+            this.__forceNextImport = true;
+            await this.importScript(namespace, id);
+        }
+
+        if (options?.deleted || options?.moved) {
+            // Destroy any other scripts that depend on this script, since they must be broken now
+            for (const [otherKey, deps] of Object.entries(this.dependencyTree)) {
+                if (deps.includes(key)) {
+                    console.log(`Script ${otherKey} depends on ${key}. Removing from cache and execution order.`);
+                    delete this.scriptCache[otherKey];
+                    this.scriptOrder = this.scriptOrder.filter(k => k !== otherKey);
+                    delete this.dependencyTree[otherKey];
+                }
+            }
+        } else {
+            // Re-import scripts that depend on this script, since they may have changed
+            for (const [otherKey, deps] of Object.entries(this.dependencyTree)) {
+                if (deps.includes(key)) {
+                    console.log(`Script ${otherKey} depends on ${key}. Re-importing...`);
+                    const [ns, id] = otherKey.split('/');
+                    this.__forceNextImport = true;
+                    await this.importScript(ns, id);
+                }
+            }
+        }
     }
 
     async clearExecutionOrder() {

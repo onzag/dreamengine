@@ -15,6 +15,7 @@ import { promisify } from 'util';
 import { fileURLToPath } from 'url';
 import https from 'https';
 import { buildDreamEngineHome } from './util/build-dreamengine-home.js';
+import { watchScripts } from './util/watch-scripts.js';
 import express from 'express';
 
 const execFileAsync = promisify(execFile);
@@ -638,21 +639,17 @@ async function startWebServer(creds) {
         });
     });
 
-    /** @type {NodeJS.Timeout|null} */
-    let scriptChangeTimeout = null;
-    fs.watch(SCRIPT_FOLDER, { recursive: true }, (_eventType, filename) => {
-        if (!filename || !String(filename).endsWith('.js')) return;
-        if (scriptChangeTimeout) clearTimeout(scriptChangeTimeout);
-        scriptChangeTimeout = setTimeout(() => {
-            scriptChangeTimeout = null;
-            for (const client of scriptChangeClients) {
-                try {
-                    client.write('event: scripts-changed\ndata: {}\n\n');
-                } catch {
-                    scriptChangeClients.delete(client);
-                }
+    watchScripts(SCRIPT_FOLDER, ({ namespace, id, options }) => {
+        // Mirror the electron payload: stream the affected script's namespace/id
+        // plus its disposition (deleted/moved) as the SSE event data.
+        const payload = JSON.stringify({ namespace, id, options: options ?? null });
+        for (const client of scriptChangeClients) {
+            try {
+                client.write(`event: scripts-changed\ndata: ${payload}\n\n`);
+            } catch {
+                scriptChangeClients.delete(client);
             }
-        }, 500);
+        }
     });
 
     // Redirect the root to the app's index so relative paths in index.html

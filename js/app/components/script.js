@@ -71,7 +71,7 @@ class ScriptOverlay extends HTMLElement {
 
                 try {
                     await window.API.newScriptFile(namespace, name, "//@placeholder\n\nengine.exports = {}");
-                    await window.JS_ENGINE_RECREATE(namespace, name);
+                    await window.JS_ENGINE_UPDATE(namespace, name);
                     localStorage.setItem('lastScriptNamespace', namespace);
                     this.currentScriptId = name;
                     this.currentScriptNamespace = namespace;

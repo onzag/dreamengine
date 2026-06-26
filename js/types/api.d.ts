@@ -38,7 +38,7 @@ declare global {
     DREAMENGINE_HOME: string;
     DREAMENGINE_DEFAULT_SCRIPTS_HOME: string;
     ENGINE_WORKER_CLIENT: EngineWorkerClient;
-    JS_ENGINE_RECREATE: (
+    JS_ENGINE_UPDATE: (
       namespace: string,
       id: string,
       options?: { deleted?: boolean; moved?: { newNamespace: string; newId: string } }

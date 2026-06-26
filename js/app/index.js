@@ -507,25 +507,14 @@ client.ready.then(async () => {
 // Expose client on window
 window.ENGINE_WORKER_CLIENT = client;
 
-let callingRecreate = false;
-window.JS_ENGINE_RECREATE = async () => {
-    if (callingRecreate) return;
-    callingRecreate = true;
-
-    const scriptFiles = await window.API.listScriptFiles();
-    await client.jsEngineRecreate();
-    await client.setScriptList({
-        scripts: scriptFiles,
-    });
-    await client.jsEnginePreloadAllScripts();
-
-    document.dispatchEvent(new CustomEvent('jsEngineRecreated'));
-
-    callingRecreate = false;
+window.JS_ENGINE_UPDATE = async (namespace, id, options) => {
+    await client.jsEngineUpdate(namespace, id, options || {});
 };
 
 // Auto-reload scripts when files change on disk
-window.API.onScriptsChanged(() => {
-    console.log('Scripts changed on disk, recreating engine...');
-    window.JS_ENGINE_RECREATE();
+window.API.onScriptsChanged((namespace, id, options) => {
+    console.log(`Script changed on disk: ${namespace}/${id}`, options);
+    window.JS_ENGINE_UPDATE(namespace, id, options).catch((err) => {
+        console.error("Failed to update JS engine:", err);
+    });
 });

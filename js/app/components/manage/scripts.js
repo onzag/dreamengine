@@ -99,6 +99,7 @@ class AppManageScripts extends HTMLElement {
         const infoMap = await window.ENGINE_WORKER_CLIENT.jsEngineGetInfoMap();
 
         const infoMapForNamespace = Object.values(infoMap).filter(info => info.namespace === this.currentNamespace && info.type !== "characters" && info.type !== "world");
+        infoMapForNamespace.sort((a, b) => a.id.localeCompare(b.id));
 
         if (infoMapForNamespace.length === 0) {
             const hasNewButton = this.getAttribute("no-new-button") !== "true";

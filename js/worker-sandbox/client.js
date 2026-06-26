@@ -191,6 +191,13 @@ export class EngineWorkerClient {
     jsEngineImportScripts(args) { return this.#call("jsEngineImportScripts", args); }
     jsEnginePreloadAllScripts() { return this.#call("jsEnginePreloadAllScripts"); }
     jsEngineRecreate() { return this.#call("jsEngineRecreate"); }
+    /**
+     * @param {string} namespace 
+     * @param {string} id 
+     * @param {{ deleted?: boolean, moved?: { newNamespace: string, newId: string } }} options 
+     * @returns {Promise<void>}
+     */
+    jsEngineUpdate(namespace, id, options) { return this.#call("jsEngineUpdate", { namespace, id, options }); }
     jsEngineClearExecutionOrder() { return this.#call("jsEngineClearExecutionOrder"); }
     jsEngineInitialize() { return this.#call("jsEngineInitialize"); }
     jsEngineUnload() { return this.#call("jsEngineUnload"); }

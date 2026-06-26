@@ -88,6 +88,7 @@ class AppManageCharacters extends HTMLElement {
         const infoMap = await window.ENGINE_WORKER_CLIENT.jsEngineGetInfoMap();
 
         const infoMapForNamespace = Object.values(infoMap).filter(info => info.namespace === this.currentNamespace && info.type === "characters");
+        infoMapForNamespace.sort((a, b) => a.id.localeCompare(b.id));
 
         const characterElements = infoMapForNamespace.map(characterFile => `
                 <div class="character-item" data-character-id="${characterFile.id}" data-character-namespace="${this.currentNamespace}">
