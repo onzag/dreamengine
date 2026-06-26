@@ -22,7 +22,10 @@ class ScriptInfo extends HTMLElement {
 
     async refresh() {
         try {
-            await window.JS_ENGINE_RECREATE();
+            await window.JS_ENGINE_RECREATE(
+                this.scriptNamespace,
+                this.scriptId,
+            );
             this.infoMap = await window.ENGINE_WORKER_CLIENT.jsEngineGetInfoMapForScripts({
                 scripts: [{ namespace: this.scriptNamespace, id: this.scriptId }]
             });
@@ -201,7 +204,7 @@ class ScriptInfo extends HTMLElement {
             dialog.removeEventListener('cancel', onCancel);
             try {
                 await window.API.deleteScriptFile(this.scriptNamespace, this.scriptId);
-                await window.JS_ENGINE_RECREATE();
+                await window.JS_ENGINE_RECREATE(this.scriptNamespace, this.scriptId, {deleted: true});
             } catch (err) {
                 console.error('Failed to delete script file:', err);
                 document.body.removeChild(dialog);
@@ -311,7 +314,11 @@ class ScriptInfo extends HTMLElement {
 
             try {
                 await window.API.moveScriptFile(this.scriptNamespace, this.scriptId, newNamespace, newId);
-                await window.JS_ENGINE_RECREATE();
+                await window.JS_ENGINE_RECREATE(
+                    this.scriptNamespace,
+                    this.scriptId,
+                    { moved: { newNamespace, newId } }
+                );
             } catch (err) {
                 console.error('Failed to move script file:', err);
                 // Re-arm listeners so the user can correct and retry.

@@ -25,7 +25,11 @@ declare interface DEAPI {
 
   getDreamEnginePaths(): Promise<string[]>;
   uploadFileToDEPath(dePath: string, file: File | Blob): Promise<boolean>;
-  onScriptsChanged(callback: () => void): void;
+  onScriptsChanged(callback: (
+    namespace: string,
+    id: string,
+    options?: { deleted?: boolean; moved?: { newNamespace: string; newId: string } }
+  ) => void): void;
 }
 
 declare global {
@@ -34,7 +38,11 @@ declare global {
     DREAMENGINE_HOME: string;
     DREAMENGINE_DEFAULT_SCRIPTS_HOME: string;
     ENGINE_WORKER_CLIENT: EngineWorkerClient;
-    JS_ENGINE_RECREATE: () => Promise<void>;
+    JS_ENGINE_RECREATE: (
+      namespace: string,
+      id: string,
+      options?: { deleted?: boolean; moved?: { newNamespace: string; newId: string } }
+    ) => Promise<void>;
   }
 }
 
