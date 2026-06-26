@@ -528,6 +528,7 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
             currentCardOfWizard = currentCard;
             // Cancel any previous wizard run
             cancelCurrentWizard();
+            const thisRunId = ++wizardRunId;
 
             const { promise: cancelPromise, cancel } = createCancelToken();
             currentWizardCancel = cancel;
@@ -566,7 +567,9 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
                 if (currentWizardCancel === cancel) {
                     currentWizardCancel = null;
                 }
-                currentCardOfWizard = null;
+                if (wizardRunId === thisRunId) {
+                    currentCardOfWizard = null;
+                }
             }
         },
 
@@ -588,6 +591,9 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
     class WizardCancelledError extends Error {
         constructor() { super("Wizard cancelled"); }
     }
+
+    /** @type {number} */
+    let wizardRunId = 0;
 
     /** @type {(() => void) | null} */
     let currentWizardCancel = null;
@@ -648,7 +654,30 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
             const reask = typeof id === "object" && id !== null ? !!id.reask : false;
             const trackStep = typeof id === "object" && id !== null ? (id.step !== undefined ? !!id.step : true) : true;
             const recalcdefault = typeof id === "object" && id !== null ? !!id.recalcdefault : false;
-            const stateValue = actualId !== null ? currentCard.state[actualId] : undefined;
+
+            let stateValue = actualId !== null ? currentCard.state[actualId] : undefined;
+
+            /**
+             * @type {string[] | null}
+             */
+            let availableOptions = null;
+            if (extra.options && Array.isArray(extra.options)) {
+                availableOptions = extra.options;
+            } else if (typeof extra.options === "object" && extra.options !== null) {
+                availableOptions = [];
+                for (const key in extra.options) {
+                    if (Array.isArray(extra.options[key])) {
+                        availableOptions = availableOptions.concat(extra.options[key]);
+                        break;
+                    }
+                }
+            }
+
+            if (typeof stateValue === "string" && availableOptions && stateValue !== undefined && !availableOptions.includes(stateValue)) {
+                // If the state value is not in the options, treat it as undefined so that the guider will ask again
+                stateValue = undefined;
+            }
+
             const stepHasNotRanTechnically = !(currentCard.state[".steps"] || []).includes(actualId);
             const shouldAsk = (reask || stepHasNotRanTechnically || stateValue === undefined) && isGuided;
             let defaultValue = stateValue !== undefined ? stateValue : (typeof defaultValueFnOrValue === 'function' ? await defaultValueFnOrValue() : defaultValueFnOrValue);
@@ -677,8 +706,6 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
                     answerPromise,
                     cancelPromise
                 ]));
-
-
 
                 finalAnswer = receivedAnswer;
             } else {

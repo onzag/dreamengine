@@ -264,11 +264,28 @@ function processRelationshipSteps(state, relationshipSteps, prefix) {
             const fieldEl = document.createElement('div');
             fieldEl.className = 'relationship-group-field';
 
+            const labelRowEl = document.createElement('div');
+            labelRowEl.className = 'relationship-group-field-label-row';
+
             const labelEl = document.createElement('div');
             labelEl.className = 'overview-label';
             labelEl.textContent = formatRelationshipKeyLabel(fieldKey);
-            fieldEl.appendChild(labelEl);
+            labelRowEl.appendChild(labelEl);
 
+            if (fieldKey === 'description') {
+                const copyBtn = document.createElement('button');
+                copyBtn.className = 'relationship-copy-btn';
+                copyBtn.textContent = 'Copy';
+                const descValue = group.groupFields.get(fieldKey);
+                copyBtn.addEventListener('click', () => {
+                    navigator.clipboard.writeText(descValue != null ? String(descValue) : '');
+                    copyBtn.textContent = 'Copied!';
+                    setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1500);
+                });
+                labelRowEl.appendChild(copyBtn);
+            }
+
+            fieldEl.appendChild(labelRowEl);
             fieldEl.appendChild(renderRelationshipValue(group.groupFields.get(fieldKey)));
             body.appendChild(fieldEl);
         }
@@ -673,7 +690,15 @@ const SECTIONS = [
     },
     {
         title: "Relationships (Bad Strangers)",
-        fields: [],
+        /**
+         * @param {*} s
+         * @return {HTMLElement | null}
+         */
+        custom: (s) => {
+            const stepsInfo = s[".steps"];
+            const typeToProcessPrefix = "strangerBad_n100_n5_";
+            return processRelationshipSteps(s, stepsInfo, typeToProcessPrefix);
+        }
     },
     {
         title: "Relationships (Acquaintances)",
@@ -931,6 +956,25 @@ class CharacterOverview extends HTMLElement {
                 font-size: 1.6vh;
                 font-style: italic;
                 color: rgba(255, 255, 255, 0.55);
+            }
+            .relationship-group-field-label-row {
+                display: flex;
+                align-items: center;
+                gap: 1ch;
+            }
+            .relationship-copy-btn {
+                font-size: 1.4vh;
+                padding: 0.2vh 0.8vh;
+                border-radius: 3px;
+                border: 1px solid rgba(100, 200, 240, 0.4);
+                background: rgba(100, 200, 240, 0.1);
+                color: rgba(100, 200, 240, 0.9);
+                cursor: pointer;
+                user-select: none;
+                line-height: 1;
+            }
+            .relationship-copy-btn:hover {
+                background: rgba(100, 200, 240, 0.2);
             }
         `;
         dialog.appendChild(style);

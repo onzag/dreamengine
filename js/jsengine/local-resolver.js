@@ -83,7 +83,7 @@ export async function localListResolver() {
     // List default scripts (namespaces must start with @)
     await listScriptsInDir(defaultScriptsDir, '', (namespace) => {
         if (!namespace.startsWith('@')) {
-            console.warn(`Warning: default script namespace '${namespace}' does not start with '@', skipping`);
+            // console.warn(`Warning: default script namespace '${namespace}' does not start with '@', skipping`);
             return false;
         }
         return true;
@@ -91,7 +91,7 @@ export async function localListResolver() {
     // List local user scripts (namespaces must NOT start with @)
     await listScriptsInDir(localDEScriptsDir, '', (namespace) => {
         if (namespace.startsWith('@')) {
-            console.warn(`Warning: local script namespace '${namespace}' starts with '@', skipping`);
+            // console.warn(`Warning: local script namespace '${namespace}' starts with '@', skipping`);
             return false;
         }
         return true;

@@ -2416,7 +2416,6 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                 let guidanceGivenAllExtraInfo = allExtraInfo;
                 let guidanceGiven = "";
                 let redoGuidance = false;
-                let descriptionValueUnprocessed = "";
                 let descriptionValue = "";
                 let originalReferenceDescription = getFineTuneReferenceNoIntimateModifier("description");
                 while (true) {
@@ -2454,7 +2453,7 @@ export async function generateBonds(engine, scriptgenerator, guider) {
 
                     const guiderResult = await guider.askAccept(
                         { id: strangerKey + "_" + fineTuneComment + "_description", reask: redidGuidance, step: true, recalcdefault: true },
-                        "Description of a relationship with " + actualStrangerValue + messageAboutAnswersFrom + (originalReferenceDescription ? "\n\nOriginal: " + originalReferenceDescription : ""),
+                        "Description of a relationship with " + actualStrangerValue + messageAboutAnswersFrom,
                         async () => {
                             if (originalReferenceDescription && !redidGuidance) {
                                 return originalReferenceDescription;

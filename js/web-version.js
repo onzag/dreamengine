@@ -492,7 +492,7 @@ async function startWebServer(creds) {
                     if (!entry.isDirectory()) continue;
                     const namespace = entry.name;
                     if (!namespace.startsWith('@')) {
-                        console.warn(`Warning: default script namespace '${namespace}' does not start with '@', skipping`);
+                        // console.warn(`Warning: default script namespace '${namespace}' does not start with '@', skipping`);
                         continue;
                     }
                     const nsPath = path.join(DEFAULT_SCRIPTS_DIR, namespace);

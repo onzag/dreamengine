@@ -326,7 +326,7 @@ ipcMain.handle('listScriptFiles', async (event) => {
             if (entry.isDirectory()) {
                 const namespace = entry.name;
                 if (!namespace.startsWith('@')) {
-                    console.warn(`Warning: default script namespace '${namespace}' does not start with '@', skipping`);
+                    // console.warn(`Warning: default script namespace '${namespace}' does not start with '@', skipping`);
                     continue;
                 }
                 const nsPath = path.join(defaultScriptsDir, namespace);
