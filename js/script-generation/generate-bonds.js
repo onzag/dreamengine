@@ -75,14 +75,6 @@ const RELATIONSHIP_KEY_DESCRIPTIONS = {
     "bestFriend_50_100": "best friend",
 };
 
-const RELATIONSHIP_ROMANTIC_INTEREST_BACKTRACKING_LIST = [
-    "noRomanticInterest_0_10",
-    "slightRomanticInterest_10_20",
-    "romanticInterest_20_35",
-    "strongRomanticInterest_35_50",
-    "deepInLove_50_100",
-];
-
 /** @type {Record<string, Record<string, [string, string | null]>>} */
 const RELATIONSHIP_KEY_INFO_MAP = {
     "foe_n100_n50": {
@@ -2522,8 +2514,6 @@ export async function generateBonds(engine, scriptgenerator, guider) {
         }
     }
 
-    throw new Error("Test error");
-
     for (const relationshipKey of SETTINGS_ORDER_FIRST_LAYER) {
         /**
          * @type {object}
@@ -2545,33 +2535,19 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                 // @ts-ignore
                 relationshipValue[romanticInterestKey];
 
-            // let wasUndefined = false;
-            // if (!card.config.romanticShape) {
-            //     card.config.romanticShape = {};
-            // }
-            // if (!card.config.romanticShape[relationshipKey]) {
-            //     card.config.romanticShape[relationshipKey] = {};
-            // }
-            // if (!card.config.romanticShape[relationshipKey][romanticInterestKey]) {
-            //     wasUndefined = true;
-            //     card.config.romanticShape[relationshipKey][romanticInterestKey] = {
-            //         addAttractionRules: true,
-            //         forceFamily: !isIncestuousValue,
-            //     };
-            // }
-
-            // let addAttractionRules = card.config.romanticShape[relationshipKey][romanticInterestKey].addAttractionRules;
-            // const forceFamily = card.config.romanticShape[relationshipKey][romanticInterestKey].forceFamily;
+            let addAttractionRules = true;
             if (romanticInterestKey !== "noRomanticInterest_0_10") {
-                const guiderResult = await guider.askBoolean("Is " + name + " capable to develop a " + ROMANTIC_INTEREST_KEY_LABELS[romanticInterestKey] + " (beyond simple physical or superficial attraction) " + (" towards a " + RELATIONSHIP_KEY_DESCRIPTIONS[relationshipKey]).replace("a acquaintance", "an acquaintance") + "?", addAttractionRules);
+                const guiderResult = await guider.askBoolean(
+                    "capable-of-romantic-interest-" + relationshipKey + "-" + romanticInterestKey,
+                    "Is " + name + " capable to develop a " + ROMANTIC_INTEREST_KEY_LABELS[romanticInterestKey] + " (beyond simple physical or superficial attraction) " + (" towards a " + RELATIONSHIP_KEY_DESCRIPTIONS[relationshipKey]).replace("a acquaintance", "an acquaintance") + "?",
+                    addAttractionRules,
+                );
                 addAttractionRules = guiderResult.value;
-                card.config.romanticShape[relationshipKey][romanticInterestKey].addAttractionRules = addAttractionRules;
-                await autosave?.save();
             }
 
             // no need to add the rule, the character cannot really develop an attraction at such bond level
             // to that degree given
-            if (!addAttractionRules && !forceFamily) {
+            if (!addAttractionRules) {
                 continue;
             }
 
@@ -2581,14 +2557,6 @@ export async function generateBonds(engine, scriptgenerator, guider) {
             });
 
             for (const familyKey of SETTINGS_ORDER_THIRD_LAYER) {
-                const isValidBecauseFamilyIsForced = forceFamily && familyKey === "family";
-                const isValidBecauseWeAllowAttractions = addAttractionRules;
-
-                const isNotValid = !isValidBecauseFamilyIsForced && !isValidBecauseWeAllowAttractions;
-                if (isNotValid) {
-                    continue;
-                }
-
                 /**
                  * @type {string}
                  */
@@ -2701,114 +2669,38 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                             familySectionOpenToAffection.body.push(`if (${getAttractionLevelCondition(fineTuneConditions[fineTune], attractionLevel)}) {`);
                         }
 
-
                         /**
-                         * @param {string} intimateModifier 
+                         * @param {string} intimateModifier
+                         * @param {string} key
                          */
-                        const getFineTuneReference = (intimateModifier) => {
+                        const getFineTuneReference = (intimateModifier, key) => {
                             const fineTuneCommentWithIntimacyModifier = fineTuneComment + "_" + intimateModifier;
 
-                            if (
-                                card.config.tuneInfos[fineTuneCommentWithIntimacyModifier] &&
-                                card.config.tuneInfos[fineTuneCommentWithIntimacyModifier][relationshipKey] &&
-                                card.config.tuneInfos[fineTuneCommentWithIntimacyModifier][relationshipKey][romanticInterestKey]
-                            ) {
-                                return [
-                                    card.config.tuneInfos[fineTuneCommentWithIntimacyModifier][relationshipKey][romanticInterestKey],
-                                    card.config.tuneInfos[fineTuneCommentWithIntimacyModifier][relationshipKey][romanticInterestKey].origin || RELATIONSHIP_KEY_INFO_OBTAINED_FROM[relationshipKey][romanticInterestKey]
-                                ];
-                            }
-
-                            let fineTuneReference = card.config.tuneInfos[fineTuneCommentWithIntimacyModifier];
-
+                            /**
+                             * @type {string}
+                             */
                             let fineTuneReferenceOrigin = "";
+                            /**
+                             * @type {string | undefined}
+                             */
+                            let fineTuneReference = undefined;
 
-                            if (!fineTuneReference) {
-                                // must be a family case, in fact must be the first family case with acquaintance_0_10
-                                // let's try to get answers from somewhere else, first get the suffix for the gender part
-                                const unfamilizedPart = fineTuneCommentWithIntimacyModifier.replace("family_character_", "");
-                                let matchingKey = Object.keys(card.config.tuneInfos).find(key => key.endsWith(unfamilizedPart) && key.startsWith(card.config.characterSpeciesType));
-                                if (!matchingKey) {
-                                    const unfamilizedPartWithoutAnyNA1 = unfamilizedPart.replace("any_", "ambiguous_");
-                                    matchingKey = Object.keys(card.config.tuneInfos).find(key => key.endsWith(unfamilizedPartWithoutAnyNA1) && key.startsWith(card.config.characterSpeciesType));
-                                    if (!matchingKey) {
-                                        const unfamilizedPartWithoutAnyNA2 = unfamilizedPart.replace("any_", "male_");
-                                        matchingKey = Object.keys(card.config.tuneInfos).find(key => key.endsWith(unfamilizedPartWithoutAnyNA2) && key.startsWith(card.config.characterSpeciesType));
-                                        if (!matchingKey) {
-                                            const unfamilizedPartWithoutAnyNA3 = unfamilizedPart.replace("any_", "female_");
-                                            matchingKey = Object.keys(card.config.tuneInfos).find(key => key.endsWith(unfamilizedPartWithoutAnyNA3) && key.startsWith(card.config.characterSpeciesType));
-                                        }
-                                    }
-                                }
-                                if (!matchingKey) {
-                                    matchingKey = Object.keys(card.config.tuneInfos).find(key => key.endsWith(unfamilizedPart));
-                                }
-
-                                if (matchingKey) {
-                                    fineTuneReference = { ...card.config.tuneInfos[matchingKey] };
-                                    for (const key in fineTuneReference) {
-                                        if (typeof fineTuneReference[key] === "object" && fineTuneReference[key] !== null) {
-                                            delete fineTuneReference[key];
-                                        }
-                                    }
+                            // first case
+                            if (relationshipKey === "acquaintance_0_10") {
+                                // first case, get the information from the strangerGood section
+                                if (romanticInterestKey === "noRomanticInterest_0_10") {
+                                    // TODO fix this, this is not the right way, we need to have a ton of fallbacks
+                                    let targetStrangerKey = "strangerGood_5_100_" + fineTuneCommentWithIntimacyModifier + "_" + key;
+                                    return [
+                                        scriptgenerator.state[targetStrangerKey],
+                                        targetStrangerKey
+                                    ];
                                 } else {
-                                    // TODO not throw this error make a new fine tune
-                                    throw new Error(fineTuneCommentWithIntimacyModifier);
+                                    throw new Error("Not Implemented");
                                 }
+                            } else {
+                                throw new Error("Not Implemented");
                             }
-
-                            if (fineTuneReference) {
-                                const sourceOfFineTuneInfo = RELATIONSHIP_KEY_INFO_MAP[relationshipKey][romanticInterestKey];
-                                fineTuneReferenceOrigin = RELATIONSHIP_KEY_INFO_OBTAINED_FROM[relationshipKey][romanticInterestKey];
-                                if (sourceOfFineTuneInfo[1] === null) {
-                                    if (fineTuneReference[sourceOfFineTuneInfo[0]]) {
-                                        fineTuneReference = {
-                                            ...fineTuneReference,
-                                            ...fineTuneReference[sourceOfFineTuneInfo[0]],
-                                        }
-                                        for (const key in fineTuneReference) {
-                                            if (typeof fineTuneReference[key] === "object" && fineTuneReference[key] !== null) {
-                                                delete fineTuneReference[key];
-                                            }
-                                        }
-                                    }
-                                } else {
-                                    if (fineTuneReference[sourceOfFineTuneInfo[0]]) {
-                                        let fineTuneAtTheRomanticInterest = fineTuneReference[sourceOfFineTuneInfo[0]][sourceOfFineTuneInfo[1]];
-                                        if (!fineTuneAtTheRomanticInterest) {
-                                            const indexAtLayer = SETTINGS_ORDER_SECOND_LAYER.indexOf(romanticInterestKey);
-                                            for (let i = indexAtLayer - 1; i >= 0; i--) {
-                                                const upperRomanticInterestKey = SETTINGS_ORDER_SECOND_LAYER[i];
-                                                if (fineTuneReference[sourceOfFineTuneInfo[0]][upperRomanticInterestKey]) {
-                                                    fineTuneAtTheRomanticInterest = fineTuneReference[sourceOfFineTuneInfo[0]][upperRomanticInterestKey];
-                                                    fineTuneReferenceOrigin = fineTuneReferenceOrigin.split("with")[0] + "with " + ROMANTIC_INTEREST_KEY_LABELS[upperRomanticInterestKey];
-                                                    break;
-                                                }
-                                            }
-                                        }
-                                        if (fineTuneAtTheRomanticInterest) {
-                                            fineTuneReference = {
-                                                ...fineTuneReference,
-                                                ...fineTuneAtTheRomanticInterest,
-                                            }
-                                            for (const key in fineTuneReference) {
-                                                if (typeof fineTuneReference[key] === "object" && fineTuneReference[key] !== null) {
-                                                    delete fineTuneReference[key];
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                                fineTuneReference.origin = fineTuneReferenceOrigin;
-                            }
-
-                            if (!card.config.tuneInfos[fineTuneCommentWithIntimacyModifier]) {
-                                card.config.tuneInfos[fineTuneCommentWithIntimacyModifier] = {};
-                            }
-                            if (!card.config.tuneInfos[fineTuneCommentWithIntimacyModifier][relationshipKey]) {
-                                card.config.tuneInfos[fineTuneCommentWithIntimacyModifier][relationshipKey] = {};
-                            }
-                            card.config.tuneInfos[fineTuneCommentWithIntimacyModifier][relationshipKey][romanticInterestKey] = fineTuneReference;
 
                             return [
                                 fineTuneReference,
