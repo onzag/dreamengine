@@ -1303,7 +1303,8 @@ export async function generateBase(engine, scriptgenerator, guider) {
     }
 
     {
-        const isMuteValue = (await guider.askBoolean(
+        const speciesType = scriptgenerator.state["species-type"];
+        const isMuteValue = speciesType === "animal" ? true : (await guider.askBoolean(
             "mute",
             "Is " + name + " mute, unable to speak or communicate verbally?",
             async () => {

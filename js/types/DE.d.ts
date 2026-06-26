@@ -1440,27 +1440,50 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
      * one of these for the first time (or at least for a limited duration)
      * 
      * TODO implement
+     * 
+     * TODO we will need some sort of accustomization definition for the gradients
      */
     worldKnowledge: {
         /**
          * If false, the character considers that talking animals are not possible in the world
          * this means that the character will be suprised if they ever encounter talking animals
+         * 
+         * TODO have some sort of accustomization gradient so that the character can get used to talking animals and stop being suprised by them after a while
+         * inject the prompt with surprise and the more it interacts the more nimble and quiet it gets, until it stops being suprised by talking animals and starts to consider them normal
          */
         talkingAnimals: boolean;
         /**
+         * If false, the character considers that anthropomorphized creatures are not possible in the world
+         * this means that the character will be suprised if they ever encounter anthropomorphized creatures
+         * 
+         * TODO have some sort of accustomization gradient so that the character can get used to anthropomorphized creatures and stop being suprised by them after a while
+         * inject the prompt with surprise and the more it interacts the more nimble and quiet it gets, until it stops being suprised by anthropomorphized creatures and starts to consider them normal
+         */
+        anthropomorphizedCreatures: boolean;
+        /**
          * If false, the character considers that magic is not possible in the world
          * this means that the character will be suprised if they ever encounter magic
+         * 
+         * TODO have some sort of accustomization gradient so that the character can get used to magic and stop being suprised by it after a while
+         * inject the prompt with surprise and the more it interacts the more nimble and quiet it gets, until it stops being suprised by magic and starts to consider it normal
          */
         magic: boolean;
         /**
          * If false, the character considers that advanced technology is not possible in the world
          * this means that the character will be suprised if they ever encounter advanced technology
+         * 
+         * TODO have some sort of accustomization gradient so that the character can get used to advanced technology and stop being suprised by it after a while
+         * inject the prompt with surprise and the more it interacts the more nimble and quiet it gets, until it stops being suprised by advanced technology and starts to consider it normal
          */
         advancedTechnology: boolean;
         /**
-         * If 
+         * If false, the character considers that robots are not possible in the world
+         * this means that the character will be suprised if they ever encounter robots
+         * 
+         * TODO have some sort of accustomization gradient so that the character can get used to robots and stop being suprised by them after a while
+         * inject the prompt with surprise and the more it interacts the more nimble and quiet it gets, until it stops being suprised by robots and starts to consider them normal
          */
-
+        robots: boolean;
     };
 
     /**

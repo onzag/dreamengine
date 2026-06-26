@@ -152,6 +152,9 @@ class Dialog extends HTMLElement {
             max-height: 60vh;
             overflow-y: auto;
         }
+        .dialog-content-prexpand {
+            height: 60vh;
+        }
         .dialog-buttons {
             display: flex;
             justify-content: space-between;
@@ -172,7 +175,7 @@ class Dialog extends HTMLElement {
         <div class="dialog-title" id="dialog-title" tabindex="0" data-de-aria-text="true">
             ${title}
         </div>
-        <div class="dialog-content">
+        <div class="dialog-content ${this.getAttribute("pre-expand") ? "dialog-content-prexpand" : ""}">
             <slot></slot>
         </div>
         ${dialogButtons}
