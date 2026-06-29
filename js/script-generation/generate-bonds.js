@@ -2670,11 +2670,11 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                         }
 
                         /**
-                         * @param {string} intimateModifier
+                         * @param {string|null} intimateModifier
                          * @param {string} key
                          */
                         const getFineTuneReference = (intimateModifier, key) => {
-                            const fineTuneCommentWithIntimacyModifier = fineTuneComment + "_" + intimateModifier;
+                            const fineTuneCommentWithIntimacyModifier = fineTuneComment + (intimateModifier ? "_" + intimateModifier : "");
 
                             /**
                              * @type {string}
@@ -2689,11 +2689,10 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                             if (relationshipKey === "acquaintance_0_10") {
                                 // first case, get the information from the strangerGood section
                                 if (romanticInterestKey === "noRomanticInterest_0_10") {
-                                    // TODO fix this, this is not the right way, we need to have a ton of fallbacks
                                     let targetStrangerKey = "strangerGood_5_100_" + fineTuneCommentWithIntimacyModifier + "_" + key;
                                     return [
                                         scriptgenerator.state[targetStrangerKey],
-                                        targetStrangerKey
+                                        RELATIONSHIP_KEY_INFO_OBTAINED_FROM[relationshipKey][romanticInterestKey],
                                     ];
                                 } else {
                                     throw new Error("Not Implemented");
@@ -3104,7 +3103,6 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                         let guidanceGiven = "";
                         let redoGuidance = false;
                         let descriptionValue = "";
-                        // @ts-ignore - description has no intimacy modifier; getFineTuneReference will be reworked to handle this
                         let [originalReferenceDescription, messageAboutAnswersFrom] = getFineTuneReference(null, "description");
                         while (true) {
                             let redidGuidance = false;

@@ -244,7 +244,11 @@ export class EngineWorkerClient {
      */
     setupInferenceAdapter(args) { return this.#call("setupInferenceAdapter", args); }
 
-    initializeInferenceAdapter() { return this.#call("initializeInferenceAdapter"); }
+    /**
+     * @param {string} lang 
+     * @returns {Promise<{ warning?: string, ok: boolean }>} Resolves when the inference adapter is initialized, or rejects if it fails. If the inference adapter is not available, resolves with a warning message.
+     */
+    initializeInferenceAdapter(lang) { return this.#call("initializeInferenceAdapter", { lang }); }
 
     // ── deObject partial query ──────────────────────────────────
 

@@ -35,6 +35,7 @@ declare interface DEAPI {
 declare global {
   interface Window {
     API: DEAPI;
+    DREAMENGINE_LANGUAGE: string;
     DREAMENGINE_HOME: string;
     DREAMENGINE_DEFAULT_SCRIPTS_HOME: string;
     ENGINE_WORKER_CLIENT: EngineWorkerClient;

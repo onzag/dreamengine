@@ -1,6 +1,7 @@
 import './overlay.js';
 import "./profile-image.js";
 import { playCancelSound, playConfirmSound, playHoverSound, playPauseSound } from '../sound.js';
+import { supportedLanguages, supportedLanguageNames } from '../localization/index.js';
 
 // Optional dependency: `gbnf` is declared as an optionalDependency in
 // package.json, so it may or may not be present at runtime. We attempt a
@@ -333,6 +334,20 @@ class Settings extends HTMLElement {
                 ></app-overlay-select>
             </app-overlay-section>`;
         } else if (this.currentSectionIndex === 1 && tabsContainer) {
+            const langOptions = JSON.stringify(["auto"].concat(supportedLanguages));
+            // @ts-ignore
+            const langLabels = JSON.stringify(["-"].concat(supportedLanguages.map(code => supportedLanguageNames[code] || code)));
+            tabsContainer.innerHTML = `<app-overlay-section section-title="Language">
+                <app-overlay-select
+                    label="Language"
+                    input-options='${langOptions}'
+                    input-options-labels='${langLabels}'
+                    title="The language used by the application."
+                    input-data-location="language"
+                ></app-overlay-select>
+                <div style="margin-top:1vh;color:#ff6b6b;font-size:3vh;">&#9888; The app must be restarted after changing the language, the language affects which characters and worlds are available</div>
+            </app-overlay-section>`;
+        } else if (this.currentSectionIndex === 2 && tabsContainer) {
             tabsContainer.innerHTML = `<app-overlay-section section-title="AI Inference Settings">
                 <app-overlay-input
                     label="Inference host"
@@ -449,7 +464,7 @@ class Settings extends HTMLElement {
             }
         </style>
         <app-overlay overlay-title="Settings" cancel-text="Cancel" confirm-text="Save & Close">
-            <app-overlay-tabs current="${this.currentSectionIndex}" sections='["General", "AI Settings"]'>              
+            <app-overlay-tabs current="${this.currentSectionIndex}" sections='["General", "Language", "AI Settings"]'>              
             </app-overlay-tabs>
         </app-overlay>`;
     }

@@ -213,13 +213,18 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
             return { ok: true };
         },
 
-        async initializeInferenceAdapter() {
+        async initializeInferenceAdapter({ lang }) {
             const adapter = engine.inferenceAdapter;
             if (!adapter) {
                 throw new Error("No inference adapter found on engine");
             }
             await adapter.ensureInitialized();
-            return { ok: true };
+            const supportedLanguages = adapter.getSupportedLanguages();
+            let warning = null;
+            if (!supportedLanguages.includes(lang)) {
+                warning = `Warning: Inference server does not support language '${lang}'. Supported languages: ${supportedLanguages.join(', ')}`;
+            }
+            return { ok: true, warning };
         },
 
         async initialize({ user, playMode }) {

@@ -140,10 +140,15 @@ export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
             this.contextWindowSize = 4096; // we can set this to whatever we want in test mode, since it doesn't actually connect to a model, we will just use it for testing the behavior when the context window is exceeded
             this.doSupportsParallelRequests = true; // we can also set this to whatever we want in test mode, since it doesn't actually connect to a model, we will just use it for testing the behavior when parallel requests are not supported
             this.endToken = "<|endoftext|>"; // we can also set this to whatever we want in test mode, since it doesn't actually connect to a model, we will just use it for testing the behavior when an end token is defined
+            /**
+             * @type {Array<string>}
+             */
+            this.supportedLanguages = ["en"];
         } else {
             this.contextWindowSize = 4096; // default context window size, will be updated when the server sends the ready message
             this.doSupportsParallelRequests = false; // we will update this when the server sends the ready message
             this.endToken = null; // we will update this when the server sends the ready message, but by default we will assume there is no end token
+            this.supportedLanguages = []; // we will update this when the server sends the ready message, but by default we will assume there is no supported languages
         }
 
         /**
@@ -200,6 +205,10 @@ export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
         }
 
         await this.initialize();
+    }
+
+    getSupportedLanguages() {
+        return this.supportedLanguages;
     }
 
     async initialize() {
@@ -303,6 +312,7 @@ export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
                 this.contextWindowSize = data.context_window_size;
                 this.doSupportsParallelRequests = data.supports_parallel_requests;
                 this.endToken = data.end_token || null;
+                this.supportedLanguages = data.supported_languages || [];
 
                 console.log("InferenceAdapterLlamaUncensored: Received ready message from server. Context window size: " + this.contextWindowSize + ", Supports parallel requests: " + this.doSupportsParallelRequests);
 

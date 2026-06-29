@@ -3757,6 +3757,11 @@ declare interface DEScript {
     type: "world" | "characters" | "world-mechanic" | "character-mechanic" | "misc";
 
     /**
+     * The language code of the script, the engine set language, and the server should be the same and match
+     */
+    language: string;
+
+    /**
      * Description for the script
      */
     description?: string;

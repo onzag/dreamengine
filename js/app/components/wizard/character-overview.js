@@ -246,6 +246,22 @@ function processRelationshipSteps(state, relationshipSteps, prefix) {
         if (group.attractiveness) {
             header.appendChild(createRelationshipChip('Attraction', formatAttractiveness(group.attractiveness)));
         }
+
+        let baseKey = `${prefix}${group.species ?? ''}_character_`;
+        if (group.sex) baseKey += `${group.sex}_`;
+        if (group.attractiveness) baseKey += `${group.attractiveness}`;
+
+        const copyKeyBtn = document.createElement('button');
+        copyKeyBtn.className = 'relationship-copy-btn relationship-copy-key-btn';
+        copyKeyBtn.textContent = 'Copy Key';
+        copyKeyBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            navigator.clipboard.writeText(baseKey);
+            copyKeyBtn.textContent = 'Copied!';
+            setTimeout(() => { copyKeyBtn.textContent = 'Copy Key'; }, 1500);
+        });
+        header.appendChild(copyKeyBtn);
+
         header.addEventListener('click', () => {
             groupEl.classList.toggle('expanded');
         });
@@ -701,57 +717,17 @@ const SECTIONS = [
         }
     },
     {
-        title: "Relationships (Acquaintances)",
-        fields: [],
-    },
-    {
-        title: "Relationships (Friends)",
-        fields: [],
-    },
-    {
-        title: "Relationships (Good Friends)",
-        fields: [],
-    },
-    {
-        title: "Relationships (Close Friends)",
-        fields: [],
-    },
-    {
-        title: "Relationships (Best Friends)",
-        fields: [],
-    },
-    {
-        title: "Relationships (Unpleasant Acquaintances)",
-        fields: [],
-    },
-    {
-        title: "Relationships (Unfriendly)",
-        fields: [],
-    },
-    {
-        title: "Relationships (Antagonistic)",
-        fields: [],
-    },
-    {
-        title: "Relationships (Hostile)",
-        fields: [],
-    },
-    {
-        title: "Relationships (Sworn Enemies)",
-        fields: [],
-    },
-    {
-        title: "Evolution of Relationships",
-        fields: [],
-    },
-    {
-        title: "Base Emotional States",
-        fields: [],
-    },
-    {
-        title: "Other States",
-        fields: [],
-    },
+        title: "Relationships (Acquaintances, No Romantic Interest, Non-Family)",
+        /**
+         * @param {*} s
+         * @return {HTMLElement | null}
+         */
+        custom: (s) => {
+            const stepsInfo = s[".steps"];
+            const typeToProcessPrefix = "acquaintance_0_10_noRomanticInterest_0_10_nonFamily_";
+            return processRelationshipSteps(s, stepsInfo, typeToProcessPrefix);
+        }
+    }
 ]
 
 class CharacterOverview extends HTMLElement {
@@ -975,6 +951,9 @@ class CharacterOverview extends HTMLElement {
             }
             .relationship-copy-btn:hover {
                 background: rgba(100, 200, 240, 0.2);
+            }
+            .relationship-copy-key-btn {
+                margin-left: auto;
             }
         `;
         dialog.appendChild(style);

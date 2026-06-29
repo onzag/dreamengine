@@ -761,6 +761,7 @@ class OverlayInputSelect extends HTMLElement {
          * @type {string[]}
          */
         const options = JSON.parse(this.getAttribute('input-options') || '[]');
+        const optionsLabels = JSON.parse(this.getAttribute('input-options-labels') || '[]');
         const optionsDescriptions = JSON.parse(this.getAttribute('input-options-descriptions') || '[]');
 
         this.root.innerHTML = `
@@ -810,7 +811,7 @@ class OverlayInputSelect extends HTMLElement {
       <div class="overlay-input">
         <label>${label}</label>
         <select value="" tabindex="0" aria-label="${label}" data-de-aria-key="p">
-            ${options.map((opt, index) => `<option value="${opt}" title="${optionsDescriptions[index] || ''}">${opt.split("_").map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(" ")}</option>`).join('')}
+            ${options.map((opt, index) => `<option value="${opt}" title="${optionsDescriptions[index] || ''}">${optionsLabels[index] || opt.split("_").map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(" ")}</option>`).join('')}
         </select>
         <div class="error-message"></div>
       </div>

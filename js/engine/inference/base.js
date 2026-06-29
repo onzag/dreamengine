@@ -41,6 +41,17 @@ export class BaseInferenceAdapter {
         throw new Error("Method 'initialize()' must be implemented.");
     }
 
+    async ensureInitialized() {
+        throw new Error("Method 'ensureInitialized()' must be implemented.");
+    }
+
+    /**
+     * @returns {Array<string>} the list of supported languages
+     */
+    getSupportedLanguages() {
+        throw new Error("Method 'getSupportedLanguages()' must be implemented.");
+    }
+
     /**
      * Infers the next message for a character narrative purposes
      * 

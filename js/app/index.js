@@ -10,7 +10,18 @@ import './components/license.js';
 import './components/other-attributions.js';
 import './components/play.js';
 import './components/game.js';
+import { loadLanguage, supportedLanguages } from './localization/index.js';
 import '../api.js';
+
+function detectBestLanguage() {
+    const preferred = Array.from(navigator.languages?.length ? navigator.languages : [navigator.language || 'en']);
+    for (const pref of preferred) {
+        if (supportedLanguages.includes(pref)) return pref;
+        const primary = pref.split('-')[0];
+        if (supportedLanguages.includes(primary)) return primary;
+    }
+    return 'en';
+}
 
 import { EngineWorkerClient } from "../worker-sandbox/client.js";
 
@@ -20,12 +31,18 @@ import {
     stopAllAmbiencesAndStartNewOne
 } from './sound.js';
 
-const initialPromise = new Promise((resolve) => {
+const initialPromise = new Promise((resolve, reject) => {
     window.API.getDreamEnginePaths().then((paths) => {
         window.DREAMENGINE_HOME = paths[0];
         window.DREAMENGINE_DEFAULT_SCRIPTS_HOME = paths[1];
-        resolve(paths);
-    });
+        window.API.getConfigValue('language').then((lang) => {
+            if (lang === "auto") {
+                lang = null;
+            }
+            window.DREAMENGINE_LANGUAGE = lang || detectBestLanguage();
+            loadLanguage(window.DREAMENGINE_LANGUAGE).then(resolve).catch(reject);
+        }).catch(reject);
+    }).catch(reject);
 });
 
 function exitGame() {
@@ -341,6 +358,10 @@ function removeLoadingBlur() {
  * @type {*}
  */
 let INFERENCE_ADAPTER_ERROR = null;
+/**
+ * @type {string|null}
+ */
+let INFERENCE_ADAPTER_WARNING = null;
 async function initialChecks() {
     // Check if the engine has any API keys configured, if not show the settings overlay
     const apiKey = await window.API.getConfigValue('secret');
@@ -382,6 +403,29 @@ async function initialChecks() {
             dialog.innerHTML += `<br><br><p tabindex="0" data-de-aria-text="true">Since you are using the web version and connecting to a secure WebSocket (wss://), you may need to accept the self-signed certificate in your browser before the connection can be established, at <a tabindex="0" data-de-aria-key="l" href="https://${host.replace("wss://", "")}" target="_blank">https://${host.replace("wss://", "")}</a> then restart the app</p>`;
         }
 
+        dialog.setAttribute("confirmation", "true");
+        dialog.setAttribute("confirm-text", "Open Settings");
+        dialog.setAttribute("cancel-text", "Ignore");
+        dialog.addEventListener('confirm', () => {
+            const settingsOverlay = document.createElement('app-settings');
+            settingsOverlay.setAttribute("initial-section", "2");
+            document.body.appendChild(settingsOverlay);
+            settingsOverlay.addEventListener('close', () => {
+                document.body.removeChild(settingsOverlay);
+                makeHomeInert(false);
+            });
+            document.body.removeChild(dialog);
+        });
+        dialog.addEventListener('cancel', () => {
+            document.body.removeChild(dialog);
+            makeHomeInert(false);
+        });
+        document.body.appendChild(dialog);
+        makeHomeInert(true);
+    } else if (INFERENCE_ADAPTER_WARNING) {
+        const dialog = document.createElement('app-dialog');
+        dialog.setAttribute('dialog-title', 'Warning');
+        dialog.innerHTML = `<p tabindex="0" data-de-aria-text="true">There was a warning while initializing the inference adapter: ${INFERENCE_ADAPTER_WARNING}</p>`;
         dialog.setAttribute("confirmation", "true");
         dialog.setAttribute("confirm-text", "Open Settings");
         dialog.setAttribute("cancel-text", "Ignore");
@@ -487,7 +531,10 @@ client.ready.then(async () => {
         });
 
         try {
-            await client.initializeInferenceAdapter();
+            const rs = await client.initializeInferenceAdapter(window.DREAMENGINE_LANGUAGE || 'en');
+            if (rs.warning) {
+                INFERENCE_ADAPTER_WARNING = rs.warning;
+            }
         } catch (err) {
             console.error("Failed to initialize inference adapter:", err);
             INFERENCE_ADAPTER_ERROR = err;
