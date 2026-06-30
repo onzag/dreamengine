@@ -533,8 +533,9 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
          * @param {object} args
          * @param {import('../script-generation/base.js').ScriptTypeGenerator} args.currentCard
          * @param {boolean} args.guided - whether to run the guider questions or skip straight to generation 
+         * @param {string} args.language - the language to use for the wizard
          */
-        async continueCardTypeWizard({ currentCard, guided }) {
+        async continueCardTypeWizard({ currentCard, guided, language }) {
             currentCardOfWizard = currentCard;
             // Cancel any previous wizard run
             cancelCurrentWizard();
@@ -560,7 +561,7 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
             const guider = createWorkerGuider(currentCard, cancelPromise, guided);
 
             try {
-                await generateBase(engine, currentCard, guider);
+                await generateBase(engine, currentCard, guider, language);
                 await generateAffectiveStates(engine, currentCard, guider);
                 await generateBonds(engine, currentCard, guider);
                 await generateActivities(engine, currentCard, guider);
@@ -672,12 +673,12 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
              */
             let availableOptions = null;
             if (extra.options && Array.isArray(extra.options)) {
-                availableOptions = extra.options;
+                availableOptions = extra.options.map(/** @param {*} o */ o => typeof o === 'string' ? o : o.value);
             } else if (typeof extra.options === "object" && extra.options !== null) {
                 availableOptions = [];
                 for (const key in extra.options) {
                     if (Array.isArray(extra.options[key])) {
-                        availableOptions = availableOptions.concat(extra.options[key]);
+                        availableOptions = availableOptions.concat(extra.options[key].map(/** @param {*} o */ o => typeof o === 'string' ? o : o.value));
                         break;
                     }
                 }

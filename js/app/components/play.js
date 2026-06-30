@@ -127,12 +127,14 @@ function capitalize(s) {
  * disabled in selection UIs.
  *
  * @param {Record<string, any> | null | undefined} metadata
+ * @param {string} language
  * @returns {{ disabled: boolean, reason: string }}
  */
-function getScriptDisabledState(metadata) {
+function getScriptDisabledState(metadata, language) {
     if (!metadata || typeof metadata !== 'object') return { disabled: false, reason: '' };
     if (metadata.__placeholder) return { disabled: true, reason: 'Not ready — no content in the file.' };
     if (metadata.__in_progress) return { disabled: true, reason: 'Not ready — still in progress.' };
+    if (language !== "*" && language.split("-")[0] !== window.DREAMENGINE_LANGUAGE.split("-")[0]) return { disabled: true, reason: `Not compatible — script is in language ${JSON.stringify(language) || 'unknown'} but engine is in ${JSON.stringify(window.DREAMENGINE_LANGUAGE)}.` };
     return { disabled: false, reason: '' };
 }
 
@@ -218,11 +220,11 @@ class PlayOverlay extends HTMLElement {
         this.selectedPartyCharacters = [];
         /** @type {Record<string, Array<{ namespace: string, id: string }>> | null} */
         this.partyCharacterRefs = null;
-        /** @type {Record<string, Array<{ namespace: string, id: string, description: string, metadata: Record<string, any> }>>} */
+        /** @type {Record<string, Array<{ namespace: string, id: string, description: string, metadata: Record<string, any>, language: string }>>} */
         this.partyNamespaceCache = {};
         /** @type {Set<string>} */
         this.expandedPartyNamespaces = new Set();
-        /** @type {Array<{ name: string, scriptKey: string, namespace: string, description: string, asset: string | null }> | null} */
+        /** @type {Array<{ name: string, scriptKey: string, namespace: string, description: string, asset: string | null, language: string }> | null} */
         this.characterCache = null;
     }
 
@@ -441,7 +443,7 @@ class PlayOverlay extends HTMLElement {
      * character in a single namespace. Cached per namespace.
      *
      * @param {string} namespace
-     * @returns {Promise<Array<{ namespace: string, id: string, description: string, metadata: Record<string, any> }>>}
+     * @returns {Promise<Array<{ namespace: string, id: string, description: string, metadata: Record<string, any>, language: string }>>}
      */
     async loadPartyNamespaceCharacters(namespace) {
         if (this.partyNamespaceCache[namespace]) return this.partyNamespaceCache[namespace];
@@ -462,7 +464,7 @@ class PlayOverlay extends HTMLElement {
             console.error(`Failed to load detailed info for namespace ${namespace}:`, err);
         }
 
-        /** @type {Array<{ namespace: string, id: string, description: string, metadata: Record<string, any> }>} */
+        /** @type {Array<{ namespace: string, id: string, description: string, metadata: Record<string, any>, language: string }>} */
         const result = [];
         for (const info of Object.values(detailedMap)) {
             // @ts-ignore
@@ -478,6 +480,8 @@ class PlayOverlay extends HTMLElement {
                 description: info.description || '',
                 // @ts-ignore
                 metadata: info.metadata || {},
+                // @ts-ignore
+                language: info.language || 'en',
             });
         }
 
@@ -623,7 +627,7 @@ class PlayOverlay extends HTMLElement {
 
         const items = characters.map(c => {
             const isSelected = this.isPartyCharacterSelected(c);
-            const { disabled, reason } = getScriptDisabledState(c.metadata);
+            const { disabled, reason } = getScriptDisabledState(c.metadata, c.language);
             const detailsHTML = renderCharacterDetails(c.metadata || {});
             return `
                 <div class="character-card party-card${isSelected ? ' selected' : ''}${disabled ? ' disabled' : ''}"
@@ -779,7 +783,7 @@ class PlayOverlay extends HTMLElement {
         const groupsHTML = namespaces.map(ns => {
             const isSystem = ns.startsWith('@');
             const items = grouped[ns].map((w) => {
-                const { disabled, reason } = getScriptDisabledState(w.metadata);
+                const { disabled, reason } = getScriptDisabledState(w.metadata, w.language);
                 return `
                 <div class="world-card${disabled ? ' disabled' : ''}"
                      data-namespace="${escapeHTML(ns)}"
@@ -1023,12 +1027,11 @@ class PlayOverlay extends HTMLElement {
             return [];
         }
 
-        /** @type {Array<{ name: string, scriptKey: string, namespace: string, description: string, asset: string | null }>} */
+        /** @type {Array<{ name: string, scriptKey: string, namespace: string, description: string, asset: string | null, language: string }>} */
         const characters = [];
         const seen = new Set();
 
         for (const [scriptKey, info] of Object.entries(infoMap)) {
-            // @ts-ignore
             const exposeCharacters = info.exposeCharacters || {};
             for (const [name, def] of Object.entries(exposeCharacters)) {
                 const dedupKey = `${scriptKey}::${name}`;
@@ -1045,6 +1048,8 @@ class PlayOverlay extends HTMLElement {
                     asset: def?.asset || null,
                     // @ts-ignore
                     details: def?.details || null,
+                    // @ts-ignore
+                    language: def?.language || 'en',
                 });
             }
         }

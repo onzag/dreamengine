@@ -296,7 +296,7 @@ export class EngineWorkerClient {
 
     /**
      * Start or continue cardtype generation on the worker.
-     * @param {{ currentCard: import('../script-generation/base.js').ScriptTypeGenerator, guided: boolean }} args
+     * @param {{ currentCard: import('../script-generation/base.js').ScriptTypeGenerator, guided: boolean, language: string }} args
      */
     continueCardTypeWizard(args) { return this.#call("continueCardTypeWizard", args); }
 

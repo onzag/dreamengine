@@ -467,6 +467,239 @@ function getBestMatchInOptions(values, options) {
 }
 
 /**
+ * Prefixes a noun phrase with the appropriate indefinite article.
+ * @param {string} phrase
+ * @returns {string}
+ */
+function withArticle(phrase) {
+    return /^[aeiou]/i.test(phrase) ? `an ${phrase}` : `a ${phrase}`;
+}
+
+/**
+ * Parses a merged relationship/stranger step key into its component parts,
+ * given the chain prefix it belongs to. Mirrors the structure used by the
+ * character overview UI (see character-overview.js).
+ *
+ * Keys are built like:
+ *   {chain}{species}_character_{sex}_{attraction}_{context}_{key}
+ *   {chain}{species}_character_{sex}_{attraction}_description
+ *   {chain}{species}_character_{context}_{key}              (e.g. any_character)
+ *   {chain}{species}_character_description
+ *
+ * The context segment is space separated ("In private"), the trailing key
+ * segment is hyphen separated ("open-to-affection"), and every structural
+ * boundary is an underscore - which is what makes the pieces separable.
+ *
+ * @param {string} step
+ * @param {string} chain
+ * @returns {{species: string, sex: string|null, attractiveness: string|null, context: string|null, key: string}|null}
+ */
+function parseRelationshipStep(step, chain) {
+    const withoutPrefix = step.slice(chain.length);
+
+    // Species always ends with "_character"; everything before it is the type.
+    const speciesMatch = withoutPrefix.match(/^(.+?)_character(?:_|$)/);
+    if (!speciesMatch) return null;
+
+    const species = speciesMatch[1];
+    const rest = withoutPrefix.slice(speciesMatch[0].length);
+    if (!rest) return null;
+
+    const tokens = rest.split('_');
+    const key = tokens[tokens.length - 1];
+
+    /** @type {string|null} */
+    let context = null;
+    /** @type {string[]} */
+    let front;
+    if (key === 'description') {
+        front = tokens.slice(0, -1);
+    } else if (tokens.length >= 2) {
+        context = tokens[tokens.length - 2];
+        front = tokens.slice(0, -2);
+    } else {
+        front = [];
+    }
+
+    /** @type {string|null} */
+    let sex = null;
+    /** @type {string|null} */
+    let attractiveness = null;
+    const frontStr = front.join('_');
+    if (frontStr) {
+        const attractionMatch = frontStr.match(/^(?:(.+?)_)?(a_slight|a_moderate|a_strong|na)$/);
+        if (attractionMatch) {
+            sex = attractionMatch[1] || null;
+            attractiveness = attractionMatch[2];
+        } else {
+            sex = frontStr;
+        }
+    }
+
+    return { species, sex, attractiveness, context, key };
+}
+
+/**
+ * Turns an attraction token into a lowercase human readable phrase, or null
+ * when there is no attraction qualifier.
+ * @param {string|null} attractiveness
+ * @returns {string|null}
+ */
+function describeAttractiveness(attractiveness) {
+    switch (attractiveness) {
+        case 'a_slight': return 'slightly attractive';
+        case 'a_moderate': return 'moderately attractive';
+        case 'a_strong': return 'strongly attractive';
+        case 'na': return 'not physically attractive';
+        default: return null;
+    }
+}
+
+/**
+ * Builds a human readable description of the "other" character a fine tune
+ * targets, from the parsed species / sex / attractiveness tokens.
+ * @param {string} species
+ * @param {string|null} sex
+ * @param {string|null} attractiveness
+ * @returns {string}
+ */
+function describeFineTune(species, sex, attractiveness) {
+    const isFamily = species.includes('family');
+    const anySpecies = species === 'any' || species === 'any_family';
+
+    let speciesNoun;
+    if (isFamily) {
+        speciesNoun = 'family member';
+    } else if (anySpecies) {
+        speciesNoun = 'character';
+    } else if (species === 'humanoid') {
+        speciesNoun = 'human or humanoid character';
+    } else if (species === 'animal') {
+        speciesNoun = 'animal';
+    } else if (species === 'feral') {
+        speciesNoun = 'feral creature';
+    } else {
+        speciesNoun = `${species} character`;
+    }
+
+    let phrase;
+    if (sex && sex !== 'any') {
+        phrase = withArticle(`${sex} ${speciesNoun}`);
+    } else if (anySpecies) {
+        phrase = `any ${speciesNoun}`;
+    } else {
+        phrase = `${withArticle(speciesNoun)} of any gender`;
+    }
+
+    const attractionLabel = describeAttractiveness(attractiveness);
+    return attractionLabel ? `${phrase} (${attractionLabel})` : phrase;
+}
+
+/**
+ * Builds a human readable description for a stranger chain, using the base
+ * description from STRANGER_KEY_DESCRIPTIONS and qualifying it by the first
+ * impression encoded in the key.
+ * @param {string} strangerKey
+ * @returns {string}
+ */
+function describeStrangerChain(strangerKey) {
+    const base = STRANGER_KEY_DESCRIPTIONS[strangerKey] || 'stranger';
+    if (strangerKey.startsWith('strangerGood')) {
+        return `a ${base} with a good first impression`;
+    }
+    if (strangerKey.startsWith('strangerBad')) {
+        return `a ${base} with a bad first impression`;
+    }
+    return `a neutral ${base}`;
+}
+
+/**
+ * Identifies the relationship/stranger chain a step belongs to and produces a
+ * human readable description of that chain. Only chains that start from a known
+ * STRANGER_KEY_DESCRIPTIONS or RELATIONSHIP_KEY_DESCRIPTIONS key (and, for
+ * relationships, a known romantic-interest and family key) are recognised.
+ * @param {string} step
+ * @returns {{chain: string, chainLabel: string}|null}
+ */
+function getChainInfoForStep(step) {
+    for (const strangerKey of Object.keys(STRANGER_KEY_DESCRIPTIONS)) {
+        const chain = `${strangerKey}_`;
+        if (step.startsWith(chain)) {
+            return { chain, chainLabel: describeStrangerChain(strangerKey) };
+        }
+    }
+
+    for (const relationshipKey of Object.keys(RELATIONSHIP_KEY_DESCRIPTIONS)) {
+        if (!step.startsWith(`${relationshipKey}_`)) continue;
+        const afterRelationship = step.slice(relationshipKey.length + 1);
+
+        for (const romanticInterestKey of Object.keys(ROMANTIC_INTEREST_KEY_LABELS)) {
+            if (!afterRelationship.startsWith(`${romanticInterestKey}_`)) continue;
+            const afterRomantic = afterRelationship.slice(romanticInterestKey.length + 1);
+
+            for (const familyKey of ['nonFamily', 'family']) {
+                if (!afterRomantic.startsWith(`${familyKey}_`)) continue;
+                const chain = `${relationshipKey}_${romanticInterestKey}_${familyKey}_`;
+                return {
+                    chain,
+                    chainLabel: describeFamilyContext(relationshipKey, romanticInterestKey, familyKey, false, false),
+                };
+            }
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Walks the steps already answered in the state and builds the list of
+ * potential reference prefixes the guider can inherit answers from. Each
+ * option's `value` is a prefix that, concatenated with `{context}_{key}`,
+ * resolves to a previously answered value in the state; its `label` is a human
+ * readable description of the relationship + fine tune the prefix refers to.
+ *
+ * Only prefixes that can be given a human readable name (i.e. that start from a
+ * known stranger/relationship chain and a parseable fine tune) are returned.
+ *
+ * @param {*} state
+ * @returns {Array<{value: string, label: string}>}
+ */
+function getAllPotentialOptions(state) {
+    const steps = state['.steps'];
+    if (!Array.isArray(steps)) {
+        return [];
+    }
+
+    /** @type {Map<string, string>} prefix -> label */
+    const optionsByPrefix = new Map();
+
+    for (const step of steps) {
+        if (typeof step !== 'string') continue;
+
+        const chainInfo = getChainInfoForStep(step);
+        if (!chainInfo) continue;
+
+        const parsed = parseRelationshipStep(step, chainInfo.chain);
+        if (!parsed) continue;
+
+        const { species, sex, attractiveness } = parsed;
+
+        // Reconstruct the fine tune reference prefix: everything up to (and
+        // including the trailing underscore before) the context segment.
+        let prefix = `${chainInfo.chain}${species}_character_`;
+        if (sex) prefix += `${sex}_`;
+        if (attractiveness) prefix += `${attractiveness}_`;
+
+        if (optionsByPrefix.has(prefix)) continue;
+
+        const fineTuneLabel = describeFineTune(species, sex, attractiveness);
+        optionsByPrefix.set(prefix, `${chainInfo.chainLabel}, ${fineTuneLabel}`);
+    }
+
+    return Array.from(optionsByPrefix, ([value, label]) => ({ value, label }));
+}
+
+/**
  * @param {DEngine} engine
  * @param {import('./base.js').ScriptTypeGenerator} scriptgenerator
  * @param {import('./base.js').ScriptTypeGuider} guider
@@ -1989,12 +2222,12 @@ export async function generateBonds(engine, scriptgenerator, guider) {
 
                 const options = getAllPotentialOptions(scriptgenerator.state);
 
-                const fineTuneReferencePrefix = await guider.askOption(
+                const fineTuneReferencePrefix = options.length !== 0 ? (await guider.askOption(
                     "refkey_" + strangerKey + "_" + fineTuneComment,
                     "Select a reference to inherit answer for " + actualStrangerValue,
                     options,
                     getFineTuneReferenceDefaultPrefix(),
-                );
+                )).value : getFineTuneReferenceDefaultPrefix();
 
                 const fineTuneReferenceLabel = options.find(o => o.value === fineTuneReferencePrefix)?.label || fineTuneReferencePrefix;
 

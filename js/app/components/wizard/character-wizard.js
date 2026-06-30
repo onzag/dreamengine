@@ -92,6 +92,7 @@ export class CardTypeWizard extends HTMLElement {
                 this.showError('Failed to parse character script. It may be malformed or contain syntax errors.');
                 return;
             }
+
             const isCompleteCard = parsedCard.state.guidedWizardCompleted || parsedCard.state.automaticWizardCompleted;
             if (isCompleteCard) {
                 const contentArea = this.root.querySelector('.wizard-content');
@@ -104,6 +105,13 @@ export class CardTypeWizard extends HTMLElement {
                 const contentArea = this.root.querySelector('.wizard-content');
                 // @ts-ignore
                 contentArea.innerHTML = `<p>This character script was generated with version ${parsedCard.state.version} of the wizard, but you are currently running version 2. There may be incompatibilities that prevent the wizard from working correctly. Please update your character script by copying its content, creating a new character with the latest version of the wizard, and pasting the content into the new character's script.</p>`;
+                return;
+            }
+
+            if (!parsedCard.state.language || parsedCard.state.language.split("-")[0] !== window.DREAMENGINE_LANGUAGE.split("-")[0]) {
+                const contentArea = this.root.querySelector('.wizard-content');
+                // @ts-ignore
+                contentArea.innerHTML = `<p>This character script is in a different language (${parsedCard.state.language || 'unknown'}) than the engine (${window.DREAMENGINE_LANGUAGE}). The wizard may not function correctly.</p>`;
                 return;
             }
 
@@ -297,7 +305,7 @@ export class CardTypeWizard extends HTMLElement {
                 head: [],
                 state: parsedCard.state || {},
             };
-            await client.continueCardTypeWizard({ currentCard: copiedParsedCardWithoutCode, guided });
+            await client.continueCardTypeWizard({ currentCard: copiedParsedCardWithoutCode, guided, language: window.DREAMENGINE_LANGUAGE });
         } catch (err) {
             cleanup();
             this.showError(err instanceof Error ? err.message : String(err));

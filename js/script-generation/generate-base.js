@@ -38,10 +38,12 @@ export function replaceAllCharNameWithPlaceholder(str, charName) {
  * @param {DEngine} engine
  * @param {import('./base.js').ScriptTypeGenerator} scriptgenerator
  * @param {import('./base.js').ScriptTypeGuider} guider
+ * @param {string} language
  * @return {Promise<void>}
  */
-export async function generateBase(engine, scriptgenerator, guider) {
+export async function generateBase(engine, scriptgenerator, guider, language) {
     scriptgenerator.state.version = 2;
+    scriptgenerator.state.language = language;
 
     if (!scriptgenerator.state.card) {
         throw new Error("No card found in state");
@@ -61,6 +63,7 @@ export async function generateBase(engine, scriptgenerator, guider) {
     scriptgenerator.head.push(`engine.exports = {`);
     scriptgenerator.head.push(`metadata,`);
     scriptgenerator.head.push(`type: "characters",`);
+    scriptgenerator.head.push(`language: ${JSON.stringify(language)},`);
     scriptgenerator.foot.push(`};`);
 
     const inferenceAdapter = engine.inferenceAdapter;

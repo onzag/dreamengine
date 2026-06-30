@@ -218,7 +218,19 @@ class CharacterOverlay extends HTMLElement {
             } else {
                 try {
                     const parsedCardType = parseScriptGeneratorFrom(scriptSource.src);
-                    if (parsedCardType.state.guidedWizardInProgress) {
+                    if (parsedCardType.state.version && parsedCardType.state.version !== 2) {
+                        cardtypeWizardContent = `<app-overlay-section section-title="CardType Wizard">
+                            <p>
+                                This character script was generated with version ${parsedCardType.state.version} of the wizard, but you are currently running version 2. There may be incompatibilities that prevent the wizard from working correctly. Please update your character script by copying its content, creating a new character with the latest version of the wizard, and pasting the content into the new character's script.
+                            </p>
+                        </app-overlay-section>`;
+                    } else if (!parsedCardType.state.language || parsedCardType.state.language.split("-")[0] !== window.DREAMENGINE_LANGUAGE.split("-")[0]) {
+                        cardtypeWizardContent = `<app-overlay-section section-title="CardType Wizard">
+                            <p>
+                                This character script is in a different language (${parsedCardType.state.language || 'unknown'}) than the engine (${window.DREAMENGINE_LANGUAGE}). The wizard may not function correctly.
+                            </p>
+                        </app-overlay-section>`;
+                    } else if (parsedCardType.state.guidedWizardInProgress) {
                         cardtypeWizardContent = `<app-overlay-section section-title="CardType Wizard">
                             <p>
                                 This character script is in progress of being created by the Guided Wizard.
