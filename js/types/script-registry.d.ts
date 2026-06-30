@@ -75,5 +75,7 @@ declare interface DEScriptRegistry {
         applyToCharacter(DE: DEObject, character: DECompleteCharacterReference): void;
     };
     "@characters/dema-basic": DEScript;
-    "@worlds/simple-lunar-station": DEScript;
+    "@worlds/simple-lunar-station": DEScript & {
+        language: string;
+    };
 }

@@ -1,6 +1,7 @@
 engine.exports = {
     type: "world",
     description: "A serene lunar station orbiting earth, featuring advanced technology and breathtaking views of space.",
+    language: "en",
     exposeProperties: {
         "IS_ROBOT": {
             propertyLocation: "characters",
