@@ -632,10 +632,13 @@ export class CardTypeWizard extends HTMLElement {
                         const wrapper = document.createElement('div');
                         wrapper.className = 'guider-options';
                         options.forEach((opt, i) => {
+                            const optValue = typeof opt === 'string' ? opt : opt.value;
+                            const optLabel = typeof opt === 'string' ? opt : opt.label;
                             const optBtn = document.createElement('div');
                             optBtn.className = 'guider-option';
-                            if (opt === defaultValue) optBtn.classList.add('selected');
-                            optBtn.textContent = opt;
+                            if (optValue === defaultValue) optBtn.classList.add('selected');
+                            optBtn.dataset.value = optValue;
+                            optBtn.textContent = optLabel;
                             optBtn.addEventListener('mouseenter', playHoverSound);
                             optBtn.addEventListener('click', () => {
                                 wrapper.querySelectorAll('.guider-option').forEach(b => b.classList.remove('selected'));
@@ -647,7 +650,8 @@ export class CardTypeWizard extends HTMLElement {
                     },
                     (inputArea) => {
                         const selected = inputArea.querySelector('.guider-option.selected');
-                        return selected ? selected.textContent : (defaultValue ?? options[0]);
+                        const firstValue = options[0] !== undefined ? (typeof options[0] === 'string' ? options[0] : options[0].value) : undefined;
+                        return selected ? /** @type {HTMLElement} */ (selected).dataset.value : (defaultValue ?? firstValue);
                     },
                     defaultValue
                 );
@@ -822,6 +826,16 @@ export class CardTypeWizard extends HTMLElement {
                         /** @type {string[]} */
                         const items = defaultValue ? [...defaultValue] : [];
 
+                        const valueToLabel = new Map();
+                        if (options) {
+                            for (const group of Object.values(options)) {
+                                for (const o of group) {
+                                    if (typeof o === 'string') valueToLabel.set(o, o);
+                                    else valueToLabel.set(o.value, o.label);
+                                }
+                            }
+                        }
+
                         const renderItems = () => {
                             let listContainer = wrapper.querySelector('.guider-list-items');
                             if (!listContainer) {
@@ -831,7 +845,7 @@ export class CardTypeWizard extends HTMLElement {
                             }
                             listContainer.innerHTML = items.map((item, idx) => `
                                 <div class="guider-list-item">
-                                    <span>${item}</span>
+                                    <span data-value="${item}">${valueToLabel.get(item) ?? item}</span>
                                     <div class="guider-list-remove" data-idx="${idx}">✕</div>
                                 </div>
                             `).join('');
@@ -862,15 +876,18 @@ export class CardTypeWizard extends HTMLElement {
                                 let hasAny = false;
                                 const groups = Object.keys(options);
                                 for (const group of groups) {
-                                    const remaining = options[group].filter(o => !items.includes(o));
+                                    const remaining = options[group].filter(o => {
+                                        const optVal = typeof o === 'string' ? o : o.value;
+                                        return !items.includes(optVal);
+                                    });
                                     if (remaining.length === 0) continue;
                                     hasAny = true;
                                     const optgroup = document.createElement('optgroup');
                                     optgroup.label = group;
                                     remaining.forEach(opt => {
                                         const o = document.createElement('option');
-                                        o.value = opt;
-                                        o.textContent = opt;
+                                        o.value = typeof opt === 'string' ? opt : opt.value;
+                                        o.textContent = typeof opt === 'string' ? opt : opt.label;
                                         optgroup.appendChild(o);
                                     });
                                     select.appendChild(optgroup);
@@ -924,7 +941,7 @@ export class CardTypeWizard extends HTMLElement {
                     },
                     (inputArea) => {
                         const itemEls = inputArea.querySelectorAll('.guider-list-item span');
-                        const result = Array.from(itemEls).map(el => el.textContent || '');
+                        const result = Array.from(itemEls).map(el => /** @type {HTMLElement} */ (el).dataset.value || el.textContent || '');
                         const pending = inputArea.querySelector('.guider-list-add-row .guider-input');
                         if (pending) {
                             // @ts-ignore

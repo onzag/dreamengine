@@ -220,13 +220,19 @@ export function getJsScriptFromGenerator(base, baseTabCount = 0, noImportsNorSta
 }
 
 /**
+ * @typedef {Object} ScriptTypeGuiderOption
+ * @property {string} value
+ * @property {string} label
+ */
+
+/**
  * @typedef {Object} ScriptTypeGuider
- * @property {(id: string | {id: string, reask: boolean, recalcdefault?: boolean, step: boolean} | null, question: string, options: string[], defaultValue: string | (() => Promise<string>)) => Promise<{value: string}>} askOption
+ * @property {(id: string | {id: string, reask: boolean, recalcdefault?: boolean, step: boolean} | null, question: string, options: Array<ScriptTypeGuiderOption | string>, defaultValue: string | (() => Promise<string>)) => Promise<{value: string}>} askOption
  * @property {(id: string | {id: string, reask: boolean, recalcdefault?: boolean, step: boolean} | null, question: string, defaultValue: string | (() => Promise<string>)) => Promise<{value: string}>} askOpen
  * @property {(id: string | {id: string, reask: boolean, recalcdefault?: boolean, step: boolean} | null, question: string, defaultValue: string | (() => Promise<string>)) => Promise<{value: string}>} askAccept
  * @property {(id: string | {id: string, reask: boolean, recalcdefault?: boolean, step: boolean} | null, question: string, defaultValue: number | (() => Promise<number>)) => Promise<{value: number}>} askNumber
  * @property {(id: string | {id: string, reask: boolean, recalcdefault?: boolean, step: boolean} | null, question: string, defaultValue: boolean | (() => Promise<boolean>)) => Promise<{value: boolean}>} askBoolean
- * @property {(id: string | {id: string, reask: boolean, recalcdefault?: boolean, step: boolean} | null, question: string, options: Record<string, string[]> | null, defaultValue: string[] | (() => Promise<string[]>)) => Promise<{value: string[]}>} askList
+ * @property {(id: string | {id: string, reask: boolean, recalcdefault?: boolean, step: boolean} | null, question: string, options: Record<string, Array<ScriptTypeGuiderOption | string>> | null, defaultValue: string[] | (() => Promise<string[]>)) => Promise<{value: string[]}>} askList
  * @property {(id: string | {id: string, reask: boolean, recalcdefault?: boolean, step: boolean} | null, question: string, defaultValue: string[] | (() => Promise<string[]>)) => Promise<{value: string[]}>} askArbitraryList
  * @property {(id: string | {id: string, reask: boolean, recalcdefault?: boolean, step: boolean} | null, question: string, defaultValue: string[] | (() => Promise<string[] | null>)) => Promise<{value: string[] | null}>} askAcceptArbitraryList
  */

@@ -251,16 +251,16 @@ function processRelationshipSteps(state, relationshipSteps, prefix) {
         if (group.sex) baseKey += `${group.sex}_`;
         if (group.attractiveness) baseKey += `${group.attractiveness}`;
 
-        const copyKeyBtn = document.createElement('button');
-        copyKeyBtn.className = 'relationship-copy-btn relationship-copy-key-btn';
-        copyKeyBtn.textContent = 'Copy Key';
-        copyKeyBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            navigator.clipboard.writeText(baseKey);
-            copyKeyBtn.textContent = 'Copied!';
-            setTimeout(() => { copyKeyBtn.textContent = 'Copy Key'; }, 1500);
-        });
-        header.appendChild(copyKeyBtn);
+        // const copyKeyBtn = document.createElement('button');
+        // copyKeyBtn.className = 'relationship-copy-btn relationship-copy-key-btn';
+        // copyKeyBtn.textContent = 'Copy Key';
+        // copyKeyBtn.addEventListener('click', (e) => {
+        //     e.stopPropagation();
+        //     navigator.clipboard.writeText(baseKey);
+        //     copyKeyBtn.textContent = 'Copied!';
+        //     setTimeout(() => { copyKeyBtn.textContent = 'Copy Key'; }, 1500);
+        // });
+        // header.appendChild(copyKeyBtn);
 
         header.addEventListener('click', () => {
             groupEl.classList.toggle('expanded');

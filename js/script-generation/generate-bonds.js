@@ -48,19 +48,6 @@ const STRANGER_KEY_DESCRIPTIONS = {
     "strangerBad_n100_n5": "stranger",
 };
 
-const STRANGER_KEY_INFO_OBTAINED_FROM_STRANGERNEUTRAL_SPECIALCASE = {
-    "n/a": "",
-    "slight": "",
-    "moderate": "\n\nThe answers were obtained from the same question for slightly attractive strangers",
-    "strong": "\n\nThe answers were obtained from the same question for moderately attractive strangers",
-}
-
-/** @type {Record<string, string>} */
-const STRANGER_KEY_INFO_OBTAINED_FROM = {
-    "strangerGood_5_100": "\n\nThe answers were obtained from the same question for neutral strangers",
-    "strangerBad_n100_n5": "\n\nThe answers were obtained from the same question for neutral strangers",
-};
-
 /** @type {Record<string, string>} */
 const RELATIONSHIP_KEY_DESCRIPTIONS = {
     "foe_n100_n50": "sworn enemy",
@@ -1987,44 +1974,45 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                     strangerSectionOpenToAffection.body.push(`if (${getAttractionLevelCondition(fineTuneConditions[fineTune], attractionLevel)}) {`);
                 }
 
-                /**
-                 * @param {string} intimateModifier
-                 * @param {string} key
-                 */
-                const getFineTuneReference = (intimateModifier, key) => {
-                    const fineTuneCommentWithIntimacyModifier = fineTuneComment + "_" + intimateModifier;
+                const getFineTuneReferenceDefaultPrefix = () => {
                     if (strangerKey === "strangerNeutral_n5_5" && attractionLevel === "moderate") {
                         // special case pick it from itself but from the slight attraction level
-                        return scriptgenerator.state[strangerKey + "_" + fineTune + "_slight_" + intimateModifier + "_" + key];
+                        return strangerKey + "_" + fineTune + "_slight_"
                     } else if (strangerKey === "strangerNeutral_n5_5" && attractionLevel === "strong") {
                         // special case pick it from itself but from the moderate attraction level
-                        return scriptgenerator.state[strangerKey + "_" + fineTune + "_moderate_" + intimateModifier + "_" + key];
+                        return strangerKey + "_" + fineTune + "_moderate_";
                     } else {
-                        // normal case, pick it from the stranger neutral with the same fine tune and intimacy modifier
-                        return scriptgenerator.state["strangerNeutral_n5_5" + "_" + fineTuneCommentWithIntimacyModifier + "_" + key];
+                        // normal case, pick it from the stranger neutral with the same fine tune and attraction level
+                        return "strangerNeutral_n5_5" + "_" + fineTuneComment + "_";
                     }
                 }
 
+                const options = getAllPotentialOptions(scriptgenerator.state);
+
+                const fineTuneReferencePrefix = await guider.askOption(
+                    "refkey_" + strangerKey + "_" + fineTuneComment,
+                    "Select a reference to inherit answer for " + actualStrangerValue,
+                    options,
+                    getFineTuneReferenceDefaultPrefix(),
+                );
+
+                const fineTuneReferenceLabel = options.find(o => o.value === fineTuneReferencePrefix)?.label || fineTuneReferencePrefix;
+
+                const messageAboutAnswersFrom = fineTuneReferenceLabel ? "\n\nThe answers were obtained from " + fineTuneReferenceLabel : "";
+
                 /**
-                 * @param {string} key
+                 * 
+                 * @param {string} intimateModifier 
+                 * @param {string} key 
+                 * @returns 
                  */
-                const getFineTuneReferenceNoIntimateModifier = (key) => {
-                    if (strangerKey === "strangerNeutral_n5_5" && attractionLevel === "moderate") {
-                        // special case pick it from itself but from the slight attraction level
-                        return scriptgenerator.state[strangerKey + "_" + fineTune + "_slight_" + key];
-                    } else if (strangerKey === "strangerNeutral_n5_5" && attractionLevel === "strong") {
-                        // special case pick it from itself but from the moderate attraction level
-                        return scriptgenerator.state[strangerKey + "_" + fineTune + "_moderate_" + key];
-                    } else {
-                        // normal case, pick it from the stranger neutral with the same fine tune and attraction level
-                        return scriptgenerator.state["strangerNeutral_n5_5" + "_" + fineTuneComment + "_" + key];
-                    }
+                const getFineTuneReference = (intimateModifier, key) => {
+                    return scriptgenerator.state[fineTuneReferencePrefix + intimateModifier + "_" + key];
                 }
 
                 for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
                     const fineTuneCommentWithIntimacyModifier = fineTuneComment + "_" + intimateModifier;
 
-                    const messageAboutAnswersFrom = STRANGER_KEY_INFO_OBTAINED_FROM[strangerKey] || STRANGER_KEY_INFO_OBTAINED_FROM_STRANGERNEUTRAL_SPECIALCASE[attractionLevel] || "";
                     const guiderResult = await guider.askOption(
                         strangerKey + "_" + fineTuneCommentWithIntimacyModifier + "_open-to-affection",
                         "How receptive to affection is " + name + " towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "?" + messageAboutAnswersFrom, [
@@ -2103,7 +2091,6 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                 for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
                     const fineTuneCommentWithIntimacyModifier = fineTuneComment + "_" + intimateModifier;
 
-                    const messageAboutAnswersFrom = STRANGER_KEY_INFO_OBTAINED_FROM[strangerKey] || STRANGER_KEY_INFO_OBTAINED_FROM_STRANGERNEUTRAL_SPECIALCASE[attractionLevel] || "";
                     const guiderResult = await guider.askOption(
                         strangerKey + "_" + fineTuneCommentWithIntimacyModifier + "_open-to-intimate-affection",
                         "How receptive to intimate affection is " + name + " towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "?" + messageAboutAnswersFrom, [
@@ -2181,7 +2168,6 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                 for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
                     const fineTuneCommentWithIntimacyModifier = fineTuneComment + "_" + intimateModifier;
 
-                    const messageAboutAnswersFrom = STRANGER_KEY_INFO_OBTAINED_FROM[strangerKey] || STRANGER_KEY_INFO_OBTAINED_FROM_STRANGERNEUTRAL_SPECIALCASE[attractionLevel] || "";
                     const guiderResult = await guider.askOption(
                         strangerKey + "_" + fineTuneCommentWithIntimacyModifier + "_open-to-sex",
                         "How receptive to sex is " + name + " towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "?" + messageAboutAnswersFrom, [
@@ -2255,8 +2241,6 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                     // @ts-ignore
                     strangerSectionProneToInitiatingAffection.body.push(`if (${getAttractionLevelCondition(fineTuneConditions[fineTune], attractionLevel)}) {`);
                 }
-
-                const messageAboutAnswersFrom = STRANGER_KEY_INFO_OBTAINED_FROM[strangerKey] || STRANGER_KEY_INFO_OBTAINED_FROM_STRANGERNEUTRAL_SPECIALCASE[attractionLevel] || "";
 
                 for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
                     const fineTuneCommentWithIntimacyModifier = fineTuneComment + "_" + intimateModifier;
@@ -2409,7 +2393,7 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                 let guidanceGiven = "";
                 let redoGuidance = false;
                 let descriptionValue = "";
-                let originalReferenceDescription = getFineTuneReferenceNoIntimateModifier("description");
+                let originalReferenceDescription = scriptgenerator.state[fineTuneReferencePrefix + "description"];
                 while (true) {
                     let redidGuidance = false;
                     if (redoGuidance) {
