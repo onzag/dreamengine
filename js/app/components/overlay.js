@@ -15,6 +15,25 @@ class Overlay extends HTMLElement {
     connectedCallback() {
         this.render();
 
+        // Find the direct child of document.body that contains this overlay.
+        // It may be this element itself, or an ancestor host if mounted inside a shadow root.
+        /** @type {HTMLElement} */
+        let bodyLevelChild = /** @type {HTMLElement} */ (this);
+        while (true) {
+            const p = /** @type {any} */ (bodyLevelChild.parentNode);
+            if (!p || p === document.body || p === document) break;
+            bodyLevelChild = p.nodeType === 11 /* DOCUMENT_FRAGMENT_NODE */ ? p.host : p;
+        }
+
+        /** @type {HTMLElement[]} */
+        this._madeInert = [];
+        for (const el of document.body.children) {
+            if (el !== bodyLevelChild && !/** @type {HTMLElement} */ (el).inert) {
+                /** @type {HTMLElement} */ (el).inert = true;
+                this._madeInert.push(/** @type {HTMLElement} */ (el));
+            }
+        }
+
         // hide stars when overlay is active
         // @ts-expect-error
         document.querySelector('.sky').style.display = 'none';
@@ -83,6 +102,12 @@ class Overlay extends HTMLElement {
 
     disconnectedCallback() {
         document.removeEventListener("keydown", this.onDocumentKeydown);
+        if (this._madeInert) {
+            for (const el of this._madeInert) {
+                el.inert = false;
+            }
+            this._madeInert = [];
+        }
         // only show stars if no other overlay is still active
         const remainingOverlays = document.querySelectorAll('app-character, app-world, app-settings, app-play, app-manage, app-license, app-other-attributions, app-cardtype-wizard, app-world-wizard');
         if (remainingOverlays.length === 0) {
@@ -202,6 +227,7 @@ class Overlay extends HTMLElement {
             overflow-y: auto;
         }
         .overlay-buttons {
+                position: relative;
                 display: flex;
     justify-content: space-between;
     align-items: flex-end;
@@ -1280,9 +1306,22 @@ class OverlayButton extends HTMLElement {
         .overlay-button.disabled:hover {
             color: inherit;
         }
+        .overlay-button-container {
+            position: relative;
+            display: inline-block;
+        }
       </style>
-      <div class="overlay-button${this.getAttribute('disabled') === 'true' ? ' disabled' : ''}" role="button" aria-disabled="${this.getAttribute('disabled') === 'true' ? 'true' : 'false'}" tabindex="0">
-        <slot></slot>
+      <div class="overlay-button-container">
+        <div
+            class="overlay-button${this.getAttribute('disabled') === 'true' ? ' disabled' : ''}"
+            role="button"
+            aria-disabled="${this.getAttribute('disabled') === 'true' ? 'true' : 'false'}"
+            tabindex="0"
+            data-de-aria-key="${this.getAttribute('aria-key') || ''}"
+            data-de-aria-horizontal-alignment="end-outside"
+        >
+            <slot></slot>
+        </div>
       </div>
     `;
     }

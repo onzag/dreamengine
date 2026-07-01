@@ -19,6 +19,15 @@ class Dialog extends HTMLElement {
     connectedCallback() {
         this.render();
 
+        /** @type {HTMLElement[]} */
+        this._madeInert = [];
+        for (const el of document.body.children) {
+            if (el !== this && !/** @type {HTMLElement} */ (el).inert) {
+                /** @type {HTMLElement} */ (el).inert = true;
+                this._madeInert.push(/** @type {HTMLElement} */ (el));
+            }
+        }
+
         playPauseSound();
         document.addEventListener("keydown", this.onDocumentKeydown);
 
@@ -76,6 +85,12 @@ class Dialog extends HTMLElement {
 
     disconnectedCallback() {
         document.removeEventListener("keydown", this.onDocumentKeydown);
+        if (this._madeInert) {
+            for (const el of this._madeInert) {
+                el.inert = false;
+            }
+            this._madeInert = [];
+        }
     }
 
     render() {

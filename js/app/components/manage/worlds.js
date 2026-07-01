@@ -66,11 +66,11 @@ class AppManageWorlds extends HTMLElement {
             });
         });
         // @ts-expect-error
-        this.root.querySelector('.go-back-button-container').addEventListener('click', () => {
+        this.root.querySelector('.go-back-button').addEventListener('click', () => {
             this.onGoBackWorldNamespaces();
         });
         // @ts-expect-error
-        this.root.querySelector('.go-back-button-container').addEventListener('mouseenter', () => {
+        this.root.querySelector('.go-back-button').addEventListener('mouseenter', () => {
             playHoverSound();
         });
     }
@@ -102,9 +102,9 @@ class AppManageWorlds extends HTMLElement {
         }
 
         const worldElements = infoMapForNamespace.map(worldInfo => `
-                <div class="world-item" data-world-file="${worldInfo.namespace}/${worldInfo.id}" data-world-namespace="${worldInfo.namespace}">
+                <div class="world-item" role="button" tabindex="0" data-de-aria-key="e" data-de-aria-horizontal-alignment="end-inside" data-world-file="${worldInfo.namespace}/${worldInfo.id}" data-world-namespace="${worldInfo.namespace}">
                     <div class="world-icon">
-                        <app-world-image image-url="assets/${worldInfo.namespace}/${worldInfo.id}/image"></app-world-image>
+                        <app-world-image image-url="assets/${worldInfo.namespace}/${worldInfo.id}/image" tabindex="-1"></app-world-image>
                     </div>
                     <div class="world-name">
                         ${formatName(worldInfo.id)}
@@ -136,7 +136,7 @@ class AppManageWorlds extends HTMLElement {
             return;
         } else {
             const namespaceElements = allNamespaces.map(namespace => `
-                <div class="world-namespace-item" data-world-namespace="${namespace}">
+                <div class="world-namespace-item" role="button" tabindex="0" data-de-aria-key="e" data-de-aria-horizontal-alignment="end-outside" data-world-namespace="${namespace}">
                     <div class="world-namespace-icon">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640">
                             <path fill="#ccc" d="M128 464L512 464C520.8 464 528 456.8 528 448L528 208C528 199.2 520.8 192 512 192L362.7 192C345.4 192 328.5 186.4 314.7 176L276.3 147.2C273.5 145.1 270.2 144 266.7 144L128 144C119.2 144 112 151.2 112 160L112 448C112 456.8 119.2 464 128 464zM512 512L128 512C92.7 512 64 483.3 64 448L64 160C64 124.7 92.7 96 128 96L266.7 96C280.5 96 294 100.5 305.1 108.8L343.5 137.6C349 141.8 355.8 144 362.7 144L512 144C547.3 144 576 172.7 576 208L576 448C576 483.3 547.3 512 512 512z"/>
@@ -270,22 +270,30 @@ class AppManageWorlds extends HTMLElement {
                     opacity: 0.7;
                 }
                 .go-back-button-container {
+                    margin-bottom: 4vh;
+                    position: relative;
+                }
+                .go-back-button {
+                    display: inline-block;
                     font-size: 3vh;
                     color: #ccc;
-                    margin-bottom: 4vh;
                     cursor: pointer;
                 }
-                .go-back-button-container:hover {
+                .go-back-button:hover {
                     color: #FF6B6B;
                 }
                 .go-back-button-container.hidden {
                     display: none;
                 }
             </style>
-            ${hasNewButton ? '<app-overlay-button play-sound-on-click="false">New World</app-overlay-button>' : ''}
+            ${hasNewButton ? '<app-overlay-button play-sound-on-click="false" aria-key="n">New World</app-overlay-button>' : ''}
             <div class="worlds-container">
-                <h2><span>Worlds</span>&nbsp;<span class="namespace-name"></span></h2>
-                <div class="go-back-button-container">&lt; Back to Namespaces</div>
+                <h2 tabindex="0" data-de-aria-text="true" role="navigation"><span>Worlds</span>&nbsp;<span class="namespace-name"></span></h2>
+                <div class="go-back-button-container">
+                    <div class="go-back-button" role="button" tabindex="0" data-de-aria-key="b" data-de-aria-horizontal-alignment="end-outside" data-de-aria-vertical-alignment="middle">
+                        &lt; Back to Namespaces
+                    </div>
+                </div>
                 <div class="world-list">
                     <div class="no-worlds-placeholder">
                         You have no worlds yet.${hasNewButton ? ' Click "New World" to create one.' : ''}
