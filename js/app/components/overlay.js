@@ -567,7 +567,7 @@ class OverlayInput extends HTMLElement {
             }
         }
 
-        let inputItself = multiline ? `<textarea placeholder="${placeholder}" tabindex="0" aria-label="${label}" data-de-aria-key="p"></textarea>` : `<input type="${type}" placeholder="${placeholder}" ${extraAttributes} tabindex="0" aria-label="${label}" data-de-aria-key="p" />`;
+        let inputItself = multiline ? `<textarea placeholder="${placeholder}" tabindex="0" aria-label="${label}" data-de-aria-key="${this.getAttribute("aria-key") || 'p'}"></textarea>` : `<input type="${type}" placeholder="${placeholder}" ${extraAttributes} tabindex="0" aria-label="${label}" data-de-aria-key="${this.getAttribute("aria-key") || 'p'}" />`;
 
         this.root.innerHTML = `
       <style>

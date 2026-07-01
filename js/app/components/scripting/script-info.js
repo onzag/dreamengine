@@ -66,35 +66,35 @@ class ScriptInfo extends HTMLElement {
             <style>${ScriptInfo.styles}</style>
             <div class="script-info">
                 <div class="toolbar">
-                    <app-overlay-button id="refresh-btn">Refresh</app-overlay-button>
-                    <app-overlay-button id="view-btn">View Source</app-overlay-button>
-                    ${isReadOnly || window.API.mode === "web" ? '' : '<app-overlay-button id="open-btn">Edit File</app-overlay-button>'}
-                    ${isReadOnly ? '' : '<app-overlay-button play-sound-on-click="false" id="delete-btn">Delete File</app-overlay-button>'}
-                    ${isReadOnly ? '' : '<app-overlay-button play-sound-on-click="false" id="move-btn">Move/Rename File</app-overlay-button>'}
+                    <app-overlay-button id="refresh-btn" aria-key="r">Refresh</app-overlay-button>
+                    <app-overlay-button id="view-btn" aria-key="v">View Source</app-overlay-button>
+                    ${isReadOnly || window.API.mode === "web" ? '' : '<app-overlay-button id="open-btn" aria-key="e">Edit File</app-overlay-button>'}
+                    ${isReadOnly ? '' : '<app-overlay-button play-sound-on-click="false" id="delete-btn" aria-key="d">Delete File</app-overlay-button>'}
+                    ${isReadOnly ? '' : '<app-overlay-button play-sound-on-click="false" id="move-btn" aria-key="m">Move/Rename File</app-overlay-button>'}
                 </div>
                 ${info ? `
-                    <div class="section">
+                    <div class="section" data-de-aria-text="true" tabindex="0">
                         <div class="label">ID</div>
                         <div class="value">${this.#esc(info.id)}</div>
                     </div>
-                    <div class="section">
+                    <div class="section" data-de-aria-text="true" tabindex="0">
                         <div class="label">Namespace</div>
                         <div class="value">${this.#esc(info.namespace.replace("@", "(System) "))}</div>
                     </div>
-                    <div class="section">
+                    <div class="section" data-de-aria-text="true" tabindex="0">
                         <div class="label">Type</div>
                         <div class="value">${this.#esc(info.type)}</div>
                     </div>
-                    <div class="section">
+                    <div class="section" data-de-aria-text="true" tabindex="0">
                         <div class="label">Description</div>
                         <div class="value">${this.#esc(info.description)}</div>
                     </div>
                     ${Object.keys(info.exposeProperties).length > 0 ? `
                         <div class="section">
-                            <div class="label">Exposed Properties</div>
+                            <div class="label" data-de-aria-text="true" tabindex="0">Exposed Properties</div>
                             <div class="props-list">
                                 ${Object.entries(info.exposeProperties).map(([name, prop]) => `
-                                    <div class="prop-item">
+                                    <div class="prop-item" data-de-aria-text="true" tabindex="0">
                                         <span class="prop-name">${this.#esc(name)}</span>
                                         <span class="prop-type">${this.#esc(/** @type {any} */(prop).type)}</span>
                                         <span class="prop-location">${this.#esc(/** @type {any} */(prop).propertyLocation)}</span>
@@ -106,10 +106,10 @@ class ScriptInfo extends HTMLElement {
                     ` : ''}
                     ${Object.keys(info.exposeCharacters).length > 0 ? `
                         <div class="section">
-                            <div class="label">Exposed Characters</div>
+                            <div class="label" data-de-aria-text="true" tabindex="0">Exposed Characters</div>
                             <div class="props-list">
                                 ${Object.entries(info.exposeCharacters).map(([name, char]) => `
-                                    <div class="props-item">
+                                    <div class="props-item" data-de-aria-text="true" tabindex="0">
                                         <span class="prop-name">${this.#esc(name)}</span>
                                         ${/** @type {any} */ (char).description ? `<span class="prop-desc">${this.#esc(/** @type {any} */(char).description)}</span>` : ''}
                                     </div>
@@ -119,17 +119,17 @@ class ScriptInfo extends HTMLElement {
                     ` : ''}
                     ${dependencies.length > 0 ? `
                         <div class="section">
-                            <div class="label">Dependencies (${dependencies.length})</div>
+                            <div class="label" data-de-aria-text="true" tabindex="0">Dependencies (${dependencies.length})</div>
                             <div class="deps-list">
                                 ${dependencies.map(dep => `
-                                    <div class="dep-item">${this.#esc(dep.namespace.replace("@", "(System) "))}/${this.#esc(dep.id)}</div>
+                                    <div class="dep-item" data-de-aria-text="true" tabindex="0">${this.#esc(dep.namespace.replace("@", "(System) "))}/${this.#esc(dep.id)}</div>
                                 `).join('')}
                             </div>
                         </div>
                     ` : ''}
                 ` : `
                     <div class="section">
-                        <div class="value none">No info available for this script.</div>
+                        <div class="value none" data-de-aria-text="true" tabindex="0">No info available for this script.</div>
                     </div>
                 `}
             </div>

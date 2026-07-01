@@ -87,11 +87,13 @@ class CharacterOverlay extends HTMLElement {
                     id="name-input"
                     label="Character Name"
                     input-placeholder="e.g. my-character"
+                    aria-key="n"
                 ></app-overlay-input>
                 <app-overlay-input
                     id="namespace-input"
                     label="Namespace"
                     input-placeholder="e.g. my-scripts"
+                    aria-key="s"
                     ${lastNamespace ? `input-default-value="${lastNamespace}"` : ''}
                 ></app-overlay-input>
             `;
