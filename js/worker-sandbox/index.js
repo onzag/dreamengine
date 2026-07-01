@@ -554,7 +554,7 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
                 currentCard.foot = [];
                 currentCard.imports = [];
 
-                return { currentCard, guided };
+                return { currentCard, guided, language };
             }
 
             /** @type {import('../script-generation/base.js').ScriptTypeGuider} */
@@ -610,7 +610,7 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
     let currentWizardCancel = null;
     
     /**
-     * @type {(() => { currentCard: import('../script-generation/base.js').ScriptTypeGenerator, guided: boolean }) | null}
+     * @type {(() => { currentCard: import('../script-generation/base.js').ScriptTypeGenerator, guided: boolean, language: string }) | null}
      */
     let currentWizardGoBack = null;
 

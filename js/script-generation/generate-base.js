@@ -2,6 +2,7 @@ import { DEngine } from '../engine/index.js';
 import { emotions, emotionsGrouped } from '../engine/util/emotions.js';
 import { createGrammarListFromList } from '../engine/util/grammar.js';
 import { insertSection, getSection, insertSpecialComment, hasSpecialComment, toTemplateLiteral, unshiftSpecialComment } from './base.js';
+import { replaceOtherCharNameWithPlaceholder } from './generate-bond-triggers.js';
 
 if (typeof process !== "undefined" && process.versions && process.versions.node) {
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
@@ -42,6 +43,10 @@ export function replaceAllCharNameWithPlaceholder(str, charName) {
  * @return {Promise<void>}
  */
 export async function generateBase(engine, scriptgenerator, guider, language) {
+    if (!language) {
+        throw new Error("No language specified");
+    }
+
     scriptgenerator.state.version = 2;
     scriptgenerator.state.language = language;
 
@@ -1552,6 +1557,169 @@ export async function generateBase(engine, scriptgenerator, guider, language) {
 
         insertSpecialComment(newCharacterSection.body, "base-adventurousness");
         newCharacterSection.body.push(`adventurousness: ${adventurousnessValue / 10},`);
+    }
+
+    {
+        const correctivenessLikelyhoodValue = (await guider.askNumber(
+            "correctiveness-likelyhood",
+            "From 1 to 10 how likely is " + name + " to correct others when they say something wrong or incorrect? with 10 being extremely likely to always correct others and 1 being very unlikely to ever correct anyone",
+            async () => {
+                await prime();
+                const correctivenessLikelyhoodValue = await generator.next({
+                    maxCharacters: 100,
+                    maxSafetyCharacters: 0,
+                    maxParagraphs: 1,
+                    nextQuestion: "How likely is " + name + " to correct others when they are wrong? answer with \"very likely\", \"somewhat likely\", \"not very likely\" or \"not likely at all\"",
+                    stopAfter: [],
+                    stopAt: [],
+                    grammar: `root ::= "very likely" | "somewhat likely" | "not very likely" | "not likely at all"`,
+                });
+
+                if (correctivenessLikelyhoodValue.done) {
+                    throw new Error("Generator finished without producing output");
+                }
+
+                const mapping = {
+                    "very likely": 10,
+                    "somewhat likely": 7,
+                    "not very likely": 4,
+                    "not likely at all": 1,
+                };
+
+                // @ts-ignore
+                return mapping[correctivenessLikelyhoodValue.value.trim().toLowerCase()];
+            },
+        )).value;
+
+        const correctivenessGeneralFacts = correctivenessLikelyhoodValue >= 1 ? (await guider.askArbitraryList(
+            "correctiveness-general-facts",
+            "Provide a list of general facts and beliefs that " + name + " holds to be true about the world",
+            async () => {
+                await prime();
+                const facts = await generator.next({
+                    maxCharacters: 1500,
+                    maxSafetyCharacters: 500,
+                    maxParagraphs: 1,
+                    nextQuestion: `List general facts and beliefs that ${name} firmly holds to be true about the world, as a bullet point list. These should be basic, worldly, general-knowledge facts and convictions that ${name} would confidently believe based on their personality, background, education, culture and life experience. Each item must be a short, self-contained statement of fact. List 10 unique items.`,
+                    stopAfter: [],
+                    stopAt: [],
+                    instructions: `Each item must be a short, self-contained factual statement that ${name} believes to be true, written in plain 3rd person as a statement (not a question). Base them on ${name}'s knowledge, background and worldview. Do NOT reference other characters, do not use you, your, I or we.`,
+                    answerTrail: name + "'s general known facts and firmly held beliefs:\n\n",
+                    grammar: "root ::= list\nlist ::=" + (" bulletPoint").repeat(10) + "\nbulletPoint ::= \"- \" [a-zA-Z0-9 ,;.'_-]+ \"\\n\"",
+                });
+
+                if (facts.done) {
+                    throw new Error("Generator finished without producing output");
+                }
+
+                return facts.value.split("\n").map(fact => fact.trim().replace(/^-\s*/, "").trim()).filter(fact => fact);
+            },
+        )).value : [];
+
+        const correctivenessPersonalQuestions = correctivenessLikelyhoodValue >= 1 ? (await guider.askArbitraryList(
+            "correctiveness-personal-questions",
+            "Provide a list of personal situations where " + name + " would attempt to correct another character",
+            async () => {
+                await prime();
+                const questions = await generator.next({
+                    maxCharacters: 1500,
+                    maxSafetyCharacters: 500,
+                    maxParagraphs: 1,
+                    nextQuestion: `List specific PERSONAL yes/no questions about another character (referred to as OTHER_CHARACTER) that, if answered yes, would make ${name} feel compelled to correct them. These must be PERSONAL matters concerning ${name} directly — such as their name, identity, personal history, relationships, preferences, work, or how they are treated or described — that ${name} would want to set straight. Write each as a past-tense 3rd person yes/no question using OTHER_CHARACTER as a placeholder for the other character's name. List 3 unique questions.`,
+                    stopAfter: [],
+                    stopAt: [],
+                    instructions: `Each item must be a yes/no question in past tense and 3rd person about a PERSONAL matter concerning ${name} directly, using OTHER_CHARACTER as a placeholder for the other character's name; OTHER_CHARACTER must always be included. Focus only on personal things about ${name} themselves that they would want to correct, not general facts of the world. Do not use you, your, I, we or similar first or second person words.`,
+                    answerTrail: `# List of personal things about ${name} that they would want to correct OTHER_CHARACTER about:\n\n`,
+                    grammar: "root ::= list\nlist ::=" + (" bulletPoint").repeat(3) + "\nbulletPoint ::= \"- \" (\"Was\" | \"Did\" | \"Has\" | \"Does\" | \"Is\") \" OTHER_CHARACTER \" [a-zA-Z0-9 ,;.'?!_-]+ \"\\n\"",
+                });
+
+                if (questions.done) {
+                    throw new Error("Generator finished without producing output");
+                }
+
+                return questions.value.split("\n").map(question => question.trim().replace(/^-\s*/, "").trim()).filter(question => question).map(question => replaceOtherCharNameWithPlaceholder(question, name));
+            },
+        )).value : [];
+
+        const correctivenessWorldQuestions = correctivenessLikelyhoodValue >= 1 ? (await guider.askArbitraryList(
+            "correctiveness-world-questions",
+            "Provide a list of general world facts and beliefs that " + name + " would attempt to correct another character about",
+            async () => {
+                await prime();
+                const questions = await generator.next({
+                    maxCharacters: 1500,
+                    maxSafetyCharacters: 500,
+                    maxParagraphs: 1,
+                    nextQuestion: `List yes/no questions about another character (referred to as OTHER_CHARACTER) expressing a BROAD WRONG BELIEF OR STATEMENT that, if answered yes, would make ${name} feel compelled to correct them. Each question must be a broad, categorical expression — asking whether OTHER_CHARACTER expressed something broadly anti-scientific, anti-religious, morally wrong, factually wrong about a topic ${name} cares about, etc. based on ${name}'s worldview, beliefs and values. Do NOT enumerate specific narrow facts. Think of question patterns like: "Did OTHER_CHARACTER say something anti-scientific?", "Did OTHER_CHARACTER say something against God?", "Did OTHER_CHARACTER express a racist belief?", "Did OTHER_CHARACTER say something factually wrong about [a broad topic important to ${name}]?". Write each as a past-tense 3rd person yes/no question using OTHER_CHARACTER as a placeholder. List 6 unique questions.`,
+                    stopAfter: [],
+                    stopAt: [],
+                    instructions: `Each item must be a broad yes/no question in past tense and 3rd person, framed as "Did OTHER_CHARACTER say/express/claim something [broadly wrong in a category]?" — NOT a specific narrow question about one particular fact. The question must be about a CATEGORY of wrongness or a broad statement, not a specific detail. Use OTHER_CHARACTER as a placeholder; it must always be included. Base the categories on ${name}'s personal worldview, values and beliefs (e.g. science, religion, morality, politics, nature, society). Do not use you, your, I, we or similar first or second person words.`,
+                    answerTrail: `# List of broad wrong beliefs that ${name} would want to correct OTHER_CHARACTER about:\n\n`,
+                    grammar: "root ::= list\nlist ::=" + (" bulletPoint").repeat(6) + "\nbulletPoint ::= \"- Did OTHER_CHARACTER \" [a-zA-Z0-9 ,;.'?!_-]+ \"\\n\"",
+                });
+
+                if (questions.done) {
+                    throw new Error("Generator finished without producing output");
+                }
+
+                return questions.value.split("\n").map(question => question.trim().replace(/^-\s*/, "").trim()).filter(question => question).map(question => replaceOtherCharNameWithPlaceholder(question, name));
+            },
+        )).value : [];
+
+        const correctivenessQuestions = [...correctivenessPersonalQuestions, ...correctivenessWorldQuestions];
+
+        insertSpecialComment(newCharacterSection.body, "base-correctiveness");
+        newCharacterSection.body.push(`correctiveness: {`);
+        newCharacterSection.body.push(`likelyhood: ${correctivenessLikelyhoodValue / 10},`);
+        newCharacterSection.body.push(`generalFacts: ${JSON.stringify(correctivenessGeneralFacts)},`);
+        newCharacterSection.body.push(`questions: [`);
+
+        for (let correctivenessIndex = 0; correctivenessIndex < correctivenessQuestions.length; correctivenessIndex++) {
+            const correctivenessQuestion = correctivenessQuestions[correctivenessIndex];
+            const correctivenessQuestionForInference = correctivenessQuestion
+                .replace(/\{\{other\}\}/g, "OTHER_CHARACTER")
+                .replace(/\{\{char\}\}/g, name);
+
+            const correctivenessQuestionLikelyhoodValue = (await guider.askNumber(
+                "correctiveness-question-likelyhood-" + correctivenessQuestion,
+                "From 1 to 10 how likely is " + name + " to bring up a correction when: \"" + correctivenessQuestion + "\"",
+                10,
+            )).value;
+
+            const correctivenessCorrectionValue = (await guider.askOpen(
+                "correctiveness-question-correction-" + correctivenessQuestion,
+                "Describe the emotional stance and broad corrective attitude " + name + " takes when: \"" + correctivenessQuestion + "\" — do not script what they say or do specifically",
+                async () => {
+                    await prime();
+                    const correction = await generator.next({
+                        maxCharacters: 150,
+                        maxSafetyCharacters: 0,
+                        maxParagraphs: 1,
+                        nextQuestion: "The situation is: \"" + correctivenessQuestionForInference + "\". In one short sentence, describe the emotional tone and broad corrective action " + name + " takes specifically about THIS situation — the correction must concern the SAME subject as the question above, nothing else.",
+                        stopAfter: [],
+                        stopAt: [],
+                        instructions: "IMPORTANT: the correction MUST be about the SAME subject as the situation described: \"" + correctivenessQuestionForInference + "\". Do NOT substitute a different topic. Write ONE short sentence with: emotional tone (e.g. indignant, firm, calm, amused) + corrective action (challenge, correct, lecture, dismiss) + the subject from the situation above. Keep the subject label broad — e.g. 'incorrect claim about biology', 'moral stance on the matter', 'factual error on the topic'. Do NOT quote exact words " + name + " says. Use OTHER_CHARACTER as placeholder; must be included. 3rd person only.",
+                        grammar: "root ::= " + JSON.stringify(name + " will ") + " [a-zA-Z0-9 ,;.'_]+",
+                    });
+
+                    if (correction.done) {
+                        throw new Error("Generator finished without producing output");
+                    }
+
+                    return replaceOtherCharNameWithPlaceholder(correction.value.trim(), name);
+                },
+            )).value;
+
+            newCharacterSection.body.push(`{`);
+            newCharacterSection.body.push(`askPer: "conversing_character",`);
+            newCharacterSection.body.push(`question: (info) => ${toTemplateLiteral(correctivenessQuestion, name)},`);
+            newCharacterSection.body.push(`likelyhood: ${correctivenessQuestionLikelyhoodValue / 10},`);
+            newCharacterSection.body.push(`correction: (info) => ${toTemplateLiteral(correctivenessCorrectionValue, name)},`);
+            newCharacterSection.body.push(`},`);
+        }
+
+        newCharacterSection.body.push(`],`);
+        newCharacterSection.body.push(`},`);
     }
 
     insertSpecialComment(newCharacterSection.body, "base-family-ties");
