@@ -45,8 +45,27 @@ class GameOverlay extends HTMLElement {
             this.lightFadeResolve = resolve;
         });
 
+        /**
+         * Resolves the moment the white "falling asleep" overlay begins fading
+         * out — i.e. the dream world starts being revealed. The theme song
+         * waits on this (rather than the longer lightFadePromise) so it swells
+         * in with the reveal instead of trailing it by a couple of seconds.
+         * @type {Promise<void>}
+         */
+        this.lightFadeOutStartedPromise = new Promise(resolve => {
+            this.lightFadeOutStartedResolve = resolve;
+        });
+
         /** @type {ReturnType<typeof setTimeout> | null} */
         this._charUpdateTimer = null;
+
+        /**
+         * Global keydown handler installed while the world intro plays. Kept
+         * on the instance so disconnectedCallback can detach it if we unmount
+         * before the intro finishes.
+         * @type {((e: KeyboardEvent) => void) | null}
+         */
+        this._introKeydownHandler = null;
     }
 
     async connectedCallback() {
@@ -87,16 +106,51 @@ class GameOverlay extends HTMLElement {
             this._worldImageAssetDoesNotExist = true;
         }
 
-        const lightFade = this.root.querySelector('.light-fade');
+        /**
+         * World intro messages, shown one-by-one over the white "falling
+         * asleep" overlay before the dream settles in. `getInfoMapForScripts`
+         * returns a map keyed by "<namespace>/<id>", so the world is looked up
+         * by that key (the previous `[0]` index was always undefined). Any
+         * failure here is non-fatal — we simply fall back to no intro.
+         *
+         * @type {Array<{ title: string, subtitle: string, delay?: number }>}
+         */
+        let introMessages = [];
+        try {
+            const introWorldNamespace = this.getAttribute('world-namespace') || '';
+            const introWorldId = this.getAttribute('world-id') || '';
+            const introInfoMap = await window.ENGINE_WORKER_CLIENT.jsEngineGetInfoMapForScripts({
+                scripts: [{ namespace: introWorldNamespace, id: introWorldId }],
+            });
+            const introWorldInfo = introInfoMap?.[`${introWorldNamespace}/${introWorldId}`];
+            const intro = introWorldInfo?.metadata?.intro;
+            if (Array.isArray(intro)) introMessages = intro;
+        } catch (error) {
+            console.error('Failed to load world intro messages:', error);
+        }
+
+        const lightFade = /** @type {HTMLElement | null} */ (this.root.querySelector('.light-fade'));
         if (lightFade) {
-            setTimeout(async () => {
+            (async () => {
+                // When the world ships an intro, play it over the white screen
+                // and only fade out once the player has seen (or skipped) it.
+                // Otherwise keep the original brief blank-flash behaviour.
+                if (introMessages.length > 0) {
+                    await this.playWorldIntro(lightFade, introMessages);
+                } else {
+                    await new Promise(resolve => setTimeout(resolve, 1000)); // slight delay to ensure the element is visible before starting the fade
+                }
+
                 lightFade.classList.add('fade-out');
+                // Signal that the dream is now being revealed so the theme song
+                // (waiting in startInitialThemeSong) can swell in with the fade.
+                this.lightFadeOutStartedResolve();
                 await new Promise(resolve => setTimeout(resolve, 1100));
                 lightFade.remove();
                 setTimeout(() => {
                     this.lightFadeResolve();
                 }, 1000); // delay the resolve to ensure the fade-out has fully completed before allowing any dependent actions (like error dialogs) to proceed
-            }, 1000); // slight delay to ensure the element is visible before starting the fade
+            })();
         }
 
         // Wire up controls.
@@ -129,6 +183,216 @@ class GameOverlay extends HTMLElement {
         }
 
         this.prepareGame();
+    }
+
+    /**
+     * Play the world's intro over the white "falling asleep" overlay.
+     *
+     * Each entry fades its title (and optional subtitle) in. When the entry
+     * has a numeric `delay` it holds for that long (clamped to a readable
+     * minimum) and auto-advances; when `delay` is omitted it waits for the
+     * player to press the explicit "Continue" button before moving on. The
+     * whole sequence is interactive: clicking anywhere — or pressing
+     * Space / Enter / → — advances, while the "Skip" control (or Escape)
+     * jumps straight to the end. Resolves once the last message has shown or
+     * the player skips; the caller then fades the white overlay away.
+     *
+     * @param {HTMLElement} overlay - the `.light-fade` element to mount onto
+     * @param {Array<{ title: string, subtitle: string, delay?: number }>} messages
+     * @returns {Promise<void>}
+     */
+    playWorldIntro(overlay, messages) {
+        return new Promise(resolve => {
+            const intro = document.createElement('div');
+            intro.className = 'light-fade-intro';
+            intro.setAttribute('role', 'group');
+            intro.setAttribute('aria-label', 'World introduction');
+            intro.innerHTML = `
+                <button class="light-fade-intro-skip" type="button">Skip</button>
+                <div class="light-fade-intro-stage" aria-live="polite">
+                    <div class="light-fade-intro-title"></div>
+                    <div class="light-fade-intro-subtitle"></div>
+                </div>
+                <div class="light-fade-intro-footer">
+                    <div class="light-fade-intro-progress" aria-hidden="true"></div>
+                    <div class="light-fade-intro-action">
+                        <button class="light-fade-intro-continue" type="button"></button>
+                        <div class="light-fade-intro-hint"><span>Click anywhere to continue</span></div>
+                    </div>
+                </div>`;
+            overlay.appendChild(intro);
+
+            const stage = /** @type {HTMLElement} */ (intro.querySelector('.light-fade-intro-stage'));
+            const titleEl = /** @type {HTMLElement} */ (intro.querySelector('.light-fade-intro-title'));
+            const subtitleEl = /** @type {HTMLElement} */ (intro.querySelector('.light-fade-intro-subtitle'));
+            const progressEl = /** @type {HTMLElement} */ (intro.querySelector('.light-fade-intro-progress'));
+            const skipBtn = /** @type {HTMLButtonElement} */ (intro.querySelector('.light-fade-intro-skip'));
+            const continueBtn = /** @type {HTMLButtonElement} */ (intro.querySelector('.light-fade-intro-continue'));
+            const hintEl = /** @type {HTMLElement} */ (intro.querySelector('.light-fade-intro-hint'));
+
+            // One progress dot per message (hidden for a lone message).
+            const dots = messages.map(() => {
+                const dot = document.createElement('span');
+                dot.className = 'light-fade-intro-dot';
+                progressEl.appendChild(dot);
+                return dot;
+            });
+            if (messages.length < 2) progressEl.style.display = 'none';
+
+            let skipped = false;
+            let finished = false;
+            /** @type {(() => void) | null} */
+            let resolveStep = null;
+
+            // A wait the player can cut short by advancing or skipping.
+            /** @param {number} ms */
+            const interruptibleWait = (ms) => new Promise(res => {
+                const finish = () => {
+                    clearTimeout(timer);
+                    resolveStep = null;
+                    res(undefined);
+                };
+                const timer = setTimeout(finish, ms);
+                resolveStep = finish;
+            });
+
+            // A wait with no timer: only the player (the Continue button, a
+            // click, a key, or Skip) can end it. Used for messages that omit
+            // their `delay`.
+            const waitForContinue = () => new Promise(res => {
+                resolveStep = () => {
+                    resolveStep = null;
+                    res(undefined);
+                };
+            });
+
+            const advance = () => {
+                if (finished || !resolveStep) return;
+                playHoverSound();
+                resolveStep();
+            };
+            const skip = () => {
+                if (finished) return;
+                skipped = true;
+                if (resolveStep) resolveStep();
+            };
+
+            /** @param {KeyboardEvent} e */
+            const onKeyDown = (e) => {
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    skip();
+                    return;
+                }
+                // If a control button is focused, let it handle its own
+                // activation (Enter / Space) rather than double-firing.
+                const active = this.root.activeElement;
+                if ((active === skipBtn || active === continueBtn) && (e.key === 'Enter' || e.key === ' ')) return;
+                if (e.key === ' ' || e.key === 'Enter' || e.key === 'ArrowRight') {
+                    e.preventDefault();
+                    advance();
+                }
+            };
+
+            intro.addEventListener('click', advance);
+            skipBtn.addEventListener('mouseenter', () => playHoverSound());
+            skipBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                playConfirmSound();
+                skip();
+            });
+            continueBtn.addEventListener('mouseenter', () => playHoverSound());
+            continueBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (finished || !resolveStep) return;
+                playConfirmSound();
+                resolveStep();
+            });
+            document.addEventListener('keydown', onKeyDown);
+            this._introKeydownHandler = onKeyDown;
+
+            const cleanup = () => {
+                if (finished) return;
+                finished = true;
+                document.removeEventListener('keydown', onKeyDown);
+                this._introKeydownHandler = null;
+                // Fade the intro furniture out, then drop it so the caller is
+                // left with a clean white overlay to fade away.
+                intro.classList.add('leaving');
+                setTimeout(() => {
+                    intro.remove();
+                    resolve();
+                }, 600);
+            };
+
+            (async () => {
+                // Let the blank white screen settle before the first words.
+                await interruptibleWait(700);
+
+                for (let i = 0; i < messages.length; i++) {
+                    if (skipped) break;
+
+                    const msg = /** @type {{ title?: string, subtitle?: string, delay?: number }} */ (messages[i] || {});
+                    const title = typeof msg.title === 'string' ? msg.title : '';
+                    const subtitle = typeof msg.subtitle === 'string' ? msg.subtitle : '';
+                    const hasDelay = typeof msg.delay === 'number' && isFinite(msg.delay);
+                    const isLast = i === messages.length - 1;
+
+                    titleEl.textContent = title;
+                    subtitleEl.textContent = subtitle;
+                    subtitleEl.style.display = subtitle ? '' : 'none';
+
+                    dots.forEach((dot, di) => {
+                        dot.classList.toggle('active', di === i);
+                        dot.classList.toggle('seen', di < i);
+                    });
+
+                    // A message with a `delay` auto-advances (but can still be
+                    // cut short); one without it waits for the player to press
+                    // the explicit Continue button (or click / a key / Skip).
+                    // The button and hint share a fixed-size slot and cross-fade
+                    // via the `visible` class, and the button's label is set
+                    // while it's still invisible so it never flashes "Continue"
+                    // before settling on "Begin".
+                    if (hasDelay) {
+                        continueBtn.classList.remove('visible');
+                        hintEl.classList.add('visible');
+                    } else {
+                        hintEl.classList.remove('visible');
+                        continueBtn.textContent = isLast ? 'Begin' : 'Continue';
+                        continueBtn.classList.add('visible');
+                    }
+
+                    // Restart the enter transition, then reveal the message.
+                    stage.classList.remove('visible', 'leaving');
+                    void stage.offsetWidth;
+                    stage.classList.add('visible');
+
+                    if (!hasDelay) continueBtn.focus();
+
+                    // Hold on screen: a timed (but skippable) hold when a delay
+                    // is given, otherwise wait indefinitely for the player.
+                    if (hasDelay) {
+                        await interruptibleWait(Math.max(1400, /** @type {number} */(msg.delay)));
+                    } else {
+                        await waitForContinue();
+                    }
+
+                    // Fade the message out before the next one (or the finish),
+                    // taking the button/hint with it so the action slot fades in
+                    // step with the words rather than snapping away.
+                    continueBtn.classList.remove('visible');
+                    hintEl.classList.remove('visible');
+                    stage.classList.remove('visible');
+                    stage.classList.add('leaving');
+                    if (!skipped) await interruptibleWait(450);
+                }
+
+                stage.classList.remove('visible');
+                stage.classList.add('leaving');
+                cleanup();
+            })();
+        });
     }
 
     async prepareGame(comeFromConflictError = false, newName = null) {
@@ -256,6 +520,13 @@ class GameOverlay extends HTMLElement {
                 }
             }
 
+            // The engine is ready now, so begin resolving the world's theme
+            // song. It waits internally for the dream to start being revealed
+            // (the white overlay fading out) and then swells in — kicking it off
+            // here, before the post-fade buffers below, keeps it on time even
+            // after a long, interactive world intro.
+            this.startInitialThemeSong();
+
             await this.lightFadePromise;
             await new Promise(resolve => setTimeout(resolve, 1000));
 
@@ -281,6 +552,45 @@ class GameOverlay extends HTMLElement {
         }
     }
 
+    /**
+     * Start the world's theme song, synced to the dream being revealed.
+     *
+     * Kicked off (fire-and-forget) from prepareGame() as soon as the engine is
+     * ready. It waits only for the white "falling asleep" overlay to BEGIN
+     * fading out — not the longer lightFadePromise, which tacks a ~2s buffer
+     * onto the fade — so the music swells in alongside the reveal. This matters
+     * most after a world intro: by the time the player dismisses it the engine
+     * is long ready, so without this the theme would sit silent through the
+     * fade and its trailing buffers before finally starting.
+     * @returns {Promise<void>}
+     */
+    async startInitialThemeSong() {
+        if (this._initialThemeSongStarted) return;
+        this._initialThemeSongStarted = true;
+        try {
+            const themeSong = await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                path: ["world", "state", "theme"],
+            });
+            if (!themeSong || !themeSong.asset) return;
+
+            const worldNamespace = this.getAttribute('world-namespace') || '';
+            const worldId = this.getAttribute('world-id') || '';
+            const isSystemAsset = worldNamespace.startsWith('@');
+            const base = isSystemAsset
+                ? window.DREAMENGINE_DEFAULT_SCRIPTS_HOME
+                : window.DREAMENGINE_HOME;
+            const themeUrl = `${base}/assets/${worldNamespace}/${worldId}/${themeSong.asset}`;
+
+            // Hold until the dream starts being revealed, then swell the theme
+            // in over the same window the world fades up.
+            await this.lightFadeOutStartedPromise;
+
+            await stopAllAmbiencesAndStartNewOne([{ src: themeUrl, volume: themeSong.volume || 1 }], 1000, 1000);
+        } catch (error) {
+            console.error('Error starting theme ambience:', error);
+        }
+    }
+
     async onInitialSceneSelect() {
         try {
             const actualUserName = await window.ENGINE_WORKER_CLIENT.queryDEObject({
@@ -289,28 +599,11 @@ class GameOverlay extends HTMLElement {
             const currentSelectedScene = await window.ENGINE_WORKER_CLIENT.queryDEObject({
                 path: ["world", "selectedScene"],
             });
-            const themeSong = await window.ENGINE_WORKER_CLIENT.queryDEObject({
-                path: ["world", "state", "theme"],
-            });
 
-            if (themeSong && themeSong.asset) {
-                const worldNamespace = this.getAttribute('world-namespace') || '';
-                const worldId = this.getAttribute('world-id') || '';
-                const isSystemAsset = worldNamespace.startsWith('@');
-                const base = isSystemAsset
-                    ? window.DREAMENGINE_DEFAULT_SCRIPTS_HOME
-                    : window.DREAMENGINE_HOME;
-
-                const themeUrl = `${base}/assets/${worldNamespace}/${worldId}/${themeSong.asset}`;
-                (async () => {
-                    await this.lightFadePromise; // ensure the light fade has completed before starting the ambience, so it doesn't play on top of the fade-out
-                    try {
-                        await stopAllAmbiencesAndStartNewOne([{ src: themeUrl, volume: themeSong.volume || 1 }], 1000, 1000);
-                    } catch (error) {
-                        console.error('Error starting theme ambience:', error);
-                    }
-                })();
-            }
+            // The world's theme song is started separately, from
+            // startInitialThemeSong() (kicked off in prepareGame), so it can
+            // swell in the moment the dream is revealed rather than waiting on
+            // the post-fade buffers this method sits behind.
 
             if (!currentSelectedScene) {
                 const allInitialScenes = await window.ENGINE_WORKER_CLIENT.queryDEObject({
@@ -642,13 +935,13 @@ class GameOverlay extends HTMLElement {
             // Remove stale items.
             const wantNames = new Set(slotEntries.map(s => s.name));
             for (const item of Array.from(slotsList.querySelectorAll('.game-nav-bar-location-slot'))) {
-                if (changedRootLocation || !wantNames.has(/** @type {HTMLElement} */ (item).dataset.slotName || '')) item.remove();
+                if (changedRootLocation || !wantNames.has(/** @type {HTMLElement} */(item).dataset.slotName || '')) item.remove();
             }
 
             for (const entry of slotEntries) {
                 let item = /** @type {HTMLElement | null} */ (
                     Array.from(slotsList.querySelectorAll('.game-nav-bar-location-slot'))
-                        .find(el => /** @type {HTMLElement} */ (el).dataset.slotName === entry.name)
+                        .find(el => /** @type {HTMLElement} */(el).dataset.slotName === entry.name)
                 );
 
                 if (!item) {
@@ -832,7 +1125,7 @@ class GameOverlay extends HTMLElement {
                 });
                 const charDescription = await window.ENGINE_WORKER_CLIENT.queryDEObject({
                     path: ["utils", "templateUtils", "getExternalDescriptionOfCharacter"],
-                    call: [{char: char.name}, true, false],
+                    call: [{ char: char.name }, true, false],
                 });
                 return { ...char, slot: charSlot, description: charDescription };
             }));
@@ -851,7 +1144,7 @@ class GameOverlay extends HTMLElement {
             // @ts-ignore
             const currentNames = new Set(charactersAtLocation.map(c => c.name));
             for (const card of Array.from(list.querySelectorAll('.game-present-character'))) {
-                if (!currentNames.has(/** @type {HTMLElement} */ (card).dataset.charName)) card.remove();
+                if (!currentNames.has(/** @type {HTMLElement} */(card).dataset.charName)) card.remove();
             }
 
             const emptyEl = list.querySelector('.game-present-characters-empty');
@@ -871,7 +1164,7 @@ class GameOverlay extends HTMLElement {
             for (const char of charactersAtLocation) {
                 let card = /** @type {HTMLElement | null} */ (
                     Array.from(list.querySelectorAll('.game-present-character'))
-                        .find(el => /** @type {HTMLElement} */ (el).dataset.charName === char.name)
+                        .find(el => /** @type {HTMLElement} */(el).dataset.charName === char.name)
                 );
 
                 if (!card) {
@@ -1480,6 +1773,12 @@ class GameOverlay extends HTMLElement {
     }
 
     async disconnectedCallback() {
+        // If the world intro is still playing, detach its global key listener.
+        if (this._introKeydownHandler) {
+            document.removeEventListener('keydown', this._introKeydownHandler);
+            this._introKeydownHandler = null;
+        }
+
         // @ts-expect-error
         document.querySelector('.sky').style.display = 'block';
         // @ts-ignore

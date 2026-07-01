@@ -62,7 +62,9 @@ Format: `speciesType = "feral" | "animal" | "humanoid"`
 
 An introduction for the world, only really read in the world script, an array of title subtitle pairs, the app can use this field to display the introduction in the UI.
 
-Format: `intro = [{title: "Title", subtitle: "Subtitle"}, {title: "Title 2", subtitle: "Subtitle 2"}, ...]`
+Delay is optional, and if not specified, the app will request the user to click to continue.
+
+Format: `intro = [{title: "Title", subtitle: "Subtitle", delay?: 1000}, {title: "Title 2", subtitle: "Subtitle 2", delay?: 1000}, ...]`
 
 ## Stateful Fields
 

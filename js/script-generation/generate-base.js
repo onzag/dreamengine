@@ -211,7 +211,7 @@ export async function generateBase(engine, scriptgenerator, guider, language) {
         }
 
         insertSpecialComment(newCharacterSection.body, "base-description");
-        newCharacterSection.body.push(`general: (info) => ${toTemplateLiteral(description)},`);
+        newCharacterSection.body.push(`general: (info) => ${toTemplateLiteral(description, name)},`);
     }
 
     let shortDescription = "";
@@ -527,7 +527,7 @@ export async function generateBase(engine, scriptgenerator, guider, language) {
 
         insertSpecialComment(newCharacterSection.body, "base-schizo-details");
         newCharacterSection.body.push(`schizophrenia: ${severity},`);
-        newCharacterSection.body.push(`schizophrenicVoiceDescription: (info) => ${toTemplateLiteral(voiceDescription)},`);
+        newCharacterSection.body.push(`schizophrenicVoiceDescription: (info) => ${toTemplateLiteral(voiceDescription, name)},`);
     } else {
         insertSpecialComment(newCharacterSection.body, "base-schizo-details");
         newCharacterSection.body.push(`schizophrenia: 0,`);
@@ -1444,6 +1444,114 @@ export async function generateBase(engine, scriptgenerator, guider, language) {
 
         insertSpecialComment(newCharacterSection.body, "base-skepticism");
         newCharacterSection.body.push(`skepticism: ${skepticismValue / 10},`);
+    }
+
+    {
+        const antagonismValue = (await guider.askNumber(
+            "antagonism",
+            "From 1 to 10 how antagonistic is " + name + " towards others, running contrary to their ideas or experiences? with 10 being extremely antagonistic and contrarian and 1 being very agreeable",
+            async () => {
+                await prime();
+                const antagonismValue = await generator.next({
+                    maxCharacters: 100,
+                    maxSafetyCharacters: 0,
+                    maxParagraphs: 1,
+                    nextQuestion: "How antagonistic or contrarian is " + name + " towards others? answer with \"very antagonistic\", \"somewhat antagonistic\", \"not very antagonistic\" or \"not antagonistic at all\"",
+                    stopAfter: [],
+                    stopAt: [],
+                    grammar: `root ::= "very antagonistic" | "somewhat antagonistic" | "not very antagonistic" | "not antagonistic at all"`,
+                });
+
+                if (antagonismValue.done) {
+                    throw new Error("Generator finished without producing output");
+                }
+
+                const mapping = {
+                    "very antagonistic": 8,
+                    "somewhat antagonistic": 5,
+                    "not very antagonistic": 3,
+                    "not antagonistic at all": 1,
+                };
+
+                // @ts-ignore
+                return mapping[antagonismValue.value.trim().toLowerCase()];
+            },
+        )).value;
+
+        insertSpecialComment(newCharacterSection.body, "base-antagonism");
+        newCharacterSection.body.push(`antagonism: ${antagonismValue / 10},`);
+    }
+
+    {
+        const curiosityValue = (await guider.askNumber(
+            "curiosity",
+            "From 1 to 10 how curious is " + name + " about things, asking questions when presented with new information or experiences? with 10 being extremely curious and 1 being very incurious",
+            async () => {
+                await prime();
+                const curiosityValue = await generator.next({
+                    maxCharacters: 100,
+                    maxSafetyCharacters: 0,
+                    maxParagraphs: 1,
+                    nextQuestion: "How curious is " + name + " about things and new information or experiences? answer with \"very curious\", \"somewhat curious\", \"not very curious\" or \"not curious at all\"",
+                    stopAfter: [],
+                    stopAt: [],
+                    grammar: `root ::= "very curious" | "somewhat curious" | "not very curious" | "not curious at all"`,
+                });
+
+                if (curiosityValue.done) {
+                    throw new Error("Generator finished without producing output");
+                }
+
+                const mapping = {
+                    "very curious": 10,
+                    "somewhat curious": 7,
+                    "not very curious": 4,
+                    "not curious at all": 1,
+                };
+
+                // @ts-ignore
+                return mapping[curiosityValue.value.trim().toLowerCase()];
+            },
+        )).value;
+
+        insertSpecialComment(newCharacterSection.body, "base-curiosity");
+        newCharacterSection.body.push(`curiosity: ${curiosityValue / 10},`);
+    }
+
+    {
+        const adventurousnessValue = (await guider.askNumber(
+            "adventurousness",
+            "From 1 to 10 how adventurous is " + name + ", seeking out new experiences, adventures, and challenges? with 10 being extremely adventurous and risk-taking and 1 being very cautious and risk-averse",
+            async () => {
+                await prime();
+                const adventurousnessValue = await generator.next({
+                    maxCharacters: 100,
+                    maxSafetyCharacters: 0,
+                    maxParagraphs: 1,
+                    nextQuestion: "How adventurous is " + name + ", seeking new experiences and challenges? answer with \"very adventurous\", \"somewhat adventurous\", \"not very adventurous\" or \"not adventurous at all\"",
+                    stopAfter: [],
+                    stopAt: [],
+                    grammar: `root ::= "very adventurous" | "somewhat adventurous" | "not very adventurous" | "not adventurous at all"`,
+                });
+
+                if (adventurousnessValue.done) {
+                    throw new Error("Generator finished without producing output");
+                }
+
+                const mapping = {
+                    "very adventurous": 10,
+                    "somewhat adventurous": 7,
+                    "not very adventurous": 4,
+                    "not adventurous at all": 1,
+                };
+
+                // @ts-ignore
+                return mapping[adventurousnessValue.value.trim().toLowerCase()];
+            },
+        )).value;
+
+        insertSpecialComment(newCharacterSection.body, "base-adventurousness");
+        newCharacterSection.body.push(`adventurousness: ${adventurousnessValue / 10},`);
     }
 
     insertSpecialComment(newCharacterSection.body, "base-family-ties");

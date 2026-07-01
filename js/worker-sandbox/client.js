@@ -229,7 +229,7 @@ export class EngineWorkerClient {
     }
     /**
      * @param {{ scripts: Array<{namespace: string, id: string}> }} args
-     * @returns {Promise<Record<string, { id: string, namespace: string, description: string, type: string, exposeProperties: DEScriptExposeProperties, exposeCharacters: DEScriptExposeCharacters, metadata?: Record<string, boolean | string | number> }>>} An object mapping script keys to their description, type, and exposeProperties/Characters, used for UI display and other purposes
+     * @returns {Promise<Record<string, { id: string, namespace: string, description: string, type: string, exposeProperties: DEScriptExposeProperties, exposeCharacters: DEScriptExposeCharacters, metadata?: Record<string, any> }>>} An object mapping script keys to their description, type, and exposeProperties/Characters, used for UI display and other purposes
      */
     jsEngineGetInfoMapForScripts(args) {
         return this.#call("jsEngineGetInfoMapForScripts", args);

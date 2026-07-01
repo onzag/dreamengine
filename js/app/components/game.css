@@ -1086,4 +1086,287 @@
     backdrop-filter: blur(0);
 }
 
+/* ── World intro overlay ─────────────────────────────────────────────
+   Shown over the white "falling asleep" .light-fade screen when a world
+   ships intro messages. Text-focused, slick and interactive: each message
+   rises/fades in, holds, then fades out; clicking (or a key press) advances,
+   and "Skip" jumps to the end. Dark ink on the white screen keeps it crisp
+   and clearly readable. */
+.light-fade-intro {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    padding: 12vh 8vw;
+    text-align: center;
+    color: #243149;
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+    opacity: 0;
+    animation: light-fade-intro-in 0.9s ease forwards;
+}
+
+.light-fade-intro.leaving {
+    animation: light-fade-intro-out 0.55s ease forwards;
+    pointer-events: none;
+}
+
+@keyframes light-fade-intro-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+@keyframes light-fade-intro-out {
+    from { opacity: 1; }
+    to   { opacity: 0; }
+}
+
+/* Message block: fades as a whole; its lines rise + un-blur with a stagger. */
+.light-fade-intro-stage {
+    max-width: min(64vw, 110vh);
+    opacity: 0;
+    transition: opacity 0.7s ease;
+}
+
+.light-fade-intro-stage.visible {
+    opacity: 1;
+}
+
+.light-fade-intro-stage.leaving {
+    opacity: 0;
+    transition-duration: 0.45s;
+}
+
+.light-fade-intro-title,
+.light-fade-intro-subtitle {
+    transform: translateY(2.6vh);
+    filter: blur(0.5vh);
+    transition: transform 0.85s cubic-bezier(0.22, 0.61, 0.36, 1), filter 0.85s ease;
+}
+
+.light-fade-intro-stage.visible .light-fade-intro-title {
+    transform: translateY(0);
+    filter: blur(0);
+}
+
+.light-fade-intro-stage.visible .light-fade-intro-subtitle {
+    transform: translateY(0);
+    filter: blur(0);
+    transition-delay: 0.14s;
+}
+
+.light-fade-intro-stage.leaving .light-fade-intro-title,
+.light-fade-intro-stage.leaving .light-fade-intro-subtitle {
+    transform: translateY(-1.8vh);
+    filter: blur(0.5vh);
+    transition-duration: 0.45s;
+    transition-delay: 0s;
+}
+
+.light-fade-intro-title {
+    font-size: 6.2vh;
+    font-weight: 600;
+    line-height: 1.12;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #212e46;
+}
+
+.light-fade-intro-title:empty {
+    display: none;
+}
+
+.light-fade-intro-subtitle {
+    margin-top: 2.6vh;
+    font-size: 3vh;
+    line-height: 1.5;
+    letter-spacing: 0.015em;
+}
+
+/* Skip control: a quiet pill tucked into the top-right corner. */
+.light-fade-intro-skip {
+    position: absolute;
+    top: 3.6vh;
+    right: 3.4vw;
+    appearance: none;
+    -webkit-appearance: none;
+    font: inherit;
+    font-size: 1.6vh;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: rgba(36, 49, 73, 0.6);
+    padding: 0.9vh 2.2vh;
+    border: 3px solid rgba(36, 49, 73, 0.25);
+    border-radius: 999px;
+    background: rgba(36, 49, 73, 0.03);
+    cursor: pointer;
+    transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+}
+
+.light-fade-intro-skip:hover {
+    color: rgba(28, 38, 60, 0.95);
+    border-color: rgba(36, 49, 73, 0.5);
+    background: rgba(36, 49, 73, 0.08);
+    transform: translateY(-0.2vh);
+}
+
+.light-fade-intro-skip:active {
+    transform: translateY(0);
+}
+
+/* Footer: progress dots above a gently pulsing "continue" hint. */
+.light-fade-intro-footer {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 5vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.6vh;
+    pointer-events: none;
+}
+
+.light-fade-intro-progress {
+    display: flex;
+    gap: 1vh;
+}
+
+.light-fade-intro-dot {
+    width: 0.95vh;
+    height: 0.95vh;
+    border-radius: 50%;
+    background: rgba(36, 49, 73, 0.18);
+    transition: background 0.35s ease, transform 0.35s ease;
+}
+
+.light-fade-intro-dot.seen {
+    background: rgba(36, 49, 73, 0.4);
+}
+
+.light-fade-intro-dot.active {
+    background: rgba(36, 49, 73, 0.85);
+    transform: scale(1.4);
+}
+
+/* Action slot: holds the mutually-exclusive Continue button and auto-advance
+   hint stacked in the same grid cell, so switching between them — or fading
+   either in or out — never changes the footer's height or nudges anything.
+   The cell sizes to the taller child (the button, which always occupies its
+   layout space even at opacity 0), reserving its room up front. */
+.light-fade-intro-action {
+    display: grid;
+    justify-items: center;
+    align-items: center;
+    pointer-events: none;
+}
+
+.light-fade-intro-action > .light-fade-intro-continue,
+.light-fade-intro-action > .light-fade-intro-hint {
+    grid-area: 1 / 1;
+}
+
+/* Continue button: the primary affordance shown for messages that omit a
+   `delay`, so the player explicitly clicks to move on. Filled (vs. the quiet
+   Skip pill) to read as the main action. Hidden by default; it cross-fades in
+   via `.visible` so its label can be set while invisible (no Continue→Begin
+   flash) and it never snaps in or out. */
+.light-fade-intro-continue {
+    appearance: none;
+    -webkit-appearance: none;
+    font: inherit;
+    font-size: 2vh;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #f4f7fb;
+    padding: 1.2vh 3.6vh;
+    border: 1px solid rgba(28, 38, 60, 0.9);
+    border-radius: 999px;
+    background: rgba(36, 49, 73, 0.92);
+    cursor: pointer;
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(0.7vh);
+    box-shadow: 0 0.4vh 1.6vh rgba(36, 49, 73, 0.28);
+    transition: opacity 0.45s ease, transform 0.45s ease, background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.light-fade-intro-continue.visible {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+}
+
+.light-fade-intro-continue:hover {
+    background: rgba(24, 33, 53, 1);
+    border-color: rgba(20, 28, 46, 1);
+    transform: translateY(-0.25vh);
+    box-shadow: 0 0.7vh 2.2vh rgba(36, 49, 73, 0.38);
+}
+
+.light-fade-intro-continue:active {
+    transform: translateY(0);
+    box-shadow: 0 0.3vh 1.2vh rgba(36, 49, 73, 0.3);
+}
+
+.light-fade-intro-continue:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 0.3vh rgba(36, 49, 73, 0.3), 0 0.4vh 1.6vh rgba(36, 49, 73, 0.28);
+}
+
+/* Auto-advance hint: shown for delayed messages. The outer element cross-fades
+   via `.visible` while the inner span keeps the gentle pulse — nested opacity
+   multiplies, so the fade stays smooth even mid-pulse. */
+.light-fade-intro-hint {
+    font-size: 1.5vh;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: rgba(36, 49, 73, 0.42);
+    opacity: 0;
+    transition: opacity 0.45s ease;
+}
+
+.light-fade-intro-hint.visible {
+    opacity: 1;
+}
+
+.light-fade-intro-hint > span {
+    display: inline-block;
+    animation: light-fade-intro-hint-pulse 2.6s ease-in-out infinite;
+}
+
+@keyframes light-fade-intro-hint-pulse {
+    0%, 100% { opacity: 0.32; }
+    50%      { opacity: 0.85; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .light-fade-intro-title,
+    .light-fade-intro-subtitle {
+        transition-duration: 0.01ms;
+        transform: none;
+        filter: none;
+    }
+
+    .light-fade-intro-continue,
+    .light-fade-intro-continue.visible {
+        transform: none;
+    }
+
+    .light-fade-intro-continue {
+        transition: opacity 0.01ms ease, background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .light-fade-intro-hint {
+        transition-duration: 0.01ms;
+    }
+
+    .light-fade-intro-hint > span {
+        animation: none;
+    }
+}
+
 

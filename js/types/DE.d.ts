@@ -1373,6 +1373,56 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
     skepticism: number;
 
     /**
+     * A number from 0 to 1 that is somewhat similar to skepticism, except this represents the likelyhood to run contrary to the other character given
+     * information, ideas or experiences, without any real reason to do so, higher means more likely to be antagonistic and run contrary to the other character
+     * 
+     * Some antagonism is good for characters, as this reduces the LLM from being too agreeable
+     * 
+     * TODO implement this in talk.js
+     */
+    antagonism: number;
+
+    /**
+     * The drive for a character to correct the other character when they are wrong, higher means more likely to correct the other character when they are wrong
+     * 
+     * TODO implement this in talk.js
+     */
+    correctiveness: {
+        /**
+         * General likelyhood
+         * 
+         * A number from 0 to 1 that represents how likely is the character to correct the other character when they are wrong, higher means more likely to correct the other character when they are wrong
+         */
+        likelyhood: number;
+        /**
+         * General facts that the character knows about the world, these are used to correct the other character when they are wrong about things that the character knows about
+         */
+        generalFacts: string[];
+        /**
+         * A list of questions that provided the answer is Yes, for the given character, the character will attempt to correct the other character in a very specific manner
+         * 
+         * Use this as sort of a world knowledge for the character, with more specific actions, so that they can correct the other character when they are wrong about things that the character knows about
+         */
+        questions: DECharacterQuestionWithAskPerForCharactersWithLikelyhoodAndCorrection[];
+    };
+
+    /**
+     * A number from 0 to 1 that represents
+     * the probability of a character to be curious about things, and ask questions about them,
+     * specially when presented with new information or experiences, higher means more likely to be curious and ask questions
+     * 
+     * TODO implement this in talk.js
+     */
+    curiosity: number;
+
+    /**
+     * A number from 0 to 1 that represents how likely is the character to seek out new experiences, adventures, and challenges, higher means more likely to seek out new experiences and take risks
+     * 
+     * TODO implement this in talk.js
+     */
+    adventurousness: number;
+
+    /**
      * A number from 0 to 1 that represents how much the character enjoys or seeks out sexual activities and interactions, higher means more likely to do it and repeat
      * do not make it 1, or the character will likely become insatiable
      */
@@ -1522,6 +1572,17 @@ declare type DECharacterQuestionWithAskPerForCharacters = DECharacterQuestionBas
      * @returns 
      */
     runIf?: (character: DECompleteCharacterReference, otherChar: DECompleteCharacterReference, otherFamilyRelation: DEFamilyRelation | null) => PromiseOrNot<boolean>;
+};
+
+declare type DECharacterQuestionWithAskPerForCharactersWithLikelyhoodAndCorrection = DECharacterQuestionWithAskPerForCharacters & {
+    /**
+     * The likelyhood of the question being checked, a number from 0 to 1, higher means more likely to be checked
+     */
+    likelyhood: number;
+    /**
+     * The action correction the character will attempt to make to the other character if the answer is Yes, has access to {{other}} and {{other_family_relation}}
+     */
+    correction: DEStringTemplateCharAndOther;
 };
 
 declare type DECharacterQuestionWithAskPerForCausants = DECharacterQuestionBase & {
@@ -3770,7 +3831,7 @@ declare interface DEScript {
      * Arbitrary meetadata
      */
     metadata?: {
-        [key: string]: boolean | string | number;
+        [key: string]: any;
     };
 
     /**

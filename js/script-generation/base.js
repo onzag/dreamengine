@@ -357,6 +357,17 @@ export function getSection(lines, commentId) {
 }
 
 /**
+ * 
+ * @param {string} str 
+ * @param {string} charName 
+ */
+function replaceCharNameWithChar(str, charName) {
+    const escapedName = charName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const regex = new RegExp(`(^|[^\\w])(${escapedName})(?=[^\\w]|$)`, "g");
+    return str.replace(regex, "$1{{char}}");
+}
+
+/**
  * Converts a plain string with {{placeholder}} syntax into a backtick-wrapped
  * template literal string with specific replacements:
  *   {{char}}        → ${info.char.name}
@@ -369,11 +380,12 @@ export function getSection(lines, commentId) {
  * Escapes existing backticks and $ signs so the result is safe
  * to embed directly as a JS template literal.
  * @param {string} str
+ * @param {string} charName
  * @returns {string}
  */
-export function toTemplateLiteral(str) {
+export function toTemplateLiteral(str, charName) {
     // Escape backticks and lone ${} that aren't our placeholders
-    let escaped = str.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$\{/g, '\\${').replace(/\n/g, '\\n');
+    let escaped = replaceCharNameWithChar(str, charName).replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$\{/g, '\\${').replace(/\n/g, '\\n');
     // Replace {{...}} with specific expansions
     escaped = escaped.replace(/\{\{(.+?)\}\}/g, (_, key) => {
         if (key === 'char') return '${info.char.name}';
@@ -399,11 +411,12 @@ export function toTemplateLiteral(str) {
  * Escapes existing backticks and $ signs so the result is safe
  * to embed directly as a JS template literal.
  * @param {string} str
+ * @param {string} charName
  * @returns {string}
  */
-export function toTemplateLiteralNoInfo(str) {
+export function toTemplateLiteralNoInfo(str, charName) {
     // Escape backticks and lone ${} that aren't our placeholders
-    let escaped = str.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$\{/g, '\\${').replace(/\n/g, '\\n');
+    let escaped = replaceCharNameWithChar(str, charName).replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$\{/g, '\\${').replace(/\n/g, '\\n');
     // Replace {{...}} with specific expansions
     escaped = escaped.replace(/\{\{(.+?)\}\}/g, (_, key) => {
         if (key === 'char') return '${char.name}';

@@ -216,7 +216,7 @@ export async function generateAffectiveStates(engine, scriptgenerator, guider) {
      */
     const generateIntimateAction = async (id, act, consentDefaultNo, addVocabLimit, continous, probabilityCondition, section) => {
         section.body.push(`{`)
-        section.body.push(`action: (info) => ${toTemplateLiteral(act)},`);
+        section.body.push(`action: (info) => ${toTemplateLiteral(act, name)},`);
         section.body.push(`probability: (char, other) => ${probabilityCondition},`);
 
         const actForInference = act.replace(/{{other}}/g, "other character").replace(/{{char}}/g, name);
@@ -302,7 +302,7 @@ export async function generateAffectiveStates(engine, scriptgenerator, guider) {
 
             section.body.push(`fullfillCriteriaQuestions: [`);
             criteriaQuestions.forEach(q => {
-                section.body.push(`(info) => ${toTemplateLiteral(q)},`);
+                section.body.push(`(info) => ${toTemplateLiteral(q, name)},`);
             });
             section.body.push(`],`);
         }
@@ -467,9 +467,9 @@ export async function generateAffectiveStates(engine, scriptgenerator, guider) {
                 )).value;
 
                 section.body.push(`{`);
-                section.body.push(`action: (info) => ${toTemplateLiteral(consentRequestingAction)},`);
-                section.body.push(`check: (info) => ${toTemplateLiteral(consentGrantedQuestion)},`);
-                section.body.push(`checkAmbiguousResponse: (info) => ${toTemplateLiteral(consentUnspecifiedQuestion)},`);
+                section.body.push(`action: (info) => ${toTemplateLiteral(consentRequestingAction, name)},`);
+                section.body.push(`check: (info) => ${toTemplateLiteral(consentGrantedQuestion, name)},`);
+                section.body.push(`checkAmbiguousResponse: (info) => ${toTemplateLiteral(consentUnspecifiedQuestion, name)},`);
                 section.body.push(`},`);
             }
             section.body.push(`],`);
@@ -972,8 +972,8 @@ export async function generateAffectiveStates(engine, scriptgenerator, guider) {
                 )).value;
 
                 intimateHead.body.push("{");
-                intimateHead.body.push(`question: (info) => ${toTemplateLiteral(reversedKinksQuestion)},`);
-                intimateHead.body.push(`reaction: (info) => ${toTemplateLiteral(reversedKinksReactionLoved)},`);
+                intimateHead.body.push(`question: (info) => ${toTemplateLiteral(reversedKinksQuestion, name)},`);
+                intimateHead.body.push(`reaction: (info) => ${toTemplateLiteral(reversedKinksReactionLoved, name)},`);
                 intimateHead.body.push(`onlyAtLevel: ["slight", "moderate", "very"],`);
                 intimateHead.body.push(`},`)
 
@@ -1003,8 +1003,8 @@ export async function generateAffectiveStates(engine, scriptgenerator, guider) {
                 )).value;
 
                 intimateHead.body.push("{");
-                intimateHead.body.push(`question: (info) => ${toTemplateLiteral(reversedKinksQuestion)},`);
-                intimateHead.body.push(`reaction: (info) => ${toTemplateLiteral(reversedKinksReactionUnloved)},`);
+                intimateHead.body.push(`question: (info) => ${toTemplateLiteral(reversedKinksQuestion, name)},`);
+                intimateHead.body.push(`reaction: (info) => ${toTemplateLiteral(reversedKinksReactionUnloved, name)},`);
                 intimateHead.body.push(`onlyAtLevel: ["not"],`);
                 intimateHead.body.push(`},`)
             }
@@ -1097,8 +1097,8 @@ export async function generateAffectiveStates(engine, scriptgenerator, guider) {
                 )).value;
 
                 intimateHead.body.push("{");
-                intimateHead.body.push(`question: (info) => ${toTemplateLiteral(sexActQuestion)},`);
-                intimateHead.body.push(`reaction: (info) => ${toTemplateLiteral(sexActReactionLoved)},`);
+                intimateHead.body.push(`question: (info) => ${toTemplateLiteral(sexActQuestion, name)},`);
+                intimateHead.body.push(`reaction: (info) => ${toTemplateLiteral(sexActReactionLoved, name)},`);
                 intimateHead.body.push(`vocabularyLimit: DE.utils.createVocabularyLimitFromPreset(${JSON.stringify(vocabLimitParsed)}),`);
                 intimateHead.body.push(`onlyAtLevel: ["slight", "moderate", "very"],`);
                 intimateHead.body.push(`},`);
@@ -1129,8 +1129,8 @@ export async function generateAffectiveStates(engine, scriptgenerator, guider) {
                 )).value;
 
                 intimateHead.body.push("{");
-                intimateHead.body.push(`question: (info) => ${toTemplateLiteral(sexActQuestion)},`);
-                intimateHead.body.push(`reaction: (info) => ${toTemplateLiteral(sexActReactionUnloved)},`);
+                intimateHead.body.push(`question: (info) => ${toTemplateLiteral(sexActQuestion, name)},`);
+                intimateHead.body.push(`reaction: (info) => ${toTemplateLiteral(sexActReactionUnloved, name)},`);
                 intimateHead.body.push(`vocabularyLimit: DE.utils.createVocabularyLimitFromPreset(${JSON.stringify(vocabLimitParsed)}),`);
                 intimateHead.body.push(`onlyAtLevel: ["not"],`);
                 intimateHead.body.push(`},`);

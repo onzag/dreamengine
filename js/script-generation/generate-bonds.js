@@ -2148,7 +2148,7 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                         fineTune,
                     );
 
-                    strangerSectionOpenToAffection.body.push(`return {value: ${JSON.stringify(valueAnswer)}, reason: ${reason ? toTemplateLiteralNoInfo(reason) : "null"}};`);
+                    strangerSectionOpenToAffection.body.push(`return {value: ${JSON.stringify(valueAnswer)}, reason: ${reason ? toTemplateLiteralNoInfo(reason, name) : "null"}};`);
                     if (condition !== "true") {
                         strangerSectionOpenToAffection.body.push(`}`);
                     }
@@ -2225,7 +2225,7 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                         fineTune,
                     );
 
-                    strangerSectionOpenToIntimateAffection.body.push(`return {value: ${JSON.stringify(valueAnswer)}, reason: ${reason ? toTemplateLiteralNoInfo(reason) : "null"}};`);
+                    strangerSectionOpenToIntimateAffection.body.push(`return {value: ${JSON.stringify(valueAnswer)}, reason: ${reason ? toTemplateLiteralNoInfo(reason, name) : "null"}};`);
                     if (condition !== "true") {
                         strangerSectionOpenToIntimateAffection.body.push(`}`);
                     }
@@ -2302,7 +2302,7 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                         fineTune,
                     );
 
-                    strangerSectionOpenToSex.body.push(`return {value: ${JSON.stringify(valueAnswer)}, reason: ${reason ? toTemplateLiteralNoInfo(reason) : "null"}};`);
+                    strangerSectionOpenToSex.body.push(`return {value: ${JSON.stringify(valueAnswer)}, reason: ${reason ? toTemplateLiteralNoInfo(reason, name) : "null"}};`);
                     if (condition !== "true") {
                         strangerSectionOpenToSex.body.push(`}`);
                     }
@@ -2572,11 +2572,11 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                 // @ts-ignore
                 if (fineTuneConditions[fineTune] === "true") {
                     // @ts-ignore
-                    strangerSectionDescription.body.push(`return ${toTemplateLiteral(descriptionValue)};`);
+                    strangerSectionDescription.body.push(`return ${toTemplateLiteral(descriptionValue, name)};`);
                 } else {
                     // @ts-ignore
                     strangerSectionDescription.body.push(`if (${getAttractionLevelCondition(fineTuneConditions[fineTune], attractionLevel)}) {`);
-                    strangerSectionDescription.body.push(`return ${toTemplateLiteral(descriptionValue)};`);
+                    strangerSectionDescription.body.push(`return ${toTemplateLiteral(descriptionValue, name)};`);
                     strangerSectionDescription.body.push(`}`);
                 }
             }
@@ -2849,7 +2849,7 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                                 fineTune,
                             );
 
-                            familySectionOpenToAffection.body.push(`return {value: ${JSON.stringify(valueAnswer)}, reason: ${reason ? toTemplateLiteralNoInfo(reason) : "null"}};`);
+                            familySectionOpenToAffection.body.push(`return {value: ${JSON.stringify(valueAnswer)}, reason: ${reason ? toTemplateLiteralNoInfo(reason, name) : "null"}};`);
                             if (condition !== "true") {
                                 familySectionOpenToAffection.body.push(`}`);
                             }
@@ -2931,7 +2931,7 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                                 fineTune,
                             );
 
-                            familySectionOpenToIntimateAffection.body.push(`return {value: ${JSON.stringify(valueAnswer)}, reason: ${reason ? toTemplateLiteralNoInfo(reason) : "null"}};`);
+                            familySectionOpenToIntimateAffection.body.push(`return {value: ${JSON.stringify(valueAnswer)}, reason: ${reason ? toTemplateLiteralNoInfo(reason, name) : "null"}};`);
                             if (condition !== "true") {
                                 familySectionOpenToIntimateAffection.body.push(`}`);
                             }
@@ -3011,7 +3011,7 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                                 fineTune,
                             );
 
-                            familySectionOpenToSex.body.push(`return {value: ${JSON.stringify(valueAnswer)}, reason: ${reason ? toTemplateLiteralNoInfo(reason) : "null"}};`);
+                            familySectionOpenToSex.body.push(`return {value: ${JSON.stringify(valueAnswer)}, reason: ${reason ? toTemplateLiteralNoInfo(reason, name) : "null"}};`);
                             if (condition !== "true") {
                                 familySectionOpenToSex.body.push(`}`);
                             }
@@ -3283,11 +3283,11 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                         // @ts-ignore
                         if (fineTuneConditions[fineTune] === "true") {
                             // @ts-ignore
-                            familySectionDescription.body.push(`return ${toTemplateLiteral(descriptionValue)};`);
+                            familySectionDescription.body.push(`return ${toTemplateLiteral(descriptionValue, name)};`);
                         } else {
                             // @ts-ignore
                             familySectionDescription.body.push(`if (${getAttractionLevelCondition(fineTuneConditions[fineTune], attractionLevel)}) {`);
-                            familySectionDescription.body.push(`return ${toTemplateLiteral(descriptionValue)};`);
+                            familySectionDescription.body.push(`return ${toTemplateLiteral(descriptionValue, name)};`);
                             familySectionDescription.body.push(`}`);
                         }
                     }

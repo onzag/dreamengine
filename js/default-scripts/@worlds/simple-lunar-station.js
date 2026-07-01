@@ -2,6 +2,14 @@ engine.exports = {
     type: "world",
     description: "A serene lunar station orbiting earth, featuring advanced technology and breathtaking views of space.",
     language: "en",
+    metadatax: {
+        intro: [
+            {
+                title: "Moon Surface, Year 2307",
+                subtitle: "After two centuries of severe global warming, and severe scientific setback due to the Artemis Catastrophe, humanity has finally established a small lunar station on the moon surface.",
+            },
+        ],
+    },
     exposeProperties: {
         "IS_ROBOT": {
             propertyLocation: "characters",
@@ -13,6 +21,15 @@ engine.exports = {
         DE.world.scenes["Default Scene"] = /** @type {DEScene} */ ({
             location: "Lunar Station",
             locationSlot: "Common Area",
+            time: {
+                dayOfMonth: 17,
+                dayOfWeek: 1,
+                hourOfDay: 12,
+                minuteOfHour: 0,
+                monthOfYear: 1,
+                year: 2307,
+                time: (new Date(2307, 0, 17, 12, 0)).getTime(),
+            },
             narration: (info) => {
                 const others = DE.utils.templateUtils.allWorldCharactersButUser();
                 if (!others || others.length === 0) {

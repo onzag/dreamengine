@@ -77,5 +77,6 @@ declare interface DEScriptRegistry {
     "@characters/dema-basic": DEScript;
     "@worlds/simple-lunar-station": DEScript & {
         language: string;
+        metadatax: { intro: { title: string; subtitle: string; }[]; };
     };
 }
