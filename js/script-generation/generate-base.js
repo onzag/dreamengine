@@ -1697,9 +1697,9 @@ export async function generateBase(engine, scriptgenerator, guider, language) {
                         maxParagraphs: 1,
                         nextQuestion: "The situation is: \"" + correctivenessQuestionForInference + "\". In one short sentence, describe the emotional tone and broad corrective action " + name + " takes specifically about THIS situation — the correction must concern the SAME subject as the question above, nothing else.",
                         stopAfter: [],
-                        stopAt: [],
+                        stopAt: ["\n"],
                         instructions: "IMPORTANT: the correction MUST be about the SAME subject as the situation described: \"" + correctivenessQuestionForInference + "\". Do NOT substitute a different topic. Write ONE short sentence with: emotional tone (e.g. indignant, firm, calm, amused) + corrective action (challenge, correct, lecture, dismiss) + the subject from the situation above. Keep the subject label broad — e.g. 'incorrect claim about biology', 'moral stance on the matter', 'factual error on the topic'. Do NOT quote exact words " + name + " says. Use OTHER_CHARACTER as placeholder; must be included. 3rd person only.",
-                        grammar: "root ::= " + JSON.stringify(name + " will ") + " [a-zA-Z0-9 ,;.'_]+",
+                        grammar: "root ::= " + JSON.stringify(name + " will ") + " [a-zA-Z0-9 ,;.'_\\n]+",
                     });
 
                     if (correction.done) {

@@ -2527,9 +2527,9 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                                 maxParagraphs: 1,
                                 nextQuestion: "Provide a concise and short one sentence description of how " + name + " should act towards " + actualStrangerValue + ". Focus on the emotional and psychological aspects of their perception, rather than physical details. This should capture the essence of their feelings and attitudes towards this person in a way that informs their interactions and relationship dynamics.",
                                 stopAfter: [],
-                                stopAt: [],
+                                stopAt: ["\n"],
                                 instructions: baseInstructions,
-                                grammar: "root ::= " + JSON.stringify("Regarding OTHER_CHARACTER " + name + " should act ") + " [a-zA-Z0-9 ,;.'_]+",
+                                grammar: "root ::= " + JSON.stringify("Regarding OTHER_CHARACTER " + name + " should act ") + " [a-zA-Z0-9 ,;.'_\\n]+",
                             });
 
                             if (descriptionBehaviour.done) {
@@ -2544,9 +2544,9 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                                 maxParagraphs: 1,
                                 nextQuestion: "Provide a concise and short one sentence description of how " + name + " feels internally towards " + actualStrangerValue + ". Focus on the emotional and psychological aspects of their perception, rather than physical details. This should capture the essence of their feelings towards this person in a way that informs their interactions and relationship dynamics.",
                                 stopAfter: [],
-                                stopAt: [],
+                                stopAt: ["\n"],
                                 instructions: baseInstructions,
-                                grammar: "root ::= " + JSON.stringify(name + " feels that OTHER_CHARACTER is ") + " [a-zA-Z0-9 ,;.'_]+",
+                                grammar: "root ::= " + JSON.stringify(name + " feels that OTHER_CHARACTER is ") + " [a-zA-Z0-9 ,;.'_\\n]+",
                             });
 
                             if (descriptionInternalFeelings.done) {
@@ -3238,9 +3238,9 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                                         maxParagraphs: 1,
                                         nextQuestion: "Provide a concise and short one sentence description of how " + name + " should act towards " + actualFamilyValue + ". Focus on the emotional and psychological aspects of their perception, rather than physical details. This should capture the essence of their feelings and attitudes towards this person in a way that informs their interactions and relationship dynamics.",
                                         stopAfter: [],
-                                        stopAt: [],
+                                        stopAt: ["\n"],
                                         instructions: baseInstructions,
-                                        grammar: "root ::= " + JSON.stringify("Regarding OTHER_CHARACTER " + name + " should act ") + " [a-zA-Z0-9 ,;.'_]+",
+                                        grammar: "root ::= " + JSON.stringify("Regarding OTHER_CHARACTER " + name + " should act ") + " [a-zA-Z0-9 ,;.'_\\n]+",
                                     });
 
                                     if (descriptionBehaviour.done) {
@@ -3255,9 +3255,9 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                                         maxParagraphs: 1,
                                         nextQuestion: "Provide a concise and short one sentence description of how " + name + " feels internally towards " + actualFamilyValue + ". Focus on the emotional and psychological aspects of their perception, rather than physical details. This should capture the essence of their feelings towards this person in a way that informs their interactions and relationship dynamics.",
                                         stopAfter: [],
-                                        stopAt: [],
+                                        stopAt: ["\n"],
                                         instructions: baseInstructions,
-                                        grammar: "root ::= " + JSON.stringify(name + " feels that OTHER_CHARACTER is ") + " [a-zA-Z0-9 ,;.'_]+",
+                                        grammar: "root ::= " + JSON.stringify(name + " feels that OTHER_CHARACTER is ") + " [a-zA-Z0-9 ,;.'_\\n]+",
                                     });
 
                                     if (descriptionInternalFeelings.done) {
