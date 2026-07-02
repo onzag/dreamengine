@@ -18,6 +18,25 @@ export class CardTypeWizard extends HTMLElement {
     async connectedCallback() {
         this.render();
 
+        // Find the direct child of document.body that contains this overlay.
+        // It may be this element itself, or an ancestor host if mounted inside a shadow root.
+        /** @type {HTMLElement} */
+        let bodyLevelChild = /** @type {HTMLElement} */ (this);
+        while (true) {
+            const p = /** @type {any} */ (bodyLevelChild.parentNode);
+            if (!p || p === document.body || p === document) break;
+            bodyLevelChild = p.nodeType === 11 /* DOCUMENT_FRAGMENT_NODE */ ? p.host : p;
+        }
+
+        /** @type {HTMLElement[]} */
+        this._madeInert = [];
+        for (const el of document.body.children) {
+            if (el !== bodyLevelChild && !/** @type {HTMLElement} */ (el).inert) {
+                /** @type {HTMLElement} */ (el).inert = true;
+                this._madeInert.push(/** @type {HTMLElement} */ (el));
+            }
+        }
+
         document.addEventListener('keydown', this.onDocumentKeydown);
 
         this.root.getElementById('cancel-btn')?.addEventListener('click', () => {
@@ -470,6 +489,8 @@ export class CardTypeWizard extends HTMLElement {
                 const questionLabel = document.createElement('div');
                 questionLabel.className = 'guider-label';
                 questionLabel.innerHTML = highlightKeywordsInQuestion(question);
+                questionLabel.setAttribute("data-de-aria-text", "true");
+                questionLabel.setAttribute("tabindex", "0");
                 container.appendChild(questionLabel);
 
                 const inputArea = buildInputFn();
@@ -496,6 +517,10 @@ export class CardTypeWizard extends HTMLElement {
                 const submitBtn = document.createElement('div');
                 submitBtn.className = 'guider-submit-btn';
                 submitBtn.textContent = 'Confirm';
+                submitBtn.setAttribute("data-de-aria-key", "k");
+                submitBtn.setAttribute('tabindex', '0');
+                submitBtn.setAttribute("role", "button");
+                submitBtn.setAttribute("aria-label", "Confirm");
                 submitBtn.addEventListener('mouseenter', playHoverSound);
                 submitBtn.addEventListener('click', () => {
                     playConfirmSound();
@@ -550,6 +575,11 @@ export class CardTypeWizard extends HTMLElement {
                             span.setAttribute('contenteditable', 'plaintext-only');
                             span.setAttribute('spellcheck', 'true');
                             span.textContent = item;
+                            span.setAttribute('tabindex', '0');
+                            span.setAttribute('role', 'textbox');
+                            span.setAttribute('aria-label', 'List item');
+                            span.setAttribute("data-de-aria-key", "p");
+                            span.setAttribute("data-de-aria-action", "focus");
                             // Fallback for browsers that don't support plaintext-only:
                             // strip rich content from pasted data and block enter newlines.
                             span.addEventListener('paste', (e) => {
@@ -577,6 +607,12 @@ export class CardTypeWizard extends HTMLElement {
                                 items.splice(idx, 1);
                                 renderItems();
                             });
+
+                            removeBtn.setAttribute('tabindex', '0');
+                            removeBtn.setAttribute('role', 'button');
+                            removeBtn.setAttribute('aria-label', 'Remove item');
+                            removeBtn.setAttribute("data-de-aria-key", "r");
+
                             itemEl.appendChild(removeBtn);
 
                             listContainer.appendChild(itemEl);
@@ -593,6 +629,9 @@ export class CardTypeWizard extends HTMLElement {
                         this.style.height = 'auto';
                         this.style.height = this.scrollHeight + 'px';
                     });
+                    textarea.setAttribute('tabindex', '0');
+                    textarea.setAttribute('role', 'textbox');
+                    textarea.setAttribute("data-de-aria-key", "e");
 
                     const addBtn = document.createElement('div');
                     addBtn.className = 'guider-list-add-btn';
@@ -607,6 +646,11 @@ export class CardTypeWizard extends HTMLElement {
                         textarea.style.height = 'auto';
                         renderItems();
                     });
+
+                    addBtn.setAttribute('tabindex', '0');
+                    addBtn.setAttribute('role', 'button');
+                    addBtn.setAttribute('aria-label', 'Add item');
+                    addBtn.setAttribute("data-de-aria-key", "a");
 
                     addRow.appendChild(textarea);
                     addRow.appendChild(addBtn);
@@ -644,13 +688,25 @@ export class CardTypeWizard extends HTMLElement {
                             const optLabel = typeof opt === 'string' ? opt : opt.label;
                             const optBtn = document.createElement('div');
                             optBtn.className = 'guider-option';
-                            if (optValue === defaultValue) optBtn.classList.add('selected');
+                            if (optValue === defaultValue) {
+                                optBtn.classList.add('selected');
+                                optBtn.setAttribute('aria-selected', 'true');
+                            } else {
+                                optBtn.setAttribute('aria-selected', 'false');
+                            }
                             optBtn.dataset.value = optValue;
+                            optBtn.setAttribute('tabindex', '0');
+                            optBtn.setAttribute('role', 'button');
+                            optBtn.setAttribute("data-de-aria-key", "p");
                             optBtn.textContent = optLabel;
                             optBtn.addEventListener('mouseenter', playHoverSound);
                             optBtn.addEventListener('click', () => {
-                                wrapper.querySelectorAll('.guider-option').forEach(b => b.classList.remove('selected'));
+                                wrapper.querySelectorAll('.guider-option').forEach(b => {
+                                    b.classList.remove('selected');
+                                    b.setAttribute('aria-selected', 'false');
+                                });
                                 optBtn.classList.add('selected');
+                                optBtn.setAttribute('aria-selected', 'true');
                             });
                             wrapper.appendChild(optBtn);
                         });
@@ -681,6 +737,9 @@ export class CardTypeWizard extends HTMLElement {
                             this.style.height = 'auto';
                             this.style.height = this.scrollHeight + 'px';
                         });
+                        textarea.setAttribute('tabindex', '0');
+                        textarea.setAttribute('role', 'textbox');
+                        textarea.setAttribute("data-de-aria-key", "p");
                         requestAnimationFrame(() => {
                             textarea.style.height = 'auto';
                             textarea.style.height = textarea.scrollHeight + 'px';
@@ -716,6 +775,9 @@ export class CardTypeWizard extends HTMLElement {
                             this.style.height = 'auto';
                             this.style.height = this.scrollHeight + 'px';
                         });
+                        textarea.setAttribute('tabindex', '0');
+                        textarea.setAttribute('role', 'textbox');
+                        textarea.setAttribute("data-de-aria-key", "p");
                         requestAnimationFrame(() => {
                             textarea.style.height = 'auto';
                             textarea.style.height = textarea.scrollHeight + 'px';
@@ -749,6 +811,9 @@ export class CardTypeWizard extends HTMLElement {
                         input.type = 'number';
                         if (defaultValue !== undefined) input.value = String(defaultValue);
                         input.placeholder = defaultValue !== undefined ? String(defaultValue) : '0';
+                        input.setAttribute('tabindex', '0');
+                        input.setAttribute('role', 'spinbutton');
+                        input.setAttribute("data-de-aria-key", "p");
                         return input;
                     },
                     (inputArea) => {
@@ -773,23 +838,43 @@ export class CardTypeWizard extends HTMLElement {
                         const yesBtn = document.createElement('div');
                         yesBtn.className = 'guider-bool-btn';
                         yesBtn.textContent = 'Yes';
-                        if (defaultValue === true) yesBtn.classList.add('selected');
+                        if (defaultValue === true) {
+                            yesBtn.classList.add('selected');
+                            yesBtn.setAttribute('aria-selected', 'true');
+                        } else {
+                            yesBtn.setAttribute('aria-selected', 'false');
+                        }
+                        yesBtn.setAttribute('tabindex', '0');
+                        yesBtn.setAttribute('role', 'button');
+                        yesBtn.setAttribute("data-de-aria-key", "y");
 
                         const noBtn = document.createElement('div');
                         noBtn.className = 'guider-bool-btn';
                         noBtn.textContent = 'No';
-                        if (defaultValue === false) noBtn.classList.add('selected');
+                        if (defaultValue === false) {
+                            noBtn.classList.add('selected');
+                            noBtn.setAttribute('aria-selected', 'true');
+                        } else {
+                            noBtn.setAttribute('aria-selected', 'false');
+                        }
+                        noBtn.setAttribute('tabindex', '0');
+                        noBtn.setAttribute('role', 'button');
+                        noBtn.setAttribute("data-de-aria-key", "n");
 
                         yesBtn.addEventListener('mouseenter', playHoverSound);
                         noBtn.addEventListener('mouseenter', playHoverSound);
 
                         yesBtn.addEventListener('click', () => {
                             yesBtn.classList.add('selected');
+                            yesBtn.setAttribute('aria-selected', 'true');
                             noBtn.classList.remove('selected');
+                            noBtn.setAttribute('aria-selected', 'false');
                         });
                         noBtn.addEventListener('click', () => {
                             noBtn.classList.add('selected');
+                            noBtn.setAttribute('aria-selected', 'true');
                             yesBtn.classList.remove('selected');
+                            yesBtn.setAttribute('aria-selected', 'false');
                         });
 
                         wrapper.appendChild(yesBtn);
@@ -853,8 +938,8 @@ export class CardTypeWizard extends HTMLElement {
                             }
                             listContainer.innerHTML = items.map((item, idx) => `
                                 <div class="guider-list-item">
-                                    <span data-value="${item}">${valueToLabel.get(item) ?? item}</span>
-                                    <div class="guider-list-remove" data-idx="${idx}">✕</div>
+                                    <span data-de-aria-text="true" data-value="${item}">${valueToLabel.get(item) ?? item}</span>
+                                    <div role="button" tabindex="0" data-de-aria-key="r" class="guider-list-remove" data-idx="${idx}">✕</div>
                                 </div>
                             `).join('');
                             listContainer.querySelectorAll('.guider-list-remove').forEach(btn => {
@@ -881,6 +966,8 @@ export class CardTypeWizard extends HTMLElement {
                             if (options) {
                                 const select = document.createElement('select');
                                 select.className = 'guider-input';
+                                select.setAttribute('data-de-aria-key', 'o');
+                                select.setAttribute('tabindex', '0');
                                 let hasAny = false;
                                 const groups = Object.keys(options);
                                 for (const group of groups) {
@@ -922,6 +1009,8 @@ export class CardTypeWizard extends HTMLElement {
                                 input.className = 'guider-input';
                                 input.type = 'text';
                                 input.placeholder = 'Add item...';
+                                input.setAttribute('data-de-aria-key', 'o');
+                                input.setAttribute('tabindex', '0');
                                 addInput = input;
                             }
                             addRow.insertBefore(addInput, addRow.querySelector('.guider-list-add-btn'));
@@ -939,6 +1028,11 @@ export class CardTypeWizard extends HTMLElement {
                             renderItems();
                             if (options) rebuildAddInput();
                         });
+
+                        addBtn.setAttribute('tabindex', '0');
+                        addBtn.setAttribute('role', 'button');
+                        addBtn.setAttribute('aria-label', 'Add item');
+                        addBtn.setAttribute("data-de-aria-key", "a");
 
                         addRow.appendChild(addBtn);
                         wrapper.appendChild(addRow);
@@ -1047,6 +1141,12 @@ export class CardTypeWizard extends HTMLElement {
     }
 
     async disconnectedCallback() {
+        if (this._madeInert) {
+            for (const el of this._madeInert) {
+                el.inert = false;
+            }
+            this._madeInert = [];
+        }
         this.endOverlay();
         if (this._autosaveHideTimer) {
             clearTimeout(this._autosaveHideTimer);
@@ -1088,7 +1188,7 @@ export class CardTypeWizard extends HTMLElement {
                 <div class="wizard-prev-button">prev</div>
             </div>
         </div>
-        <div class="wizard-content">
+        <div class="wizard-content" data-de-role="scroller">
             <slot></slot>
         </div>
         <div class="wizard-buttons">

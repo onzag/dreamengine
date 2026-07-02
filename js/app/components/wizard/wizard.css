@@ -235,6 +235,10 @@
     -webkit-backdrop-filter: blur(14px);
     border-top: solid 1px rgba(80, 180, 220, 0.25);
     box-shadow: 0 -1vh 3vh rgba(0, 8, 18, 0.45);
+    /**
+     * For some reason it doesn't work without this z-index
+     */
+    z-index: 100000;
 }
 
 .buttons-container > * {
@@ -288,6 +292,7 @@
     display: flex;
     flex-wrap: wrap;
     gap: 1.5vh;
+    position: relative;
 }
 
 .guider-option {

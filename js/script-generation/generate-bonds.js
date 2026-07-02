@@ -504,6 +504,32 @@ function getChainInfoForStep(step) {
 }
 
 /**
+ * For each relationship (SETTINGS_ORDER_FIRST_LAYER) key, the set of chain base
+ * keys a reference answer may be inherited from. Inheritance is limited to the
+ * relationship itself plus the closest adjacent one(s) so the guider only ever
+ * sees "close" potential references. Strangers are intentionally not limited
+ * (see the strangers loop) and therefore are not present as map keys.
+ * @type {Record<string, string[]>}
+ */
+const RELATIONSHIP_INHERIT_SOURCES = {
+    // acquaintance is the entry point of the positive chain: it may inherit
+    // from any first impression (stranger) or from itself.
+    "acquaintance_0_10": ["strangerNeutral_n5_5", "strangerGood_5_100", "acquaintance_0_10"],
+    "friendly_10_20": ["acquaintance_0_10", "friendly_10_20"],
+    "goodFriend_20_35": ["friendly_10_20", "goodFriend_20_35"],
+    "closeFriend_35_50": ["goodFriend_20_35", "closeFriend_35_50"],
+    "bestFriend_50_100": ["closeFriend_35_50", "bestFriend_50_100"],
+    // unpleasant is the entry point of the negative chain and is a special
+    // case: it may inherit from a bad first impression, from its positive
+    // counterpart (acquaintance), or from itself.
+    "unpleasant_n10_0": ["strangerBad_n100_n5", "acquaintance_0_10", "unpleasant_n10_0"],
+    "unfriendly_n20_n10": ["unpleasant_n10_0", "unfriendly_n20_n10"],
+    "antagonistic_n35_n20": ["unfriendly_n20_n10", "antagonistic_n35_n20"],
+    "hostile_n50_n35": ["antagonistic_n35_n20", "hostile_n50_n35"],
+    "foe_n100_n50": ["hostile_n50_n35", "foe_n100_n50"],
+};
+
+/**
  * Walks the steps already answered in the state and builds the list of
  * potential reference prefixes the guider can inherit answers from. Each
  * option's `value` is a prefix that, concatenated with `{context}_{key}`,
@@ -513,14 +539,22 @@ function getChainInfoForStep(step) {
  * Only prefixes that can be given a human readable name (i.e. that start from a
  * known stranger/relationship chain and a parseable fine tune) are returned.
  *
+ * When `forRelationshipKey` is provided, the returned options are limited to
+ * the "close" inheritance sources of that relationship (see
+ * RELATIONSHIP_INHERIT_SOURCES); prefixes belonging to any other relationship
+ * are filtered out. When omitted (e.g. for strangers), no limit is applied.
+ *
  * @param {*} state
+ * @param {string} [forRelationshipKey]
  * @returns {Array<{value: string, label: string}>}
  */
-function getAllPotentialOptions(state) {
+function getAllPotentialOptions(state, forRelationshipKey) {
     const steps = state['.steps'];
     if (!Array.isArray(steps)) {
         return [];
     }
+
+    const allowedSourceKeys = forRelationshipKey ? RELATIONSHIP_INHERIT_SOURCES[forRelationshipKey] : null;
 
     /** @type {Map<string, string>} prefix -> label */
     const optionsByPrefix = new Map();
@@ -541,6 +575,12 @@ function getAllPotentialOptions(state) {
         let prefix = `${chainInfo.chain}${species}_character_`;
         if (sex) prefix += `${sex}_`;
         if (attractiveness) prefix += `${attractiveness}_`;
+
+        // When limiting to a relationship's close inheritance sources, drop any
+        // prefix that does not belong to one of the allowed chain base keys.
+        if (allowedSourceKeys && !allowedSourceKeys.some(key => prefix.startsWith(`${key}_`))) {
+            continue;
+        }
 
         if (optionsByPrefix.has(prefix)) continue;
 
@@ -2764,13 +2804,15 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                                 "bestFriend_50_100": "closeFriend_35_50_noRomanticInterest_0_10_nonFamily",
                                 "unpleasant_n10_0": "strangerBad_n100_n5",
                                 "unfriendly_n20_n10": "unpleasant_n10_0_noRomanticInterest_0_10_nonFamily",
-                                "foe_n100_n50": "unfriendly_n20_n10_noRomanticInterest_0_10_nonFamily",
+                                "antagonistic_n35_n20": "unfriendly_n20_n10_noRomanticInterest_0_10_nonFamily",
+                                "hostile_n50_n35": "antagonistic_n35_n20_noRomanticInterest_0_10_nonFamily",
+                                "foe_n100_n50": "hostile_n50_n35_noRomanticInterest_0_10_nonFamily",
                             };
 
                             return (noRomanticInterestBaseSource[relationshipKey] || "strangerGood_5_100") + "_" + suffix;
                         }
 
-                        const options = getAllPotentialOptions(scriptgenerator.state);
+                        const options = getAllPotentialOptions(scriptgenerator.state, relationshipKey);
 
                         const fineTuneReferencePrefix = options.length !== 0 ? (await guider.askOption(
                             "refkey_" + relationshipKey + "_" + romanticInterestKey + "_" + familyKey + "_" + fineTuneComment,
