@@ -74,10 +74,10 @@ const ROMANTIC_INTEREST_KEY_DESCRIPTIONS = {
 /** @type {Record<string, string>} */
 const ROMANTIC_INTEREST_KEY_LABELS = {
     "noRomanticInterest_0_10": "no romantic interest",
-    "slightRomanticInterest_10_20": "slight romantic interest",
-    "romanticInterest_20_35": "romantic interest",
-    "strongRomanticInterest_35_50": "strong romantic interest",
-    "deepInLove_50_100": "deep love",
+    "slightRomanticInterest_10_20": "develop slight romantic interest",
+    "romanticInterest_20_35": "develop romantic interest",
+    "strongRomanticInterest_35_50": "develop strong romantic interest",
+    "deepInLove_50_100": "become deeply in love",
 };
 
 /**
@@ -2648,7 +2648,7 @@ export async function generateBonds(engine, scriptgenerator, guider) {
             if (romanticInterestKey !== "noRomanticInterest_0_10") {
                 const guiderResult = await guider.askBoolean(
                     "capable-of-romantic-interest-" + relationshipKey + "-" + romanticInterestKey,
-                    "Is " + name + " capable to develop a " + ROMANTIC_INTEREST_KEY_LABELS[romanticInterestKey] + " (beyond simple physical or superficial attraction) " + (" towards a " + RELATIONSHIP_KEY_DESCRIPTIONS[relationshipKey]).replace("a acquaintance", "an acquaintance") + "?",
+                    "Is " + name + " capable to " + ROMANTIC_INTEREST_KEY_LABELS[romanticInterestKey] + " (beyond simple physical or superficial attraction) " + (" towards a " + RELATIONSHIP_KEY_DESCRIPTIONS[relationshipKey]).replace("a acquaintance", "an acquaintance") + "?",
                     addAttractionRules,
                 );
                 addAttractionRules = guiderResult.value;

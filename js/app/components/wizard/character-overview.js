@@ -361,6 +361,66 @@ function processRelationshipSteps(state, relationshipSteps, prefix) {
     return container;
 }
 
+const RELATIONSHIP_FIRST_PREFIXES = [
+    [
+        "acquaintance_0_10_", "Acquaintances",
+    ],
+    [
+        "friendly_10_20_", "Friends",
+    ],
+    [
+        "goodFriend_20_35_", "Good Friends",
+    ],
+    [
+        "closeFriend_35_50_", "Close Friends",
+    ],
+    [
+        "bestFriend_50_100_", "Best Friends",
+    ],
+    [
+        "unpleasant_n10_0_", "Unpleasant Acquaintances",
+    ],
+    [
+        "unfriendly_n20_n10_", "Unfriendly Relationships",
+    ],
+    [
+        "antagonistic_n35_n20_", "Antagonistic Relationships",
+    ],
+    [
+        "hostile_n50_n35_", "Hostile Relationships",
+    ],
+    [
+        "foe_n100_n50_", "Sworn Enemies",
+    ],
+];
+
+const RELATIONSHIPS_SECOND_PREFIXES = [
+    [
+        "noRomanticInterest_0_10_", "No Romantic Interest",
+    ],
+    [
+        "slightRomanticInterest_10_20_", "Slight Romantic Interest",
+    ],
+    [
+        "romanticInterest_20_35_", "Moderate Romantic Interest",
+    ],
+    [
+        "strongRomanticInterest_35_50_", "Strong Romantic Interest",
+    ],
+    [
+        "deepInLove_50_100_", "Deep in Love",
+    ],
+];
+
+const RELATIONSHIPS_THIRD_PREFIXES = [
+    [
+        "nonFamily_", "Non-Family",
+    ],
+    [
+        "family_", "Family",
+    ],
+];
+
 const SECTIONS = [
     {
         title: 'Character Overview',
@@ -716,91 +776,23 @@ const SECTIONS = [
             return processRelationshipSteps(s, stepsInfo, typeToProcessPrefix);
         }
     },
-    {
-        title: "Relationships (Acquaintances, No Romantic Interest, Non-Family)",
-        /**
-         * @param {*} s
-         * @return {HTMLElement | null}
-         */
-        custom: (s) => {
-            const stepsInfo = s[".steps"];
-            const typeToProcessPrefix = "acquaintance_0_10_noRomanticInterest_0_10_nonFamily_";
-            return processRelationshipSteps(s, stepsInfo, typeToProcessPrefix);
-        }
-    },
-    {
-        title: "Relationships (Acquaintances, No Romantic Interest, Family)",
-        /**
-         * @param {*} s
-         * @return {HTMLElement | null}
-         */
-        custom: (s) => {
-            const stepsInfo = s[".steps"];
-            const typeToProcessPrefix = "acquaintance_0_10_noRomanticInterest_0_10_family_";
-            return processRelationshipSteps(s, stepsInfo, typeToProcessPrefix);
-        }
-    }
+    ...RELATIONSHIP_FIRST_PREFIXES.flatMap(([firstPrefix, firstLabel]) =>
+        RELATIONSHIPS_SECOND_PREFIXES.flatMap(([secondPrefix, secondLabel]) =>
+            RELATIONSHIPS_THIRD_PREFIXES.map(([thirdPrefix, thirdLabel]) => ({
+                title: `Relationships (${firstLabel}, ${secondLabel}, ${thirdLabel})`,
+                /**
+                 * @param {*} s
+                 * @return {HTMLElement | null}
+                 */
+                custom: (s) => {
+                    const stepsInfo = s[".steps"];
+                    const typeToProcessPrefix = firstPrefix + secondPrefix + thirdPrefix;
+                    return processRelationshipSteps(s, stepsInfo, typeToProcessPrefix);
+                }
+            }))
+        )
+    ),
 ]
-
-const RELATIONSHIP_FIRST_PREFIXES = [
-    [
-        "acquaintance_0_10_", "Acquaintances",
-    ],
-    [
-        "friendly_10_20_", "Friends",
-    ],
-    [
-        "goodFriend_20_35_", "Good Friends",
-    ],
-    [
-        "closeFriend_35_50_", "Close Friends",
-    ],
-    [
-        "bestFriend_50_100_", "Best Friends",
-    ],
-    [
-        "unpleasant_n10_0_", "Unpleasant Acquaintances",
-    ],
-    [
-        "unfriendly_n20_n10_", "Unfriendly Relationships",
-    ],
-    [
-        "antagonistic_n35_n20_", "Antagonistic Relationships",
-    ],
-    [
-        "hostile_n50_n35_", "Hostile Relationships",
-    ],
-    [
-        "foe_n100_n50_", "Sworn Enemies",
-    ],
-];
-
-const RELATIONSHIPS_SECOND_PREFIXES = [
-    [
-        "noRomanticInterest_0_10_", "No Romantic Interest",
-    ],
-    [
-        "slightRomanticInterest_10_20", "Slight Romantic Interest",
-    ],
-    [
-        "romanticInterest_20_35", "Moderate Romantic Interest",
-    ],
-    [
-        "strongRomanticInterest_35_50", "Strong Romantic Interest",
-    ],
-    [
-        "deepInLove_50_100", "Deep in Love",
-    ],
-];
-
-const RELATIONSHIPS_THIRD_PREFIXES = [
-    [
-        "nonFamily_", "Non-Family",
-    ],
-    [
-        "family_", "Family",
-    ],
-];
 
 class CharacterOverview extends HTMLElement {
     constructor() {
