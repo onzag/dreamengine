@@ -2783,7 +2783,7 @@ export async function generateBonds(engine, scriptgenerator, guider) {
 
                             // family relationships inherit from their non-family counterpart, the closest already answered question
                             if (familyKey === "family") {
-                                return relationshipKey + "_" + romanticInterestKey + "_nonFamily_" + suffix;
+                                return relationshipKey + "_" + romanticInterestKey + "_nonFamily_any_character_";
                             }
 
                             // higher romantic interests inherit from the previous (lower) romantic interest of the same relationship
