@@ -471,13 +471,13 @@ function describeStrangerChain(strangerKey) {
  * STRANGER_KEY_DESCRIPTIONS or RELATIONSHIP_KEY_DESCRIPTIONS key (and, for
  * relationships, a known romantic-interest and family key) are recognised.
  * @param {string} step
- * @returns {{chain: string, chainLabel: string}|null}
+ * @returns {{chain: string, chainLabel: string, romanticInterestKey: string|null, familyKey: string|null}|null}
  */
 function getChainInfoForStep(step) {
     for (const strangerKey of Object.keys(STRANGER_KEY_DESCRIPTIONS)) {
         const chain = `${strangerKey}_`;
         if (step.startsWith(chain)) {
-            return { chain, chainLabel: describeStrangerChain(strangerKey) };
+            return { chain, chainLabel: describeStrangerChain(strangerKey), romanticInterestKey: null, familyKey: null };
         }
     }
 
@@ -495,6 +495,8 @@ function getChainInfoForStep(step) {
                 return {
                     chain,
                     chainLabel: describeFamilyContext(relationshipKey, romanticInterestKey, familyKey, false, false),
+                    romanticInterestKey,
+                    familyKey,
                 };
             }
         }
@@ -545,10 +547,12 @@ const RELATIONSHIP_INHERIT_SOURCES = {
  * are filtered out. When omitted (e.g. for strangers), no limit is applied.
  *
  * @param {*} state
- * @param {string} [forRelationshipKey]
+ * @param {string|null} forRelationshipKey
+ * @param {boolean} allCreepy
+ * @param {boolean} familyCreepy
  * @returns {Array<{value: string, label: string}>}
  */
-function getAllPotentialOptions(state, forRelationshipKey) {
+function getAllPotentialOptions(state, forRelationshipKey, allCreepy, familyCreepy) {
     const steps = state['.steps'];
     if (!Array.isArray(steps)) {
         return [];
@@ -584,8 +588,35 @@ function getAllPotentialOptions(state, forRelationshipKey) {
 
         if (optionsByPrefix.has(prefix)) continue;
 
+        const isFamily = species.includes('family');
+        const isCreepy = allCreepy || (familyCreepy && isFamily);
+        const hasRomanticInterest = chainInfo.romanticInterestKey !== null && chainInfo.romanticInterestKey !== 'noRomanticInterest_0_10';
         const fineTuneLabel = describeFineTune(species, sex, attractiveness);
-        optionsByPrefix.set(prefix, `${chainInfo.chainLabel}, ${fineTuneLabel}`);
+
+        let label;
+        if (isCreepy && hasRomanticInterest) {
+            // In creepy mode the romantic interest is reversed: the other character
+            // has the interest in our character, not the other way around.
+            // Extract the relationship key by stripping the romantic-interest suffix from the chain.
+            const relationshipKey = chainInfo.chain.split('_noRomanticInterest')[0]
+                .split('_slightRomanticInterest')[0]
+                .split('_romanticInterest')[0]
+                .split('_strongRomanticInterest')[0]
+                .split('_deepInLove')[0];
+            const relationshipLabel = RELATIONSHIP_KEY_DESCRIPTIONS[relationshipKey] || 'character';
+            const creepyInterestLabel = ({
+                'slightRomanticInterest_10_20': 'has a slight romantic interest in our character',
+                'romanticInterest_20_35': 'has a romantic interest in our character',
+                'strongRomanticInterest_35_50': 'has a strong romantic interest in our character',
+                'deepInLove_50_100': 'is deeply in love with our character',
+            // @ts-ignore
+            })[chainInfo.romanticInterestKey] || 'is interested in our character';
+            const familySuffix = chainInfo.familyKey === 'family' ? ', who is family' : '';
+            label = `${relationshipLabel} who ${creepyInterestLabel}${familySuffix}, ${fineTuneLabel}`;
+        } else {
+            label = `${chainInfo.chainLabel}, ${fineTuneLabel}`;
+        }
+        optionsByPrefix.set(prefix, label);
     }
 
     return Array.from(optionsByPrefix, ([value, label]) => ({ value, label }));
@@ -1765,8 +1796,8 @@ export async function generateBonds(engine, scriptgenerator, guider) {
 
     const ROMANTIC_PREFIXES = {
         "noRomanticInterest_0_10": "",
-        "slightRomanticInterest_10_20": "Slightly Interesting ",
-        "romanticInterest_20_35": "Interesting ",
+        "slightRomanticInterest_10_20": "Slightly Romantically Interesting ",
+        "romanticInterest_20_35": "Romantically Interesting ",
         "strongRomanticInterest_35_50": "Beloved ",
         "deepInLove_50_100": "Extremely Beloved ",
     }
@@ -1785,7 +1816,7 @@ export async function generateBonds(engine, scriptgenerator, guider) {
             "family": "{{other_family_relation}}",
         },
         "friendly_10_20": {
-            "nonFamily": "Friendly",
+            "nonFamily": "Friend",
             "family": "{{other_family_relation}}",
         },
         "goodFriend_20_35": {
@@ -1794,23 +1825,23 @@ export async function generateBonds(engine, scriptgenerator, guider) {
         },
         "closeFriend_35_50": {
             "nonFamily": "Close Friend",
-            "family": "{{other_family_relation}}",
+            "family": "Close {{other_family_relation}}",
         },
         "bestFriend_50_100": {
             "nonFamily": "Best Friend",
-            "family": "{{other_family_relation}}",
+            "family": "Close {{other_family_relation}}",
         },
         "unpleasant_n10_0": {
             "nonFamily": "Unpleasant Presence",
-            "family": "{{other_family_relation}}",
+            "family": "Unpleasant {{other_family_relation}}",
         },
         "unfriendly_n20_n10": {
             "nonFamily": "Unfriendly Relationship",
-            "family": "{{other_family_relation}}",
+            "family": "Disliked {{other_family_relation}}",
         },
         "foe_n100_n50": {
             "nonFamily": "Sworn Enemy",
-            "family": "{{other_family_relation}}",
+            "family": "Hated {{other_family_relation}}",
         },
     };
 
@@ -2175,7 +2206,7 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                     }
                 }
 
-                const options = getAllPotentialOptions(scriptgenerator.state);
+                const options = getAllPotentialOptions(scriptgenerator.state, null, isAsexualValue, isAsexualValue || !isIncestuousValue);
 
                 const fineTuneReferencePrefix = options.length !== 0 ? (await guider.askOption(
                     "refkey_" + strangerKey + "_" + fineTuneComment,
@@ -2751,7 +2782,11 @@ export async function generateBonds(engine, scriptgenerator, guider) {
 
                 const familySectionBase = insertSection(romanticInterestSection.body, familyKey, (s) => {
                     s.head.push(`${familyKey}: {`);
-                    s.head.push(`relationshipName: null, // fill if you want this relationship to have a name`);
+                    s.foot.push(`},`);
+                });
+
+                const familySectionRelationshipName = insertSection(familySectionBase.body, "relationshipName", (s) => {
+                    s.head.push(`relationshipName: (info) => {`);
                     s.foot.push(`},`);
                 });
 
@@ -2888,7 +2923,7 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                             return (noRomanticInterestBaseSource[relationshipKey] || "strangerGood_5_100") + "_" + suffix;
                         }
 
-                        const options = getAllPotentialOptions(scriptgenerator.state, relationshipKey);
+                        const options = getAllPotentialOptions(scriptgenerator.state, relationshipKey, isAsexualValue, isAsexualValue || !isIncestuousValue);
 
                         const fineTuneReferencePrefix = options.length !== 0 ? (await guider.askOption(
                             "refkey_" + relationshipKey + "_" + romanticInterestKey + "_" + familyKey + "_" + fineTuneComment,
@@ -3397,16 +3432,34 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                             }
                         }
 
+                        const useCreepyRomanticPrefixes = isAsexualValue || (familyKey === "family" && !isIncestuousValue);
+                        // @ts-ignore
+                        const romanticNamePrefix = (useCreepyRomanticPrefixes ? ROMANTIC_PREFIXES_CREEPY : ROMANTIC_PREFIXES)[romanticInterestKey];
+                        // @ts-ignore
+                        const relationshipNameDefault = romanticNamePrefix + SETTINGS_RELATIONSHIP_NAMES[relationshipKey][familyKey];
+
+                        const relationshipNameResult = await guider.askOpen(
+                            relationshipKey + "_" + romanticInterestKey + "_" + familyKey + "_" + fineTuneComment + "_relationship-name",
+                            "What is the name of the relationship between " + name + " and " + actualFamilyValue + "?" + (familyKey === "family" ? " You may use the template {{other_family_relation}} which represents the family bond (e.g. cousin, father, mother) of the other character." : ""),
+                            relationshipNameDefault,
+                        );
+
                         insertSpecialComment(familySectionDescription.body, fineTune + (attractionLevel !== "n/a" ? "_" + attractionLevel : ""));
                         // @ts-ignore
                         if (fineTuneConditions[fineTune] === "true") {
                             // @ts-ignore
                             familySectionDescription.body.push(`return ${toTemplateLiteral(descriptionValue, name)};`);
+                            familySectionRelationshipName.body.push(`return ${toTemplateLiteral(relationshipNameResult.value.trim(), name)};`);
                         } else {
                             // @ts-ignore
                             familySectionDescription.body.push(`if (${getAttractionLevelCondition(fineTuneConditions[fineTune], attractionLevel)}) {`);
                             familySectionDescription.body.push(`return ${toTemplateLiteral(descriptionValue, name)};`);
                             familySectionDescription.body.push(`}`);
+
+                            // @ts-ignore
+                            familySectionRelationshipName.body.push(`if (${getAttractionLevelCondition(fineTuneConditions[fineTune], attractionLevel)}) {`);
+                            familySectionRelationshipName.body.push(`return ${toTemplateLiteral(relationshipNameResult.value.trim(), name)};`);
+                            familySectionRelationshipName.body.push(`}`);
                         }
                     }
                 }

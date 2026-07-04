@@ -72,7 +72,7 @@ function parseRelationshipStep(step, prefix) {
     let context = null;
     /** @type {string[]} */
     let front;
-    if (key === 'description') {
+    if (key === 'description' || key === 'relationship-name') {
         front = tokens.slice(0, -1);
     } else if (tokens.length >= 2) {
         context = tokens[tokens.length - 2];
@@ -270,8 +270,16 @@ function processRelationshipSteps(state, relationshipSteps, prefix) {
         const body = document.createElement('div');
         body.className = 'relationship-group-body';
 
-        // Context-less fields first, with the description prioritised.
-        const groupFieldKeys = [...group.groupFields.keys()].sort((a, b) => {
+        // Context-less fields first: relationship-name first, description second.
+        const relationshipNameValue = group.groupFields.get('relationship-name');
+        if (relationshipNameValue !== undefined && relationshipNameValue !== null && relationshipNameValue !== '') {
+            const nameTitleEl = document.createElement('div');
+            nameTitleEl.className = 'relationship-name-title';
+            nameTitleEl.textContent = String(relationshipNameValue).replace("{{other_family_relation}}", "Family Member");
+            body.appendChild(nameTitleEl);
+        }
+
+        const groupFieldKeys = [...group.groupFields.keys()].filter(k => k !== 'relationship-name').sort((a, b) => {
             if (a === 'description') return -1;
             if (b === 'description') return 1;
             return 0;
@@ -1018,6 +1026,15 @@ class CharacterOverview extends HTMLElement {
             }
             .relationship-copy-key-btn {
                 margin-left: auto;
+            }
+            .relationship-name-title {
+                font-size: 2vh;
+                font-weight: 700;
+                color: rgba(180, 230, 255, 0.95);
+                padding: 0.5vh 0 0.8vh;
+                border-bottom: 1px solid rgba(100, 200, 240, 0.25);
+                margin-bottom: 0.2vh;
+                letter-spacing: 0.03em;
             }
         `;
         dialog.appendChild(style);
