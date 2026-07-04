@@ -393,6 +393,8 @@ export function toTemplateLiteral(str, charName) {
         if (key === 'other') return '${info.other.name}';
         if (key.startsWith('other.')) return '${info.' + key + '}';
         if (key === 'chars') return '${DE.utils.templateUtils.formatAnd(DE, info.chars.map((c) => c.name))}';
+        if (key === 'other_family_relation') return '${info.otherFamilyRelation}';
+        if (key === 'other_relationship') return '${info.otherRelationship}';
         return '${"???"}';
     });
     return '`' + escaped + '`';

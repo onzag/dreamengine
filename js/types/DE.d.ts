@@ -756,7 +756,7 @@ declare interface DEBondDeclaration {
      * 
      * can leave empty if the relationship does not exist, eg. strangers, or if the relationship name is not important for the bond declaration 
      */
-    relationshipName: DEStringTemplateCharAndOther | null;
+    relationshipName: DEStringTemplateCharAndOther;
     /**
      * Whether it is a stranger bond or not, stranger bonds are used
      * when characters have just met and have no prior relationship
@@ -1405,6 +1405,14 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
          */
         questions: DECharacterQuestionWithAskPerForCharactersWithLikelyhoodAndCorrection[];
     };
+
+    /**
+     * Determines how a character fights and their fighting style
+     *
+     * TODO implement this in combat system
+     * TODO add to wizard
+     */
+    combat: DEStringTemplateCharAndOther[];
 
     /**
      * A number from 0 to 1 that represents

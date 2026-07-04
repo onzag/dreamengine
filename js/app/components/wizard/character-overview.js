@@ -1060,6 +1060,7 @@ class CharacterOverview extends HTMLElement {
         const cardState = result.state;
         const fragment = document.createDocumentFragment();
 
+        // @ts-ignore
         for (const section of SECTIONS) {
             const sectionEl = document.createElement('div');
             sectionEl.className = 'overview-section';

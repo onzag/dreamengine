@@ -105,7 +105,7 @@ export class BaseInferenceAdapter {
      * @param {{
      *   description: string,
      *   externalDescription: string,
-     *   relationships: string[],
+     *   relationships: Array<{title: string, description: string}>,
      *   expressiveStates: string[],
      *   scenario: string,
      *   lore: string|null,
@@ -126,7 +126,7 @@ export class BaseInferenceAdapter {
      * @param {{
      *   description: string,
      *   externalDescription: string|null,
-     *   relationships: string[],
+     *   relationships: Array<{title: string, description: string}>,
      *   expressiveStates: string[],
      *   scenario: string|null,
      *   lore: string|null,

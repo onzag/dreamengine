@@ -829,7 +829,7 @@ RULE: Spoken dialogue should be done in first person, and start with the charact
      * @param {{
      *   description: string,
      *   externalDescription: string|null,
-     *   relationships: string[],
+     *   relationships: Array<{title: string, description: string}>,
      *   expressiveStates: string[],
      *   scenario: string|null,
      *   lore: string|null,
@@ -849,7 +849,7 @@ ${description}${relationships.length > 0 ? `
 
 # ${character.name}'s Relationships:
 
-${relationships.map(relationship => ` - ${relationship}`).join("\n")}` : ""}${expressiveStates.length > 0 ? `
+${relationships.map(relationship => `## ${relationship.title}\n\n${relationship.description}`).join("\n")}` : ""}${expressiveStates.length > 0 ? `
 
 # Current States:
 
@@ -870,7 +870,7 @@ ${lore}
      * @param {{
      *   description: string,
      *   externalDescription: string,
-     *   relationships: string[],
+     *   relationships: Array<{title: string, description: string}>,
      *   expressiveStates: string[],
      *   scenario: string,
      *   lore: string|null,

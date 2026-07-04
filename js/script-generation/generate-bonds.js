@@ -1763,6 +1763,57 @@ export async function generateBonds(engine, scriptgenerator, guider) {
         "family",
     ];
 
+    const ROMANTIC_PREFIXES = {
+        "noRomanticInterest_0_10": "",
+        "slightRomanticInterest_10_20": "Slightly Interesting ",
+        "romanticInterest_20_35": "Interesting ",
+        "strongRomanticInterest_35_50": "Beloved ",
+        "deepInLove_50_100": "Extremely Beloved ",
+    }
+
+    const ROMANTIC_PREFIXES_CREEPY = {
+        "noRomanticInterest_0_10": "",
+        "slightRomanticInterest_10_20": "Slightly Creepy ",
+        "romanticInterest_20_35": "Creepy ",
+        "strongRomanticInterest_35_50": "Extremely Creepy ",
+        "deepInLove_50_100": "Unhealthily Creepy ",
+    };
+
+    const SETTINGS_RELATIONSHIP_NAMES = {
+        "acquaintance_0_10": {
+            "nonFamily": "Acquaintance",
+            "family": "{{other_family_relation}}",
+        },
+        "friendly_10_20": {
+            "nonFamily": "Friendly",
+            "family": "{{other_family_relation}}",
+        },
+        "goodFriend_20_35": {
+            "nonFamily": "Good Friend",
+            "family": "{{other_family_relation}}",
+        },
+        "closeFriend_35_50": {
+            "nonFamily": "Close Friend",
+            "family": "{{other_family_relation}}",
+        },
+        "bestFriend_50_100": {
+            "nonFamily": "Best Friend",
+            "family": "{{other_family_relation}}",
+        },
+        "unpleasant_n10_0": {
+            "nonFamily": "Unpleasant Presence",
+            "family": "{{other_family_relation}}",
+        },
+        "unfriendly_n20_n10": {
+            "nonFamily": "Unfriendly Relationship",
+            "family": "{{other_family_relation}}",
+        },
+        "foe_n100_n50": {
+            "nonFamily": "Sworn Enemy",
+            "family": "{{other_family_relation}}",
+        },
+    };
+
     const STRANGERS = {
         "strangerNeutral_n5_5": "a stranger, {} that " + name + " just met and has no feelings towards them either positive or negative",
         "strangerGood_5_100": "a stranger, {} that " + name + " just met but has already formed a good impression of and has positive feelings towards them",
@@ -1775,9 +1826,15 @@ export async function generateBonds(engine, scriptgenerator, guider) {
         "strangerBad_n100_n5",
     ];
 
+    const STRANGERS_RELATIONSHIP_NAMES = {
+        "strangerNeutral_n5_5": "Neutral Stranger",
+        "strangerGood_5_100": "Good Stranger",
+        "strangerBad_n100_n5": "Unpleasant Stranger",
+    };
+
     const FINE_TUNE_WITH_ATTRACTION_POTENTIAL_TO_DESCRIPTION = [
         "SLIGHTLY Physically Attractive for " + name + ", a minor level of attraction but there nonetheless",
-        "MODERATELY Physically Attractive for " + name + ", a clear and noticeable level of attraction that influences how they perceive and feel about this person",
+        "MODERATELY Physically Attractive for " + name + ", a clear and noticeable level of attraction that influences how they perceive and feel about this character",
         "STRONGLY Physically Attractive for " + name + ", a powerful level of attraction that dominates their thoughts and emotions",
     ];
 
@@ -1975,6 +2032,7 @@ export async function generateBonds(engine, scriptgenerator, guider) {
             condition: "true",
             reasonYes: [
                 "being in public makes {{char}} feel comfortable",
+                "they are in public",
                 "they are in public, it would be better in a more private location",
                 "they are in public, it would be better if they knew each other better",
                 "{{other}} is a [], and {} attractive for {{char}}, which makes {{char}} feel comfortable",
@@ -1984,6 +2042,7 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                 "{{other}} is {} attractive for {{char}}"
             ],
             reasonNo: [
+                "they are in public",
                 "they are in public, it would be possible in a more private location",
                 "{{char}} is in public with {{other}}, who is a [], which makes {{char}} feel uncomfortable",
                 "{{other}} is a [], it would be possible if they knew each other better",
@@ -2015,7 +2074,11 @@ export async function generateBonds(engine, scriptgenerator, guider) {
 
         const strangerSectionBase = insertSection(optionsSection.body, strangerKey, (s) => {
             s.head.push(`${strangerKey}: {`);
-            s.head.push(`relationshipName: null,`);
+            s.foot.push(`},`);
+        });
+
+        const strangerSectionRelationshipName = insertSection(strangerSectionBase.body, "relationshipName", (s) => {
+            s.head.push(`relationshipName: (info) => {`);
             s.foot.push(`},`);
         });
 
@@ -2569,7 +2632,7 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                                 stopAfter: [],
                                 stopAt: ["\n"],
                                 instructions: baseInstructions,
-                                grammar: "root ::= " + JSON.stringify("Regarding OTHER_CHARACTER " + name + " should act ") + " [a-zA-Z0-9 ,;.'_\\n]+",
+                                grammar: "root ::= " + JSON.stringify("Regarding OTHER_CHARACTER " + name + " will treat them like ") + " [a-zA-Z0-9 ,;.'_\\n]+",
                             });
 
                             if (descriptionBehaviour.done) {
@@ -2608,16 +2671,29 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                     }
                 }
 
+                const relationshipNameResult = await guider.askOpen(
+                    strangerKey + "_" + fineTuneComment + "_relationship-name",
+                    "What is the name of the relationship between " + name + " and " + actualStrangerValue + "?",
+                    // @ts-ignore
+                    STRANGERS_RELATIONSHIP_NAMES[strangerKey],
+                );
+
                 insertSpecialComment(strangerSectionBase.body, fineTuneComment);
                 // @ts-ignore
                 if (fineTuneConditions[fineTune] === "true") {
                     // @ts-ignore
                     strangerSectionDescription.body.push(`return ${toTemplateLiteral(descriptionValue, name)};`);
+                    strangerSectionRelationshipName.body.push(`return ${toTemplateLiteral(relationshipNameResult.value.trim(), name)};`);
                 } else {
                     // @ts-ignore
                     strangerSectionDescription.body.push(`if (${getAttractionLevelCondition(fineTuneConditions[fineTune], attractionLevel)}) {`);
                     strangerSectionDescription.body.push(`return ${toTemplateLiteral(descriptionValue, name)};`);
                     strangerSectionDescription.body.push(`}`);
+
+                    // @ts-ignore
+                    strangerSectionRelationshipName.body.push(`if (${getAttractionLevelCondition(fineTuneConditions[fineTune], attractionLevel)}) {`);
+                    strangerSectionRelationshipName.body.push(`return ${toTemplateLiteral(relationshipNameResult.value.trim(), name)};`);
+                    strangerSectionRelationshipName.body.push(`}`);
                 }
             }
         }
@@ -3282,7 +3358,7 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                                         stopAfter: [],
                                         stopAt: ["\n"],
                                         instructions: baseInstructions,
-                                        grammar: "root ::= " + JSON.stringify("Regarding OTHER_CHARACTER " + name + " should act ") + " [a-zA-Z0-9 ,;.'_\\n]+",
+                                        grammar: "root ::= " + JSON.stringify("Regarding OTHER_CHARACTER " + name + " will treat them like ") + " [a-zA-Z0-9 ,;.'_\\n]+",
                                     });
 
                                     if (descriptionBehaviour.done) {

@@ -1604,7 +1604,7 @@ export async function getInternalDescriptionOfCharacter(deObject, characterName)
     const bonds = deObject.bonds[characterName];
 
     /**
-     * @type {string[]}
+     * @type {Array<{title: string; description: string;}>}
      */
     const relationships = [];
 
@@ -1711,7 +1711,12 @@ export async function getInternalDescriptionOfCharacter(deObject, characterName)
                 }
             }
 
-            relationships.push(result);
+            const titleOfRelationship = `${otherCharacter.name} (${generalRelationship})`;
+
+            relationships.push({
+                title: titleOfRelationship,
+                description: result,
+            });
 
             if (bondDeclaration.generalCharacterDescriptionInjection) {
                 const injection = typeof bondDeclaration.generalCharacterDescriptionInjection === "string" ? bondDeclaration.generalCharacterDescriptionInjection : (await bondDeclaration.generalCharacterDescriptionInjection({
@@ -1767,6 +1772,7 @@ export async function getInternalDescriptionOfCharacter(deObject, characterName)
 
     // these do apply to all the total strangers
     const allSurroundingTotalStrangers = surroundingChars.totalStrangers;
+    // TODO optimize this, if there are too many total strangers, we may want to bundle them up into a single description instead of doing them one by one, as it may be too verbose and not useful
     for (const strangerName of allSurroundingTotalStrangers) {
         const strangerCharacter = deObject.characters[strangerName];
 
@@ -1812,7 +1818,12 @@ export async function getInternalDescriptionOfCharacter(deObject, characterName)
                 result += ` ${strangerName} is ${characterName}'s ${familyRelationship}.`;
             }
 
-            relationships.push(result);
+            const titleOfRelationship = `${strangerCharacter.name} (Totally Unknown Stranger)`;
+
+            relationships.push({
+                title: titleOfRelationship,
+                description: result,
+            });
         }
 
         if (strangerBondDeclaration.generalCharacterDescriptionInjection) {
@@ -2432,7 +2443,8 @@ export async function getRelationshipBetweenCharacters(deObject, characterName, 
 /**
  * 
  * @param {DECompleteCharacterReference} character 
- * @param {DECompleteCharacterReference} towards 
+ * @param {DECompleteCharacterReference} towards
+ * @returns {DEFamilyRelation|null} The family relation of the character towards the other character, or null if there is no family relation.
  */
 export function getFamilyBondRelation(character, towards) {
     const familyTie = character.familyTies[towards.name];

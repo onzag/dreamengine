@@ -65,7 +65,7 @@ engine.exports = {
          * Plain affection openness and initiation probability scale with the bond level.
          *
          * @param {DEStringTemplateCharAndOther} description
-         * @param {string | null} relationshipName
+         * @param {string} relationshipName
          * @param {"not" | "slight" | "moderate" | "very"} affectionOpenness
          * @param {string} affectionReason
          * @param {number} initiateProbability
@@ -99,6 +99,22 @@ engine.exports = {
             shortDescriptionTopNakedAdd: "showing its sleek robotic body.",
             shortDescriptionBottomNakedAdd: "revealing its articulated legs.",
             skepticism: 0.4,
+            antagonism: 0.1,
+            correctiveness: {
+                likelyhood: 1,
+                generalFacts: [
+                    "The world is driven by science",
+                    "Robots are a common part of society",
+                    "Robots are a good source of companionship and assistance",
+                    "Robots are not capable of romantic or sexual attraction",
+                ],
+                questions: [],
+            },
+            adventurousness: 0.1,
+            combat: [
+                (info) => `${info.char.name} will use his robotic strength and a series of sharp blades that come off its arm to defend itself from ${info.other.name}`,
+            ],
+            curiosity: 0.8,
             worldKnowledge: {
                 talkingAnimals: false,
                 magic: false,
@@ -159,7 +175,7 @@ engine.exports = {
         }, {
             type: "4d_creepy",
             strangerBad_n100_n5: {
-                relationshipName: null,
+                relationshipName: "Unfriendly Stranger",
                 description: strangerBadTemplate,
                 openToAffection: (char, other) => {
                     return ({
@@ -196,7 +212,7 @@ engine.exports = {
                 },
             },
             strangerGood_5_100: {
-                relationshipName: null,
+                relationshipName: "Friendly Stranger",
                 description: strangerGoodTemplate,
                 openToAffection: (char, other) => {
                     return ({
@@ -233,7 +249,7 @@ engine.exports = {
                 },
             },
             strangerNeutral_n5_5: {
-                relationshipName: null,
+                relationshipName: "Neutral Stranger",
                 description: strangerNeutralTemplate,
                 openToAffection: (char, other) => {
                     return ({
@@ -271,76 +287,76 @@ engine.exports = {
             },
             // ── Negative bonds: Dema is not open to any affection regardless of the other's interest ──
             foe_n100_n50: {
-                noRomance_0_10:          demaTie(demaBase(foeBondTemplate, null, "not", "Dema sees them as a sworn enemy and will not engage in any affection.", 0)),
-                creepyInterest_10_20:    demaTie(demaBase(foeBondTemplate, null, "not", "Dema sees them as a sworn enemy and will not engage in any affection.", 0)),
-                obsessiveInterest_20_35: demaTie(demaBase(foeBondTemplate, null, "not", "Dema sees them as a sworn enemy and will not engage in any affection.", 0)),
-                stalkingInterest_35_50:  demaTie(demaBase(foeBondTemplate, null, "not", "Dema sees them as a sworn enemy and will not engage in any affection.", 0)),
-                sexualAbuseInterest_50_100: demaTie(demaBase(foeBondTemplate, null, "not", "Dema sees them as a sworn enemy and will not engage in any affection.", 0)),
+                noRomance_0_10:          demaTie(demaBase(foeBondTemplate, "Sworn Enemy", "not", "Dema sees them as a sworn enemy and will not engage in any affection.", 0)),
+                creepyInterest_10_20:    demaTie(demaBase(foeBondTemplate, "Sworn Enemy", "not", "Dema sees them as a sworn enemy and will not engage in any affection.", 0)),
+                obsessiveInterest_20_35: demaTie(demaBase(foeBondTemplate, "Sworn Enemy", "not", "Dema sees them as a sworn enemy and will not engage in any affection.", 0)),
+                stalkingInterest_35_50:  demaTie(demaBase(foeBondTemplate, "Sworn Enemy", "not", "Dema sees them as a sworn enemy and will not engage in any affection.", 0)),
+                sexualAbuseInterest_50_100: demaTie(demaBase(foeBondTemplate, "Sworn Enemy", "not", "Dema sees them as a sworn enemy and will not engage in any affection.", 0)),
             },
             hostile_n50_n35: {
-                noRomance_0_10:          demaTie(demaBase(hostileBondTemplate, null, "not", "Dema regards them as an adversary and is not open to affection.", 0)),
-                creepyInterest_10_20:    demaTie(demaBase(hostileBondTemplate, null, "not", "Dema regards them as an adversary and is not open to affection.", 0)),
-                obsessiveInterest_20_35: demaTie(demaBase(hostileBondTemplate, null, "not", "Dema regards them as an adversary and is not open to affection.", 0)),
-                stalkingInterest_35_50:  demaTie(demaBase(hostileBondTemplate, null, "not", "Dema regards them as an adversary and is not open to affection.", 0)),
-                sexualAbuseInterest_50_100: demaTie(demaBase(hostileBondTemplate, null, "not", "Dema regards them as an adversary and is not open to affection.", 0)),
+                noRomance_0_10:          demaTie(demaBase(hostileBondTemplate, "Hostile Relationship", "not", "Dema regards them as an adversary and is not open to affection.", 0)),
+                creepyInterest_10_20:    demaTie(demaBase(hostileBondTemplate, "Hostile Relationship", "not", "Dema regards them as an adversary and is not open to affection.", 0)),
+                obsessiveInterest_20_35: demaTie(demaBase(hostileBondTemplate, "Hostile Relationship", "not", "Dema regards them as an adversary and is not open to affection.", 0)),
+                stalkingInterest_35_50:  demaTie(demaBase(hostileBondTemplate, "Hostile Relationship", "not", "Dema regards them as an adversary and is not open to affection.", 0)),
+                sexualAbuseInterest_50_100: demaTie(demaBase(hostileBondTemplate, "Hostile Relationship", "not", "Dema regards them as an adversary and is not open to affection.", 0)),
             },
             antagonistic_n35_n20: {
-                noRomance_0_10:          demaTie(demaBase(antagonisticBondTemplate, null, "not", "Dema finds them troublesome and is not open to affection.", 0)),
-                creepyInterest_10_20:    demaTie(demaBase(antagonisticBondTemplate, null, "not", "Dema finds them troublesome and is not open to affection.", 0)),
-                obsessiveInterest_20_35: demaTie(demaBase(antagonisticBondTemplate, null, "not", "Dema finds them troublesome and is not open to affection.", 0)),
-                stalkingInterest_35_50:  demaTie(demaBase(antagonisticBondTemplate, null, "not", "Dema finds them troublesome and is not open to affection.", 0)),
-                sexualAbuseInterest_50_100: demaTie(demaBase(antagonisticBondTemplate, null, "not", "Dema finds them troublesome and is not open to affection.", 0)),
+                noRomance_0_10:          demaTie(demaBase(antagonisticBondTemplate, "Antagonistic Relationship", "not", "Dema finds them troublesome and is not open to affection.", 0)),
+                creepyInterest_10_20:    demaTie(demaBase(antagonisticBondTemplate, "Antagonistic Relationship", "not", "Dema finds them troublesome and is not open to affection.", 0)),
+                obsessiveInterest_20_35: demaTie(demaBase(antagonisticBondTemplate, "Antagonistic Relationship", "not", "Dema finds them troublesome and is not open to affection.", 0)),
+                stalkingInterest_35_50:  demaTie(demaBase(antagonisticBondTemplate, "Antagonistic Relationship", "not", "Dema finds them troublesome and is not open to affection.", 0)),
+                sexualAbuseInterest_50_100: demaTie(demaBase(antagonisticBondTemplate, "Antagonistic Relationship", "not", "Dema finds them troublesome and is not open to affection.", 0)),
             },
             unfriendly_n20_n10: {
-                noRomance_0_10:          demaTie(demaBase(unfriendlyBondTemplate, null, "not", "Dema sees them as unwelcome and is not open to affection.", 0)),
-                creepyInterest_10_20:    demaTie(demaBase(unfriendlyBondTemplate, null, "not", "Dema sees them as unwelcome and is not open to affection.", 0)),
-                obsessiveInterest_20_35: demaTie(demaBase(unfriendlyBondTemplate, null, "not", "Dema sees them as unwelcome and is not open to affection.", 0)),
-                stalkingInterest_35_50:  demaTie(demaBase(unfriendlyBondTemplate, null, "not", "Dema sees them as unwelcome and is not open to affection.", 0)),
-                sexualAbuseInterest_50_100: demaTie(demaBase(unfriendlyBondTemplate, null, "not", "Dema sees them as unwelcome and is not open to affection.", 0)),
+                noRomance_0_10:          demaTie(demaBase(unfriendlyBondTemplate, "Unfriendly Relationship", "not", "Dema sees them as unwelcome and is not open to affection.", 0)),
+                creepyInterest_10_20:    demaTie(demaBase(unfriendlyBondTemplate, "Unfriendly Relationship", "not", "Dema sees them as unwelcome and is not open to affection.", 0)),
+                obsessiveInterest_20_35: demaTie(demaBase(unfriendlyBondTemplate, "Unfriendly Relationship", "not", "Dema sees them as unwelcome and is not open to affection.", 0)),
+                stalkingInterest_35_50:  demaTie(demaBase(unfriendlyBondTemplate, "Unfriendly Relationship", "not", "Dema sees them as unwelcome and is not open to affection.", 0)),
+                sexualAbuseInterest_50_100: demaTie(demaBase(unfriendlyBondTemplate, "Unfriendly Relationship", "not", "Dema sees them as unwelcome and is not open to affection.", 0)),
             },
             unpleasant_n10_0: {
-                noRomance_0_10:          demaTie(demaBase(unpleasantBondTemplate, null, "not", "Dema is wary of them and not comfortable with affection.", 0)),
-                creepyInterest_10_20:    demaTie(demaBase(unpleasantBondTemplate, null, "not", "Dema is wary of them and not comfortable with affection.", 0)),
-                obsessiveInterest_20_35: demaTie(demaBase(unpleasantBondTemplate, null, "not", "Dema is wary of them and not comfortable with affection.", 0)),
-                stalkingInterest_35_50:  demaTie(demaBase(unpleasantBondTemplate, null, "not", "Dema is wary of them and not comfortable with affection.", 0)),
-                sexualAbuseInterest_50_100: demaTie(demaBase(unpleasantBondTemplate, null, "not", "Dema is wary of them and not comfortable with affection.", 0)),
+                noRomance_0_10:          demaTie(demaBase(unpleasantBondTemplate, "Unpleasant Relationship", "not", "Dema is wary of them and not comfortable with affection.", 0)),
+                creepyInterest_10_20:    demaTie(demaBase(unpleasantBondTemplate, "Unpleasant Relationship", "not", "Dema is wary of them and not comfortable with affection.", 0)),
+                obsessiveInterest_20_35: demaTie(demaBase(unpleasantBondTemplate, "Unpleasant Relationship", "not", "Dema is wary of them and not comfortable with affection.", 0)),
+                stalkingInterest_35_50:  demaTie(demaBase(unpleasantBondTemplate, "Unpleasant Relationship", "not", "Dema is wary of them and not comfortable with affection.", 0)),
+                sexualAbuseInterest_50_100: demaTie(demaBase(unpleasantBondTemplate, "Unpleasant Relationship", "not", "Dema is wary of them and not comfortable with affection.", 0)),
             },
             // ── Positive bonds: plain affection opens up; intimate/sexual always "not" (asexual) ──
             // If the other person is pushing boundaries (creepy+), Dema's openness drops regardless of bond.
             acquaintance_0_10: {
-                noRomance_0_10:          demaTie(demaBase(acquaintanceBondTemplate, null, "slight",   "Dema is curious and willing to accept a small warm gesture from a new acquaintance.", 0)),
-                creepyInterest_10_20:    demaTie(demaBase(acquaintanceBondTemplate, null, "not",      "Dema detects the other is pushing boundaries and is not comfortable with affection.", 0)),
-                obsessiveInterest_20_35: demaTie(demaBase(acquaintanceBondTemplate, null, "not",      "Dema is unsettled by the other's obsessive interest and rejects affection.", 0)),
-                stalkingInterest_35_50:  demaTie(demaBase(acquaintanceBondTemplate, null, "not",      "Dema recognises alarming behaviour and will not engage in affection.", 0)),
-                sexualAbuseInterest_50_100: demaTie(demaBase(acquaintanceBondTemplate, null, "not",   "Dema detects abusive intent and firmly rejects any contact.", 0)),
+                noRomance_0_10:          demaTie(demaBase(acquaintanceBondTemplate, "Acquaintance", "slight",   "Dema is curious and willing to accept a small warm gesture from a new acquaintance.", 0)),
+                creepyInterest_10_20:    demaTie(demaBase(acquaintanceBondTemplate, "Acquaintance", "not",      "Dema detects the other is pushing boundaries and is not comfortable with affection.", 0)),
+                obsessiveInterest_20_35: demaTie(demaBase(acquaintanceBondTemplate, "Acquaintance", "not",      "Dema is unsettled by the other's obsessive interest and rejects affection.", 0)),
+                stalkingInterest_35_50:  demaTie(demaBase(acquaintanceBondTemplate, "Acquaintance", "not",      "Dema recognises alarming behaviour and will not engage in affection.", 0)),
+                sexualAbuseInterest_50_100: demaTie(demaBase(acquaintanceBondTemplate, "Acquaintance", "not",   "Dema detects abusive intent and firmly rejects any contact.", 0)),
             },
             friendly_10_20: {
-                noRomance_0_10:          demaTie(demaBase(friendlyBondTemplate, null, "slight",   "Dema enjoys their company and is open to small friendly gestures.", 0.05)),
-                creepyInterest_10_20:    demaTie(demaBase(friendlyBondTemplate, null, "not",      "Dema likes them but is uncomfortable with the way they are pushing boundaries.", 0)),
-                obsessiveInterest_20_35: demaTie(demaBase(friendlyBondTemplate, null, "not",      "Dema is troubled by the obsessive behaviour and will not engage in affection.", 0)),
-                stalkingInterest_35_50:  demaTie(demaBase(friendlyBondTemplate, null, "not",      "Dema recognises dangerous stalking behaviour and firmly refuses affection.", 0)),
-                sexualAbuseInterest_50_100: demaTie(demaBase(friendlyBondTemplate, null, "not",   "Dema detects abusive intent and firmly rejects any contact.", 0)),
+                noRomance_0_10:          demaTie(demaBase(friendlyBondTemplate, "Friend", "slight",   "Dema enjoys their company and is open to small friendly gestures.", 0.05)),
+                creepyInterest_10_20:    demaTie(demaBase(friendlyBondTemplate, "Friend", "not",      "Dema likes them but is uncomfortable with the way they are pushing boundaries.", 0)),
+                obsessiveInterest_20_35: demaTie(demaBase(friendlyBondTemplate, "Friend", "not",      "Dema is troubled by the obsessive behaviour and will not engage in affection.", 0)),
+                stalkingInterest_35_50:  demaTie(demaBase(friendlyBondTemplate, "Friend", "not",      "Dema recognises dangerous stalking behaviour and firmly refuses affection.", 0)),
+                sexualAbuseInterest_50_100: demaTie(demaBase(friendlyBondTemplate, "Friend", "not",   "Dema detects abusive intent and firmly rejects any contact.", 0)),
             },
             goodFriend_20_35: {
-                noRomance_0_10:          demaTie(demaBase(goodFriendBondTemplate, null, "moderate", "Dema values the friendship and is genuinely open to warm, friendly gestures.", 0.1)),
-                creepyInterest_10_20:    demaTie(demaBase(goodFriendBondTemplate, null, "slight",   "Dema values the bond but feels uneasy about the boundary-pushing and is more guarded.", 0.02)),
-                obsessiveInterest_20_35: demaTie(demaBase(goodFriendBondTemplate, null, "not",      "Dema is worried by the obsessive behaviour and pulls back from affection.", 0)),
-                stalkingInterest_35_50:  demaTie(demaBase(goodFriendBondTemplate, null, "not",      "Dema is alarmed by the stalking and refuses affection regardless of the bond.", 0)),
-                sexualAbuseInterest_50_100: demaTie(demaBase(goodFriendBondTemplate, null, "not",   "Dema detects abusive intent and firmly rejects any contact.", 0)),
+                noRomance_0_10:          demaTie(demaBase(goodFriendBondTemplate, "Good Friend", "moderate", "Dema values the friendship and is genuinely open to warm, friendly gestures.", 0.1)),
+                creepyInterest_10_20:    demaTie(demaBase(goodFriendBondTemplate, "Good Friend", "slight",   "Dema values the bond but feels uneasy about the boundary-pushing and is more guarded.", 0.02)),
+                obsessiveInterest_20_35: demaTie(demaBase(goodFriendBondTemplate, "Good Friend", "not",      "Dema is worried by the obsessive behaviour and pulls back from affection.", 0)),
+                stalkingInterest_35_50:  demaTie(demaBase(goodFriendBondTemplate, "Good Friend", "not",      "Dema is alarmed by the stalking and refuses affection regardless of the bond.", 0)),
+                sexualAbuseInterest_50_100: demaTie(demaBase(goodFriendBondTemplate, "Good Friend", "not",   "Dema detects abusive intent and firmly rejects any contact.", 0)),
             },
             closeFriend_35_50: {
-                noRomance_0_10:          demaTie(demaBase(closeFriendBondTemplate, null, "moderate", "Dema deeply cares for them and welcomes warm expressions of their close friendship.", 0.15)),
-                creepyInterest_10_20:    demaTie(demaBase(closeFriendBondTemplate, null, "slight",   "Dema cares deeply but the boundary-pushing makes it uneasy and less open to affection.", 0.02)),
-                obsessiveInterest_20_35: demaTie(demaBase(closeFriendBondTemplate, null, "not",      "Dema is distressed by the obsessive behaviour and closes off to affection.", 0)),
-                stalkingInterest_35_50:  demaTie(demaBase(closeFriendBondTemplate, null, "not",      "Dema is alarmed by the stalking and refuses all affection regardless of the close bond.", 0)),
-                sexualAbuseInterest_50_100: demaTie(demaBase(closeFriendBondTemplate, null, "not",   "Dema detects abusive intent and firmly rejects any contact.", 0)),
+                noRomance_0_10:          demaTie(demaBase(closeFriendBondTemplate, "Close Friend", "moderate", "Dema deeply cares for them and welcomes warm expressions of their close friendship.", 0.15)),
+                creepyInterest_10_20:    demaTie(demaBase(closeFriendBondTemplate, "Close Friend", "slight",   "Dema cares deeply but the boundary-pushing makes it uneasy and less open to affection.", 0.02)),
+                obsessiveInterest_20_35: demaTie(demaBase(closeFriendBondTemplate, "Close Friend", "not",      "Dema is distressed by the obsessive behaviour and closes off to affection.", 0)),
+                stalkingInterest_35_50:  demaTie(demaBase(closeFriendBondTemplate, "Close Friend", "not",      "Dema is alarmed by the stalking and refuses all affection regardless of the close bond.", 0)),
+                sexualAbuseInterest_50_100: demaTie(demaBase(closeFriendBondTemplate, "Close Friend", "not",   "Dema detects abusive intent and firmly rejects any contact.", 0)),
             },
             bestFriend_50_100: {
-                noRomance_0_10:          demaTie(demaBase(bestFriendBondTemplate, null, "very",     "Dema cherishes this bond deeply and is very open to warm gestures of their profound friendship.", 0.2)),
-                creepyInterest_10_20:    demaTie(demaBase(bestFriendBondTemplate, null, "moderate", "Dema cherishes the bond but is uncomfortable with the boundary-pushing; still open to warmth, though guarded.", 0.05)),
-                obsessiveInterest_20_35: demaTie(demaBase(bestFriendBondTemplate, null, "slight",   "Dema is troubled by the obsessive behaviour despite the deep bond and becomes more reserved.", 0)),
-                stalkingInterest_35_50:  demaTie(demaBase(bestFriendBondTemplate, null, "not",      "Dema is alarmed by the stalking and refuses affection regardless of how deep the bond is.", 0)),
-                sexualAbuseInterest_50_100: demaTie(demaBase(bestFriendBondTemplate, null, "not",   "Dema firmly rejects any contact from someone displaying abusive intent, regardless of history.", 0)),
+                noRomance_0_10:          demaTie(demaBase(bestFriendBondTemplate, "Best Friend", "very",     "Dema cherishes this bond deeply and is very open to warm gestures of their profound friendship.", 0.2)),
+                creepyInterest_10_20:    demaTie(demaBase(bestFriendBondTemplate, "Best Friend", "moderate", "Dema cherishes the bond but is uncomfortable with the boundary-pushing; still open to warmth, though guarded.", 0.05)),
+                obsessiveInterest_20_35: demaTie(demaBase(bestFriendBondTemplate, "Best Friend", "slight",   "Dema is troubled by the obsessive behaviour despite the deep bond and becomes more reserved.", 0)),
+                stalkingInterest_35_50:  demaTie(demaBase(bestFriendBondTemplate, "Best Friend", "not",      "Dema is alarmed by the stalking and refuses affection regardless of how deep the bond is.", 0)),
+                sexualAbuseInterest_50_100: demaTie(demaBase(bestFriendBondTemplate, "Best Friend", "not",   "Dema firmly rejects any contact from someone displaying abusive intent, regardless of history.", 0)),
             },
         }));
 
