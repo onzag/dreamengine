@@ -52,7 +52,7 @@ const STRANGER_KEY_DESCRIPTIONS = {
 const RELATIONSHIP_KEY_DESCRIPTIONS = {
     "foe_n100_n50": "sworn enemy",
     "hostile_n50_n35": "hostile presence",
-    "antagonistic_n35_n20": "antagonist",
+    "antagonistic_n35_n20": "unwanted presence",
     "unfriendly_n20_n10": "unfriendly presence",
     "unpleasant_n10_0": "unpleasant acquaintance",
     "acquaintance_0_10": "acquaintance",
@@ -60,6 +60,20 @@ const RELATIONSHIP_KEY_DESCRIPTIONS = {
     "goodFriend_20_35": "good friend",
     "closeFriend_35_50": "close friend",
     "bestFriend_50_100": "best friend",
+};
+
+/** @type {Record<string, string>} */
+const RELATIONSHIP_KEY_DESCRIPTIONS_FAMILY = {
+    "foe_n100_n50": "sworn enemy",
+    "hostile_n50_n35": "hostile presence",
+    "antagonistic_n35_n20": "unwanted presence",
+    "unfriendly_n20_n10": "unfriendly presence",
+    "unpleasant_n10_0": "unpleasant character",
+    "acquaintance_0_10": "character",
+    "friendly_10_20": "cherished character",
+    "goodFriend_20_35": "beloved character",
+    "closeFriend_35_50": "beloved character",
+    "bestFriend_50_100": "deeply beloved and close character",
 };
 
 /** @type {Record<string, string>} */
@@ -100,7 +114,7 @@ function describeStrangerContext(strangerKey) {
  * @returns {string}
  */
 function describeFamilyContext(relationshipKey, romanticInterestKey, familyKey, negativeScenario, intimateScenario) {
-    const r = RELATIONSHIP_KEY_DESCRIPTIONS[relationshipKey] || "character";
+    const r = (familyKey === "family" ? RELATIONSHIP_KEY_DESCRIPTIONS_FAMILY : RELATIONSHIP_KEY_DESCRIPTIONS)[relationshipKey] || "character";
     const ri = romanticInterestKey === "noRomanticInterest_0_10" && !negativeScenario ? "" : ((ROMANTIC_INTEREST_KEY_DESCRIPTIONS[romanticInterestKey] || (negativeScenario ? "is not a romantic interest" : "")));
     const fam = familyKey === "family" ? "is family" : (negativeScenario && !intimateScenario ? "is not family" : "");
     let base = `${r}`;
@@ -365,12 +379,19 @@ function parseRelationshipStep(step, chain) {
     /** @type {string[]} */
     let front;
     if (key === 'description') {
+        // description steps have no intimacy-context segment.
         front = tokens.slice(0, -1);
-    } else if (tokens.length >= 2) {
+    } else if (tokens.length >= 2 && tokens[tokens.length - 2].includes(' ')) {
+        // The intimacy context ("In private", "In public around family", ...) is
+        // the only segment that contains spaces; the sex, attraction and key
+        // segments never do. Only treat the second-to-last token as a context
+        // when it actually is one - otherwise context-less steps (e.g.
+        // "relationship-name") would wrongly consume the trailing attraction
+        // token ("na", "a_slight", ...) as the context and drop it.
         context = tokens[tokens.length - 2];
         front = tokens.slice(0, -2);
     } else {
-        front = [];
+        front = tokens.slice(0, -1);
     }
 
     /** @type {string|null} */
@@ -623,6 +644,69 @@ function getAllPotentialOptions(state, forRelationshipKey, allCreepy, familyCree
 }
 
 /**
+ * Picks the option whose `value` is closest to `targetValue`. An exact match
+ * wins outright; otherwise closeness is measured primarily by the length of the
+ * shared leading `_`-separated token prefix (the keys are hierarchical, so a
+ * longer common prefix means a closer relationship/romantic-interest/family/
+ * fine-tune match), with overall token overlap (Jaccard) as a tiebreaker.
+ *
+ * This is used to snap a computed default reference prefix onto an actually
+ * available option when the ideal source (e.g. a nonFamily `any_character`
+ * counterpart) was never generated and is therefore absent from `options`.
+ *
+ * @param {string} targetValue
+ * @param {Array<{value: string, label: string}>} options
+ * @returns {string|null}
+ */
+function getClosestOptionByValue(targetValue, options) {
+    if (!options || options.length === 0) {
+        return null;
+    }
+
+    const exact = options.find(o => o.value === targetValue);
+    if (exact) {
+        return exact.value;
+    }
+
+    const targetTokens = targetValue.split('_').filter(Boolean);
+
+    /** @type {string|null} */
+    let best = null;
+    let bestScore = -1;
+    for (const option of options) {
+        const optionTokens = option.value.split('_').filter(Boolean);
+
+        // Length of the shared leading token prefix (hierarchical closeness).
+        let prefixLen = 0;
+        while (
+            prefixLen < targetTokens.length &&
+            prefixLen < optionTokens.length &&
+            targetTokens[prefixLen] === optionTokens[prefixLen]
+        ) {
+            prefixLen++;
+        }
+
+        // Order-independent token overlap, used only to break prefix ties.
+        const targetSet = new Set(targetTokens);
+        const optionSet = new Set(optionTokens);
+        let intersection = 0;
+        for (const t of targetSet) {
+            if (optionSet.has(t)) intersection++;
+        }
+        const union = targetSet.size + optionSet.size - intersection;
+        const jaccard = union === 0 ? 0 : intersection / union;
+
+        const score = prefixLen * 1000 + jaccard;
+        if (score > bestScore) {
+            bestScore = score;
+            best = option.value;
+        }
+    }
+
+    return best;
+}
+
+/**
  * @param {DEngine} engine
  * @param {import('./base.js').ScriptTypeGenerator} scriptgenerator
  * @param {import('./base.js').ScriptTypeGuider} guider
@@ -633,8 +717,6 @@ export async function generateBonds(engine, scriptgenerator, guider) {
     if (!inferenceAdapter) {
         throw new Error("No inference adapter found on engine");
     }
-
-    const probabilityGrammar = createGrammarFromList(engine, PROBABILITY_OPTIONS);
 
     const systemPrompt = inferenceAdapter.buildSystemPromptForQuestioningAgent(
         `You are a helpful assistant that will answer and assist in defining a character for a game based on their description, you are allowed free rein to interpret the character's description and generate the code that defines them in the game, you will be asked questions about the character and you should answer them as best as you can`,
@@ -2752,19 +2834,14 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                 relationshipValue[romanticInterestKey];
 
             let addAttractionRules = true;
-            if (romanticInterestKey !== "noRomanticInterest_0_10") {
+            // asexual will always get added because it is all creepy bonds
+            if (romanticInterestKey !== "noRomanticInterest_0_10" && !isAsexualValue) {
                 const guiderResult = await guider.askBoolean(
                     "capable-of-romantic-interest-" + relationshipKey + "-" + romanticInterestKey,
                     "Is " + name + " capable to " + ROMANTIC_INTEREST_KEY_LABELS[romanticInterestKey] + " (beyond simple physical or superficial attraction) " + (" towards a " + RELATIONSHIP_KEY_DESCRIPTIONS[relationshipKey]).replace("a acquaintance", "an acquaintance") + "?",
                     addAttractionRules,
                 );
                 addAttractionRules = guiderResult.value;
-            }
-
-            // no need to add the rule, the character cannot really develop an attraction at such bond level
-            // to that degree given
-            if (!addAttractionRules) {
-                continue;
             }
 
             const romanticInterestSection = insertSection(relationshipsSection.body, romanticInterestKey, (s) => {
@@ -2779,6 +2856,14 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                 const familyValue =
                     // @ts-ignore
                     romanticInterestValue[familyKey];
+
+                const isCreepyFamilyBond = familyKey === "family" && !isIncestuousValue;
+
+                // no need to add the rule, the character cannot really develop an attraction at such bond level
+                // to that degree given
+                if (!addAttractionRules && !isCreepyFamilyBond) {
+                    continue;
+                }
 
                 const familySectionBase = insertSection(romanticInterestSection.body, familyKey, (s) => {
                     s.head.push(`${familyKey}: {`);
@@ -2889,6 +2974,8 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                             familySectionOpenToAffection.body.push(`if (${getAttractionLevelCondition(fineTuneConditions[fineTune], attractionLevel)}) {`);
                         }
 
+                        const options = getAllPotentialOptions(scriptgenerator.state, relationshipKey, isAsexualValue, isAsexualValue || !isIncestuousValue);
+
                         const getFineTuneReferenceDefaultPrefix = () => {
                             const suffix = fineTuneComment + "_";
 
@@ -2923,14 +3010,20 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                             return (noRomanticInterestBaseSource[relationshipKey] || "strangerGood_5_100") + "_" + suffix;
                         }
 
-                        const options = getAllPotentialOptions(scriptgenerator.state, relationshipKey, isAsexualValue, isAsexualValue || !isIncestuousValue);
+                        const defaultReferencePrefix = getFineTuneReferenceDefaultPrefix();
+                        // The computed default may point to a source that was never
+                        // generated and is therefore absent from `options` (e.g. the
+                        // family branch always targets the nonFamily `any_character`
+                        // counterpart). In that case snap it to the closest available
+                        // option so `askOption` is always given a valid default.
+                        const resolvedDefaultReferencePrefix = getClosestOptionByValue(defaultReferencePrefix, options) || defaultReferencePrefix;
 
                         const fineTuneReferencePrefix = options.length !== 0 ? (await guider.askOption(
                             "refkey_" + relationshipKey + "_" + romanticInterestKey + "_" + familyKey + "_" + fineTuneComment,
                             "Select a reference to inherit answer for " + actualFamilyValue,
                             options,
-                            getFineTuneReferenceDefaultPrefix(),
-                        )).value : getFineTuneReferenceDefaultPrefix();
+                            resolvedDefaultReferencePrefix,
+                        )).value : defaultReferencePrefix;
 
                         const fineTuneReferenceLabel = options.find(o => o.value === fineTuneReferencePrefix)?.label || fineTuneReferencePrefix;
 
@@ -3374,15 +3467,19 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                                 baseInstructions += "\n\n# MANDATORY REQUIREMENTS — ACTIVE OVERRIDE:\n\nThe following requirements MUST be reflected in your answer. Treat them as hard constraints that take absolute priority over any conflicting instruction above. Do NOT ignore or dilute them:\n\n" + guidanceGiven;
                             }
 
-                            baseInstructions += "\n\nAnswer in present tense, future tense is allowed to specify potential behaviors that " + name + " might do";
+                            console.log(relationshipKey + "_" + romanticInterestKey + "_" + familyKey + "_" + fineTuneComment + "_description");
 
                             const guiderResult = await guider.askAccept(
                                 { id: relationshipKey + "_" + romanticInterestKey + "_" + familyKey + "_" + fineTuneComment + "_description", reask: redidGuidance, step: true, recalcdefault: true },
                                 "Description of a relationship with " + actualFamilyValue + messageAboutAnswersFrom,
                                 async () => {
+                                    console.log("Generating description for " + relationshipKey + "_" + romanticInterestKey + "_" + familyKey + "_" + fineTuneComment + "_description");
                                     if (originalReferenceDescription && !redidGuidance) {
+                                        console.log("Using original reference description for " + relationshipKey + "_" + romanticInterestKey + "_" + familyKey + "_" + fineTuneComment + "_description");
                                         return originalReferenceDescription;
                                     }
+                                    console.log("NOT FOUND");
+                        console.log(fineTuneReferencePrefix + "description");
                                     await prime();
 
                                     const descriptionBehaviour = await generator.next({
