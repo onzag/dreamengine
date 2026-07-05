@@ -2473,11 +2473,22 @@ export async function getRelationship(deObject, character, towards) {
         return null;
     }
 
-    if (!bondDecl.relationshipName) {
+    if (!(activeBond.relationshipNameOverride || bondDecl.relationshipName)) {
         return null;
     }
 
     const familyRelationship = getFamilyBondRelation(character, towards);
 
-    return typeof bondDecl.relationshipName === "string" ? bondDecl.relationshipName : await bondDecl.relationshipName({ char: character, other: towards, otherFamilyRelation: familyRelationship, otherRelationship: null });
+    let relationshipNameResult = "";
+    if (typeof activeBond.relationshipNameOverride === "string") {
+        relationshipNameResult = activeBond.relationshipNameOverride;
+    } else if (activeBond.relationshipNameOverride) {
+        relationshipNameResult = await activeBond.relationshipNameOverride({ char: character, other: towards, otherFamilyRelation: familyRelationship, otherRelationship: null });
+    }
+    
+    if (!relationshipNameResult && bondDecl.relationshipName) {
+        relationshipNameResult = typeof bondDecl.relationshipName === "string" ? bondDecl.relationshipName : await bondDecl.relationshipName({ char: character, other: towards, otherFamilyRelation: familyRelationship, otherRelationship: null });
+    }
+    
+    return relationshipNameResult;
 }

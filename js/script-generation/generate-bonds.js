@@ -115,7 +115,7 @@ function describeStrangerContext(strangerKey) {
  */
 function describeFamilyContext(relationshipKey, romanticInterestKey, familyKey, negativeScenario, intimateScenario) {
     const r = (familyKey === "family" ? RELATIONSHIP_KEY_DESCRIPTIONS_FAMILY : RELATIONSHIP_KEY_DESCRIPTIONS)[relationshipKey] || "character";
-    const ri = romanticInterestKey === "noRomanticInterest_0_10" && !negativeScenario ? "" : ((ROMANTIC_INTEREST_KEY_DESCRIPTIONS[romanticInterestKey] || (negativeScenario ? "is not a romantic interest" : "")));
+    const ri = romanticInterestKey === "noRomanticInterest_0_10" && !negativeScenario ? "" : (ROMANTIC_INTEREST_KEY_DESCRIPTIONS[romanticInterestKey] || (negativeScenario ? "is not a romantic interest" : ""));
     const fam = familyKey === "family" ? "is family" : (negativeScenario && !intimateScenario ? "is not family" : "");
     let base = `${r}`;
     if (ri) {
@@ -167,6 +167,10 @@ async function chooseReason(id, guider, modifierInfo, valueAnswer, name, context
     const isAnimal = fineTune.includes("animal");
     const isFeral = fineTune.includes("feral");
     const isFamily = fineTune.includes("family");
+
+    if (id === "friendly_10_20_slightRomanticInterest_10_20_nonFamily_feral_character_male_a_slight_In private_open-to-affection-reason") {
+        debugger;
+    }
 
     const reasons = []
 
@@ -624,13 +628,13 @@ function getAllPotentialOptions(state, forRelationshipKey, allCreepy, familyCree
                 .split('_romanticInterest')[0]
                 .split('_strongRomanticInterest')[0]
                 .split('_deepInLove')[0];
-            const relationshipLabel = RELATIONSHIP_KEY_DESCRIPTIONS[relationshipKey] || 'character';
+            const relationshipLabel = (chainInfo.chain.includes("family") ? RELATIONSHIP_KEY_DESCRIPTIONS_FAMILY[relationshipKey] : RELATIONSHIP_KEY_DESCRIPTIONS[relationshipKey]) || 'character';
             const creepyInterestLabel = ({
                 'slightRomanticInterest_10_20': 'has a slight romantic interest in our character',
                 'romanticInterest_20_35': 'has a romantic interest in our character',
                 'strongRomanticInterest_35_50': 'has a strong romantic interest in our character',
                 'deepInLove_50_100': 'is deeply in love with our character',
-            // @ts-ignore
+                // @ts-ignore
             })[chainInfo.romanticInterestKey] || 'is interested in our character';
             const familySuffix = chainInfo.familyKey === 'family' ? ', who is family' : '';
             label = `${relationshipLabel} who ${creepyInterestLabel}${familySuffix}, ${fineTuneLabel}`;
@@ -1860,6 +1864,8 @@ export async function generateBonds(engine, scriptgenerator, guider) {
         "bestFriend_50_100",
         "unpleasant_n10_0",
         "unfriendly_n20_n10",
+        "antagonistic_n35_n20",
+        "hostile_n50_n35",
         "foe_n100_n50",
     ];
 
@@ -1911,7 +1917,7 @@ export async function generateBonds(engine, scriptgenerator, guider) {
         },
         "bestFriend_50_100": {
             "nonFamily": "Best Friend",
-            "family": "Close {{other_family_relation}}",
+            "family": "Close and Beloved {{other_family_relation}}",
         },
         "unpleasant_n10_0": {
             "nonFamily": "Unpleasant Presence",
@@ -1920,6 +1926,14 @@ export async function generateBonds(engine, scriptgenerator, guider) {
         "unfriendly_n20_n10": {
             "nonFamily": "Unfriendly Relationship",
             "family": "Disliked {{other_family_relation}}",
+        },
+        "antagonistic_n35_n20": {
+            "nonFamily": "Antagonistic Relationship",
+            "family": "Really Disliked {{other_family_relation}}",
+        },
+        "hostile_n50_n35": {
+            "nonFamily": "Hostile Relationship",
+            "family": "Hated {{other_family_relation}}",
         },
         "foe_n100_n50": {
             "nonFamily": "Sworn Enemy",
@@ -2741,7 +2755,7 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                                 maxCharacters: 200,
                                 maxSafetyCharacters: 600,
                                 maxParagraphs: 1,
-                                nextQuestion: "Provide a concise and short one sentence description of how " + name + " should act towards " + actualStrangerValue + ". Focus on the emotional and psychological aspects of their perception, rather than physical details. This should capture the essence of their feelings and attitudes towards this person in a way that informs their interactions and relationship dynamics.",
+                                nextQuestion: "Provide a concise description (2-3 sentences) of how " + name + " feels about and acts towards " + actualStrangerValue + ". Cover their overall attitude and emotional stance, how they typically behave around this person, and importantly any ways their usual personality shifts because of this bond — for example becoming more open, dropping defenses, acting more protective or aggressive, or behaving out of character in some way.",
                                 stopAfter: [],
                                 stopAt: ["\n"],
                                 instructions: baseInstructions,
@@ -2754,24 +2768,26 @@ export async function generateBonds(engine, scriptgenerator, guider) {
 
                             const actualDescriptionBehavour = replaceOtherCharNameWithPlaceholder(descriptionBehaviour.value.trim(), name);
 
-                            const descriptionInternalFeelings = await generator.next({
-                                maxCharacters: 200,
-                                maxSafetyCharacters: 600,
-                                maxParagraphs: 1,
-                                nextQuestion: "Provide a concise and short one sentence description of how " + name + " feels internally towards " + actualStrangerValue + ". Focus on the emotional and psychological aspects of their perception, rather than physical details. This should capture the essence of their feelings towards this person in a way that informs their interactions and relationship dynamics.",
-                                stopAfter: [],
-                                stopAt: ["\n"],
-                                instructions: baseInstructions,
-                                grammar: "root ::= " + JSON.stringify(name + " feels that OTHER_CHARACTER is ") + " [a-zA-Z0-9 ,;.'_\\n]+",
-                            });
+                            return actualDescriptionBehavour;
 
-                            if (descriptionInternalFeelings.done) {
-                                throw new Error("Generator ended unexpectedly while generating description for " + strangerKey);
-                            }
+                            // const descriptionInternalFeelings = await generator.next({
+                            //     maxCharacters: 200,
+                            //     maxSafetyCharacters: 600,
+                            //     maxParagraphs: 1,
+                            //     nextQuestion: "Provide a concise and short one sentence description of how " + name + " feels internally towards " + actualStrangerValue + ". Focus on the emotional and psychological aspects of their perception, rather than physical details. This should capture the essence of their feelings towards this person in a way that informs their interactions and relationship dynamics.",
+                            //     stopAfter: [],
+                            //     stopAt: ["\n"],
+                            //     instructions: baseInstructions,
+                            //     grammar: "root ::= " + JSON.stringify(name + " feels that OTHER_CHARACTER is ") + " [a-zA-Z0-9 ,;.'_\\n]+",
+                            // });
 
-                            const actualDescriptionInternalFeelings = replaceOtherCharNameWithPlaceholder(descriptionInternalFeelings.value.trim(), name);
+                            // if (descriptionInternalFeelings.done) {
+                            //     throw new Error("Generator ended unexpectedly while generating description for " + strangerKey);
+                            //  }
 
-                            return actualDescriptionBehavour + "\n\n" + actualDescriptionInternalFeelings;
+                            // const actualDescriptionInternalFeelings = replaceOtherCharNameWithPlaceholder(descriptionInternalFeelings.value.trim(), name);
+
+                            // return actualDescriptionBehavour + "\n\n" + actualDescriptionInternalFeelings;
                         },
                     );
                     if (guiderResult.value === null) {
@@ -3456,9 +3472,9 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                             }
 
                             const isAnimalFineTune = fineTune.startsWith("animal_");
-                            let baseInstructions = "NEVER ask for clarification or more information. ALWAYS directly write the description paragraph. Invent any specific details as needed. The response should use the word 'OTHER_CHARACTER' to refer to the other character name. Write in clear, direct, objective terms about how " + name + " views and relates to OTHER_CHARACTER — describe the nature of the relationship, attitudes, and behaviors concretely. Avoid flowery language, metaphors about physical sensations (e.g. warm feelings in the chest, fuzzy warmth), and purple prose. State facts about the relationship plainly: whether " + name + " has romantic or sexual interest in OTHER_CHARACTER or not, how they behave towards them, and what they expect from the relationship. Do not describe specific physical micro-actions or sensory body-part details (e.g. eyes tracking someone, 'blue orbs', specific hand gestures). Broad behavioral tendencies are fine (e.g. they may withdraw from their presence, they may act shyly around them).";
+                            let baseInstructions = "NEVER ask for clarification or more information. ALWAYS directly write the description paragraph. Invent any specific details as needed. The response should use the word 'OTHER_CHARACTER' to refer to the other character name. Write in clear, direct, objective terms about how " + name + " views, feels about, and behaves towards OTHER_CHARACTER — describe the nature of the relationship, attitudes, and behaviors concretely. Avoid flowery language, metaphors about physical sensations (e.g. warm feelings in the chest, fuzzy warmth), and purple prose. State facts about the relationship plainly: whether " + name + " has romantic or sexual interest in OTHER_CHARACTER or not, how they behave towards them, and what they expect from the relationship. Crucially, also describe how " + name + "'s personality and typical behavior shifts specifically because of this bond — for example, if they are normally guarded or sarcastic, do they drop that around OTHER_CHARACTER? If they are shy, do they become more open? Do they become more protective, more aggressive, more vulnerable, or act out of character in any way? These behavioral changes due to the bond are important to capture. Do not describe specific physical micro-actions or sensory body-part details (e.g. eyes tracking someone, 'blue orbs', specific hand gestures). Broad behavioral tendencies are fine (e.g. they may withdraw from their presence, they may act shyly around them).";
                             if (isAnimalFineTune && speciesType !== "animal") {
-                                baseInstructions = "NEVER ask for clarification or more information. ALWAYS directly write the description paragraph. Invent any specific details as needed. The response should use the word 'OTHER_CHARACTER' to refer to the animal (pet or wild beast) in question. Write in clear, direct, objective terms about how " + name + " views and relates to OTHER_CHARACTER — describe their attitudes and behaviors concretely. Avoid flowery language and purple prose. Do not describe specific physical micro-actions or sensory body-part details. Broad behavioral tendencies are fine (e.g. they may hide from it, they may want to approach it). State plainly whether " + name + " has any sexual feelings towards OTHER_CHARACTER or not, and describe how " + name + " would interact with this pet or wild animal, including whether they would want to care for it, be afraid of it, or want to befriend it."
+                                baseInstructions = "NEVER ask for clarification or more information. ALWAYS directly write the description paragraph. Invent any specific details as needed. The response should use the word 'OTHER_CHARACTER' to refer to the animal (pet or wild beast) in question. Write in clear, direct, objective terms about how " + name + " views, feels about, and behaves towards OTHER_CHARACTER — describe their attitudes and behaviors concretely. Avoid flowery language and purple prose. Do not describe specific physical micro-actions or sensory body-part details. Broad behavioral tendencies are fine (e.g. they may hide from it, they may want to approach it). State plainly whether " + name + " has any sexual feelings towards OTHER_CHARACTER or not, and describe how " + name + " would interact with this pet or wild animal, including whether they would want to care for it, be afraid of it, or want to befriend it. Also note any shifts in " + name + "'s typical personality or behavior caused by this animal's presence."
                             }
                             if (guidanceGivenAllExtraInfo) {
                                 baseInstructions += "\n\nThe following information has been provided based on the previous questions and answers:\n\n" + guidanceGivenAllExtraInfo;
@@ -3475,18 +3491,15 @@ export async function generateBonds(engine, scriptgenerator, guider) {
                                 async () => {
                                     console.log("Generating description for " + relationshipKey + "_" + romanticInterestKey + "_" + familyKey + "_" + fineTuneComment + "_description");
                                     if (originalReferenceDescription && !redidGuidance) {
-                                        console.log("Using original reference description for " + relationshipKey + "_" + romanticInterestKey + "_" + familyKey + "_" + fineTuneComment + "_description");
                                         return originalReferenceDescription;
                                     }
-                                    console.log("NOT FOUND");
-                        console.log(fineTuneReferencePrefix + "description");
                                     await prime();
 
                                     const descriptionBehaviour = await generator.next({
-                                        maxCharacters: 200,
-                                        maxSafetyCharacters: 600,
+                                        maxCharacters: 500,
+                                        maxSafetyCharacters: 900,
                                         maxParagraphs: 1,
-                                        nextQuestion: "Provide a concise and short one sentence description of how " + name + " should act towards " + actualFamilyValue + ". Focus on the emotional and psychological aspects of their perception, rather than physical details. This should capture the essence of their feelings and attitudes towards this person in a way that informs their interactions and relationship dynamics.",
+                                        nextQuestion: "Provide a concise description (2-3 sentences) of how " + name + " feels about and acts towards " + actualFamilyValue + ". Cover their overall attitude and emotional stance, how they typically behave around this person, and importantly any ways their usual personality shifts because of this bond — for example becoming more open, dropping defenses, acting more protective or aggressive, or behaving out of character in some way.",
                                         stopAfter: [],
                                         stopAt: ["\n"],
                                         instructions: baseInstructions,
@@ -3499,24 +3512,26 @@ export async function generateBonds(engine, scriptgenerator, guider) {
 
                                     const actualDescriptionBehavour = replaceOtherCharNameWithPlaceholder(descriptionBehaviour.value.trim(), name);
 
-                                    const descriptionInternalFeelings = await generator.next({
-                                        maxCharacters: 200,
-                                        maxSafetyCharacters: 600,
-                                        maxParagraphs: 1,
-                                        nextQuestion: "Provide a concise and short one sentence description of how " + name + " feels internally towards " + actualFamilyValue + ". Focus on the emotional and psychological aspects of their perception, rather than physical details. This should capture the essence of their feelings towards this person in a way that informs their interactions and relationship dynamics.",
-                                        stopAfter: [],
-                                        stopAt: ["\n"],
-                                        instructions: baseInstructions,
-                                        grammar: "root ::= " + JSON.stringify(name + " feels that OTHER_CHARACTER is ") + " [a-zA-Z0-9 ,;.'_\\n]+",
-                                    });
+                                    return actualDescriptionBehavour;
 
-                                    if (descriptionInternalFeelings.done) {
-                                        throw new Error("Generator ended unexpectedly while generating description for " + relationshipKey + " > " + romanticInterestKey + " > " + familyKey);
-                                    }
+                                    // const descriptionInternalFeelings = await generator.next({
+                                    //     maxCharacters: 200,
+                                    //     maxSafetyCharacters: 600,
+                                    //     maxParagraphs: 1,
+                                    //     nextQuestion: "Provide a concise and short one sentence description of how " + name + " feels internally towards " + actualFamilyValue + ". Focus on the emotional and psychological aspects of their perception, rather than physical details. This should capture the essence of their feelings towards this person in a way that informs their interactions and relationship dynamics.",
+                                    //     stopAfter: [],
+                                    //     stopAt: ["\n"],
+                                    //     instructions: baseInstructions,
+                                    //     grammar: "root ::= " + JSON.stringify(name + " feels that OTHER_CHARACTER is ") + " [a-zA-Z0-9 ,;.'_\\n]+",
+                                    // });
 
-                                    const actualDescriptionInternalFeelings = replaceOtherCharNameWithPlaceholder(descriptionInternalFeelings.value.trim(), name);
+                                    // if (descriptionInternalFeelings.done) {
+                                    //     throw new Error("Generator ended unexpectedly while generating description for " + relationshipKey + " > " + romanticInterestKey + " > " + familyKey);
+                                    // }
 
-                                    return actualDescriptionBehavour + "\n\n" + actualDescriptionInternalFeelings;
+                                    // const actualDescriptionInternalFeelings = replaceOtherCharNameWithPlaceholder(descriptionInternalFeelings.value.trim(), name);
+
+                                    // return actualDescriptionBehavour + "\n\n" + actualDescriptionInternalFeelings;
                                 },
                             );
                             if (guiderResult.value === null) {

@@ -766,11 +766,16 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
         };
     }
 
+    let goingBackInWizard = false;
+
     function goBackInCardTypeWizard() {
+        if (goingBackInWizard) return;
         const goBackValues = currentWizardGoBack ? currentWizardGoBack() : null;
         if (goBackValues) {
+            goingBackInWizard = true;
             cancelCurrentWizard();
             handlers.continueCardTypeWizard(goBackValues);
+            goingBackInWizard = false;
         }
     }
 

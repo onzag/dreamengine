@@ -750,11 +750,9 @@ declare interface DEBondDeclaration {
      */
     name: string;
     /**
-     * TODO implement in sysprompt and other places
-     * 
      * The relationship name, should be one word, eg. friend, lover, colleague, etc... this is used for reasoning about the relationship and for the character to refer to the other character in the relationship, for example, if the relationship name is "friend", the character may refer to the other character as "my friend" or just "friend" when talking about them
      * 
-     * can leave empty if the relationship does not exist, eg. strangers, or if the relationship name is not important for the bond declaration 
+     * can leave empty if the relationship does not exist, eg. strangers, or if the relationship name is not important for the bond declaration
      */
     relationshipName: DEStringTemplateCharAndOther;
     /**
@@ -1886,7 +1884,13 @@ declare interface DESingleBondDescription {
     createdAt: DETimeDescription;
     undoableShifts: {
         [shiftId: string]: DEUndoableShift;
-    }
+    };
+
+    /**
+     * A name for the relationship that overrides the default one
+     * for example, if they got married the relationship can be "spouse" instead of "friend" or "lover"
+     */
+    relationshipNameOverride?: DEStringTemplateCharAndOther | null;
 }
 
 declare interface DEBondDescription {

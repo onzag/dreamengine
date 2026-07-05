@@ -11,6 +11,10 @@ export class CardTypeWizard extends HTMLElement {
         this._overlayTimer = null;
         /** @type {number | null} */
         this._autosaveHideTimer = null;
+        /** @type {Promise<void> | null} */
+        this._saveLoopPromise = null;
+        /** @type {{ parsedCard: import('../../../script-generation/base.js').ScriptTypeGenerator, completed: boolean } | null} */
+        this._pendingSave = null;
         /** @type {(() => void) | null} */
         this._wizardCleanup = null;
     }
@@ -202,7 +206,12 @@ export class CardTypeWizard extends HTMLElement {
             const startBtn = contentArea.querySelector('.wizard-start-btn');
             if (startBtn) {
                 startBtn.addEventListener('mouseenter', playHoverSound);
+
+                let submitted = false;
+
                 startBtn.addEventListener('click', () => {
+                    if (submitted) return;
+                    submitted = true;
                     playConfirmSound();
                     // @ts-ignore
                     const cardText = (textarea?.value || '').trim();
@@ -287,12 +296,12 @@ export class CardTypeWizard extends HTMLElement {
         };
 
         /** @param {any} data */
-        const onComplete = (data) => {
+        const onComplete = async (data) => {
             data.currentCard.state.automaticWizardInProgress = false;
             data.currentCard.state.guidedWizardInProgress = false;
             data.currentCard.state.automaticWizardCompleted = true;
             data.currentCard.state.guidedWizardCompleted = true;
-            this.save(data.currentCard, true);
+            await this.save(data.currentCard, true);
             this.endOverlay();
             cleanup();
         };
@@ -340,6 +349,7 @@ export class CardTypeWizard extends HTMLElement {
     }
 
     onPrevButtonClick() {
+        this.goingBack = true;
         const client = window.ENGINE_WORKER_CLIENT;
         if (client) {
             client.goBackInCardTypeWizard();
@@ -506,7 +516,7 @@ export class CardTypeWizard extends HTMLElement {
                 if (hasTryAgainOption) {
                     const tryAgainBtn = document.createElement('div');
                     tryAgainBtn.className = 'guider-try-again-btn';
-                    tryAgainBtn.textContent = 'Try Again';
+                    tryAgainBtn.textContent = 'Regenerate';
                     tryAgainBtn.addEventListener('mouseenter', playHoverSound);
                     tryAgainBtn.addEventListener('click', () => {
                         playCancelSound();
@@ -517,6 +527,8 @@ export class CardTypeWizard extends HTMLElement {
                     buttonsContainer.appendChild(tryAgainBtn);
                 }
 
+                let submitted = false;
+
                 const submitBtn = document.createElement('div');
                 submitBtn.className = 'guider-submit-btn';
                 submitBtn.textContent = 'Confirm';
@@ -526,10 +538,12 @@ export class CardTypeWizard extends HTMLElement {
                 submitBtn.setAttribute("aria-label", "Confirm");
                 submitBtn.addEventListener('mouseenter', playHoverSound);
                 submitBtn.addEventListener('click', () => {
+                    if (submitted) return;
                     playConfirmSound();
                     const value = extractValueFn(inputArea);
                     self.initOverlay();
                     resolve(value);
+                    submitted = true;
                 });
                 buttonsContainer.appendChild(submitBtn);
 
@@ -1093,12 +1107,47 @@ export class CardTypeWizard extends HTMLElement {
     }
 
     /**
-     * Shows the autosave indicator in the title bar as "Saving...".
+     * Persists the given card. Saves are coalesced: if a save is already running it
+     * is allowed to finish uninterrupted, and any calls made in the meantime are
+     * queued. Only the most recently requested save is kept in the queue (older
+     * queued saves are superseded), and every queued caller resolves once that
+     * latest save completes.
+     * @param {import('../../../script-generation/base.js').ScriptTypeGenerator} parsedCard 
+     * @param {boolean} completed
+     * @returns {Promise<void>}
+     */
+    save(parsedCard, completed = false) {
+        // Always record the latest requested save; only the most recent one matters.
+        this._pendingSave = { parsedCard, completed };
+
+        // A save is already in flight: let it finish and it will pick up this latest
+        // pending save afterwards. All queued callers share the same promise.
+        if (this._saveLoopPromise) {
+            return this._saveLoopPromise;
+        }
+
+        this._saveLoopPromise = (async () => {
+            try {
+                while (this._pendingSave) {
+                    const { parsedCard, completed } = this._pendingSave;
+                    this._pendingSave = null;
+                    await this._performSave(parsedCard, completed);
+                }
+            } finally {
+                this._saveLoopPromise = null;
+            }
+        })();
+
+        return this._saveLoopPromise;
+    }
+
+    /**
+     * Performs a single save operation and updates the autosave indicator.
      * @param {import('../../../script-generation/base.js').ScriptTypeGenerator} parsedCard 
      * @param {boolean} completed
      */
-    async save(parsedCard, completed = false) {
-        // TODO prevent racing of many saves when questions are being fired too fast, somehow at startup or on non-guided mode
+    async _performSave(parsedCard, completed) {
+        this.saving = true;
         this.lastSavedCard = parsedCard;
         const jsContent = getJsScriptFromGenerator(parsedCard, undefined, undefined, completed ? [] : ["initialize"]);
         const characterId = this.getAttribute('character-id') || "";
@@ -1110,7 +1159,8 @@ export class CardTypeWizard extends HTMLElement {
             jsContent
         );
         this.hideAutosaveStatus();
-    };
+        this.saving = false;
+    }
 
     showAutosaveStatus() {
         if (this._autosaveHideTimer) {
