@@ -1888,6 +1888,14 @@ export async function generateBonds(engine, scriptgenerator, guider) {
         "foe_n100_n50",
     ];
 
+    const NEGATIVE_RELATIONSHIPS_FIRST_LAYER = [
+        "unpleasant_n10_0",
+        "unfriendly_n20_n10",
+        "antagonistic_n35_n20",
+        "hostile_n50_n35",
+        "foe_n100_n50",
+    ];
+
     const SETTINGS_ORDER_SECOND_LAYER = [
         "noRomanticInterest_0_10",
         "slightRomanticInterest_10_20",
@@ -2871,7 +2879,7 @@ export async function generateBonds(engine, scriptgenerator, guider) {
             let addAttractionRules = true;
             // asexual will always get added because it is all creepy bonds
             if (romanticInterestKey !== "noRomanticInterest_0_10" && !isAsexualValue) {
-                if (romanticInterestKey === "slightRomanticInterest_10_20" && isLoveAtFirstSightValue) {
+                if (romanticInterestKey === "slightRomanticInterest_10_20" && isLoveAtFirstSightValue && !NEGATIVE_RELATIONSHIPS_FIRST_LAYER.includes(relationshipKey)) {
                     // must add because love at first sight implies at least a slight romantic interest
                     addAttractionRules = true;
                 } else {
