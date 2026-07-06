@@ -1,6 +1,7 @@
 import { isScriptTypeGeneratorFile, parseScriptGeneratorFrom } from '../../script-generation/base.js';
 import { playCancelSound, playConfirmSound, playHoverSound, playPauseSound, setTempSoundDisable } from '../sound.js';
 import './profile-image.js';
+import './wizard/character-overview.js';
 
 /**
  * 
@@ -238,6 +239,7 @@ class CharacterOverlay extends HTMLElement {
                                 This character script is in progress of being created by the Guided Wizard.
                             </p>
                             <app-overlay-button id="guided-wizard-btn" aria-key="g">Continue Guided Wizard</app-overlay-button>
+                            <app-overlay-button id="show-overview-btn" aria-key="o">Show Overview</app-overlay-button>
                         </app-overlay-section>`;
                     } else if (parsedCardType.state.automaticWizardInProgress) {
                         cardtypeWizardContent = `<app-overlay-section section-title="CardType Wizard">
@@ -245,6 +247,7 @@ class CharacterOverlay extends HTMLElement {
                                 This character script is in progress of being created by the Automatic Wizard.
                             </p>
                             <app-overlay-button id="auto-wizard-btn" aria-key="a">Continue Automatic Wizard</app-overlay-button>
+                            <app-overlay-button id="show-overview-btn" aria-key="o">Show Overview</app-overlay-button>
                         </app-overlay-section>`;
                     } else if (parsedCardType.state.guidedWizardCompleted || parsedCardType.state.automaticWizardCompleted) {
                         // TODO add more options here, for the states
@@ -252,6 +255,7 @@ class CharacterOverlay extends HTMLElement {
                             <p data-de-aria-text="true" tabindex="0">
                                 This character script was created by the ${parsedCardType.state.guidedWizardCompleted ? 'Guided Wizard' : 'Automatic Wizard'}.
                             </p>
+                            <app-overlay-button id="show-overview-btn" aria-key="o">Show Overview</app-overlay-button>
                         </app-overlay-section>`;
                     } else {
                         cardtypeWizardContent = `<app-overlay-section section-title="CardType Wizard">
@@ -303,6 +307,12 @@ class CharacterOverlay extends HTMLElement {
                 wizard.setAttribute('wizard-expectation', "automatic");
                 wizard.addEventListener('wizard-closed', () => this.renderSection());
                 document.body.appendChild(wizard);
+            });
+            tabsContainer.querySelector('#show-overview-btn')?.addEventListener('button-click', () => {
+                const overview = document.createElement('app-character-overview');
+                overview.setAttribute('character-namespace', this.currentCharacterNamespace);
+                overview.setAttribute('character-id', this.currentCharacterId);
+                document.body.appendChild(overview);
             });
         } else if (this.currentSectionIndex === 1) {
             tabsContainer.innerHTML = `<app-overlay-section section-title="Script Info">

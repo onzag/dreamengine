@@ -1895,86 +1895,6 @@ export async function generateBase(engine, scriptgenerator, guider, language) {
     }
 
     {
-        /**
-         * @type {string[]}
-         */
-        let likesListParsedAndDeduped = [];
-        const likesListAsked = await guider.askList(
-            "likes-list",
-            "List some hobbies, activities, interests, or conversation topics that " + name + " enjoys. Examples: swimming, cooking, cats, astronomy, music, gardening, chess",
-            null,
-            async () => {
-                await prime();
-                const likesList = await generator.next({
-                    maxCharacters: 1000,
-                    maxSafetyCharacters: 0,
-                    maxParagraphs: 10,
-                    nextQuestion: "List some hobbies, activities, interests, or conversation topics that " + name + " enjoys, at most 10 things. Examples: swimming, cooking, cats, astronomy, music, gardening, chess",
-                    stopAfter: [],
-                    stopAt: [],
-                    instructions: "Answer with a comma-separated list of single lowercase words representing concrete hobbies, activities, subjects, or things that " + name + " likes. Each entry must be a noun or activity like: swimming, reading, cats, magic, cooking, astronomy, horses, painting, archery. Do NOT include emotional states, interpersonal situations, or multi-word phrases. Just single-word nouns or activities separated by commas.",
-                    grammar: "root ::= item moreItems\nmoreItems ::= \", \" item moreItems | \"\"\nitem ::= [A-Za-z ]+"
-                });
-
-                if (likesList.done) {
-                    throw new Error("Generator finished without producing output");
-                }
-
-                return likesList.value.trim().split(",").filter(item => item.trim() !== "").map(item => item.trim())
-                    .filter((item, index, self) => self.indexOf(item) === index); // trim items, filter out empty items and dedupe
-            },
-        );
-        if (likesListAsked) {
-            likesListParsedAndDeduped = likesListAsked.value.map(item => item.trim().toLowerCase().split(" ").map(word => word.trim()).filter(word => word !== "").join(" ")).filter(item => item !== "").filter((item, index, self) => self.indexOf(item) === index);
-        }
-
-        insertSpecialComment(newCharacterSection.body, "base-likes");
-        newCharacterSection.body.push(`likes: ${JSON.stringify(likesListParsedAndDeduped)}, // These are ids that need to be specified for the social simulation`);
-    }
-
-    {
-        /**
-         * @type {string[]}
-         */
-        let dislikesListParsedAndDeduped = [];
-
-        const likes = scriptgenerator.state["likes-list"];
-
-        const dislikesListAsked = await guider.askList(
-            "dislikes-list",
-            "List some hobbies, activities, interests, or conversation topics that " + name + " dislikes. Examples: swimming, cooking, cats, politics, math, spiders, crowds",
-            null,
-            async () => {
-                await prime();
-                const dislikesList = await generator.next({
-                    maxCharacters: 1000,
-                    maxSafetyCharacters: 0,
-                    maxParagraphs: 10,
-                    nextQuestion: "List some hobbies, activities, interests, or conversation topics that " + name + " dislikes, at most 10 things. Examples: swimming, cooking, cats, politics, math, spiders, crowds",
-                    stopAfter: [],
-                    stopAt: [],
-                    instructions: "Answer with a comma-separated list of single lowercase words representing concrete hobbies, activities, subjects, or things that " + name + " dislikes. Each entry must be a noun or activity like: swimming, math, spiders, crowds, politics, mornings, heights, snakes, thunder. Do NOT include emotional states, interpersonal situations, or multi-word phrases. Just single-word nouns or activities separated by commas.",
-                    grammar: "root ::= item moreItems\nmoreItems ::= \", \" item moreItems | \"\"\nitem ::= [A-Za-z ]+"
-                });
-
-                if (dislikesList.done) {
-                    throw new Error("Generator finished without producing output");
-                }
-
-                return dislikesList.value.trim().split(",").filter(item => item.trim() !== "").map(item => item.trim())
-                    .filter((item, index, self) => self.indexOf(item) === index) // trim items, filter out empty items and dedupe
-                    .filter(item => !likes.includes(item)); // ensure there is no overlap with likes
-            },
-        );
-        if (dislikesListAsked) {
-            dislikesListParsedAndDeduped = dislikesListAsked.value.map(item => item.trim().toLowerCase().split(" ").map(word => word.trim()).filter(word => word !== "").join(" ")).filter(item => item !== "").filter((item, index, self) => self.indexOf(item) === index).filter(item => !likes.includes(item));
-        }
-
-        insertSpecialComment(newCharacterSection.body, "base-dislikes");
-        newCharacterSection.body.push(`dislikes: ${JSON.stringify(dislikesListParsedAndDeduped)}, // These are ids that need to be specified for the social simulation`);
-    }
-
-    {
         const guidedSpecies = (await guider.askOpen("species", "What species is " + name + "?", async () => {
             await prime();
             const species = await generator.next({
@@ -2531,6 +2451,86 @@ export async function generateBase(engine, scriptgenerator, guider, language) {
 
         insertSpecialComment(socialSimulationSection.body, "base-gossip");
         socialSimulationSection.body.push(`gossipTendency: ${gossipValue / 10},`);
+    }
+
+    {
+        /**
+         * @type {string[]}
+         */
+        let likesListParsedAndDeduped = [];
+        const likesListAsked = await guider.askList(
+            "likes-list",
+            "List some hobbies, activities, interests, or conversation topics that " + name + " enjoys. Examples: swimming, cooking, cats, astronomy, music, gardening, chess",
+            null,
+            async () => {
+                await prime();
+                const likesList = await generator.next({
+                    maxCharacters: 1000,
+                    maxSafetyCharacters: 0,
+                    maxParagraphs: 10,
+                    nextQuestion: "List some hobbies, activities, interests, or conversation topics that " + name + " enjoys, at most 10 things. Examples: swimming, cooking, cats, astronomy, music, gardening, chess",
+                    stopAfter: [],
+                    stopAt: [],
+                    instructions: "Answer with a comma-separated list of single lowercase words representing concrete hobbies, activities, subjects, or things that " + name + " likes. Each entry must be a noun or activity like: swimming, reading, cats, magic, cooking, astronomy, horses, painting, archery. Do NOT include emotional states, interpersonal situations, or multi-word phrases. Just single-word nouns or activities separated by commas.",
+                    grammar: "root ::= item moreItems\nmoreItems ::= \", \" item moreItems | \"\"\nitem ::= [A-Za-z ]+"
+                });
+
+                if (likesList.done) {
+                    throw new Error("Generator finished without producing output");
+                }
+
+                return likesList.value.trim().split(",").filter(item => item.trim() !== "").map(item => item.trim())
+                    .filter((item, index, self) => self.indexOf(item) === index); // trim items, filter out empty items and dedupe
+            },
+        );
+        if (likesListAsked) {
+            likesListParsedAndDeduped = likesListAsked.value.map(item => item.trim().toLowerCase().split(" ").map(word => word.trim()).filter(word => word !== "").join(" ")).filter(item => item !== "").filter((item, index, self) => self.indexOf(item) === index);
+        }
+
+        insertSpecialComment(newCharacterSection.body, "base-likes");
+        newCharacterSection.body.push(`likes: ${JSON.stringify(likesListParsedAndDeduped)}, // These are ids that need to be specified for the social simulation`);
+    }
+
+    {
+        /**
+         * @type {string[]}
+         */
+        let dislikesListParsedAndDeduped = [];
+
+        const likes = scriptgenerator.state["likes-list"];
+
+        const dislikesListAsked = await guider.askList(
+            "dislikes-list",
+            "List some hobbies, activities, interests, or conversation topics that " + name + " dislikes. Examples: swimming, cooking, cats, politics, math, spiders, crowds",
+            null,
+            async () => {
+                await prime();
+                const dislikesList = await generator.next({
+                    maxCharacters: 1000,
+                    maxSafetyCharacters: 0,
+                    maxParagraphs: 10,
+                    nextQuestion: "List some hobbies, activities, interests, or conversation topics that " + name + " dislikes, at most 10 things. Examples: swimming, cooking, cats, politics, math, spiders, crowds",
+                    stopAfter: [],
+                    stopAt: [],
+                    instructions: "Answer with a comma-separated list of single lowercase words representing concrete hobbies, activities, subjects, or things that " + name + " dislikes. Each entry must be a noun or activity like: swimming, math, spiders, crowds, politics, mornings, heights, snakes, thunder. Do NOT include emotional states, interpersonal situations, or multi-word phrases. Just single-word nouns or activities separated by commas.",
+                    grammar: "root ::= item moreItems\nmoreItems ::= \", \" item moreItems | \"\"\nitem ::= [A-Za-z ]+"
+                });
+
+                if (dislikesList.done) {
+                    throw new Error("Generator finished without producing output");
+                }
+
+                return dislikesList.value.trim().split(",").filter(item => item.trim() !== "").map(item => item.trim())
+                    .filter((item, index, self) => self.indexOf(item) === index) // trim items, filter out empty items and dedupe
+                    .filter(item => !likes.includes(item)); // ensure there is no overlap with likes
+            },
+        );
+        if (dislikesListAsked) {
+            dislikesListParsedAndDeduped = dislikesListAsked.value.map(item => item.trim().toLowerCase().split(" ").map(word => word.trim()).filter(word => word !== "").join(" ")).filter(item => item !== "").filter((item, index, self) => self.indexOf(item) === index).filter(item => !likes.includes(item));
+        }
+
+        insertSpecialComment(newCharacterSection.body, "base-dislikes");
+        newCharacterSection.body.push(`dislikes: ${JSON.stringify(dislikesListParsedAndDeduped)}, // These are ids that need to be specified for the social simulation`);
     }
 
     if (primed) {

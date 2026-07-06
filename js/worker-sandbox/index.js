@@ -6,6 +6,7 @@
  */
 
 import { getRelationship } from "../engine/util/character-info.js";
+import { isScriptTypeGeneratorFile, parseScriptGeneratorFrom } from "../script-generation/base.js";
 
 // Catch truly unexpected things (runtime errors after init)
 self.onerror = (message, source, lineno, colno, error) => {
@@ -562,9 +563,9 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
 
             try {
                 await generateBase(engine, currentCard, guider, language);
+                await generateActivities(engine, currentCard, guider);
                 await generateAffectiveStates(engine, currentCard, guider);
                 await generateBonds(engine, currentCard, guider);
-                await generateActivities(engine, currentCard, guider);
                 await generateBondTriggers(engine, currentCard, guider);
                 await generateBasicStates(engine, currentCard, guider);
 
@@ -594,6 +595,18 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
 
         async getCardTypeWizardState() {
             return { state: currentCardOfWizard?.state };
+        },
+
+        /**
+         * @returns {Promise<* | null>}
+         */
+        async getWizardStateFromScript({namespace, id}) {
+            const source = jsEngine.getScriptSource(namespace, id);
+            if (source && isScriptTypeGeneratorFile(source)) {
+                const parsed = parseScriptGeneratorFrom(source);
+                return {state: parsed.state};
+            }
+            return null;
         }
     };
 

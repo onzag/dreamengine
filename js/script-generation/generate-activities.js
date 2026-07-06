@@ -51,9 +51,9 @@ export async function generateActivities(engine, scriptgenerator, guider) {
     }
 
     for (const likeOrDislike of allLikesAndDislikes) {
-        const guideResult = await guider.askOpen(
-            "activity-execution-template-for-" + likeOrDislike,
-            "Provide a template for the activity '" + likeOrDislike + "' that will be shown to the player. Use {{chars}} as a placeholder for the characters that are engaging in the activity or talking about the topic of conversation.",
+        const isAnActivity = await guider.askBoolean(
+            "like-or-dislike-is-activity-" + likeOrDislike,
+            "Is " + likeOrDislike + " an activity or hobby that anyone can engage in?",
             async () => {
                 await prime();
                 const isAnActivity = await generator2.next({
@@ -71,11 +71,16 @@ export async function generateActivities(engine, scriptgenerator, guider) {
                     throw new Error("Generator finished without producing output");
                 }
 
-                const isActivityValue = isAnActivity.value.trim().toLowerCase() === "yes";
+                return isAnActivity.value.trim().toLowerCase() === "yes";
+            }
+        );
 
-                scriptgenerator.state["like-or-dislike-is-activity-" + likeOrDislike] = isActivityValue;
-
-                const activitySimple = isActivityValue ? likeOrDislike : "talk about " + likeOrDislike;
+        const guideResult = await guider.askOpen(
+            "activity-execution-template-for-" + likeOrDislike,
+            "Provide a template for the activity '" + likeOrDislike + "' that will be shown to the player. Use {{chars}} as a placeholder for the characters that are engaging in the activity or talking about the topic of conversation.",
+            async () => {
+                await prime();
+                const activitySimple = isAnActivity ? likeOrDislike : "talk about " + likeOrDislike;
 
                 const activityTemplate = await generator2.next({
                     maxCharacters: 100,
@@ -94,10 +99,10 @@ export async function generateActivities(engine, scriptgenerator, guider) {
                 return activityTemplate.value.trim().split("MANY_CHARACTERS").join("{{chars}}");
             },
         );
+        
         const templateValue = guideResult.value.trim();
 
-        const isActivityValue = scriptgenerator.state["like-or-dislike-is-activity-" + likeOrDislike];
-        const activitySimple = isActivityValue ? likeOrDislike : "talk about " + likeOrDislike;
+        const activitySimple = isAnActivity ? likeOrDislike : "talk about " + likeOrDislike;
 
         initializeSection.body.unshift(`DE.utils.newGlobalInterest({ id: ${JSON.stringify(likeOrDislike)}, simple: ${JSON.stringify(activitySimple)}, template: (DE, info) => ${toTemplateLiteral(templateValue, scriptgenerator.state.name)}});`);
     }

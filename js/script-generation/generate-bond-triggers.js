@@ -15,15 +15,23 @@ export function replaceOtherCharNameWithPlaceholder(text, charName) {
 }
 
 /**
+ * Returns true if the text contains second/first person language (you, your, I, me, etc.)
+ * Uses word boundaries to avoid false positives on substrings.
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function detectGemmaSecondPersonIssue(text) {
+    return /\b(you|your|yours|yourself|yourselves|I|I'm|I've|I'd|I'll|me|my|mine|myself|we|our|ours|ourselves)\b/i.test(text);
+}
+
+/**
  * @param {DEngine} engine
- * @param {import('./base.js').ScriptTypeGenerator} card
- * @param {import('./base.js').ScriptTypeGuider | null} guider
+ * @param {import('./base.js').ScriptTypeGenerator} scriptgenerator
+ * @param {import('./base.js').ScriptTypeGuider} guider
  * @return {Promise<void>}
  */
-export async function generateBondTriggers(engine, card, guider) {
-    card.config.bondTriggers = card.config.bondTriggers || {};
-
-    const initializeSection = getSection(card.body, "initialize");
+export async function generateBondTriggers(engine, scriptgenerator, guider) {
+    const initializeSection = getSection(scriptgenerator.body, "initialize");
     if (!initializeSection) {
         throw new Error("Initialize section not found");
     }
@@ -34,16 +42,14 @@ export async function generateBondTriggers(engine, card, guider) {
     }
 
     const systemPrompt = inferenceAdapter.buildSystemPromptForQuestioningAgent(
-        `You are a helpful assistant that will answer and assist in defining a character for a game based on their description, you are allowed free rein to interpret the character's description and generate the code that defines them in the game, you will be asked questions about the character and you should answer them as best as you can`,
+        `You are a helpful assistant that will answer and assist in defining a character for a game based on their description, you are allowed free rein to interpret the character, you will be asked questions about the character and you should answer them as best as you can`,
         [],
-        `# Character Card:\n\n${card.card}`
+        `# Character Card:\n\n${scriptgenerator.state.card}`
     );
 
-    if (!hasSpecialComment(card.imports, "basic-bond-questions-import")) {
-        insertSpecialComment(card.imports, "basic-bond-questions-import");
-        card.imports.push(`const basicBondQuestions = await importScript("@bond-systems", "basic-bond-questions");`);
-        initializeSection.body.push(`basicBondQuestions.addBasicBondQuestions(DE.characters[${JSON.stringify(card.config.name)}]);`);
-    }
+    insertSpecialComment(scriptgenerator.imports, "basic-bond-questions-import");
+    scriptgenerator.imports.push(`const basicBondQuestions = await importScript("@bond-systems", "basic-bond-questions");`);
+    initializeSection.body.push(`basicBondQuestions.addBasicBondQuestions(DE.characters[${JSON.stringify(scriptgenerator.state.name)}]);`);
 
     const generator = inferenceAdapter.runQuestioningCustomAgentOn("cardtype-gen-bond-triggers", {
         contextInfoAfter: null,
@@ -52,45 +58,49 @@ export async function generateBondTriggers(engine, card, guider) {
         system: systemPrompt,
     });
 
-    const isAsexualValue = card.config.isAsexual;
-    const isIncestuousValue = card.config.isIncestuous;
-    const name = card.config.name;
+    // prime the generator
+    let primed = false;
+    const prime = async () => {
+        if (primed) return;
+        primed = true;
+        const ready = await generator.next();
+        if (ready.done) {
+            throw new Error("Generator finished without producing output");
+        }
+    }
+
+    const isAsexualValue = scriptgenerator.state.asexual;
+    const isIncestuousValue = isAsexualValue ? false : !scriptgenerator.state["non-incestuous"];
+    const name = scriptgenerator.state.name;
 
     /**
      * @type {string[]}
      */
-    let EMOTIONAL_STATES_TO_CHECK_AGAINST = card.config.emotionalStatesToCheckAgainst || [...BASIC_EMOTIONAL_STATES];
+    let baseEmotionalStates = [...BASIC_EMOTIONAL_STATES];
     if (isAsexualValue) {
-        EMOTIONAL_STATES_TO_CHECK_AGAINST = EMOTIONAL_STATES_TO_CHECK_AGAINST.filter(state => !["Flirty", "Loving", "Aroused"].includes(state));
+        baseEmotionalStates = baseEmotionalStates.filter(state => !["Flirty", "Loving", "Aroused"].includes(state));
     }
 
-    if (guider && !card.config.emotionalStatesToCheckAgainst) {
-        const guiderResult = await guider.askArbitraryList(`Emotional states to check against for ${name}`, EMOTIONAL_STATES_TO_CHECK_AGAINST);
-        if (guiderResult.value) {
-            EMOTIONAL_STATES_TO_CHECK_AGAINST = Array.from(new Set(guiderResult.value.map(em => em.trim()).filter(em => em.length > 0)));
-        }
-        card.config.emotionalStatesToCheckAgainst = EMOTIONAL_STATES_TO_CHECK_AGAINST;
-    }
+    const guiderResult = await guider.askArbitraryList(
+        "base-emotional-states",
+        `Emotional states that ${name} can experience, add any emotional states that are not included in this list if you want the character to enter such emotional state`,
+        baseEmotionalStates,
+    );
+    const EMOTIONAL_STATES_TO_CHECK_AGAINST = Array.from(new Set(guiderResult.value.map(em => em.trim()).filter(em => em.length > 0)));
 
     /**
-     * @type {*}
+     * @type {Record<string, string[]>}
      */
-    const EMOTIONAL_STATES_TO_CHECK_AGAINST_AS_RECORD = { ...BASIC_EMOTIONAL_STATES_OPTIONS };
-
-    const customEmotionalStates = EMOTIONAL_STATES_TO_CHECK_AGAINST.filter(state => !BASIC_EMOTIONAL_STATES.includes(state));
-
-    // @ts-ignore
-    EMOTIONAL_STATES_TO_CHECK_AGAINST_AS_RECORD.Positive.filter(state => !EMOTIONAL_STATES_TO_CHECK_AGAINST.includes(state));
-    // @ts-ignore
-    EMOTIONAL_STATES_TO_CHECK_AGAINST_AS_RECORD.Negative.filter(state => !EMOTIONAL_STATES_TO_CHECK_AGAINST.includes(state));
-
-    if (customEmotionalStates.length > 0) {
-        EMOTIONAL_STATES_TO_CHECK_AGAINST_AS_RECORD.Custom = customEmotionalStates;
+    const EMOTIONAL_STATES_TO_CHECK_AGAINST_AS_RECORD = {};
+    for (const [group, states] of Object.entries(BASIC_EMOTIONAL_STATES_OPTIONS)) {
+        const groupStates = EMOTIONAL_STATES_TO_CHECK_AGAINST.filter(em => states.includes(em));
+        if (groupStates.length > 0) {
+            EMOTIONAL_STATES_TO_CHECK_AGAINST_AS_RECORD[group] = groupStates;
+        }
     }
-
-    if (isAsexualValue) {
-        // @ts-ignore
-        EMOTIONAL_STATES_TO_CHECK_AGAINST_AS_RECORD.Positive = EMOTIONAL_STATES_TO_CHECK_AGAINST_AS_RECORD.Positive.filter(state => !["Flirty", "Loving", "Aroused"].includes(state));
+    const otherEmotionalStates = EMOTIONAL_STATES_TO_CHECK_AGAINST.filter(em => !Object.values(BASIC_EMOTIONAL_STATES_OPTIONS).some(states => states.includes(em)));
+    if (otherEmotionalStates.length > 0) {
+        EMOTIONAL_STATES_TO_CHECK_AGAINST_AS_RECORD["Other"] = otherEmotionalStates;
     }
 
     const ready = await generator.next(); // start the generator with an empty message to get it going
@@ -122,13 +132,6 @@ export async function generateBondTriggers(engine, card, guider) {
      * @param {boolean} [severeAndExtremeWithUndo] if true, it means that the yes answer is about a severe and extreme case that would cause intense hatred and sworn enmity, and the altYesCode is about clearing up a mild misunderstanding, so the question is did they do the severe thing that causes intense hatred, and then if not did they do the mild thing that clears up a misunderstanding, and if not then nothing happens, this is used to create triggers that can cause intense hatred but also be cleared up by clearing up a mild misunderstanding, which is important to avoid permanently broken relationships due to misunderstandings or minor things
      */
     const askYesNo = async (id, amount, reasoning, trail, consideringInQuestion, consideringInStatement, condition, yesCode, altCondition, altYesCode, altConsidering, severeAndExtremeWithUndo) => {
-        if (hasSpecialComment(initializeSection.body, "bond-trigger-" + id)) {
-            return [card.config.bondTriggers[id].causes, card.config.bondTriggers[id].questions];
-        }
-
-        insertSpecialComment(initializeSection.body, "bond-trigger-" + id);
-
-        let yesNoQuestionValue = "";
         /**
          * @type {string[]}
          */
@@ -143,120 +146,138 @@ export async function generateBondTriggers(engine, card, guider) {
          */
         let questionsParsed = [];
         while (true) {
-            if (guider && redoGuidance) {
-                const guiderResult = await guider.askOpen("Guidance for generating yes/no questions about " + JSON.stringify(reasoning) + ". What are some important things to keep in mind when writing about that in the context of " + name + "'s character and personality?");
+            let redidGuidance = false;
+            if (redoGuidance) {
+                redidGuidance = true;
+                const guiderResult = await guider.askOpen(
+                    { id: `${id}-questions-guidance`, reask: true, step: false },
+                    "Guidance for generating yes/no questions about " + JSON.stringify(reasoning) + ". What are some important things to keep in mind when writing about that in the context of " + name + "'s character and personality?",
+                    guidanceGiven,
+                );
                 if (guiderResult) {
                     guidanceGiven = guiderResult.value.trim();
                 }
                 redoGuidance = false;
             }
 
-            let instructions = "The list should be in 3rd person and formatted as a markdown list with each question as a separate bullet point, use OTHER CHARACTER as a placeholder for the other character's name. OTHER CHARACTER must always be included, the questions should be in past tense and 3rd person, do not use you, your, I, we, or similar words that indicate second or first person";
-            if (doNotIncludeQuestions) {
-                instructions += "\n\nDo NOT include any questions similar to these:\n\n- " + doNotIncludeQuestions.join("\n- " + name + " ");
-            }
-            if (guidanceGiven) {
-                instructions += ".\n\nIMPORTANT Guidance for constructing the questions: " + guidanceGiven;
-            }
+            const guiderResult = await guider.askAcceptArbitraryList(
+                { id: `${id}-questions`, reask: redidGuidance, step: true, recalcdefault: true },
+                "Yes/no questions about " + JSON.stringify(reasoning),
+                async () => {
+                    await prime();
+                    while (true) {
+                        let instructions = "The list should be in 3rd person and formatted as a markdown list with each question as a separate bullet point, use OTHER CHARACTER as a placeholder for the other character's name. OTHER CHARACTER must always be included, the questions should be in past tense and 3rd person, do not use you, your, I, we, or similar words that indicate second or first person. Keep each question short and simple, focusing only on the core action, 10 words at most after OTHER CHARACTER";
+                        if (doNotIncludeQuestions) {
+                            instructions += "\n\nDo NOT include any questions similar to these:\n\n- " + doNotIncludeQuestions.join("\n- " + name + " ");
+                        }
+                        if (guidanceGiven) {
+                            instructions += ".\n\nIMPORTANT Guidance for constructing the questions: " + guidanceGiven;
+                        }
 
-            const yesNoQuestions = await generator.next({
-                maxCharacters: 5000,
-                maxSafetyCharacters: 0,
-                maxParagraphs: 10,
-                nextQuestion: (overrideWholeReasoning ? reasoning : "Make a list of yes/no questions that provided a positive (yes) answer would make " + name + " " + reasoning) + ", " + consideringInQuestion + "; give " + amount + " questions, make the question as long and as expressive as needed, but not too long 100 words at most",
-                stopAfter: [
-                    " you ",
-                    " You ",
-                    " your ",
-                    " Your ",
-                    " I'm ",
-                    " I ",
-                ],
-                stopAt: [],
-                instructions: instructions,
-                grammar: "root ::= list\nlist ::=" + (" bulletPoint").repeat(amount) + "\nbulletPoint ::= \"- \" (\"Was\" | \"Did\") \" OTHER CHARACTER \" [a-zA-Z0-9 ,?'!_]+ \"\\n\"",
-                answerTrail: overrideWholeReasoning ? "#" + trail + ":\n\n" : "# List of yes/no questions that would make " + name + " " + trail + ":\n\n",
-            });
+                        const yesNoQuestions = await generator.next({
+                            maxCharacters: 5000,
+                            maxSafetyCharacters: 0,
+                            maxParagraphs: 10,
+                            nextQuestion: (overrideWholeReasoning ? reasoning : "Make a list of yes/no questions that provided a positive (yes) answer would make " + name + " " + reasoning) + ", " + consideringInQuestion + "; give " + amount + " questions, keep each question short and simple (10 words or less), focus only on the core action without extra details or context",
+                            stopAfter: [],
+                            stopAt: [],
+                            instructions: instructions,
+                            grammar: "root ::= list\nlist ::=" + (" bulletPoint").repeat(amount) + "\nbulletPoint ::= \"- \" (\"Was\" | \"Did\") \" OTHER CHARACTER \" [a-zA-Z0-9 ,?'!_]+ \"\\n\"",
+                            answerTrail: overrideWholeReasoning ? "#" + trail + ":\n\n" : "# List of yes/no questions that would make " + name + " " + trail + ":\n\n",
+                        });
 
-            if (yesNoQuestions.done) {
-                throw new Error("Generator finished without producing output");
-            }
+                        if (yesNoQuestions.done) {
+                            throw new Error("Generator finished without producing output");
+                        }
 
-            yesNoQuestionValue = yesNoQuestions.value.trim();
+                        const yesNoQuestionValue = yesNoQuestions.value.trim();
 
-            if (yesNoQuestionValue.includes("OTHER_CHARACTER") || yesNoQuestionValue.includes("OTHER CHARACTER") || yesNoQuestionValue.includes("other character")) {
-                // good
-            } else {
-                console.log("Generated questions without OTHER_CHARACTER placeholder, retrying...");
+                        if (yesNoQuestionValue.includes("OTHER_CHARACTER") || yesNoQuestionValue.includes("OTHER CHARACTER") || yesNoQuestionValue.includes("other character")) {
+                            // good
+                        } else {
+                            console.log("Generated questions without OTHER_CHARACTER placeholder, retrying...");
+                            continue;
+                        }
+
+                        if (/\b(you|your|yours|yourself|yourselves|I|I'm|I've|I'd|I'll|me|my|mine|myself|we|our|ours|ourselves)\b/i.test(yesNoQuestionValue)) {
+                            console.log("Detected second/first person language, retrying...");
+                            continue;
+                        }
+
+                        return yesNoQuestionValue.split("\n").map(line => line.trim()).filter(line => line.startsWith("- "))
+                            .map(line => line.substring(2).trim()).map(line => replaceOtherCharNameWithPlaceholder(line, name));
+                    }
+                },
+            );
+            if (!guiderResult.value) {
+                redoGuidance = true;
                 continue;
             }
 
-            if (/\b(you|your|yours|yourself|yourselves|I|I'm|I've|I'd|I'll|me|my|mine|myself|we|our|ours|ourselves)\b/i.test(yesNoQuestionValue)) {
-                console.log("Detected second/first person language, retrying...");
-                continue;
-            }
-
-            questionsParsed = yesNoQuestionValue.split("\n").map(line => line.trim()).filter(line => line.startsWith("- "))
-                .map(line => line.substring(2).trim()).map(line => replaceOtherCharNameWithPlaceholder(line, name));
-
-            if (guider) {
-                const guiderResult = await guider.askAcceptArbitraryList("Yes/no questions about " + JSON.stringify(reasoning), questionsParsed);
-                if (!guiderResult.value) {
-                    redoGuidance = true;
-                    continue;
-                }
-
-                questionsParsed = guiderResult.value.map(q => q.trim()).filter(q => q.length > 0);
-            }
+            questionsParsed = guiderResult.value.map(q => q.trim()).filter(q => q.length > 0);
             break;
         }
 
         for (let i = 0; i < questionsParsed.length; i++) {
             const question = questionsParsed[i];
             generatedQuestions.push(question);
-            console.log("Generated question:", question);
 
             initializeSection.body.push(`DE.utils.newTrigger(${JSON.stringify(name)}, {`);
             initializeSection.body.push(`type: "yes_no",`);
             initializeSection.body.push(`askPer: "conversing_character",`);
             initializeSection.body.push(condition);
-            initializeSection.body.push(`question: (info) => ${toTemplateLiteral(question)},`);
+            initializeSection.body.push(`question: (info) => ${toTemplateLiteral(question, name)},`);
             initializeSection.body.push(`onValue: (answer, char, other) => {`);
 
-            const causeValue = await generator.next({
-                maxCharacters: 100,
-                maxSafetyCharacters: 0,
-                maxParagraphs: 1,
-                nextQuestion: `What would be a short "yes" answer to the question "${question}", it should be very short`,
-                stopAfter: [],
-                stopAt: [],
-                contextInfo: inferenceAdapter.buildContextInfoExample(
-                    `Example: if the question is 'Was OTHER CHARACTER mean to ${name}?' the answer could be 'yes, ${name} received a rude treatment'`
-                ) + "\n\n" + inferenceAdapter.buildContextInfoExample(
-                    `Example: if the question is 'Was OTHER CHARACTER nice to ${name}?' the answer could be 'yes, ${name} received a kind treatment'`
-                ) + "\n\n" + inferenceAdapter.buildContextInfoExample(
-                    `Example: if the question is 'Did OTHER CHARACTER interact with ${name} in an offensive manner?' the answer could be 'yes, ${name} took offense from their words'`
-                ) + "\n\n" + inferenceAdapter.buildContextInfoExample(
-                    `Example: if the question is 'Did OTHER CHARACTER call ${name} a clanker?' the answer could be 'yes, ${name} got called a clanker'`
-                ) + "\n\n" + inferenceAdapter.buildContextInfoExample(
-                    `Example: if the question is 'Did OTHER CHARACTER jump on top of ${name} and left them paraplejic?' the answer could be 'yes, ${name} was left paraplejic after they got jumped on top'`
-                ),
-                instructions: "Do not include the phrase OTHER CHARACTER in the answer, just give a short statement of what the yes answer would mean for " + name + "; the answer must be in past tense and be very short and concise, 10 words at most",
-                answerTrail: `# The short statement is:\n\nyes, ${name} `,
-            });
+            const descriptionResult = await guider.askOpen(
+                `${id}-description-${question}`,
+                `Short "yes" answer for ${JSON.stringify(question)}\n\nThis answer does not contain the name of any character on purpose, it's a nameless statement for a reason they are experiencing an emotion; think of it as it starts with "yes, ${name} ...`,
+                async () => {
+                    await prime();
+                    let finalResult = "";
+                    while (true) {
+                        const causeValue = await generator.next({
+                            maxCharacters: 100,
+                            maxSafetyCharacters: 0,
+                            maxParagraphs: 1,
+                            nextQuestion: `What would be a short "yes" answer to the question "${question}", it should be very short`,
+                            stopAfter: [],
+                            stopAt: ["\n"],
+                            contextInfo: inferenceAdapter.buildContextInfoExample(
+                                `Example: if the question is 'Was OTHER CHARACTER mean to ${name}?' the answer could be 'yes, ${name} received a rude treatment'`
+                            ) + "\n\n" + inferenceAdapter.buildContextInfoExample(
+                                `Example: if the question is 'Was OTHER CHARACTER nice to ${name}?' the answer could be 'yes, ${name} received a kind treatment'`
+                            ) + "\n\n" + inferenceAdapter.buildContextInfoExample(
+                                `Example: if the question is 'Did OTHER CHARACTER interact with ${name} in an offensive manner?' the answer could be 'yes, ${name} took offense from their words'`
+                            ) + "\n\n" + inferenceAdapter.buildContextInfoExample(
+                                `Example: if the question is 'Did OTHER CHARACTER call ${name} a clanker?' the answer could be 'yes, ${name} got called a clanker'`
+                            ) + "\n\n" + inferenceAdapter.buildContextInfoExample(
+                                `Example: if the question is 'Did OTHER CHARACTER jump on top of ${name} and left them paraplejic?' the answer could be 'yes, ${name} was left paraplejic after they got jumped on top'`
+                            ),
+                            instructions: "Do not include the phrase OTHER CHARACTER in the answer. Do NOT use you, your, I, we, or any second or first person words. Write only in third person using " + name + " as the subject. Just give a short statement of what the yes answer would mean for " + name + "; the answer must be in past tense and be very short and concise, 10 words at most",
+                            answerTrail: `# The short statement is:\n\n`,
+                            grammar: `root ::= "yes, " ${JSON.stringify(name)} " " [a-zA-Z0-9 ,?'!_\\n]+`,
+                        });
 
-            if (causeValue.done) {
-                throw new Error("Generator finished without producing output");
-            }
+                        if (causeValue.done) {
+                            throw new Error("Generator finished without producing output");
+                        }
 
-            let description = causeValue.value.trim();
+                        if (detectGemmaSecondPersonIssue(causeValue.value)) {
+                            // GEMMA PAIN IN THE ASS, with giving you/your in the answers
+                            console.log("Detected second person language in yes answer, retrying...");
+                            continue;
+                        }
 
-            if (guider) {
-                const guiderResult = await guider.askOpen(`Short yes answer for ${JSON.stringify(question)}\n\nThis answer does not contain the name of any character on purpose, it's a nameless statement for a reason they are experiencing an emotion; think of it as it starts with "yes, ${name} ...`, description);
-                if (guiderResult.value) {
-                    description = guiderResult.value.trim();
-                }
-            }
+                        finalResult = causeValue.value.trim().replace("yes, " + name + " ", "").trim();
+                        break;
+                    }
+
+                    return finalResult;
+                },
+            );
+
+            const description = descriptionResult.value.trim();
 
             causesValue.push(description);
 
@@ -265,40 +286,43 @@ export async function generateBondTriggers(engine, card, guider) {
                 initializeSection.body.push(`const bondShiftId = ${JSON.stringify(bondShiftId)};`);
                 initializeSection.body.push(`const bondShiftAmount = DE.utils.determineExtremeHostileShift(char, other);`);
 
-                const yesNoQuestionClearMisunderstanding = await generator.next({
-                    maxCharacters: 5000,
-                    maxSafetyCharacters: 0,
-                    maxParagraphs: 10,
-                    nextQuestion: `Make a single yes/no question that would cause ${name} to forgive or clear a misunderstanding after ${JSON.stringify(question)}, received a yes answer`,
-                    stopAfter: [
-                        " you ",
-                        " You ",
-                        " your ",
-                        " Your ",
-                        " I'm ",
-                        " I ",
-                    ],
-                    stopAt: [],
-                    contextInfo: inferenceAdapter.buildContextInfoInstructions("The yes answer meant that " + name + " " + JSON.stringify(description)),
-                    instructions: "Make a single yes/no question no matter how difficult to achieve it might be, it either clears a misunderstanding or provides a plausible acceptable reason for the severe action that " + name + " would accept provided a yes answer, use OTHER CHARACTER to specify the character name that caused that situation, the question should be in past tense and 3rd person",
-                    grammar: "root ::= (\"Was\" | \"Did\") \" OTHER CHARACTER \" [a-zA-Z0-9 ,?'!_]+ \"\\n\"",
-                    answerTrail: "# Yes/no question that would make " + name + " forgive, accept or clear the misunderstanding:\n\n",
-                });
+                const altQuestionResult = await guider.askOpen(
+                    `${id}-alt-question-${i}`,
+                    `Yes/no question that would make ${name} forgive or clear the misunderstanding after ${JSON.stringify(question)}, received a yes answer`,
+                    async () => {
+                        await prime();
+                        while (true) {
+                            const yesNoQuestionClearMisunderstanding = await generator.next({
+                                maxCharacters: 5000,
+                                maxSafetyCharacters: 0,
+                                maxParagraphs: 10,
+                                nextQuestion: `Make a single yes/no question that would cause ${name} to forgive or clear a misunderstanding after ${JSON.stringify(question)}, received a yes answer`,
+                                stopAfter: [],
+                                stopAt: [],
+                                contextInfo: inferenceAdapter.buildContextInfoInstructions("The yes answer meant that " + name + " " + JSON.stringify(description)),
+                                instructions: "Make a single yes/no question no matter how difficult to achieve it might be, it either clears a misunderstanding or provides a plausible acceptable reason for the severe action that " + name + " would accept provided a yes answer, use OTHER CHARACTER to specify the character name that caused that situation, the question should be in past tense and 3rd person",
+                                grammar: "root ::= (\"Was\" | \"Did\") \" OTHER CHARACTER \" [a-zA-Z0-9 ,?'!_]+ \"\\n\"",
+                                answerTrail: "# Yes/no question that would make " + name + " forgive, accept or clear the misunderstanding:\n\n",
+                            });
 
-                if (yesNoQuestionClearMisunderstanding.done) {
-                    throw new Error("Generator finished without producing output");
-                }
+                            if (yesNoQuestionClearMisunderstanding.done) {
+                                throw new Error("Generator finished without producing output");
+                            }
 
-                let altQuestion = replaceOtherCharNameWithPlaceholder(yesNoQuestionClearMisunderstanding.value.trim(), name);
-                if (guider) {
-                    const guiderResult = await guider.askOpen(`Yes/no question that would make ${name} forgive or clear the misunderstanding after ${JSON.stringify(question)}, received a yes answer`, altQuestion);
-                    if (guiderResult.value) {
-                        altQuestion = guiderResult.value.trim();
-                    }
-                }
-                
+                            if (detectGemmaSecondPersonIssue(yesNoQuestionClearMisunderstanding.value)) {
+                                console.log("Detected second person language in undo question, retrying...");
+                                continue;
+                            }
+
+                            return replaceOtherCharNameWithPlaceholder(yesNoQuestionClearMisunderstanding.value.trim(), name);
+                        }
+                    },
+                );
+
+                const altQuestion = altQuestionResult.value.trim();
+
                 initializeSection.body.push(`const bondShiftAmount = DE.utils.determineExtremeSuddenHostileShift(char, other);`);
-                initializeSection.body.push(`const bondShiftUndoQuestion = ${toTemplateLiteralNoInfo(altQuestion)})`);
+                initializeSection.body.push(`const bondShiftUndoQuestion = ${toTemplateLiteralNoInfo(altQuestion, name)};`);
             }
 
             initializeSection.body.push(`if (answer) {`);
@@ -307,29 +331,30 @@ export async function generateBondTriggers(engine, card, guider) {
             }
             initializeSection.body.push(yesCode);
 
-            const listOfEmotions = await generator.next({
-                maxCharacters: 5,
-                maxSafetyCharacters: 0,
-                maxParagraphs: 1,
-                nextQuestion: `"${name} ${description}", ${consideringInStatement}, how would ${name} feel? answer with 3 of the most likely emotions`,
-                stopAfter: [],
-                stopAt: [],
-                instructions: "Answer with a comma separated list of the 3 most likely of the following emotions: " + EMOTIONAL_STATES_TO_CHECK_AGAINST.join(", "),
-                grammar: createGrammarListFromList(engine, EMOTIONAL_STATES_TO_CHECK_AGAINST, 3).grammar,
-            });
+            const parsedEmotionalStates = (await guider.askList(
+                `${id}-emotions-${question}`,
+                `"${name} ${description}", ${consideringInStatement}, how would ${name} feel?`,
+                EMOTIONAL_STATES_TO_CHECK_AGAINST_AS_RECORD,
+                async () => {
+                    await prime();
+                    const listOfEmotions = await generator.next({
+                        maxCharacters: 5,
+                        maxSafetyCharacters: 0,
+                        maxParagraphs: 1,
+                        nextQuestion: `"${name} ${description}", ${consideringInStatement}, how would ${name} feel? answer with 3 of the most likely emotions`,
+                        stopAfter: [],
+                        stopAt: [],
+                        instructions: "Answer with a comma separated list of the 2 most likely of the following emotions: " + EMOTIONAL_STATES_TO_CHECK_AGAINST.join(", "),
+                        grammar: createGrammarListFromList(engine, EMOTIONAL_STATES_TO_CHECK_AGAINST, 2).grammar,
+                    });
 
-            if (listOfEmotions.done) {
-                throw new Error("Generator finished without producing output");
-            }
+                    if (listOfEmotions.done) {
+                        throw new Error("Generator finished without producing output");
+                    }
 
-            let parsedEmotionalStates = parseListFromGrammarResponse(listOfEmotions.value).map(emState => emState[0].toUpperCase() + emState.slice(1).toLowerCase()); // capitalize first letter to match the emotional states format
-
-            if (guider) {
-                const guiderResult = await guider.askList(`"${name} ${description}", ${consideringInStatement}, how would ${name} feel?`, EMOTIONAL_STATES_TO_CHECK_AGAINST_AS_RECORD, parsedEmotionalStates);
-                if (guiderResult.value) {
-                    parsedEmotionalStates = guiderResult.value.map(em => em.trim()).filter(em => EMOTIONAL_STATES_TO_CHECK_AGAINST.includes(em));
-                }
-            }
+                    return parseListFromGrammarResponse(listOfEmotions.value).map(emState => emState[0].toUpperCase() + emState.slice(1).toLowerCase()); // capitalize first letter to match the emotional states format
+                },
+            )).value.map(em => em.trim()).filter(em => EMOTIONAL_STATES_TO_CHECK_AGAINST.includes(em));
 
             for (const emotionalState of parsedEmotionalStates) {
                 initializeSection.body.push(`DE.utils.shiftState(char, ${JSON.stringify(emotionalState)}, ${shiftStateByOverride + 1}, ${shiftStateByOverride + 2}, [{causant: {name: other.name, type: "character"}, description: ${JSON.stringify(description)}}}]);`);
@@ -339,28 +364,30 @@ export async function generateBondTriggers(engine, card, guider) {
                 initializeSection.body.push(`} else {`);
                 initializeSection.body.push(altYesCode);
 
-                const listOfEmotions2 = await generator.next({
-                    maxCharacters: 5,
-                    maxSafetyCharacters: 0,
-                    maxParagraphs: 1,
-                    nextQuestion: `"${name} ${description}", ${altConsidering}, how would ${name} feel? answer with 3 of the most likely emotions`,
-                    stopAfter: [],
-                    stopAt: [],
-                    instructions: "Answer with a comma separated list of the 3 most likely of the following emotions: " + EMOTIONAL_STATES_TO_CHECK_AGAINST.join(", "),
-                    grammar: createGrammarListFromList(engine, EMOTIONAL_STATES_TO_CHECK_AGAINST, 3).grammar,
-                });
+                const parsedEmotionalStates2 = (await guider.askList(
+                    `${id}-emotions-alt-${question}`,
+                    `"${name} ${description}", ${altConsidering}, how would ${name} feel?`,
+                    EMOTIONAL_STATES_TO_CHECK_AGAINST_AS_RECORD,
+                    async () => {
+                        await prime();
+                        const listOfEmotions2 = await generator.next({
+                            maxCharacters: 5,
+                            maxSafetyCharacters: 0,
+                            maxParagraphs: 1,
+                            nextQuestion: `"${name} ${description}", ${altConsidering}, how would ${name} feel? answer with 3 of the most likely emotions`,
+                            stopAfter: [],
+                            stopAt: [],
+                            instructions: "Answer with a comma separated list of the 3 most likely of the following emotions: " + EMOTIONAL_STATES_TO_CHECK_AGAINST.join(", "),
+                            grammar: createGrammarListFromList(engine, EMOTIONAL_STATES_TO_CHECK_AGAINST, 3).grammar,
+                        });
 
-                if (listOfEmotions2.done) {
-                    throw new Error("Generator finished without producing output");
-                }
+                        if (listOfEmotions2.done) {
+                            throw new Error("Generator finished without producing output");
+                        }
 
-                let parsedEmotionalStates2 = parseListFromGrammarResponse(listOfEmotions2.value).map(emState => emState[0].toUpperCase() + emState.slice(1).toLowerCase()); // capitalize first letter to match the emotional states format
-                if (guider) {
-                    const guiderResult = await guider.askList(`"${name} ${description}", ${altConsidering}, how would ${name} feel?`, EMOTIONAL_STATES_TO_CHECK_AGAINST_AS_RECORD, parsedEmotionalStates2);
-                    if (guiderResult.value) {
-                        parsedEmotionalStates2 = guiderResult.value.map(em => em.trim()).filter(em => EMOTIONAL_STATES_TO_CHECK_AGAINST.includes(em));
-                    }
-                }
+                        return parseListFromGrammarResponse(listOfEmotions2.value).map(emState => emState[0].toUpperCase() + emState.slice(1).toLowerCase()); // capitalize first letter to match the emotional states format
+                    },
+                )).value.map(em => em.trim()).filter(em => EMOTIONAL_STATES_TO_CHECK_AGAINST.includes(em));
 
                 for (const emotionalState of parsedEmotionalStates2) {
                     initializeSection.body.push(`DE.utils.shiftState(char, ${JSON.stringify(emotionalState)}, ${shiftStateByOverride + 1}, ${shiftStateByOverride + 2}, [{causant: {name: other.name, type: "character"}, description: ${JSON.stringify(description)}}}]);`);
@@ -378,12 +405,6 @@ export async function generateBondTriggers(engine, card, guider) {
         doNotIncludeQuestions = null;
         overrideWholeReasoning = false;
 
-        card.config.bondTriggers[id] = {
-            causes: causesValue,
-            questions: generatedQuestions,
-        };
-        await autosave?.save();
-
         return [causesValue, generatedQuestions];
     }
 
@@ -394,7 +415,7 @@ export async function generateBondTriggers(engine, card, guider) {
         10,
         "like another character at any relationship level",
         "like another character at any relationship level",
-        "this can include anyone from strangers, enemies, aquitances, friends, close friends, to best friends towards each other",
+        "this can include anyone from strangers, enemies, aquitances, friends, close friends, to best friends towards each other; do not include sexual themes or romantic themes, focus on general liking and friendship",
         "it was done by another character",
         `runIf: (char, other) => true,`,
         `DE.utils.shiftBond(char, other, 1, 0);`,
@@ -406,7 +427,7 @@ export async function generateBondTriggers(engine, card, guider) {
         10,
         "dislike slightly another character at any relationship level, do not include extreme cases that would cause intense hatred or sworn enmity, focus on more mild cases of dislike that would just cause a bond decrease but not intense hatred (e.g. getting annoyed by them, disliking their habits, finding them irritating, getting into a petty argument, etc)",
         "dislike slightly another character at any relationship level",
-        "this can include anyone from strangers, enemies, aquitances, friends, close friends, to best friends towards each other",
+        "this can include anyone from strangers, enemies, aquitances, friends, close friends, to best friends towards each other; do not include sexual themes or romantic themes, focus on general dislike and mild annoyance",
         "it was done by another character",
         `runIf: (char, other) => true,`,
         `DE.utils.shiftBond(char, other, -1, 0);`,
@@ -420,7 +441,7 @@ export async function generateBondTriggers(engine, card, guider) {
         6,
         "like another provided they just met and have no prior relationship (the question must be specific to first impressions and first impressions only)",
         "like another character when they are strangers",
-        "they are strangers towards each other",
+        "they are strangers towards each other, do not include sexual themes or romantic themes, focus on general liking and friendship",
         "it was done by a stranger",
         `runIf: (char, other) => DE.utils.isStrangerTowards(char, other),`,
         `DE.utils.shiftBond(char, other, 1, 0);`,
@@ -433,42 +454,34 @@ export async function generateBondTriggers(engine, card, guider) {
         6,
         "dislike another character provided they just met and have no prior relationship (the question must be specific to first impressions and first impressions only)",
         "dislike another character when they are strangers",
-        "they are strangers towards each other",
+        "they are strangers towards each other, do not include sexual themes or romantic themes, focus on general dislike and mild annoyance",
         "it was done by a stranger",
         `runIf: (char, other) => DE.utils.isStrangerTowards(char, other),`,
         `DE.utils.shiftBond(char, other, -1, -1);`,
     );
 
-    let isLoveAtFirstSightValue = false;
-    if (typeof card.config.loveAtFirstSight === "undefined") {
-        // would char be one that would feel love at first sight?
-        const isLoveAtFirstSight = await generator.next({
-            maxCharacters: 5,
-            maxSafetyCharacters: 0,
-            maxParagraphs: 1,
-            nextQuestion: `If ${name} just met someone and had no prior relationship with them, is it possible for ${name} to feel love at first sight towards them? Answer with "yes" or "no".`,
-            stopAfter: [],
-            stopAt: [],
-            grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
-        });
+    const isLoveAtFirstSightValue = await guider.askBoolean(
+        "love-at-first-sight",
+        "Can " + name + " feel love at first sight?",
+        async () => {
+            await prime();
+            const isLoveAtFirstSight = await generator.next({
+                maxCharacters: 5,
+                maxSafetyCharacters: 0,
+                maxParagraphs: 1,
+                nextQuestion: `If ${name} just met someone and had no prior relationship with them, is it possible for ${name} to feel love at first sight towards them? Answer with "yes" or "no".`,
+                stopAfter: [],
+                stopAt: [],
+                grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
+            });
 
-        if (isLoveAtFirstSight.done) {
-            throw new Error("Generator finished without producing output");
-        }
-
-        if (guider) {
-            const guiderResult = await guider.askBoolean("Can " + name + " feel love at first sight?", isLoveAtFirstSightValue);
-            if (guiderResult) {
-                isLoveAtFirstSightValue = guiderResult.value;
+            if (isLoveAtFirstSight.done) {
+                throw new Error("Generator finished without producing output");
             }
-        }
 
-        isLoveAtFirstSightValue = isLoveAtFirstSight.value.trim().toLowerCase() === "yes";
-
-        card.config.loveAtFirstSight = isLoveAtFirstSightValue;
-    } else {
-        isLoveAtFirstSightValue = card.config.loveAtFirstSight;
-    }
+            return isLoveAtFirstSight.value.trim().toLowerCase() === "yes";
+        },
+    );
 
     if (isLoveAtFirstSightValue) {
         initializeSection.body.push(`// Yes/no questions about love at first sight`);
@@ -620,49 +633,45 @@ export async function generateBondTriggers(engine, card, guider) {
         let romanticBondValueMale = 100;
         let romanticBondValueFemale = 100;
 
+        const isAttractedToMales = !isAsexualValue && (scriptgenerator.state.pansexual || scriptgenerator.state["finds-males-attractive"]);
+        const isAttractedToFemales = !isAsexualValue && (scriptgenerator.state.pansexual || scriptgenerator.state["finds-females-attractive"]);
+        const isPansexual = !isAsexualValue && scriptgenerator.state.pansexual;
+
         // TODO make this better
         let generalConditionForAttraction = "";
 
-        if (card.config.attractions.includes("ambiguous")) {
-            /**
-             * @type {number}
-             */
-            let romanticBondValue;
-            if (typeof card.config.attractionEasyOrDifficult === "undefined") {
-                const generatedValue = await generator.next({
-                    maxCharacters: 200,
-                    maxSafetyCharacters: 0,
-                    maxParagraphs: 1,
-                    nextQuestion: `How easy or difficult is to get ${name} to engage sexually with another character?`,
-                    stopAfter: [],
-                    stopAt: [],
-                    grammar: `root ::= "very easy" | "easy" | "somewhat easy" | "neutral" | "somewhat difficult" | "difficult" | "very difficult"`,
-                    instructions: `Answer with one of the following options: "very easy", "easy", "somewhat easy", "neutral", "somewhat difficult", "difficult", "very difficult"`,
-                });
+        if (isPansexual) {
+            const guiderResult = await guider.askOption(
+                "intimate-engagement-pansexual",
+                "How difficult is it to get " + name + " to engage intimately with another character? (in general)",
+                Object.keys(levelsOfRomanticBond),
+                async () => {
+                    await prime();
+                    /**
+                     * @type {number}
+                     */
+                    let romanticBondValue;
+                    const generatedValue = await generator.next({
+                        maxCharacters: 200,
+                        maxSafetyCharacters: 0,
+                        maxParagraphs: 1,
+                        nextQuestion: `How easy or difficult is to get ${name} to engage sexually with another character?`,
+                        stopAfter: [],
+                        stopAt: [],
+                        grammar: `root ::= "very easy" | "easy" | "somewhat easy" | "neutral" | "somewhat difficult" | "difficult" | "very difficult"`,
+                        instructions: `Answer with one of the following options: "very easy", "easy", "somewhat easy", "neutral", "somewhat difficult", "difficult", "very difficult"`,
+                    });
 
-                if (generatedValue.done) {
-                    throw new Error("Generator finished without producing output");
-                }
-
-                let valueParsed = generatedValue.value.trim().toLowerCase();
-
-                if (guider) {
-                    const guiderResult = await guider.askOption("How difficult is it to get " + name + " to engage sexually/romantically with another character? (in general)", Object.keys(levelsOfRomanticBond), valueParsed);
-
-                    if (guiderResult.value) {
-                        valueParsed = guiderResult.value;
+                    if (generatedValue.done) {
+                        throw new Error("Generator finished without producing output");
                     }
-                }
 
-                // @ts-ignore
-                romanticBondValue = await levelsOfRomanticBond[valueParsed];
+                    return generatedValue.value.trim().toLowerCase();
+                },
+            );
 
-                card.config.attractionEasyOrDifficult = valueParsed;
-                await autosave?.save();
-            } else {
-                // @ts-ignore
-                romanticBondValue = levelsOfRomanticBond[card.config.attractionEasyOrDifficult];
-            }
+            // @ts-ignore
+            const romanticBondValue = levelsOfRomanticBond[guiderResult.value];
 
             // TODO basicConditionsForAttractionFn is not defined anywhere
             generalConditionForAttraction += `(basicConditionsForAttractionFn(char, other) && DE.utils.isSecondBondEqOrMoreThan(char, other, ${romanticBondValue}))`;
@@ -915,9 +924,4 @@ export async function generateBondTriggers(engine, card, guider) {
     if (!isIncestuousValue) {
         // TODO creepy bonds for incest
     }
-
-    // TODO generate some actions, alone with a character that is romantic interest, etc...
-
-    delete card.config.bondTriggers;
-    await autosave?.save();
 }

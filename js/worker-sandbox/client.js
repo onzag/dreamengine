@@ -312,6 +312,13 @@ export class EngineWorkerClient {
     getCardTypeWizardState() { return this.#call("getCardTypeWizardState"); }
 
     /**
+     * 
+     * @param {{ namespace: string, id: string }} args
+     * @returns {Promise<* | null>}
+     */
+    getWizardStateFromScript(args) { return this.#call("getWizardStateFromScript", args); }
+
+    /**
      * Send an answer to a guider question on the worker.
      * @param {{ qid: number, value: any }} args
      */

@@ -396,6 +396,19 @@ export class DEJSEngine {
     }
 
     /**
+     * @param {string} namespace 
+     * @param {string} id 
+     * @returns 
+     */
+    getScriptSource(namespace, id) {
+        const key = `${namespace}/${id}`;
+        if (this.scriptCache[key]) {
+            return this.scriptCache[key].__source;
+        }
+        return null;
+    }
+
+    /**
      * @param {Array<{namespace: string, id: string}>} scripts 
      * @returns {Record<string, { id: string, namespace: string, language: string, description: string, type: string, exposeProperties: DEScriptExposeProperties, exposeCharacters: DEScriptExposeCharacters, metadata?: Record<string, boolean | string | number> }>}
      */

@@ -168,10 +168,6 @@ async function chooseReason(id, guider, modifierInfo, valueAnswer, name, context
     const isFeral = fineTune.includes("feral");
     const isFamily = fineTune.includes("family");
 
-    if (id === "friendly_10_20_slightRomanticInterest_10_20_nonFamily_feral_character_male_a_slight_In private_open-to-affection-reason") {
-        debugger;
-    }
-
     const reasons = []
 
     if (valueAnswer === "not") {

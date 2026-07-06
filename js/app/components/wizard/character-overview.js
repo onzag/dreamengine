@@ -429,6 +429,729 @@ const RELATIONSHIPS_THIRD_PREFIXES = [
     ],
 ];
 
+/**
+ * Builds a rich HTMLElement for a likes-list or dislikes-list, augmented with
+ * the activity data produced by generate-activities.js.
+ * For each item the state may contain:
+ *   `like-or-dislike-is-activity-{item}`         boolean
+ *   `activity-execution-template-for-{item}`     string (template with {{chars}})
+ * @param {*} state
+ * @param {'likes-list'|'dislikes-list'} listKey
+ * @returns {HTMLElement|null}
+ */
+/**
+ * Renders all family members collected during the wizard.
+ * State keys per index i (until `family-member-to-add-{i}` is "no" or missing):
+ *   `family-member-to-add-{i}`             string – relation type
+ *   `family-member-to-add-{i}-name`        string – member's name
+ *   `family-member-to-add-{i}-pre-create-bond`  boolean
+ *   `family-member-to-add-{i}-bond-type`   string – only if pre-create-bond is true
+ * @param {*} state
+ * @returns {HTMLElement|null}
+ */
+function renderFamilyMembers(state) {
+    const items = [];
+    let i = 0;
+    while (true) {
+        const relation = state[`family-member-to-add-${i}`];
+        if (relation === undefined || relation === null || relation === 'no') break;
+        items.push(i);
+        i++;
+    }
+    if (!items.length) return null;
+
+    const container = document.createElement('div');
+    container.className = 'activities-list';
+
+    for (const idx of items) {
+        const memberName = state[`family-member-to-add-${idx}-name`];
+        const relation = state[`family-member-to-add-${idx}`];
+        const preCreateBond = state[`family-member-to-add-${idx}-pre-create-bond`];
+        const bondType = state[`family-member-to-add-${idx}-bond-type`];
+
+        const itemEl = document.createElement('div');
+        itemEl.className = 'activity-item';
+
+        const nameEl = document.createElement('div');
+        nameEl.className = 'activity-item-name';
+        nameEl.textContent = memberName ? String(memberName) : '(unnamed)';
+        itemEl.appendChild(nameEl);
+
+        const relRow = document.createElement('div');
+        relRow.className = 'activity-item-meta';
+        const relLabel = document.createElement('span');
+        relLabel.className = 'activity-meta-label';
+        relLabel.textContent = 'Relation:';
+        relRow.appendChild(relLabel);
+        const relVal = document.createElement('span');
+        relVal.className = 'activity-template-val';
+        relVal.textContent = capitalizeFirst(String(relation));
+        relRow.appendChild(relVal);
+        itemEl.appendChild(relRow);
+
+        if (preCreateBond !== undefined) {
+            const bondRow = document.createElement('div');
+            bondRow.className = 'activity-item-meta';
+            const bondLabel = document.createElement('span');
+            bondLabel.className = 'activity-meta-label';
+            bondLabel.textContent = 'Pre-created bond:';
+            bondRow.appendChild(bondLabel);
+            const badge = document.createElement('span');
+            badge.className = `overview-badge ${preCreateBond ? 'overview-badge--yes' : 'overview-badge--no'}`;
+            badge.textContent = preCreateBond ? 'Yes' : 'No';
+            bondRow.appendChild(badge);
+            itemEl.appendChild(bondRow);
+        }
+
+        if (bondType) {
+            const bondTypeRow = document.createElement('div');
+            bondTypeRow.className = 'activity-item-meta';
+            const bondTypeLabel = document.createElement('span');
+            bondTypeLabel.className = 'activity-meta-label';
+            bondTypeLabel.textContent = 'Bond:';
+            bondTypeRow.appendChild(bondTypeLabel);
+            const bondTypeVal = document.createElement('span');
+            bondTypeVal.className = 'activity-template-val';
+            bondTypeVal.textContent = capitalizeFirst(String(bondType));
+            bondTypeRow.appendChild(bondTypeVal);
+            itemEl.appendChild(bondTypeRow);
+        }
+
+        container.appendChild(itemEl);
+    }
+
+    return container;
+}
+
+/**
+ * Renders all non-family relationships collected during the wizard.
+ * State keys per index i (until `non-family-relationship-{i}` is false or missing):
+ *   `non-family-relationship-{i}`                          boolean
+ *   `non-family-relationship-{i}-name`                    string
+ *   `non-family-relationship-{i}-bond-type`               string (may be "select per character...")
+ *   `non-family-relationship-{i}-bond-type-for-character` string (if per-char)
+ *   `non-family-relationship-{i}-bond-type-for-target`    string (if per-char)
+ *   `non-family-relationship-{i}-bond2-type`              string (romantic)
+ *   `non-family-relationship-{i}-bond2-type-for-character` string (if per-char)
+ *   `non-family-relationship-{i}-bond2-type-for-target`   string (if per-char)
+ *   `non-family-relationship-{i}-bond-time`               number (years known)
+ * @param {*} state
+ * @returns {HTMLElement|null}
+ */
+function renderNonFamilyRelationships(state) {
+    const items = [];
+    let i = 0;
+    while (true) {
+        const rel = state[`non-family-relationship-${i}`];
+        if (rel === undefined || rel === null || rel === false) break;
+        items.push(i);
+        i++;
+    }
+    if (!items.length) return null;
+
+    const charName = state['name'] || 'Character';
+    const container = document.createElement('div');
+    container.className = 'activities-list';
+
+    for (const idx of items) {
+        const targetName = state[`non-family-relationship-${idx}-name`];
+        const bondType = state[`non-family-relationship-${idx}-bond-type`];
+        const bondTypeForChar = state[`non-family-relationship-${idx}-bond-type-for-character`];
+        const bondTypeForTarget = state[`non-family-relationship-${idx}-bond-type-for-target`];
+        const bond2Type = state[`non-family-relationship-${idx}-bond2-type`];
+        const bond2TypeForChar = state[`non-family-relationship-${idx}-bond2-type-for-character`];
+        const bond2TypeForTarget = state[`non-family-relationship-${idx}-bond2-type-for-target`];
+        const bondTime = state[`non-family-relationship-${idx}-bond-time`];
+
+        const itemEl = document.createElement('div');
+        itemEl.className = 'activity-item';
+
+        const nameEl = document.createElement('div');
+        nameEl.className = 'activity-item-name';
+        nameEl.textContent = targetName ? String(targetName) : '(unnamed)';
+        itemEl.appendChild(nameEl);
+
+        const isPerChar = bondType === 'select per character (each character sees the other differently)';
+        if (bondType) {
+            if (isPerChar) {
+                if (bondTypeForChar) {
+                    const row = document.createElement('div');
+                    row.className = 'activity-item-meta';
+                    const label = document.createElement('span');
+                    label.className = 'activity-meta-label';
+                    label.textContent = `${charName} sees them as:`;
+                    row.appendChild(label);
+                    const val = document.createElement('span');
+                    val.className = 'activity-template-val';
+                    val.textContent = capitalizeFirst(String(bondTypeForChar));
+                    row.appendChild(val);
+                    itemEl.appendChild(row);
+                }
+                if (bondTypeForTarget) {
+                    const row = document.createElement('div');
+                    row.className = 'activity-item-meta';
+                    const label = document.createElement('span');
+                    label.className = 'activity-meta-label';
+                    label.textContent = `${targetName || 'They'} see${targetName ? 's' : ''} ${charName} as:`;
+                    row.appendChild(label);
+                    const val = document.createElement('span');
+                    val.className = 'activity-template-val';
+                    val.textContent = capitalizeFirst(String(bondTypeForTarget));
+                    row.appendChild(val);
+                    itemEl.appendChild(row);
+                }
+            } else {
+                const row = document.createElement('div');
+                row.className = 'activity-item-meta';
+                const label = document.createElement('span');
+                label.className = 'activity-meta-label';
+                label.textContent = 'Relationship:';
+                row.appendChild(label);
+                const val = document.createElement('span');
+                val.className = 'activity-template-val';
+                val.textContent = capitalizeFirst(String(bondType));
+                row.appendChild(val);
+                itemEl.appendChild(row);
+            }
+        }
+
+        const isRomPerChar = bond2Type === 'select per character (each character sees the other differently)';
+        if (bond2Type) {
+            if (isRomPerChar) {
+                if (bond2TypeForChar) {
+                    const row = document.createElement('div');
+                    row.className = 'activity-item-meta';
+                    const label = document.createElement('span');
+                    label.className = 'activity-meta-label';
+                    label.textContent = `${charName}'s romantic view:`;
+                    row.appendChild(label);
+                    const val = document.createElement('span');
+                    val.className = 'activity-template-val';
+                    val.textContent = capitalizeFirst(String(bond2TypeForChar));
+                    row.appendChild(val);
+                    itemEl.appendChild(row);
+                }
+                if (bond2TypeForTarget) {
+                    const row = document.createElement('div');
+                    row.className = 'activity-item-meta';
+                    const label = document.createElement('span');
+                    label.className = 'activity-meta-label';
+                    label.textContent = `${targetName || 'Their'} romantic view:`;
+                    row.appendChild(label);
+                    const val = document.createElement('span');
+                    val.className = 'activity-template-val';
+                    val.textContent = capitalizeFirst(String(bond2TypeForTarget));
+                    row.appendChild(val);
+                    itemEl.appendChild(row);
+                }
+            } else {
+                const row = document.createElement('div');
+                row.className = 'activity-item-meta';
+                const label = document.createElement('span');
+                label.className = 'activity-meta-label';
+                label.textContent = 'Romantic bond:';
+                row.appendChild(label);
+                const val = document.createElement('span');
+                val.className = 'activity-template-val';
+                val.textContent = capitalizeFirst(String(bond2Type));
+                row.appendChild(val);
+                itemEl.appendChild(row);
+            }
+        }
+
+        if (bondTime !== undefined && bondTime !== null) {
+            const row = document.createElement('div');
+            row.className = 'activity-item-meta';
+            const label = document.createElement('span');
+            label.className = 'activity-meta-label';
+            label.textContent = 'Known for:';
+            row.appendChild(label);
+            const val = document.createElement('span');
+            val.className = 'activity-template-val';
+            val.textContent = `${bondTime} year${bondTime === 1 ? '' : 's'}`;
+            row.appendChild(val);
+            itemEl.appendChild(row);
+        }
+
+        container.appendChild(itemEl);
+    }
+
+    return container;
+}
+
+/**
+ * Renders extra attractions towards specific species and species groups.
+ * State keys for specific-species loop (prefix "extra-attraction-"):
+ *   `extra-attraction-{i}`          boolean
+ *   `extra-attraction-{i}-species`  string
+ *   `extra-attraction-{i}-age-min`  number
+ *   `extra-attraction-{i}-age-max`  number
+ *   `extra-attraction-{i}-gender`   string
+ *   `extra-attraction-{i}-sex`      string
+ * State keys for species-group loop (prefix "extra-attraction-species-group-"):
+ *   `extra-attraction-species-group-{i}`          boolean
+ *   `extra-attraction-species-group-{i}-group`    string
+ *   `extra-attraction-species-group-{i}-age-min`  number
+ *   `extra-attraction-species-group-{i}-age-max`  number
+ *   `extra-attraction-species-group-{i}-gender`   string
+ *   `extra-attraction-species-group-{i}-sex`      string
+ * @param {*} state
+ * @returns {HTMLElement|null}
+ */
+function renderExtraAttractions(state) {
+    /**
+     * @param {string} prefix
+     * @param {(idx: number) => {title: string, rows: {label: string, value: string}[]}} buildEntry
+     * @returns {{title: string, rows: {label: string, value: string}[]}[]}
+     */
+    function collectLoop(prefix, buildEntry) {
+        const entries = [];
+        let i = 0;
+        while (true) {
+            const v = state[`${prefix}${i}`];
+            if (!v) break;
+            entries.push(buildEntry(i));
+            i++;
+        }
+        return entries;
+    }
+
+    const specificEntries = collectLoop('extra-attraction-', (i) => {
+        const species = state[`extra-attraction-${i}-species`];
+        const ageMin = state[`extra-attraction-${i}-age-min`];
+        const ageMax = state[`extra-attraction-${i}-age-max`];
+        const gender = state[`extra-attraction-${i}-gender`];
+        const sex = state[`extra-attraction-${i}-sex`];
+        const rows = [];
+        if (species) rows.push({ label: 'Species', value: capitalizeFirst(String(species)) });
+        if (gender) rows.push({ label: 'Gender', value: capitalizeFirst(String(gender)) });
+        if (sex && sex !== 'any') rows.push({ label: 'Sex', value: capitalizeFirst(String(sex)) });
+        if (ageMin !== undefined && ageMax !== undefined) rows.push({ label: 'Age range', value: `${ageMin} – ${ageMax} years` });
+        return { title: species ? capitalizeFirst(String(species)) : `Attraction ${i + 1}`, rows };
+    });
+
+    const groupEntries = collectLoop('extra-attraction-species-group-', (i) => {
+        const group = state[`extra-attraction-species-group-${i}-group`];
+        const ageMin = state[`extra-attraction-species-group-${i}-age-min`];
+        const ageMax = state[`extra-attraction-species-group-${i}-age-max`];
+        const gender = state[`extra-attraction-species-group-${i}-gender`];
+        const sex = state[`extra-attraction-species-group-${i}-sex`];
+        const rows = [];
+        if (group) rows.push({ label: 'Species group', value: capitalizeFirst(String(group)) });
+        if (gender) rows.push({ label: 'Gender', value: capitalizeFirst(String(gender)) });
+        if (sex && sex !== 'any') rows.push({ label: 'Sex', value: capitalizeFirst(String(sex)) });
+        if (ageMin !== undefined && ageMax !== undefined) rows.push({ label: 'Age range', value: `${ageMin} – ${ageMax} years` });
+        return { title: group ? `${capitalizeFirst(String(group))} group` : `Group attraction ${i + 1}`, rows };
+    });
+
+    const allEntries = [...specificEntries, ...groupEntries];
+    if (!allEntries.length) return null;
+
+    const container = document.createElement('div');
+    container.className = 'activities-list';
+
+    for (const entry of allEntries) {
+        const itemEl = document.createElement('div');
+        itemEl.className = 'activity-item';
+
+        const nameEl = document.createElement('div');
+        nameEl.className = 'activity-item-name';
+        nameEl.textContent = entry.title;
+        itemEl.appendChild(nameEl);
+
+        for (const { label, value } of entry.rows) {
+            const row = document.createElement('div');
+            row.className = 'activity-item-meta';
+            const lbl = document.createElement('span');
+            lbl.className = 'activity-meta-label';
+            lbl.textContent = `${label}:`;
+            row.appendChild(lbl);
+            const val = document.createElement('span');
+            val.className = 'activity-template-val';
+            val.textContent = value;
+            row.appendChild(val);
+            itemEl.appendChild(row);
+        }
+
+        container.appendChild(itemEl);
+    }
+
+    return container;
+}
+
+/**
+ * Renders a single intimate act card with all its consent/vocab/criteria metadata.
+ * State keys per act (where {act} is the act string used as the state key id):
+ *   `{act}-would-ask-consent`         boolean
+ *   `{act}-consent-requesting-actions` string[]
+ *   `{act}-insistence`                number (0-10)
+ *   `{act}-ignore-consent`            number (0-10)
+ *   `{act}-vocab-limit`               string (optional, sex acts only)
+ *   `{act}-criteria-questions`        string[] (optional, sex acts only)
+ * @param {*} state
+ * @param {string} act
+ * @returns {HTMLElement}
+ */
+function renderIntimateActCard(state, act) {
+    const itemEl = document.createElement('div');
+    itemEl.className = 'activity-item';
+
+    const nameEl = document.createElement('div');
+    nameEl.className = 'activity-item-name';
+    nameEl.textContent = String(act).replace(/\{\{char\}\}/g, state['name'] || 'Character').replace(/\{\{other\}\}/g, 'Other');
+    itemEl.appendChild(nameEl);
+
+    /**
+     * @param {string} label
+     * @param {string} value
+     */
+    const addMeta = (label, value) => {
+        const row = document.createElement('div');
+        row.className = 'activity-item-meta';
+        const lbl = document.createElement('span');
+        lbl.className = 'activity-meta-label';
+        lbl.textContent = `${label}:`;
+        row.appendChild(lbl);
+        const val = document.createElement('span');
+        val.className = 'activity-template-val';
+        val.textContent = value;
+        row.appendChild(val);
+        itemEl.appendChild(row);
+    };
+
+    /**
+     * @param {string} label
+     * @param {boolean} yes
+     */
+    const addBadge = (label, yes) => {
+        const row = document.createElement('div');
+        row.className = 'activity-item-meta';
+        const lbl = document.createElement('span');
+        lbl.className = 'activity-meta-label';
+        lbl.textContent = `${label}:`;
+        row.appendChild(lbl);
+        const badge = document.createElement('span');
+        badge.className = `overview-badge ${yes ? 'overview-badge--yes' : 'overview-badge--no'}`;
+        badge.textContent = yes ? 'Yes' : 'No';
+        row.appendChild(badge);
+        itemEl.appendChild(row);
+    };
+
+    const vocabLimit = state[`${act}-vocab-limit`];
+    if (vocabLimit && vocabLimit !== 'none' && vocabLimit !== 'normal') {
+        addMeta('Vocal expression', capitalizeFirst(String(vocabLimit)));
+    }
+
+    const criteriaQuestions = state[`${act}-criteria-questions`];
+    if (Array.isArray(criteriaQuestions) && criteriaQuestions.length) {
+        const row = document.createElement('div');
+        row.className = 'activity-item-meta';
+        const lbl = document.createElement('span');
+        lbl.className = 'activity-meta-label';
+        lbl.textContent = 'Ends when:';
+        row.appendChild(lbl);
+        const ul = document.createElement('ul');
+        ul.className = 'overview-list';
+        ul.style.margin = '0';
+        for (const q of criteriaQuestions) {
+            const li = document.createElement('li');
+            li.textContent = String(q).replace(/\{\{char\}\}/g, state['name'] || 'Character').replace(/\{\{other\}\}/g, 'Other');
+            ul.appendChild(li);
+        }
+        row.appendChild(ul);
+        itemEl.appendChild(row);
+    }
+
+    const wouldAskConsent = state[`${act}-would-ask-consent`];
+    if (wouldAskConsent !== undefined) {
+        addBadge('Asks consent', wouldAskConsent);
+    }
+
+    if (wouldAskConsent) {
+        const consentActions = state[`${act}-consent-requesting-actions`];
+        if (Array.isArray(consentActions) && consentActions.length) {
+            const row = document.createElement('div');
+            row.className = 'activity-item-meta';
+            const lbl = document.createElement('span');
+            lbl.className = 'activity-meta-label';
+            lbl.textContent = 'Consent actions:';
+            row.appendChild(lbl);
+            const ul = document.createElement('ul');
+            ul.className = 'overview-list';
+            ul.style.margin = '0';
+            for (const a of consentActions) {
+                const li = document.createElement('li');
+                li.textContent = String(a).replace(/\{\{char\}\}/g, state['name'] || 'Character').replace(/\{\{other\}\}/g, 'Other');
+                ul.appendChild(li);
+            }
+            row.appendChild(ul);
+            itemEl.appendChild(row);
+        }
+
+        const insistence = state[`${act}-insistence`];
+        if (insistence !== undefined && insistence !== null) {
+            addMeta('Insistence after refusal', `${insistence} / 10`);
+        }
+
+        const ignoreConsent = state[`${act}-ignore-consent`];
+        if (ignoreConsent !== undefined && ignoreConsent !== null) {
+            addMeta('Likelihood to ignore refusal', `${ignoreConsent} / 10`);
+        }
+    }
+
+    return itemEl;
+}
+
+/**
+ * Renders a list of intimate acts from a state list key.
+ * @param {*} state
+ * @param {string} listKey
+ * @returns {HTMLElement|null}
+ */
+function renderActList(state, listKey) {
+    const acts = state[listKey];
+    if (!Array.isArray(acts) || !acts.length) return null;
+
+    const container = document.createElement('div');
+    container.className = 'activities-list';
+
+    for (const act of acts) {
+        container.appendChild(renderIntimateActCard(state, act));
+    }
+
+    return container;
+}
+
+/**
+ * Renders the "open-to" sex responses section, including reversed-kinks reactions
+ * and the vocab/reaction for each sex act question.
+ * State keys:
+ *   `reversed-kinks-question`            string
+ *   `reversed-kinks-reaction-loved`      string
+ *   `reversed-kinks-reaction-unloved`    string
+ *   `sex-acts-open-to-questions`         string[]
+ *   `sex-acts-open-to-vocab-{q}`         string
+ *   `sex-acts-open-to-loved-reaction-{q}` string
+ * @param {*} state
+ * @returns {HTMLElement|null}
+ */
+function renderOpenToSex(state) {
+    const charName = state['name'] || 'Character';
+
+    /**
+     * @param {string} text
+     * @returns {string}
+     */
+    const replacePlaceholders = (text) => String(text)
+        .replace(/\{\{char\}\}/g, charName)
+        .replace(/\{\{other\}\}/g, 'Other');
+
+    /**
+     * @param {string} label
+     * @param {string} value
+     * @param {HTMLElement} parent
+     */
+    const addMeta = (label, value, parent) => {
+        const row = document.createElement('div');
+        row.className = 'activity-item-meta';
+        const lbl = document.createElement('span');
+        lbl.className = 'activity-meta-label';
+        lbl.textContent = `${label}:`;
+        row.appendChild(lbl);
+        const val = document.createElement('span');
+        val.className = 'activity-template-val';
+        val.textContent = value;
+        row.appendChild(val);
+        parent.appendChild(row);
+    };
+
+    const items = [];
+
+    const reversedKinksQuestion = state['reversed-kinks-question'];
+    const reversedKinksReactionLoved = state['reversed-kinks-reaction-loved'];
+    const reversedKinksReactionUnloved = state['reversed-kinks-reaction-unloved'];
+
+    if (reversedKinksQuestion || reversedKinksReactionLoved || reversedKinksReactionUnloved) {
+        const card = document.createElement('div');
+        card.className = 'activity-item';
+        const title = document.createElement('div');
+        title.className = 'activity-item-name';
+        title.textContent = 'Unwanted kink behaviour';
+        card.appendChild(title);
+        if (reversedKinksQuestion) addMeta('Trigger question', replacePlaceholders(reversedKinksQuestion), card);
+        if (reversedKinksReactionLoved) addMeta('Reaction (attracted to them)', replacePlaceholders(reversedKinksReactionLoved), card);
+        if (reversedKinksReactionUnloved) addMeta('Reaction (not attracted)', replacePlaceholders(reversedKinksReactionUnloved), card);
+        items.push(card);
+    }
+
+    const openToQuestions = state['sex-acts-open-to-questions'];
+    if (Array.isArray(openToQuestions)) {
+        for (const q of openToQuestions) {
+            const card = document.createElement('div');
+            card.className = 'activity-item';
+            const title = document.createElement('div');
+            title.className = 'activity-item-name';
+            title.textContent = replacePlaceholders(String(q));
+            card.appendChild(title);
+            const vocab = state[`sex-acts-open-to-vocab-${q}`];
+            if (vocab && vocab !== 'none' && vocab !== 'normal') addMeta('Vocal expression', capitalizeFirst(String(vocab)), card);
+            const reactionLoved = state[`sex-acts-open-to-loved-reaction-${q}`];
+            if (reactionLoved) addMeta('Reaction (attracted to them)', replacePlaceholders(String(reactionLoved)), card);
+            items.push(card);
+        }
+    }
+
+    if (!items.length) return null;
+
+    const container = document.createElement('div');
+    container.className = 'activities-list';
+    for (const item of items) container.appendChild(item);
+    return container;
+}
+
+/**
+ * Renders a list of activities.
+ * @param {*} state 
+ * @param {string} listKey 
+ * @returns {HTMLElement|null}
+ */
+/**
+ * Renders all yes/no questions for a single bond trigger id produced by askYesNo.
+ * State keys:
+ *   `{id}-questions`                  string[]
+ *   `{id}-description-{question}`     string
+ *   `{id}-emotions-{question}`        string[]
+ * @param {*} state
+ * @param {string} id
+ * @returns {HTMLElement|null}
+ */
+function renderBondTriggers(state, id) {
+    const questions = state[`${id}-questions`];
+    if (!Array.isArray(questions) || !questions.length) return null;
+
+    const charName = state['name'] || 'Character';
+    /**
+     * 
+     * @param {string} text 
+     * @returns 
+     */
+    const replacePlaceholders = (text) => String(text)
+        .replace(/\{\{char\}\}/g, charName)
+        .replace(/\{\{other\}\}/g, 'Other');
+
+    const container = document.createElement('div');
+    container.className = 'activities-list';
+
+    for (const question of questions) {
+        const itemEl = document.createElement('div');
+        itemEl.className = 'activity-item';
+
+        const nameEl = document.createElement('div');
+        nameEl.className = 'activity-item-name';
+        nameEl.textContent = replacePlaceholders(String(question));
+        itemEl.appendChild(nameEl);
+
+        const description = state[`${id}-description-${question}`];
+        if (description) {
+            const row = document.createElement('div');
+            row.className = 'activity-item-meta';
+            const lbl = document.createElement('span');
+            lbl.className = 'activity-meta-label';
+            lbl.textContent = 'If yes:';
+            row.appendChild(lbl);
+            const val = document.createElement('span');
+            val.className = 'activity-template-val';
+            val.textContent = replacePlaceholders(String(description));
+            row.appendChild(val);
+            itemEl.appendChild(row);
+        }
+
+        const emotions = state[`${id}-emotions-${question}`];
+        if (Array.isArray(emotions) && emotions.length) {
+            const row = document.createElement('div');
+            row.className = 'activity-item-meta';
+            const lbl = document.createElement('span');
+            lbl.className = 'activity-meta-label';
+            lbl.textContent = 'Emotions:';
+            row.appendChild(lbl);
+            const val = document.createElement('span');
+            val.className = 'activity-template-val';
+            val.textContent = emotions.join(', ');
+            row.appendChild(val);
+            itemEl.appendChild(row);
+        }
+
+        container.appendChild(itemEl);
+    }
+
+    return container;
+}
+
+/**
+ * 
+ * @param {*} state 
+ * @param {string} listKey 
+ * @returns {HTMLElement|null}
+ */
+function renderActivitiesList(state, listKey) {
+    const items = state[listKey];
+    if (!Array.isArray(items) || items.length === 0) return null;
+
+    const container = document.createElement('div');
+    container.className = 'activities-list';
+
+    for (const item of items) {
+        const itemEl = document.createElement('div');
+        itemEl.className = 'activity-item';
+
+        const nameEl = document.createElement('div');
+        nameEl.className = 'activity-item-name';
+        nameEl.textContent = String(item);
+        itemEl.appendChild(nameEl);
+
+        const isActivity = state[`like-or-dislike-is-activity-${item}`];
+        const template = state[`activity-execution-template-for-${item}`];
+
+        if (isActivity !== undefined) {
+            const typeRow = document.createElement('div');
+            typeRow.className = 'activity-item-meta';
+
+            const typeLabel = document.createElement('span');
+            typeLabel.className = 'activity-meta-label';
+            typeLabel.textContent = 'Type:';
+            typeRow.appendChild(typeLabel);
+
+            const badge = document.createElement('span');
+            badge.className = `overview-badge ${isActivity ? 'overview-badge--yes' : 'overview-badge--no'}`;
+            badge.textContent = isActivity ? 'Activity' : 'Topic of Conversation';
+            typeRow.appendChild(badge);
+
+            itemEl.appendChild(typeRow);
+        }
+
+        if (template) {
+            const templateRow = document.createElement('div');
+            templateRow.className = 'activity-item-meta';
+
+            const templateLabel = document.createElement('span');
+            templateLabel.className = 'activity-meta-label';
+            templateLabel.textContent = 'Template:';
+            templateRow.appendChild(templateLabel);
+
+            const templateVal = document.createElement('span');
+            templateVal.className = 'activity-template-val';
+            templateVal.textContent = String(template);
+            templateRow.appendChild(templateVal);
+
+            itemEl.appendChild(templateRow);
+        }
+
+        container.appendChild(itemEl);
+    }
+
+    return container;
+}
+
 const SECTIONS = [
     {
         title: 'Character Overview',
@@ -640,14 +1363,41 @@ const SECTIONS = [
                     return typeof s['mute'] === 'boolean' ? s['mute'] : true;
                 }
             },
-            // TODO family and friends display
+            {
+                label: "Family Members",
+                key: 'family-member-to-add-0',
+                /**
+                 * @param {*} s
+                 * @returns {HTMLElement|null}
+                 */
+                custom: (s) => renderFamilyMembers(s),
+            },
+            {
+                label: "Non-Family Relationships",
+                key: 'non-family-relationship-0',
+                /**
+                 * @param {*} s
+                 * @returns {HTMLElement|null}
+                 */
+                custom: (s) => renderNonFamilyRelationships(s),
+            },
             {
                 label: "Likes and Interests",
                 key: 'likes-list',
+                /**
+                 * @param {*} s
+                 * @returns {HTMLElement|null}
+                 */
+                custom: (s) => renderActivitiesList(s, 'likes-list'),
             },
             {
                 label: "Dislikes",
                 key: 'dislikes-list',
+                /**
+                 * @param {*} s
+                 * @returns {HTMLElement|null}
+                 */
+                custom: (s) => renderActivitiesList(s, 'dislikes-list'),
             },
             {
                 label: "Prejudiced Against (Species)",
@@ -724,7 +1474,15 @@ const SECTIONS = [
                 label: "Pickiness with Ambiguous",
                 key: 'pickiness-ambiguous-genders',
             },
-            // TODO other attractions
+            {
+                label: "Additional Attractions",
+                key: 'extra-attraction-0',
+                /**
+                 * @param {*} s
+                 * @returns {HTMLElement|null}
+                 */
+                custom: (s) => renderExtraAttractions(s),
+            },
             {
                 label: "Kinks and Fetishes",
                 key: 'kinks',
@@ -746,6 +1504,119 @@ const SECTIONS = [
                 key: 'intimate-verbality',
             },
             // TODO affection showcases with requesting actions and all that stuff
+            {
+                label: "Affection Showcases",
+                key: 'affection-showcases',
+                /**
+                 * @param {*} s
+                 * @returns {HTMLElement|null}
+                 */
+                custom: (s) => renderActList(s, 'affection-showcases'),
+            },
+            {
+                label: "Intimate Affection (Males)",
+                key: 'intimate-affection-for-males',
+                /**
+                 * @param {*} s
+                 * @returns {HTMLElement|null}
+                 */
+                custom: (s) => renderActList(s, 'intimate-affection-for-males'),
+            },
+            {
+                label: "Intimate Affection (Females)",
+                key: 'intimate-affection-for-females',
+                /**
+                 * @param {*} s
+                 * @returns {HTMLElement|null}
+                 */
+                custom: (s) => renderActList(s, 'intimate-affection-for-females'),
+            },
+            {
+                label: "Intimate Affection (Ambiguous)",
+                key: 'intimate-affection-for-ambiguous',
+                /**
+                 * @param {*} s
+                 * @returns {HTMLElement|null}
+                 */
+                custom: (s) => renderActList(s, 'intimate-affection-for-ambiguous'),
+            },
+            {
+                label: "Sex Acts (Males)",
+                key: 'sex-acts-for-males',
+                /**
+                 * @param {*} s
+                 * @returns {HTMLElement|null}
+                 */
+                custom: (s) => renderActList(s, 'sex-acts-for-males'),
+            },
+            {
+                label: "Sex Acts (Females)",
+                key: 'sex-acts-for-females',
+                /**
+                 * @param {*} s
+                 * @returns {HTMLElement|null}
+                 */
+                custom: (s) => renderActList(s, 'sex-acts-for-females'),
+            },
+            {
+                label: "Sex Acts (Ambiguous)",
+                key: 'sex-acts-for-ambiguous',
+                /**
+                 * @param {*} s
+                 * @returns {HTMLElement|null}
+                 */
+                custom: (s) => renderActList(s, 'sex-acts-for-ambiguous'),
+            },
+            {
+                label: "Open-to Sex Responses",
+                key: 'sex-acts-open-to-questions',
+                /**
+                 * @param {*} s
+                 * @returns {HTMLElement|null}
+                 */
+                custom: (s) => renderOpenToSex(s),
+            },
+        ]
+    },
+    {
+        title: "Character Bond Triggers",
+        fields: [
+            {
+                label: "Likes (Any Level)",
+                key: 'like-at-any-level-questions',
+                /**
+                 * @param {*} s
+                 * @returns {HTMLElement|null}
+                 */
+                custom: (s) => renderBondTriggers(s, 'like-at-any-level'),
+            },
+            {
+                label: "Dislikes (Any Level)",
+                key: 'dislike-at-any-level-questions',
+                /**
+                 * @param {*} s
+                 * @returns {HTMLElement|null}
+                 */
+                custom: (s) => renderBondTriggers(s, 'dislike-at-any-level'),
+            },
+            {
+                label: "Likes (Strangers)",
+                key: 'like-strangers-questions',
+                /**
+                 * @param {*} s
+                 * @returns {HTMLElement|null}
+                 */
+                custom: (s) => renderBondTriggers(s, 'like-strangers'),
+            },
+            {
+                label: "Dislikes (Strangers)",
+                key: 'dislike-strangers-questions',
+                /**
+                 * @param {*} s
+                 * @returns {HTMLElement|null}
+                 */
+                custom: (s) => renderBondTriggers(s, 'dislike-strangers'),
+            },
         ]
     },
     {
@@ -1036,6 +1907,45 @@ class CharacterOverview extends HTMLElement {
                 margin-bottom: 0.2vh;
                 letter-spacing: 0.03em;
             }
+            .activities-list {
+                display: flex;
+                flex-direction: column;
+                gap: 0.8vh;
+                width: 100%;
+            }
+            .activity-item {
+                display: flex;
+                flex-direction: column;
+                gap: 0.4vh;
+                padding: 0.7vh 1vh;
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 4px;
+                background: rgba(255, 255, 255, 0.03);
+            }
+            .activity-item-name {
+                font-size: 1.9vh;
+                font-weight: 700;
+                color: rgba(255, 255, 255, 0.92);
+            }
+            .activity-item-meta {
+                display: flex;
+                align-items: baseline;
+                gap: 0.8ch;
+                flex-wrap: wrap;
+            }
+            .activity-meta-label {
+                font-size: 1.5vh;
+                color: rgba(255, 255, 255, 0.45);
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: 0.04em;
+                flex-shrink: 0;
+            }
+            .activity-template-val {
+                font-size: 1.8vh;
+                color: rgba(255, 255, 255, 0.75);
+                font-style: italic;
+            }
         `;
         dialog.appendChild(style);
 
@@ -1064,7 +1974,12 @@ class CharacterOverview extends HTMLElement {
         const contentArea = this._contentArea;
         if (!contentArea) return;
 
-        const result = await window.ENGINE_WORKER_CLIENT.getCardTypeWizardState();
+        const id = this.getAttribute('character-id');
+        const namespace = this.getAttribute('character-namespace');
+
+        const result = id && namespace ? (
+            await window.ENGINE_WORKER_CLIENT.getWizardStateFromScript({ id, namespace })
+        ) : await window.ENGINE_WORKER_CLIENT.getCardTypeWizardState();
 
         if (!result || !result.state) {
             const empty = document.createElement('p');

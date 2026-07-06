@@ -943,9 +943,6 @@ export async function generateAffectiveStates(engine, scriptgenerator, guider) {
                         `Is {{other}} currently engaging or attempting to engage any of the following with {{char}}: ` + formatOrHelper(reversedKinks) + "?",
                     )).value;
 
-                // now let's determine the reaction using inference
-                const reversedKinksList = reversedKinks.join(", ");
-
                 const reversedKinksReactionLoved = (await guider.askOpen(
                     "reversed-kinks-reaction-loved",
                     `${name}'s reaction when another character that they are attracted to attempts unwanted sexual behaviours onto them — they don't like it and want to redirect`,
