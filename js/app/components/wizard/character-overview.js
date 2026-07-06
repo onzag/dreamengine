@@ -1619,42 +1619,26 @@ const SECTIONS = [
             },
         ]
     },
-    {
-        title: "Relationships (Neutral Strangers)",
-        /**
-         * @param {*} s
-         * @return {HTMLElement | null}
-         */
-        custom: (s) => {
-            const stepsInfo = s[".steps"];
-            const typeToProcessPrefix = "strangerNeutral_n5_5_";
-            return processRelationshipSteps(s, stepsInfo, typeToProcessPrefix);
-        }
-    },
-    {
-        title: "Relationships (Good Strangers)",
-        /**
-         * @param {*} s
-         * @return {HTMLElement | null}
-         */
-        custom: (s) => {
-            const stepsInfo = s[".steps"];
-            const typeToProcessPrefix = "strangerGood_5_100_";
-            return processRelationshipSteps(s, stepsInfo, typeToProcessPrefix);
-        }
-    },
-    {
-        title: "Relationships (Bad Strangers)",
-        /**
-         * @param {*} s
-         * @return {HTMLElement | null}
-         */
-        custom: (s) => {
-            const stepsInfo = s[".steps"];
-            const typeToProcessPrefix = "strangerBad_n100_n5_";
-            return processRelationshipSteps(s, stepsInfo, typeToProcessPrefix);
-        }
-    },
+    ...[
+        ["strangerNeutral_n5_5_", "Neutral Strangers"],
+        ["strangerGood_5_100_", "Good Strangers"],
+        ["strangerBad_n100_n5_", "Bad Strangers"],
+    ].flatMap(([strangerPrefix, strangerLabel]) =>
+        RELATIONSHIPS_SECOND_PREFIXES.map(([secondPrefix, secondLabel]) => ({
+            title: `Relationships (${strangerLabel}, ${secondLabel})`,
+            /**
+             * @param {*} s
+             * @return {HTMLElement | null}
+             */
+            custom: (s) => {
+                const stepsInfo = s[".steps"];
+                // Strangers carry a romantic-interest layer (but no family layer),
+                // so the prefix combines the stranger key with the romantic interest.
+                const typeToProcessPrefix = strangerPrefix + secondPrefix;
+                return processRelationshipSteps(s, stepsInfo, typeToProcessPrefix);
+            }
+        }))
+    ),
     ...RELATIONSHIP_FIRST_PREFIXES.flatMap(([firstPrefix, firstLabel]) =>
         RELATIONSHIPS_SECOND_PREFIXES.flatMap(([secondPrefix, secondLabel]) =>
             RELATIONSHIPS_THIRD_PREFIXES.map(([thirdPrefix, thirdLabel]) => ({

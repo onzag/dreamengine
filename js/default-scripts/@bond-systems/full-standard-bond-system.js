@@ -89,9 +89,9 @@
  * @property {FSSLoveDefinition} closeFriend_35_50
  * @property {FSSLoveDefinition} bestFriend_50_100
  * 
- * @property {FSSLoveDefinition} strangerBad_n100_n5
- * @property {FSSLoveDefinition} strangerNeutral_n5_5
- * @property {FSSLoveDefinition} strangerGood_5_100
+ * @property {FSSLoveDefinitionNoFamily} strangerBad_n100_n5
+ * @property {FSSLoveDefinitionNoFamily} strangerNeutral_n5_5
+ * @property {FSSLoveDefinitionNoFamily} strangerGood_5_100
  */
 
 /**
@@ -118,9 +118,9 @@
  * @property {FSSCreepyLoveDefinition} closeFriend_35_50
  * @property {FSSCreepyLoveDefinition} bestFriend_50_100
  * 
- * @property {FSSCreepyLoveDefinition} strangerBad_n100_n5
- * @property {FSSCreepyLoveDefinition} strangerNeutral_n5_5
- * @property {FSSCreepyLoveDefinition} strangerGood_5_100
+ * @property {FSSCreepyLoveDefinitionNoFamily} strangerBad_n100_n5
+ * @property {FSSCreepyLoveDefinitionNoFamily} strangerNeutral_n5_5
+ * @property {FSSCreepyLoveDefinitionNoFamily} strangerGood_5_100
  */
 
 
@@ -334,12 +334,20 @@ engine.exports = {
                         /**
                          * @type {FSSBase}
                          */
-                        const baseRule = isStranger ? secondRangeRule :
+                        const baseRule = isStranger ?
+                            // Strangers have no family sub-layer: the romantic-interest
+                            // level is itself the rule. A romantic-interest level the
+                            // character is not capable of is emitted as an empty object,
+                            // which we treat as missing so the fallback below extends the
+                            // previous (lower) level to cover it — the same way missing
+                            // non-family relationship levels are handled.
+                            // @ts-ignore
+                            (secondRangeRule && Object.keys(secondRangeRule).length > 0 ? secondRangeRule : null) :
                             // @ts-ignore
                             secondRangeRule && secondRangeRule[familyStatus];
 
-                        if (!baseRule && !isStranger) {
-                            const lastSameFamilyRuleAddedArray = character.bonds.declarations.filter(d => d.familyBond === (familyStatus === "family") && d.minBondLevel === min && d.maxBondLevel === max && !d.strangerBond);
+                        if (!baseRule) {
+                            const lastSameFamilyRuleAddedArray = character.bonds.declarations.filter(d => d.familyBond === (familyStatus === "family") && d.minBondLevel === min && d.maxBondLevel === max && d.strangerBond === isStranger);
                             const lastSameFamilyRuleAdded = lastSameFamilyRuleAddedArray.length > 0 ? lastSameFamilyRuleAddedArray[lastSameFamilyRuleAddedArray.length - 1] : null;
 
                             if (lastSameFamilyRuleAdded) {

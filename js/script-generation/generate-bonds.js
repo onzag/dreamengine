@@ -95,12 +95,20 @@ const ROMANTIC_INTEREST_KEY_LABELS = {
 };
 
 /**
- * Builds a human-readable description of a stranger from its key.
+ * Builds a human-readable description of a stranger from its key, optionally
+ * qualified by the romantic interest layer. Strangers have no family/nonFamily
+ * distinction, so (unlike describeFamilyContext) there is no family qualifier.
  * @param {string} strangerKey
+ * @param {string} [romanticInterestKey]
+ * @param {boolean} [negativeScenario] - whether this description is for a negative scenario (e.g. to be used in a reasonNo) or not (e.g. to be used in a reasonYes)
  * @returns {string}
  */
-function describeStrangerContext(strangerKey) {
-    return STRANGER_KEY_DESCRIPTIONS[strangerKey] || "stranger";
+function describeStrangerContext(strangerKey, romanticInterestKey, negativeScenario) {
+    const base = STRANGER_KEY_DESCRIPTIONS[strangerKey] || "stranger";
+    const ri = (!romanticInterestKey || romanticInterestKey === "noRomanticInterest_0_10") && !negativeScenario
+        ? ""
+        : (ROMANTIC_INTEREST_KEY_DESCRIPTIONS[romanticInterestKey || ""] || (negativeScenario ? "is not a romantic interest" : ""));
+    return ri ? `${base} who ${ri}` : base;
 }
 
 /**
@@ -496,9 +504,19 @@ function describeStrangerChain(strangerKey) {
  */
 function getChainInfoForStep(step) {
     for (const strangerKey of Object.keys(STRANGER_KEY_DESCRIPTIONS)) {
-        const chain = `${strangerKey}_`;
-        if (step.startsWith(chain)) {
-            return { chain, chainLabel: describeStrangerChain(strangerKey), romanticInterestKey: null, familyKey: null };
+        if (!step.startsWith(`${strangerKey}_`)) continue;
+        const afterStranger = step.slice(strangerKey.length + 1);
+
+        // Strangers now carry a romantic-interest layer (but, unlike
+        // relationships, no family layer).
+        for (const romanticInterestKey of Object.keys(ROMANTIC_INTEREST_KEY_LABELS)) {
+            if (!afterStranger.startsWith(`${romanticInterestKey}_`)) continue;
+            const chain = `${strangerKey}_${romanticInterestKey}_`;
+            const baseLabel = describeStrangerChain(strangerKey);
+            const chainLabel = romanticInterestKey === 'noRomanticInterest_0_10'
+                ? baseLabel
+                : `${baseLabel} who ${ROMANTIC_INTEREST_KEY_DESCRIPTIONS[romanticInterestKey]}`;
+            return { chain, chainLabel, romanticInterestKey, familyKey: null };
         }
     }
 
@@ -624,7 +642,7 @@ function getAllPotentialOptions(state, forRelationshipKey, allCreepy, familyCree
                 .split('_romanticInterest')[0]
                 .split('_strongRomanticInterest')[0]
                 .split('_deepInLove')[0];
-            const relationshipLabel = (chainInfo.chain.includes("family") ? RELATIONSHIP_KEY_DESCRIPTIONS_FAMILY[relationshipKey] : RELATIONSHIP_KEY_DESCRIPTIONS[relationshipKey]) || 'character';
+            const relationshipLabel = (chainInfo.chain.includes("family") ? RELATIONSHIP_KEY_DESCRIPTIONS_FAMILY[relationshipKey] : RELATIONSHIP_KEY_DESCRIPTIONS[relationshipKey]) || STRANGER_KEY_DESCRIPTIONS[relationshipKey] || 'character';
             const creepyInterestLabel = ({
                 'slightRomanticInterest_10_20': 'has a slight romantic interest in our character',
                 'romanticInterest_20_35': 'has a romantic interest in our character',
@@ -1974,6 +1992,26 @@ export async function generateBonds(engine, scriptgenerator, guider) {
         "strangerBad_n100_n5": "a stranger, {} that " + name + " just met but has already formed a bad impression of and has negative feelings towards them",
     };
 
+    // Clause appended to a stranger base description for each romantic interest
+    // level. In the asexual (creepy) case the romantic/sexual interest flows
+    // from the other character towards {name}, who cannot reciprocate; otherwise
+    // it is {name} who feels the immediate (first-sight) attraction.
+    const STRANGERS_ROMANTIC_CLAUSES = {
+        "noRomanticInterest_0_10": "",
+        "slightRomanticInterest_10_20": isAsexualValue ?
+            ", though this person has shown a slight romantic and sexual interest in " + name + " which " + name + " does not reciprocate because they are asexual" :
+            ", and " + name + " feels a slight, immediate physical and romantic attraction towards them",
+        "romanticInterest_20_35": isAsexualValue ?
+            ", though this person has shown a real romantic and sexual interest in " + name + " which " + name + " does not reciprocate because they are asexual" :
+            ", and " + name + " feels a real, immediate physical and romantic attraction towards them",
+        "strongRomanticInterest_35_50": isAsexualValue ?
+            ", though this person has shown strong romantic and sexual feelings for " + name + " which " + name + " does not reciprocate because they are asexual" :
+            ", and " + name + " feels strong, immediate physical and romantic feelings towards them",
+        "deepInLove_50_100": isAsexualValue ?
+            ", though this person has fallen deeply in love with and become sexually attracted to " + name + " at first sight, which " + name + " does not reciprocate because they are asexual" :
+            ", and " + name + " has, remarkably, fallen deeply in love with and become sexually attracted to them at first sight",
+    };
+
     const STRANGERS_ORDER = [
         "strangerNeutral_n5_5",
         "strangerGood_5_100",
@@ -2222,634 +2260,717 @@ export async function generateBonds(engine, scriptgenerator, guider) {
         /**
          * @type {string}
          */
-        const strangerValue =
+        const strangerBaseValue =
             // @ts-ignore
             STRANGERS[strangerKey];
 
-        const strangerSectionBase = insertSection(optionsSection.body, strangerKey, (s) => {
+        const strangerSectionOuter = insertSection(optionsSection.body, strangerKey, (s) => {
             s.head.push(`${strangerKey}: {`);
             s.foot.push(`},`);
         });
 
-        const strangerSectionRelationshipName = insertSection(strangerSectionBase.body, "relationshipName", (s) => {
-            s.head.push(`relationshipName: (info) => {`);
-            s.foot.push(`},`);
-        });
-
-        const strangerSectionDescription = insertSection(strangerSectionBase.body, "description", (s) => {
-            s.head.push(`description: (info) => {`);
-            s.head.push(`const char = info.char;`);
-            s.head.push(`const other = info.other;`);
-            s.foot.push(`},`);
-        });
-
-        const strangerSectionOpenToAffection = insertSection(strangerSectionBase.body, "openToAffection", (s) => {
-            s.head.push(`openToAffection: (char, other) => {`);
-            s.foot.push(`},`);
-            s.foot.push(`openToAffectionResponses,`);
-        });
-
-        const strangerSectionOpenToIntimateAffection = insertSection(strangerSectionBase.body, "openToIntimateAffection", (s) => {
-            s.head.push(`openToIntimateAffection: (char, other) => {`);
-            s.foot.push(`},`);
-            s.foot.push(`openToIntimateAffectionResponses,`);
-        });
-
-        const strangerSectionOpenToSex = insertSection(strangerSectionBase.body, "openToSex", (s) => {
-            s.head.push(`openToSex: (char, other) => {`);
-            s.foot.push(`},`);
-            s.foot.push(`openToSexResponses,`);
-        });
-
-        const strangerSectionProneToInitiatingAffection = insertSection(strangerSectionBase.body, "proneToInitiatingAffection", (s) => {
-            s.head.push(`proneToInitiatingAffection: {`);
-            s.head.push(`probability: (char, other) => {`);
-            s.foot.push(`},`);
-            s.foot.push(`actions: affectionActs,`);
-            s.foot.push(`},`);
-        });
-
-        const strangerSectionProneToInitiatingIntimateAffection = insertSection(strangerSectionBase.body, "proneToInitiatingIntimateAffection", (s) => {
-            s.head.push(`proneToInitiatingIntimateAffection: {`);
-            s.head.push(`probability: (char, other) => {`);
-            s.foot.push(`},`);
-            s.foot.push(`actions: intimateAffectionActs,`);
-            s.foot.push(`},`);
-        });
-
-        const strangerSectionProneToInitiatingSex = insertSection(strangerSectionBase.body, "proneToInitiatingSex", (s) => {
-            s.head.push(`proneToInitiatingSex: {`);
-            s.head.push(`probability: (char, other) => {`);
-            s.foot.push(`},`);
-            s.foot.push(`actions: sexActs,`);
-            s.foot.push(`},`);
-        });
-
-        for (const fineTune of selectedFineTunes) {
-            /**
-             * @type {string}
-             */
-            let fineTuneAsDescription =
+        for (const romanticInterestKey of SETTINGS_ORDER_SECOND_LAYER) {
+            // Compose the stranger base description with the romantic interest
+            // clause for this layer. Strangers have no family/nonFamily
+            // distinction, so (unlike relationships) there is no family layer.
+            const strangerValue = strangerBaseValue +
                 // @ts-ignore
-                fineTunesDescriptions[fineTune];
+                STRANGERS_ROMANTIC_CLAUSES[romanticInterestKey];
 
-            /**
-             * @type {Array<"n/a" | "slight" | "moderate" | "strong">}
-             */
-            let attractionLevelsToUse = fineTune.endsWith("_a") ? FINE_TUNE_WITH_ATTRACTION_POTENTIALS_STRANGER : ["n/a"];
+            let addAttractionRules = true;
+            // asexual will always get added because it is all creepy bonds
+            if (romanticInterestKey !== "noRomanticInterest_0_10" && !isAsexualValue) {
+                if (romanticInterestKey === "slightRomanticInterest_10_20" && isLoveAtFirstSightValue && strangerKey !== "strangerBad_n100_n5") {
+                    // must add because love at first sight implies at least a slight romantic interest
+                    addAttractionRules = true;
+                } else {
+                    const guiderResult = await guider.askBoolean(
+                        "capable-of-romantic-interest-" + strangerKey + "-" + romanticInterestKey,
+                        // @ts-ignore
+                        "Is " + name + " capable to " + ROMANTIC_INTEREST_KEY_LABELS[romanticInterestKey] + " (beyond simple physical or superficial attraction) towards " + describeStrangerChain(strangerKey) + " they just met?",
+                        addAttractionRules,
+                    );
+                    addAttractionRules = guiderResult.value;
+                }
+            }
 
-            for (const attractionLevel of attractionLevelsToUse) {
-                const fineTuneComment = fineTune + (attractionLevel !== "n/a" ? "_" + attractionLevel : "");
+            const romanticInterestSection = insertSection(strangerSectionOuter.body, romanticInterestKey, (s) => {
+                s.head.push(`${romanticInterestKey}: {`);
+                s.foot.push(`},`);
+            });
 
-                const fineTuneValue = getFineTuneValueWithAttractionLevel(fineTuneAsDescription, attractionLevel);
+            // Strangers have no family layer, and therefore no creepy-family
+            // exception: when the character cannot develop this romantic
+            // interest the layer is left empty, mirroring an incapable
+            // relationship layer.
+            if (!addAttractionRules) {
+                continue;
+            }
 
-                const actualStrangerValue = strangerValue.replace("{}", fineTuneValue);
+            const strangerSectionRelationshipName = insertSection(romanticInterestSection.body, "relationshipName", (s) => {
+                s.head.push(`relationshipName: (info) => {`);
+                s.foot.push(`},`);
+            });
 
-                let allExtraInfo = "";
+            const strangerSectionDescription = insertSection(romanticInterestSection.body, "description", (s) => {
+                s.head.push(`description: (info) => {`);
+                s.head.push(`const char = info.char;`);
+                s.head.push(`const other = info.other;`);
+                s.foot.push(`},`);
+            });
 
-                // First openToAffection for each intimacy modifier
-                let extraInfoOpenToAffection = "";
-                let allIsNotReceptive = true;
-                // @ts-ignore
-                if (fineTuneConditions[fineTune] !== "true") {
+            const strangerSectionOpenToAffection = insertSection(romanticInterestSection.body, "openToAffection", (s) => {
+                s.head.push(`openToAffection: (char, other) => {`);
+                s.foot.push(`},`);
+                s.foot.push(`openToAffectionResponses,`);
+            });
+
+            const strangerSectionOpenToIntimateAffection = insertSection(romanticInterestSection.body, "openToIntimateAffection", (s) => {
+                s.head.push(`openToIntimateAffection: (char, other) => {`);
+                s.foot.push(`},`);
+                s.foot.push(`openToIntimateAffectionResponses,`);
+            });
+
+            const strangerSectionOpenToSex = insertSection(romanticInterestSection.body, "openToSex", (s) => {
+                s.head.push(`openToSex: (char, other) => {`);
+                s.foot.push(`},`);
+                s.foot.push(`openToSexResponses,`);
+            });
+
+            const strangerSectionProneToInitiatingAffection = insertSection(romanticInterestSection.body, "proneToInitiatingAffection", (s) => {
+                s.head.push(`proneToInitiatingAffection: {`);
+                s.head.push(`probability: (char, other) => {`);
+                s.foot.push(`},`);
+                s.foot.push(`actions: affectionActs,`);
+                s.foot.push(`},`);
+            });
+
+            const strangerSectionProneToInitiatingIntimateAffection = insertSection(romanticInterestSection.body, "proneToInitiatingIntimateAffection", (s) => {
+                s.head.push(`proneToInitiatingIntimateAffection: {`);
+                s.head.push(`probability: (char, other) => {`);
+                s.foot.push(`},`);
+                s.foot.push(`actions: intimateAffectionActs,`);
+                s.foot.push(`},`);
+            });
+
+            const strangerSectionProneToInitiatingSex = insertSection(romanticInterestSection.body, "proneToInitiatingSex", (s) => {
+                s.head.push(`proneToInitiatingSex: {`);
+                s.head.push(`probability: (char, other) => {`);
+                s.foot.push(`},`);
+                s.foot.push(`actions: sexActs,`);
+                s.foot.push(`},`);
+            });
+
+            let fineTuneListToUse = selectedFineTunes;
+            if (romanticInterestKey !== "noRomanticInterest_0_10") {
+                fineTuneListToUse = selectedFineTunesAfterRomanticInterest;
+            }
+
+            for (const fineTune of fineTuneListToUse) {
+                /**
+                 * @type {string}
+                 */
+                let fineTuneAsDescription =
                     // @ts-ignore
-                    strangerSectionOpenToAffection.body.push(`if (${getAttractionLevelCondition(fineTuneConditions[fineTune], attractionLevel)}) {`);
-                }
-
-                const getFineTuneReferenceDefaultPrefix = () => {
-                    if (strangerKey === "strangerNeutral_n5_5" && attractionLevel === "moderate") {
-                        // special case pick it from itself but from the slight attraction level
-                        return strangerKey + "_" + fineTune + "_slight_"
-                    } else if (strangerKey === "strangerNeutral_n5_5" && attractionLevel === "strong") {
-                        // special case pick it from itself but from the moderate attraction level
-                        return strangerKey + "_" + fineTune + "_moderate_";
-                    } else {
-                        // normal case, pick it from the stranger neutral with the same fine tune and attraction level
-                        return "strangerNeutral_n5_5" + "_" + fineTuneComment + "_";
-                    }
-                }
-
-                const options = getAllPotentialOptions(scriptgenerator.state, null, isAsexualValue, isAsexualValue || !isIncestuousValue);
-
-                const fineTuneReferencePrefix = options.length !== 0 ? (await guider.askOption(
-                    "refkey_" + strangerKey + "_" + fineTuneComment,
-                    "Select a reference to inherit answer for " + actualStrangerValue,
-                    options,
-                    getFineTuneReferenceDefaultPrefix(),
-                )).value : getFineTuneReferenceDefaultPrefix();
-
-                const fineTuneReferenceLabel = options.find(o => o.value === fineTuneReferencePrefix)?.label || fineTuneReferencePrefix;
-
-                const messageAboutAnswersFrom = fineTuneReferenceLabel ? "\n\nThe answers were obtained from " + fineTuneReferenceLabel : "";
+                    fineTunesDescriptions[fineTune];
 
                 /**
-                 * 
-                 * @param {string} intimateModifier 
-                 * @param {string} key 
-                 * @returns 
+                 * @type {Array<"n/a" | "slight" | "moderate" | "strong">}
                  */
-                const getFineTuneReference = (intimateModifier, key) => {
-                    return scriptgenerator.state[fineTuneReferencePrefix + intimateModifier + "_" + key];
+                let attractionLevelsToUse = fineTune.endsWith("_a") ? FINE_TUNE_WITH_ATTRACTION_POTENTIALS_STRANGER : ["n/a"];
+                if (fineTune.endsWith("_a")) {
+                    if (romanticInterestKey === "slightRomanticInterest_10_20") {
+                        attractionLevelsToUse = FINE_TUNE_WITH_ATTRACTION_POTENTIALS_SLIGHT_ROMANTIC_INTEREST;
+                    } else if (romanticInterestKey === "romanticInterest_20_35") {
+                        attractionLevelsToUse = FINE_TUNE_WITH_ATTRACTION_POTENTIALS_ROMANTIC_INTEREST;
+                    } else if (romanticInterestKey === "strongRomanticInterest_35_50") {
+                        attractionLevelsToUse = FINE_TUNE_WITH_ATTRACTION_POTENTIALS_STRONG_ROMANTIC_INTEREST;
+                    } else if (romanticInterestKey === "deepInLove_50_100") {
+                        attractionLevelsToUse = FINE_TUNE_WITH_ATTRACTION_POTENTIALS_STRONG_ROMANTIC_INTEREST;
+                    }
                 }
 
-                for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
-                    const fineTuneCommentWithIntimacyModifier = fineTuneComment + "_" + intimateModifier;
-
-                    const guiderResult = await guider.askOption(
-                        strangerKey + "_" + fineTuneCommentWithIntimacyModifier + "_open-to-affection",
-                        "How receptive to affection is " + name + " towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "?" + messageAboutAnswersFrom, [
-                        "not receptive",
-                        "slightly receptive",
-                        "moderately receptive",
-                        "very receptive",
-                    ], getFineTuneReference(intimateModifier, "open-to-affection") || "not receptive");
-
-                    const answerTrimmed = guiderResult.value.trim().toLowerCase();
-                    if (answerTrimmed !== "not receptive") {
-                        allIsNotReceptive = false;
+                for (const attractionLevel of attractionLevelsToUse) {
+                    const fineTuneComment = fineTune + (attractionLevel !== "n/a" ? "_" + attractionLevel : "");
+                    if (hasSpecialComment(strangerSectionDescription.body, fineTuneComment)) {
+                        continue;
                     }
 
-                    const toValue = {
-                        "not receptive": "not",
-                        "slightly receptive": "slight",
-                        "moderately receptive": "moderate",
-                        "very receptive": "very",
-                    }
+                    const fineTuneValue = getFineTuneValueWithAttractionLevel(fineTuneAsDescription, attractionLevel);
 
+                    const actualStrangerValue = strangerValue.replace("{}", fineTuneValue);
+
+                    let allExtraInfo = "";
+
+                    // First openToAffection for each intimacy modifier
+                    let extraInfoOpenToAffection = "";
+                    let allIsNotReceptive = true;
                     // @ts-ignore
-                    const valueAnswer = toValue[answerTrimmed];
-
-                    extraInfoOpenToAffection += `\n${name} is ${answerTrimmed} to affection from this other chraracter when they are ${intimateModifier.toLowerCase()}`;
-
-                    // @ts-ignore
-                    const modifierInfo = MODIFIERS_INTIMACY[intimateModifier];
-                    const condition = modifierInfo.condition;
-                    if (condition !== "true") {
-                        strangerSectionOpenToAffection.body.push(`if (${condition}) {`);
+                    if (fineTuneConditions[fineTune] !== "true") {
+                        // @ts-ignore
+                        strangerSectionOpenToAffection.body.push(`if (${getAttractionLevelCondition(fineTuneConditions[fineTune], attractionLevel)}) {`);
                     }
+
+                    const getFineTuneReferenceDefaultPrefix = () => {
+                        // Higher romantic interests inherit from the previous (lower)
+                        // romantic interest of the same stranger, keeping the same fine
+                        // tune and attraction level.
+                        const romanticInterestIndex = SETTINGS_ORDER_SECOND_LAYER.indexOf(romanticInterestKey);
+                        if (romanticInterestIndex > 0) {
+                            return strangerKey + "_" + SETTINGS_ORDER_SECOND_LAYER[romanticInterestIndex - 1] + "_" + fineTuneComment + "_";
+                        }
+
+                        // no romantic interest (the base layer): the neutral stranger is
+                        // the root; good/bad strangers and the higher attraction levels of
+                        // the neutral stranger inherit from it.
+                        if (strangerKey === "strangerNeutral_n5_5" && attractionLevel === "moderate") {
+                            // special case pick it from itself but from the slight attraction level
+                            return strangerKey + "_" + romanticInterestKey + "_" + fineTune + "_slight_"
+                        } else if (strangerKey === "strangerNeutral_n5_5" && attractionLevel === "strong") {
+                            // special case pick it from itself but from the moderate attraction level
+                            return strangerKey + "_" + romanticInterestKey + "_" + fineTune + "_moderate_";
+                        } else {
+                            // normal case, pick it from the stranger neutral with the same fine tune and attraction level
+                            return "strangerNeutral_n5_5" + "_" + romanticInterestKey + "_" + fineTuneComment + "_";
+                        }
+                    }
+
+                    const options = getAllPotentialOptions(scriptgenerator.state, null, isAsexualValue, isAsexualValue || !isIncestuousValue);
+
+                    const defaultReferencePrefix = getFineTuneReferenceDefaultPrefix();
+                    // The computed default may point to a layer that was never generated
+                    // (e.g. an incapable lower romantic interest). Snap it to the closest
+                    // available option so `askOption` is always given a valid default.
+                    const resolvedDefaultReferencePrefix = getClosestOptionByValue(defaultReferencePrefix, options) || defaultReferencePrefix;
+
+                    const fineTuneReferencePrefix = options.length !== 0 ? (await guider.askOption(
+                        "refkey_" + strangerKey + "_" + romanticInterestKey + "_" + fineTuneComment,
+                        "Select a reference to inherit answer for " + actualStrangerValue,
+                        options,
+                        resolvedDefaultReferencePrefix,
+                    )).value : defaultReferencePrefix;
+
+                    // add it manually to the state if not so it won't ask again
+                    scriptgenerator.state["refkey_" + strangerKey + "_" + romanticInterestKey + "_" + fineTuneComment] = fineTuneReferencePrefix || "none";
+
+                    const fineTuneReferenceLabel = options.find(o => o.value === fineTuneReferencePrefix)?.label || fineTuneReferencePrefix;
+
+                    const messageAboutAnswersFrom = fineTuneReferenceLabel ? "\n\nThe answers were obtained from " + fineTuneReferenceLabel : "";
 
                     /**
-                     * @type {string | null}
+                     * 
+                     * @param {string} intimateModifier 
+                     * @param {string} key 
+                     * @returns 
                      */
-                    let reason = await chooseReason(
-                        strangerKey + "_" + fineTuneCommentWithIntimacyModifier + "_open-to-affection-reason",
-                        guider,
-                        modifierInfo,
-                        valueAnswer,
-                        name,
-                        describeStrangerContext(strangerKey),
-                        "What is the reason for " + name + " being " + answerTrimmed + " to affection from this other character when they are " + intimateModifier.toLowerCase() + "?" + messageAboutAnswersFrom,
+                    const getFineTuneReference = (intimateModifier, key) => {
+                        return scriptgenerator.state[fineTuneReferencePrefix + intimateModifier + "_" + key];
+                    }
 
-                        getFineTuneReference(intimateModifier, "open-to-affection-reason"),
-                        attractionLevel,
-                        fineTune,
-                    );
+                    for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
+                        const fineTuneCommentWithIntimacyModifier = fineTuneComment + "_" + intimateModifier;
 
-                    strangerSectionOpenToAffection.body.push(`return {value: ${JSON.stringify(valueAnswer)}, reason: ${reason ? toTemplateLiteralNoInfo(reason, name) : "null"}};`);
-                    if (condition !== "true") {
+                        const guiderResult = await guider.askOption(
+                            strangerKey + "_" + romanticInterestKey + "_" + fineTuneCommentWithIntimacyModifier + "_open-to-affection",
+                            "How receptive to affection is " + name + " towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "?" + messageAboutAnswersFrom, [
+                            "not receptive",
+                            "slightly receptive",
+                            "moderately receptive",
+                            "very receptive",
+                        ], getFineTuneReference(intimateModifier, "open-to-affection") || "not receptive");
+
+                        const answerTrimmed = guiderResult.value.trim().toLowerCase();
+                        if (answerTrimmed !== "not receptive") {
+                            allIsNotReceptive = false;
+                        }
+
+                        const toValue = {
+                            "not receptive": "not",
+                            "slightly receptive": "slight",
+                            "moderately receptive": "moderate",
+                            "very receptive": "very",
+                        }
+
+                        // @ts-ignore
+                        const valueAnswer = toValue[answerTrimmed];
+
+                        extraInfoOpenToAffection += `\n${name} is ${answerTrimmed} to affection from this other chraracter when they are ${intimateModifier.toLowerCase()}`;
+
+                        // @ts-ignore
+                        const modifierInfo = MODIFIERS_INTIMACY[intimateModifier];
+                        const condition = modifierInfo.condition;
+                        if (condition !== "true") {
+                            strangerSectionOpenToAffection.body.push(`if (${condition}) {`);
+                        }
+
+                        /**
+                         * @type {string | null}
+                         */
+                        let reason = await chooseReason(
+                            strangerKey + "_" + romanticInterestKey + "_" + fineTuneCommentWithIntimacyModifier + "_open-to-affection-reason",
+                            guider,
+                            modifierInfo,
+                            valueAnswer,
+                            name,
+                            describeStrangerContext(strangerKey, romanticInterestKey, valueAnswer === "not"),
+                            "What is the reason for " + name + " being " + answerTrimmed + " to affection from this other character when they are " + intimateModifier.toLowerCase() + "?" + messageAboutAnswersFrom,
+
+                            getFineTuneReference(intimateModifier, "open-to-affection-reason"),
+                            attractionLevel,
+                            fineTune,
+                        );
+
+                        strangerSectionOpenToAffection.body.push(`return {value: ${JSON.stringify(valueAnswer)}, reason: ${reason ? toTemplateLiteralNoInfo(reason, name) : "null"}};`);
+                        if (condition !== "true") {
+                            strangerSectionOpenToAffection.body.push(`}`);
+                        }
+                    }
+                    if (allIsNotReceptive) {
+                        extraInfoOpenToAffection = `\n${name} is not receptive to affection from this other character in any context.`;
+                    }
+                    allExtraInfo += extraInfoOpenToAffection;
+                    // @ts-ignore
+                    if (fineTuneConditions[fineTune] !== "true") {
+                        // @ts-ignore
                         strangerSectionOpenToAffection.body.push(`}`);
                     }
-                }
-                if (allIsNotReceptive) {
-                    extraInfoOpenToAffection = `\n${name} is not receptive to affection from this other character in any context.`;
-                }
-                allExtraInfo += extraInfoOpenToAffection;
-                // @ts-ignore
-                if (fineTuneConditions[fineTune] !== "true") {
+                    // done openToAffection
+
+                    // Next openToIntimateAffection for each intimacy modifier
+                    let extraInfoOpenToIntimateAffection = "";
+                    let allIsNotReceptiveIntimateAffection = true;
                     // @ts-ignore
-                    strangerSectionOpenToAffection.body.push(`}`);
-                }
-                // done openToAffection
-
-                // Next openToIntimateAffection for each intimacy modifier
-                let extraInfoOpenToIntimateAffection = "";
-                let allIsNotReceptiveIntimateAffection = true;
-                // @ts-ignore
-                if (fineTuneConditions[fineTune] !== "true") {
-                    // @ts-ignore
-                    strangerSectionOpenToIntimateAffection.body.push(`if (${getAttractionLevelCondition(fineTuneConditions[fineTune], attractionLevel)}) {`);
-                }
-
-                for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
-                    const fineTuneCommentWithIntimacyModifier = fineTuneComment + "_" + intimateModifier;
-
-                    const guiderResult = await guider.askOption(
-                        strangerKey + "_" + fineTuneCommentWithIntimacyModifier + "_open-to-intimate-affection",
-                        "How receptive to intimate affection is " + name + " towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "?" + messageAboutAnswersFrom, [
-                        "not receptive",
-                        "slightly receptive",
-                        "moderately receptive",
-                        "very receptive",
-                    ], getFineTuneReference(intimateModifier, "open-to-intimate-affection") || "not receptive");
-
-                    const answerTrimmed = guiderResult.value.trim().toLowerCase();
-                    if (answerTrimmed !== "not receptive") {
-                        allIsNotReceptiveIntimateAffection = false;
+                    if (fineTuneConditions[fineTune] !== "true") {
+                        // @ts-ignore
+                        strangerSectionOpenToIntimateAffection.body.push(`if (${getAttractionLevelCondition(fineTuneConditions[fineTune], attractionLevel)}) {`);
                     }
 
-                    const toValue = {
-                        "not receptive": "not",
-                        "slightly receptive": "slight",
-                        "moderately receptive": "moderate",
-                        "very receptive": "very",
+                    for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
+                        const fineTuneCommentWithIntimacyModifier = fineTuneComment + "_" + intimateModifier;
+
+                        const guiderResult = await guider.askOption(
+                            strangerKey + "_" + romanticInterestKey + "_" + fineTuneCommentWithIntimacyModifier + "_open-to-intimate-affection",
+                            "How receptive to intimate affection is " + name + " towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "?" + messageAboutAnswersFrom, [
+                            "not receptive",
+                            "slightly receptive",
+                            "moderately receptive",
+                            "very receptive",
+                        ], getFineTuneReference(intimateModifier, "open-to-intimate-affection") || "not receptive");
+
+                        const answerTrimmed = guiderResult.value.trim().toLowerCase();
+                        if (answerTrimmed !== "not receptive") {
+                            allIsNotReceptiveIntimateAffection = false;
+                        }
+
+                        const toValue = {
+                            "not receptive": "not",
+                            "slightly receptive": "slight",
+                            "moderately receptive": "moderate",
+                            "very receptive": "very",
+                        }
+
+                        // @ts-ignore
+                        const valueAnswer = toValue[answerTrimmed];
+
+                        extraInfoOpenToIntimateAffection += `\n${name} is ${answerTrimmed} to intimate affection from this other character when they are ${intimateModifier.toLowerCase()}`;
+
+                        // @ts-ignore
+                        const modifierInfo = MODIFIERS_INTIMACY[intimateModifier];
+                        const condition = modifierInfo.condition;
+                        if (condition !== "true") {
+                            strangerSectionOpenToIntimateAffection.body.push(`if (${condition}) {`);
+                        }
+
+                        /**
+                         * @type {string | null}
+                         */
+                        let reason = await chooseReason(
+                            strangerKey + "_" + romanticInterestKey + "_" + fineTuneCommentWithIntimacyModifier + "_open-to-intimate-affection-reason",
+                            guider,
+                            modifierInfo,
+                            valueAnswer,
+                            name,
+                            describeStrangerContext(strangerKey, romanticInterestKey, valueAnswer === "not"),
+                            "What is the reason for " + name + " being " + answerTrimmed + " to intimate affection from this other character when they are " + intimateModifier.toLowerCase() + "?" + messageAboutAnswersFrom,
+                            getFineTuneReference(intimateModifier, "open-to-intimate-affection-reason"),
+                            attractionLevel,
+                            fineTune,
+                        );
+
+                        strangerSectionOpenToIntimateAffection.body.push(`return {value: ${JSON.stringify(valueAnswer)}, reason: ${reason ? toTemplateLiteralNoInfo(reason, name) : "null"}};`);
+                        if (condition !== "true") {
+                            strangerSectionOpenToIntimateAffection.body.push(`}`);
+                        }
                     }
-
-                    // @ts-ignore
-                    const valueAnswer = toValue[answerTrimmed];
-
-                    extraInfoOpenToIntimateAffection += `\n${name} is ${answerTrimmed} to intimate affection from this other character when they are ${intimateModifier.toLowerCase()}`;
-
-                    // @ts-ignore
-                    const modifierInfo = MODIFIERS_INTIMACY[intimateModifier];
-                    const condition = modifierInfo.condition;
-                    if (condition !== "true") {
-                        strangerSectionOpenToIntimateAffection.body.push(`if (${condition}) {`);
+                    if (allIsNotReceptiveIntimateAffection) {
+                        extraInfoOpenToIntimateAffection = `\n${name} is not receptive to intimate affection from this other character in any context.`;
                     }
-
-                    /**
-                     * @type {string | null}
-                     */
-                    let reason = await chooseReason(
-                        strangerKey + "_" + fineTuneCommentWithIntimacyModifier + "_open-to-intimate-affection-reason",
-                        guider,
-                        modifierInfo,
-                        valueAnswer,
-                        name,
-                        describeStrangerContext(strangerKey),
-                        "What is the reason for " + name + " being " + answerTrimmed + " to intimate affection from this other character when they are " + intimateModifier.toLowerCase() + "?" + messageAboutAnswersFrom,
-                        getFineTuneReference(intimateModifier, "open-to-intimate-affection-reason"),
-                        attractionLevel,
-                        fineTune,
-                    );
-
-                    strangerSectionOpenToIntimateAffection.body.push(`return {value: ${JSON.stringify(valueAnswer)}, reason: ${reason ? toTemplateLiteralNoInfo(reason, name) : "null"}};`);
-                    if (condition !== "true") {
+                    allExtraInfo += extraInfoOpenToIntimateAffection;
+                    // @ts-ignore
+                    if (fineTuneConditions[fineTune] !== "true") {
+                        // @ts-ignore
                         strangerSectionOpenToIntimateAffection.body.push(`}`);
                     }
-                }
-                if (allIsNotReceptiveIntimateAffection) {
-                    extraInfoOpenToIntimateAffection = `\n${name} is not receptive to intimate affection from this other character in any context.`;
-                }
-                allExtraInfo += extraInfoOpenToIntimateAffection;
-                // @ts-ignore
-                if (fineTuneConditions[fineTune] !== "true") {
+                    // done openToIntimateAffection
+
+                    // Next openToSex for each intimacy modifier
+                    let extraInfoOpenToSex = "";
+                    let allIsNotReceptiveOpenToSex = true;
                     // @ts-ignore
-                    strangerSectionOpenToIntimateAffection.body.push(`}`);
-                }
-                // done openToIntimateAffection
-
-                // Next openToSex for each intimacy modifier
-                let extraInfoOpenToSex = "";
-                let allIsNotReceptiveOpenToSex = true;
-                // @ts-ignore
-                if (fineTuneConditions[fineTune] !== "true") {
-                    // @ts-ignore
-                    strangerSectionOpenToSex.body.push(`if (${getAttractionLevelCondition(fineTuneConditions[fineTune], attractionLevel)}) {`);
-                }
-
-                for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
-                    const fineTuneCommentWithIntimacyModifier = fineTuneComment + "_" + intimateModifier;
-
-                    const guiderResult = await guider.askOption(
-                        strangerKey + "_" + fineTuneCommentWithIntimacyModifier + "_open-to-sex",
-                        "How receptive to sex is " + name + " towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "?" + messageAboutAnswersFrom, [
-                        "not receptive",
-                        "slightly receptive",
-                        "moderately receptive",
-                        "very receptive",
-                    ], getFineTuneReference(intimateModifier, "open-to-sex") || "not receptive");
-
-                    const answerTrimmed = guiderResult.value.trim().toLowerCase();
-                    if (answerTrimmed !== "not receptive") {
-                        allIsNotReceptiveOpenToSex = false;
+                    if (fineTuneConditions[fineTune] !== "true") {
+                        // @ts-ignore
+                        strangerSectionOpenToSex.body.push(`if (${getAttractionLevelCondition(fineTuneConditions[fineTune], attractionLevel)}) {`);
                     }
 
-                    const toValue = {
-                        "not receptive": "not",
-                        "slightly receptive": "slight",
-                        "moderately receptive": "moderate",
-                        "very receptive": "very",
+                    for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
+                        const fineTuneCommentWithIntimacyModifier = fineTuneComment + "_" + intimateModifier;
+
+                        const guiderResult = await guider.askOption(
+                            strangerKey + "_" + romanticInterestKey + "_" + fineTuneCommentWithIntimacyModifier + "_open-to-sex",
+                            "How receptive to sex is " + name + " towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "?" + messageAboutAnswersFrom, [
+                            "not receptive",
+                            "slightly receptive",
+                            "moderately receptive",
+                            "very receptive",
+                        ], getFineTuneReference(intimateModifier, "open-to-sex") || "not receptive");
+
+                        const answerTrimmed = guiderResult.value.trim().toLowerCase();
+                        if (answerTrimmed !== "not receptive") {
+                            allIsNotReceptiveOpenToSex = false;
+                        }
+
+                        const toValue = {
+                            "not receptive": "not",
+                            "slightly receptive": "slight",
+                            "moderately receptive": "moderate",
+                            "very receptive": "very",
+                        }
+
+                        // @ts-ignore
+                        const valueAnswer = toValue[answerTrimmed];
+
+                        extraInfoOpenToSex += `\n${name} is ${answerTrimmed} to sex with this other character when they are ${intimateModifier.toLowerCase()}`;
+
+                        // @ts-ignore
+                        const modifierInfo = MODIFIERS_INTIMACY[intimateModifier];
+                        const condition = modifierInfo.condition;
+                        if (condition !== "true") {
+                            strangerSectionOpenToSex.body.push(`if (${condition}) {`);
+                        }
+
+                        /**
+                         * @type {string | null}
+                         */
+                        let reason = await chooseReason(
+                            strangerKey + "_" + romanticInterestKey + "_" + fineTuneCommentWithIntimacyModifier + "_open-to-sex-reason",
+                            guider,
+                            modifierInfo,
+                            valueAnswer,
+                            name,
+                            describeStrangerContext(strangerKey, romanticInterestKey, valueAnswer === "not"),
+                            "What is the reason for " + name + " being " + answerTrimmed + " to sex with this other character when they are " + intimateModifier.toLowerCase() + "?" + messageAboutAnswersFrom,
+                            getFineTuneReference(intimateModifier, "open-to-sex-reason"),
+                            attractionLevel,
+                            fineTune,
+                        );
+
+                        strangerSectionOpenToSex.body.push(`return {value: ${JSON.stringify(valueAnswer)}, reason: ${reason ? toTemplateLiteralNoInfo(reason, name) : "null"}};`);
+                        if (condition !== "true") {
+                            strangerSectionOpenToSex.body.push(`}`);
+                        }
                     }
-
-                    // @ts-ignore
-                    const valueAnswer = toValue[answerTrimmed];
-
-                    extraInfoOpenToSex += `\n${name} is ${answerTrimmed} to sex with this other character when they are ${intimateModifier.toLowerCase()}`;
-
-                    // @ts-ignore
-                    const modifierInfo = MODIFIERS_INTIMACY[intimateModifier];
-                    const condition = modifierInfo.condition;
-                    if (condition !== "true") {
-                        strangerSectionOpenToSex.body.push(`if (${condition}) {`);
+                    if (allIsNotReceptiveOpenToSex) {
+                        extraInfoOpenToSex = `\n${name} is not receptive to sex with this other character in any context.`;
                     }
-
-                    /**
-                     * @type {string | null}
-                     */
-                    let reason = await chooseReason(
-                        strangerKey + "_" + fineTuneCommentWithIntimacyModifier + "_open-to-sex-reason",
-                        guider,
-                        modifierInfo,
-                        valueAnswer,
-                        name,
-                        describeStrangerContext(strangerKey),
-                        "What is the reason for " + name + " being " + answerTrimmed + " to sex with this other character when they are " + intimateModifier.toLowerCase() + "?" + messageAboutAnswersFrom,
-                        getFineTuneReference(intimateModifier, "open-to-sex-reason"),
-                        attractionLevel,
-                        fineTune,
-                    );
-
-                    strangerSectionOpenToSex.body.push(`return {value: ${JSON.stringify(valueAnswer)}, reason: ${reason ? toTemplateLiteralNoInfo(reason, name) : "null"}};`);
-                    if (condition !== "true") {
+                    allExtraInfo += extraInfoOpenToSex;
+                    // @ts-ignore
+                    if (fineTuneConditions[fineTune] !== "true") {
+                        // @ts-ignore
                         strangerSectionOpenToSex.body.push(`}`);
                     }
-                }
-                if (allIsNotReceptiveOpenToSex) {
-                    extraInfoOpenToSex = `\n${name} is not receptive to sex with this other character in any context.`;
-                }
-                allExtraInfo += extraInfoOpenToSex;
-                // @ts-ignore
-                if (fineTuneConditions[fineTune] !== "true") {
+                    // done openToSex
+
+                    // Next proneToInitiatingAffection for each intimacy modifier
+                    let extraInfoProneToInitiatingAffection = "";
+                    let allIsNotProneToInitiatingAffection = true;
                     // @ts-ignore
-                    strangerSectionOpenToSex.body.push(`}`);
-                }
-                // done openToSex
+                    if (fineTuneConditions[fineTune] !== "true") {
+                        // @ts-ignore
+                        strangerSectionProneToInitiatingAffection.body.push(`if (${getAttractionLevelCondition(fineTuneConditions[fineTune], attractionLevel)}) {`);
+                    }
 
-                // Next proneToInitiatingAffection for each intimacy modifier
-                let extraInfoProneToInitiatingAffection = "";
-                let allIsNotProneToInitiatingAffection = true;
-                // @ts-ignore
-                if (fineTuneConditions[fineTune] !== "true") {
-                    // @ts-ignore
-                    strangerSectionProneToInitiatingAffection.body.push(`if (${getAttractionLevelCondition(fineTuneConditions[fineTune], attractionLevel)}) {`);
-                }
+                    for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
+                        const fineTuneCommentWithIntimacyModifier = fineTuneComment + "_" + intimateModifier;
 
-                for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
-                    const fineTuneCommentWithIntimacyModifier = fineTuneComment + "_" + intimateModifier;
+                        const guiderResult = await guider.askOption(
+                            strangerKey + "_" + romanticInterestKey + "_" + fineTuneCommentWithIntimacyModifier + "_prone-to-initiating-affection",
+                            "How likely is " + name + " to initiate non-romantic physical affection towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "?" + messageAboutAnswersFrom,
+                            PROBABILITY_OPTIONS,
+                            getFineTuneReference(intimateModifier, "prone-to-initiating-affection") || PROBABILITY_OPTIONS[0],
+                        );
 
-                    const guiderResult = await guider.askOption(
-                        strangerKey + "_" + fineTuneCommentWithIntimacyModifier + "_prone-to-initiating-affection",
-                        "How likely is " + name + " to initiate non-romantic physical affection towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "?" + messageAboutAnswersFrom,
-                        PROBABILITY_OPTIONS,
-                        getFineTuneReference(intimateModifier, "prone-to-initiating-affection") || PROBABILITY_OPTIONS[0],
-                    );
+                        const probability = probabilityFromAnswer(guiderResult.value);
 
-                    const probability = probabilityFromAnswer(guiderResult.value);
+                        if (probability > 0) {
+                            allIsNotProneToInitiatingAffection = false;
+                            const odds = probability >= 0.7 ? "very likely" : probability >= 0.4 ? "somewhat likely" : "slightly likely";
+                            extraInfoProneToInitiatingAffection += `\n${name} is ${odds} to initiate physical affection towards this other character when they are ${intimateModifier.toLowerCase()}`;
+                        } else {
+                            extraInfoProneToInitiatingAffection += `\n${name} is not likely to initiate physical affection towards this other character when they are ${intimateModifier.toLowerCase()}`;
+                        }
 
-                    if (probability > 0) {
-                        allIsNotProneToInitiatingAffection = false;
-                        const odds = probability >= 0.7 ? "very likely" : probability >= 0.4 ? "somewhat likely" : "slightly likely";
-                        extraInfoProneToInitiatingAffection += `\n${name} is ${odds} to initiate physical affection towards this other character when they are ${intimateModifier.toLowerCase()}`;
+                        // @ts-ignore
+                        const modifierInfo = MODIFIERS_INTIMACY[intimateModifier];
+                        const condition = modifierInfo.condition;
+                        if (condition !== "true") {
+                            strangerSectionProneToInitiatingAffection.body.push(`if (${condition}) {`);
+                        }
+                        strangerSectionProneToInitiatingAffection.body.push(`return ${probability};`);
+                        if (condition !== "true") {
+                            strangerSectionProneToInitiatingAffection.body.push(`}`);
+                        }
+                    }
+                    if (allIsNotProneToInitiatingAffection) {
+                        extraInfoProneToInitiatingAffection = `\n${name} is not likely to initiate physical affection towards this other character in any context.`;
                     } else {
-                        extraInfoProneToInitiatingAffection += `\n${name} is not likely to initiate physical affection towards this other character when they are ${intimateModifier.toLowerCase()}`;
+                        allExtraInfo += extraInfoProneToInitiatingAffection;
                     }
-
                     // @ts-ignore
-                    const modifierInfo = MODIFIERS_INTIMACY[intimateModifier];
-                    const condition = modifierInfo.condition;
-                    if (condition !== "true") {
-                        strangerSectionProneToInitiatingAffection.body.push(`if (${condition}) {`);
-                    }
-                    strangerSectionProneToInitiatingAffection.body.push(`return ${probability};`);
-                    if (condition !== "true") {
+                    if (fineTuneConditions[fineTune] !== "true") {
+                        // @ts-ignore
                         strangerSectionProneToInitiatingAffection.body.push(`}`);
                     }
-                }
-                if (allIsNotProneToInitiatingAffection) {
-                    extraInfoProneToInitiatingAffection = `\n${name} is not likely to initiate physical affection towards this other character in any context.`;
-                } else {
-                    allExtraInfo += extraInfoProneToInitiatingAffection;
-                }
-                // @ts-ignore
-                if (fineTuneConditions[fineTune] !== "true") {
+                    // done proneToInitiatingAffection
+
+                    // Next proneToInitiatingIntimateAffection for each intimacy modifier
+                    let extraInfoProneToInitiatingIntimateAffection = "";
+                    let allIsNotProneToInitiatingIntimateAffection = true;
                     // @ts-ignore
-                    strangerSectionProneToInitiatingAffection.body.push(`}`);
-                }
-                // done proneToInitiatingAffection
-
-                // Next proneToInitiatingIntimateAffection for each intimacy modifier
-                let extraInfoProneToInitiatingIntimateAffection = "";
-                let allIsNotProneToInitiatingIntimateAffection = true;
-                // @ts-ignore
-                if (fineTuneConditions[fineTune] !== "true") {
-                    // @ts-ignore
-                    strangerSectionProneToInitiatingIntimateAffection.body.push(`if (${getAttractionLevelCondition(fineTuneConditions[fineTune], attractionLevel)}) {`);
-                }
-                for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
-                    const fineTuneCommentWithIntimacyModifier = fineTuneComment + "_" + intimateModifier;
-
-                    const guiderResult = await guider.askOption(
-                        strangerKey + "_" + fineTuneCommentWithIntimacyModifier + "_prone-to-initiating-intimate-affection",
-                        "How likely is " + name + " to initiate romantic or sexual physical affection towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "?" + messageAboutAnswersFrom,
-                        PROBABILITY_OPTIONS,
-                        getFineTuneReference(intimateModifier, "prone-to-initiating-intimate-affection") || PROBABILITY_OPTIONS[0],
-                    );
-
-                    const probability = probabilityFromAnswer(guiderResult.value);
-
-                    if (probability > 0) {
-                        allIsNotProneToInitiatingIntimateAffection = false;
-                        const odds = probability >= 0.7 ? "very likely" : probability >= 0.4 ? "somewhat likely" : "slightly likely";
-                        extraInfoProneToInitiatingIntimateAffection += `\n${name} is ${odds} to initiate romantic or sexual physical affection towards this other character when they are ${intimateModifier.toLowerCase()}`;
-                    } else {
-                        extraInfoProneToInitiatingIntimateAffection += `\n${name} is not likely to initiate romantic or sexual physical affection towards this other character when they are ${intimateModifier.toLowerCase()}`;
+                    if (fineTuneConditions[fineTune] !== "true") {
+                        // @ts-ignore
+                        strangerSectionProneToInitiatingIntimateAffection.body.push(`if (${getAttractionLevelCondition(fineTuneConditions[fineTune], attractionLevel)}) {`);
                     }
+                    for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
+                        const fineTuneCommentWithIntimacyModifier = fineTuneComment + "_" + intimateModifier;
 
-                    // @ts-ignore
-                    const modifierInfo = MODIFIERS_INTIMACY[intimateModifier];
-                    const condition = modifierInfo.condition;
-                    if (condition !== "true") {
-                        strangerSectionProneToInitiatingIntimateAffection.body.push(`if (${condition}) {`);
+                        const guiderResult = await guider.askOption(
+                            strangerKey + "_" + romanticInterestKey + "_" + fineTuneCommentWithIntimacyModifier + "_prone-to-initiating-intimate-affection",
+                            "How likely is " + name + " to initiate romantic or sexual physical affection towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "?" + messageAboutAnswersFrom,
+                            PROBABILITY_OPTIONS,
+                            getFineTuneReference(intimateModifier, "prone-to-initiating-intimate-affection") || PROBABILITY_OPTIONS[0],
+                        );
+
+                        const probability = probabilityFromAnswer(guiderResult.value);
+
+                        if (probability > 0) {
+                            allIsNotProneToInitiatingIntimateAffection = false;
+                            const odds = probability >= 0.7 ? "very likely" : probability >= 0.4 ? "somewhat likely" : "slightly likely";
+                            extraInfoProneToInitiatingIntimateAffection += `\n${name} is ${odds} to initiate romantic or sexual physical affection towards this other character when they are ${intimateModifier.toLowerCase()}`;
+                        } else {
+                            extraInfoProneToInitiatingIntimateAffection += `\n${name} is not likely to initiate romantic or sexual physical affection towards this other character when they are ${intimateModifier.toLowerCase()}`;
+                        }
+
+                        // @ts-ignore
+                        const modifierInfo = MODIFIERS_INTIMACY[intimateModifier];
+                        const condition = modifierInfo.condition;
+                        if (condition !== "true") {
+                            strangerSectionProneToInitiatingIntimateAffection.body.push(`if (${condition}) {`);
+                        }
+                        strangerSectionProneToInitiatingIntimateAffection.body.push(`return ${probability};`);
+                        if (condition !== "true") {
+                            strangerSectionProneToInitiatingIntimateAffection.body.push(`}`);
+                        }
                     }
-                    strangerSectionProneToInitiatingIntimateAffection.body.push(`return ${probability};`);
-                    if (condition !== "true") {
+                    // @ts-ignore
+                    if (fineTuneConditions[fineTune] !== "true") {
+                        // @ts-ignore
                         strangerSectionProneToInitiatingIntimateAffection.body.push(`}`);
                     }
-                }
-                // @ts-ignore
-                if (fineTuneConditions[fineTune] !== "true") {
-                    // @ts-ignore
-                    strangerSectionProneToInitiatingIntimateAffection.body.push(`}`);
-                }
-                // done proneToInitiatingIntimateAffection
-                if (allIsNotProneToInitiatingIntimateAffection) {
-                    extraInfoProneToInitiatingIntimateAffection = `\n${name} is not likely to initiate romantic or sexual physical affection towards this other character in any context.`;
-                } else {
-                    allExtraInfo += extraInfoProneToInitiatingIntimateAffection;
-                }
-
-                // Next proneToInitiatingSex for each intimacy modifier
-                let extraInfoProneToInitiatingSex = "";
-                let allIsNotProneToInitiatingSex = true;
-                // @ts-ignore
-                if (fineTuneConditions[fineTune] !== "true") {
-                    // @ts-ignore
-                    strangerSectionProneToInitiatingSex.body.push(`if (${getAttractionLevelCondition(fineTuneConditions[fineTune], attractionLevel)}) {`);
-                }
-                for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
-                    const fineTuneCommentWithIntimacyModifier = fineTuneComment + "_" + intimateModifier;
-
-                    const guiderResult = await guider.askOption(
-                        strangerKey + "_" + fineTuneCommentWithIntimacyModifier + "_prone-to-initiating-sex",
-                        "How likely is " + name + " to initiate sex towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "?" + messageAboutAnswersFrom,
-                        PROBABILITY_OPTIONS,
-                        getFineTuneReference(intimateModifier, "prone-to-initiating-sex") || PROBABILITY_OPTIONS[0],
-                    );
-
-                    const probability = probabilityFromAnswer(guiderResult.value);
-
-                    if (probability > 0) {
-                        allIsNotProneToInitiatingSex = false;
-                        const odds = probability >= 0.7 ? "very likely" : probability >= 0.4 ? "somewhat likely" : "slightly likely";
-                        extraInfoProneToInitiatingSex += `\n${name} is ${odds} to initiate sex towards this other character when they are ${intimateModifier.toLowerCase()}`;
+                    // done proneToInitiatingIntimateAffection
+                    if (allIsNotProneToInitiatingIntimateAffection) {
+                        extraInfoProneToInitiatingIntimateAffection = `\n${name} is not likely to initiate romantic or sexual physical affection towards this other character in any context.`;
                     } else {
-                        extraInfoProneToInitiatingSex += `\n${name} is not likely to initiate sex towards this other character when they are ${intimateModifier.toLowerCase()}`;
+                        allExtraInfo += extraInfoProneToInitiatingIntimateAffection;
                     }
 
+                    // Next proneToInitiatingSex for each intimacy modifier
+                    let extraInfoProneToInitiatingSex = "";
+                    let allIsNotProneToInitiatingSex = true;
                     // @ts-ignore
-                    const modifierInfo = MODIFIERS_INTIMACY[intimateModifier];
-                    const condition = modifierInfo.condition;
-                    if (condition !== "true") {
-                        strangerSectionProneToInitiatingSex.body.push(`if (${condition}) {`);
+                    if (fineTuneConditions[fineTune] !== "true") {
+                        // @ts-ignore
+                        strangerSectionProneToInitiatingSex.body.push(`if (${getAttractionLevelCondition(fineTuneConditions[fineTune], attractionLevel)}) {`);
                     }
+                    for (const intimateModifier of MODIFIERS_INTIMACY_ORDER) {
+                        const fineTuneCommentWithIntimacyModifier = fineTuneComment + "_" + intimateModifier;
 
-                    strangerSectionProneToInitiatingSex.body.push(`return ${probability};`);
+                        const guiderResult = await guider.askOption(
+                            strangerKey + "_" + romanticInterestKey + "_" + fineTuneCommentWithIntimacyModifier + "_prone-to-initiating-sex",
+                            "How likely is " + name + " to initiate sex towards " + actualStrangerValue + " when they are " + intimateModifier.toLowerCase() + "?" + messageAboutAnswersFrom,
+                            PROBABILITY_OPTIONS,
+                            getFineTuneReference(intimateModifier, "prone-to-initiating-sex") || PROBABILITY_OPTIONS[0],
+                        );
 
-                    if (condition !== "true") {
+                        const probability = probabilityFromAnswer(guiderResult.value);
+
+                        if (probability > 0) {
+                            allIsNotProneToInitiatingSex = false;
+                            const odds = probability >= 0.7 ? "very likely" : probability >= 0.4 ? "somewhat likely" : "slightly likely";
+                            extraInfoProneToInitiatingSex += `\n${name} is ${odds} to initiate sex towards this other character when they are ${intimateModifier.toLowerCase()}`;
+                        } else {
+                            extraInfoProneToInitiatingSex += `\n${name} is not likely to initiate sex towards this other character when they are ${intimateModifier.toLowerCase()}`;
+                        }
+
+                        // @ts-ignore
+                        const modifierInfo = MODIFIERS_INTIMACY[intimateModifier];
+                        const condition = modifierInfo.condition;
+                        if (condition !== "true") {
+                            strangerSectionProneToInitiatingSex.body.push(`if (${condition}) {`);
+                        }
+
+                        strangerSectionProneToInitiatingSex.body.push(`return ${probability};`);
+
+                        if (condition !== "true") {
+                            strangerSectionProneToInitiatingSex.body.push(`}`);
+                        }
+                    }
+                    if (allIsNotProneToInitiatingSex) {
+                        extraInfoProneToInitiatingSex = `\n${name} is not likely to initiate sex towards this other character in any context.`;
+                    } else {
+                        allExtraInfo += extraInfoProneToInitiatingSex;
+                    }
+                    // @ts-ignore
+                    if (fineTuneConditions[fineTune] !== "true") {
+                        // @ts-ignore
                         strangerSectionProneToInitiatingSex.body.push(`}`);
                     }
-                }
-                if (allIsNotProneToInitiatingSex) {
-                    extraInfoProneToInitiatingSex = `\n${name} is not likely to initiate sex towards this other character in any context.`;
-                } else {
-                    allExtraInfo += extraInfoProneToInitiatingSex;
-                }
-                // @ts-ignore
-                if (fineTuneConditions[fineTune] !== "true") {
-                    // @ts-ignore
-                    strangerSectionProneToInitiatingSex.body.push(`}`);
-                }
-                // done proneToInitiatingSex
+                    // done proneToInitiatingSex
 
-                let guidanceGivenAllExtraInfo = allExtraInfo;
-                let guidanceGiven = "";
-                let redoGuidance = false;
-                let descriptionValue = "";
-                let originalReferenceDescription = scriptgenerator.state[fineTuneReferencePrefix + "description"];
-                while (true) {
-                    let redidGuidance = false;
-                    if (redoGuidance) {
-                        redidGuidance = true;
-                        const guiderResult = await guider.askOpen(
-                            {
-                                id: strangerKey + "_" + fineTuneComment + "_description_guidance",
-                                reask: true,
-                                step: false,
-                            },
-                            "What are some important things to keep in mind when writing about a relationship with " + actualStrangerValue + " in the context of " + name + "'s character and personality?",
-                            guidanceGiven,
-                        );
-                        if (guiderResult) {
-                            guidanceGiven = guiderResult.value.trim();
+                    let guidanceGivenAllExtraInfo = allExtraInfo;
+                    let guidanceGiven = "";
+                    let redoGuidance = false;
+                    let descriptionValue = "";
+                    let originalReferenceDescription = scriptgenerator.state[fineTuneReferencePrefix + "description"];
+                    while (true) {
+                        let redidGuidance = false;
+                        if (redoGuidance) {
+                            redidGuidance = true;
+                            const guiderResult = await guider.askOpen(
+                                {
+                                    id: strangerKey + "_" + romanticInterestKey + "_" + fineTuneComment + "_description_guidance",
+                                    reask: true,
+                                    step: false,
+                                },
+                                "What are some important things to keep in mind when writing about a relationship with " + actualStrangerValue + " in the context of " + name + "'s character and personality?",
+                                guidanceGiven,
+                            );
+                            if (guiderResult) {
+                                guidanceGiven = guiderResult.value.trim();
+                            }
+                            redoGuidance = false;
                         }
-                        redoGuidance = false;
+
+                        const isAnimalFineTune = fineTune.startsWith("animal_");
+                        let baseInstructions = "NEVER ask for clarification or more information. ALWAYS directly write the description short paragraph. Invent any specific details as needed. The response should use the word 'OTHER_CHARACTER' to refer to the other character name. Write in clear, direct, objective terms about how " + name + " views and relates to OTHER_CHARACTER — describe the nature of the relationship, attitudes, and behaviors concretely. Avoid flowery language, metaphors about physical sensations (e.g. warm feelings in the chest, fuzzy warmth), and purple prose. State facts about the relationship plainly: whether " + name + " has romantic or sexual interest in OTHER_CHARACTER or not, how they behave towards them, and what they expect from the relationship. Do not describe specific physical micro-actions or sensory body-part details (e.g. eyes tracking someone, 'blue orbs', specific hand gestures). Broad behavioral tendencies are fine (e.g. they may withdraw from their presence, they may act shyly around them)."
+                        if (isAnimalFineTune && speciesType !== "animal") {
+                            baseInstructions = "NEVER ask for clarification or more information. ALWAYS directly write the description short paragraph. Invent any specific details as needed. The response should use the word 'OTHER_CHARACTER' to refer to the animal (pet or wild beast) in question. Write in clear, direct, objective terms about how " + name + " views and relates to OTHER_CHARACTER — describe their attitudes and behaviors concretely. Avoid flowery language and purple prose. Do not describe specific physical micro-actions or sensory body-part details. Broad behavioral tendencies are fine (e.g. they may hide from it, they may want to approach it). State plainly whether " + name + " has any sexual feelings towards OTHER_CHARACTER or not, and describe how " + name + " would interact with this pet or wild animal, including whether they would want to care for it, be afraid of it, or want to befriend it."
+                        }
+                        if (guidanceGivenAllExtraInfo) {
+                            baseInstructions += "\n\nThe following information has been provided based on the previous questions and answers:\n\n" + guidanceGivenAllExtraInfo;
+                        }
+                        if (guidanceGiven) {
+                            baseInstructions += "\n\n# MANDATORY REQUIREMENTS — ACTIVE OVERRIDE:\n\nThe following requirements MUST be reflected in your answer. Treat them as hard constraints that take absolute priority over any conflicting instruction above. Do NOT ignore or dilute them:\n\n" + guidanceGiven;
+                        }
+
+                        baseInstructions += "\n\nAnswer in present tense, future tense is allowed to specify potential behaviors that " + name + " might do";
+
+                        const guiderResult = await guider.askAccept(
+                            { id: strangerKey + "_" + romanticInterestKey + "_" + fineTuneComment + "_description", reask: redidGuidance, step: true, recalcdefault: true },
+                            "Description of a relationship with " + actualStrangerValue + messageAboutAnswersFrom,
+                            async () => {
+                                if (originalReferenceDescription && !redidGuidance) {
+                                    return originalReferenceDescription;
+                                }
+                                await prime();
+
+                                const descriptionBehaviour = await generator.next({
+                                    maxCharacters: 200,
+                                    maxSafetyCharacters: 600,
+                                    maxParagraphs: 1,
+                                    nextQuestion: "Provide a concise description (2-3 sentences) of how " + name + " feels about and acts towards " + actualStrangerValue + ". Cover their overall attitude and emotional stance, how they typically behave around this person, and importantly any ways their usual personality shifts because of this bond — for example becoming more open, dropping defenses, acting more protective or aggressive, or behaving out of character in some way.",
+                                    stopAfter: [],
+                                    stopAt: ["\n"],
+                                    instructions: baseInstructions,
+                                    grammar: "root ::= " + JSON.stringify("Regarding OTHER_CHARACTER " + name + " will treat them like ") + " [a-zA-Z0-9 ,;.'_\\n]+",
+                                });
+
+                                if (descriptionBehaviour.done) {
+                                    throw new Error("Generator ended unexpectedly while generating description for " + strangerKey);
+                                }
+
+                                const actualDescriptionBehavour = replaceOtherCharNameWithPlaceholder(descriptionBehaviour.value.trim(), name);
+
+                                return actualDescriptionBehavour;
+
+                                // const descriptionInternalFeelings = await generator.next({
+                                //     maxCharacters: 200,
+                                //     maxSafetyCharacters: 600,
+                                //     maxParagraphs: 1,
+                                //     nextQuestion: "Provide a concise and short one sentence description of how " + name + " feels internally towards " + actualStrangerValue + ". Focus on the emotional and psychological aspects of their perception, rather than physical details. This should capture the essence of their feelings towards this person in a way that informs their interactions and relationship dynamics.",
+                                //     stopAfter: [],
+                                //     stopAt: ["\n"],
+                                //     instructions: baseInstructions,
+                                //     grammar: "root ::= " + JSON.stringify(name + " feels that OTHER_CHARACTER is ") + " [a-zA-Z0-9 ,;.'_\\n]+",
+                                // });
+
+                                // if (descriptionInternalFeelings.done) {
+                                //     throw new Error("Generator ended unexpectedly while generating description for " + strangerKey);
+                                //  }
+
+                                // const actualDescriptionInternalFeelings = replaceOtherCharNameWithPlaceholder(descriptionInternalFeelings.value.trim(), name);
+
+                                // return actualDescriptionBehavour + "\n\n" + actualDescriptionInternalFeelings;
+                            },
+                        );
+                        if (guiderResult.value === null) {
+                            redoGuidance = true;
+                            descriptionValue = "";
+                            continue;
+                        } else {
+                            descriptionValue = guiderResult.value.trim();
+                            break;
+                        }
                     }
 
-                    const isAnimalFineTune = fineTune.startsWith("animal_");
-                    let baseInstructions = "NEVER ask for clarification or more information. ALWAYS directly write the description short paragraph. Invent any specific details as needed. The response should use the word 'OTHER_CHARACTER' to refer to the other character name. Write in clear, direct, objective terms about how " + name + " views and relates to OTHER_CHARACTER — describe the nature of the relationship, attitudes, and behaviors concretely. Avoid flowery language, metaphors about physical sensations (e.g. warm feelings in the chest, fuzzy warmth), and purple prose. State facts about the relationship plainly: whether " + name + " has romantic or sexual interest in OTHER_CHARACTER or not, how they behave towards them, and what they expect from the relationship. Do not describe specific physical micro-actions or sensory body-part details (e.g. eyes tracking someone, 'blue orbs', specific hand gestures). Broad behavioral tendencies are fine (e.g. they may withdraw from their presence, they may act shyly around them)."
-                    if (isAnimalFineTune && speciesType !== "animal") {
-                        baseInstructions = "NEVER ask for clarification or more information. ALWAYS directly write the description short paragraph. Invent any specific details as needed. The response should use the word 'OTHER_CHARACTER' to refer to the animal (pet or wild beast) in question. Write in clear, direct, objective terms about how " + name + " views and relates to OTHER_CHARACTER — describe their attitudes and behaviors concretely. Avoid flowery language and purple prose. Do not describe specific physical micro-actions or sensory body-part details. Broad behavioral tendencies are fine (e.g. they may hide from it, they may want to approach it). State plainly whether " + name + " has any sexual feelings towards OTHER_CHARACTER or not, and describe how " + name + " would interact with this pet or wild animal, including whether they would want to care for it, be afraid of it, or want to befriend it."
-                    }
-                    if (guidanceGivenAllExtraInfo) {
-                        baseInstructions += "\n\nThe following information has been provided based on the previous questions and answers:\n\n" + guidanceGivenAllExtraInfo;
-                    }
-                    if (guidanceGiven) {
-                        baseInstructions += "\n\n# MANDATORY REQUIREMENTS — ACTIVE OVERRIDE:\n\nThe following requirements MUST be reflected in your answer. Treat them as hard constraints that take absolute priority over any conflicting instruction above. Do NOT ignore or dilute them:\n\n" + guidanceGiven;
-                    }
+                    const useCreepyRomanticPrefixes = isAsexualValue;
+                    // @ts-ignore
+                    const romanticNamePrefix = (useCreepyRomanticPrefixes ? ROMANTIC_PREFIXES_CREEPY : ROMANTIC_PREFIXES)[romanticInterestKey];
+                    // @ts-ignore
+                    const relationshipNameDefault = romanticNamePrefix + STRANGERS_RELATIONSHIP_NAMES[strangerKey];
 
-                    baseInstructions += "\n\nAnswer in present tense, future tense is allowed to specify potential behaviors that " + name + " might do";
-
-                    const guiderResult = await guider.askAccept(
-                        { id: strangerKey + "_" + fineTuneComment + "_description", reask: redidGuidance, step: true, recalcdefault: true },
-                        "Description of a relationship with " + actualStrangerValue + messageAboutAnswersFrom,
-                        async () => {
-                            if (originalReferenceDescription && !redidGuidance) {
-                                return originalReferenceDescription;
-                            }
-                            await prime();
-
-                            const descriptionBehaviour = await generator.next({
-                                maxCharacters: 200,
-                                maxSafetyCharacters: 600,
-                                maxParagraphs: 1,
-                                nextQuestion: "Provide a concise description (2-3 sentences) of how " + name + " feels about and acts towards " + actualStrangerValue + ". Cover their overall attitude and emotional stance, how they typically behave around this person, and importantly any ways their usual personality shifts because of this bond — for example becoming more open, dropping defenses, acting more protective or aggressive, or behaving out of character in some way.",
-                                stopAfter: [],
-                                stopAt: ["\n"],
-                                instructions: baseInstructions,
-                                grammar: "root ::= " + JSON.stringify("Regarding OTHER_CHARACTER " + name + " will treat them like ") + " [a-zA-Z0-9 ,;.'_\\n]+",
-                            });
-
-                            if (descriptionBehaviour.done) {
-                                throw new Error("Generator ended unexpectedly while generating description for " + strangerKey);
-                            }
-
-                            const actualDescriptionBehavour = replaceOtherCharNameWithPlaceholder(descriptionBehaviour.value.trim(), name);
-
-                            return actualDescriptionBehavour;
-
-                            // const descriptionInternalFeelings = await generator.next({
-                            //     maxCharacters: 200,
-                            //     maxSafetyCharacters: 600,
-                            //     maxParagraphs: 1,
-                            //     nextQuestion: "Provide a concise and short one sentence description of how " + name + " feels internally towards " + actualStrangerValue + ". Focus on the emotional and psychological aspects of their perception, rather than physical details. This should capture the essence of their feelings towards this person in a way that informs their interactions and relationship dynamics.",
-                            //     stopAfter: [],
-                            //     stopAt: ["\n"],
-                            //     instructions: baseInstructions,
-                            //     grammar: "root ::= " + JSON.stringify(name + " feels that OTHER_CHARACTER is ") + " [a-zA-Z0-9 ,;.'_\\n]+",
-                            // });
-
-                            // if (descriptionInternalFeelings.done) {
-                            //     throw new Error("Generator ended unexpectedly while generating description for " + strangerKey);
-                            //  }
-
-                            // const actualDescriptionInternalFeelings = replaceOtherCharNameWithPlaceholder(descriptionInternalFeelings.value.trim(), name);
-
-                            // return actualDescriptionBehavour + "\n\n" + actualDescriptionInternalFeelings;
-                        },
+                    const relationshipNameResult = await guider.askOpen(
+                        strangerKey + "_" + romanticInterestKey + "_" + fineTuneComment + "_relationship-name",
+                        "What is the name of the relationship between " + name + " and " + actualStrangerValue + "?",
+                        relationshipNameDefault,
                     );
-                    if (guiderResult.value === null) {
-                        redoGuidance = true;
-                        descriptionValue = "";
-                        continue;
+
+                    insertSpecialComment(strangerSectionDescription.body, fineTuneComment);
+                    // @ts-ignore
+                    if (fineTuneConditions[fineTune] === "true") {
+                        // @ts-ignore
+                        strangerSectionDescription.body.push(`return ${toTemplateLiteral(descriptionValue, name)};`);
+                        strangerSectionRelationshipName.body.push(`return ${toTemplateLiteral(relationshipNameResult.value.trim(), name)};`);
                     } else {
-                        descriptionValue = guiderResult.value.trim();
-                        break;
+                        // @ts-ignore
+                        strangerSectionDescription.body.push(`if (${getAttractionLevelCondition(fineTuneConditions[fineTune], attractionLevel)}) {`);
+                        strangerSectionDescription.body.push(`return ${toTemplateLiteral(descriptionValue, name)};`);
+                        strangerSectionDescription.body.push(`}`);
+
+                        // @ts-ignore
+                        strangerSectionRelationshipName.body.push(`if (${getAttractionLevelCondition(fineTuneConditions[fineTune], attractionLevel)}) {`);
+                        strangerSectionRelationshipName.body.push(`return ${toTemplateLiteral(relationshipNameResult.value.trim(), name)};`);
+                        strangerSectionRelationshipName.body.push(`}`);
                     }
-                }
-
-                const relationshipNameResult = await guider.askOpen(
-                    strangerKey + "_" + fineTuneComment + "_relationship-name",
-                    "What is the name of the relationship between " + name + " and " + actualStrangerValue + "?",
-                    // @ts-ignore
-                    STRANGERS_RELATIONSHIP_NAMES[strangerKey],
-                );
-
-                insertSpecialComment(strangerSectionBase.body, fineTuneComment);
-                // @ts-ignore
-                if (fineTuneConditions[fineTune] === "true") {
-                    // @ts-ignore
-                    strangerSectionDescription.body.push(`return ${toTemplateLiteral(descriptionValue, name)};`);
-                    strangerSectionRelationshipName.body.push(`return ${toTemplateLiteral(relationshipNameResult.value.trim(), name)};`);
-                } else {
-                    // @ts-ignore
-                    strangerSectionDescription.body.push(`if (${getAttractionLevelCondition(fineTuneConditions[fineTune], attractionLevel)}) {`);
-                    strangerSectionDescription.body.push(`return ${toTemplateLiteral(descriptionValue, name)};`);
-                    strangerSectionDescription.body.push(`}`);
-
-                    // @ts-ignore
-                    strangerSectionRelationshipName.body.push(`if (${getAttractionLevelCondition(fineTuneConditions[fineTune], attractionLevel)}) {`);
-                    strangerSectionRelationshipName.body.push(`return ${toTemplateLiteral(relationshipNameResult.value.trim(), name)};`);
-                    strangerSectionRelationshipName.body.push(`}`);
                 }
             }
         }
@@ -3040,22 +3161,23 @@ export async function generateBonds(engine, scriptgenerator, guider) {
 
                             // no romantic interest: inherit from the closest relationship already asked following the
                             // questioning order in SETTINGS_ORDER_FIRST_LAYER. The first relationship of each chain
-                            // (acquaintance and unpleasant) inherits from the closest stranger impression instead.
+                            // (acquaintance and unpleasant) inherits from the closest stranger impression instead
+                            // (specifically that stranger's own no-romantic-interest layer).
                             /** @type {Record<string, string>} */
                             const noRomanticInterestBaseSource = {
-                                "acquaintance_0_10": "strangerGood_5_100",
+                                "acquaintance_0_10": "strangerGood_5_100_noRomanticInterest_0_10",
                                 "friendly_10_20": "acquaintance_0_10_noRomanticInterest_0_10_nonFamily",
                                 "goodFriend_20_35": "friendly_10_20_noRomanticInterest_0_10_nonFamily",
                                 "closeFriend_35_50": "goodFriend_20_35_noRomanticInterest_0_10_nonFamily",
                                 "bestFriend_50_100": "closeFriend_35_50_noRomanticInterest_0_10_nonFamily",
-                                "unpleasant_n10_0": "strangerBad_n100_n5",
+                                "unpleasant_n10_0": "strangerBad_n100_n5_noRomanticInterest_0_10",
                                 "unfriendly_n20_n10": "unpleasant_n10_0_noRomanticInterest_0_10_nonFamily",
                                 "antagonistic_n35_n20": "unfriendly_n20_n10_noRomanticInterest_0_10_nonFamily",
                                 "hostile_n50_n35": "antagonistic_n35_n20_noRomanticInterest_0_10_nonFamily",
                                 "foe_n100_n50": "hostile_n50_n35_noRomanticInterest_0_10_nonFamily",
                             };
 
-                            return (noRomanticInterestBaseSource[relationshipKey] || "strangerGood_5_100") + "_" + suffix;
+                            return (noRomanticInterestBaseSource[relationshipKey] || "strangerGood_5_100_noRomanticInterest_0_10") + "_" + suffix;
                         }
 
                         const defaultReferencePrefix = getFineTuneReferenceDefaultPrefix();
