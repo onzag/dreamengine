@@ -239,7 +239,7 @@ class CharacterOverlay extends HTMLElement {
                                 This character script is in progress of being created by the Guided Wizard.
                             </p>
                             <app-overlay-button id="guided-wizard-btn" aria-key="g">Continue Guided Wizard</app-overlay-button>
-                            <app-overlay-button id="show-overview-btn" aria-key="o">Show Overview</app-overlay-button>
+                            <app-overlay-button id="show-overview-btn" aria-key="o" play-sound-on-click="false">Show Overview</app-overlay-button>
                         </app-overlay-section>`;
                     } else if (parsedCardType.state.automaticWizardInProgress) {
                         cardtypeWizardContent = `<app-overlay-section section-title="CardType Wizard">
@@ -247,7 +247,7 @@ class CharacterOverlay extends HTMLElement {
                                 This character script is in progress of being created by the Automatic Wizard.
                             </p>
                             <app-overlay-button id="auto-wizard-btn" aria-key="a">Continue Automatic Wizard</app-overlay-button>
-                            <app-overlay-button id="show-overview-btn" aria-key="o">Show Overview</app-overlay-button>
+                            <app-overlay-button id="show-overview-btn" aria-key="o" play-sound-on-click="false">Show Overview</app-overlay-button>
                         </app-overlay-section>`;
                     } else if (parsedCardType.state.guidedWizardCompleted || parsedCardType.state.automaticWizardCompleted) {
                         // TODO add more options here, for the states
@@ -255,7 +255,7 @@ class CharacterOverlay extends HTMLElement {
                             <p data-de-aria-text="true" tabindex="0">
                                 This character script was created by the ${parsedCardType.state.guidedWizardCompleted ? 'Guided Wizard' : 'Automatic Wizard'}.
                             </p>
-                            <app-overlay-button id="show-overview-btn" aria-key="o">Show Overview</app-overlay-button>
+                            <app-overlay-button id="show-overview-btn" aria-key="o" play-sound-on-click="false">Show Overview</app-overlay-button>
                         </app-overlay-section>`;
                     } else {
                         cardtypeWizardContent = `<app-overlay-section section-title="CardType Wizard">

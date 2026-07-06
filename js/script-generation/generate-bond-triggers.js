@@ -341,7 +341,7 @@ export async function generateBondTriggers(engine, scriptgenerator, guider) {
                         maxCharacters: 5,
                         maxSafetyCharacters: 0,
                         maxParagraphs: 1,
-                        nextQuestion: `"${name} ${description}", ${consideringInStatement}, how would ${name} feel? answer with 3 of the most likely emotions`,
+                        nextQuestion: `"${name} ${description}", ${consideringInStatement}, how would ${name} feel? answer with 2 of the most likely emotions`,
                         stopAfter: [],
                         stopAt: [],
                         instructions: "Answer with a comma separated list of the 2 most likely of the following emotions: " + EMOTIONAL_STATES_TO_CHECK_AGAINST.join(", "),
@@ -460,28 +460,7 @@ export async function generateBondTriggers(engine, scriptgenerator, guider) {
         `DE.utils.shiftBond(char, other, -1, -1);`,
     );
 
-    const isLoveAtFirstSightValue = await guider.askBoolean(
-        "love-at-first-sight",
-        "Can " + name + " feel love at first sight?",
-        async () => {
-            await prime();
-            const isLoveAtFirstSight = await generator.next({
-                maxCharacters: 5,
-                maxSafetyCharacters: 0,
-                maxParagraphs: 1,
-                nextQuestion: `If ${name} just met someone and had no prior relationship with them, is it possible for ${name} to feel love at first sight towards them? Answer with "yes" or "no".`,
-                stopAfter: [],
-                stopAt: [],
-                grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
-            });
-
-            if (isLoveAtFirstSight.done) {
-                throw new Error("Generator finished without producing output");
-            }
-
-            return isLoveAtFirstSight.value.trim().toLowerCase() === "yes";
-        },
-    );
+    const isLoveAtFirstSightValue = scriptgenerator.state["love-at-first-sight"];
 
     if (isLoveAtFirstSightValue) {
         initializeSection.body.push(`// Yes/no questions about love at first sight`);
@@ -810,7 +789,7 @@ export async function generateBondTriggers(engine, scriptgenerator, guider) {
                 initializeSection.body.push(`type: "yes_no",`);
                 initializeSection.body.push(`askPer: "conversing_character",`);
                 initializeSection.body.push(`runIf: (char, other) => !(${generalConditionForAttraction}),`);
-                initializeSection.body.push(`question: (info) => ${toTemplateLiteral(question)},`);
+                initializeSection.body.push(`question: (info) => ${toTemplateLiteral(question, name)},`);
                 initializeSection.body.push(`onValue: (answer, char, other) => {`);
                 initializeSection.body.push(`if (answer) {`);
                 initializeSection.body.push(`DE.utils.shiftBond(char, other, -5, -2.5);`);

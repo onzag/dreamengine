@@ -36,6 +36,15 @@
  */
 
 /**
+ * @typedef {Object} FSSLoveDefinitionNoFamily
+ * @property {FSSBase} [deepInLove_50_100]
+ * @property {FSSBase} [strongRomanticInterest_35_50]
+ * @property {FSSBase} [romanticInterest_20_35]
+ * @property {FSSBase} [slightRomanticInterest_10_20]
+ * @property {FSSBase} noRomanticInterest_0_10
+ */
+
+/**
  * @typedef {Object} FSSCreepyLoveDefinition
  * @property {FSSByFamilyTie} [sexualAbuseInterest_50_100]
  * @property {FSSByFamilyTie} [stalkingInterest_35_50]
@@ -43,6 +52,16 @@
  * @property {FSSByFamilyTie} [creepyInterest_10_20]
  * @property {FSSByFamilyTie} noRomance_0_10
  */
+
+/**
+ * @typedef {Object} FSSCreepyLoveDefinitionNoFamily
+ * @property {FSSBase} [sexualAbuseInterest_50_100]
+ * @property {FSSBase} [stalkingInterest_35_50]
+ * @property {FSSBase} [obsessiveInterest_20_35]
+ * @property {FSSBase} [creepyInterest_10_20]
+ * @property {FSSBase} noRomance_0_10
+ */
+
 
 /**
  * @typedef {Object} FSS4DOptions
@@ -70,9 +89,9 @@
  * @property {FSSLoveDefinition} closeFriend_35_50
  * @property {FSSLoveDefinition} bestFriend_50_100
  * 
- * @property {FSSBase} strangerBad_n100_n5
- * @property {FSSBase} strangerNeutral_n5_5
- * @property {FSSBase} strangerGood_5_100
+ * @property {FSSLoveDefinition} strangerBad_n100_n5
+ * @property {FSSLoveDefinition} strangerNeutral_n5_5
+ * @property {FSSLoveDefinition} strangerGood_5_100
  */
 
 /**
@@ -99,9 +118,9 @@
  * @property {FSSCreepyLoveDefinition} closeFriend_35_50
  * @property {FSSCreepyLoveDefinition} bestFriend_50_100
  * 
- * @property {FSSBase} strangerBad_n100_n5
- * @property {FSSBase} strangerNeutral_n5_5
- * @property {FSSBase} strangerGood_5_100
+ * @property {FSSCreepyLoveDefinition} strangerBad_n100_n5
+ * @property {FSSCreepyLoveDefinition} strangerNeutral_n5_5
+ * @property {FSSCreepyLoveDefinition} strangerGood_5_100
  */
 
 
@@ -126,6 +145,27 @@ function convertCreepyOptionsToStandardOptions(creepyOptions) {
         ...creepyOptions,
         type: "4d_standard",
         familyCreepy: true,
+        strangerBad_n100_n5: {
+            noRomanticInterest_0_10: creepyOptions.strangerBad_n100_n5.noRomance_0_10,
+            slightRomanticInterest_10_20: creepyOptions.strangerBad_n100_n5.creepyInterest_10_20,
+            romanticInterest_20_35: creepyOptions.strangerBad_n100_n5.obsessiveInterest_20_35,
+            strongRomanticInterest_35_50: creepyOptions.strangerBad_n100_n5.stalkingInterest_35_50,
+            deepInLove_50_100: creepyOptions.strangerBad_n100_n5.sexualAbuseInterest_50_100,
+        },
+        strangerNeutral_n5_5: {
+            noRomanticInterest_0_10: creepyOptions.strangerNeutral_n5_5.noRomance_0_10,
+            slightRomanticInterest_10_20: creepyOptions.strangerNeutral_n5_5.creepyInterest_10_20,
+            romanticInterest_20_35: creepyOptions.strangerNeutral_n5_5.obsessiveInterest_20_35,
+            strongRomanticInterest_35_50: creepyOptions.strangerNeutral_n5_5.stalkingInterest_35_50,
+            deepInLove_50_100: creepyOptions.strangerNeutral_n5_5.sexualAbuseInterest_50_100,
+        },
+        strangerGood_5_100: {
+            noRomanticInterest_0_10: creepyOptions.strangerGood_5_100.noRomance_0_10,
+            slightRomanticInterest_10_20: creepyOptions.strangerGood_5_100.creepyInterest_10_20,
+            romanticInterest_20_35: creepyOptions.strangerGood_5_100.obsessiveInterest_20_35,
+            strongRomanticInterest_35_50: creepyOptions.strangerGood_5_100.stalkingInterest_35_50,
+            deepInLove_50_100: creepyOptions.strangerGood_5_100.sexualAbuseInterest_50_100,
+        },
         foe_n100_n50: {
             deepInLove_50_100: creepyOptions.foe_n100_n50.sexualAbuseInterest_50_100,
             strongRomanticInterest_35_50: creepyOptions.foe_n100_n50.stalkingInterest_35_50,
@@ -202,19 +242,22 @@ function convertCreepyOptionsToStandardOptions(creepyOptions) {
 }
 
 /**
- * @type {Array<[string, number, number]>}
+ * @type {Array<[string, number, number, boolean]>}
  */
 const RANGES = [
-    ["foe_n100_n50", -100, -50],
-    ["hostile_n50_n35", -50, -35],
-    ["antagonistic_n35_n20", -35, -20],
-    ["unfriendly_n20_n10", -20, -10],
-    ["unpleasant_n10_0", -10, 0],
-    ["acquaintance_0_10", 0, 10],
-    ["friendly_10_20", 10, 20],
-    ["goodFriend_20_35", 20, 35],
-    ["closeFriend_35_50", 35, 50],
-    ["bestFriend_50_100", 50, 100],
+    ["foe_n100_n50", -100, -50, false],
+    ["hostile_n50_n35", -50, -35, false],
+    ["antagonistic_n35_n20", -35, -20, false],
+    ["unfriendly_n20_n10", -20, -10, false],
+    ["unpleasant_n10_0", -10, 0, false],
+    ["acquaintance_0_10", 0, 10, false],
+    ["friendly_10_20", 10, 20, false],
+    ["goodFriend_20_35", 20, 35, false],
+    ["closeFriend_35_50", 35, 50, false],
+    ["bestFriend_50_100", 50, 100, false],
+    ["strangerBad_n100_n5", -100, -5, true],
+    ["strangerNeutral_n5_5", -5, 5, true],
+    ["strangerGood_5_100", 5, 100, true],
 ];
 
 /**
@@ -232,6 +275,7 @@ engine.exports = {
     type: "misc",
     description: "A complex 4 dimensional bond system with a lot of fine tuning, designed for SFW and NSFW characters alike.",
     exposeProperties: {},
+    language: "*",
 
     /**
      * @param {DEObject} DE
@@ -274,89 +318,9 @@ engine.exports = {
         };
 
         {
-            character.bonds.declarations.push({
-                name: `${options.type}_strangerBad_n100_n5`,
-                description: options.strangerBad_n100_n5.description,
-                relationshipName: options.strangerBad_n100_n5.relationshipName,
-                minBondLevel: -100,
-                maxBondLevel: -5,
-                min2BondLevel: 0,
-                max2BondLevel: 100,
-                strangerBond: true,
-                familyBond: false,
-                bondAdditionalDescription: options.strangerBad_n100_n5.bondAdditionalDescription,
-                generalCharacterDescriptionInjection: options.strangerBad_n100_n5.generalCharacterDescriptionInjection,
-                generalCharacterDescriptionInjectionEx: options.strangerBad_n100_n5.generalCharacterDescriptionInjectionEx,
-                intimacy: {
-                    openToAffection: options.strangerBad_n100_n5.openToAffection,
-                    openToAffectionResponses: options.strangerBad_n100_n5.openToAffectionResponses,
-                    openToIntimateAffection: options.strangerBad_n100_n5.openToIntimateAffection,
-                    openToIntimateAffectionResponses: options.strangerBad_n100_n5.openToIntimateAffectionResponses,
-                    openToSex: options.strangerBad_n100_n5.openToSex,
-                    openToSexResponses: options.strangerBad_n100_n5.openToSexResponses,
-                    proneToInitiatingAffection: options.strangerBad_n100_n5.proneToInitiatingAffection,
-                    proneToInitiatingIntimateAffection: options.strangerBad_n100_n5.proneToInitiatingIntimateAffection,
-                    proneToInitiatingSex: options.strangerBad_n100_n5.proneToInitiatingSex,
-                },
-            });
-
-            character.bonds.declarations.push({
-                name: `${options.type}_strangerNeutral_n5_5`,
-                description: options.strangerNeutral_n5_5.description,
-                relationshipName: options.strangerNeutral_n5_5.relationshipName,
-                minBondLevel: -5,
-                maxBondLevel: 5,
-                min2BondLevel: 0,
-                max2BondLevel: 100,
-                strangerBond: true,
-                familyBond: false,
-                bondAdditionalDescription: options.strangerNeutral_n5_5.bondAdditionalDescription,
-                generalCharacterDescriptionInjection: options.strangerNeutral_n5_5.generalCharacterDescriptionInjection,
-                generalCharacterDescriptionInjectionEx: options.strangerNeutral_n5_5.generalCharacterDescriptionInjectionEx,
-                intimacy: {
-                    openToAffection: options.strangerNeutral_n5_5.openToAffection,
-                    openToAffectionResponses: options.strangerNeutral_n5_5.openToAffectionResponses,
-                    openToIntimateAffection: options.strangerNeutral_n5_5.openToIntimateAffection,
-                    openToIntimateAffectionResponses: options.strangerNeutral_n5_5.openToIntimateAffectionResponses,
-                    openToSex: options.strangerNeutral_n5_5.openToSex,
-                    openToSexResponses: options.strangerNeutral_n5_5.openToSexResponses,
-                    proneToInitiatingAffection: options.strangerNeutral_n5_5.proneToInitiatingAffection,
-                    proneToInitiatingIntimateAffection: options.strangerNeutral_n5_5.proneToInitiatingIntimateAffection,
-                    proneToInitiatingSex: options.strangerNeutral_n5_5.proneToInitiatingSex,
-                },
-            });
-
-            character.bonds.declarations.push({
-                name: `${options.type}_strangerGood_5_100`,
-                description: options.strangerGood_5_100.description,
-                relationshipName: options.strangerGood_5_100.relationshipName,
-                minBondLevel: 5,
-                maxBondLevel: 100,
-                min2BondLevel: 0,
-                max2BondLevel: 100,
-                strangerBond: true,
-                familyBond: false,
-                bondAdditionalDescription: options.strangerGood_5_100.bondAdditionalDescription,
-                generalCharacterDescriptionInjection: options.strangerGood_5_100.generalCharacterDescriptionInjection,
-                generalCharacterDescriptionInjectionEx: options.strangerGood_5_100.generalCharacterDescriptionInjectionEx,
-                intimacy: {
-                    openToAffection: options.strangerGood_5_100.openToAffection,
-                    openToAffectionResponses: options.strangerGood_5_100.openToAffectionResponses,
-                    openToIntimateAffection: options.strangerGood_5_100.openToIntimateAffection,
-                    openToIntimateAffectionResponses: options.strangerGood_5_100.openToIntimateAffectionResponses,
-                    openToSex: options.strangerGood_5_100.openToSex,
-                    openToSexResponses: options.strangerGood_5_100.openToSexResponses,
-                    proneToInitiatingAffection: options.strangerGood_5_100.proneToInitiatingAffection,
-                    proneToInitiatingIntimateAffection: options.strangerGood_5_100.proneToInitiatingIntimateAffection,
-                    proneToInitiatingSex: options.strangerGood_5_100.proneToInitiatingSex,
-                },
-            });
-        }
-
-        {
             const standardForm = options.type === "4d_creepy" ? convertCreepyOptionsToStandardOptions(options) : options;
 
-            for (const [bondName, min, max] of RANGES) {
+            for (const [bondName, min, max, isStranger] of RANGES) {
                 for (const [secondaryBondName, secondaryMin, secondaryMax] of SECOND_RANGES) {
 
                     /**
@@ -366,15 +330,15 @@ engine.exports = {
                         // @ts-ignore
                         standardForm[bondName][secondaryBondName]
 
-                    for (const familyStatus of ["family", "nonFamily"]) {
+                    for (const familyStatus of (isStranger ? ["family", "nonFamily"] : ["nonFamily"])) {
                         /**
                          * @type {FSSBase}
                          */
-                        const baseRule =
+                        const baseRule = isStranger ? secondRangeRule :
                             // @ts-ignore
                             secondRangeRule && secondRangeRule[familyStatus];
 
-                        if (!baseRule) {
+                        if (!baseRule && !isStranger) {
                             const lastSameFamilyRuleAddedArray = character.bonds.declarations.filter(d => d.familyBond === (familyStatus === "family") && d.minBondLevel === min && d.maxBondLevel === max && !d.strangerBond);
                             const lastSameFamilyRuleAdded = lastSameFamilyRuleAddedArray.length > 0 ? lastSameFamilyRuleAddedArray[lastSameFamilyRuleAddedArray.length - 1] : null;
 
@@ -388,14 +352,14 @@ engine.exports = {
                         }
 
                         character.bonds.declarations.push({
-                            name: `${options.type}_${bondName}_${secondaryBondName}_non_stranger_${familyStatus}`,
+                            name: `${options.type}_${bondName}_${secondaryBondName}_${isStranger ? "stranger" : "non_stranger"}_${familyStatus}`,
                             description: baseRule.description,
                             relationshipName: baseRule.relationshipName,
                             minBondLevel: min,
                             maxBondLevel: max,
                             min2BondLevel: secondaryMin,
                             max2BondLevel: secondaryMax,
-                            strangerBond: false,
+                            strangerBond: isStranger,
                             familyBond: familyStatus === "family",
                             bondAdditionalDescription: baseRule.bondAdditionalDescription,
                             generalCharacterDescriptionInjection: baseRule.generalCharacterDescriptionInjection,

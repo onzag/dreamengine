@@ -793,6 +793,29 @@ export async function generateBonds(engine, scriptgenerator, guider) {
         optionsSection.body.push(`familyCreepy: true,`);
     }
 
+    const isLoveAtFirstSightValue = await guider.askBoolean(
+        "love-at-first-sight",
+        "Can " + name + " feel love at first sight?",
+        async () => {
+            await prime();
+            const isLoveAtFirstSight = await generator.next({
+                maxCharacters: 5,
+                maxSafetyCharacters: 0,
+                maxParagraphs: 1,
+                nextQuestion: `If ${name} just met someone and had no prior relationship with them, is it possible for ${name} to feel love at first sight towards them? Answer with "yes" or "no".`,
+                stopAfter: [],
+                stopAt: [],
+                grammar: `root ::= "yes" | "no" | "Yes" | "No" | "YES" | "NO"`,
+            });
+
+            if (isLoveAtFirstSight.done) {
+                throw new Error("Generator finished without producing output");
+            }
+
+            return isLoveAtFirstSight.value.trim().toLowerCase() === "yes";
+        },
+    );
+
     const speciesType = scriptgenerator.state["species-type"];
 
     const fineTunesDescriptions = {
@@ -2848,12 +2871,17 @@ export async function generateBonds(engine, scriptgenerator, guider) {
             let addAttractionRules = true;
             // asexual will always get added because it is all creepy bonds
             if (romanticInterestKey !== "noRomanticInterest_0_10" && !isAsexualValue) {
-                const guiderResult = await guider.askBoolean(
-                    "capable-of-romantic-interest-" + relationshipKey + "-" + romanticInterestKey,
-                    "Is " + name + " capable to " + ROMANTIC_INTEREST_KEY_LABELS[romanticInterestKey] + " (beyond simple physical or superficial attraction) " + (" towards a " + RELATIONSHIP_KEY_DESCRIPTIONS[relationshipKey]).replace("a acquaintance", "an acquaintance") + "?",
-                    addAttractionRules,
-                );
-                addAttractionRules = guiderResult.value;
+                if (romanticInterestKey === "slightRomanticInterest_10_20" && isLoveAtFirstSightValue) {
+                    // must add because love at first sight implies at least a slight romantic interest
+                    addAttractionRules = true;
+                } else {
+                    const guiderResult = await guider.askBoolean(
+                        "capable-of-romantic-interest-" + relationshipKey + "-" + romanticInterestKey,
+                        "Is " + name + " capable to " + ROMANTIC_INTEREST_KEY_LABELS[romanticInterestKey] + " (beyond simple physical or superficial attraction) " + (" towards a " + RELATIONSHIP_KEY_DESCRIPTIONS[relationshipKey]).replace("a acquaintance", "an acquaintance") + "?",
+                        addAttractionRules,
+                    );
+                    addAttractionRules = guiderResult.value;
+                }
             }
 
             const romanticInterestSection = insertSection(relationshipsSection.body, romanticInterestKey, (s) => {
