@@ -724,6 +724,15 @@ declare interface DEIntimateAction {
          * and proceed anyway after receveing a no for an answer
          */
         ignoreConsentRejection: number;
+        /**
+         * If the action was performed, ignoring the constnet, provided a consent
+         * mechanism was set, this multiplier will affect both bonds
+         * on the successBondChange criteria, normally you may want a value
+         * of 0.5 around here, if not specified, it will be 1, meaning no change
+         * 
+         * TODO implement
+         */
+        ignoreContentRejectionBondChangeSuccessMultiplier?: number;
     };
     /**
      * States to trigger with this action once it executes
@@ -742,6 +751,28 @@ declare interface DEIntimateAction {
      * Apply a vocabulary limit while performing the action
      */
     vocabularyLimit?: DEVocabularyLimit;
+
+    /**
+     * Bond change that happens when the action is performed successfully
+     * For example a kiss may increase secondary bond level
+     * 
+     * TODO implement
+     */
+    successBondChange: {
+        primary: number;
+        secondary: number;
+    };
+
+    /**
+     * Bond change that happens when the action is performed but fails
+     * due to not receiving consent or being rejected and pushed away
+     * 
+     * TODO implement
+     */
+    failureBondChange: {
+        primary: number;
+        secondary: number;
+    };
 }
 
 declare interface DEBondDeclaration {
@@ -823,7 +854,52 @@ declare interface DEBondDeclaration {
     intimacy: DEBondIntimacyInfo;
 }
 
-declare interface DEIntimateOpenActivity { question: DEStringTemplateCharAndOther, reaction: DEStringTemplateCharAndOther, vocabularyLimit?: DEVocabularyLimit, onlyAtLevel?: Array<"not" | "slight" | "moderate" | "very"> };
+declare interface DEIntimateOpenActivity {
+    /**
+     * Yes/No question
+     */
+    question: DEStringTemplateCharAndOther;
+    /**
+     * Reaction of the character
+     */
+    reaction: DEStringTemplateCharAndOther;
+    /**
+     * vocabulary limit to apply to the reaction, if not specified, no limit is applied
+     */
+    vocabularyLimit?: DEVocabularyLimit;
+    /**
+     * The open to affection/intimate affection/sex response, it will only be considered if the character is at one of these bond levels, if not specified, it will be considered at any bond level
+     */
+    onlyAtLevel?: Array<"not" | "slight" | "moderate" | "very">;
+};
+
+declare interface DEOpenToIntimacyResponse {
+    /**
+     * How open they are to the intimate action
+     */
+    value: "not" | "slight" | "moderate" | "very";
+    /**
+     * Reason why they are open or not
+     */
+    reason?: string | null;
+    /**
+     * The bond change that happens when another character engages in such a manner towards
+     * our character, keep in mind creepy bonds in openToAffection as you don't want (or maybe you do)
+     * a character that mistakes affection for creepiness
+     * 
+     * If you return not, you probably should have negative values, so that if they are engaged
+     * against their will their bond worsens
+     * 
+     * Note that this only affects when our character receives the affection, not when our character initiates, for that
+     * another mechanism is used
+     * 
+     * TODO implement
+     */
+    bondChangeEngaged: {
+        primary: number;
+        secondary: number;
+    };
+}
 
 declare interface DEBondIntimacyInfo {
     /**
@@ -833,7 +909,7 @@ declare interface DEBondIntimacyInfo {
      * @param other 
      * @returns 
      */
-    openToAffection: (char: DECompleteCharacterReference, other: DECompleteCharacterReference) => PromiseOrNot<{ value: "not" | "slight" | "moderate" | "very", reason?: string | null }>;
+    openToAffection: (char: DECompleteCharacterReference, other: DECompleteCharacterReference) => PromiseOrNot<DEOpenToIntimacyResponse>;
     /**
      * Responses to specific affective actions when performed (mostly by the other character)
      * for example, question can be: is {{char}} being hugged by {{other}}?
@@ -854,7 +930,7 @@ declare interface DEBondIntimacyInfo {
      * @param other 
      * @returns 
      */
-    openToIntimateAffection: (char: DECompleteCharacterReference, other: DECompleteCharacterReference) => PromiseOrNot<{ value: "not" | "slight" | "moderate" | "very", reason?: string | null }>;
+    openToIntimateAffection: (char: DECompleteCharacterReference, other: DECompleteCharacterReference) => PromiseOrNot<DEOpenToIntimacyResponse>;
     /**
      * Responses to specific affective actions when performed (mostly by the other character)
      * for example, question can be: is {{char}} being kissed by {{other}}?
@@ -875,7 +951,7 @@ declare interface DEBondIntimacyInfo {
      * @param other 
      * @returns 
      */
-    openToSex: (char: DECompleteCharacterReference, other: DECompleteCharacterReference) => PromiseOrNot<{ value: "not" | "slight" | "moderate" | "very", reason?: string | null }>;
+    openToSex: (char: DECompleteCharacterReference, other: DECompleteCharacterReference) => PromiseOrNot<DEOpenToIntimacyResponse>;
     /**
      * Responses to specific sexual actions when performed (mostly by the other character)
      * for example, question can be: is {{char}} being touched in a sexual way by {{other}}?

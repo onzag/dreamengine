@@ -244,8 +244,6 @@ export async function runQuestion(engine, character, question, options) {
             otherRelationship: relationship || null,
         }) : question.question;
 
-        console.log(`Asking question: ${questionText}`);
-
         if (question.type === "yes_no") {
             const answer = await options.questioningAgent.next({
                 maxCharacters: 0,
@@ -307,8 +305,6 @@ export async function runQuestion(engine, character, question, options) {
             }
 
             const answerText = answer.value.trim();
-
-            console.log(`Received answer: ${answerText}`);
 
             const parsedNumber = parseFloat(answerText);
 
@@ -433,19 +429,42 @@ export default async function runAllTriggersFor(engine, character, interactedCha
         }
     }
 
+    const sexualFullfillmentQuestion = "Has " + character.name + " had an orgasm or completed a sexual act in the last story fragment?";
+    await runQuestion(engine, character, {
+        type: "yes_no",
+        question: sexualFullfillmentQuestion,
+        onValue: async (answer) => {
+            smallQuestionsCache[sexualFullfillmentQuestion] = answer;
+        },
+    }, {
+        lastCycleMessagesInfo,
+        interactedCharactersAccordingToItemChange,
+        questioningAgent,
+        initializeAgent,
+    });
+
+    const isSexuallyFullfiled = smallQuestionsCache[sexualFullfillmentQuestion];
+
+    if (isSexuallyFullfiled) {
+        character.state["last_sexual_fullfillment_act"] = engine.deObject.currentTime.time;
+    }
+
+    // TODO force an orgasm sometimes if already engaged in sex
+    // TODO add vocalizations for intimate acts and sexual acts if not defined one, using the default system
+
     for (const bond of engine.deObject.bonds[character.name].active) {
         if (bond.towards in interactedCharactersAccordingToItemChange) {
-            if (character.temp["rejectIntimacy_" + bond.towards]) {
-                console.log("Intimacy towards " + bond.towards + " is currently rejected for " + character.name + ", skipping intimacy triggers for this bond");
-                continue; // skip this bond if intimacy is rejected due to recent negative interaction or already shifted bond
+            let rejectIntimacy = character.temp["rejectIntimacy_" + bond.towards];
+            if (rejectIntimacy) {
+                console.log("Intimacy towards " + bond.towards + " is currently rejected for " + character.name + " because of a recent negative interaction");
             }
 
             if (character.temp["alreadyShiftedBondPrimary_" + bond.towards] < 0 || character.temp["alreadyShiftedBondSecondary_" + bond.towards] < 0) {
-                console.log("Intimacy towards " + bond.towards + " is currently rejected for " + character.name + " because of a negative interaction or already shifted bond, skipping intimacy triggers for this bond");
-                continue; // skip this bond if intimacy is rejected due to recent negative interaction or already shifted bond
+                console.log("Intimacy towards " + bond.towards + " is currently rejected for " + character.name + " because of a negative interaction or already shifted bond");
+                rejectIntimacy = true;
             }
 
-            let multiplier = 1;
+            let multiplier = rejectIntimacy ? 0 : 1;
 
             const allActiveStates = engine.deObject.stateFor[character.name].states;
             for (const activeState of allActiveStates) {
@@ -465,9 +484,25 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                 let negativeInteraction = false;
                 let alreadyInAffectionateAct = false;
 
-                const openToAffection = await bondDeclaration.intimacy.openToAffection(character, engine.deObject.characters[bond.towards]);
-                const openToIntimateAffection = await bondDeclaration.intimacy.openToIntimateAffection(character, engine.deObject.characters[bond.towards]);
-                const openToSex = await bondDeclaration.intimacy.openToSex(character, engine.deObject.characters[bond.towards]);
+                /**
+                 * @type {DEOpenToIntimacyResponse}
+                 */
+                const rejectedIntimacyNegative = {
+                    value: "not",
+                    reason: "A recent negative interaction",
+                    bondChangeEngaged: {
+                        primary: 0,
+                        secondary: 0,
+                    },
+                };
+
+                const openToAffectionDefault = await bondDeclaration.intimacy.openToAffection(character, engine.deObject.characters[bond.towards]);
+                const openToIntimateAffectionDefault = await bondDeclaration.intimacy.openToIntimateAffection(character, engine.deObject.characters[bond.towards]);
+                const openToSexDefault = await bondDeclaration.intimacy.openToSex(character, engine.deObject.characters[bond.towards]);
+
+                const openToAffection = rejectIntimacy && openToAffectionDefault.value !== "not" ? rejectedIntimacyNegative : openToAffectionDefault;
+                const openToIntimateAffection = rejectIntimacy && openToAffectionDefault.value !== "not" ? rejectedIntimacyNegative : openToIntimateAffectionDefault;
+                const openToSex = rejectIntimacy && openToAffectionDefault.value !== "not" ? rejectedIntimacyNegative : openToSexDefault;
 
                 const openToAffectionQuestions = bondDeclaration.intimacy.openToAffectionResponses.filter(r => !r.onlyAtLevel || r.onlyAtLevel.includes(openToAffection.value));
                 const openToIntimateAffectionQuestions = bondDeclaration.intimacy.openToIntimateAffectionResponses.filter(r => !r.onlyAtLevel || r.onlyAtLevel.includes(openToIntimateAffection.value));
@@ -516,7 +551,45 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                     }
                 }
 
-                const questionOfSex = "In the last story fragment, has " + character.name + " engaged in sexual activities or sexual acts with " + bond.towards + "?";
+                const descriptionExtraForAmount = {
+                    "slight": ", slightly means that the character is open but may cast doubts or be hesitant, and may not be fully comfortable with the act, but is willing to engage in it",
+                    "moderate": ", moderately means that the character is open and comfortable with the act, and may even enjoy it, but may not be fully committed right away",
+                    "very": ", very means that the character is very open and enthusiastic about the act",
+                };
+
+                const descriptionForText = {
+                    "slight": "slightly",
+                    "moderate": "moderately",
+                    "very": "very",
+                }
+
+                const questionOfSex = "In the last story fragment, has " + character.name + " engaged in sexual activities or sexual acts?";
+                const questionOfProposedSex = "In the last story fragment, has " + bond.towards + " proposed to engage in sexual activities or sexual acts with " + character.name + "?";
+
+                const characterLibido = character.libido || 0;
+
+                let extraSexMessageProposal = "";
+                let extraSexMessageEngaged = "";
+                if (characterLibido >= 0.9) {
+                    extraSexMessageEngaged = ", " + character.name + " has a very high libido, so they are actually very eager and enthusiastic about engaging in sexual activities with " + bond.towards;
+                    extraSexMessageProposal = extraSexMessageEngaged;
+                } else {
+                    // basically amount of ms ago when they had last sex
+                    const timeSinceLastSex = engine.deObject.currentTime.time - (character.state["last_sexual_fullfillment_act"] || 0);
+                    const cooldownPeriodHours = (1 - characterLibido) * 48; // from 0 hours at libido 1 to 48 hours at libido 0
+                    const timeSinceLastSexHours = timeSinceLastSex / (60 * 60 * 1000);
+
+                    if (timeSinceLastSexHours <= cooldownPeriodHours * 0.25) {
+                        extraSexMessageEngaged = ", " + character.name + " has recently fullfilled their sexual activities and is still in a cooldown period, so they are not be fully comfortable";
+                        extraSexMessageProposal = ", " + character.name + " has recently fullfilled their sexual activities and is still in a cooldown period, so they may be adamant on engaging in sexual activities";
+                    } else if (timeSinceLastSexHours <= cooldownPeriodHours * 0.5) {
+                        extraSexMessageEngaged = ", " + character.name + " has recently fullfilled their sexual activities and is still in a cooldown period";
+                        extraSexMessageProposal = ", " + character.name + " has recently fullfilled their sexual activities and is more recovered, so they may show little interest in engaging in sexual activities, but they may yield";
+                    } else if (timeSinceLastSexHours <= cooldownPeriodHours * 0.75) {
+                        extraSexMessageEngaged = ", " + character.name + " has recently fullfilled their sexual activities and is still in a cooldown period";
+                        extraSexMessageProposal = ", " + character.name + " has recently fullfilled their sexual activities and is more recovered, so they may not be fully comfortable to engaging in sexual activities, but they may yield";
+                    }
+                }
 
                 if (!smallQuestionsCache[questionOfSex]) {
                     await runQuestion(engine, character, {
@@ -535,16 +608,45 @@ export default async function runAllTriggersFor(engine, character, interactedCha
 
                 const engagedInSex = smallQuestionsCache[questionOfSex];
 
+                if (!engagedInSex && !smallQuestionsCache[questionOfProposedSex] && character.speciesType !== "animal") {
+                    await runQuestion(engine, character, {
+                        type: "yes_no",
+                        question: questionOfProposedSex,
+                        onValue: async (answer) => {
+                            smallQuestionsCache[questionOfProposedSex] = answer;
+                        },
+                    }, {
+                        lastCycleMessagesInfo,
+                        interactedCharactersAccordingToItemChange,
+                        questioningAgent,
+                        initializeAgent,
+                    });
+                }
+
+                const proposedToEngageInSex = smallQuestionsCache[questionOfProposedSex];
+
                 if (engagedInSex) {
                     alreadyInIntimateAct = true;
                     alreadyInSex = true;
                     if (openToSex.value === "not") {
                         negativeInteraction = true;
-                        microInjections.push(character.name + " just engaged in sexual activities with " + bond.towards + " but " + character.name + " is not open to sex with them, this might cause serious tension, trauma, or conflict in their interactions");
+                        microInjections.push(character.name + " is engaging in sexual activities with " + bond.towards + " but " + character.name + " is not open to sex with them, this might cause serious tension, trauma, or conflict in their interactions");
                     } else {
-                        microInjections.push(character.name + " just engaged in sexual activities with " + bond.towards + " and " + character.name + " is " + openToSex.value + " open to sex with them, this might significantly deepen their bond and intimacy");
+                        microInjections.push(character.name + " is engaging in sexual activities with " + bond.towards + " and " + character.name + " is " + descriptionForText[openToSex.value] + " open to sex with them, this might significantly deepen their bond and intimacy" + descriptionExtraForAmount[openToSex.value] + extraSexMessageEngaged);
+                        // TODO tell it about its kinks in the way I wrote the message in telegram
                     }
+
+                    character.state["last_sexual_act"] = engine.deObject.currentTime.time;
                 } else {
+                    if (proposedToEngageInSex) {
+                        if (openToSex.value === "not") {
+                            negativeInteraction = true;
+                            microInjections.push(bond.towards + " is proposing to engage in sexual activities with " + bond.towards + " but " + character.name + " is not open to sex with them, this might cause tension or conflict in their interactions");
+                        } else {
+                            microInjections.push(bond.towards + " is proposing to engage in sexual activities with " + character.name + " and " + character.name + " is " + descriptionForText[openToSex.value] + " open to sex with them, this might lead to a positive development in their bond and intimacy" + descriptionExtraForAmount[openToSex.value] + extraSexMessageProposal);
+                        }
+                    }
+
                     const questionOfIntimateAffection = "In the last story fragment, has " + character.name + " received intimate affection from " + bond.towards + "? eg. kissing with arousing/sexual intent, making out, intimate actions with romantic/sexual interest, etc.";
 
                     if (!smallQuestionsCache[questionOfIntimateAffection]) {
@@ -562,17 +664,47 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                         });
                     }
 
+                    const questionOfProposedIntimateAffection = "In the last story fragment, has " + character.name + " proposed to receive intimate affection from " + bond.towards + "? eg. kissing with arousing/sexual intent, making out, intimate actions with romantic/sexual interest, etc.";
+
                     const receivedIntimateAffection = smallQuestionsCache[questionOfIntimateAffection];
+
+                    if (!receivedIntimateAffection && !smallQuestionsCache[questionOfProposedIntimateAffection] && character.speciesType !== "animal") {
+                        await runQuestion(engine, character, {
+                            type: "yes_no",
+                            question: questionOfProposedIntimateAffection,
+                            onValue: async (answer) => {
+                                smallQuestionsCache[questionOfProposedIntimateAffection] = answer;
+                            }
+                        }, {
+                            lastCycleMessagesInfo,
+                            interactedCharactersAccordingToItemChange,
+                            questioningAgent,
+                            initializeAgent,
+                        });
+                    }
+
+                    const proposedToReceiveIntimateAffection = smallQuestionsCache[questionOfProposedIntimateAffection];
 
                     if (receivedIntimateAffection) {
                         alreadyInIntimateAct = true;
                         if (openToIntimateAffection.value === "not") {
                             negativeInteraction = true;
-                            microInjections.push(character.name + " just received intimate affection from " + bond.towards + " but " + character.name + " is not open to intimate affection from them, this might cause significant tension, discomfort, or conflict in their interactions");
+                            microInjections.push(character.name + " is receiving intimate affection from " + bond.towards + " but " + character.name + " is not open to intimate affection from them, this might cause significant tension, discomfort, or conflict in their interactions");
                         } else {
-                            microInjections.push(character.name + " just received intimate affection from " + bond.towards + " and " + character.name + " is " + openToIntimateAffection.value + " open to intimate affection from them, this might deepen their bond and have a very positive effect on their interactions");
+                            microInjections.push(character.name + " is receiving intimate affection from " + bond.towards + " and " + character.name + " is " + descriptionForText[openToIntimateAffection.value] + " open to intimate affection from them, this might deepen their bond and have a very positive effect on their interactions" + descriptionExtraForAmount[openToIntimateAffection.value]);
                         }
+
+                        character.state["last_intimate_affection_act"] = engine.deObject.currentTime.time;
                     } else {
+                        if (proposedToReceiveIntimateAffection) {
+                            if (openToIntimateAffection.value === "not") {
+                                negativeInteraction = true;
+                                microInjections.push(bond.towards + " is proposing intimate affection with " + character.name + " but " + character.name + " is not open to intimate affection from them, this might cause tension or conflict in their interactions");
+                            } else {
+                                microInjections.push(bond.towards + " is proposing intimate affection with " + character.name + " and " + character.name + " is " + descriptionForText[openToIntimateAffection.value] + " open to intimate affection from them, this might lead to a positive development in their bond and intimacy" + descriptionExtraForAmount[openToIntimateAffection.value]);
+                            }
+                        }
+
                         const questionOfAffection = "In the last story fragment, has " + character.name + " received affection from " + bond.towards + "? eg. hugging, caressing, holding hands, affectionate words, etc.";
 
                         if (!smallQuestionsCache[questionOfAffection]) {
@@ -592,13 +724,43 @@ export default async function runAllTriggersFor(engine, character, interactedCha
 
                         const receivedAffection = smallQuestionsCache[questionOfAffection];
 
+                        const questionOfProposedAffection = "In the last story fragment, has " + character.name + " proposed to receive affection from " + bond.towards + "? eg. hugging, caressing, holding hands, affectionate words, etc.";
+
+                        if (!receivedAffection && !smallQuestionsCache[questionOfProposedAffection] && character.speciesType !== "animal") {
+                            await runQuestion(engine, character, {
+                                type: "yes_no",
+                                question: questionOfProposedAffection,
+                                onValue: async (answer) => {
+                                    smallQuestionsCache[questionOfProposedAffection] = answer;
+                                },
+                            }, {
+                                lastCycleMessagesInfo,
+                                interactedCharactersAccordingToItemChange,
+                                questioningAgent,
+                                initializeAgent,
+                            });
+                        }
+
+                        const proposedAffection = smallQuestionsCache[questionOfProposedAffection];
+
                         if (receivedAffection) {
                             alreadyInAffectionateAct = true;
                             if (openToAffection.value === "not") {
                                 negativeInteraction = true;
                                 microInjections.push(character.name + " just received affection from " + bond.towards + " but " + character.name + " is not open to affection from them, this might cause some tension or discomfort in their interactions");
                             } else {
-                                microInjections.push(character.name + " just received affection from " + bond.towards + " and " + character.name + " is " + openToAffection.value + " open to affection from them, this might have a positive effect on their interactions");
+                                microInjections.push(character.name + " just received affection from " + bond.towards + " and " + character.name + " is " + descriptionForText[openToAffection.value] + " open to affection from them, this might have a positive effect on their interactions" + descriptionExtraForAmount[openToAffection.value]);
+                            }
+
+                            character.state["last_affectionate_act"] = engine.deObject.currentTime.time;
+                        } else {
+                            if (proposedAffection) {
+                                if (openToAffection.value === "not") {
+                                    negativeInteraction = true;
+                                    microInjections.push(bond.towards + " is proposing affective acts with " + character.name + " but " + character.name + " is not open to affection from them, this might cause some tension or discomfort in their interactions");
+                                } else {
+                                    microInjections.push(bond.towards + " is proposing affective acts with " + character.name + " and " + character.name + " is " + descriptionForText[openToAffection.value] + " open to affection from them, this might have a positive effect on their interactions" + descriptionExtraForAmount[openToAffection.value]);
+                                }
                             }
                         }
                     }
@@ -626,7 +788,7 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                     }
 
                     const lastIsWaitingForAffectionConsent = character.state["last_is_waiting_for_affection_consent_from_" + bond.towards];
-                    const lastIsExecutingAffectionateAct = character.state["last_continous_affectionate_act_towards_" + bond.towards];
+                    const lastIsExecutingAffectionateAct = character.state["last_continous_affectionate_act_initiated_towards_" + bond.towards];
                     const referenceToUse = lastIsExecutingAffectionateAct || lastIsWaitingForAffectionConsent;
                     if (proneToInitiateAffectionProbability > 0 || referenceToUse) {
                         // affection showcase is not subject to libido
@@ -666,15 +828,17 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                                         }
 
                                         // @ts-ignore typescript is wrong, it is not null
-                                        character.state["last_affectionate_act_towards_" + bond.towards] = engine.deObject.currentTime;
+                                        character.state["last_affectionate_act_initiated_towards_" + bond.towards] = engine.deObject.currentTime;
+                                        // @ts-ignore typescript is wrong, it is not null
+                                        character.state["last_affectionate_act"] = engine.deObject.currentTime;
 
                                         if ((actionToChoose.fullfillCriteriaQuestions || []).length > 0) {
-                                            character.state["last_continous_affectionate_act_towards_" + bond.towards] = {
+                                            character.state["last_continous_affectionate_act_initiated_towards_" + bond.towards] = {
                                                 decl: realBondDeclaration.name,
                                                 actionIndex: realBondDeclaration.intimacy.proneToInitiatingAffection.actions.indexOf(actionToChoose),
                                             };
                                         } else {
-                                            delete character.state["last_continous_affectionate_act_towards_" + bond.towards];
+                                            delete character.state["last_continous_affectionate_act_initiated_towards_" + bond.towards];
                                         }
 
                                         delete character.state["last_is_waiting_for_affection_consent_response_from_" + bond.towards];
@@ -759,8 +923,13 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                                         if (!isFullfilled) {
                                             await injectBehaviour();
                                         } else {
-                                            delete character.state["last_continous_affectionate_act_towards_" + bond.towards];
+                                            delete character.state["last_continous_affectionate_act_initiated_towards_" + bond.towards];
                                             delete character.state["last_is_waiting_for_affection_consent_response_from_" + bond.towards];
+
+                                            // suggest a continous act we need to inform it to be completed
+                                            if ((actionToChoose.fullfillCriteriaQuestions || []).length > 0) {
+                                                microInjections.push(character.name + " has fullfilled the affectionate act: " + behaviour + " towards " + bond.towards);
+                                            }
                                         }
                                     } else if (actionToChoose.consentMechanism) {
                                         if (lastIsWaitingForAffectionConsent) {
@@ -831,7 +1000,7 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                                                         // proceed anyway after receiving a no
                                                         await injectBehaviour(true);
                                                     } else {
-                                                        delete character.state["last_continous_affectionate_act_towards_" + bond.towards];
+                                                        delete character.state["last_continous_affectionate_act_initiated_towards_" + bond.towards];
                                                         delete character.state["last_is_waiting_for_affection_consent_response_from_" + bond.towards];
                                                     }
                                                 }
@@ -860,11 +1029,11 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                     const intimateCooldownPeriodHours = (1 - characterLibido) * 1;
                     const intimateCooldownPeriodMilliseconds = intimateCooldownPeriodHours * 60 * 60 * 1000;
 
-                    const timeSinceLastSex = engine.deObject.currentTime.time - (character.state["last_sexual_act_towards_" + bond.towards] || 0);
-                    const timeSinceLastIntimateAffection = engine.deObject.currentTime.time - (character.state["last_intimate_affectionate_act_towards_" + bond.towards] || 0);
+                    const timeSinceLastSexualFullfillment = character.state["last_sexual_fullfillment_act"] ? engine.deObject.currentTime.time - (character.state["last_sexual_fullfillment_act"]) : null;
+                    const timeSinceLastIntimateAffection = engine.deObject.currentTime.time - (character.state["last_intimate_affectionate_act_initiated_towards_" + bond.towards] || 0);
 
-                    const sexCooldownActive = timeSinceLastSex < cooldownPeriodMilliseconds;
-                    let sexCooldownRatio = sexCooldownActive && cooldownPeriodMilliseconds > 0 ? (timeSinceLastSex / cooldownPeriodMilliseconds) : 1;
+                    const sexCooldownActive = timeSinceLastSexualFullfillment === null ? false : timeSinceLastSexualFullfillment < cooldownPeriodMilliseconds;
+                    let sexCooldownRatio = sexCooldownActive && cooldownPeriodMilliseconds > 0 && timeSinceLastSexualFullfillment !== null ? (timeSinceLastSexualFullfillment / cooldownPeriodMilliseconds) : 1;
                     if (sexCooldownRatio > 1) {
                         sexCooldownRatio = 1;
                     }
@@ -883,7 +1052,7 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                     }
 
                     const lastIsWaitingForIntimateAffectionConsent = character.state["last_is_waiting_for_intimate_affection_consent_from_" + bond.towards];
-                    const lastIsExecutingIntimateAffectionateAct = character.state["last_continous_intimate_affectionate_act_towards_" + bond.towards];
+                    const lastIsExecutingIntimateAffectionateAct = character.state["last_continous_intimate_affectionate_act_initiated_towards_" + bond.towards];
                     const referenceToUseIntimate = lastIsExecutingIntimateAffectionateAct || lastIsWaitingForIntimateAffectionConsent;
                     if (Math.random() < proneToInitiateIntimateAffectionProbability || referenceToUseIntimate) {
                         const realBondDeclaration = /** @type {DEBondDeclaration} */ (referenceToUseIntimate ?
@@ -924,15 +1093,17 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                                     }
 
                                     // @ts-ignore typescript is wrong, it is not null
-                                    character.state["last_intimate_affectionate_act_towards_" + bond.towards] = engine.deObject.currentTime;
+                                    character.state["last_intimate_affectionate_act_initiated_towards_" + bond.towards] = engine.deObject.currentTime;
+                                    // @ts-ignore typescript is wrong, it is not null
+                                    character.state["last_intimate_affectionate_act"] = engine.deObject.currentTime;
 
                                     if ((actionToChoose.fullfillCriteriaQuestions || []).length > 0) {
-                                        character.state["last_continous_intimate_affectionate_act_towards_" + bond.towards] = {
+                                        character.state["last_continous_intimate_affectionate_act_initiated_towards_" + bond.towards] = {
                                             decl: realBondDeclaration.name,
                                             actionIndex: realBondDeclaration.intimacy.proneToInitiatingIntimateAffection.actions.indexOf(actionToChoose),
                                         };
                                     } else {
-                                        delete character.state["last_continous_intimate_affectionate_act_towards_" + bond.towards];
+                                        delete character.state["last_continous_intimate_affectionate_act_initiated_towards_" + bond.towards];
                                     }
 
                                     delete character.state["last_is_waiting_for_intimate_affection_consent_response_from_" + bond.towards];
@@ -1017,8 +1188,13 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                                     if (!isFullfilled) {
                                         await injectBehaviour();
                                     } else {
-                                        delete character.state["last_continous_intimate_affectionate_act_towards_" + bond.towards];
+                                        delete character.state["last_continous_intimate_affectionate_act_initiated_towards_" + bond.towards];
                                         delete character.state["last_is_waiting_for_intimate_affection_consent_response_from_" + bond.towards];
+
+                                        // suggest a continous act we need to inform it to be completed
+                                        if ((actionToChoose.fullfillCriteriaQuestions || []).length > 0) {
+                                            microInjections.push(character.name + " has fullfilled the intimate affectionate act: " + behaviour + " towards " + bond.towards);
+                                        }
                                     }
                                 } else if (actionToChoose.consentMechanism) {
                                     if (lastIsWaitingForIntimateAffectionConsent) {
@@ -1089,7 +1265,7 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                                                     // proceed anyway after receiving a no
                                                     await injectBehaviour(true);
                                                 } else {
-                                                    delete character.state["last_continous_intimate_affectionate_act_towards_" + bond.towards];
+                                                    delete character.state["last_continous_intimate_affectionate_act_initiated_towards_" + bond.towards];
                                                     delete character.state["last_is_waiting_for_intimate_affection_consent_response_from_" + bond.towards];
                                                 }
                                             }
@@ -1107,7 +1283,7 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                     }
 
                     const lastIsWaitingForSexConsent = character.state["last_is_waiting_for_sex_consent_from_" + bond.towards];
-                    const lastIsExecutingSexualAct = character.state["last_continous_sexual_act_towards_" + bond.towards];
+                    const lastIsExecutingSexualAct = character.state["last_continous_sexual_act_initiated_towards_" + bond.towards];
                     const referenceToUseSex = lastIsExecutingSexualAct || lastIsWaitingForSexConsent;
                     if (Math.random() < proneToInitiateSexProbability || referenceToUseSex) {
                         const realBondDeclaration = /** @type {DEBondDeclaration} */ (referenceToUseSex ?
@@ -1147,15 +1323,17 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                                     }
 
                                     // @ts-ignore typescript is wrong, it is not null
-                                    character.state["last_sexual_act_towards_" + bond.towards] = engine.deObject.currentTime;
+                                    character.state["last_sexual_act_initiated_towards_" + bond.towards] = engine.deObject.currentTime;
+                                    // @ts-ignore typescript is wrong, it is not null
+                                    character.state["last_sexual_act"] = engine.deObject.currentTime;
 
                                     if ((actionToChoose.fullfillCriteriaQuestions || []).length > 0) {
-                                        character.state["last_continous_sexual_act_towards_" + bond.towards] = {
+                                        character.state["last_continous_sexual_act_initiated_towards_" + bond.towards] = {
                                             decl: realBondDeclaration.name,
                                             actionIndex: realBondDeclaration.intimacy.proneToInitiatingSex.actions.indexOf(actionToChoose),
                                         };
                                     } else {
-                                        delete character.state["last_continous_sexual_act_towards_" + bond.towards];
+                                        delete character.state["last_continous_sexual_act_initiated_towards_" + bond.towards];
                                     }
 
                                     delete character.state["last_is_waiting_for_sex_consent_response_from_" + bond.towards];
@@ -1239,8 +1417,14 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                                     if (!isFullfilled) {
                                         await injectBehaviour();
                                     } else {
-                                        delete character.state["last_continous_sexual_act_towards_" + bond.towards];
+                                        delete character.state["last_continous_sexual_act_initiated_towards_" + bond.towards];
                                         delete character.state["last_is_waiting_for_sex_consent_response_from_" + bond.towards];
+
+                                        // suggest a continous act we need to inform it to be completed
+                                        if ((actionToChoose.fullfillCriteriaQuestions || []).length > 0) {
+                                            microInjections.push(character.name + " has fullfilled the sexual act: " + behaviour + " towards " + bond.towards);
+                                            character.state["last_sexual_fullfillment_act"] = engine.deObject.currentTime;
+                                        }
                                     }
                                 } else if (actionToChoose.consentMechanism) {
                                     if (lastIsWaitingForSexConsent) {
@@ -1312,7 +1496,7 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                                                     // proceed anyway after receiving a no
                                                     await injectBehaviour(true);
                                                 } else {
-                                                    delete character.state["last_continous_sexual_act_towards_" + bond.towards];
+                                                    delete character.state["last_continous_sexual_act_initiated_towards_" + bond.towards];
                                                     delete character.state["last_is_waiting_for_sex_consent_response_from_" + bond.towards];
                                                 }
                                             }
@@ -1334,7 +1518,6 @@ export default async function runAllTriggersFor(engine, character, interactedCha
             }
         }
     }
-
 
     if (initialized) {
         await questioningAgent.next(null);
