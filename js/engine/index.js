@@ -1050,9 +1050,6 @@ export class DEngine {
 
         await this.informDEObjectUpdated();
 
-        // TODO remove this early return
-        return;
-
         let index = 0;
         /**
          * @param {string[]} messages

@@ -985,153 +985,6 @@
     gap: 0;
 }
 
-/* ── Individual message ─────────────────────────────────────────── */
-.game-story-message {
-    display: flex;
-    flex-direction: row;
-    align-items: flex-start;
-    padding: 0.3vh 0.8vh;
-    border-radius: 0.5vh;
-    transition: background 0.1s ease;
-}
-
-.game-story-message:hover {
-    background: rgba(255, 255, 255, 0.05);
-}
-
-/* Extra top margin marks the start of a new sender group. */
-.game-story-message--group-start {
-    margin-top: 2.2vh;
-}
-
-/* Avatar circle (shown on the first message of each group). */
-.game-story-message-avatar {
-    flex-shrink: 0;
-    width: 5.5vh;
-    height: 5.5vh;
-    border-radius: 50%;
-    overflow: hidden;
-    margin-right: 1.5vh;
-    margin-top: 0.25vh;
-    background: rgba(20, 35, 65, 0.55);
-    border: 1px solid rgba(180, 210, 240, 0.35);
-    box-shadow: 0 0.2vh 0.8vh rgba(0, 0, 0, 0.45);
-}
-
-.game-story-message-avatar app-asset-image {
-    display: block;
-    width: 100%;
-    height: 100%;
-}
-
-.game-story-message-avatar app-asset-image::part(asset-image-container) {
-    border: none;
-    border-radius: 50%;
-    box-shadow: none;
-    background-color: transparent;
-    width: 100%;
-    height: 100%;
-}
-
-.game-story-message-avatar app-asset-image::part(asset-image) {
-    border-radius: 50%;
-    border: none;
-    object-fit: cover;
-    width: 100%;
-    height: 100%;
-}
-
-/* Spacer that aligns continuation-message text under the name line. */
-.game-story-message-avatar-spacer {
-    flex-shrink: 0;
-    width: 5.5vh;
-    margin-right: 1.5vh;
-}
-
-/* Text column beside the avatar. */
-.game-story-message-body {
-    flex: 1;
-    min-width: 0;
-}
-
-/* Sender name (shown only on group-start messages). */
-.game-story-message-name {
-    font-size: 2.1vh;
-    font-weight: 700;
-    line-height: 1.3;
-    margin-bottom: 0.3vh;
-    color: rgba(160, 210, 255, 0.97);
-    letter-spacing: 0.03em;
-    text-shadow: 0 0 1px rgba(0, 0, 0, 0.8);
-}
-
-/* The current player's own name appears in a warm green. */
-.game-story-message--self .game-story-message-name {
-    color: rgba(105, 215, 145, 0.97);
-}
-
-/* Message body text — large and readable. */
-.game-story-message-text {
-    font-size: 2.7vh;
-    line-height: 1.68;
-    color: rgba(230, 240, 255, 0.93);
-    letter-spacing: 0.012em;
-    word-break: break-word;
-    white-space: pre-wrap;
-    text-shadow: 0 0 1px rgba(0, 0, 0, 0.7), 0 0 1px rgba(0, 0, 0, 0.7);
-}
-
-/* ── Narration messages (story master) ──────────────────────────────
-   No avatar, no sender label. Centered italic prose on a warm amber
-   tint — visually distinct from any character's dialogue. Flanked by
-   thin decorative rules so it reads as a god-level narration beat. */
-.game-story-message--narration {
-    display: block;
-    /* margin: 2.4vh 3vh; */
-    padding: 0 2vh;
-    background: none;
-    border-radius: 0;
-    background: rgba(0,0,0,0.3);
-    backdrop-filter: blur(100px);
-    border-radius: 1vh;
-}
-
-.game-story-message--narration::before,
-.game-story-message--narration::after {
-    content: '';
-    display: block;
-    height: 0.3vh;
-    margin: 0 6vw;
-    background: linear-gradient(
-        90deg,
-        transparent 0%,
-        rgba(255, 215, 140, 0.35) 30%,
-        rgba(255, 215, 140, 0.35) 70%,
-        transparent 100%
-    );
-}
-
-.game-story-message--narration::before {
-    margin-bottom: 1.4vh;
-}
-
-.game-story-message--narration::after {
-    margin-top: 1.4vh;
-}
-
-.game-story-message-narration-text {
-    font-size: 2vh;
-    font-style: italic;
-    text-align: center;
-    text-shadow: 0 0 1px black, 0 0 1px black, 0 0 1px black, 0 0 1px black,0 0 1px black, 0 0 1px black,0 0 1px black,0 0 1px black,0 0 1px black;
-    color: white;
-    letter-spacing: 0.04em;
-    word-break: break-word;
-    white-space: pre-wrap;
-    margin: 0;
-    padding: 0;
-}
-
 .game-story-container {
     position: relative;
     box-sizing: border-box;
@@ -1565,11 +1418,13 @@
     left: 12vh;
     top: 0;
     bottom: 0;
+    overflow: hidden;
 }
 
 .game-story-content-list {
     display: flex;
     flex-direction: column;
+    justify-content: flex-start;
     gap: 1.6vh;
     padding: 2.4vh 3.2vh;
     box-sizing: border-box;
@@ -1577,6 +1432,16 @@
     width: 100%;
     height: 100%;
     overflow-y: auto;
+    /* Promote to its own GPU compositor layer to prevent Chromium tile-drop
+       glitches caused by the backdrop-filter on the ancestor container. */
+    will-change: transform;
+}
+
+/* Pushes messages to the bottom when they don't fill the viewport.
+   Collapses to nothing when content overflows, so the scrollbar works. */
+.game-story-content-list::before {
+    content: '';
+    flex: 1 1 0;
 }
 
 *::-webkit-scrollbar {

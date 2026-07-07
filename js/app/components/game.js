@@ -1,6 +1,7 @@
 import { playCancelSound, playConfirmSound, playHoverSound, stopAllAmbiencesAndStartNewOne } from '../sound.js';
 import './world-image.js';
 import './dialog.js';
+import './game-messages/message.js';
 
 /**
  * The main in-dream game UI. Renders a transition ("falling asleep" white
@@ -1353,6 +1354,8 @@ class GameOverlay extends HTMLElement {
                 lastMessageGid: this.lastMessageGid,
             });
 
+            const hadNoPreviousMessages = this.lastMessageGid === null;
+
             if (!history || !Array.isArray(history) || history.length === 0) return;
 
             const historyReversed = history.reverse(); // this list contains the most recent messages last
@@ -1367,61 +1370,84 @@ class GameOverlay extends HTMLElement {
             const lastRenderedItem = /** @type {HTMLElement | null} */ (list.lastElementChild);
             let lastSenderName = lastRenderedItem?.dataset.senderName || '';
 
+            /**
+             * Pre-resolve all message metadata so we can enqueue them without
+             * async work inside the chained event handler.
+             * @type {Array<{ gid: string, senderName: string, isNarration: boolean, isUser: boolean, isGroupStart: boolean, assetImage: string, text: string }>}
+             */
+            const resolvedMsgs = [];
             for (const msg of historyReversed) {
                 const gid = msg.gid ?? msg.id;
                 if (gid == null) continue;
 
                 const senderName = msg.name || '';
-                const isNarration = msg.storyMaster;
+                const isNarration = !!msg.storyMaster;
                 const isUser = senderName === actualUserName;
                 const text = msg.message || '';
-                // A new group begins when the sender changes or narration interrupts.
                 const isGroupStart = !isNarration && senderName !== lastSenderName;
 
-                const el = document.createElement('div');
-                el.dataset.gid = String(gid);
-
-                if (isNarration) {
-                    el.className = 'game-story-message game-story-message--narration';
-                    el.innerHTML = `<p class="game-story-message-narration-text">${escapeHtml(text)}</p>`;
-                } else {
-                    el.dataset.senderName = senderName;
-                    el.className = [
-                        'game-story-message',
-                        'game-story-message--chat',
-                        isUser ? 'game-story-message--self' : '',
-                        isGroupStart ? 'game-story-message--group-start' : '',
-                    ].filter(Boolean).join(' ');
-
-                    if (isGroupStart) {
-                        // First message in a group: show avatar + name.
-                        el.innerHTML = `
-                            <div class="game-story-message-avatar">
-                                <app-asset-image default-image="./images/default-profile.png" no-transition="true"></app-asset-image>
-                            </div>
-                            <div class="game-story-message-body">
-                                <div class="game-story-message-name">${escapeHtml(senderName)}</div>
-                                <div class="game-story-message-text">${escapeHtml(text)}</div>
-                            </div>`;
+                let assetImage = !isNarration ? (await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                    path: ["characters", senderName, "state", "asset"],
+                }) || "profile") : "";
+                if (assetImage) {
+                    const engineInfo = await window.ENGINE_WORKER_CLIENT.getEngineScriptInfo();
+                    const charInfo = engineInfo.charactersAdded.find(c => c.name === senderName);
+                    if (charInfo) {
+                        assetImage = `assets/${charInfo.byNamespace}/${charInfo.byId}/${assetImage}`;
                     } else {
-                        // Continuation message: spacer replaces the avatar, no name.
-                        el.innerHTML = `
-                            <div class="game-story-message-avatar-spacer" aria-hidden="true"></div>
-                            <div class="game-story-message-body">
-                                <div class="game-story-message-text">${escapeHtml(text)}</div>
-                            </div>`;
+                        const userNameBySettings = await window.API.getConfigValue('user.name');
+                        if (this.getAttribute('is-self-insert') === 'true' && userNameBySettings === senderName) {
+                            assetImage = "profile";
+                        } else {
+                            assetImage = "";
+                        }
                     }
                 }
 
-                list.appendChild(el);
-                this.lastMessageGid = String(gid);
-                // Narration resets grouping so the next dialogue always shows its sender.
+                resolvedMsgs.push({ gid: String(gid), senderName, isNarration, isUser, isGroupStart, assetImage, text });
                 lastSenderName = isNarration ? '' : senderName;
             }
 
-            // Keep the chat scrolled to the latest message.
-            const container = this.root.querySelector('.game-story-content');
-            if (container) container.scrollTop = container.scrollHeight;
+            /**
+             * Append one resolved message entry, then wait for its stream to
+             * finish before appending the next.
+             * @param {number} index
+             */
+            const appendNext = (index) => {
+                if (index >= resolvedMsgs.length) return;
+                const { gid, senderName, isNarration, isUser, isGroupStart, assetImage, text } = resolvedMsgs[index];
+
+                const el = /** @type {HTMLElement} */ (document.createElement('app-game-message'));
+                el.dataset.gid = gid;
+                el.setAttribute('text', text);
+                el.setAttribute('image-url', assetImage);
+                if (hadNoPreviousMessages) {
+                    el.setAttribute('no-stream-simulation', 'true');
+                }
+                if (isNarration) {
+                    el.setAttribute('is-narration', '');
+                } else {
+                    el.dataset.senderName = senderName;
+                    el.setAttribute('sender-name', senderName);
+                    if (isUser) el.setAttribute('is-self', '');
+                    if (isGroupStart) el.setAttribute('is-group-start', '');
+                }
+
+                this.lastMessageGid = gid;
+
+                // Keep the chat scrolled to the latest message.
+                const container = this.root.querySelector('.game-story-content-list');
+
+                el.addEventListener('on-simulated-stream-finished', () => {
+                    if (container) container.scrollTop = container.scrollHeight;
+                    appendNext(index + 1);
+                }, { once: true });
+
+                list.appendChild(el);
+                if (container) container.scrollTop = container.scrollHeight;
+            };
+
+            appendNext(0);
 
         } catch (error) {
             console.error('Error updating story:', error);
@@ -1441,7 +1467,17 @@ class GameOverlay extends HTMLElement {
      * @param {{conversationId: string, messageId: string, text: string, hidden: boolean}} data 
      */
     onInferringOverConversationMessage(data) {
-        console.log(`Inferring-over conversation message [${data.conversationId} / ${data.messageId}]: ${data.text} (hidden: ${data.hidden})`);
+        if (data.hidden) return;
+
+        const list = this.root.querySelector('.game-story-content-list');
+        if (!list) return;
+
+        const el = /** @type {HTMLElement | null} */ (
+            list.querySelector(`[data-gid="${CSS.escape(data.messageId)}"]`)
+        );
+        if (el && typeof /** @type {any} */ (el).addText === 'function') {
+            /** @type {any} */ (el).addText(data.text);
+        }
     }
 
     /**

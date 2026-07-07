@@ -194,7 +194,7 @@ export function generateGrammarForVocabulary(engine, vocabulary, charName) {
         throw new Error("DEngine must be initialized to create grammar");
     }
 
-    const defaultEverythingGoes = `[^*:\n—]+`;
+    const defaultEverythingGoes = `[^*:\n— ]+ (" " [^*:\n— ]+)*`;
     let dialogueVocabulary = defaultEverythingGoes;
 
     if (vocabulary?.mute) {

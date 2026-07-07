@@ -1,0 +1,196 @@
+/* ── app-game-message styles ─────────────────────────────────────── */
+
+:host {
+    display: block;
+}
+
+/* ── Base message row ───────────────────────────────────────────── */
+.message {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    padding: 0.3vh 0.8vh;
+    border-radius: 0.5vh;
+    transition: background 0.1s ease;
+}
+
+.message:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+/* Extra top margin marks the start of a new sender group. */
+.message.group-start {
+    margin-top: 2.2vh;
+}
+
+/* Avatar circle (shown on the first message of each group). */
+.avatar {
+    flex-shrink: 0;
+    width: 5.5vh;
+    height: 5.5vh;
+    border-radius: 50%;
+    overflow: hidden;
+    margin-right: 1.5vh;
+    margin-top: 0.25vh;
+    background: rgba(20, 35, 65, 0.55);
+    border: 1px solid rgba(180, 210, 240, 0.35);
+    box-shadow: 0 0.2vh 0.8vh rgba(0, 0, 0, 0.45);
+}
+
+.avatar app-asset-image {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.avatar app-asset-image::part(asset-image-container) {
+    border: none;
+    border-radius: 50%;
+    box-shadow: none;
+    background-color: transparent;
+    width: 100%;
+    height: 100%;
+}
+
+.avatar app-asset-image::part(asset-image) {
+    border-radius: 50%;
+    border: none;
+    object-fit: cover;
+    width: 100%;
+    height: 100%;
+}
+
+/* Spacer that aligns continuation-message text under the name line. */
+.avatar-spacer {
+    flex-shrink: 0;
+    width: 5.5vh;
+    margin-right: 1.5vh;
+}
+
+/* Text column beside the avatar. */
+.body {
+    flex: 1;
+    min-width: 0;
+}
+
+/* Sender name (shown only on group-start messages). */
+.name {
+    font-size: 1.8vh;
+    font-weight: 700;
+    line-height: 1.3;
+    margin-bottom: 0.3vh;
+    color: rgba(160, 210, 255, 0.97);
+    letter-spacing: 0.03em;
+    text-shadow: 0 0 1px rgba(0, 0, 0, 0.8);
+}
+
+/* The current player's own name appears in warm green. */
+.message.self .name {
+    text-shadow: 0 0 1px black, 0 0 1px black, 0 0 1px black, 0 0 1px black,
+                 0 0 1px black, 0 0 1px black, 0 0 1px black, 0 0 1px black, 0 0 1px black;
+}
+
+/* Message body text — large and readable. */
+.msg-text {
+    font-size: 2vh;
+    line-height: 1.68;
+    color: rgba(230, 240, 255, 0.93);
+    letter-spacing: 0.012em;
+    word-break: break-word;
+    white-space: pre-wrap;
+    text-shadow: 0 0 1px black, 0 0 1px black, 0 0 1px black, 0 0 1px black,
+                 0 0 1px black, 0 0 1px black, 0 0 1px black, 0 0 1px black, 0 0 1px black;
+}
+
+/* ── Narration messages (story master) ──────────────────────────────
+   No avatar, no sender label. Centered italic prose on a warm amber
+   tint — visually distinct from any character's dialogue. Flanked by
+   thin decorative rules so it reads as a god-level narration beat. */
+.message.narration {
+    display: block;
+    padding: 0 2vh;
+    background: rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(100px);
+    border-radius: 1vh;
+}
+
+.message.narration:hover {
+    background: rgba(0, 0, 0, 0.3);
+}
+
+.message.narration::before,
+.message.narration::after {
+    content: '';
+    display: block;
+    height: 0.3vh;
+    margin: 0 6vw;
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        rgba(255, 215, 140, 0.35) 30%,
+        rgba(255, 215, 140, 0.35) 70%,
+        transparent 100%
+    );
+}
+
+.message.narration::before {
+    margin-bottom: 1.4vh;
+}
+
+.message.narration::after {
+    margin-top: 1.4vh;
+}
+
+.narration-text {
+    font-size: 2vh;
+    font-style: italic;
+    text-align: center;
+    text-shadow: 0 0 1px black, 0 0 1px black, 0 0 1px black, 0 0 1px black,
+                 0 0 1px black, 0 0 1px black, 0 0 1px black, 0 0 1px black, 0 0 1px black;
+    color: white;
+    letter-spacing: 0.04em;
+    word-break: break-word;
+    white-space: pre-wrap;
+    margin: 0;
+    padding: 0;
+}
+
+/* ── Streaming tokens ───────────────────────────────────────────────
+   Each chunk appended by addText() arrives as a .token span that
+   fades in with a very short blur-to-clear animation, giving the
+   illusion of characters materialising as the model generates them. */
+.token {
+    display: inline;
+    animation: token-in 0.13s ease forwards;
+}
+
+@keyframes token-in {
+    from {
+        opacity: 0;
+        filter: blur(0.18em);
+    }
+    to {
+        opacity: 1;
+        filter: blur(0);
+    }
+}
+
+/* ── Streaming cursor ───────────────────────────────────────────────
+   A thin blinking block placed after the last token while text is
+   still arriving. Removed automatically once streaming finishes. */
+.cursor {
+    display: inline-block;
+    width: 0.55ch;
+    height: 1.05em;
+    vertical-align: text-bottom;
+    background: currentColor;
+    border-radius: 1px;
+    margin-left: 0.08ch;
+    opacity: 0.75;
+    animation: cursor-blink 0.88s step-end infinite;
+}
+
+@keyframes cursor-blink {
+    0%, 100% { opacity: 0.75; }
+    50%       { opacity: 0;    }
+}

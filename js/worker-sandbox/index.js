@@ -635,7 +635,7 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
                 next = await generator.next(true);
             }
             return accumulatedMessages;
-        }
+        },
     };
 
     // ── CardType Wizard infrastructure ──────────────────────────────────
