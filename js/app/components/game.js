@@ -1353,16 +1353,78 @@ class GameOverlay extends HTMLElement {
                 lastMessageGid: this.lastMessageGid,
             });
 
-            if (!history || !Array.isArray(history)) return;
+            if (!history || !Array.isArray(history) || history.length === 0) return;
 
             const historyReversed = history.reverse(); // this list contains the most recent messages last
             // and we want to render them in the order from oldest to newest, so we reverse the list before rendering
 
-            for (const msg of historyReversed) {
-                
-            }
-        } catch (error) {
+            const list = this.root.querySelector('.game-story-content-list');
+            if (!list) return;
 
+            // Determine the last rendered sender so consecutive messages from the
+            // same character can be grouped (Discord-style: only the first message
+            // in a run shows the avatar and name; subsequent ones show a spacer).
+            const lastRenderedItem = /** @type {HTMLElement | null} */ (list.lastElementChild);
+            let lastSenderName = lastRenderedItem?.dataset.senderName || '';
+
+            for (const msg of historyReversed) {
+                const gid = msg.gid ?? msg.id;
+                if (gid == null) continue;
+
+                const senderName = msg.name || '';
+                const isNarration = msg.storyMaster;
+                const isUser = senderName === actualUserName;
+                const text = msg.message || '';
+                // A new group begins when the sender changes or narration interrupts.
+                const isGroupStart = !isNarration && senderName !== lastSenderName;
+
+                const el = document.createElement('div');
+                el.dataset.gid = String(gid);
+
+                if (isNarration) {
+                    el.className = 'game-story-message game-story-message--narration';
+                    el.innerHTML = `<p class="game-story-message-narration-text">${escapeHtml(text)}</p>`;
+                } else {
+                    el.dataset.senderName = senderName;
+                    el.className = [
+                        'game-story-message',
+                        'game-story-message--chat',
+                        isUser ? 'game-story-message--self' : '',
+                        isGroupStart ? 'game-story-message--group-start' : '',
+                    ].filter(Boolean).join(' ');
+
+                    if (isGroupStart) {
+                        // First message in a group: show avatar + name.
+                        el.innerHTML = `
+                            <div class="game-story-message-avatar">
+                                <app-asset-image default-image="./images/default-profile.png" no-transition="true"></app-asset-image>
+                            </div>
+                            <div class="game-story-message-body">
+                                <div class="game-story-message-name">${escapeHtml(senderName)}</div>
+                                <div class="game-story-message-text">${escapeHtml(text)}</div>
+                            </div>`;
+                    } else {
+                        // Continuation message: spacer replaces the avatar, no name.
+                        el.innerHTML = `
+                            <div class="game-story-message-avatar-spacer" aria-hidden="true"></div>
+                            <div class="game-story-message-body">
+                                <div class="game-story-message-text">${escapeHtml(text)}</div>
+                            </div>`;
+                    }
+                }
+
+                list.appendChild(el);
+                this.lastMessageGid = String(gid);
+                // Narration resets grouping so the next dialogue always shows its sender.
+                lastSenderName = isNarration ? '' : senderName;
+            }
+
+            // Keep the chat scrolled to the latest message.
+            const container = this.root.querySelector('.game-story-content');
+            if (container) container.scrollTop = container.scrollHeight;
+
+        } catch (error) {
+            console.error('Error updating story:', error);
         }
     }
 
