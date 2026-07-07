@@ -6,6 +6,15 @@ import { BASIC_EMOTIONAL_STATES, BASIC_EMOTIONAL_STATES_OPTIONS } from "./genera
 
 /**
  * 
+ * @param {Array<string>} list 
+ * @returns {Array<string>}
+ */
+function randomSortList(list) {
+    return list.sort(() => Math.random() - 0.5);
+}
+
+/**
+ * 
  * @param {string} text
  * @param {string} charName
  * @returns 
@@ -119,6 +128,7 @@ export async function generateBondTriggers(engine, scriptgenerator, guider) {
 
     /**
      * @param {string} id
+     * @param {number} cooldownMinutes A cooldown for the question to be asked again, if the answer is yes
      * @param {number} amount
      * @param {string} reasoning 
      * @param {string} trail 
@@ -131,7 +141,7 @@ export async function generateBondTriggers(engine, scriptgenerator, guider) {
      * @param {string} [altConsidering]
      * @param {boolean} [severeAndExtremeWithUndo] if true, it means that the yes answer is about a severe and extreme case that would cause intense hatred and sworn enmity, and the altYesCode is about clearing up a mild misunderstanding, so the question is did they do the severe thing that causes intense hatred, and then if not did they do the mild thing that clears up a misunderstanding, and if not then nothing happens, this is used to create triggers that can cause intense hatred but also be cleared up by clearing up a mild misunderstanding, which is important to avoid permanently broken relationships due to misunderstandings or minor things
      */
-    const askYesNo = async (id, amount, reasoning, trail, consideringInQuestion, consideringInStatement, condition, yesCode, altCondition, altYesCode, altConsidering, severeAndExtremeWithUndo) => {
+    const askYesNo = async (id, cooldownMinutes, amount, reasoning, trail, consideringInQuestion, consideringInStatement, condition, yesCode, altCondition, altYesCode, altConsidering, severeAndExtremeWithUndo) => {
         /**
          * @type {string[]}
          */
@@ -225,6 +235,7 @@ export async function generateBondTriggers(engine, scriptgenerator, guider) {
             initializeSection.body.push(`DE.utils.newTrigger(${JSON.stringify(name)}, {`);
             initializeSection.body.push(`type: "yes_no",`);
             initializeSection.body.push(`askPer: "conversing_character",`);
+            initializeSection.body.push(`yesCooldownMinutes: ${cooldownMinutes},`);
             initializeSection.body.push(condition);
             initializeSection.body.push(`question: (info) => ${toTemplateLiteral(question, name)},`);
             initializeSection.body.push(`onValue: (answer, char, other) => {`);
@@ -242,7 +253,8 @@ export async function generateBondTriggers(engine, scriptgenerator, guider) {
                             maxParagraphs: 1,
                             nextQuestion: `What would be a short "yes" answer to the question "${question}", it should be very short`,
                             stopAfter: [],
-                            stopAt: ["\n"],
+                            // gemma issue loving to say you despite being told not to
+                            stopAt: ["\n", " by you", " from you"],
                             contextInfo: inferenceAdapter.buildContextInfoExample(
                                 `Example: if the question is 'Was OTHER CHARACTER mean to ${name}?' the answer could be 'yes, ${name} received a rude treatment'`
                             ) + "\n\n" + inferenceAdapter.buildContextInfoExample(
@@ -344,7 +356,7 @@ export async function generateBondTriggers(engine, scriptgenerator, guider) {
                         nextQuestion: `"${name} ${description}", ${consideringInStatement}, how would ${name} feel? answer with 2 of the most likely emotions`,
                         stopAfter: [],
                         stopAt: [],
-                        instructions: "Answer with a comma separated list of the 2 most likely of the following emotions: " + EMOTIONAL_STATES_TO_CHECK_AGAINST.join(", "),
+                        instructions: "Answer with a comma separated list of the 2 most likely of the following emotions: " + randomSortList(EMOTIONAL_STATES_TO_CHECK_AGAINST).join(", "),
                         grammar: createGrammarListFromList(engine, EMOTIONAL_STATES_TO_CHECK_AGAINST, 2).grammar,
                     });
 
@@ -377,8 +389,8 @@ export async function generateBondTriggers(engine, scriptgenerator, guider) {
                             nextQuestion: `"${name} ${description}", ${altConsidering}, how would ${name} feel? answer with 3 of the most likely emotions`,
                             stopAfter: [],
                             stopAt: [],
-                            instructions: "Answer with a comma separated list of the 3 most likely of the following emotions: " + EMOTIONAL_STATES_TO_CHECK_AGAINST.join(", "),
-                            grammar: createGrammarListFromList(engine, EMOTIONAL_STATES_TO_CHECK_AGAINST, 3).grammar,
+                            instructions: "Answer with a comma separated list of the 2 most likely of the following emotions: " + randomSortList(EMOTIONAL_STATES_TO_CHECK_AGAINST).join(", "),
+                            grammar: createGrammarListFromList(engine, EMOTIONAL_STATES_TO_CHECK_AGAINST, 2).grammar,
                         });
 
                         if (listOfEmotions2.done) {
@@ -413,6 +425,7 @@ export async function generateBondTriggers(engine, scriptgenerator, guider) {
     const [likeAtAnyLevelValue, likeAtAnyLevelQuestions] = await askYesNo(
         "like-at-any-level",
         10,
+        10,
         "like another character at any relationship level",
         "like another character at any relationship level",
         "this can include anyone from strangers, enemies, aquitances, friends, close friends, to best friends towards each other; do not include sexual themes or romantic themes, focus on general liking and friendship",
@@ -424,6 +437,7 @@ export async function generateBondTriggers(engine, scriptgenerator, guider) {
     initializeSection.body.push(`// Yes/no questions about disliking in all relationship levels`);
     const [dislikeAtAnyLevelValue, dislikeAtAnyLevelQuestions] = await askYesNo(
         "dislike-at-any-level",
+        0,
         10,
         "dislike slightly another character at any relationship level, do not include extreme cases that would cause intense hatred or sworn enmity, focus on more mild cases of dislike that would just cause a bond decrease but not intense hatred (e.g. getting annoyed by them, disliking their habits, finding them irritating, getting into a petty argument, etc)",
         "dislike slightly another character at any relationship level",
@@ -438,10 +452,11 @@ export async function generateBondTriggers(engine, scriptgenerator, guider) {
     doNotIncludeQuestions = likeAtAnyLevelQuestions;
     const [likeAtStrangersValue, likeAtStrangersQuestions] = await askYesNo(
         "like-strangers",
+        10,
         6,
-        "like another provided they just met and have no prior relationship (the question must be specific to first impressions and first impressions only)",
+        "like another provided they just met and have no prior relationship (the question must be specific to first impressions and first impressions only); include a variety of topics such as shared hobbies, common topics of interest or conversation, mutual passions, activities they enjoy, as well as personal qualities and compliments",
         "like another character when they are strangers",
-        "they are strangers towards each other, do not include sexual themes or romantic themes, focus on general liking and friendship",
+        "they are strangers towards each other, do not include sexual themes or romantic themes, focus on general liking and friendship; include questions about shared hobbies, common topics of interest, mutual passions, or activities that create an instant connection",
         "it was done by a stranger",
         `runIf: (char, other) => DE.utils.isStrangerTowards(char, other),`,
         `DE.utils.shiftBond(char, other, 1, 0);`,
@@ -451,6 +466,7 @@ export async function generateBondTriggers(engine, scriptgenerator, guider) {
     doNotIncludeQuestions = dislikeAtAnyLevelQuestions;
     const [dislikeAtStrangersValue, dislikeAtStrangersQuestions] = await askYesNo(
         "dislike-strangers",
+        0,
         6,
         "dislike another character provided they just met and have no prior relationship (the question must be specific to first impressions and first impressions only)",
         "dislike another character when they are strangers",
@@ -467,6 +483,7 @@ export async function generateBondTriggers(engine, scriptgenerator, guider) {
         doNotIncludeQuestions = [...likeAtAnyLevelQuestions, ...likeAtStrangersQuestions];
         await askYesNo(
             "love-at-first-sight",
+            10,
             5,
             "feel love (romantic and sexual) at first sight towards another character they just met and have no prior relationship with (focus on physical attraction, chemistry, sexual tension, romantic feelings, etc)",
             "feel love (romantic and sexual) at first sight towards another when they are strangers",
@@ -481,8 +498,9 @@ export async function generateBondTriggers(engine, scriptgenerator, guider) {
     doNotIncludeQuestions = [...dislikeAtAnyLevelQuestions, ...dislikeAtStrangersQuestions];
     const [hateAtFirstSightValue, hateAtFirstSightQuestions] = await askYesNo(
         "hate-at-first-sight",
+        0,
         5,
-        "feel hate at first sight towards another character they just met and have no prior relationship with (focus on intense dislike, and serious causes, things like severe annoyance, strong negative first impression, strong aversion, etc; do NOT include mild things like getting slightly annoyed, disliking their habits, finding them irritating, getting into a petty argument, etc)",
+        "feel hate at first sight towards another character they just met and have no prior relationship with",
         "feel hate at first sight towards another when they are strangers",
         "they are strangers towards each other",
         "it was hate at first sight with a stranger",
@@ -495,24 +513,26 @@ export async function generateBondTriggers(engine, scriptgenerator, guider) {
     doNotIncludeQuestions = likeAtAnyLevelQuestions;
     const [likeAtAcquaintancesValue, likeAtAcquaintancesQuestions] = await askYesNo(
         "like-acquaintances",
-        5,
-        "like another character provided they are acquaintances but not close friends (the behaviour/action showcase that they can be potential friends, it must be specific to something that showcases they can be a friend but they are not close friends yet)",
+        10,
+        8,
+        "like another character provided they are acquaintances but not close friends (the behaviour/action showcase that they can be potential friends, it must be specific to something that showcases they can be a friend but they are not close friends yet); include a variety of topics such as discovering shared hobbies, bonding over common topics of interest or conversation, finding mutual passions or activities, as well as personal qualities and kind gestures",
         "like another character when they are acquaintances",
-        "they are acquaintances but not close friends towards each other",
+        "they are acquaintances but not close friends towards each other; include questions about shared hobbies, common topics of interest, mutual passions, or activities they enjoy together that show friendship potential",
         "it was done by an aquaintance showcasing friendship potential",
-        `runIf: (char, other) => DE.utils.isNotStrangersTowards(char, other) && DE.utils.isAcquaintanceOrWorseTowards(char, other),`,
+        `runIf: (char, other) => (DE.utils.isNotStrangersTowards(char, other) || DE.utils.isAcquaintanceOrWorseTowards(char, other)) && !(DE.utils.hasSlightRomanticInterestOrBetterTowards(char, other)),`,
         `DE.utils.shiftBond(char, other, 1, 0);`,
     );
 
     doNotIncludeQuestions = dislikeAtAnyLevelQuestions;
     const [dislikeAtAcquaintancesValue, dislikeAtAcquaintancesQuestions] = await askYesNo(
         "dislike-acquaintances",
-        8, // added more in this case because general all levels contradicted often
+        0,
+        8,
         "dislike another character provided they are acquaintances but not close friends (the behaviour/action is otherwise acceptable with close friends, but not with acquaintances)",
         "dislike another character when they are acquaintances",
         "they are acquaintances but not close friends towards each other",
         "it was done by an aquaintance but it would only be acceptable if it was a close friend",
-        `runIf: (char, other) => DE.utils.isNotStrangersTowards(char, other) && DE.utils.isAcquaintanceOrWorseTowards(char, other),`,
+        `runIf: (char, other) => (DE.utils.isNotStrangersTowards(char, other) || DE.utils.isAcquaintanceOrWorseTowards(char, other)) && !(DE.utils.hasSlightRomanticInterestOrBetterTowards(char, other)),`,
         `DE.utils.shiftBond(char, other, -1, -1);`,
     );
 
@@ -521,6 +541,7 @@ export async function generateBondTriggers(engine, scriptgenerator, guider) {
     shiftStateByOverride = 2;
     await askYesNo(
         "sudden-hatred-sworn-enemies",
+        0,
         4,
         "feel a sudden intense hatred towards another and become sworn enemies instantly (the cause MUST be extreme and severe: murder, killing someone they love, physical abuse, torture, genocide, enslavement, catastrophic betrayal, destruction of their home, or similarly devastating acts; do NOT include mild things like threats, insults, rudeness or general mistreatment)",
         "feel a sudden intense hatred towards another and become sworn enemies instantly due to extreme acts",
@@ -540,7 +561,8 @@ export async function generateBondTriggers(engine, scriptgenerator, guider) {
     initializeSection.body.push(`// Yes/no questions about clearing a mild misunderstanding`);
     await askYesNo(
         "clear-mild-misunderstanding",
-        1,
+        0,
+        7,
         "Clear up a misunderstanding that had caused hostility (the cause must be mild and not extreme: a petty argument, a misunderstanding, a minor betrayal, a small offense, a minor annoyance, or similar acts that can cause hostility but are not severe enough to warrant sworn enmity)",
         "feel sudden relief about the misunderstanding that was cleared",
         "this can include anyone at any relationship level",
@@ -556,30 +578,13 @@ export async function generateBondTriggers(engine, scriptgenerator, guider) {
     doNotIncludeQuestions = [...likeAtAnyLevelQuestions, ...likeAtAcquaintancesQuestions];
     const [likeAtCloseFriendsValue, likeAtCloseFriendsQuestions] = await askYesNo(
         "like-close-friends-only",
+        10,
         7,
-        "like another character more ONLY because they are already close friends; the behaviour/action described MUST be something that is exclusively acceptable between close friends (e.g. showing up unannounced, playful teasing, sharing personal secrets, physical affection like hugs); if they are NOT close friends, the same behaviour would be seen as invasive, inappropriate, or unacceptable by " + name,
+        "like another character more ONLY because they are already close friends; the behaviour/action described MUST be something that is exclusively acceptable between close friends (e.g. showing up unannounced, playful teasing, sharing personal secrets, physical affection like hugs, dragging them to a niche hobby event, obsessively discussing a shared passion topic for hours, involving them in a personal hobby project); if they are NOT close friends, the same behaviour would be seen as invasive, inappropriate, or unacceptable by " + name + "; include a variety of topics such as shared niche hobbies, deep topics of mutual interest, activities or creative projects they pursue together, as well as personal gestures only acceptable between close friends",
         "like another character more when they are close friends and find it unacceptable otherwise",
-        "they are close friends towards each other and the behaviour is only acceptable because of that friendship bond",
+        "they are close friends towards each other and the behaviour is only acceptable because of that friendship bond; include questions about shared niche hobbies, deep topics of mutual interest, activities or creative projects they pursue together, or personal gestures exclusive to close friends",
         "it was done by a close friend and they find it acceptable so they shouldn't get angry or hostile",
         `runIf: (char, other) => true,`,
-        `DE.utils.shiftBond(char, other, 1, 0);`,
-
-        `!DE.utils.isFriendsOrBetterWith(char, other)`,
-        `DE.utils.shiftBond(char, other, -0.5, 0);`,
-        "they are NOT close friends and " + name + " finds the behaviour/action unacceptable, invasive, and inappropriate",
-    );
-
-    // BEST FRIENDS
-    initializeSection.body.push(`// Yes/no questions about elevating friendship towards best friendship`);
-    doNotIncludeQuestions = [...likeAtAnyLevelQuestions, ...likeAtAcquaintancesQuestions, ...likeAtStrangersQuestions, ...likeAtCloseFriendsQuestions];
-    const [elevateToBestFriendValue, elevateToBestFriendQuestions] = await askYesNo(
-        "elevate-to-best-friend",
-        7,
-        "elevate a character friendship towards a best friendship and really like them, these must be serious reasons that would cause a strong increase in bond and elevate them to best friends, it must be something that is not acceptable or would not cause such a strong bond increase if they were not already friends (e.g. being there for them during a traumatic event, saving their life, making a huge sacrifice for them, etc); the reason must be something that can only be acceptable because they are already friends, if they were strangers or acquaintances it would be seen as invasive, inappropriate, or even creepy",
-        "elevate a character friendship towards a best friendship",
-        "this can include anyone from strangers, enemies, aquitances, friends, close friends, to best friends towards each other",
-        "they are already friends",
-        `runIf: (char, other) => DE.utils.isFriendsOrBetterWith(char, other),`,
         `DE.utils.shiftBond(char, other, 1, 0);`,
 
         `!DE.utils.isFriendsOrBetterWith(char, other)`,

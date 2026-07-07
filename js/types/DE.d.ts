@@ -879,6 +879,14 @@ declare interface DEOpenToIntimacyResponse {
      */
     value: "not" | "slight" | "moderate" | "very";
     /**
+     * An additional message for the character to keep in mind when they got engaged into an intimate action of any type
+     * 
+     * Use this message only when the answer is slight, moderate or very, as if the answer is not, the character should not engage in any intimate action with the other character
+     * 
+     * TODO this is what should add the message
+     */
+    keepInMind?: string;
+    /**
      * Reason why they are open or not
      */
     reason?: string | null;
@@ -1720,6 +1728,12 @@ declare type DECharacterQuestionWithoutAskPer = DECharacterQuestionBase & {
 declare type DECharacterYesNoQuestion =
     | (DECharacterQuestionWithAskPerForCharacters & {
         question: DEStringTemplateCharAndOther;
+        /**
+         * A cooldown for the question to be asked again, if the answer is yes
+         * 
+         * TODO implement this cooldown
+         */
+        yesCooldownMinutes?: number | ((character: DECompleteCharacterReference, otherChar: DECompleteCharacterReference | null) => number);
         type: "yes_no"; onValue: (
             answer: boolean,
             character: DECompleteCharacterReference,
@@ -1729,6 +1743,11 @@ declare type DECharacterYesNoQuestion =
         ) => Promise<void> | void;
     }) | (DECharacterQuestionWithAskPerForObjects & {
         question: DEStringTemplateCharAndItem;
+        /**
+         * A cooldown for the question to be asked again, if the answer is yes
+         * TODO implement this cooldown
+         */
+        yesCooldownMinutes?: number | ((character: DECompleteCharacterReference, item: string) => number);
         type: "yes_no"; onValue: (
             answer: boolean,
             character: DECompleteCharacterReference,
@@ -1737,6 +1756,11 @@ declare type DECharacterYesNoQuestion =
     }) | (
         DECharacterQuestionWithAskPerForCausants & {
             question: DEStringTemplateCharAndOther;
+            /**
+             * A cooldown for the question to be asked again, if the answer is yes
+             * TODO implement cooldown system
+             */
+            yesCooldownMinutes?: number | ((character: DECompleteCharacterReference, otherChar: DECompleteCharacterReference | null) => number);
             type: "yes_no"; onValue: (
                 answer: boolean,
                 character: DECompleteCharacterReference,
@@ -3405,8 +3429,8 @@ declare interface DEUtils {
 
     isAloneWith(char1: string | DECompleteCharacterReference | null, char2: string | DECompleteCharacterReference | null): boolean;
     isInPrivateLocation(char1: string | DECompleteCharacterReference | null): boolean;
-    isAroundFriendsOrBetter(char1: string | DECompleteCharacterReference | null, options: {exclude?: string | DECompleteCharacterReference | Array<string | DECompleteCharacterReference>, excludeFamily?: boolean}): boolean;
-    isAroundFamily(char1: string | DECompleteCharacterReference | null, options: {exclude?: string | DECompleteCharacterReference | Array<string | DECompleteCharacterReference>}): boolean;
+    isAroundFriendsOrBetter(char1: string | DECompleteCharacterReference | null, options: { exclude?: string | DECompleteCharacterReference | Array<string | DECompleteCharacterReference>, excludeFamily?: boolean }): boolean;
+    isAroundFamily(char1: string | DECompleteCharacterReference | null, options: { exclude?: string | DECompleteCharacterReference | Array<string | DECompleteCharacterReference> }): boolean;
 
     /**
      * To be used during questions and triggers mostly

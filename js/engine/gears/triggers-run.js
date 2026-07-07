@@ -285,8 +285,6 @@ export async function runQuestion(engine, character, question, options) {
 
             const answerText = answer.value.trim();
 
-            console.log(`Received answer: ${answerText}`);
-
             // @ts-ignore tired of fighting typescript
             await question.onText(answerText, character, other ? engine.deObject.characters[other] : null, otherFamilyRelationship, relationship);
         } else if (question.type === "numeric") {
