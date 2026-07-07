@@ -330,6 +330,12 @@ export class EngineWorkerClient {
         this.#worker.postMessage({ type: "ScriptTypeGuiderGoBack" });
     }
 
+    /**
+     * @param {{ characterName: string, lastMessageGid: string | null }} args
+     * @returns {Promise<import("../engine/util/messages.js").DEObjectMessageGeneratorResult[]>}
+     */
+    getHistoryForCharacter(args) { return this.#call("getHistoryForCharacter", args); }
+
     // ── Lifecycle ───────────────────────────────────────────────────
 
     terminate() {

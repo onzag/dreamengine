@@ -6,6 +6,7 @@
  */
 
 import { getRelationship } from "../engine/util/character-info.js";
+import { getHistoryForCharacter } from "../engine/util/messages.js";
 import { isScriptTypeGeneratorFile, parseScriptGeneratorFrom } from "../script-generation/base.js";
 
 // Catch truly unexpected things (runtime errors after init)
@@ -600,13 +601,40 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
         /**
          * @returns {Promise<* | null>}
          */
-        async getWizardStateFromScript({namespace, id}) {
+        async getWizardStateFromScript({ namespace, id }) {
             const source = jsEngine.getScriptSource(namespace, id);
             if (source && isScriptTypeGeneratorFile(source)) {
                 const parsed = parseScriptGeneratorFrom(source);
-                return {state: parsed.state};
+                return { state: parsed.state };
             }
             return null;
+        },
+
+        async getHistoryForCharacter({ characterName, lastMessageGid }) {
+            /**
+             * @type {Array<import("../engine/util/messages.js").DEObjectMessageGeneratorResult>}
+             */
+            let accumulatedMessages = [];
+            const generator = getHistoryForCharacter(
+                engine,
+                engine.getDEObject().characters[characterName],
+                {
+                    // excludeFrom: [this.username],
+                    includeDebugMessages: true,
+                    includeRejectedMessages: true,
+                    includeHiddenMessages: true,
+                }
+            );
+            let next = await generator.next(true);
+            while (!next.done) {
+                if (next.value.gid === lastMessageGid) {
+                    await generator.return();
+                    break;
+                }
+                accumulatedMessages.push(next.value);
+                next = await generator.next(true);
+            }
+            return accumulatedMessages;
         }
     };
 
@@ -621,7 +649,7 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
 
     /** @type {(() => void) | null} */
     let currentWizardCancel = null;
-    
+
     /**
      * @type {(() => { currentCard: import('../script-generation/base.js').ScriptTypeGenerator, guided: boolean, language: string }) | null}
      */
@@ -710,7 +738,7 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
             if (reask && recalcdefault) {
                 defaultValue = typeof defaultValueFnOrValue === 'function' ? await defaultValueFnOrValue() : defaultValueFnOrValue;
             }
-            
+
             extra.defaultValue = defaultValue;
 
             let finalAnswer;

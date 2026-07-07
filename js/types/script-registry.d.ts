@@ -82,6 +82,6 @@ declare interface DEScriptRegistry {
     };
     "@worlds/simple-lunar-station": DEScript & {
         language: string;
-        metadatax: { intro: { title: string; subtitle: string; }[]; };
+        metadata: { intro: { title: string; subtitle: string; }[]; };
     };
 }

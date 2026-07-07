@@ -1,5 +1,3 @@
-import { DEngine } from "../index.js";
-
 /**
  * Takes a complete message in the narrative form and converts it into components that conform the message
  * 
@@ -151,6 +149,20 @@ export function makeTimestamp(deObject, time, includeNowLabel = true) {
 }
 
 /**
+ * @typedef {Object} DEObjectMessageGeneratorResult
+ * @property {string} name the name of the character or entity that generated the message
+ * @property {string} message the message content, can be a narrative or a dialogue
+ * @property {string | null} conversationId the id of the conversation this message belongs to, if any, otherwise null
+ * @property {string | null} id the id of the message, if this is a conversation message, otherwise null
+ * @property {boolean} debug wether this is a debug message
+ * @property {boolean} rejected whether this message was rejected by the story master or not
+ * @property {boolean} hidden wheter this message is hidden or not
+ * @property {boolean} storyMaster whether this message is from the story master or not
+ * @property {string[]} interactingCharacters the interacting characters in this message
+ * @property {string} gid a global id, always available, always unique, can be used to identify a message uniquely
+ */
+
+/**
  * Returns the whole history for the character up to the specified depth, if the depth
  * is 0, returns all history.
  * 
@@ -158,10 +170,10 @@ export function makeTimestamp(deObject, time, includeNowLabel = true) {
  * when it starts to get too long, even sumarization of many conversations into a single summary message
  * this will ensure the LLM can handle the context window properly without losing important information
  * 
- * @param {DEngine} engine
+ * @param {import("../index.js").DEngine} engine
  * @param {DECompleteCharacterReference} character
  * @param {{ excludeFrom?: string[] | null, includeDebugMessages?: boolean | null, includeRejectedMessages?: boolean | null, includeHiddenMessages?: boolean | null}} options
- * @return {AsyncGenerator<{name: string, message: string, conversationId: string | null, id: string | null, conversationId: string | null, debug: boolean, rejected: boolean, hidden: boolean, storyMaster: boolean, interactingCharacters: string[], gid: string}, void, boolean>}
+ * @return {AsyncGenerator<DEObjectMessageGeneratorResult, void, boolean>}
  */
 export async function* getHistoryForCharacter(engine, character, options) {
     if (!engine.deObject) {
@@ -372,7 +384,7 @@ export async function* getHistoryForCharacter(engine, character, options) {
  * TODO implement useExponentialShrinkingSelectiveContextWindowStrategy
  * VERYIMPORTANT TODO
  * 
- * @param {DEngine} engine
+ * @param {import("../index.js").DEngine} engine
  * @param {DECompleteCharacterReference} character
  * @param {{
  *   excludeFrom?: string[] | null,

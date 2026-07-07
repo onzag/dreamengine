@@ -66,6 +66,11 @@ class GameOverlay extends HTMLElement {
          * @type {((e: KeyboardEvent) => void) | null}
          */
         this._introKeydownHandler = null;
+
+        /**
+         * @type {string | null}
+         */
+        this.lastMessageGid = null;
     }
 
     async connectedCallback() {
@@ -481,7 +486,6 @@ class GameOverlay extends HTMLElement {
                         race: race || null,
                         groupBelonging: groupBelonging || [],
                     };
-
 
                     console.log('User config values retrieved for self-insert:', user);
                 }
@@ -1152,7 +1156,6 @@ class GameOverlay extends HTMLElement {
                 if (!emptyEl) {
                     const el = document.createElement('div');
                     el.className = 'game-present-characters-empty';
-                    el.textContent = 'No one else is here.';
                     list.appendChild(el);
                 }
                 return;
@@ -1342,7 +1345,22 @@ class GameOverlay extends HTMLElement {
 
     async updateStory() {
         try {
+            const actualUserName = await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                path: ["user", "name"],
+            });
+            const history = await window.ENGINE_WORKER_CLIENT.getHistoryForCharacter({
+                characterName: actualUserName,
+                lastMessageGid: this.lastMessageGid,
+            });
 
+            if (!history || !Array.isArray(history)) return;
+
+            const historyReversed = history.reverse(); // this list contains the most recent messages last
+            // and we want to render them in the order from oldest to newest, so we reverse the list before rendering
+
+            for (const msg of historyReversed) {
+                
+            }
         } catch (error) {
 
         }
@@ -1469,7 +1487,7 @@ class GameOverlay extends HTMLElement {
 
             const assetImage = await window.ENGINE_WORKER_CLIENT.queryDEObject({
                 path: ["characters", actualUserName, "state", "asset"],
-            }) || "image";
+            }) || "profile";
 
             const userCharacter = await window.ENGINE_WORKER_CLIENT.queryDEObject({
                 path: ["characters", actualUserName],
@@ -1883,13 +1901,15 @@ class GameOverlay extends HTMLElement {
 
         // Build the input placeholder (3rd-person, varies by mode).
         let inputPlaceholder;
-        if (specialMode === 'narrator') {
-            inputPlaceholder = `Narrate ${characterName}'s actions\u2026`;
-        } else if (specialMode === 'schizophrenia') {
-            const voice = voiceName || 'a voice';
-            inputPlaceholder = `Speak inside ${characterName}'s head as ${voice}\u2026`;
-        } else {
-            inputPlaceholder = `What does ${characterName} do/say?`;
+        if (!characterName.startsWith("script://")) {
+            if (specialMode === 'narrator') {
+                inputPlaceholder = `Narrate ${characterName}'s actions\u2026`;
+            } else if (specialMode === 'schizophrenia') {
+                const voice = voiceName || 'a voice';
+                inputPlaceholder = `Speak inside ${characterName}'s head as ${voice}\u2026`;
+            } else {
+                inputPlaceholder = `What does ${characterName} do/say?`;
+            }
         }
 
         // Resolve the world background image. System namespaces (those whose
@@ -2035,6 +2055,10 @@ class GameOverlay extends HTMLElement {
                                 <div class="game-present-character-stats"></div>
                             </div>
                         </div>
+                        <div class="game-story-content">
+                            <div class="game-story-content-list">
+                            </div>
+                        </div>
                     </div>
 
                     <div class="game-input-bar">
@@ -2042,7 +2066,7 @@ class GameOverlay extends HTMLElement {
                             id="game-input"
                             class="game-input"
                             rows="1"
-                            placeholder="${escapeHtml(inputPlaceholder)}"></textarea>
+                            placeholder="${escapeHtml(inputPlaceholder || "")}"></textarea>
                         <button id="submit-btn" class="game-submit" aria-label="Submit">
                             <svg viewBox="0 0 24 24" width="100%" height="100%" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <line x1="22" y1="2" x2="11" y2="13"></line>

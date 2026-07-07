@@ -2,7 +2,7 @@ engine.exports = {
     type: "world",
     description: "A serene lunar station orbiting earth, featuring advanced technology and breathtaking views of space.",
     language: "en",
-    metadatax: {
+    metadata: {
         intro: [
             {
                 title: "Moon Surface, Year 2307",
