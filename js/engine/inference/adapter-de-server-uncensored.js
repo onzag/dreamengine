@@ -406,6 +406,8 @@ export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
 
         let systemPrompt = replaceMultipleNewLines(system + visibleEnviroment).trim();
 
+        // TODO random chance alternative where they don't write these beat of third person action
+        // TODO add special tags based on what sounds are available [cough] [laugh] [sigh] [scream] [sniffle] [snore] [sneeze] [yawn] [grunt] [groan] [gasp] [moan] [whistle] [cheer] [applause] [clap] [snap] [stomp] [thump] [bang] [crash] [slam]
         const nextMessageMustBeInform = "\n# Write the next message like this\n\n" + (
             options.narration ?
             `Write the next passage as third-person narration, the way an outside narrator describes a scene in a novel. Keep everyone, including ${character.name}, in the third person, referred to by name or as he, she, or they. Describe ${character.name}'s actions, feelings, and surroundings as an observer who is watching the scene from outside of it.` :

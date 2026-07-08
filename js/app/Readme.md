@@ -56,6 +56,26 @@ The `speciesType` field is used to specify the type of species of a character. T
 
 Format: `speciesType = "feral" | "animal" | "humanoid"`
 
+### voice
+
+The `voice` field is used to specify how the voice of a character sounds, it should be distributed by different emotions, based on the emotions.js file.
+
+The sample should be a wav file.
+
+Format: `voice = {happy: {sample: "voice_happy.wav", prompt: "a soft happy voice"}, sad: {sample: "voice_sad.wav", prompt: "a soft sad voice"}, angry: {sample: "voice_angry.wav", prompt: "a soft angry voice"}, ...}`
+
+### sounds
+
+TODO implement the sound system in the app, maybe move it to DE as standard?... how would the sound engine even work, hmmm?...
+
+The `sounds` field is used to specify the sounds a character can make.
+
+The keys can be arbitrary.
+
+The sounds should be wav files.
+
+Format: `sounds = {cough: ["cough1.wav", "cough2.wav", "cough3.wav"], laugh: ["laugh1.wav", "laugh2.wav", "laugh3.wav"], sigh: ["sigh1.wav", "sigh2.wav", "sigh3.wav"], ...}`
+
 ## Root Metadata Fields (World)
 
 ### intro
@@ -65,6 +85,12 @@ An introduction for the world, only really read in the world script, an array of
 Delay is optional, and if not specified, the app will request the user to click to continue.
 
 Format: `intro = [{title: "Title", subtitle: "Subtitle", delay?: 1000}, {title: "Title 2", subtitle: "Subtitle 2", delay?: 1000}, ...]`
+
+### voice
+
+The voice of the narrator of the world, this is used to specify how the narrator's voice sounds
+
+Format: `voice = {sample: "voice_narrator.wav", prompt: "a powerful narrator voice"}`
 
 ## Stateful Fields
 
