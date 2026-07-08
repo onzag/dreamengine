@@ -4,6 +4,18 @@
     display: block;
 }
 
+/* A single message parses into one or more stacked boxes (dialogue and/or
+   narration paragraphs). */
+.boxes {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+}
+
+.boxes > .message + .message {
+    margin-top: 0.8vh;
+}
+
 /* ── Base message row ───────────────────────────────────────────── */
 .message {
     display: flex;
@@ -102,6 +114,14 @@
                  0 0 1px black, 0 0 1px black, 0 0 1px black, 0 0 1px black, 0 0 1px black;
 }
 
+/* Inline narration/action embedded within a dialogue line (from *...*).
+   Styled like narration (italic amber) but kept inline in the dialogue. */
+.inline-narration {
+    font-style: italic;
+    color: rgba(255, 224, 165, 0.86);
+    letter-spacing: 0.02em;
+}
+
 /* ── Narration messages (story master) ──────────────────────────────
    No avatar, no sender label. Centered italic prose on a warm amber
    tint — visually distinct from any character's dialogue. Flanked by
@@ -162,6 +182,11 @@
 .token {
     display: inline;
     animation: token-in 0.13s ease forwards;
+}
+
+/* Non-animated variant used when text is added immediately. */
+.token-instant {
+    display: inline;
 }
 
 @keyframes token-in {

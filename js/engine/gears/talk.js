@@ -346,22 +346,10 @@ export async function talk(engine, character, options) {
     if (baseVocabularyLimit?.mute) {
         narrativeEffects.push(`'${character.name}' is currently mute`);
     } else {
-        if (baseVocabularyLimit?.vocabulary) {
-            narrativeEffects.push(`'${character.name}' currently has a limited vocabulary`);
-        }
-        if (baseVocabularyLimit?.elongateWordsEffect) {
-            narrativeEffects.push(`'${character.name}' may elongate their words in dialogue`);
-        }
-        if (baseVocabularyLimit?.stutterEffect) {
-            narrativeEffects.push(`'${character.name}' may stutter in dialogue, eg. saying "I... I don't know" instead of "I don't know" or "b-b-but I want to go" instead of "but I want to go"`);
-        }
-        if (baseVocabularyLimit?.intensityEffect === "CAPITALIZE_SCREAM") {
-            narrativeEffects.push(`'${character.name}' is currently screaming and their dialogue should be in ALL CAPS to reflect that`);
-        }
-        if (baseVocabularyLimit && baseVocabularyLimit.description) {
+        if (baseVocabularyLimit?.description) {
             const description = typeof baseVocabularyLimit.description === "string" ? baseVocabularyLimit.description : await baseVocabularyLimit.description({char: character});
             if (description) {
-                narrativeEffects.push(`'${character.name}' vocabulary limitation description: ${description}`);
+                narrativeEffects.push(`'${character.name}' vocabulary description: ${description}`);
             }
         }
     }
@@ -572,7 +560,9 @@ export async function talk(engine, character, options) {
 
     let hasHiddenContent = false;
     let hasStandardContent = false;
+    let fragmentCount = -1;
     while (nextToGenerate) {
+        fragmentCount++;
         let generatedMessage = "";
         let hasYieldDoubleLineHidden = false;
         let hasYieldDoubleLineStandard = false;
@@ -596,6 +586,9 @@ export async function talk(engine, character, options) {
                 narrativeEffects,
                 grammar: nextToGenerateIsSameAsPreviousButNarrativeAction ? grammar.narrative : (nextToGenerate.type === "dialogue" ? grammar.dialogue : grammar.narrative),
                 activeStates,
+                narration: nextToGenerateIsSameAsPreviousButNarrativeAction ? true : nextToGenerate.type === "narration",
+
+                __debug_id: nextMessage.id + "__" + fragmentCount,
 
                 // @ts-ignore primary emotion is guaranteed to be set at this point, because if it wasn't, we would have set it to "neutral"
                 primaryEmotion,

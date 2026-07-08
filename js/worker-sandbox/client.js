@@ -292,6 +292,13 @@ export class EngineWorkerClient {
      */
     startScene(args) { return this.#call("startScene", args); }
 
+    /**
+     * 
+     * @param {{stability: number}} args 
+     * @returns {Promise<void>}
+     */
+    setDreamStability(args) { return this.#call("setDreamStability", args); }
+
     // ── CardType Wizard ─────────────────────────────────────────────
 
     /**
@@ -335,6 +342,12 @@ export class EngineWorkerClient {
      * @returns {Promise<import("../engine/util/messages.js").DEObjectMessageGeneratorResult[]>}
      */
     getHistoryForCharacter(args) { return this.#call("getHistoryForCharacter", args); }
+
+    /**
+     * @param {{ characterName: string }} args 
+     * @returns {Promise<{info: string}>} The debug info for the character
+     */
+    getDebugInfoForCharacter(args) { return this.#call("getDebugInfoForCharacter", args); }
 
     // ── Lifecycle ───────────────────────────────────────────────────
 

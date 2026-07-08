@@ -194,17 +194,15 @@ export default async function testWorldRulesOn(engine, character) {
                 maxSafetyCharacters: 0,
                 nextQuestion: nextQuestion,
                 stopAfter: [],
-                stopAt: ["\n\n"],
-                answerTrail: "Narrative message to explain the hallucination:\n\n",
-                grammar: `root ::= "*" .* "*\n\n"}`,
+                stopAt: ["\n"],
+                answerTrail: "Narrative message to explain the hallucination:\n\n"
             });
 
             if (hallucinationMessage.done || !hallucinationMessage.value) {
                 throw new Error("Inference adapter questioning generator for schizophrenia hallucination ended unexpectedly during hallucination message generation.");
             }
 
-            const messageWithoutAsterisks = hallucinationMessage.value.trim().replace(/^\*/, "").replace(/\*$/, "").trim();
-            addedMessagesForStoryMaster.push(messageWithoutAsterisks);
+            addedMessagesForStoryMaster.push(hallucinationMessage.value.trim());
         }
     }
 
@@ -543,15 +541,13 @@ export default async function testWorldRulesOn(engine, character) {
                         stopAfter: [],
                         stopAt: ["\n\n"],
                         answerTrail: "Narrative message to explain the hallucination:\n\n",
-                        grammar: `root ::= "*" .* "*\n\n"}`,
                     });
 
                     if (hallucinationMessage.done || !hallucinationMessage.value) {
                         throw new Error("Inference adapter questioning generator for phantom item hallucination ended unexpectedly during hallucination message generation.");
                     }
 
-                    const messageWithoutAsterisks = hallucinationMessage.value.trim().replace(/^\*/, "").replace(/\*$/, "").trim();
-                    addedMessagesForStoryMaster.push(messageWithoutAsterisks);
+                    addedMessagesForStoryMaster.push(hallucinationMessage.value.trim());
                 }
             }
         }

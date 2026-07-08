@@ -81,6 +81,9 @@ async function checkObjectRecursivelyAsync(parent, obj, objChecker) {
  * @return {DEMinimalCharacterReference}
  */
 function repairPotentialUserWithDefaults(character) {
+    const speciesType = character.speciesType || "humanoid";
+    const gender = character.gender || "ambiguous";
+    const sex = character.sex || "intersex";
     return ({
         ...character,
 
@@ -102,10 +105,25 @@ function repairPotentialUserWithDefaults(character) {
         rangeMeters: typeof character.rangeMeters === "number" ? character.rangeMeters : 10000,
         sex: character.sex || "intersex",
         shortDescription: character.shortDescription || "An odd humanoid creature with indistinguishable features a body covered by stars looking like a cosmic entity and no face",
-        shortDescriptionBottomNakedAdd: character.shortDescriptionBottomNakedAdd || "Not wearing anything on the lower half of their body showing no genitals or anus",
-        shortDescriptionTopNakedAdd: character.shortDescriptionTopNakedAdd || "Not wearing anything on the upper half of their body showing no male or female characteristics",
+        shortDescriptionBottomNakedAdd: character.shortDescriptionBottomNakedAdd || (
+            sex === "male" ? "showing exposed male genitalia" :
+                (
+                    sex === "female" ? "showing exposed female genitalia" :
+                        (sex === "intersex" ? "showing exposed unclear genitalia" :
+                            "showing no genitals or anus")
+                )
+        ),
+        shortDescriptionTopNakedAdd: character.shortDescriptionTopNakedAdd || (
+            gender === "male" && speciesType === "humanoid" ? "showing a flat toned male chest" :
+                (gender === "female" && speciesType === "humanoid" ? "showing small breasts" :
+                    (speciesType === "humanoid" ? "showing no male or female characteristics" : (
+                        gender === "male" ? "showing male characteristics" :
+                            gender === "female" ? "showing female characteristics" :
+                                "showing no male or female characteristics"
+                    )))
+        ),
         species: character.species || "unknown",
-        speciesType: character.speciesType || "humanoid",
+        speciesType,
         stealth: typeof character.stealth === "number" ? character.stealth : 0.5,
         tier: character.tier || "galactic",
         tierValue: typeof character.tierValue === "number" ? character.tierValue : 100,
@@ -154,6 +172,25 @@ function minimizeCharacterFromComplete(character) {
  */
 function createCharacterFromUser(user) {
     return {
+        adventurousness: 0,
+        antagonism: 0,
+        combat: [],
+        correctiveness: {
+            generalFacts: [],
+            likelyhood: 0,
+            questions: [],
+        },
+        curiosity: 0,
+        skepticism: 0,
+        worldKnowledge: {
+            advancedTechnology: false,
+            anthropomorphizedCreatures: false,
+            magic: false,
+            robots: false,
+            talkingAnimals: false,
+        },
+        apparentTier: user.apparentTier,
+        apparentTierValue: user.apparentTierValue,
         name: user.name,
         autism: 0,
         gender: user.gender,
@@ -297,6 +334,11 @@ export class DEngine {
         this.disabledWorldRules = false;
 
         /**
+         * Stability of the simulation
+         */
+        this.stability = 1;
+
+        /**
          * @type {EngineInitializationInfo}
          */
         this.engineScriptInfo = {
@@ -304,6 +346,18 @@ export class DEngine {
         };
 
         this.getDEObject = this.getDEObject.bind(this);
+    }
+
+    /**
+     * A number from 0 to 1 representing how stable the simulation is
+     * don't know why you would want to make it unstable, but it makes for
+     * a nice gimmick
+     * 
+     * @param {number} stability 
+     */
+    setStability(stability) {
+        // TODO implement deliberate low stability effects
+        this.stability = stability;
     }
 
     getDEObject() {

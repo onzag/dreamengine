@@ -132,6 +132,14 @@ export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
         this.onData = this.onData.bind(this);
 
         /**
+         * @type {Array<{
+         *   payload: import('./base.js').DEServerPayload,
+         *   id: string,
+         * }>}
+         */
+        this.__debug_last10TalkPayloads = [];
+
+        /**
          * @type {{ host?: string; apiKey?: string; secret?: string; useExperimentalTestMode?: boolean; }}
          */
         this.options = options;
@@ -155,6 +163,17 @@ export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
          * @type {Object.<string, [(data: any) => void, (err: any) => void]>}
          */
         this.listener = {};
+    }
+
+    /**
+     * Returns a debug payload, non-essential
+     * this is an arbitrary json object that was sent as payload for whatever the server is
+     * 
+     * @param {string} __debug_id
+     * @returns {any | null}
+     */
+    getDebugPayload(__debug_id) {
+        return this.__debug_last10TalkPayloads.find(p => p.id === __debug_id)?.payload || null;
     }
 
     /**
@@ -363,8 +382,10 @@ export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
      *   visibleEnviroment: string,
      *   narrativeEffects: string[],
      *   grammar: string|null,
+     *   narration: boolean,
      *   primaryEmotion: string,
      *   activeStates: Array<{state: string, dominance: number}>,
+     *   __debug_id?: string|null,
      * }} options
      * @returns {AsyncGenerator<{type: "text" | "warning" | "hidden", content: string}, void, boolean>}
      */
@@ -389,9 +410,18 @@ ${stateInjections.length > 0 ? `# ${character.name}'s Current States:\n\n${state
 
 ${narrativeEffects.length ? "# When narrating ensure that:\n\n" + narrativeEffects.map(effect => `- ${effect}`).join("\n") : ""}
 
-RULE: Always format narration inside asterisks and in third person eg. \`*As ${character.name} hears this...*\`
-RULE: Keep *narration* messages short and sweet, only 3 to 4 sentences at most, and avoid long descriptions.
+RULE: Use a movie script style format for the story, with character names followed by a colon, and their dialogue or actions following.
 RULE: Spoken dialogue should be done in first person, and start with the character name followed by a colon eg. \`${character.name}: This is spoken dialogue.\`
+RULE: Narration messages are plain without specifying a speaker and written, and in third person eg. \`As ${character.name} hears this...\` written on their own line.
+
+# Narration and Dialogue Examples:
+\`\`\`
+This is narration
+
+${character.name}: This is spoken dialogue - this is also narration - this is spoken dialogue
+
+This is narration
+\`\`\`
         `).trim();
         let assistantPromptTrail = "";
 
@@ -443,6 +473,15 @@ RULE: Spoken dialogue should be done in first person, and start with the charact
             assistantPromptTrail += messagesTrail.join("\n\n") + "\n\n";
         }
 
+        const nextMessageMustBeInform = "# IMPORTANT\n\n" + (
+            options.narration ?
+            "The next message must be a narration message, and not a dialogue message. The narration must be in 3rd person. Never use `You` or `I` in the narration" :
+            "The next message must be a dialogue message."
+        );
+
+        /**
+         * @type {import('./base.js').DEServerPayload}
+         */
         const payload = {
             messages: [
                 {
@@ -451,19 +490,30 @@ RULE: Spoken dialogue should be done in first person, and start with the charact
                 },
                 {
                     role: "user",
-                    content: userPrompt,
+                    content: userPrompt + nextMessageMustBeInform,
                 }
             ],
             trail: assistantPromptTrail,
-            maxParagraphs: 5,
-            maxCharacters: 1000,
-            maxSafetyCharacters: 5000,
+            maxParagraphs: 1,
+            maxCharacters: 200,
+            maxSafetyCharacters: 500,
             stopAt: [],
             stopAfter: [],
             grammar: grammar || null,
             primaryEmotion: options.primaryEmotion,
             activeStates: options.activeStates,
         };
+
+        if (options.__debug_id) {
+            this.__debug_last10TalkPayloads.push({
+                payload,
+                id: options.__debug_id,
+            });
+
+            if (this.__debug_last10TalkPayloads.length > 10) {
+                this.__debug_last10TalkPayloads.shift();
+            }
+    }
 
         const rid = cheapRID();
         if (this.options.useExperimentalTestMode) {
@@ -914,7 +964,6 @@ Adopt a \`show, don't tell\` manner, similar to Terry Pratchett's style, blendin
 ${otherInteractingCharacters.map(name => `Rule: Never speak for or control ${name}'s actions, thoughts, or feelings.`).join("\n")}
 Rule: Avoid suggesting or implying reactions or decisions from other characters
 Rule: Reflect on the potential consequences of ${character.name} actions and decisions.
-Rule: Always format character actions inside asterisks, e.g., *${character.name} looks around*.
 Rule: Write all narration and actions in third person, not first person.
 Rule: Spoken dialogue should be done in first person.${characterRules.length ? `
 

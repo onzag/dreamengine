@@ -316,6 +316,24 @@ class Settings extends HTMLElement {
                     input-number-step="1"
                     input-number-unit="aura"
                 ></app-overlay-input>
+                <app-overlay-select
+                    label="Apparent Power Tier"
+                    input-options='["insect", "critter", "human", "apex", "street_level", "block_level", "city_level", "country_level", "continental", "planetary", "stellar", "galactic", "universal", "multiversal", "limitless"]'
+                    input-default-value="human"
+                    title="The apparent power level of your character on the power scale. As how it is perceived by others."
+                    input-data-location="user.apparentTier"
+                ></app-overlay-select>
+                <app-overlay-input
+                    label="Apparent Tier Value"
+                    title="A value from 0 to 100 representing your character's perceived strength within their apparent power tier. 0 means barely makes it, 100 means peak condition. Used for comparisons against characters in the same tier."
+                    input-data-location="user.apparentTierValue"
+                    input-placeholder="50"
+                    input-type="number"
+                    input-number-min="0"
+                    input-number-max="100"
+                    input-number-step="1"
+                    input-number-unit="aura"
+                ></app-overlay-input>
                 <app-overlay-input
                     label="Power Growth Rate"
                     title="A value from 0 to 1 representing how fast your character grows on their power scale after interactions or events. 0.25 is standard for a human, 0.5 to 1 for fast-growing characters like shonen protagonists."

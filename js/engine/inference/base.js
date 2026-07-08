@@ -1,6 +1,20 @@
 import { DEngine } from "../index.js";
 
 /**
+ * @typedef {Object} DEServerPayload
+ * @property {Array<{role: "system" | "user" | "assistant", content: string}>} messages
+ * @property {string} trail
+ * @property {number} maxParagraphs
+ * @property {number} maxCharacters
+ * @property {number} maxSafetyCharacters
+ * @property {Array<string>} stopAfter
+ * @property {Array<string>} stopAt
+ * @property {string|null} grammar
+ * @property {string} primaryEmotion
+ * @property {{state: string, dominance: number}[]} activeStates
+ */
+
+/**
  * @typedef {AsyncGenerator<string, void, {
      * answerTrail?: string,
      * grammar?: string,
@@ -65,7 +79,9 @@ export class BaseInferenceAdapter {
      *   narrativeEffects: string[],
      *   grammar: string|null,
      *   primaryEmotion: string,
+     *   narration: boolean,
      *   activeStates: Array<{state: string, dominance: number}>,
+     *   __debug_id?: string|null,
      * }} options
      * @returns {AsyncGenerator<{type: "text" | "warning" | "hidden", content: string}, void, boolean>}
      */
@@ -74,6 +90,17 @@ export class BaseInferenceAdapter {
         options,
     ) {
         throw new Error("Method 'inferNextStoryFragmentFor()' must be implemented.");
+    }
+
+    /**
+     * Returns a debug payload, non-essential
+     * this is an arbitrary json object that was sent as payload for whatever the server is
+     * 
+     * @param {string} __debug_id
+     * @returns {any | null}
+     */
+    getDebugPayload(__debug_id) {
+        return null;
     }
 
     /**

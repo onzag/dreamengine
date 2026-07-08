@@ -2,6 +2,7 @@ import { playCancelSound, playConfirmSound, playHoverSound, stopAllAmbiencesAndS
 import './world-image.js';
 import './dialog.js';
 import './game-messages/message.js';
+import './debug/debug-character.js';
 
 /**
  * The main in-dream game UI. Renders a transition ("falling asleep" white
@@ -72,6 +73,11 @@ class GameOverlay extends HTMLElement {
          * @type {string | null}
          */
         this.lastMessageGid = null;
+
+        /**
+         * @type {"normal" | "hard" | "easy" | "debug"}
+         */
+        this.gameDifficulty = "normal";
     }
 
     async connectedCallback() {
@@ -177,6 +183,16 @@ class GameOverlay extends HTMLElement {
         if (exitBtn) {
             exitBtn.addEventListener('mouseenter', () => playHoverSound());
             exitBtn.addEventListener('click', this.onExitClick);
+        }
+
+        const sidebarPortrait = this.root.querySelector('.game-sidebar-portrait');
+        if (sidebarPortrait) {
+            sidebarPortrait.addEventListener('mouseenter', () => playHoverSound());
+            sidebarPortrait.addEventListener('click', () => {
+                const titleEl = this.root.querySelector('.game-sidebar-title');
+                const name = (titleEl && titleEl.textContent) || this.getAttribute('character-name') || '';
+                this._openCharacterDialog(name);
+            });
         }
 
         const input = /** @type {HTMLTextAreaElement | null} */ (this.root.getElementById('game-input'));
@@ -403,6 +419,12 @@ class GameOverlay extends HTMLElement {
 
     async prepareGame(comeFromConflictError = false, newName = null) {
         try {
+            this.gameDifficulty = (await window.API.getConfigValue("difficulty") || "normal").toLowerCase();
+
+            const dreamStability = this.getAttribute('dream-stability') || 'stable';
+
+            await window.ENGINE_WORKER_CLIENT.setDreamStability({ stability: dreamStability === "stable" ? 1 : (dreamStability === "unstable" ? 0.99 : 0.95) });
+
             const partyCharactersJson = this.getAttribute('party-characters') || '[]';
             const partyCharacters = JSON.parse(partyCharactersJson);
 
@@ -445,7 +467,7 @@ class GameOverlay extends HTMLElement {
                         rangeMeters, locomotionSpeedMetersPerSecond,
                         shortDescription, shortDescriptionTopNakedAdd, shortDescriptionBottomNakedAdd,
                         stealth, perception, attractiveness, charisma,
-                        tier, tierValue, powerGrowthRate,
+                        tier, tierValue, apparentTier, apparentTierValue, powerGrowthRate,
                         species, speciesType, race, groupBelonging,
                     ] = await Promise.all([
                         cfg('user.name'), cfg('user.sex'), cfg('user.gender'),
@@ -455,7 +477,7 @@ class GameOverlay extends HTMLElement {
                         cfg('user.rangeMeters'), cfg('user.locomotionSpeedMetersPerSecond'),
                         cfg('user.shortDescription'), cfg('user.shortDescriptionTopNakedAdd'), cfg('user.shortDescriptionBottomNakedAdd'),
                         cfg('user.stealth'), cfg('user.perception'), cfg('user.attractiveness'), cfg('user.charisma'),
-                        cfg('user.tier'), cfg('user.tierValue'), cfg('user.powerGrowthRate'),
+                        cfg('user.tier'), cfg('user.tierValue'), cfg('user.apparentTier'), cfg('user.apparentTierValue'), cfg('user.powerGrowthRate'),
                         cfg('user.species'), cfg('user.speciesType'), cfg('user.race'), cfg('user.groupBelonging'),
                     ]);
 
@@ -463,25 +485,27 @@ class GameOverlay extends HTMLElement {
                         name,
                         sex: sex || "male",
                         gender: gender || sex || "male",
-                        heightCm: Number(heightCm),
-                        weightKg: Number(weightKg),
-                        ageYears: Number(ageYears),
-                        carryingCapacityLiters: Number(carryingCapacityLiters),
-                        carryingCapacityKg: Number(carryingCapacityKg),
-                        maintenanceCaloriesPerDay: Number(maintenanceCaloriesPerDay),
-                        maintenanceHydrationLitersPerDay: Number(maintenanceHydrationLitersPerDay),
-                        rangeMeters: Number(rangeMeters),
-                        locomotionSpeedMetersPerSecond: Number(locomotionSpeedMetersPerSecond),
+                        heightCm: typeof heightCm === "number" ? Number(heightCm) : 175,
+                        weightKg: typeof weightKg === "number" ? Number(weightKg) : 70,
+                        ageYears: typeof ageYears === "number" ? Number(ageYears) : 25,
+                        carryingCapacityLiters: typeof carryingCapacityLiters === "number" ? Number(carryingCapacityLiters) : 50,
+                        carryingCapacityKg: typeof carryingCapacityKg === "number" ? Number(carryingCapacityKg) : 50,
+                        maintenanceCaloriesPerDay: typeof maintenanceCaloriesPerDay === "number" ? Number(maintenanceCaloriesPerDay) : 2000,
+                        maintenanceHydrationLitersPerDay: typeof maintenanceHydrationLitersPerDay === "number" ? Number(maintenanceHydrationLitersPerDay) : 2,
+                        rangeMeters: typeof rangeMeters === "number" ? Number(rangeMeters) : 10000,
+                        locomotionSpeedMetersPerSecond: typeof locomotionSpeedMetersPerSecond === "number" ? Number(locomotionSpeedMetersPerSecond) : 1.4,
                         shortDescription: shortDescription || '',
                         shortDescriptionTopNakedAdd: shortDescriptionTopNakedAdd || null,
                         shortDescriptionBottomNakedAdd: shortDescriptionBottomNakedAdd || null,
-                        stealth: Number(stealth),
-                        perception: Number(perception),
-                        attractiveness: Number(attractiveness),
-                        charisma: Number(charisma),
-                        tier,
-                        tierValue: Number(tierValue),
-                        powerGrowthRate: Number(powerGrowthRate),
+                        stealth: typeof stealth === "number" ? Number(stealth) : 0.5,
+                        perception: typeof perception === "number" ? Number(perception) : 0.5,
+                        attractiveness: typeof attractiveness === "number" ? Number(attractiveness) : 0.5,
+                        charisma: typeof charisma === "number" ? Number(charisma) : 0.5,
+                        tier: tier || "human",
+                        tierValue: typeof tierValue === "undefined" ? 50 : Number(tierValue),
+                        apparentTier: apparentTier || "human",
+                        apparentTierValue: typeof apparentTierValue === "undefined" ? 50 : Number(apparentTierValue),
+                        powerGrowthRate: typeof powerGrowthRate === "undefined" ? 0.25 : Number(powerGrowthRate),
                         species: species || 'human',
                         speciesType: speciesType || 'humanoid',
                         race: race || null,
@@ -1202,6 +1226,10 @@ class GameOverlay extends HTMLElement {
                     card.addEventListener('mouseleave', hide);
                     card.addEventListener('focus', show);
                     card.addEventListener('blur', hide);
+                    card.addEventListener('click', () => {
+                        // @ts-ignore
+                        this._openCharacterDialog(card.dataset.charName || '');
+                    });
 
                     list.appendChild(card);
                 }
@@ -1232,6 +1260,41 @@ class GameOverlay extends HTMLElement {
             }
         } catch (error) {
             console.error('Error updating present characters:', error);
+        }
+    }
+
+    /**
+     * Open a character detail dialog when a present-character card is clicked.
+     * In "debug" difficulty this opens the debug-character overlay.
+     * Other modes are reserved for future use.
+     * @param {string} charName
+     */
+    _openCharacterDialog(charName) {
+        if (this.gameDifficulty === 'debug') {
+            const dialog = document.createElement('app-dialog');
+            dialog.setAttribute('dialog-title', "Debug: " + charName);
+            dialog.setAttribute('confirmation', 'true');
+            dialog.setAttribute('confirm-text', 'Close');
+            dialog.setAttribute('cancel-text-disable', 'true');
+            dialog.setAttribute('extra-z-index', '100');
+            dialog.setAttribute("large", "true");
+            dialog.setAttribute("pre-expand", "true");
+
+            const debugPanel = document.createElement('app-debug-character');
+            debugPanel.setAttribute('character-name', charName);
+            dialog.appendChild(debugPanel);
+
+            dialog.addEventListener('confirm', () => {
+                playConfirmSound();
+                if (dialog.parentNode) dialog.parentNode.removeChild(dialog);
+            });
+            dialog.addEventListener('cancel', () => {
+                if (dialog.parentNode) dialog.parentNode.removeChild(dialog);
+            });
+
+            document.body.appendChild(dialog);
+        } else {
+            // TODO: implement character interaction dialog for other game modes
         }
     }
 
@@ -1421,6 +1484,8 @@ class GameOverlay extends HTMLElement {
                 el.dataset.gid = gid;
                 el.setAttribute('text', text);
                 el.setAttribute('image-url', assetImage);
+                el.setAttribute("gid", gid);
+                el.setAttribute("debug", this.gameDifficulty === 'debug' ? 'true' : 'false');
                 if (hadNoPreviousMessages) {
                     el.setAttribute('no-stream-simulation', 'true');
                 }
@@ -1647,6 +1712,11 @@ class GameOverlay extends HTMLElement {
             const content = this.root.querySelector('.game-sidebar-content');
             if (!content) return;
 
+            const userDescription = await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                path: ["utils", "templateUtils", "getExternalDescriptionOfCharacter"],
+                call: [{ char: actualUserName }, true, false],
+            });
+
             // Stable container for character stats. Created once, then chips are
             // added/updated/removed in place so re-entrant calls don't churn the
             // DOM or wipe other future sidebar sections.
@@ -1693,6 +1763,12 @@ class GameOverlay extends HTMLElement {
             for (const chip of Array.from(stats.querySelectorAll('.game-character-chip'))) {
                 const key = chip.getAttribute('data-key') || '';
                 if (!seen.has(key)) chip.remove();
+            }
+
+            const descEl = /** @type {HTMLElement | null} */ (content.querySelector('.game-character-description'));
+            if (descEl) {
+                const descText = typeof userDescription === 'string' ? userDescription : '';
+                if (descEl.textContent !== descText) descEl.textContent = descText;
             }
         } catch (error) {
             // @ts-ignore
@@ -2058,7 +2134,9 @@ class GameOverlay extends HTMLElement {
                             ${subtitleParts.length ? `<div class="game-sidebar-subtitle">${escapeHtml(subtitleParts.join(' · '))}</div>` : ''}
                         </div>
                         <div class="game-sidebar-content">
-                            <!-- intentionally empty for now -->
+                            <div class="game-character-description">
+                                <!-- populated by onCharacterUpdateUI() -->
+                            </div>
                         </div>
                         <div class="game-sidebar-footer">
                             <button id="exit-btn" class="game-sidebar-exit" type="button" aria-label="Exit game">

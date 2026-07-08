@@ -185,7 +185,7 @@ export function isYes(answer) {
  * @param {DEngine} engine 
  * @param {DEVocabularyLimit | null | undefined} vocabulary 
  * @param {string} charName
- * @returns {{narrative: string; dialogue: string | null}}
+ * @returns {{narrative: string | null; dialogue: string | null}}
  */
 export function generateGrammarForVocabulary(engine, vocabulary, charName) {
     if (!engine.inferenceAdapter) {
@@ -194,89 +194,15 @@ export function generateGrammarForVocabulary(engine, vocabulary, charName) {
         throw new Error("DEngine must be initialized to create grammar");
     }
 
-    const defaultEverythingGoes = `[^*:\n— ]+ (" " [^*:\n— ]+)*`;
-    let dialogueVocabulary = defaultEverythingGoes;
-
     if (vocabulary?.mute) {
         return {
-            narrative: `root ::= "*" ${defaultEverythingGoes} "*"`,
+            narrative: `root ::= .+`,
             dialogue: null,
         };
     }
     
-
-    if (vocabulary && vocabulary.vocabulary) {
-
-        if (vocabulary.vocabulary.length === 0) {
-            throw new Error("Vocabulary list cannot be empty if vocabulary is provided");
-        }
-
-        /**
-         * @type {Set<string>}
-         */
-        const allGrammar = new Set();
-
-        for (const token of vocabulary.vocabulary) {
-            if (token.type === "WORD") {
-                if (!token.value) continue;
-                let word = token.value.trim();
-                if (!word) continue;
-
-                allGrammar.add(wordForGrammar(word, vocabulary.intensityEffect || "NONE", "none"));
-                if (vocabulary.elongateWordsEffect) {
-                    allGrammar.add(wordForGrammar(word, vocabulary.intensityEffect || "NONE", "elongate"));
-                }
-                if (vocabulary.stutterEffect) {
-                    allGrammar.add(wordForGrammar(word, vocabulary.intensityEffect || "NONE", "stutter"));
-                }
-            } else if (token.type === "GRAMMAR") {
-                if (!token.value) continue;
-                let grammar = token.value.trim();
-                if (!grammar) continue;
-                allGrammar.add(grammar);
-            }
-        }
-
-        if (vocabulary.includeBaseVocabulary) {
-            for (const word of BASIC_WORDS) {
-                allGrammar.add(wordForGrammar(word, vocabulary.intensityEffect || "NONE", "none"));
-                if (vocabulary.elongateWordsEffect) {
-                    allGrammar.add(wordForGrammar(word, vocabulary.intensityEffect || "NONE", "elongate"));
-                }
-                if (vocabulary.stutterEffect) {
-                    allGrammar.add(wordForGrammar(word, vocabulary.intensityEffect || "NONE", "stutter"));
-                }
-            }
-        }
-
-        if (vocabulary.includeCharacterNames) {
-            const surroundingCharacters = getSurroundingCharacters(engine.deObject, charName);
-            if (surroundingCharacters.nonStrangers.length > 0) {
-                for (const character of surroundingCharacters.nonStrangers) {
-                    allGrammar.add(wordForGrammar(character, vocabulary.intensityEffect || "NONE", "none", true));
-                    if (vocabulary.elongateWordsEffect) {
-                        allGrammar.add(wordForGrammar(character, vocabulary.intensityEffect || "NONE", "elongate", true));
-                    }
-                    if (vocabulary.stutterEffect) {
-                        allGrammar.add(wordForGrammar(character, vocabulary.intensityEffect || "NONE", "stutter", true));
-                    }
-                }
-            }
-        }
-
-        // space
-        allGrammar.add(JSON.stringify(" "));
-
-        const baseWord = "(" + Array.from(allGrammar).join(" | ") + ")";
-        if (vocabulary.maxWordsPerMessage) {
-            dialogueVocabulary = baseWord + `( ${baseWord}){0,${vocabulary.maxWordsPerMessage - 1}}`;
-        } else {
-            dialogueVocabulary = baseWord + `( ${baseWord})*`;
-        }
-    }
-
     return {
-        narrative: `root ::= "*" ${defaultEverythingGoes} "*"`,
-        dialogue: `root ::= ${JSON.stringify(charName + ": ")} ${dialogueVocabulary} ( (" — *" ${defaultEverythingGoes} "*") | (" — " ${dialogueVocabulary}) )*`,
+        narrative: `root ::= .+`,
+        dialogue: `root ::= ${JSON.stringify(charName + ": ")} .+`,
     };
 }

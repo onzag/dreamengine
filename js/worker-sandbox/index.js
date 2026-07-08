@@ -5,7 +5,7 @@
  * useless opaque "ErrorEvent".
  */
 
-import { getRelationship } from "../engine/util/character-info.js";
+import { getInternalDescriptionOfCharacter, getRelationship, getSysPromptForCharacter } from "../engine/util/character-info.js";
 import { getHistoryForCharacter } from "../engine/util/messages.js";
 import { isScriptTypeGeneratorFile, parseScriptGeneratorFrom } from "../script-generation/base.js";
 
@@ -349,6 +349,11 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
             return { ok: true };
         },
 
+        async setDreamStability({ stability }) {
+            await engine.setStability(stability);
+            return { ok: true };
+        },
+
         async callCharOnlyTemplate({ path, characterName }) {
             const template = await handlers.queryDEObject({ path, _returnFunctions: true });
 
@@ -636,6 +641,21 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
             }
             return accumulatedMessages;
         },
+
+        async getDebugInfoForCharacter({ characterName }) {
+            const char = engine.getDEObject().characters[characterName];
+            if (!char) {
+                return {
+                    "info": `Character '${characterName}' not found`,
+                }
+            }
+
+            const internalDescription = await getSysPromptForCharacter(engine, characterName);
+
+            return {
+                "info": `#Sysprompt for ${characterName}\n\n${internalDescription.sysprompt}`,
+            }
+        }
     };
 
     // ── CardType Wizard infrastructure ──────────────────────────────────
