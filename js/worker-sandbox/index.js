@@ -653,8 +653,19 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
             const internalDescription = await getSysPromptForCharacter(engine, characterName);
 
             return {
-                "info": `#Sysprompt for ${characterName}\n\n${internalDescription.sysprompt}`,
+                "info": internalDescription.sysprompt,
             }
+        },
+
+        async getDebugInfoForMessage({ message__debug_id }) {
+            const inferenceAdapter = engine.inferenceAdapter;
+            if (!inferenceAdapter) {
+                return {
+                    "info": `No inference adapter found on engine`,
+                }
+            }
+            const payload = inferenceAdapter.getDebugPayload(message__debug_id);
+            return payload;
         }
     };
 

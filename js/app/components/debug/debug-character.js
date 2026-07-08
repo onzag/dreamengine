@@ -20,7 +20,14 @@ class DebugCharacter extends HTMLElement {
     }
 
     async retrieveCharacterData() {
-        
+        const info = await window.ENGINE_WORKER_CLIENT.getDebugInfoForCharacter({
+            characterName: this.getAttribute('character-name') || '',
+        });
+
+        const infoEl = this.root.querySelector('.debug-character-info');
+        if (infoEl) {
+            infoEl.textContent = info.info;
+        }
     }
 
     render() {
@@ -32,7 +39,7 @@ class DebugCharacter extends HTMLElement {
                     min-width: 32vw;
                     max-width: 60vw;
                 }
-                .debug-character-placeholder {
+                .debug-character-info {
                     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
                     font-size: 1.4vh;
                     line-height: 1.5;
@@ -49,7 +56,7 @@ class DebugCharacter extends HTMLElement {
                     -webkit-user-select: text;
                 }
             </style>
-            <code class="debug-character-placeholder">TODO: display character data for "${name}"</code>
+            <code class="debug-character-info"></code>
         `;
     }
 }

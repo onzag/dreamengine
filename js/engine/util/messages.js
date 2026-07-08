@@ -62,6 +62,11 @@ export function parseMessageInComponents(author, message) {
     const splittedLines = message.split("\n");
     for (const line of splittedLines) {
         const trimmedLine = line.trim();
+
+        if (!trimmedLine) {
+            continue;
+        }
+
         if (trimmedLine.startsWith(author + ":")) {
             finalMessages.push({
                 author: author,
@@ -70,32 +75,12 @@ export function parseMessageInComponents(author, message) {
             });
             continue;
         }
-        let inNarration = false;
-        let accumulatedContext = "";
-        for (const char of line) {
-            if (char === "*") {
-                if (accumulatedContext.trim().length > 0) {
-                    finalMessages.push({
-                        author: inNarration ? null : author,
-                        origin: author,
-                        content: accumulatedContext.trim(),
-                    });
-                }
 
-                inNarration = !inNarration;
-                accumulatedContext = "";
-            } else {
-                accumulatedContext += char;
-            }
-        }
-
-        if (accumulatedContext.trim().length > 0) {
-            finalMessages.push({
-                author: inNarration ? null : author,
-                origin: author,
-                content: accumulatedContext.trim(),
-            });
-        }
+        finalMessages.push({
+            author: null,
+            origin: author,
+            content: trimmedLine,
+        });
     }
 
     return finalMessages;
@@ -111,9 +96,17 @@ export function parseMessageInComponentsAsText(author, message) {
     let finalText = "";
     for (const component of components) {
         if (component.author) {
-            finalText += `${component.author}: ${component.content}\n\n`;
+            if (!component.content.endsWith(".")) {
+                finalText += `${component.author}: ${component.content}.\n\n`;
+            } else {
+                finalText += `${component.author}: ${component.content}\n\n`;
+            }
         } else {
-            finalText += `*${component.content}*\n\n`;
+            if (!component.content.endsWith(".")) {
+                finalText += `${component.content}.\n\n`;
+            } else {
+                finalText += `${component.content}\n\n`;
+            }
         }
     }
     return finalText.trim();
@@ -212,7 +205,7 @@ export async function* getHistoryForCharacter(engine, character, options) {
         // @ts-ignore typescript is wrong, deObject has been null checked at the beginning of the function
         let message = `From ${makeTimestamp(engine.deObject, fromTime)} to ${makeTimestamp(engine.deObject, statesAccumulatedFromTime)}, ` + character.name;
         if (statesAccumulated.size > 0) {
-            message += ` finds ${engine.getDEObject().utils.templateUtils.formatReflexive([character])} in the following states: `;
+            message += ` finds ${engine.getDEObject().utils.formatReflexive([character])} in the following states: `;
             let statesList = "";
             statesAccumulated.forEach(s => {
                 if (statesList.length > 0) {
@@ -284,7 +277,7 @@ export async function* getHistoryForCharacter(engine, character, options) {
                 }
                 const participantsExcludingCharacter = currentConversationObject.participants.filter(p => p !== character.name);
                 const timeMark = makeTimestamp(engine.deObject, conversationStartTime);
-                const withOrAlone = participantsExcludingCharacter.length === 0 ? "on their own" : "with " + engine.deObject.utils.templateUtils.formatAnd(participantsExcludingCharacter);
+                const withOrAlone = participantsExcludingCharacter.length === 0 ? "on their own" : "with " + engine.deObject.utils.formatAnd(participantsExcludingCharacter);
 
                 const expectedId = `story-master-${state.conversationId}-summary`;
                 const keepgoing = yield {
@@ -328,7 +321,7 @@ export async function* getHistoryForCharacter(engine, character, options) {
                     const participantsExcludingCharacter = currentConversationObject.participants.filter(p => p !== character.name);
                     const timeMark = makeTimestamp(engine.deObject, conversationStartTime);
                     const timeMarkDetailed = timeMark === "Now" ? "right now" : "at " + timeMark;
-                    const withOrAlone = participantsExcludingCharacter.length === 0 ? "on their own" : "with " + engine.deObject.utils.templateUtils.formatAnd(participantsExcludingCharacter);
+                    const withOrAlone = participantsExcludingCharacter.length === 0 ? "on their own" : "with " + engine.deObject.utils.formatAnd(participantsExcludingCharacter);
                     const keepgoing = yield {
                         name: "Story Master",
                         message: "The following interaction took place " + timeMarkDetailed + ", " + character.name + " is at " + conversationLocation + withOrAlone + ".",

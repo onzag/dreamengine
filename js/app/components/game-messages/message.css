@@ -164,7 +164,7 @@
 .narration-text {
     font-size: 2vh;
     font-style: italic;
-    text-align: center;
+    text-align: left;
     text-shadow: 0 0 1px black, 0 0 1px black, 0 0 1px black, 0 0 1px black,
                  0 0 1px black, 0 0 1px black, 0 0 1px black, 0 0 1px black, 0 0 1px black;
     color: white;

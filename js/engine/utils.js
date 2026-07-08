@@ -948,6 +948,7 @@ export const deEngineUtilsFn = (DE) => ({
                 // ];
         return {
             mute: false,
+            description: "",
         }
     },
 
@@ -1089,7 +1090,92 @@ export const deEngineUtilsFn = (DE) => ({
         return false;
     },
 
-    templateUtils: {
+    /**
+     * 
+     * @param {string | DECompleteCharacterReference | null} char 
+     */
+    isTopNaked(char) {
+        if (!char) {
+            return false;
+        }
+
+        const charRef = typeof char === "string" ? DE.characters[char] : char;
+        if (!charRef) {
+            console.warn(`Character reference not found when checking if top naked`);
+            return false;
+        }
+
+        const charState = DE.stateFor[charRef.name];
+        if (!charState) {
+            console.warn(`Character state for ${charRef.name} not found when checking if top naked`);
+            return false;
+        }
+        
+        return !charState.wearing.find((i) => i.wearableProperties?.coversTopNakedness);
+    },
+
+    /**
+     * 
+     * @param {string | DECompleteCharacterReference | null} char 
+     */
+    isBottomNaked(char) {
+        if (!char) {
+            return false;
+        }
+
+        const charRef = typeof char === "string" ? DE.characters[char] : char;
+        if (!charRef) {
+            console.warn(`Character reference not found when checking if bottom naked`);
+            return false;
+        }
+
+        const charState = DE.stateFor[charRef.name];
+        if (!charState) {
+            console.warn(`Character state for ${charRef.name} not found when checking if bottom naked`);
+            return false;
+        }
+
+        return !charState.wearing.find((i) => i.wearableProperties?.coversBottomNakedness);
+    },
+
+    /**
+     * Within a conversation specifies if two characters have just started talking to each other, which can be used to trigger first impressions and initial reactions if
+     * combined with strangers or whatnot
+     * @param {string | DECompleteCharacterReference | null} char1 
+     * @param {string | DECompleteCharacterReference | null} char2 
+     */
+    justStartedTalkingToEachOther(char1, char2) {
+        if (!char1 || !char2) {
+            return false;
+        }
+
+        const char1Ref = typeof char1 === "string" ? DE.characters[char1] : char1;
+        const char2Ref = typeof char2 === "string" ? DE.characters[char2] : char2;
+
+        const char1Conversation = DE.stateFor[char1Ref.name].conversationId;
+        const char2Conversation = DE.stateFor[char2Ref.name].conversationId;
+
+        // not in the same conversation, so they can't have just started talking to each other
+        if (char1Conversation !== char2Conversation) {
+            return false;
+        }
+
+        // not even in a conversation, so they can't have just started talking to each other
+        if (!char1Conversation) {
+            return false;
+        }
+
+        const conversationToUse = DE.conversations[char1Conversation];
+
+        // they were engaged in previous conversation together, so they can't have just started talking to each other
+        if (conversationToUse.previousConversationIdsPerParticipant[char1Ref.name] === conversationToUse.previousConversationIdsPerParticipant[char2Ref.name] && conversationToUse.previousConversationIdsPerParticipant[char1Ref.name]) {
+            return false;
+        }
+
+        // new conversation, so they have just started talking to each other
+        return conversationToUse.messages.filter((m) => m.sender === char1Ref.name || m.sender === char2Ref.name).length <= 1;
+    },
+
         breakDownCharactersAndCausesTemplate(info) {
             return async (info2) => {
                 let base = typeof info.base === "string" ? info.base : info.base({
@@ -1135,7 +1221,7 @@ export const deEngineUtilsFn = (DE) => ({
 
                         if (causesPerCausant[causant].length > 1) {
                             base += `. Reasons: ${info2.char.name} `;
-                            base += DE.utils.templateUtils.formatAnd(causesPerCausant[causant]);
+                            base += DE.utils.formatAnd(causesPerCausant[causant]);
                             base += `, by ${other.name}`;
                         }
                     }
@@ -1175,7 +1261,7 @@ export const deEngineUtilsFn = (DE) => ({
 
                         if (causesPerCausant[causant].length > 1) {
                             base += `. Reasons: ${info2.char.name} `;
-                            base += DE.utils.templateUtils.formatAnd(causesPerCausant[causant]);
+                            base += DE.utils.formatAnd(causesPerCausant[causant]);
                             base += `, by/with the object: ${causant}`;
                         }
                     }
@@ -1486,7 +1572,6 @@ export const deEngineUtilsFn = (DE) => ({
             const result = weightedRandomByLikelihood(options.map(option => ({ item: option, likelihood: 1 })), generateIntSeedFromString(1000000, char.name));
             return result ? result.item : options[0];
         },
-    }
 });
 
 /**

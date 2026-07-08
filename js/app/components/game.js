@@ -1143,7 +1143,7 @@ class GameOverlay extends HTMLElement {
                 path: ["user", "name"],
             });
             const charactersAtLocation = await Promise.all((await window.ENGINE_WORKER_CLIENT.queryDEObject({
-                path: ["utils", "templateUtils", "allCharactersAtLocation"],
+                path: ["utils", "allCharactersAtLocation"],
                 call: [location],
                 pick: ["name", "gender", "heightCm", "species", "speciesType"],
                 // @ts-ignore
@@ -1153,7 +1153,7 @@ class GameOverlay extends HTMLElement {
                     path: ["stateFor", char.name, "locationSlot"],
                 });
                 const charDescription = await window.ENGINE_WORKER_CLIENT.queryDEObject({
-                    path: ["utils", "templateUtils", "getExternalDescriptionOfCharacter"],
+                    path: ["utils", "getExternalDescriptionOfCharacter"],
                     call: [{ char: char.name }, true, false],
                 });
                 return { ...char, slot: charSlot, description: charDescription };
@@ -1272,7 +1272,7 @@ class GameOverlay extends HTMLElement {
     _openCharacterDialog(charName) {
         if (this.gameDifficulty === 'debug') {
             const dialog = document.createElement('app-dialog');
-            dialog.setAttribute('dialog-title', "Debug: " + charName);
+            dialog.setAttribute('dialog-title', "Debug: " + charName + " (Character Sysprompt)");
             dialog.setAttribute('confirmation', 'true');
             dialog.setAttribute('confirm-text', 'Close');
             dialog.setAttribute('cancel-text-disable', 'true');
@@ -1713,7 +1713,7 @@ class GameOverlay extends HTMLElement {
             if (!content) return;
 
             const userDescription = await window.ENGINE_WORKER_CLIENT.queryDEObject({
-                path: ["utils", "templateUtils", "getExternalDescriptionOfCharacter"],
+                path: ["utils", "getExternalDescriptionOfCharacter"],
                 call: [{ char: actualUserName }, true, false],
             });
 

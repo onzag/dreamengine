@@ -1,4 +1,6 @@
 import '../world-image.js';
+import '../dialog.js';
+import '../debug/debug-message.js';
 
 /**
  * A single message in the in-dream story feed.
@@ -65,9 +67,9 @@ class GameMessage extends HTMLElement {
     }
 
     // is-narration / is-self / is-group-start / text / no-stream-simulation are
-    // read once at connect. Only image-url and sender-name are live-updatable.
+    // read once at connect. Only image-url, sender-name, and debug are live-updatable.
     static get observedAttributes() {
-        return ['sender-name', 'image-url'];
+        return ['sender-name', 'image-url', 'debug'];
     }
 
     connectedCallback() {
@@ -116,6 +118,9 @@ class GameMessage extends HTMLElement {
                 this._ps.senderName = newValue || '';
                 this._ps.prefix = (newValue || '') + ':';
             }
+        }
+        if (name === 'debug') {
+            if (this._ps) this._ps.debug = newValue === 'true';
         }
     }
 
@@ -176,6 +181,8 @@ class GameMessage extends HTMLElement {
             senderName,
             prefix: senderName + ':',
             imageUrl: this.getAttribute('image-url') || '',
+            debug: this.getAttribute('debug') === 'true',
+            boxIndex: 0,
         };
     }
 
@@ -552,6 +559,8 @@ class GameMessage extends HTMLElement {
         box.appendChild(p);
         this._boxesEl?.appendChild(box);
         ps.narrationTextEl = p;
+        this._wireBoxDebugClick(box, ps);
+        ps.boxIndex++;
     }
 
     /** @param {any} ps */
@@ -595,6 +604,45 @@ class GameMessage extends HTMLElement {
         this._boxesEl?.appendChild(box);
         ps.dialogueTextEl = txt;
         ps.firstDialogueRendered = true;
+        this._wireBoxDebugClick(box, ps);
+        ps.boxIndex++;
+    }
+
+    /**
+     * Attach a click handler to a box that opens the debug-message dialog
+     * when the `debug` attribute is true.
+     * @param {HTMLElement} box
+     * @param {any} ps
+     */
+    _wireBoxDebugClick(box, ps) {
+        const boxIndex = ps.boxIndex;
+        box.addEventListener('click', () => {
+            if (!ps.debug) return;
+            const gid = this.dataset.gid || this.getAttribute('data-gid') || '';
+            const dialog = document.createElement('app-dialog');
+            dialog.setAttribute('dialog-title', `Message debug — box ${boxIndex}`);
+            dialog.setAttribute('confirmation', 'true');
+            dialog.setAttribute('confirm-text', 'Close');
+            dialog.setAttribute('cancel-text-disable', 'true');
+            dialog.setAttribute('extra-z-index', '100');
+            dialog.setAttribute("large", "true");
+            dialog.setAttribute("pre-expand", "true");
+
+            const panel = document.createElement('app-debug-message');
+            panel.setAttribute('gid', gid);
+            panel.setAttribute('sender-name', ps.senderName || '');
+            panel.setAttribute('index', String(boxIndex));
+            dialog.appendChild(panel);
+
+            dialog.addEventListener('confirm', () => {
+                if (dialog.parentNode) dialog.parentNode.removeChild(dialog);
+            });
+            dialog.addEventListener('cancel', () => {
+                if (dialog.parentNode) dialog.parentNode.removeChild(dialog);
+            });
+
+            document.body.appendChild(dialog);
+        });
     }
 }
 

@@ -349,6 +349,13 @@ export class EngineWorkerClient {
      */
     getDebugInfoForCharacter(args) { return this.#call("getDebugInfoForCharacter", args); }
 
+    /**
+     * 
+     * @param {{ message__debug_id: string }} args 
+     * @returns {Promise<{info: string}>} The debug info for the message
+     */
+    getDebugInfoForMessage(args) { return this.#call("getDebugInfoForMessage", args); }
+
     // ── Lifecycle ───────────────────────────────────────────────────
 
     terminate() {

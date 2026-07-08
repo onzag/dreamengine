@@ -381,6 +381,7 @@ export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
      *   stateInjections: string[],
      *   visibleEnviroment: string,
      *   narrativeEffects: string[],
+     *   followingAction?: string|null,
      *   grammar: string|null,
      *   narration: boolean,
      *   primaryEmotion: string,
@@ -405,25 +406,22 @@ export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
 
         let systemPrompt = replaceMultipleNewLines(system + visibleEnviroment).trim();
 
-        let userPrompt = replaceMultipleNewLines(`
+        const nextMessageMustBeInform = "\n# Write the next message like this\n\n" + (
+            options.narration ?
+            `Write the next passage as third-person narration, the way an outside narrator describes a scene in a novel. Keep everyone, including ${character.name}, in the third person, referred to by name or as he, she, or they. Describe ${character.name}'s actions, feelings, and surroundings as an observer who is watching the scene from outside of it.` :
+            `Write only the words ${character.name} actually says out loud right now: a single spoken line, in ${character.name}'s own voice, exactly as the words would read between quotation marks. Give the spoken words on their own, with no narration of actions, movements, or thoughts.`
+        );
+
+        const continuationRequestPrompt = replaceMultipleNewLines(`
 ${stateInjections.length > 0 ? `# ${character.name}'s Current States:\n\n${stateInjections.join("\n\n")}` : ""}
 
-${narrativeEffects.length ? "# When narrating ensure that:\n\n" + narrativeEffects.map(effect => `- ${effect}`).join("\n") : ""}
+${narrativeEffects.length ? "# When narrating ENSURE that:\n\n" + narrativeEffects.map(effect => `- ${effect}`).join("\n") : ""}
 
-RULE: Use a movie script style format for the story, with character names followed by a colon, and their dialogue or actions following.
-RULE: Spoken dialogue should be done in first person, and start with the character name followed by a colon eg. \`${character.name}: This is spoken dialogue.\`
-RULE: Narration messages are plain without specifying a speaker and written, and in third person eg. \`As ${character.name} hears this...\` written on their own line.
+${options.followingAction ? `# IMPORTANT:\n\n${options.followingAction}\n` : ""}
 
-# Narration and Dialogue Examples:
-\`\`\`
-This is narration
-
-${character.name}: This is spoken dialogue - this is also narration - this is spoken dialogue
-
-This is narration
-\`\`\`
-        `).trim();
-        let assistantPromptTrail = "";
+${nextMessageMustBeInform}
+`
+).trim() + "\n";
 
         let tokensExhaustedApprox = 512; // initial buffer
         let contextWindowSize = this.contextWindowSize
@@ -435,7 +433,7 @@ This is narration
             throw new Error("System prompt is too long for the model's context window");
         }
 
-        tokensExhaustedApprox += await this.countTokens(userPrompt);
+        tokensExhaustedApprox += await this.countTokens(continuationRequestPrompt);
 
         if (tokensExhaustedApprox >= contextWindowSize) {
             throw new Error("User prompt is too long for the model's context window");
@@ -457,27 +455,21 @@ This is narration
             tokensInStorySoFar += messageTokens;
         }
 
-        storySoFar = replaceMultipleNewLines(storySoFar).trim();
-
         if (!storySoFar) {
             throw new Error("There is no story so far to provide as context, at least one message must be provided");
         }
 
-        userPrompt = `# Story to continue:\n\n${storySoFar}\n\n${userPrompt}`;
+        if (messagesTrail.length > 0) {
+            storySoFar += "\n\n" + messagesTrail.join("\n\n");
+        }
+
+        storySoFar = replaceMultipleNewLines(storySoFar).trim();
+
+        const storyUserPrompt = `# Story to continue:\n\n${storySoFar}\n\n`;
 
         tokensExhaustedApprox += tokensInStorySoFar;
 
-        assistantPromptTrail = `# Continuing the story as ${character.name}:\n\n${getLastParagraphChunkOf(storySoFar)}\n\n`;
-
-        if (messagesTrail.length > 0) {
-            assistantPromptTrail += messagesTrail.join("\n\n") + "\n\n";
-        }
-
-        const nextMessageMustBeInform = "# IMPORTANT\n\n" + (
-            options.narration ?
-            "The next message must be a narration message, and not a dialogue message. The narration must be in 3rd person. Never use `You` or `I` in the narration" :
-            "The next message must be a dialogue message."
-        );
+        const assistantPromptTrail = `# ${options.narration ? "Continuing the story with narrative 3rd person paragraph" : `Continuing the story with spoken dialogue of ${character.name}`}:\n\n${getLastParagraphChunkOf(storySoFar)}\n\n`;
 
         /**
          * @type {import('./base.js').DEServerPayload}
@@ -490,7 +482,7 @@ This is narration
                 },
                 {
                     role: "user",
-                    content: userPrompt + nextMessageMustBeInform,
+                    content: storyUserPrompt + continuationRequestPrompt,
                 }
             ],
             trail: assistantPromptTrail,
@@ -962,10 +954,13 @@ Adopt a \`show, don't tell\` manner, similar to Terry Pratchett's style, blendin
 
 # Rules:
 ${otherInteractingCharacters.map(name => `Rule: Never speak for or control ${name}'s actions, thoughts, or feelings.`).join("\n")}
-Rule: Avoid suggesting or implying reactions or decisions from other characters
-Rule: Reflect on the potential consequences of ${character.name} actions and decisions.
-Rule: Write all narration and actions in third person, not first person.
-Rule: Spoken dialogue should be done in first person.${characterRules.length ? `
+RULE: Avoid suggesting or implying reactions or decisions from other characters
+RULE: Reflect on the potential consequences of ${character.name} actions and decisions.
+RULE: Write all narration and actions in third person, not first person.
+RULE: Spoken dialogue should be done in first person.
+RULE: Use a movie script style format for the story, with character names followed by a colon, and their dialogue or actions following.
+RULE: Spoken dialogue should be done in first person, and start with the character name followed by a colon eg. \`${character.name}: This is spoken dialogue.\`
+RULE: Narration messages are plain without specifying a speaker and written, and in third person eg. \`As ${character.name} hears this...\` written on their own line.${characterRules.length ? `
 
 # Character Rules:
 ${characterRules.map(rule => `Rule: ${rule}`).join("\n")}
@@ -979,6 +974,16 @@ ${worldRules.map(rule => `Rule: ${rule}`).join("\n")}
 
 # Roleplay Context:
 You are currently roleplaying as ${character.name}.
+
+# Narration and Dialogue Examples:
+\`\`\`
+This is narration
+
+${character.name}: This is spoken dialogue - this is also narration - this is spoken dialogue
+
+This is narration
+\`\`\`
+        
 
 ${this.buildSystemCharacterDescription(character, { description, externalDescription, relationships, expressiveStates, scenario, lore })}
 `

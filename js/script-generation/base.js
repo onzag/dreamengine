@@ -374,7 +374,7 @@ function replaceCharNameWithChar(str, charName) {
  *   {{char.x}}      → ${info.char.x}
  *   {{other}}       → ${info.other.name}
  *   {{other.x}}     → ${info.other.x}
- *   {{chars}}       → ${DE.utils.templateUtils.formatAnd(DE, info.chars.map((c) => c.name))}
+ *   {{chars}}       → ${DE.utils.formatAnd(DE, info.chars.map((c) => c.name))}
  *   anything else   → ${"???"}
  *
  * Escapes existing backticks and $ signs so the result is safe
@@ -392,7 +392,7 @@ export function toTemplateLiteral(str, charName) {
         if (key.startsWith('char.')) return '${info.' + key + '}';
         if (key === 'other') return '${info.other.name}';
         if (key.startsWith('other.')) return '${info.' + key + '}';
-        if (key === 'chars') return '${DE.utils.templateUtils.formatAnd(DE, info.chars.map((c) => c.name))}';
+        if (key === 'chars') return '${DE.utils.formatAnd(DE, info.chars.map((c) => c.name))}';
         if (key === 'other_family_relation') return '${info.otherFamilyRelation}';
         if (key === 'other_relationship') return '${info.otherRelationship}';
         return '${"???"}';
@@ -407,7 +407,7 @@ export function toTemplateLiteral(str, charName) {
  *   {{char.x}}      → ${info.char.x}
  *   {{other}}       → ${info.other.name}
  *   {{other.x}}     → ${info.other.x}
- *   {{chars}}       → ${DE.utils.templateUtils.formatAnd(DE, info.chars.map((c) => c.name))}
+ *   {{chars}}       → ${DE.utils.formatAnd(DE, info.chars.map((c) => c.name))}
  *   anything else   → ${"???"}
  *
  * Escapes existing backticks and $ signs so the result is safe

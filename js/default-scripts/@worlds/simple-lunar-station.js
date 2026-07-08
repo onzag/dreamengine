@@ -31,7 +31,7 @@ engine.exports = {
                 time: (new Date(2307, 0, 17, 12, 0)).getTime(),
             },
             narration: (info) => {
-                const others = DE.utils.templateUtils.allWorldCharactersButUser();
+                const others = DE.utils.allWorldCharactersButUser();
                 if (!others || others.length === 0) {
                     return `${info.char.name} is a visitor to the Lunar Station, eager to explore this small outpost in space. The entire station is empty and quiet, allowing ${info.char.name} to explore their surroundings in solitude in space.`;
                 }
@@ -40,18 +40,18 @@ engine.exports = {
                 const visitors = others.filter((c) => c.name !== "Dema");
 
                 if (dema && visitors.length === 0) {
-                    return `${info.char.name} is a visitor to the Lunar Station, eager to explore this small outpost in space. The robot Dema, keeper of the station, is currently awaiting ${DE.utils.templateUtils.formatPossessive([info.char.name])} arrival in the common area near the airlock, as Dema is responsible for welcoming visitors and assisting them with their needs during their stay at the station.`;
+                    return `${info.char.name} is a visitor to the Lunar Station, eager to explore this small outpost in space. The robot Dema, keeper of the station, is currently awaiting ${DE.utils.formatPossessive([info.char.name])} arrival in the common area near the airlock, as Dema is responsible for welcoming visitors and assisting them with their needs during their stay at the station.`;
                 }
 
                 if (!dema && visitors.length > 0) {
-                    return `${info.char.name} is a visitor to the Lunar Station, eager to explore this small outpost in space, yet ${DE.utils.templateUtils.formatPronoun([info.char.name])} didn't expect to find ${DE.utils.templateUtils.formatPluralOrSingular(visitors, "other visitors", "another visitor")} here. As it happens, ${DE.utils.templateUtils.formatAnd(visitors.map((n) => n.name))} ${DE.utils.templateUtils.formatVerbToBe(visitors)} also visiting the station at this time, and they find themselves gathered in the common area near the airlock.`;
+                    return `${info.char.name} is a visitor to the Lunar Station, eager to explore this small outpost in space, yet ${DE.utils.formatPronoun([info.char.name])} didn't expect to find ${DE.utils.formatPluralOrSingular(visitors, "other visitors", "another visitor")} here. As it happens, ${DE.utils.formatAnd(visitors.map((n) => n.name))} ${DE.utils.formatVerbToBe(visitors)} also visiting the station at this time, and they find themselves gathered in the common area near the airlock.`;
                 }
 
                 // Dema + other visitors
-                return `${info.char.name} is a visitor to the Lunar Station, eager to explore this small outpost in space. Dema, the station's keeper, is there in the common area near the airlock to welcome ${DE.utils.templateUtils.formatPossessive([info.char.name])} arrival. As it turns out, ${DE.utils.templateUtils.formatAnd(visitors.map((n) => n.name))} ${DE.utils.templateUtils.formatVerbToBe(visitors)} also visiting the station at this time, and they all find themselves gathered together in the common area under Dema's watchful eye.`;
+                return `${info.char.name} is a visitor to the Lunar Station, eager to explore this small outpost in space. Dema, the station's keeper, is there in the common area near the airlock to welcome ${DE.utils.formatPossessive([info.char.name])} arrival. As it turns out, ${DE.utils.formatAnd(visitors.map((n) => n.name))} ${DE.utils.formatVerbToBe(visitors)} also visiting the station at this time, and they all find themselves gathered together in the common area under Dema's watchful eye.`;
             },
             charactersStart: true,
-            engagedCharacters: () => DE.utils.templateUtils.allWorldCharactersButUser(),
+            engagedCharacters: () => DE.utils.allWorldCharactersButUser(),
         });
 
         DE.world.initialScenes.push("Default Scene");

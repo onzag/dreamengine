@@ -347,7 +347,7 @@ export async function talk(engine, character, options) {
         narrativeEffects.push(`'${character.name}' is currently mute`);
     } else {
         if (baseVocabularyLimit?.description) {
-            const description = typeof baseVocabularyLimit.description === "string" ? baseVocabularyLimit.description : await baseVocabularyLimit.description({char: character});
+            const description = typeof baseVocabularyLimit.description === "string" ? baseVocabularyLimit.description : await baseVocabularyLimit.description({ char: character });
             if (description) {
                 narrativeEffects.push(`'${character.name}' vocabulary description: ${description}`);
             }
@@ -551,6 +551,38 @@ export async function talk(engine, character, options) {
     }
 
     const conversationObject = engine.deObject.conversations[charState.conversationId];
+
+    const participantsThatJustStartedTalkingTo = conversationObject.participants.filter((participantName) => {
+        if (participantName === character.name) {
+            return false;
+        }
+
+        return engine.getDEObject().utils.justStartedTalkingToEachOther(character.name, participantName);
+    });
+
+    for (const participantName of conversationObject.participants) {
+        const participantCharacterObject = engine.deObject.characters[participantName];
+
+        const theyJustStartedTalkingToCharacter = participantsThatJustStartedTalkingTo.includes(participantName);
+
+        const isHumanoid = participantCharacterObject.speciesType === "humanoid";
+
+        const isBottomNaked = engine.deObject.utils.isBottomNaked(participantName);
+        const isTopNaked = engine.deObject.utils.isTopNaked(participantName);
+        const isFullyNaked = isBottomNaked && isTopNaked;
+
+        const andIsAStranger = engine.deObject.utils.isStrangerTowards(character.name, participantName);
+        const isAStrangerMessage = andIsAStranger ? `, and ${participantName} is a stranger to ${character.name}` : "";
+
+        if (theyJustStartedTalkingToCharacter) {
+            if (isHumanoid && isFullyNaked) {
+                narrativeEffects.push(`Keep in mind that ${participantName} is currently fully naked${isAStrangerMessage}, and ${character.name} MUST react and point that fact.`);
+            } else if (isHumanoid && isBottomNaked) {
+                narrativeEffects.push(`Keep in mind ${participantName} is currently not wearing any pants or underwear${isAStrangerMessage}, and ${character.name} MUST react and point that fact.`);
+            }
+        }
+    }
+
     conversationObject.messages.push(nextMessage);
 
     await engine.informDEObjectUpdated();
@@ -567,11 +599,15 @@ export async function talk(engine, character, options) {
         let hasYieldDoubleLineHidden = false;
         let hasYieldDoubleLineStandard = false;
 
+        /**
+         * @type {string|null}
+         */
+        let followingAction = null;
         if (nextToGenerateIsSameAsPreviousButNarrativeAction) {
-            trailingMessages.push(`OOC, ${nextToGenerate.narrativeAction}`);
+            followingAction = (`${nextToGenerate.narrativeAction}`);
             console.log("Generating next narrative action: " + nextToGenerate.narrativeAction);
         } else if (nextToGenerate.action) {
-            trailingMessages.push(`OOC, '${character.name} must take the following action next: ${nextToGenerate.action}`);
+            followingAction = (`OOC, '${character.name} must take the following action next: ${nextToGenerate.action}`);
             console.log("Generating next " + nextToGenerate.type + (nextToGenerate.action ? ` with action: ${nextToGenerate.action}` : ""));
         }
 

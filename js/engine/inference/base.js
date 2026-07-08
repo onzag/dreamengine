@@ -77,6 +77,7 @@ export class BaseInferenceAdapter {
      *   stateInjections: string[],
      *   visibleEnviroment: string,
      *   narrativeEffects: string[],
+     *   followingAction?: string|null,
      *   grammar: string|null,
      *   primaryEmotion: string,
      *   narration: boolean,

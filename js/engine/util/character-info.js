@@ -675,7 +675,7 @@ export async function getExternalDescriptionOfCharacter(deObject, characterName,
     }
 
     if (characterState.wearing.length > 0) {
-        finalDescription += " Wearing " + deObject.utils.templateUtils.formatAnd(characterState.wearing.map(item => item.amount >= 2 ? item.amount + " of " + item.description + " (" + getWearableFitment(deObject, item, characterName).fitment + ")" : item.description + " (" + getWearableFitment(deObject, item, characterName).fitment + ")")) + ".";
+        finalDescription += " Wearing " + deObject.utils.formatAnd(characterState.wearing.map(item => item.amount >= 2 ? item.amount + " of " + item.description + " (" + getWearableFitment(deObject, item, characterName).fitment + ")" : item.description + " (" + getWearableFitment(deObject, item, characterName).fitment + ")")) + ".";
     } else {
         finalDescription += " Completely naked, without clothes or accessories.";
     }
@@ -684,7 +684,7 @@ export async function getExternalDescriptionOfCharacter(deObject, characterName,
 
     if (!onlyBasics) {
         if (characterState.carrying.length > 0) {
-            finalDescription += " Carrying " + deObject.utils.templateUtils.formatAnd(characterState.carrying.map(item => item.amount >= 2 ? item.amount + " of " + item.description : item.description)) + ".";
+            finalDescription += " Carrying " + deObject.utils.formatAnd(characterState.carrying.map(item => item.amount >= 2 ? item.amount + " of " + item.description : item.description)) + ".";
         } else {
             finalDescription += " Not carrying any items.";
         }
@@ -695,7 +695,7 @@ export async function getExternalDescriptionOfCharacter(deObject, characterName,
 
         const carriedCharacters = getListOfCarriedCharactersByCharacter(deObject, characterName);
         if (carriedCharacters.length > 0) {
-            finalDescription += ` Carrying characters: ` + deObject.utils.templateUtils.formatAnd(carriedCharacters.map((v) => v.carriedName)) + ".";
+            finalDescription += ` Carrying characters: ` + deObject.utils.formatAnd(carriedCharacters.map((v) => v.carriedName)) + ".";
         }
     }
 
@@ -904,13 +904,13 @@ export async function getCharacterCanSee(deObject, characterName) {
             tags.push(`too big for ${character.name} to carry`);
         } else if (character.carryingCapacityKg < realItemWeight.singularWeight) {
             if (realItemWeight.allCharactersInvolved.length) {
-                tags.push(`too heavy for ${character.name} (contents include ${deObject.utils.templateUtils.formatAnd(realItemWeight.allCharactersInvolved)})`);
+                tags.push(`too heavy for ${character.name} (contents include ${deObject.utils.formatAnd(realItemWeight.allCharactersInvolved)})`);
             } else {
                 tags.push(`too heavy for ${character.name} (due to contents)`);
             }
         } else if (character.carryingCapacityLiters < realItemVolume.singularVolume) {
             if (realItemVolume.allCharactersInvolved.length) {
-                tags.push(`too big for ${character.name} to carry (contents include ${deObject.utils.templateUtils.formatAnd(realItemVolume.allCharactersInvolved)})`);
+                tags.push(`too big for ${character.name} to carry (contents include ${deObject.utils.formatAnd(realItemVolume.allCharactersInvolved)})`);
             } else {
                 tags.push(`too big for ${character.name} to carry (due to contents)`);
             }

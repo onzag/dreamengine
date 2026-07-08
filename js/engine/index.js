@@ -1187,10 +1187,10 @@ export class DEngine {
                     return await this.gameOver();
                 }
 
-                this.informCycleState("info", "Pre-calculating initial states for " + participantName + " and the world...");
+                this.informCycleState("info", "Pre-calculating initial states for " + participant.name + " and the world...");
                 await calculateStateChange(this, participant, lastItemChangesInfo.interactedCharacters);
 
-                this.informCycleState("info", "Pre-calculating initial bonds for " + participantName + "...");
+                this.informCycleState("info", "Pre-calculating initial bonds for " + participant.name + "...");
                 await calculateBondsChangesDueToMessages(this, participant, lastItemChangesInfo.interactedCharacters);
 
                 /**
