@@ -62,7 +62,7 @@ The `voice` field is used to specify how the voice of a character sounds, it sho
 
 The sample should be a wav file.
 
-Format: `voice = {happy: {sample: "voice_happy.wav", prompt: "a soft happy voice"}, sad: {sample: "voice_sad.wav", prompt: "a soft sad voice"}, angry: {sample: "voice_angry.wav", prompt: "a soft angry voice"}, ...}`
+Format: `voice = {emotions: {happy: {sample: "voice_happy.wav", prompt: "a soft happy voice"}, sad: {sample: "voice_sad.wav", prompt: "a soft sad voice"}, angry: {sample: "voice_angry.wav", prompt: "a soft angry voice"}, ...}}, modifiers: {mumbling: {sample: "voice_mumbling.wav", prompt: "a soft mumbling voice"}, whispering: {sample: "voice_whispering.wav", prompt: "a soft whispering voice"}, screaming: {sample: "voice_screaming.wav", prompt: "a screaming voice"}, ...}}`
 
 ### sounds
 

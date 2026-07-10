@@ -1,3 +1,5 @@
+import { info } from "console";
+
 const fss = await importScript("@bond-systems", "full-standard-bond-system");
 
 engine.exports = {
@@ -173,6 +175,23 @@ engine.exports = {
             },
             libido: 0,
             violence: 0,
+            voice: {
+                description: async (info) => `${info.char.name} has a calm and soothing voice, with a metallic and robotic undertone that reflects its robotic nature.`,
+                sounds: [
+                    {
+                        label: "sigh",
+                        replacement: async (info) => `— ${info.char.name} sighs softly —`,
+                    },
+                    {
+                        label: "gasp",
+                        replacement: async (info) => `— ${info.char.name} gasps —`,
+                    },
+                    {
+                        label: "laugh",
+                        replacement: async (info) => `— ${info.char.name} laughs —`,
+                    },
+                ],
+            }
         }, {
             type: "4d_creepy",
             strangerBad_n100_n5: {

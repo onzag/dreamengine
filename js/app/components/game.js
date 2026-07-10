@@ -652,6 +652,7 @@ class GameOverlay extends HTMLElement {
 
                 window.ENGINE_WORKER_CLIENT.onDEObjectUpdated = this.onDEObjectUpdated.bind(this);
                 window.ENGINE_WORKER_CLIENT.onCycleInform = this.onCycleInform.bind(this);
+                window.ENGINE_WORKER_CLIENT.onThinkingInform = this.onThinkingInform.bind(this);
                 window.ENGINE_WORKER_CLIENT.onInferringOverConversationMessage = this.onInferringOverConversationMessage.bind(this);
 
                 await window.ENGINE_WORKER_CLIENT.startScene({ sceneName: selectedScene });
@@ -1524,7 +1525,17 @@ class GameOverlay extends HTMLElement {
      * @param {string} message 
      */
     onCycleInform(level, message) {
-        console.warn(`Cycle inform [${level}]: ${message}`);
+        
+    }
+
+    /**
+     * @param {boolean} thinking 
+     * @param {string | null} characterName
+     */
+    onThinkingInform(thinking, characterName) {
+        // thinking refers on whether the engine is currently thinking and
+        // processing data, if a character name is specified then it means that one character is the one
+        // thinking, otherwise it means that the engine is thinking in general
     }
 
     /**
@@ -1796,7 +1807,7 @@ class GameOverlay extends HTMLElement {
 
         dialog.innerHTML = `
             <p style="margin: 0 0 1.2vh 0;">
-                A character in this world already shares the name ${escapedName}. Please pick a different name to use for this dream.
+                A character in this world already uses the name ${escapedName}. Please pick a different name to use for this dream.
             </p>
             <app-overlay-input
                 id="new-name-input"
@@ -1979,6 +1990,7 @@ class GameOverlay extends HTMLElement {
         document.querySelector('.ambience').style.zIndex = ''; // delete z-index override to restore normal stacking
 
         window.ENGINE_WORKER_CLIENT.onCycleInform = null;
+        window.ENGINE_WORKER_CLIENT.onThinkingInform = null;
         window.ENGINE_WORKER_CLIENT.onInferringOverConversationMessage = null;
         window.ENGINE_WORKER_CLIENT.onDEObjectUpdated = null;
 

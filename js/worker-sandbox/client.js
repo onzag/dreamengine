@@ -28,6 +28,8 @@ export class EngineWorkerClient {
     onDEObjectUpdated = null;
     /** @type {((level: "info" | "warning" | "error", message: string) => void) | null} */
     onCycleInform = null;
+    /** @type {((thinking: boolean, characterName: string | null) => void) | null} */
+    onThinkingInform = null;
     /** @type {((data: any) => void) | null} */
     onInferringOverConversationMessage = null;
     /** @type {((data: {qid: number, questionType: string, question: string, options?: string[], defaultValue?: any}) => void) | null} */
@@ -114,6 +116,9 @@ export class EngineWorkerClient {
                         break;
                     case "cycleInform":
                         this.onCycleInform?.(msg.data.level, msg.data.message);
+                        break;
+                    case "thinkingInform":
+                        this.onThinkingInform?.(msg.data.thinking, msg.data.characterName);
                         break;
                     case "inferringOverConversationMessage":
                         this.onInferringOverConversationMessage?.(msg.data);

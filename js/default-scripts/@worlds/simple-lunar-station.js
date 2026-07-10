@@ -56,6 +56,7 @@ engine.exports = {
 
         DE.world.initialScenes.push("Default Scene");
         DE.world.state.theme = {asset: "luna.mp3", volume: 1.3};
+        DE.world.name = "Simple Lunar Station";
 
         DE.world.lore = "The world is set on a small lunar station orbiting the Moon. The station serves as a research outpost and habitat for astronauts and scientists studying the lunar environment. The station is equipped with life support systems, scientific laboratories, living quarters, and communication facilities. Outside the station, the barren surface of the Moon stretches out, dotted with craters and rocks. The sky above is a pitch-black void, with the Earth hanging in the distance. The silence is absolute, broken only by the faint hum of the station's machinery";
 

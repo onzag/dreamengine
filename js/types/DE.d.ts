@@ -983,7 +983,60 @@ type DEEmotionNames =
     // determination
     "determined" | "serious" | "resolute" | "steadfast" | "persistent" | "confident" | "proud" |
     // cold
-    "cold" | "indifferent" | "detached"
+    "cold" | "indifferent" | "detached";
+
+declare interface DEVoiceSound {
+    /**
+     * The label of the sound, for example "laugh", "scream", "moan", "groan", "grunt", etc...
+     * This is used to identify the sound and to trigger it in the character's actions
+     */
+    label: string;
+    /**
+     * The replacement for the label, for example if the message is "[laughs], I cannot believe what you are saying!" and replacement is "- {{char}} laughs -", it will be converted to eg. "- {{char}} laughs - I cannot believe what you are saying".
+     * if not the replacement is a sort of expressive sound "hahaha, I cannot believe what you are saying!" replacement is "hahaha"
+     * You can use em dashes to express narrative replacement instead of sounds
+     * 
+     * If you want to use dynamically generated values, instead of relying on purely random, use the getRandomSeedFromString and feed it the message source
+     * that way it guarantees future reloads remain consistent with the same message and source
+     */
+    replacement: DEStringTemplateCharOnlyWithMessage;
+}
+
+declare interface DEVoiceMode {
+    /**
+     * The label of the voice mode, for example "whispering", "screaming", "singing", etc...
+     * 
+     * prefer continous tense verbs, as they are more descriptive of the action being performed
+     */
+    label: string;
+}
+
+/**
+ * Normally a character voice will work as following:
+ * 
+ * Character: "Hello, how are you?"
+ * 
+ * The voice description will help to make it something like:
+ * 
+ * Character: "[whispering] Hello, how are you? [cough]"
+ */
+declare interface DEVoiceDescription {
+    /**
+     * The description of how the character sounds
+     * the argument for emotion is passed to the description template, so you can use it to describe how the character sounds when they are happy, sad, angry, etc...
+     */
+    description: DEStringTemplateCharOnlyWithEmotion;
+    /**
+     * The sounds that a character can make
+     */
+    sounds: DEVoiceSound[];
+    /**
+     * voice modes that the voice can take, for example, whispering, screaming, singing, etc... these are used to describe how the character sounds when they are in a specific mode, for example, if the character is whispering, the description template can be "whispering {{char}} says: {{message}}"
+     * do not add normal or natural in this mode and that's assumed these are modifiers that will appear in the LLM created messages from time to time, normal or natural is considered the default
+     * and shouldn't be added to the list of modes
+     */
+    modes: DEVoiceMode[];
+}
 
 // confronted 
 
@@ -1381,6 +1434,13 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
      * TODO add in sysprompt about the character emotional profile
      */
     emotions: Partial<Record<DEEmotionNames, DEEmotionDefinition>>;
+
+    /**
+     * Describes how the character talks
+     * 
+     * TODO implement
+     */
+    voice: DEVoiceDescription;
 
     /**
      * Limit vocabulary to these specific words or grammatical tokens, ensure to double quote strings
@@ -3145,6 +3205,19 @@ declare interface DEStringTemplateInfoCharOnly {
      */
     char: DECompleteCharacterReference,
 }
+declare interface DEStringTemplateInfoCharOnlyWithMessage extends DEStringTemplateInfoCharOnly {
+    /**
+     * The message associated with the template
+     */
+    message: string;
+}
+declare interface DEStringTemplateInfoCharOnlyWithEmotion extends DEStringTemplateInfoCharOnly {
+    /**
+     * The message associated with the template
+     */
+    emotion: DEEmotionNames;
+}
+
 declare interface DEStringTemplateInfoCharAndOther {
     /**
      * Available the character invoking the template
@@ -3202,6 +3275,14 @@ declare interface DEStringTemplateInfoManyChars {
      */
     chars?: DECompleteCharacterReference[],
 }
+
+declare type DEStringTemplateCharOnlyWithMessage = string | ((
+    info: DEStringTemplateInfoCharOnlyWithMessage
+) => Promise<string> | string);
+
+declare type DEStringTemplateCharOnlyWithEmotion = string | ((
+    info: DEStringTemplateInfoCharOnlyWithEmotion
+) => Promise<string> | string);
 
 declare type DEStringTemplateCharOnly = string | ((
     info: DEStringTemplateInfoCharOnly
@@ -3301,6 +3382,10 @@ declare interface DEScene {
 }
 
 declare interface DEWorld {
+    /**
+     * Name of the world
+     */
+    name: string;
     /**
      * The current location ID where the user is located
      * while the user is a character too for optimization reasons this
