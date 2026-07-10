@@ -496,6 +496,14 @@ ${nextMessageMustBeInform}
             grammar: grammar || null,
             primaryEmotion: options.primaryEmotion,
             activeStates: options.activeStates,
+            wordRejection: {
+                rejectedWordsInNarration: ["you", "your", "yours", "yourself", "yourselves", "I", "me", "my", "mine", "myself", "we"],
+                delimiters: ["—"],
+                postRejectedWordInDialogueGrammar: null,
+                postRejectedWordInNarrationGrammar: null,
+                rejectedWordsInDialogue: [],
+                startsInDialogue: !options.narration,
+            },
         };
 
         if (options.__debug_id) {

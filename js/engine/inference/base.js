@@ -1,12 +1,23 @@
 import { DEngine } from "../index.js";
 
 /**
+ * @typedef {Object} WordRejectionSettings
+ * @property {Array<string>} rejectedWordsInNarration - The words to reject in narration.
+ * @property {string | null} postRejectedWordInNarrationGrammar - The grammar to use after a rejected word in narration.
+ * @property {Array<string>} rejectedWordsInDialogue - The words to reject in dialogue.
+ * @property {string | null} postRejectedWordInDialogueGrammar - The grammar to use after a rejected word in dialogue.
+ * @property {Array<string>} delimiters - The delimiters to use for splitting the text into words.
+ * @property {boolean} startsInDialogue - Whether the text starts in dialogue or not.
+ */
+
+/**
  * @typedef {Object} DEServerPayload
  * @property {Array<{role: "system" | "user" | "assistant", content: string}>} messages
  * @property {string} trail
  * @property {number} maxParagraphs
  * @property {number} maxCharacters
  * @property {number} maxSafetyCharacters
+ * @property {WordRejectionSettings} wordRejection
  * @property {Array<string>} stopAfter
  * @property {Array<string>} stopAt
  * @property {string|null} grammar
