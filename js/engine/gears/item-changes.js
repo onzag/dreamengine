@@ -77,7 +77,7 @@ export default async function calculateItemChanges(engine, character) {
         throw new Error("DEngine not initialized");
     } else if (!engine.inferenceAdapter) {
         throw new Error("Inference adapter not set, cannot perform inference");
-    } else if (!engine.userCharacter) {
+    } else if (!engine.deObject.user) {
         throw new Error("User character not set, cannot perform feasibility check for user");
     }
 

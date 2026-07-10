@@ -1307,6 +1307,79 @@
     pointer-events: none;
 }
 
+/* ── Thinking indicator ──────────────────────────────────────────────
+   Fixed-position futuristic loading triangle (top-right) shown while the
+   engine is thinking, plus the per-character "activated" animation applied
+   to a present-character card whose character is currently thinking. */
+.game-thinking-triangle {
+    width: 4.4vh;
+    height: 4.4vh;
+    pointer-events: none;
+    opacity: 0;
+    transform: scale(0.6);
+    transition: opacity 0.35s ease, transform 0.35s ease;
+    filter: drop-shadow(0 0 0.8vh rgba(80, 190, 255, 0.65));
+}
+
+.game-thinking-triangle.visible {
+    opacity: 1;
+    transform: scale(1);
+}
+
+.game-thinking-triangle svg {
+    width: 100%;
+    height: 100%;
+}
+
+.game-thinking-triangle .game-thinking-triangle-path {
+    stroke: url(#game-thinking-gradient);
+    stroke-width: 3.2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.game-present-character.thinking-active {
+    animation: game-thinking-card-pulse 1.6s ease-in-out infinite;
+}
+
+.game-present-character.thinking-active .game-present-character-portrait {
+    position: relative;
+    border-radius: 50%;
+    animation: game-thinking-portrait-glow 1.6s ease-in-out infinite;
+}
+
+.game-present-character.thinking-active .game-present-character-portrait::after {
+    content: "";
+    position: absolute;
+    inset: -0.35vh;
+    border-radius: 50%;
+    padding: 0.35vh;
+    background: conic-gradient(
+        from 0deg,
+        #50beff, #7d5cff, #ff5ce1, #ffc85c, #50ffb0, #50beff
+    );
+    -webkit-mask:
+        linear-gradient(#000 0 0) content-box,
+        linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask:
+        linear-gradient(#000 0 0) content-box,
+        linear-gradient(#000 0 0);
+    mask-composite: exclude;
+    animation: game-thinking-spin 2.2s linear infinite;
+    pointer-events: none;
+}
+
+@keyframes game-thinking-portrait-glow {
+    0%, 100% { box-shadow: 0 0 0.6vh rgba(80, 190, 255, 0.55); }
+    50%      { box-shadow: 0 0 1.6vh rgba(255, 92, 225, 0.75); }
+}
+
+@keyframes game-thinking-card-pulse {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-0.25vh); }
+}
+
 .light-fade-intro-action > .light-fade-intro-continue,
 .light-fade-intro-action > .light-fade-intro-hint {
     grid-area: 1 / 1;

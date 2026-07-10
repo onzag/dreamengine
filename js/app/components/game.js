@@ -40,6 +40,9 @@ class GameOverlay extends HTMLElement {
         /** @type {boolean} */
         this.sidebarOpen = false;
 
+        /** @type {string | null} */
+        this._activeThinkingCharacter = null;
+
         /**
          * @type {Promise<void>}
          */
@@ -1531,11 +1534,62 @@ class GameOverlay extends HTMLElement {
     /**
      * @param {boolean} thinking 
      * @param {string | null} characterName
+     * @param {boolean} noMoreCharactersToTalk
      */
-    onThinkingInform(thinking, characterName) {
+    onThinkingInform(thinking, characterName, noMoreCharactersToTalk) {
         // thinking refers on whether the engine is currently thinking and
         // processing data, if a character name is specified then it means that one character is the one
         // thinking, otherwise it means that the engine is thinking in general
+
+        if (thinking) {
+            // Show the spinning triangle whenever the engine is thinking.
+            this._setThinkingTriangleVisible(true);
+            // Highlight the character currently thinking (if any). Passing a
+            // new name cancels the previous character's animation first.
+            this._setThinkingCharacter(characterName || null);
+        } else {
+            // Thinking finished: stop everything — triangle and any character.
+            this._setThinkingTriangleVisible(false);
+            this._setThinkingCharacter(null);
+        }
+    }
+
+    /**
+     * @param {boolean} visible
+     */
+    _setThinkingTriangleVisible(visible) {
+        const triangle = this.root.querySelector('.game-thinking-triangle');
+        if (!triangle) return;
+        triangle.classList.toggle('visible', visible);
+        triangle.setAttribute('aria-hidden', visible ? 'false' : 'true');
+    }
+
+    /**
+     * Activate the "thinking" animation on the given character's present-card
+     * (matched by its data-char-name in the present-characters bar). Passing a
+     * different name cancels the previously animated character first; passing
+     * null simply clears any current animation.
+     * @param {string | null} characterName
+     */
+    _setThinkingCharacter(characterName) {
+        if (this._activeThinkingCharacter === characterName) return;
+
+        // Cancel the previously activated character (if any).
+        if (this._activeThinkingCharacter) {
+            const prev = this.root.querySelector(
+                `.game-present-character[data-char-name="${CSS.escape(this._activeThinkingCharacter)}"]`
+            );
+            if (prev) prev.classList.remove('thinking-active');
+        }
+
+        this._activeThinkingCharacter = characterName;
+
+        if (characterName) {
+            const card = this.root.querySelector(
+                `.game-present-character[data-char-name="${CSS.escape(characterName)}"]`
+            );
+            if (card) card.classList.add('thinking-active');
+        }
     }
 
     /**
@@ -2200,6 +2254,21 @@ class GameOverlay extends HTMLElement {
                                     </div>
                                     <div class="game-nav-bar-current-location-slot-name">
                                         <!-- populated by updateCurrentLocation() -->
+                                    </div>
+                                    <div class="game-thinking-triangle" aria-hidden="true">
+                                        <svg viewBox="0 0 100 100" aria-hidden="true">
+                                            <defs>
+                                                <linearGradient id="game-thinking-gradient" x1="0" y1="0" x2="1" y2="1">
+                                                    <stop offset="0%" stop-color="#50beff"></stop>
+                                                    <stop offset="50%" stop-color="#7d5cff"></stop>
+                                                    <stop offset="100%" stop-color="#ff5ce1"></stop>
+                                                </linearGradient>
+                                            </defs>
+                                            <svg version="1.1" id="L7" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" viewBox="0 0 100 100" enable-background="new 0 0 100 100" xml:space="preserve"><path class="game-thinking-triangle-path" fill="currentColor" d="M31.6,3.5C5.9,13.6-6.6,42.7,3.5,68.4c10.1,25.7,39.2,38.3,64.9,28.1l-3.1-7.9c-21.3,8.4-45.4-2-53.8-23.3
+                            c-8.4-21.3,2-45.4,23.3-53.8L31.6,3.5z"><animateTransform attributeName="transform" attributeType="XML" type="rotate" dur="2s" from="0 50 50" to="360 50 50" repeatCount="indefinite"></animateTransform></path><path class="game-thinking-triangle-path" fill="currentColor" d="M42.3,39.6c5.7-4.3,13.9-3.1,18.1,2.7c4.3,5.7,3.1,13.9-2.7,18.1l4.1,5.5c8.8-6.5,10.6-19,4.1-27.7
+                            c-6.5-8.8-19-10.6-27.7-4.1L42.3,39.6z"><animateTransform attributeName="transform" attributeType="XML" type="rotate" dur="1s" from="0 50 50" to="-360 50 50" repeatCount="indefinite"></animateTransform></path><path class="game-thinking-triangle-path" fill="currentColor" d="M82,35.7C74.1,18,53.4,10.1,35.7,18S10.1,46.6,18,64.3l7.6-3.4c-6-13.5,0-29.3,13.5-35.3s29.3,0,35.3,13.5
+                            L82,35.7z"><animateTransform attributeName="transform" attributeType="XML" type="rotate" dur="2s" from="0 50 50" to="360 50 50" repeatCount="indefinite"></animateTransform></path></svg>
+                                        </svg>
                                     </div>
                                 </div>
                             </div>

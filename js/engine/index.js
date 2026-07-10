@@ -322,7 +322,7 @@ export class DEngine {
          */
         this.informListeners = [];
         /**
-         * @type {((thinking: boolean, characterName: string | null) => void)[]}
+         * @type {((thinking: boolean, characterName: string | null, noMoreCharactersToTalk: boolean) => void)[]}
          */
         this.thinkingListeners = [];
         /**
@@ -992,7 +992,7 @@ export class DEngine {
         }
 
         try {
-            this.informThinking(true, null);
+            this.informThinking(true, null, false);
 
             try {
                 await this.inferenceAdapter.initialize();
@@ -1202,7 +1202,7 @@ export class DEngine {
                 for (const participantName of randomizedList) {
                     const participant = typeof participantName === "string" ? this.deObject.characters[participantName] : participantName;
                     this.informCycleState("info", "Running all triggers for " + participant.name + "...");
-                    this.informThinking(true, participant.name);
+                    this.informThinking(true, participant.name, false);
                     const triggersResult = await runAllTriggersFor(this, participant, lastItemChangesInfo.interactedCharacters);
 
                     const nextActionsProduced = this.deObject.internalState.NEXT_ACTIONS || [];
@@ -1255,6 +1255,8 @@ export class DEngine {
 
                     await addMessageForStoryMaster(talkResult.addedMessagesForStoryMaster);
 
+                    this.informThinking(true, null, true);
+
                     if (!talkResult.hasDeadEnded) {
                         const worldRulesResult = await testWorldRulesOn(this, participant);
                         await addMessageForStoryMaster(worldRulesResult.addedMessagesForStoryMaster);
@@ -1273,7 +1275,7 @@ export class DEngine {
                 }
             }
 
-            this.informThinking(true, null);
+            this.informThinking(true, null, true);
 
             this.informCycleState("info", "Running all triggers for " + this.deObject.user.name + "...");
             const triggerResults = await runAllTriggersFor(this, this.deObject.characters[this.deObject.user.name], lastItemChangesInfo.interactedCharacters);
@@ -1292,7 +1294,7 @@ export class DEngine {
             delete this.deObject.internalState.GAME_OVER;
 
             if (forcedGameOver) {
-                this.informThinking(false, null);
+                this.informThinking(false, null, true);
                 this.deObject.gameOver = true;
                 return await this.gameOver();
             }
@@ -1312,6 +1314,8 @@ export class DEngine {
              */
             const messageAccum = [];
 
+            this.informThinking(false, null, true);
+
             for (const participantName of expectedParticipants) {
                 this.informCycleState("info", "Pre-calculating posture for " + participantName + "...");
                 const messages = await calculatePostureChange(this, this.deObject.characters[participantName], lastItemChangesInfo.charactersThatMoved);
@@ -1327,11 +1331,11 @@ export class DEngine {
             await this.callFunctionInScripts(allScripts, (script) => `Running onSceneReady for script ${script.scriptKey} at the end of scene ${sceneId}`, "onSceneReady", this.deObject, scene);
 
             this.backupDEObject();
-            this.informThinking(false, null);
+            this.informThinking(false, null, true);
 
             // Game on :)
         } catch (error) {
-            this.informThinking(false, null);
+            this.informThinking(false, null, true);
             console.error("Error during scene initialization:", error);
             throw error;
         }
@@ -1365,11 +1369,12 @@ export class DEngine {
     /**
      * @param {boolean} thinking 
      * @param {string | null} characterName
+     * @param {boolean} noMoreCharactersToTalk
      */
-    informThinking(thinking, characterName) {
+    informThinking(thinking, characterName, noMoreCharactersToTalk) {
         for (const listener of this.thinkingListeners) {
             try {
-                listener(thinking, characterName);
+                listener(thinking, characterName, noMoreCharactersToTalk);
             } catch (e) {
                 console.error("Error in thinking listener:", e);
             }
@@ -1687,14 +1692,14 @@ export class DEngine {
     }
 
     /**
-     * @param {(thinking: boolean, characterName: string | null) => void} listener 
+     * @param {(thinking: boolean, characterName: string | null, noMoreCharactersToTalk: boolean) => void} listener 
      */
     addThinkingListener(listener) {
         this.thinkingListeners.push(listener);
     }
     
     /**
-     * @param {(thinking: boolean, characterName: string | null) => void} listener 
+     * @param {(thinking: boolean, characterName: string | null, noMoreCharactersToTalk: boolean) => void} listener 
      */
     removeThinkingListener(listener) {
         this.thinkingListeners = this.thinkingListeners.filter(l => l !== listener);

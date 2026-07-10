@@ -747,7 +747,7 @@ async function testMessageFeasibilityForce(engine, character) {
         throw new Error("DEngine not initialized");
     } else if (!engine.inferenceAdapter) {
         throw new Error("Inference adapter not set, cannot perform inference");
-    } else if (!engine.userCharacter) {
+    } else if (!engine.deObject.user) {
         throw new Error("User character not set, cannot perform feasibility check for user");
     }
 
@@ -1029,7 +1029,7 @@ export default async function testMessageFeasibilityForCharacter(engine, charact
         throw new Error("DEngine not initialized");
     } else if (!engine.inferenceAdapter) {
         throw new Error("Inference adapter not set, cannot perform inference");
-    } else if (!engine.userCharacter) {
+    } else if (!engine.deObject.user) {
         throw new Error("User character not set, cannot perform feasibility check for user");
     }
 
@@ -1042,7 +1042,7 @@ export default async function testMessageFeasibilityForCharacter(engine, charact
     // this is for users only as a check, because we will deny the message if
     // it was not feasible, eg. they forced a giant dragon to a mountain (which may be impossible if they are weak)
     // we will try to detect such situations and reject the message as infeasible
-    if (character.name === engine.userCharacter.name) {
+    if (character.name === engine.deObject.user.name) {
         const returnValue = await testMessageFeasibilityForce(engine, character);
         if (returnValue) {
             return returnValue;

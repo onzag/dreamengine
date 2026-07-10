@@ -149,8 +149,8 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
     });
 
     // @ts-ignore
-    engine.addThinkingListener((thinking, characterName) => {
-        self.postMessage({ type: "event", event: "thinkingInform", data: { thinking, characterName } });
+    engine.addThinkingListener((thinking, characterName, noMoreCharactersToTalk) => {
+        self.postMessage({ type: "event", event: "thinkingInform", data: { thinking, characterName, noMoreCharactersToTalk } });
     });
 
     // @ts-ignore

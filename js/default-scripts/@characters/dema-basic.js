@@ -1,5 +1,3 @@
-import { info } from "console";
-
 const fss = await importScript("@bond-systems", "full-standard-bond-system");
 
 engine.exports = {
@@ -176,6 +174,11 @@ engine.exports = {
             libido: 0,
             violence: 0,
             voice: {
+                modes: [
+                    {
+                        label: "whispering",
+                    },
+                ],
                 description: async (info) => `${info.char.name} has a calm and soothing voice, with a metallic and robotic undertone that reflects its robotic nature.`,
                 sounds: [
                     {
@@ -201,7 +204,11 @@ engine.exports = {
                     openToAffection: (char, other) => {
                         return ({
                             value: "not",
-                            reason: "Dema does not know " + other.name + " and is a robot, so it is not open to affection from them at this time."
+                            reason: "Dema does not know " + other.name + " and is a robot, so it is not open to affection from them at this time.",
+                            bondChangeEngaged: {
+                                primary: -1,
+                                secondary: 0,
+                            },
                         })
                     },
                     openToAffectionResponses: [],
@@ -209,6 +216,10 @@ engine.exports = {
                         return ({
                             value: "not",
                             reason: "Dema is not open to intimate affection because they are asexual",
+                            bondChangeEngaged: {
+                                primary: -1,
+                                secondary: 0,
+                            },
                         })
                     },
                     openToIntimateAffectionResponses: [],
@@ -216,6 +227,10 @@ engine.exports = {
                         return ({
                             value: "not",
                             reason: "Dema is not open to sex because they are asexual",
+                            bondChangeEngaged: {
+                                primary: -1,
+                                secondary: 0,
+                            },
                         })
                     },
                     openToSexResponses: [],
@@ -240,7 +255,11 @@ engine.exports = {
                     openToAffection: (char, other) => {
                         return ({
                             value: "not",
-                            reason: "Dema does not know " + other.name + " and is a robot, so it is not open to affection from them at this time."
+                            reason: "Dema does not know " + other.name + " and is a robot, so it is not open to affection from them at this time.",
+                            bondChangeEngaged: {
+                                primary: -1,
+                                secondary: 0,
+                            },
                         })
                     },
                     openToAffectionResponses: [],
@@ -248,6 +267,10 @@ engine.exports = {
                         return ({
                             value: "not",
                             reason: "Dema is not open to intimate affection because they are asexual",
+                            bondChangeEngaged: {
+                                primary: -1,
+                                secondary: 0,
+                            },
                         })
                     },
                     openToIntimateAffectionResponses: [],
@@ -255,6 +278,10 @@ engine.exports = {
                         return ({
                             value: "not",
                             reason: "Dema is not open to sex because they are asexual",
+                            bondChangeEngaged: {
+                                primary: -1,
+                                secondary: 0,
+                            },
                         })
                     },
                     openToSexResponses: [],
@@ -279,7 +306,11 @@ engine.exports = {
                     openToAffection: (char, other) => {
                         return ({
                             value: "not",
-                            reason: "Dema does not know " + other.name + " and is a robot, so it is not open to affection from them at this time."
+                            reason: "Dema does not know " + other.name + " and is a robot, so it is not open to affection from them at this time.",
+                            bondChangeEngaged: {
+                                primary: -1,
+                                secondary: 0,
+                            },
                         })
                     },
                     openToAffectionResponses: [],
@@ -287,6 +318,10 @@ engine.exports = {
                         return ({
                             value: "not",
                             reason: "Dema is not open to intimate affection because they are asexual",
+                            bondChangeEngaged: {
+                                primary: -1,
+                                secondary: 0,
+                            },
                         })
                     },
                     openToIntimateAffectionResponses: [],
@@ -294,6 +329,10 @@ engine.exports = {
                         return ({
                             value: "not",
                             reason: "Dema is not open to sex because they are asexual",
+                            bondChangeEngaged: {
+                                primary: -1,
+                                secondary: 0,
+                            },
                         })
                     },
                     openToSexResponses: [],
