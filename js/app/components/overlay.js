@@ -446,6 +446,7 @@ class OverlayInput extends HTMLElement {
                 hasError = true;
                 errorMessage = `Value must be an integer.`;
             }
+            this.dispatchEvent(new CustomEvent('input', { detail: { value }, bubbles: true }));
         } else {
             const minLength = this.getAttribute('input-minlength');
             const maxLength = this.getAttribute('input-maxlength');
@@ -459,11 +460,28 @@ class OverlayInput extends HTMLElement {
                 hasError = true;
                 errorMessage = `Value must be at most ${maxLength} characters long.`;
             }
+            this.dispatchEvent(new CustomEvent('input', { detail: { value }, bubbles: true }));
         }
 
         // @ts-expect-error
         this.root.querySelector('.error-message').innerHTML = errorMessage;
         this.hasError = hasError;
+    }
+
+    /**
+     * 
+     * @param {string} message 
+     */
+    setErrorMessage(message) {
+        // @ts-expect-error
+        this.root.querySelector('.error-message').innerHTML = message;
+        this.hasError = true;
+    }
+
+    clearErrorMessage() {
+        // @ts-expect-error
+        this.root.querySelector('.error-message').innerHTML = '';
+        this.hasError = false;
     }
 
     getValue() {

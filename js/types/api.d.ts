@@ -30,6 +30,9 @@ declare interface DEAPI {
     id: string,
     options?: { deleted?: boolean; moved?: { newNamespace: string; newId: string } }
   ) => void): void;
+
+  saveFile(namespace: string, id: string, saveName: string, saveData: string, saveIndexData?: any): Promise<void>;
+  deleteSaveFile(namespace: string, id: string, saveName: string): Promise<void>;
 }
 
 declare global {

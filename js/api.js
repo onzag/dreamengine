@@ -238,5 +238,33 @@ pre { margin:0; padding:16px; line-height:1.5; white-space:pre-wrap; word-wrap:b
             }
             return true;
         },
+
+        saveFile: async (namespace, id, saveName, saveData, saveIndexData) => {
+            const res = await fetch('/api/save', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ namespace, id, saveName, saveData, saveIndexData }),
+            });
+            if (!res.ok) {
+                let detail = `${res.status} ${res.statusText}`;
+                try { const d = await res.json(); if (d?.error) detail = d.error; } catch { /* */ }
+                throw new Error(`saveFile("${namespace}/${id}/${saveName}") failed: ${detail}`);
+            }
+        },
+        
+        deleteSaveFile: async (namespace, id, saveName) => {
+            const res = await fetch('/api/save/delete', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ namespace, id, saveName }),
+            });
+            if (!res.ok) {
+                let detail = `${res.status} ${res.statusText}`;
+                try { const d = await res.json(); if (d?.error) detail = d.error; } catch { /* */ }
+                throw new Error(`deleteSaveFile("${namespace}/${id}/${saveName}") failed: ${detail}`);
+            }
+        },
     }
 }

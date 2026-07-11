@@ -274,6 +274,11 @@ if (!fs.existsSync(SCRIPT_FOLDER)) {
     fs.mkdirSync(SCRIPT_FOLDER, { recursive: true });
 }
 
+const SAVES_FOLDER = path.join(DREAMENGINE_HOME, 'saves');
+if (!fs.existsSync(SAVES_FOLDER)) {
+    fs.mkdirSync(SAVES_FOLDER, { recursive: true });
+}
+
 // Watch the scripts folder for changes and notify the renderer. The change
 // payload describes the affected script (namespace/id) and whether it was
 // deleted or moved, so renderers can make targeted decisions.
@@ -574,5 +579,75 @@ ipcMain.handle('openInEditor', async (event, filePath, editorCmd) => {
         execFile(editorCmd, [normalizedPath], (err) => {
             if (err) console.error('Failed to open editor:', err);
         });
+    }
+});
+
+ipcMain.handle('saveFile', async (event, namespace, id, saveName, saveData, saveIndexData) => {
+    if (!namespace || !id || !saveName) {
+        throw new Error("Namespace, ID, and save name are required");
+    }
+
+    const savePath = path.join(SAVES_FOLDER, namespace, `${id}`, saveName + ".json");
+    if (fs.existsSync(savePath)) {
+        throw new Error("Save file already exists");
+    }
+
+    fs.mkdirSync(path.dirname(savePath), { recursive: true });
+    fs.writeFileSync(savePath, saveData || ""); // create save file with data or empty
+
+    const saveIndexPath = path.join(SAVES_FOLDER, namespace, `${id}.json`);
+
+    if (!fs.existsSync(saveIndexPath)) {
+        fs.writeFileSync(saveIndexPath, JSON.stringify({saves: [{
+            save: saveName,
+            data: saveIndexData,
+        }] }, null, 4));
+    } else {
+        const indexContent = fs.readFileSync(saveIndexPath, 'utf-8');
+        let indexData;
+        try {
+            indexData = JSON.parse(indexContent);
+        } catch (err) {
+            console.error("Failed to parse save index JSON:", err);
+            indexData = { saves: [] };
+        }
+        if (!Array.isArray(indexData.saves)) {
+            indexData.saves = [];
+        }
+        indexData.saves.push({
+            save: saveName,
+            data: saveIndexData,
+        });
+        fs.writeFileSync(saveIndexPath, JSON.stringify(indexData, null, 4));
+    }
+});
+
+ipcMain.handle('deleteSaveFile', async (event, namespace, id, saveName) => {
+    if (!namespace || !id || !saveName) {
+        throw new Error("Namespace, ID, and save name are required");
+    }
+
+    const savePath = path.join(SAVES_FOLDER, namespace, `${id}`, saveName);
+    if (!fs.existsSync(savePath)) {
+        throw new Error("Save file does not exist");
+    }
+
+    fs.unlinkSync(savePath);
+
+    const saveIndexPath = path.join(SAVES_FOLDER, namespace, `${id}.json`);
+    if (fs.existsSync(saveIndexPath)) {
+        const indexContent = fs.readFileSync(saveIndexPath, 'utf-8');
+        let indexData;
+        try {
+            indexData = JSON.parse(indexContent);
+        } catch (err) {
+            console.error("Failed to parse save index JSON:", err);
+            indexData = { saves: [] };
+        }
+        if (Array.isArray(indexData.saves)) {
+            // @ts-ignore
+            indexData.saves = indexData.saves.filter(save => save.save !== saveName);
+            fs.writeFileSync(saveIndexPath, JSON.stringify(indexData, null, 4));
+        }
     }
 });

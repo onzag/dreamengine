@@ -617,6 +617,92 @@ async function startWebServer(creds) {
         }
     });
 
+    app.post('/api/save', (/** @type {any} */ req, /** @type {any} */ res) => {
+        try {
+            const { namespace, id, saveName, saveData, saveIndexData } = req.body || {};
+            if (!namespace || !id || !saveName) {
+                throw new Error("Namespace, ID, and save name are required");
+            }
+            const savePath = path.join(DREAMENGINE_HOME, 'saves', namespace, `${id}`, saveName + ".json");
+            if (fs.existsSync(savePath)) {
+                throw new Error("Save file already exists");
+            }
+
+            fs.mkdirSync(path.dirname(savePath), { recursive: true });
+            fs.writeFileSync(savePath, saveData || ""); // create save file with data or empty
+
+            const saveIndexPath = path.join(DREAMENGINE_HOME, 'saves', namespace, `${id}.json`);
+
+            if (!fs.existsSync(saveIndexPath)) {
+                fs.writeFileSync(saveIndexPath, JSON.stringify({
+                    saves: [{
+                        save: saveName,
+                        data: saveIndexData,
+                    }]
+                }, null, 4));
+            } else {
+                const indexContent = fs.readFileSync(saveIndexPath, 'utf-8');
+                let indexData;
+                try {
+                    indexData = JSON.parse(indexContent);
+                } catch (err) {
+                    console.error("Failed to parse save index JSON:", err);
+                    indexData = { saves: [] };
+                }
+                if (!Array.isArray(indexData.saves)) {
+                    indexData.saves = [];
+                }
+                indexData.saves.push({
+                    save: saveName,
+                    data: saveIndexData,
+                });
+                fs.writeFileSync(saveIndexPath, JSON.stringify(indexData, null, 4));
+            }
+            res.json({ ok: true });
+        } catch (err) {
+            // @ts-ignore
+            res.status(400).json({ error: err?.message || String(err) });
+        }
+    });
+
+    app.post('/api/save/delete', (/** @type {any} */ req, /** @type {any} */ res) => {
+        try {
+            const { namespace, id, saveName } = req.body || {};
+            if (!namespace || !id || !saveName) {
+                throw new Error("Namespace, ID, and save name are required");
+            }
+
+            const savePath = path.join(DREAMENGINE_HOME, 'saves', namespace, `${id}`, saveName);
+            if (!fs.existsSync(savePath)) {
+                throw new Error("Save file does not exist");
+            }
+
+            fs.unlinkSync(savePath);
+
+            const saveIndexPath = path.join(DREAMENGINE_HOME, 'saves', namespace, `${id}.json`);
+            if (fs.existsSync(saveIndexPath)) {
+                const indexContent = fs.readFileSync(saveIndexPath, 'utf-8');
+                let indexData;
+                try {
+                    indexData = JSON.parse(indexContent);
+                } catch (err) {
+                    console.error("Failed to parse save index JSON:", err);
+                    indexData = { saves: [] };
+                }
+                if (Array.isArray(indexData.saves)) {
+                    // @ts-ignore
+                    indexData.saves = indexData.saves.filter(save => save.save !== saveName);
+                    fs.writeFileSync(saveIndexPath, JSON.stringify(indexData, null, 4));
+                }
+            }
+
+            res.json({ ok: true });
+        } catch (err) {
+            // @ts-ignore
+            res.status(400).json({ error: err?.message || String(err) });
+        }
+    });
+
     // --- Script change notifications via Server-Sent Events ------------------
     // The electron version uses win.webContents.send('scripts-changed').
     // For the web client we stream a `scripts-changed` event over SSE; the

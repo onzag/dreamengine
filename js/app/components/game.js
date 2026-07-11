@@ -81,6 +81,11 @@ class GameOverlay extends HTMLElement {
          * @type {"normal" | "hard" | "easy" | "debug"}
          */
         this.gameDifficulty = "normal";
+
+        /**
+         * @type {string | null}
+         */
+        this.lastSaveName = null;
     }
 
     async connectedCallback() {
@@ -2140,8 +2145,7 @@ class GameOverlay extends HTMLElement {
         // Avoid stacking multiple confirm dialogs.
         if (document.querySelector('app-dialog')) return;
 
-        // TODO implement save functionality and load functionality
-        let saveName = this.getAttribute("save-name");
+        let saveName = this.lastSaveName || this.getAttribute("save-name");
         if (!saveName) {
             const actualUserName = await window.ENGINE_WORKER_CLIENT.queryDEObject({
                 path: ["user", "name"],
@@ -2172,6 +2176,37 @@ class GameOverlay extends HTMLElement {
             ></app-overlay-input>
         `;
 
+        /**
+         * @param {string} nameToCheck
+         */
+        const checkSaveExists = async (nameToCheck) => {
+            const saveNameWithJSON = nameToCheck + ".json";
+            const worldNamespace = this.getAttribute('world-namespace') || '';
+            const worldId = this.getAttribute('world-id') || '';
+
+            const expectedEndPath = window.DREAMENGINE_HOME + "/saves/" + worldNamespace + "/" + worldId + "/" + saveNameWithJSON;
+
+            // run fetch to check if the file exists
+            try {
+                const response = await fetch(expectedEndPath, { method: 'HEAD' });
+                const isFound = response.ok;
+                const overlayInput = dialog.querySelector('app-overlay-input#name-input');
+
+                if (overlayInput) {
+                    if (isFound) {
+                        // @ts-ignore
+                        overlayInput.setErrorMessage('A save with this name already exists. Saving will overwrite it.');
+                    } else {
+                        // @ts-ignore
+                        overlayInput.clearErrorMessage();
+                    }
+                }
+            } catch (error) {
+
+            }
+        };
+        checkSaveExists(saveName);
+
         dialog.addEventListener('confirm', () => {
             playConfirmSound();
             // TODO
@@ -2180,6 +2215,11 @@ class GameOverlay extends HTMLElement {
         dialog.addEventListener('cancel', () => {
             playCancelSound();
             document.body.removeChild(dialog);
+        });
+        dialog.addEventListener('input', async (e) => {
+            // @ts-ignore
+            const value = (e.detail.value || '').trim();
+            checkSaveExists(value);
         });
 
         document.body.appendChild(dialog);

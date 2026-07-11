@@ -300,6 +300,7 @@ export class DEngine {
          *    location: string | null;
          *    worldName: string;
          *    time: DETimeDescription;
+         *    worldScriptId: string;
          * } | null}
          */
         this.deObjectSafeBackupInfo = null;
@@ -593,14 +594,29 @@ export class DEngine {
     backupDEObject() {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
+        } else if (!this.jsEngine) {
+            throw new Error("JS Engine not set, cannot backup DEObject");
         }
 
         this.deObjectSafeBackup = deepCopy(this.deObject);
+        const infoMap = this.jsEngine.getInfoMap();
+        /**
+         * @type {string}
+         */
+        let worldScriptId = "";
+        for (const scriptKey in infoMap) {
+            const scriptInfo = infoMap[scriptKey];
+            if (scriptInfo.type === "world") {
+                worldScriptId = scriptKey;
+                break;
+            }
+        }
         this.deObjectSafeBackupInfo = {
             userName: this.deObject.user.name,
             location: this.deObject.world.currentLocation,
             sceneName: this.deObject.world.selectedScene,
             worldName: this.deObject.world.name,
+            worldScriptId,
             time: { ...this.deObject.currentTime },
         };
     }

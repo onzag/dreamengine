@@ -1,6 +1,7 @@
 import path from 'path';
 import fs from 'fs';
 import { generateScriptRegistryContent } from './map-local-types.js';
+import { fileURLToPath } from 'url';
 
 const fsPromises = fs.promises;
 const localDEPathAtHomeDir = path.join(process.env.HOME || process.env.USERPROFILE || '.', '.dreamengine');
@@ -75,11 +76,15 @@ export default async function build(options = { doNotBuildLocals: false, doNotWr
     console.log('Done.');
 }
 
-const remoteOnly = process.argv.includes('--remote-only');
-build({
-    doNotBuildLocals: remoteOnly,
-    doNotWriteHomeScript: remoteOnly,
-}).catch(err => {
-    console.error('Failed to build types:', err);
-    process.exit(1);
-});
+const isMain = process.argv[1] &&
+    path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));
+if (isMain) {
+    const remoteOnly = process.argv.includes('--remote-only');
+    build({
+        doNotBuildLocals: remoteOnly,
+        doNotWriteHomeScript: remoteOnly,
+    }).catch(err => {
+        console.error('Failed to build types:', err);
+        process.exit(1);
+    });
+}

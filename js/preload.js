@@ -122,5 +122,27 @@ contextBridge.exposeInMainWorld('API', {
      */
     updateScriptFile: (namespace, id, content) => {
         return ipcRenderer.invoke('updateScriptFile', namespace, id, content);
+    },
+
+    /**
+     * @param {string} namespace 
+     * @param {string} id 
+     * @param {string} saveName 
+     * @param {any} saveData 
+     * @param {any} saveIndexData 
+     * @returns {Promise<void>}
+     */
+    saveFile: (namespace, id, saveName, saveData, saveIndexData) => {
+        return ipcRenderer.invoke('saveFile', namespace, id, saveName, saveData, saveIndexData);
+    },
+
+    /**
+     * @param {string} namespace 
+     * @param {string} id 
+     * @param {string} saveName 
+     * @returns {Promise<void>}
+     */
+    deleteSaveFile: (namespace, id, saveName) => {
+        return ipcRenderer.invoke('deleteSaveFile', namespace, id, saveName);
     }
 });

@@ -54,6 +54,10 @@ export async function buildDreamEngineHome() {
     await fsPromises.mkdir(assetsDir, { recursive: true });
     console.log(`Ensured assets/ exists at ${assetsDir}`);
 
+    const savesDir = path.join(localDEPathAtHomeDir, 'saves');
+    await fsPromises.mkdir(savesDir, { recursive: true });
+    console.log(`Ensured saves/ exists at ${savesDir}`);
+
     const configPath = path.join(localDEPathAtHomeDir, 'config.json');
     try {
         await fsPromises.access(configPath);
@@ -85,6 +89,10 @@ export function buildDreamEngineHomeSync() {
     const assetsDir = path.join(localDEPathAtHomeDir, 'assets');
     fs.mkdirSync(assetsDir, { recursive: true });
     console.log(`Ensured assets/ exists at ${assetsDir}`);
+
+    const savesDir = path.join(localDEPathAtHomeDir, 'saves');
+    fs.mkdirSync(savesDir, { recursive: true });
+    console.log(`Ensured saves/ exists at ${savesDir}`);
     
     if (!fs.existsSync(path.join(localDEPathAtHomeDir, 'config.json'))) {
         fs.writeFileSync(path.join(localDEPathAtHomeDir, 'config.json'), JSON.stringify({
