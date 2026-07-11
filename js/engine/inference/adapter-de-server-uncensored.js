@@ -498,7 +498,8 @@ ${nextMessageMustBeInform}
             activeStates: options.activeStates,
             wordRejection: {
                 rejectedWordsInNarration: ["you", "your", "yours", "yourself", "yourselves", "I", "me", "my", "mine", "myself", "we"],
-                delimiters: ["—"],
+                // we stay in narration in case of narration full blocks
+                delimiters: options.narration ? [] : ["—"],
                 postRejectedWordInDialogueGrammar: null,
                 postRejectedWordInNarrationGrammar: null,
                 rejectedWordsInDialogue: [],

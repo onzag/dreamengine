@@ -188,6 +188,12 @@ class GameOverlay extends HTMLElement {
             exitBtn.addEventListener('click', this.onExitClick);
         }
 
+        const saveBtn = this.root.getElementById('save-btn');
+        if (saveBtn) {
+            saveBtn.addEventListener('mouseenter', () => playHoverSound());
+            saveBtn.addEventListener('click', this.onSaveClick);
+        }
+
         const sidebarPortrait = this.root.querySelector('.game-sidebar-portrait');
         if (sidebarPortrait) {
             sidebarPortrait.addEventListener('mouseenter', () => playHoverSound());
@@ -1528,7 +1534,7 @@ class GameOverlay extends HTMLElement {
      * @param {string} message 
      */
     onCycleInform(level, message) {
-        
+
     }
 
     /**
@@ -2130,6 +2136,55 @@ class GameOverlay extends HTMLElement {
         document.body.appendChild(dialog);
     }
 
+    async onSaveClick() {
+        // Avoid stacking multiple confirm dialogs.
+        if (document.querySelector('app-dialog')) return;
+
+        // TODO implement save functionality and load functionality
+        let saveName = this.getAttribute("save-name");
+        if (!saveName) {
+            const actualUserName = await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                path: ["user", "name"],
+            });
+            saveName = await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                path: ["world", "name"],
+            });
+            if (typeof saveName !== 'string' || !saveName) {
+                saveName = this.getAttribute('world-id') || 'unknown-world';
+            }
+
+            saveName += " - " + actualUserName;
+        }
+
+        const dialog = document.createElement('app-dialog');
+        dialog.setAttribute('dialog-title', 'Save Dream');
+        dialog.setAttribute('confirmation', 'true');
+        dialog.setAttribute('confirm-text', 'Save');
+        dialog.setAttribute('cancel-text', 'Cancel');
+        dialog.setAttribute('extra-z-index', '100');
+        dialog.innerHTML = `
+            <app-overlay-input
+                label="Savefile Name"
+                input-placeholder="e.g. my-save"
+                id="name-input"
+                aria-key="n"
+                input-default-value="${escapeHtml(saveName)}"
+            ></app-overlay-input>
+        `;
+
+        dialog.addEventListener('confirm', () => {
+            playConfirmSound();
+            // TODO
+            document.body.removeChild(dialog);
+        });
+        dialog.addEventListener('cancel', () => {
+            playCancelSound();
+            document.body.removeChild(dialog);
+        });
+
+        document.body.appendChild(dialog);
+    }
+
     render() {
         const characterName = this.getAttribute('character-name') || 'Unnamed Dreamer';
         const isSelfInsert = this.getAttribute('is-self-insert') === 'true';
@@ -2205,6 +2260,14 @@ class GameOverlay extends HTMLElement {
                             </div>
                         </div>
                         <div class="game-sidebar-footer">
+                            <button id="save-btn" class="game-sidebar-save" type="button" aria-label="Save Dream">
+                                <svg viewBox="0 0 24 24" width="2.2vh" height="2.2vh" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                                    <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                                    <polyline points="7 3 7 8 15 8"></polyline>
+                                </svg>
+                                <span>Save</span>
+                            </button>
                             <button id="exit-btn" class="game-sidebar-exit" type="button" aria-label="Exit game">
                                 <svg viewBox="0 0 24 24" width="2.2vh" height="2.2vh" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                     <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
