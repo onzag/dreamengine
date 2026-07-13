@@ -338,7 +338,9 @@ class PlayOverlay extends HTMLElement {
     async onContinue() {
         if (!this.canContinue()) return;
         playConfirmSound();
-        if (this.currentStepIndex < STEPS.length - 1) {
+        // When loading a save, skip party/character steps and start immediately.
+        const isLoadingFromSave = this.currentStepIndex === 1 && this.selectedMode === 'load';
+        if (!isLoadingFromSave && this.currentStepIndex < STEPS.length - 1) {
             this.currentStepIndex += 1;
             this.renderStep();
         } else {
@@ -872,14 +874,7 @@ class PlayOverlay extends HTMLElement {
                 </div>
                 <div class="saves-panel hidden">
                     <div class="saves-panel-title">Pick a save</div>
-                    <div class="saves-list">
-                        ${EXAMPLE_SAVES.map(s => `
-                            <div class="save-item" data-save-id="${escapeHTML(s.id)}">
-                                <div class="save-item-name">${escapeHTML(s.name)}</div>
-                                <div class="save-item-meta">${escapeHTML(s.timestamp)}</div>
-                            </div>
-                        `).join('')}
-                    </div>
+                    <div class="saves-list"></div>
                 </div>
                 <div class="stability-panel hidden">
                     <div class="saves-panel-title">Dream Stability</div>
@@ -905,14 +900,59 @@ class PlayOverlay extends HTMLElement {
 
         pane.querySelectorAll('.mode-card').forEach(card => {
             card.addEventListener('mouseenter', playHoverSound);
-            card.addEventListener('click', () => {
+            card.addEventListener('click', async () => {
                 const mode = /** @type {'new' | 'load'} */ (card.getAttribute('data-mode'));
                 this.selectedMode = mode;
                 pane.querySelectorAll('.mode-card').forEach(c => c.classList.remove('selected'));
                 card.classList.add('selected');
                 if (mode === 'load') {
+                    const savesList = savesPanel?.querySelector('.saves-list');
+                    if (savesList) savesList.innerHTML = `<div class="world-loading">Loading saves…</div>`;
                     savesPanel?.classList.remove('hidden');
                     stabilityPanel?.classList.add('hidden');
+
+                    try {
+                        const savesResp = await fetch(window.DREAMENGINE_HOME + "/saves/" + this.selectedWorld?.namespace + "/" + this.selectedWorld?.id + ".json");
+                        const savesData = await savesResp.json();
+                        const saves = Array.isArray(savesData?.saves) ? savesData.saves : [];
+
+                        if (savesList) {
+                            if (saves.length === 0) {
+                                savesList.innerHTML = `<div class="placeholder-pane">No saves found for this world.</div>`;
+                            } else {
+                                savesList.innerHTML = saves.map(/** @param {any} s */ s => {
+                                    const metaChips = s.data && typeof s.data === 'object'
+                                        ? Object.entries(s.data).map(([k, v]) =>
+                                            `<span class="save-meta-chip"><span class="save-meta-key">${escapeHTML(String(k))}</span><span class="save-meta-value">${escapeHTML(String(v))}</span></span>`
+                                          ).join('')
+                                        : '';
+                                    return `
+                                        <div class="save-item" data-save-id="${escapeHTML(s.save)}">
+                                            <div class="save-item-name">${escapeHTML(s.save)}</div>
+                                            ${metaChips ? `<div class="save-item-chips">${metaChips}</div>` : ''}
+                                        </div>
+                                    `;
+                                }).join('');
+
+                                savesList.querySelectorAll('.save-item').forEach(item => {
+                                    item.addEventListener('mouseenter', playHoverSound);
+                                    item.addEventListener('click', () => {
+                                        this.selectedSaveId = item.getAttribute('data-save-id');
+                                        savesList.querySelectorAll('.save-item').forEach(s => s.classList.remove('selected'));
+                                        item.classList.add('selected');
+                                        playConfirmSound();
+                                        this.updateFooter();
+                                    });
+                                    if (this.selectedSaveId && item.getAttribute('data-save-id') === this.selectedSaveId) {
+                                        item.classList.add('selected');
+                                    }
+                                });
+                            }
+                        }
+                    } catch (err) {
+                        console.error('Failed to load saves:', err);
+                        if (savesList) savesList.innerHTML = `<div class="placeholder-pane">Failed to load saves.</div>`;
+                    }
                 } else {
                     savesPanel?.classList.add('hidden');
                     stabilityPanel?.classList.remove('hidden');
@@ -935,21 +975,6 @@ class PlayOverlay extends HTMLElement {
                     stabilityPanel?.classList.remove('hidden');
                     this.syncStabilitySelection(pane);
                 }
-            }
-        });
-
-        pane.querySelectorAll('.save-item').forEach(item => {
-            item.addEventListener('mouseenter', playHoverSound);
-            item.addEventListener('click', () => {
-                this.selectedSaveId = item.getAttribute('data-save-id');
-                pane.querySelectorAll('.save-item').forEach(s => s.classList.remove('selected'));
-                item.classList.add('selected');
-                playConfirmSound();
-                this.updateFooter();
-            });
-
-            if (this.selectedSaveId && item.getAttribute('data-save-id') === this.selectedSaveId) {
-                item.classList.add('selected');
             }
         });
 

@@ -488,8 +488,9 @@
 
 .save-item {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.8vh;
     padding: 1.6vh 2.4vh;
     border-radius: 0.8vh;
     background: rgba(0, 0, 0, 0.18);
@@ -520,6 +521,38 @@
     font-size: 1.7vh;
     color: rgba(255, 220, 180, 0.55);
     letter-spacing: 0.05em;
+}
+
+.save-item-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6vh 1vh;
+}
+
+.save-meta-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4vh;
+    padding: 0.3vh 0.9vh;
+    border-radius: 0.5vh;
+    background: rgba(255, 184, 122, 0.1);
+    border: 1px solid rgba(255, 184, 122, 0.25);
+    font-size: 1.5vh;
+}
+
+.save-meta-key {
+    color: rgba(255, 220, 180, 0.55);
+    letter-spacing: 0.04em;
+}
+
+.save-meta-key::after {
+    content: ':';
+    margin-right: 0.3vh;
+}
+
+.save-meta-value {
+    color: #fff1de;
+    letter-spacing: 0.03em;
 }
 
 /* ── Step 3: Characters ── */

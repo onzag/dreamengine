@@ -142,17 +142,19 @@ class GameOverlay extends HTMLElement {
          * @type {Array<{ title: string, subtitle: string, delay?: number }>}
          */
         let introMessages = [];
-        try {
-            const introWorldNamespace = this.getAttribute('world-namespace') || '';
-            const introWorldId = this.getAttribute('world-id') || '';
-            const introInfoMap = await window.ENGINE_WORKER_CLIENT.jsEngineGetInfoMapForScripts({
-                scripts: [{ namespace: introWorldNamespace, id: introWorldId }],
-            });
-            const introWorldInfo = introInfoMap?.[`${introWorldNamespace}/${introWorldId}`];
-            const intro = introWorldInfo?.metadata?.intro;
-            if (Array.isArray(intro)) introMessages = intro;
-        } catch (error) {
-            console.error('Failed to load world intro messages:', error);
+        if (!this.getAttribute("save-id")) {
+            try {
+                const introWorldNamespace = this.getAttribute('world-namespace') || '';
+                const introWorldId = this.getAttribute('world-id') || '';
+                const introInfoMap = await window.ENGINE_WORKER_CLIENT.jsEngineGetInfoMapForScripts({
+                    scripts: [{ namespace: introWorldNamespace, id: introWorldId }],
+                });
+                const introWorldInfo = introInfoMap?.[`${introWorldNamespace}/${introWorldId}`];
+                const intro = introWorldInfo?.metadata?.intro;
+                if (Array.isArray(intro)) introMessages = intro;
+            } catch (error) {
+                console.error('Failed to load world intro messages:', error);
+            }
         }
 
         const lightFade = /** @type {HTMLElement | null} */ (this.root.querySelector('.light-fade'));
@@ -437,6 +439,7 @@ class GameOverlay extends HTMLElement {
         });
     }
 
+    // TODO handle loading from save
     async prepareGame(comeFromConflictError = false, newName = null) {
         try {
             this.gameDifficulty = (await window.API.getConfigValue("difficulty") || "normal").toLowerCase();
@@ -2242,9 +2245,9 @@ class GameOverlay extends HTMLElement {
             if (!saveFileName) return;
 
             const saveFileNameText = /** @type {any} */ (saveFileName).getValue?.() || '';
-            
+
             const saveStateInfo = await window.ENGINE_WORKER_CLIENT.getLastSafeState();
-            
+
             const currentlyInteractingCharacters = (await window.ENGINE_WORKER_CLIENT.queryDEObject({
                 path: ["utils", "getCurrentlyInteractingCharacters"],
                 call: [saveStateInfo.user.name],
@@ -2275,7 +2278,7 @@ class GameOverlay extends HTMLElement {
                 day: 'numeric',
                 year: 'numeric',
             });
-            
+
             /**
              * @type {Record<string, string>}
              */
@@ -2283,6 +2286,7 @@ class GameOverlay extends HTMLElement {
                 "Dreamer": saveStateInfo.user.name,
                 "Scene": saveStateInfo.world.selectedScene || "No Selected Scene",
                 "Created At": formattedCreatedAt,
+                "World": saveStateInfo.world.name || "Unnamed World",
             };
 
             if (andFormatted) {
