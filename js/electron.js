@@ -588,9 +588,6 @@ ipcMain.handle('saveFile', async (event, namespace, id, saveName, saveData, save
     }
 
     const savePath = path.join(SAVES_FOLDER, namespace, `${id}`, saveName + ".json");
-    if (fs.existsSync(savePath)) {
-        throw new Error("Save file already exists");
-    }
 
     fs.mkdirSync(path.dirname(savePath), { recursive: true });
     fs.writeFileSync(savePath, saveData || ""); // create save file with data or empty
@@ -614,10 +611,23 @@ ipcMain.handle('saveFile', async (event, namespace, id, saveName, saveData, save
         if (!Array.isArray(indexData.saves)) {
             indexData.saves = [];
         }
-        indexData.saves.push({
-            save: saveName,
-            data: saveIndexData,
-        });
+        // @ts-ignore
+        const alreadyExists = indexData.saves.some(save => save.save === saveName);
+        if (alreadyExists) {
+            // Update existing save entry
+            // @ts-ignore
+            indexData.saves = indexData.saves.map(save => {
+                if (save.save === saveName) {
+                    return { save: saveName, data: saveIndexData };
+                }
+                return save;
+            });
+        } else {
+            indexData.saves.push({
+                save: saveName,
+                data: saveIndexData,
+            });
+        }
         fs.writeFileSync(saveIndexPath, JSON.stringify(indexData, null, 4));
     }
 });

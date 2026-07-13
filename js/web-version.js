@@ -624,9 +624,6 @@ async function startWebServer(creds) {
                 throw new Error("Namespace, ID, and save name are required");
             }
             const savePath = path.join(DREAMENGINE_HOME, 'saves', namespace, `${id}`, saveName + ".json");
-            if (fs.existsSync(savePath)) {
-                throw new Error("Save file already exists");
-            }
 
             fs.mkdirSync(path.dirname(savePath), { recursive: true });
             fs.writeFileSync(savePath, saveData || ""); // create save file with data or empty
@@ -652,10 +649,23 @@ async function startWebServer(creds) {
                 if (!Array.isArray(indexData.saves)) {
                     indexData.saves = [];
                 }
-                indexData.saves.push({
-                    save: saveName,
-                    data: saveIndexData,
-                });
+                // @ts-ignore
+                const alreadyExists = indexData.saves.some(save => save.save === saveName);
+                if (alreadyExists) {
+                    // Update existing save entry
+                    // @ts-ignore
+                    indexData.saves = indexData.saves.map(save => {
+                        if (save.save === saveName) {
+                            return { save: saveName, data: saveIndexData };
+                        }
+                        return save;
+                    });
+                } else {
+                    indexData.saves.push({
+                        save: saveName,
+                        data: saveIndexData,
+                    });
+                }
                 fs.writeFileSync(saveIndexPath, JSON.stringify(indexData, null, 4));
             }
             res.json({ ok: true });

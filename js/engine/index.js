@@ -255,17 +255,6 @@ export class DEngine {
          * @type {DEObject | null}
          */
         this.deObjectSafeBackup = null;
-        /**
-         * @type {{
-         *    userName: string;
-         *    sceneName: string | null;
-         *    location: string | null;
-         *    worldName: string;
-         *    time: DETimeDescription;
-         *    worldScriptId: string;
-         * } | null}
-         */
-        this.deObjectSafeBackupInfo = null;
 
         this.executingCycle = false;
 
@@ -334,6 +323,7 @@ export class DEngine {
         }
         // TODO implement deliberate low stability effects
         this.deObject.stability = stability;
+        this.backupDEObject();
     }
 
     getDEObject() {
@@ -360,6 +350,7 @@ export class DEngine {
             throw new Error("DEngine not initialized");
         }
         this.deObject.characters[this.deObject.user.name].schizophrenia = 1;
+        this.backupDEObject();
     }
 
     /**
@@ -425,12 +416,13 @@ export class DEngine {
             await this.callFunctionInScripts(allScripts, (script) => `Running onWorldClockReady for script ${script.scriptKey}`, "onWorldClockReady", this.deObject);
         }
 
+        this.backupDEObject();
         this.initialized = true;
     }
 
     getLastSafeState() {
         if (!this.deObjectSafeBackup) {
-            throw new Error("DEngine not initialized");
+            throw new Error("DEngine safe state not found");
         } else if (!this.jsEngine) {
             throw new Error("JS Engine not set, cannot get last safe state");
         }
@@ -525,7 +517,6 @@ export class DEngine {
 
         this.deObject = null;
         this.deObjectSafeBackup = null;
-        this.deObjectSafeBackupInfo = null;
         this.initialized = false;
         this.disabledWorldRules = false;
         this.engineScriptInfo = {
@@ -565,26 +556,6 @@ export class DEngine {
         }
 
         this.deObjectSafeBackup = deepCopy(this.deObject);
-        const infoMap = this.jsEngine.getInfoMap();
-        /**
-         * @type {string}
-         */
-        let worldScriptId = "";
-        for (const scriptKey in infoMap) {
-            const scriptInfo = infoMap[scriptKey];
-            if (scriptInfo.type === "world") {
-                worldScriptId = scriptKey;
-                break;
-            }
-        }
-        this.deObjectSafeBackupInfo = {
-            userName: this.deObject.user.name,
-            location: this.deObject.world.currentLocation,
-            sceneName: this.deObject.world.selectedScene,
-            worldName: this.deObject.world.name,
-            worldScriptId,
-            time: { ...this.deObject.currentTime },
-        };
     }
 
     /**

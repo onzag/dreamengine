@@ -182,7 +182,7 @@ export class EngineWorkerClient {
     assumeCharacterIdentity(args) { return this.#call("assumeCharacterIdentity", args); }
     /** @param {{ characterName: string }} args */
     addCharacterToParty(args) { return this.#call("addCharacterToParty", args); }
-    /** @param {{ json: string }} args */
+    /** @param {{ json: * }} args */
     initializeFromJSONState(args) { return this.#call("initializeFromJSONState", args); }
     /** @param {{ commandText: string }} args */
     executeCommand(args) { return this.#call("executeCommand", args); }

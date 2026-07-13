@@ -950,8 +950,7 @@ class PlayOverlay extends HTMLElement {
                             }
                         }
                     } catch (err) {
-                        console.error('Failed to load saves:', err);
-                        if (savesList) savesList.innerHTML = `<div class="placeholder-pane">Failed to load saves.</div>`;
+                        if (savesList) savesList.innerHTML = `<div class="placeholder-pane">No save files found</div>`;
                     }
                 } else {
                     savesPanel?.classList.add('hidden');
