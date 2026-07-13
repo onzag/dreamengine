@@ -3,6 +3,7 @@ import './world-image.js';
 import './dialog.js';
 import './game-messages/message.js';
 import './debug/debug-character.js';
+import './game/cycle-inform.js';
 
 /**
  * The main in-dream game UI. Renders a transition ("falling asleep" white
@@ -88,6 +89,7 @@ class GameOverlay extends HTMLElement {
         this.lastSaveName = null;
 
         this.onSaveClick = this.onSaveClick.bind(this);
+        this.onF5Keydown = this.onF5Keydown.bind(this);
         this.onCharacterUpdateUI = this.onCharacterUpdateUI.bind(this);
         this.onCycleInform = this.onCycleInform.bind(this);
         this.onThinkingInform = this.onThinkingInform.bind(this);
@@ -206,6 +208,8 @@ class GameOverlay extends HTMLElement {
             saveBtn.addEventListener('mouseenter', () => playHoverSound());
             saveBtn.addEventListener('click', this.onSaveClick);
         }
+        
+        document.addEventListener('keydown', this.onF5Keydown);
 
         const sidebarPortrait = this.root.querySelector('.game-sidebar-portrait');
         if (sidebarPortrait) {
@@ -1567,7 +1571,10 @@ class GameOverlay extends HTMLElement {
      * @param {string} message 
      */
     onCycleInform(level, message) {
-
+        const el = /** @type {any} */ (this.root.querySelector('.game-cycle-inform'));
+        if (el && typeof el.addMessage === 'function') {
+            el.addMessage(level, message);
+        }
     }
 
     /**
@@ -2108,6 +2115,7 @@ class GameOverlay extends HTMLElement {
         window.ENGINE_WORKER_CLIENT.onDEObjectUpdated = null;
 
         this.stopEngine();
+        document.removeEventListener('keydown', this.onF5Keydown);
 
         await stopAllAmbiencesAndStartNewOne([{ src: './sounds/dream-ambience.mp3', volume: 3 }], 1000, 1000);
     }
@@ -2130,8 +2138,9 @@ class GameOverlay extends HTMLElement {
         }
     }
 
-    onToggleSidebar() {
-        playConfirmSound();
+
+    onToggleSidebar(silent = false) {
+        if (!silent) playConfirmSound();
         this.sidebarOpen = !this.sidebarOpen;
         const stage = this.root.querySelector('.game-stage');
         const toggle = this.root.getElementById('sidebar-toggle');
@@ -2189,6 +2198,17 @@ class GameOverlay extends HTMLElement {
         document.body.appendChild(dialog);
     }
 
+    /**
+     * 
+     * @param {KeyboardEvent} e
+     */
+    onF5Keydown(e) {
+        if (e.key === 'F5') {
+            e.preventDefault();
+            this.onSaveClick();
+        }
+    }
+
     async onSaveClick() {
         // Avoid stacking multiple confirm dialogs.
         if (document.querySelector('app-dialog')) return;
@@ -2196,6 +2216,10 @@ class GameOverlay extends HTMLElement {
         const worldNamespace = this.getAttribute('world-namespace') || '';
         const worldId = this.getAttribute('world-id') || '';
 
+        /**
+         * @type {string}
+         */
+        // @ts-ignore
         let saveName = this.lastSaveName || this.getAttribute("save-id");
         let saveNameIsEstablished = true;
         if (!saveName) {
@@ -2260,6 +2284,7 @@ class GameOverlay extends HTMLElement {
             }
         }
 
+        
         dialog.innerHTML = `
             <app-overlay-input
                 label="Savefile Name"
@@ -2271,6 +2296,7 @@ class GameOverlay extends HTMLElement {
         `;
 
         if (saveNameIsEstablished) {
+            // @ts-ignore
             checkSaveExistWithHTMLUpdate(saveName);
         }
 
@@ -2332,13 +2358,23 @@ class GameOverlay extends HTMLElement {
             }
 
             // add some extra stuff
-            saveStateInfo.__self_insert = this.getAttribute('is-self-insert') === 'true';
-            saveStateInfo.__voice_name = this.getAttribute('voice-name') || '';
-
-            await window.API.saveFile(worldNamespace, worldId, saveFileNameText, JSON.stringify(saveStateInfo), metadataIndex);
-            this.lastSaveName = saveFileNameText;
+            saveStateInfo.__self_insert = this.saveObject.__self_insert || this.getAttribute('is-self-insert') === 'true';
+            saveStateInfo.__voice_name = this.saveObject.__voice_name || this.getAttribute('voice-name') || '';
 
             document.body.removeChild(dialog);
+            if (this.sidebarOpen) {
+                this.onToggleSidebar(true);
+            }
+
+            try {
+                this.onCycleInform("info", "Saving dream...");
+                await window.API.saveFile(worldNamespace, worldId, saveFileNameText, JSON.stringify(saveStateInfo), metadataIndex);
+                this.lastSaveName = saveFileNameText;
+                this.onCycleInform("info", "Dream saved successfully.");
+            } catch (error) {
+                console.error('Failed to save file:', error);
+                this.onCycleInform("error", "Failed to save dream.");
+            }
         });
         dialog.addEventListener('cancel', () => {
             playCancelSound();
@@ -2522,6 +2558,7 @@ class GameOverlay extends HTMLElement {
                             <div class="game-story-content-list">
                             </div>
                         </div>
+                        <app-cycle-inform class="game-cycle-inform"></app-cycle-inform>
                     </div>
 
                     <div class="game-input-bar">

@@ -654,7 +654,6 @@ export async function talk(engine, character, options) {
                     hasHiddenContent = true;
                 } else if (info.type === "text") {
                     generatedMessage += info.content;
-                    nextMessage.content += info.content;
                     const contentToSend = hasStandardContent && !hasYieldDoubleLineStandard ? "\n\n" + info.content : info.content;
                     engine.triggerInferingOverConversationMessage(engine.deObject, {
                         conversationId: charState.conversationId,
