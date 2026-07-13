@@ -187,7 +187,7 @@ class GameOverlay extends HTMLElement {
         const toggleBtn = this.root.getElementById('sidebar-toggle');
         if (toggleBtn) {
             toggleBtn.addEventListener('mouseenter', () => playHoverSound());
-            toggleBtn.addEventListener('click', this.onToggleSidebar);
+            toggleBtn.addEventListener('click', this.onToggleSidebar.bind(this, false));
         }
 
         const submitBtn = this.root.getElementById('submit-btn');
@@ -677,6 +677,13 @@ class GameOverlay extends HTMLElement {
             // swell in the moment the dream is revealed rather than waiting on
             // the post-fade buffers this method sits behind.
 
+            const bindMethods = () => {
+                window.ENGINE_WORKER_CLIENT.onDEObjectUpdated = this.onDEObjectUpdated.bind(this);
+                window.ENGINE_WORKER_CLIENT.onCycleInform = this.onCycleInform.bind(this);
+                window.ENGINE_WORKER_CLIENT.onThinkingInform = this.onThinkingInform.bind(this);
+                window.ENGINE_WORKER_CLIENT.onInferringOverConversationMessage = this.onInferringOverConversationMessage.bind(this);
+            };
+
             if (!currentSelectedScene) {
                 const allInitialScenes = await window.ENGINE_WORKER_CLIENT.queryDEObject({
                     path: ["world", "initialScenes"],
@@ -693,14 +700,17 @@ class GameOverlay extends HTMLElement {
 
                 const selectedScene = await this.promptInitialSceneSelection(sceneOptions);
 
-                window.ENGINE_WORKER_CLIENT.onDEObjectUpdated = this.onDEObjectUpdated.bind(this);
-                window.ENGINE_WORKER_CLIENT.onCycleInform = this.onCycleInform.bind(this);
-                window.ENGINE_WORKER_CLIENT.onThinkingInform = this.onThinkingInform.bind(this);
-                window.ENGINE_WORKER_CLIENT.onInferringOverConversationMessage = this.onInferringOverConversationMessage.bind(this);
+                bindMethods();
 
                 await window.ENGINE_WORKER_CLIENT.startScene({ sceneName: selectedScene });
             } else {
+                const background = this.root.querySelector('.game-background');
+                // @ts-ignore
+                const loadingMessage = background.querySelector('.game-background-message');
+                if (loadingMessage) /** @type {HTMLElement} */ (loadingMessage).style.display = 'none';
 
+                bindMethods();
+                this.onDEObjectUpdated();
             }
         } catch (error) {
             // @ts-ignore

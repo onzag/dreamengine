@@ -915,6 +915,7 @@ class PlayOverlay extends HTMLElement {
                         const savesResp = await fetch(window.DREAMENGINE_HOME + "/saves/" + this.selectedWorld?.namespace + "/" + this.selectedWorld?.id + ".json");
                         const savesData = await savesResp.json();
                         const saves = Array.isArray(savesData?.saves) ? savesData.saves : [];
+                        saves.reverse(); // show most recent saves first
 
                         if (savesList) {
                             if (saves.length === 0) {
