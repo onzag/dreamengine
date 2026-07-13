@@ -164,7 +164,7 @@ export class EngineWorkerClient {
      */
     setScriptList(args) { return this.#call("setScriptList", args); }
 
-    getStateAsJSON() { return this.#call("getStateAsJSON"); }
+    getLastSafeState() { return this.#call("getLastSafeState"); }
     /** @param {{ disabled: boolean }} args */
     setWorldRulesDisabled(args) { return this.#call("setWorldRulesDisabled", args); }
     enableSchizophreniaModeForUser() { return this.#call("enableSchizophreniaModeForUser"); }

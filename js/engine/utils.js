@@ -1,4 +1,4 @@
-import { getSurroundingCharacters, getPowerLevelFromCharacter, getRelationship, getExternalDescriptionOfCharacter } from "./util/character-info.js";
+import { getSurroundingCharacters, getPowerLevelFromCharacter, getRelationship, getExternalDescriptionOfCharacter, getCurrentlyInteractingCharacters } from "./util/character-info.js";
 import { generateIntSeedFromString, weightedRandomByLikelihood } from "../util/random.js";
 import { getCharacterVolume, getCharacterWeight } from "./util/weight-and-volume.js";
 
@@ -98,6 +98,10 @@ function getCausantsHelperLocal(DE, character, stateName) {
  * @returns {DEUtils}
  */
 export const deEngineUtilsFn = (DE) => ({
+    getCurrentlyInteractingCharacters(char) {
+        const charRef = typeof char === "string" ? DE.characters[char] : char;
+        return getCurrentlyInteractingCharacters(DE, charRef.name);
+    },
     newGlobalInterest(interest) {
         if (DE.interests[interest.id]) {
             console.warn(`Interest with id ${interest.id} already exists, mixing it.`);
@@ -123,13 +127,7 @@ export const deEngineUtilsFn = (DE) => ({
                 // @ts-ignore
                 currentWeather: null,
                 // @ts-ignore
-                currentWeatherFullEffectDescription: null,
-                // @ts-ignore
                 currentWeatherHasBeenOngoingFor: null,
-                // @ts-ignore
-                currentWeatherNoEffectDescription: null,
-                // @ts-ignore
-                currentWeatherPartialEffectDescription: null,
             }
 
         };
@@ -137,10 +135,7 @@ export const deEngineUtilsFn = (DE) => ({
         const alreadyExistingLocation = DE.world.locations[name];
         if (alreadyExistingLocation) {
             statefulLocation.internalState.currentWeather = alreadyExistingLocation.internalState.currentWeather;
-            statefulLocation.internalState.currentWeatherFullEffectDescription = alreadyExistingLocation.internalState.currentWeatherFullEffectDescription;
             statefulLocation.internalState.currentWeatherHasBeenOngoingFor = alreadyExistingLocation.internalState.currentWeatherHasBeenOngoingFor;
-            statefulLocation.internalState.currentWeatherNoEffectDescription = alreadyExistingLocation.internalState.currentWeatherNoEffectDescription;
-            statefulLocation.internalState.currentWeatherPartialEffectDescription = alreadyExistingLocation.internalState.currentWeatherPartialEffectDescription;
             statefulLocation.state = alreadyExistingLocation.state;
 
             for (const slot in alreadyExistingLocation.slots) {
@@ -164,10 +159,7 @@ export const deEngineUtilsFn = (DE) => ({
             // copy weather from parent
             if (!locationDef.ownWeatherSystem) {
                 statefulLocation.internalState.currentWeather = parentLocation.internalState.currentWeather;
-                statefulLocation.internalState.currentWeatherFullEffectDescription = parentLocation.internalState.currentWeatherFullEffectDescription;
                 statefulLocation.internalState.currentWeatherHasBeenOngoingFor = parentLocation.internalState.currentWeatherHasBeenOngoingFor;
-                statefulLocation.internalState.currentWeatherNoEffectDescription = parentLocation.internalState.currentWeatherNoEffectDescription;
-                statefulLocation.internalState.currentWeatherPartialEffectDescription = parentLocation.internalState.currentWeatherPartialEffectDescription;
             }
         }
 

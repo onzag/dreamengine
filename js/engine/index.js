@@ -16,7 +16,7 @@ import calculateItemChanges from "./gears/item-changes.js";
 import timeForwardsUsingLastMessage, { rerollWorldWeather, timeForwardsToNewTime } from "./gears/time-forwards.js";
 import { talk } from "./gears/talk.js";
 import { millisecondsToTime } from "./util/time.js";
-import { regenerateDEFromSavedDE } from "./util/save-de.js";
+import { regenerateDEFromSavedDE, removeUnnecessaryPropertiesFromDE } from "./util/save-de.js";
 import runAllTriggersFor from "./gears/triggers-run.js";
 
 const INVALID_NAMES = ["system", "assistant", "user", "everyone", "nobody",
@@ -29,8 +29,6 @@ const INVALID_NAMES = ["system", "assistant", "user", "everyone", "nobody",
     "somebody else", "somebodyelse", "nobody else", "nobody", "story master", "storymaster", "story", "master",
     "ooc"];
 
-const ROOT_SKIP_KEYS = new Set(['utils', 'functions']);
-
 /**
  * @typedef {Object} EngineInitializationInfo
  * @property {Array<{
@@ -41,46 +39,10 @@ const ROOT_SKIP_KEYS = new Set(['utils', 'functions']);
  */
 
 /**
- * @param {DEObject} root
- * @returns {(this: any, key: string, value: any) => any}
- */
-function serializationReplacer(root) {
-    // TODO improve this, there are a lot of things that we don't even need
-    // like eg. most things should only really leave the properties behind,
-    // we also should add the world script id or something or all scripts or whatever
-    return function (key, value) {
-        if (this === root && ROOT_SKIP_KEYS.has(key)) return undefined;
-        if (typeof value === 'function') return undefined;
-        return value;
-    };
-}
-
-/**
- * @param {*} obj 
- * @param {*} parent
- * @param {(parent: any, value: any) => Promise<void>} objChecker
- */
-async function checkObjectRecursivelyAsync(parent, obj, objChecker) {
-    if (typeof obj !== "object" || obj === null) {
-        return;
-    }
-    if (Array.isArray(obj)) {
-        for (const item of obj) {
-            await checkObjectRecursivelyAsync(obj, item, objChecker);
-        }
-        return;
-    }
-    await objChecker(parent, obj);
-    for (const key in obj) {
-        await checkObjectRecursivelyAsync(obj, obj[key], objChecker);
-    }
-}
-
-/**
  * @param {DEMinimalCharacterReference} character 
  * @return {DEMinimalCharacterReference}
  */
-function repairPotentialUserWithDefaults(character) {
+export function repairPotentialUserWithDefaults(character) {
     const speciesType = character.speciesType || "humanoid";
     const gender = character.gender || "ambiguous";
     const sex = character.sex || "intersex";
@@ -170,7 +132,7 @@ function minimizeCharacterFromComplete(character) {
  * @param {DEMinimalCharacterReference} user
  * @returns {DECompleteCharacterReference}
  */
-function createCharacterFromUser(user) {
+export function createCharacterFromUser(user) {
     return {
         adventurousness: 0,
         antagonism: 0,
@@ -350,11 +312,6 @@ export class DEngine {
         this.disabledWorldRules = false;
 
         /**
-         * Stability of the simulation
-         */
-        this.stability = 1;
-
-        /**
          * @type {EngineInitializationInfo}
          */
         this.engineScriptInfo = {
@@ -372,8 +329,11 @@ export class DEngine {
      * @param {number} stability 
      */
     setStability(stability) {
+        if (!this.deObject) {
+            throw new Error("DEngine not initialized");
+        }
         // TODO implement deliberate low stability effects
-        this.stability = stability;
+        this.deObject.stability = stability;
     }
 
     getDEObject() {
@@ -439,7 +399,7 @@ export class DEngine {
         this.engineScriptInfo = {
             charactersAdded: [],
         };
-        this.deObject = JSON.parse(deObjectJSON);
+        this.deObject = deObjectJSON;
         if (!this.deObject) {
             throw new Error("Invalid DEObject JSON");
         } else if (!this.jsEngine) {
@@ -468,12 +428,17 @@ export class DEngine {
         this.initialized = true;
     }
 
-    getStateAsJSON() {
-        if (!this.deObject) {
+    getLastSafeState() {
+        if (!this.deObjectSafeBackup) {
             throw new Error("DEngine not initialized");
+        } else if (!this.jsEngine) {
+            throw new Error("JS Engine not set, cannot get last safe state");
         }
 
-        return JSON.stringify(this.deObject, serializationReplacer(this.deObject));
+        const fixed = removeUnnecessaryPropertiesFromDE(this.deObjectSafeBackup);
+        fixed.__scripts = this.jsEngine.scriptOrder;
+
+        return fixed;
     }
 
     /**
@@ -523,7 +488,7 @@ export class DEngine {
             gameOver: false,
             worldRules: {},
             narrationStyle: {
-                maxParagraphs: 5,
+                maxParagraphs: 3,
                 minParagraphs: 2,
                 narrativeBias: 0.2,
             },
@@ -532,6 +497,7 @@ export class DEngine {
             interests: {},
             internalState: {},
             state: {},
+            stability: 0,
             utils:  /** @type {*} */ (/** @type {unknown} */ (null)),
         };
 

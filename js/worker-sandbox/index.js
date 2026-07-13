@@ -201,8 +201,8 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
         },
 
         // ─── DEngine methods ────────────────────────────────────────────
-        async getStateAsJSON() {
-            return engine.getStateAsJSON();
+        async getLastSafeState() {
+            return engine.getLastSafeState();
         },
 
         async setWorldRulesDisabled({ disabled }) {

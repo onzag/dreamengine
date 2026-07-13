@@ -19,10 +19,6 @@ export function rerollLocationWeather(engine, locationName, location, parentLoca
         if (parentLocation) {
             location.internalState.currentWeather = parentLocation.internalState.currentWeather;
             location.internalState.currentWeatherHasBeenOngoingFor = parentLocation.internalState.currentWeatherHasBeenOngoingFor;
-            location.internalState.currentWeatherNoEffectDescription = parentLocation.internalState.currentWeatherNoEffectDescription;
-            location.internalState.currentWeatherPartialEffectDescription = parentLocation.internalState.currentWeatherPartialEffectDescription;
-            location.internalState.currentWeatherFullEffectDescription = parentLocation.internalState.currentWeatherFullEffectDescription;
-            location.internalState.currentWeatherNegativelyExposedDescription = parentLocation.internalState.currentWeatherNegativelyExposedDescription;
 
             // find every children locations and reroll their weather
             if (cascade) {
@@ -65,16 +61,13 @@ export function rerollLocationWeather(engine, locationName, location, parentLoca
             }
             location.internalState.currentWeather = newWeatherSystem.name;
             // TODO this needs to update when we reroll weather
+            // right now it just remains at 0 forever
             location.internalState.currentWeatherHasBeenOngoingFor = {
                 inMinutes: 0,
                 inHours: 0,
                 inDays: 0,
                 inSeconds: 0,
             };
-            location.internalState.currentWeatherNoEffectDescription = newWeatherSystem.noEffectDescription;
-            location.internalState.currentWeatherPartialEffectDescription = newWeatherSystem.partialEffectDescription;
-            location.internalState.currentWeatherFullEffectDescription = newWeatherSystem.fullEffectDescription;
-            location.internalState.currentWeatherNegativelyExposedDescription = newWeatherSystem.negativelyExposedDescription;
 
             // find every children locations and reroll their weather
             if (cascade) {

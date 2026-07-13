@@ -2080,18 +2080,26 @@ export async function whatIsWeatherLikeForCharacter(deObject, characterName) {
     const characterLocationSlot = characterState.locationSlot;
     const location = deObject.world.locations[characterLocation];
     const weatherThere = location.internalState.currentWeather;
+    const weatherSystem = getWeatherSystemForLocationAndWeather(deObject, characterLocation, weatherThere);
+
+    if (!weatherSystem) {
+        console.error(`Weather system "${weatherThere}" not found in location "${characterLocation}".`);
+        return `The current weather where "${characterName}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}".`;
+    }
+
     const isSheltered = await isCharacterShelteredFromWeather(deObject, characterName, weatherThere, characterLocation, characterLocationSlot);
+
     if (isSheltered.fullySheltered) {
-        const noEffectDescription = typeof location.internalState.currentWeatherNoEffectDescription === "string" ? location.internalState.currentWeatherNoEffectDescription : await location.internalState.currentWeatherNoEffectDescription({ char: character });
+        const noEffectDescription = typeof weatherSystem.noEffectDescription === "string" ? weatherSystem.noEffectDescription : await weatherSystem.noEffectDescription({ char: character });
         return `The current weather where "${characterName}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}". However, "${characterName}" is fully sheltered from its effects. ${isSheltered.reason || ""}, therefore ${noEffectDescription || "no weather effects apply to them."}`;
     } else if (isSheltered.partiallySheltered) {
-        const partialEffectDescription = typeof location.internalState.currentWeatherPartialEffectDescription === "string" ? location.internalState.currentWeatherPartialEffectDescription : await location.internalState.currentWeatherPartialEffectDescription({ char: character });
+        const partialEffectDescription = typeof weatherSystem.partialEffectDescription === "string" ? weatherSystem.partialEffectDescription : await weatherSystem.partialEffectDescription({ char: character });
         return `The current weather where "${characterName}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}". "${characterName}" is partially sheltered from its effects. ${isSheltered.reason || ""}, therefore ${partialEffectDescription || "some weather effects may apply to them."}`;
     } else if (isSheltered.negativelyExposed) {
-        const negativeEffectsDescription = typeof location.internalState.currentWeatherNegativelyExposedDescription === "string" ? location.internalState.currentWeatherNegativelyExposedDescription : await location.internalState.currentWeatherNegativelyExposedDescription({ char: character });
+        const negativeEffectsDescription = typeof weatherSystem.negativelyExposedDescription === "string" ? weatherSystem.negativelyExposedDescription : await weatherSystem.negativelyExposedDescription({ char: character });
         return `The current weather where "${characterName}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}". "${characterName}" is negatively exposed to its effects. ${isSheltered.reason || ""}, therefore ${negativeEffectsDescription || "strongly negative weather effects apply to them."}`;
     } else {
-        const effectDescription = typeof location.internalState.currentWeatherFullEffectDescription === "string" ? location.internalState.currentWeatherFullEffectDescription : await location.internalState.currentWeatherFullEffectDescription({ char: character });
+        const effectDescription = typeof weatherSystem.fullEffectDescription === "string" ? weatherSystem.fullEffectDescription : await weatherSystem.fullEffectDescription({ char: character });
         return `The current weather where "${characterName}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}". ${isSheltered.reason || ""}, therefore ${effectDescription || "all weather effects apply to them."}`;
     }
 }

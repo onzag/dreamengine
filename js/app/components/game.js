@@ -86,6 +86,12 @@ class GameOverlay extends HTMLElement {
          * @type {string | null}
          */
         this.lastSaveName = null;
+
+        this.onSaveClick = this.onSaveClick.bind(this);
+        this.onCharacterUpdateUI = this.onCharacterUpdateUI.bind(this);
+        this.onCycleInform = this.onCycleInform.bind(this);
+        this.onThinkingInform = this.onThinkingInform.bind(this);
+        this.onInferringOverConversationMessage = this.onInferringOverConversationMessage.bind(this);
     }
 
     async connectedCallback() {
@@ -435,10 +441,6 @@ class GameOverlay extends HTMLElement {
         try {
             this.gameDifficulty = (await window.API.getConfigValue("difficulty") || "normal").toLowerCase();
 
-            const dreamStability = this.getAttribute('dream-stability') || 'stable';
-
-            await window.ENGINE_WORKER_CLIENT.setDreamStability({ stability: dreamStability === "stable" ? 1 : (dreamStability === "unstable" ? 0.99 : 0.95) });
-
             const partyCharactersJson = this.getAttribute('party-characters') || '[]';
             const partyCharacters = JSON.parse(partyCharactersJson);
 
@@ -533,6 +535,9 @@ class GameOverlay extends HTMLElement {
             } else {
                 await window.ENGINE_WORKER_CLIENT.completeDisruptedInitializationDueToNameConflict({ newName });
             }
+
+            const dreamStability = this.getAttribute('dream-stability') || 'stable';
+            await window.ENGINE_WORKER_CLIENT.setDreamStability({ stability: dreamStability === "stable" ? 1 : (dreamStability === "unstable" ? 0.99 : 0.95) });
 
             // adding characters that were added by those scripts as the party members, the reason is that
             // a script can add many characters and not just one, so they all need to be added by name
@@ -2145,7 +2150,11 @@ class GameOverlay extends HTMLElement {
         // Avoid stacking multiple confirm dialogs.
         if (document.querySelector('app-dialog')) return;
 
+        const worldNamespace = this.getAttribute('world-namespace') || '';
+        const worldId = this.getAttribute('world-id') || '';
+
         let saveName = this.lastSaveName || this.getAttribute("save-name");
+        let saveNameIsEstablished = true;
         if (!saveName) {
             const actualUserName = await window.ENGINE_WORKER_CLIENT.queryDEObject({
                 path: ["user", "name"],
@@ -2158,6 +2167,7 @@ class GameOverlay extends HTMLElement {
             }
 
             saveName += " - " + actualUserName;
+            saveNameIsEstablished = false;
         }
 
         const dialog = document.createElement('app-dialog');
@@ -2166,6 +2176,51 @@ class GameOverlay extends HTMLElement {
         dialog.setAttribute('confirm-text', 'Save');
         dialog.setAttribute('cancel-text', 'Cancel');
         dialog.setAttribute('extra-z-index', '100');
+
+        /**
+         * @param {string} nameToCheck
+         */
+        const checkSaveExists = async (nameToCheck) => {
+            const saveNameWithJSON = nameToCheck + ".json";
+            const expectedEndPath = window.DREAMENGINE_HOME + "/saves/" + worldNamespace + "/" + worldId + "/" + saveNameWithJSON;
+
+            // run fetch to check if the file exists
+            try {
+                const response = await fetch(expectedEndPath, { method: 'HEAD' });
+                const isFound = response.ok;
+                return isFound;
+            } catch (error) {
+
+            }
+            return false;
+        };
+
+        /**
+         * @param {string} nameToCheck
+         */
+        const checkSaveExistWithHTMLUpdate = async (nameToCheck) => {
+            const isFound = await checkSaveExists(nameToCheck);
+            const overlayInput = dialog.querySelector('app-overlay-input#name-input');
+            if (overlayInput) {
+                if (isFound) {
+                    // @ts-ignore
+                    overlayInput.setErrorMessage('A save with this name already exists. Saving will overwrite it.');
+                } else {
+                    // @ts-ignore
+                    overlayInput.clearErrorMessage();
+                }
+            }
+        }
+
+        if (!saveNameIsEstablished) {
+            const baseName = saveName;
+            let num = 1;
+            while (await checkSaveExists(saveName)) {
+                saveName = baseName + " #" + num;
+                num++;
+            }
+        }
+
         dialog.innerHTML = `
             <app-overlay-input
                 label="Savefile Name"
@@ -2176,40 +2231,67 @@ class GameOverlay extends HTMLElement {
             ></app-overlay-input>
         `;
 
-        /**
-         * @param {string} nameToCheck
-         */
-        const checkSaveExists = async (nameToCheck) => {
-            const saveNameWithJSON = nameToCheck + ".json";
-            const worldNamespace = this.getAttribute('world-namespace') || '';
-            const worldId = this.getAttribute('world-id') || '';
+        if (saveNameIsEstablished) {
+            checkSaveExistWithHTMLUpdate(saveName);
+        }
 
-            const expectedEndPath = window.DREAMENGINE_HOME + "/saves/" + worldNamespace + "/" + worldId + "/" + saveNameWithJSON;
-
-            // run fetch to check if the file exists
-            try {
-                const response = await fetch(expectedEndPath, { method: 'HEAD' });
-                const isFound = response.ok;
-                const overlayInput = dialog.querySelector('app-overlay-input#name-input');
-
-                if (overlayInput) {
-                    if (isFound) {
-                        // @ts-ignore
-                        overlayInput.setErrorMessage('A save with this name already exists. Saving will overwrite it.');
-                    } else {
-                        // @ts-ignore
-                        overlayInput.clearErrorMessage();
-                    }
-                }
-            } catch (error) {
-
-            }
-        };
-        checkSaveExists(saveName);
-
-        dialog.addEventListener('confirm', () => {
+        dialog.addEventListener('confirm', async () => {
             playConfirmSound();
-            // TODO
+
+            const saveFileName = dialog.querySelector('app-overlay-input#name-input');
+            if (!saveFileName) return;
+
+            const saveFileNameText = /** @type {any} */ (saveFileName).getValue?.() || '';
+            
+            const saveStateInfo = await window.ENGINE_WORKER_CLIENT.getLastSafeState();
+            
+            const currentlyInteractingCharacters = (await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                path: ["utils", "getCurrentlyInteractingCharacters"],
+                call: [saveStateInfo.user.name],
+            })) || [];
+
+            const andFormatted = currentlyInteractingCharacters.length > 1
+                ? currentlyInteractingCharacters.slice(0, -1).join(', ') + ' and ' + currentlyInteractingCharacters.slice(-1)
+                : currentlyInteractingCharacters.join('');
+
+            const timeAsDate = new Date(saveStateInfo.currentTime.time);
+
+            // format as UTC time for the given locale, with month and day
+            const locale = 'en-US';
+            const formattedTime = timeAsDate.toLocaleString(locale, {
+                hour: '2-digit',
+                minute: '2-digit',
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+                timeZone: 'UTC',
+            });
+
+            const createdAt = new Date(saveStateInfo.createdAt);
+            const formattedCreatedAt = createdAt.toLocaleString(locale, {
+                hour: '2-digit',
+                minute: '2-digit',
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+            });
+            
+            /**
+             * @type {Record<string, string>}
+             */
+            const metadataIndex = {
+                "Dreamer": saveStateInfo.user.name,
+                "Scene": saveStateInfo.world.selectedScene || "No Selected Scene",
+                "Created At": formattedCreatedAt,
+            };
+
+            if (andFormatted) {
+                metadataIndex["Interacting With"] = andFormatted;
+                metadataIndex["Dream Time"] = formattedTime;
+            }
+
+            await window.API.saveFile(worldNamespace, worldId, saveFileNameText, JSON.stringify(saveStateInfo), metadataIndex);
+
             document.body.removeChild(dialog);
         });
         dialog.addEventListener('cancel', () => {
@@ -2219,7 +2301,7 @@ class GameOverlay extends HTMLElement {
         dialog.addEventListener('input', async (e) => {
             // @ts-ignore
             const value = (e.detail.value || '').trim();
-            checkSaveExists(value);
+            checkSaveExistWithHTMLUpdate(value);
         });
 
         document.body.appendChild(dialog);

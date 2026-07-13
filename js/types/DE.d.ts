@@ -2941,22 +2941,6 @@ declare interface DEStatefulLocationDefinition extends DELocationDefinition {
          * How long the current weather has been ongoing for
          */
         currentWeatherHasBeenOngoingFor: DETimeDurationDescription;
-        /**
-         * Either the location-specific full effect description or the general weather full effect description
-         */
-        currentWeatherFullEffectDescription: DEStringTemplateCharOnly;
-        /**
-         * Either the location-specific partial effect description or the general weather partial effect description
-         */
-        currentWeatherPartialEffectDescription: DEStringTemplateCharOnly;
-        /**
-         * Either the location-specific no effect description or the general weather no effect description
-         */
-        currentWeatherNoEffectDescription: DEStringTemplateCharOnly;
-        /**
-         * Either the location-specific negative effect description or the general weather negative effect description
-         */
-        currentWeatherNegativelyExposedDescription: DEStringTemplateCharOnly;
     }
 }
 
@@ -3424,7 +3408,7 @@ declare interface DEWorld {
      * it is also used by characters to understand the world they are in
      * and detect lies or inconsistencies
      */
-    lore: DEStringTemplate | null;
+    lore: DEStringTemplateCharOnly | null;
     /**
      * Properties of the world that can be used for various purposes, eg. "world_age": 1000, "technology_level": "medieval", "has_magic": true, etc...
      */
@@ -3894,6 +3878,11 @@ declare interface DEUtils {
      * @returns string
      */
     getRandomOptionFixedCharacter(char: DECompleteCharacterReference, options: string[]): string;
+
+    /**
+     * Provides the list of characters that are currently interacting with another character
+     */
+    getCurrentlyInteractingCharacters(char: DECompleteCharacterReference | string): string[];
 }
 
 declare interface DEWorldRule {
@@ -3911,6 +3900,11 @@ declare interface DEObject {
     bonds: Record<string, DEBondDescription>;
     worldNames: DENamePool;
     stateFor: Record<string, DEStateForCharacterWithHistory>;
+    /**
+     * Stability of the simulation, a number from 0 to 1 representing how stable the world is
+     * usually should be 1 unless you want madness to happen
+     */
+    stability: number;
     world: DEWorld;
     /**
      * All the conversations that have happened in the world
