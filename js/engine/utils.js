@@ -184,13 +184,16 @@ export const deEngineUtilsFn = (DE) => ({
 
         // this is a cheat way to know if it has been called by a script already, since a stored state only saves the character state
         // this will prevent collisions
-        if (DE.characters[characterDef.name].name) {
+        if (DE.characters[characterDef.name] && !DE.internalState["CHARACTER_UNCLAIMED_" + characterDef.name]) {
             throw new Error(`Character with name ${characterDef.name} already exists in the world, cannot create it again.`);
         }
 
         DE.characters[characterDef.name] = {
             ...characterDef,
             state: currentCharacter.state,
+        }
+        if (DE.internalState["CHARACTER_UNCLAIMED_" + characterDef.name]) {
+            delete DE.internalState["CHARACTER_UNCLAIMED_" + characterDef.name];
         }
         if (DE.internalState["CHARACTER_OVERRIDES_" + characterDef.name]) {
             Object.assign(DE.characters[characterDef.name], DE.internalState["CHARACTER_OVERRIDES_" + characterDef.name]);

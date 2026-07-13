@@ -399,24 +399,21 @@ export class DEngine {
 
         this.deObject = regenerateDEFromSavedDE(this, this.deObject);
 
-        /**
-         * @type {Array<{script: DEScript, scriptKey: string}>}
-         */
-        const allScripts =
-            // @ts-ignore typescript bugs
-            this.jsEngine.scriptOrder.map(scriptKey => ({ script: this.jsEngine.scriptCache[scriptKey], scriptKey }));
+        this.backupDEObject();
 
-        const worldScripts =
-            allScripts.filter(script => script.script.type === "world");
-
-        await this.callFunctionInScripts(worldScripts, (script) => `Running initialize for script ${script.scriptKey} of type world`, "initialize", this.deObject);
+        await this.runInitializationScripts();
 
         const hasStartedClock = !!this.deObject.world.selectedScene;
         if (hasStartedClock) {
+            /**
+             * @type {Array<{script: DEScript, scriptKey: string}>}
+             */
+            const allScripts =
+                // @ts-ignore typescript bugs
+                this.jsEngine.scriptOrder.map(scriptKey => ({ script: this.jsEngine.scriptCache[scriptKey], scriptKey }));
             await this.callFunctionInScripts(allScripts, (script) => `Running onWorldClockReady for script ${script.scriptKey}`, "onWorldClockReady", this.deObject);
         }
 
-        this.backupDEObject();
         this.initialized = true;
     }
 
@@ -586,13 +583,13 @@ export class DEngine {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         }
-        let currentCharacterNames = new Set(Object.keys(this.deObject.characters).filter((c) => !!this.deObject?.characters[c].name));
+        let currentCharacterNames = new Set(Object.keys(this.deObject.characters).filter((c) => !this.deObject?.internalState["CHARACTER_UNCLAIMED_" + c]));
         for (const script of scripts) {
             if (script.script[functionName]) {
                 console.log(loopMessage(script));
                 await script.script[functionName](...args);
             }
-            const newCharacterNames = new Set(Object.keys(this.deObject.characters).filter((c) => !!this.deObject?.characters[c].name));
+            const newCharacterNames = new Set(Object.keys(this.deObject.characters).filter((c) => !this.deObject?.internalState["CHARACTER_UNCLAIMED_" + c]));
             // get the difference between the sets to find out which characters were added by this script
             const addedCharacters = [...newCharacterNames].filter(x => !currentCharacterNames.has(x));
             for (const charName of addedCharacters) {
@@ -1650,7 +1647,7 @@ export class DEngine {
     addThinkingListener(listener) {
         this.thinkingListeners.push(listener);
     }
-    
+
     /**
      * @param {(thinking: boolean, characterName: string | null, noMoreCharactersToTalk: boolean) => void} listener 
      */
