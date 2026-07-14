@@ -410,9 +410,9 @@ export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
         // TODO add special tags based on what sounds are available [cough] [laugh] [sigh] [scream] [sniffle] [snore] [sneeze] [yawn] [grunt] [groan] [gasp] [moan] [whistle] [cheer] [applause] [clap] [snap] [stomp] [thump] [bang] [crash] [slam]
         const nextMessageMustBeInform = "\n# Write the next message like this\n\n" + (
             options.narration ?
-            `Write the next passage as third-person narration, the way an outside narrator describes a scene in a novel. Keep everyone, including ${character.name}, in the third person, referred to by name or as he, she, or they. Describe ${character.name}'s actions, feelings, and surroundings as an observer who is watching the scene from outside of it.` :
-            `Write the single line ${character.name} says out loud right now, in ${character.name}'s own voice. The line is spoken words, but you may interrupt those words with a short beat of third-person narration wrapped in em dashes (—), the way a novel breaks a line of dialogue with a small action before the speech resumes. Put nothing but the brief action or attribution between the em dashes, and keep the spoken words on either side. For example: \`${character.name}: spoken words — ${character.name} does some small action — the spoken words continue.\` Only the text between the em dashes is narration; everything outside them is what ${character.name} actually says. Do not write narration on its own separate line, and do not describe any other character's actions, thoughts, or feelings.`
-        );
+            `Write the next passage as a single paragraph of third-person narration, the way an outside narrator describes a scene in a novel. Keep everyone, including ${character.name}, in the third person, referred to by name or as he, she, or they. Describe ${character.name}'s actions, feelings, and surroundings as an observer who is watching the scene from outside of it.` :
+            `Write the single line ${character.name} says out loud right now, in ${character.name}'s own voice. The line is spoken words, but you may interrupt those words with a short beat of third-person narration wrapped in em dashes (—), the way a novel breaks a line of dialogue with a small action before the speech resumes. Put nothing but the brief action or attribution between the em dashes, and keep the spoken words on either side. For example: \`${character.name}: spoken words — *${character.name} does some small action* — the spoken words continue.\` Only the text between the em dashes is narration; everything outside them is what ${character.name} actually says. Do not write narration on its own separate line, and do not describe any other character's actions, thoughts, or feelings.`
+        ) + "\n\nAdvance the scene with new events. Do not repeat, summarize, or paraphrase any previous paragraph.";
 
         const continuationRequestPrompt = replaceMultipleNewLines(`
 ${stateInjections.length > 0 ? `# ${character.name}'s Current States:\n\n${stateInjections.join("\n\n")}` : ""}
@@ -471,7 +471,9 @@ ${nextMessageMustBeInform}
 
         tokensExhaustedApprox += tokensInStorySoFar;
 
-        const assistantPromptTrail = `# ${options.narration ? "Continuing the story with narrative 3rd person paragraph" : `Continuing the story with spoken dialogue of ${character.name}`}:\n\n${getLastParagraphChunkOf(storySoFar)}\n\n`;
+        const assistantPromptTrail = `# ${options.narration ?
+            "Continuing the story with narrative 3rd person paragraph" :
+            `Continuing the story with spoken dialogue of ${character.name}`}:\n\n${getLastParagraphChunkOf(storySoFar)}\n\n`;
 
         /**
          * @type {import('./base.js').DEServerPayload}
@@ -988,11 +990,11 @@ You are currently roleplaying as ${character.name}.
 
 # Narration and Dialogue Examples:
 \`\`\`
-This is narration
+*This is narration*
 
-${character.name}: This is spoken dialogue — ${character.name} said while ... — this is spoken dialogue
+${character.name}: This is spoken dialogue — *${character.name} said while ...* — this is spoken dialogue
 
-This is narration
+*This is narration*
 \`\`\`
         
 

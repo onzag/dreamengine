@@ -2196,7 +2196,6 @@ declare interface DEItem {
     volumeLiters: number;
     weightKg: number;
     description: string;
-    canSeeContentsFromOutside: boolean;
     state: Record<string, any>;
     isConsumable: boolean;
     consumableProperties?: {
@@ -2209,6 +2208,7 @@ declare interface DEItem {
     wearableProperties?: {
         coversTopNakedness: boolean;
         coversBottomNakedness: boolean;
+        underwear: boolean;
         /**
          * The minimum and maximum volume in liters that this item is meant to fit when worn by the character
          */
@@ -2276,6 +2276,7 @@ declare interface DEItem {
     containerProperties?: {
         capacityKg: number;
         capacityLiters: number;
+        canSeeContentsFromOutside: boolean;
         /**
          * Whether the container is rigid or flexible, a rigid container does not take
          * more volume when more items are put inside it, while a flexible container grows in volume with the items put inside it

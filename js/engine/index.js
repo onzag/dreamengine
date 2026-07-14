@@ -477,7 +477,7 @@ export class DEngine {
             gameOver: false,
             worldRules: {},
             narrationStyle: {
-                maxParagraphs: 3,
+                maxParagraphs: 2,
                 minParagraphs: 2,
                 narrativeBias: 0.2,
             },

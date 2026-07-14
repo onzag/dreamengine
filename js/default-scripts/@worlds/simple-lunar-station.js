@@ -153,7 +153,6 @@ engine.exports = {
                 partiallyProtectsFromWeathers: [],
             },
             isConsumable: false,
-            canSeeContentsFromOutside: false,
             owner: null,
             communicator: null,
         }
@@ -171,6 +170,7 @@ engine.exports = {
                 capacityKg: 50,
                 capacityLiters: 1000,
                 structure: "rigid",
+            canSeeContentsFromOutside: false,
             },
             amount: 1,
             consumableProperties: null,
@@ -181,7 +181,6 @@ engine.exports = {
             maxWeightOnTopKg: 100,
             ontopCharacters: [],
             isConsumable: false,
-            canSeeContentsFromOutside: false,
             owner: null,
             communicator: null,
         };
@@ -199,6 +198,7 @@ engine.exports = {
                 capacityKg: 100,
                 capacityLiters: 20,
                 structure: "rigid",
+            canSeeContentsFromOutside: false,
             },
             amount: 1,
             consumableProperties: null,
@@ -209,7 +209,6 @@ engine.exports = {
             maxVolumeOnTopLiters: 100,
             maxWeightOnTopKg: 100,
             isConsumable: false,
-            canSeeContentsFromOutside: false,
             owner: null,
             communicator: null,
         };
@@ -232,7 +231,6 @@ engine.exports = {
             maxWeightOnTopKg: 10,
             ontopCharacters: [],
             isConsumable: false,
-            canSeeContentsFromOutside: false,
             owner: null,
             communicator: null,
         };
@@ -255,7 +253,6 @@ engine.exports = {
             maxWeightOnTopKg: 10,
             ontopCharacters: [],
             isConsumable: false,
-            canSeeContentsFromOutside: false,
             owner: null,
             communicator: null,
         };
@@ -273,6 +270,7 @@ engine.exports = {
                 capacityKg: 10,
                 capacityLiters: 20,
                 structure: "rigid",
+            canSeeContentsFromOutside: false,
             },
             amount: 1,
             consumableProperties: null,
@@ -283,7 +281,6 @@ engine.exports = {
             maxWeightOnTopKg: 0,
             ontopCharacters: [],
             isConsumable: false,
-            canSeeContentsFromOutside: false,
             owner: null,
             communicator: null,
         };
@@ -301,6 +298,7 @@ engine.exports = {
                 capacityKg: 1,
                 capacityLiters: 0.5,
                 structure: "rigid",
+            canSeeContentsFromOutside: false,
             },
             amount: 5,
             consumableProperties: null,
@@ -311,7 +309,6 @@ engine.exports = {
             maxWeightOnTopKg: 0,
             ontopCharacters: [],
             isConsumable: false,
-            canSeeContentsFromOutside: false,
             owner: null,
             communicator: null,
         };
@@ -329,6 +326,7 @@ engine.exports = {
                 capacityKg: 10,
                 capacityLiters: 20,
                 structure: "rigid",
+            canSeeContentsFromOutside: false,
             },
             amount: 1,
             consumableProperties: null,
@@ -339,7 +337,6 @@ engine.exports = {
             maxWeightOnTopKg: 0,
             ontopCharacters: [],
             isConsumable: false,
-            canSeeContentsFromOutside: false,
             owner: null,
             communicator: null,
         };
@@ -357,6 +354,7 @@ engine.exports = {
                 capacityKg: 100,
                 capacityLiters: 200,
                 structure: "rigid",
+            canSeeContentsFromOutside: false,
             },
             amount: 1,
             ontop: [],
@@ -367,7 +365,6 @@ engine.exports = {
             consumableProperties: null,
             containing: [cabinetDrawerKitchenware, cabinetDrawerBowls],
             isConsumable: false,
-            canSeeContentsFromOutside: false,
             owner: null,
             communicator: null,
         };
@@ -393,7 +390,6 @@ engine.exports = {
             maxWeightOnTopKg: 0,
             ontopCharacters: [],
             isConsumable: true,
-            canSeeContentsFromOutside: false,
             owner: null,
             communicator: null,
         };
@@ -411,6 +407,7 @@ engine.exports = {
                 capacityKg: spaceFoodPack.weightKg * spaceFoodPack.amount + 100,
                 capacityLiters: spaceFoodPack.volumeLiters * spaceFoodPack.amount + 100,
                 structure: "rigid",
+            canSeeContentsFromOutside: false,
             },
             amount: 1,
             consumableProperties: null,
@@ -421,7 +418,6 @@ engine.exports = {
             maxWeightOnTopKg: 100,
             ontopCharacters: [],
             isConsumable: false,
-            canSeeContentsFromOutside: false,
             owner: null,
             communicator: null,
         };
@@ -435,11 +431,6 @@ engine.exports = {
             weightKg: 5,
             volumeLiters: 30,
             state: {},
-            containerProperties: {
-                capacityKg: 0,
-                capacityLiters: 0,
-                structure: "rigid",
-            },
             amount: 4,
             consumableProperties: null,
             containing: [],
@@ -449,7 +440,6 @@ engine.exports = {
             maxWeightOnTopKg: 300,
             ontopCharacters: [],
             isConsumable: false,
-            canSeeContentsFromOutside: false,
             owner: null,
             communicator: null,
         };
@@ -486,11 +476,6 @@ engine.exports = {
                             weightKg: 0.5,
                             volumeLiters: 0.2,
                             state: {},
-                            containerProperties: {
-                                capacityKg: 0,
-                                capacityLiters: 0,
-                                structure: "rigid",
-                            },
                             amount: 10000,
                             consumableProperties: null,
                             containing: [],
@@ -500,7 +485,6 @@ engine.exports = {
                             maxWeightOnTopKg: 1000,
                             ontopCharacters: [],
                             isConsumable: false,
-                            canSeeContentsFromOutside: false,
                             owner: null,
                             communicator: null,
                         }
@@ -657,7 +641,6 @@ engine.exports = {
                                 maxWeightOnTopKg: 400,
                                 ontopCharacters: [],
                                 isConsumable: false,
-                                canSeeContentsFromOutside: false,
                                 owner: null,
                                 communicator: null,
                             }

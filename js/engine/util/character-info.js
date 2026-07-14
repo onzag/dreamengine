@@ -673,9 +673,26 @@ export async function getExternalDescriptionOfCharacter(deObject, characterName,
     } else if (!hasItemsCoveringBottomNakedness) {
         finalDescription += ` Not wearing any clothes on the lower body.`;
     }
+    
+    const hasItemsCoveringBottomNakenessThatAreNotUnderwear = characterState.wearing.some(item => item.amount > 0 && item.wearableProperties && item.wearableProperties.coversBottomNakedness && !item.wearableProperties.underwear);
+    const hasItemsCoveringTopNakenessThatAreNotUnderwear = characterState.wearing.some(item => item.amount > 0 && item.wearableProperties && item.wearableProperties.coversTopNakedness && !item.wearableProperties.underwear);
 
     if (characterState.wearing.length > 0) {
-        finalDescription += " Wearing " + deObject.utils.formatAnd(characterState.wearing.map(item => item.amount >= 2 ? item.amount + " of " + item.description + " (" + getWearableFitment(deObject, item, characterName).fitment + ")" : item.description + " (" + getWearableFitment(deObject, item, characterName).fitment + ")")) + ".";
+        const visibleWornItems = characterState.wearing.filter(item => {
+            if (item.amount <= 0 || !item.wearableProperties) {
+                return false;
+            }
+
+            if (!item.wearableProperties.underwear) {
+                return true;
+            }
+
+            const isVisibleAtBottom = item.wearableProperties.coversBottomNakedness && !hasItemsCoveringBottomNakenessThatAreNotUnderwear;
+            const isVisibleAtTop = item.wearableProperties.coversTopNakedness && !hasItemsCoveringTopNakenessThatAreNotUnderwear;
+
+            return isVisibleAtBottom || isVisibleAtTop;
+        });
+        finalDescription += " Wearing " + deObject.utils.formatAnd(visibleWornItems.map(item => item.amount >= 2 ? item.amount + " of " + item.description + " (" + getWearableFitment(deObject, item, characterName).fitment + ")" : item.description + " (" + getWearableFitment(deObject, item, characterName).fitment + ")")) + ".";
     } else {
         finalDescription += " Completely naked, without clothes or accessories.";
     }
@@ -985,9 +1002,9 @@ export async function getCharacterCanSee(deObject, characterName) {
         finalDescription += `${space}  Description: ${item.description}\n`;
         if (item.containing.length) {
             const charIsInside = isCharacterInsideItem(item);
-            const haveLineOfSightSoCharKnowsWhatIsInside = (charHasLineOfSight && item.canSeeContentsFromOutside) || charIsInside;
+            const haveLineOfSightSoCharKnowsWhatIsInside = (charHasLineOfSight && item.containerProperties?.canSeeContentsFromOutside) || charIsInside;
 
-            if ((charHasLineOfSight && item.canSeeContentsFromOutside)) {
+            if ((charHasLineOfSight && item.containerProperties?.canSeeContentsFromOutside)) {
                 finalDescription += `${space}  ${character.name} can see the following contents:\n`;
             } else if (charIsInside) {
                 finalDescription += `${space}  ${character.name} can see the following contents (from the inside):\n`;

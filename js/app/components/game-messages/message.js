@@ -323,6 +323,7 @@ class GameMessage extends HTMLElement {
     _feed(str, animate) {
         const ps = this._ps;
         if (!ps || !this._boxesEl) return;
+        str = str.replace(/\*/g, '');
 
         let buf = '';
         /** @type {HTMLElement | null} */

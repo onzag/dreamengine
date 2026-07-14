@@ -490,7 +490,8 @@ export async function talk(engine, character, options) {
         }
 
         const lastGenerated = generatedElements[generatedElements.length - 1];
-        if (lastGenerated && lastGenerated === "dialogue") {
+        // always switch from dialogue to narration, and always start in narration
+        if ((lastGenerated && lastGenerated === "dialogue") || generatedElements.length === 0) {
             generatedElements.push("narration");
             if (narrativeAction) {
                 generatedElements.push("narration");

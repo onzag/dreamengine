@@ -196,13 +196,13 @@ export function generateGrammarForVocabulary(engine, vocabulary, charName) {
 
     if (vocabulary?.mute) {
         return {
-            narrative: `root ::= .+`,
+            narrative: `root ::= "*" [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] .+`,
             dialogue: null,
         };
     }
     
     return {
-        narrative: `root ::= .+`,
+        narrative: `root ::= "*" [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] .+`,
         dialogue: `root ::= ${JSON.stringify(charName + ": ")} [^—] [^—] [^—] .+`,
     };
 }
