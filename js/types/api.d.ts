@@ -38,6 +38,8 @@ declare interface DEAPI {
 declare global {
   interface Window {
     API: DEAPI;
+    DREAM_AMBIENCE_CHOSEN: string;
+    DREAM_AMBIENCE_CHOSEN_VOLUME: number;
     DREAMENGINE_LANGUAGE: string;
     DREAMENGINE_HOME: string;
     DREAMENGINE_DEFAULT_SCRIPTS_HOME: string;

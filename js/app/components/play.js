@@ -288,7 +288,7 @@ class PlayOverlay extends HTMLElement {
         if (!this.startedGame) {
             // @ts-expect-error
             document.querySelector('.sky').style.display = 'block';
-            await stopAllAmbiencesAndStartNewOne([{ src: './sounds/dream-ambience.mp3', volume: 3 }], 1000, 1000);
+            await stopAllAmbiencesAndStartNewOne([{ id: 'dream-ambience', srcs: [{ src: window.DREAM_AMBIENCE_CHOSEN, fadeDurationMs: 2000, volume: window.DREAM_AMBIENCE_CHOSEN_VOLUME }] }], 1000);
         }
     }
 
@@ -378,7 +378,7 @@ class PlayOverlay extends HTMLElement {
             setTimeout(() => {
                 playSound("./sounds/transition.mp3", 0.8);
             }, 300);
-            await stopAllAmbiencesAndStartNewOne([], 1000, 1000);
+            await stopAllAmbiencesAndStartNewOne([], 1000);
         }
     }
 
@@ -1014,20 +1014,20 @@ class PlayOverlay extends HTMLElement {
         if (!overlay) return;
         overlay.classList.remove('stability-unstable', 'stability-very-unstable');
         if (this.selectedMode !== 'new') {
-            await stopAllAmbiencesAndStartNewOne([{ src: './sounds/awakening-ambience.mp3', volume: 1.5 }], 1000, 1000);
+            await stopAllAmbiencesAndStartNewOne([{ id: 'awakening-ambience', srcs: [{ src: './sounds/awakening-ambience.mp3', fadeDurationMs: 1000, volume: 1.5 }] }], 1000);
             return;
         };
         if (this.selectedDreamStability === 'unstable') {
             overlay.classList.add('stability-unstable');
 
-            await stopAllAmbiencesAndStartNewOne([{ src: './sounds/awakening-lucid.mp3', volume: 1.5 }], 1000, 1000);
+            await stopAllAmbiencesAndStartNewOne([{ id: 'awakening-lucid', srcs: [{ src: './sounds/awakening-lucid.mp3', fadeDurationMs: 1000, volume: 1.5 }] }], 1000);
 
         } else if (this.selectedDreamStability === 'very unstable') {
             overlay.classList.add('stability-very-unstable');
 
-            await stopAllAmbiencesAndStartNewOne([{ src: './sounds/awakening-astral.mp3', volume: 2 }], 1000, 1000);
+            await stopAllAmbiencesAndStartNewOne([{ id: 'awakening-astral', srcs: [{ src: './sounds/awakening-astral.mp3', fadeDurationMs: 1000, volume: 2 }] }], 1000);
         } else {
-            await stopAllAmbiencesAndStartNewOne([{ src: './sounds/awakening-ambience.mp3', volume: 1.5 }], 1000, 1000);
+            await stopAllAmbiencesAndStartNewOne([{ id: 'awakening-ambience', srcs: [{ src: './sounds/awakening-ambience.mp3', fadeDurationMs: 1000, volume: 1.5 }] }], 1000);
         }
     }
 

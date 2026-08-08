@@ -192,9 +192,9 @@ async function showCreditsOverlay(tagName) {
     overlay.addEventListener('close', async () => {
         document.body.removeChild(overlay);
         makeHomeInert(false);
-        await stopAllAmbiencesAndStartNewOne([{ src: './sounds/dream-ambience.mp3', volume: 3 }], 1000, 1000);
+        await stopAllAmbiencesAndStartNewOne([{ id: 'dream-ambience', srcs: [{ src: window.DREAM_AMBIENCE_CHOSEN, fadeDurationMs: 1000, volume: window.DREAM_AMBIENCE_CHOSEN_VOLUME }] }], 1000);
     });
-    await stopAllAmbiencesAndStartNewOne([{ src: './sounds/credits.mp3', volume: 1.2 }], 1000, 2000);
+    await stopAllAmbiencesAndStartNewOne([{ id: 'credits', srcs: [{ src: './sounds/credits.mp3', fadeDurationMs: 1000, volume: 1.2 }] }], 1000);
 }
 
 const licenseLink = document.getElementById('license-link');
@@ -281,6 +281,10 @@ document.querySelector(".ambience")?.addEventListener("click", () => {
 let WORKER_READY = false;
 let DOM_READY = false;
 
+const index = Math.floor(Math.random() * 3);
+window.DREAM_AMBIENCE_CHOSEN = ["./sounds/dream.mp3", "./sounds/dream-2.mp3", "./sounds/dream-3.mp3"][index];
+window.DREAM_AMBIENCE_CHOSEN_VOLUME = [3, 1.2, 1.5][index];
+
 // Initialize sound icons based on settings
 window.addEventListener('DOMContentLoaded', () => {
     if (isFXEnabled()) {
@@ -297,7 +301,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
     setTimeout(async () => {
         DOM_READY = true;
-        await stopAllAmbiencesAndStartNewOne([{ src: './sounds/dream-ambience.mp3', volume: 3 }], 1000, 1000);
+        await stopAllAmbiencesAndStartNewOne([{ id: 'dream-ambience', srcs: [{ src: window.DREAM_AMBIENCE_CHOSEN, fadeDurationMs: 2000, volume: window.DREAM_AMBIENCE_CHOSEN_VOLUME }] }], 1000);
         if (WORKER_READY && DOM_READY) {
             removeLoadingBlur();
         }

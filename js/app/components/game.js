@@ -657,7 +657,7 @@ class GameOverlay extends HTMLElement {
             // in over the same window the world fades up.
             await this.lightFadeOutStartedPromise;
 
-            await stopAllAmbiencesAndStartNewOne([{ src: themeUrl, volume: themeSong.volume || 1 }], 1000, 1000);
+            await stopAllAmbiencesAndStartNewOne([{ id: themeUrl, srcs: [{ src: themeUrl, fadeDurationMs: 1000, volume: themeSong.volume || 1 }] }], 1000);
         } catch (error) {
             console.error('Error starting theme ambience:', error);
         }
@@ -792,7 +792,7 @@ class GameOverlay extends HTMLElement {
                 const themeUrl = `${base}/assets/${worldNamespace}/${worldId}/${themeSongLocationSlot.asset}`;
                 (async () => {
                     try {
-                        await stopAllAmbiencesAndStartNewOne([{ src: themeUrl, volume: themeSongLocationSlot.volume || 1 }], 1000, 1000);
+                        await stopAllAmbiencesAndStartNewOne([{ id: themeUrl, srcs: [{ src: themeUrl, fadeDurationMs: 1000, volume: themeSongLocationSlot.volume || 1 }] }], 1000);
                     } catch (error) {
                         console.error('Error starting theme ambience:', error);
                     }
@@ -801,7 +801,7 @@ class GameOverlay extends HTMLElement {
                 const themeUrl = `${base}/assets/${worldNamespace}/${worldId}/${themeSongLocation.asset}`;
                 (async () => {
                     try {
-                        await stopAllAmbiencesAndStartNewOne([{ src: themeUrl, volume: themeSong.volume || 1 }], 1000, 1000);
+                        await stopAllAmbiencesAndStartNewOne([{ id: themeUrl, srcs: [{ src: themeUrl, fadeDurationMs: 1000, volume: themeSong.volume || 1 }] }], 1000);
                     } catch (error) {
                         console.error('Error starting theme ambience:', error);
                     }
@@ -810,7 +810,7 @@ class GameOverlay extends HTMLElement {
                 const themeUrl = `${base}/assets/${worldNamespace}/${worldId}/${themeSong.asset}`;
                 (async () => {
                     try {
-                        await stopAllAmbiencesAndStartNewOne([{ src: themeUrl, volume: themeSong.volume || 1 }], 1000, 1000);
+                        await stopAllAmbiencesAndStartNewOne([{ id: themeUrl, srcs: [{ src: themeUrl, fadeDurationMs: 1000, volume: themeSong.volume || 1 }] }], 1000);
                     } catch (error) {
                         console.error('Error starting theme ambience:', error);
                     }
@@ -2127,7 +2127,7 @@ class GameOverlay extends HTMLElement {
         this.stopEngine();
         document.removeEventListener('keydown', this.onF5Keydown);
 
-        await stopAllAmbiencesAndStartNewOne([{ src: './sounds/dream-ambience.mp3', volume: 3 }], 1000, 1000);
+        await stopAllAmbiencesAndStartNewOne([{ id: 'dream-ambience', srcs: [{ src: window.DREAM_AMBIENCE_CHOSEN, fadeDurationMs: 2000, volume: window.DREAM_AMBIENCE_CHOSEN_VOLUME }] }], 1000);
     }
 
     async stopEngine() {

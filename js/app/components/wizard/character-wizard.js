@@ -1,5 +1,5 @@
 import { getJsScriptFromGenerator, isScriptTypeGeneratorFile, parseScriptGeneratorFrom } from '../../../script-generation/base.js';
-import { playCancelSound, playConfirmSound, playHoverSound, setTempSoundDisable, stopAllAmbiencesAndStartNewOne } from '../../sound.js';
+import { playCancelSound, playConfirmSound, playHoverSound, randomizeAmbienceGroupSrc, setTempSoundDisable, stopAllAmbiencesAndStartNewOne } from '../../sound.js';
 import './character-overview.js';
 
 export class CardTypeWizard extends HTMLElement {
@@ -72,7 +72,13 @@ export class CardTypeWizard extends HTMLElement {
 
         this.initializeCard();
 
-        await stopAllAmbiencesAndStartNewOne([{ src: './sounds/rem.mp3', volume: 1 }], 1000, 1000);
+        await stopAllAmbiencesAndStartNewOne([{ id: 'dream-world', srcs: randomizeAmbienceGroupSrc(
+            [
+                { src: './sounds/dream-world.mp3', fadeDurationMs: 1000, volume: 3 },
+                { src: './sounds/rem.mp3', fadeDurationMs: 1000, volume: 1 },
+                { src: './sounds/critter.mp3', fadeDurationMs: 1000, volume: 1.5 },
+            ],
+        ) }], 1000);
     }
 
     async initializeCard() {
@@ -1212,7 +1218,7 @@ export class CardTypeWizard extends HTMLElement {
         document.removeEventListener('keydown', this.onDocumentKeydown);
         this.dispatchEvent(new CustomEvent('wizard-closed'));
 
-        await stopAllAmbiencesAndStartNewOne([{ src: './sounds/dream-ambience.mp3', volume: 3 }], 1000, 1000);
+        await stopAllAmbiencesAndStartNewOne([{ id: 'dream-ambience', srcs: [{ src: window.DREAM_AMBIENCE_CHOSEN, fadeDurationMs: 2000, volume: window.DREAM_AMBIENCE_CHOSEN_VOLUME }] }], 1000);
     }
 
     /** @param {KeyboardEvent} e */

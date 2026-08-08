@@ -1,5 +1,5 @@
 import { getJsScriptFromGenerator, isScriptTypeGeneratorFile, parseScriptGeneratorFrom } from '../../../script-generation/base.js';
-import { playCancelSound, playHoverSound, setTempSoundDisable, stopAllAmbiencesAndStartNewOne } from '../../sound.js';
+import { playCancelSound, playHoverSound, setTempSoundDisable, stopAllAmbiencesAndStartNewOne, randomizeAmbienceGroupSrc } from '../../sound.js';
 import { CardTypeWizard } from './character-wizard.js';
 
 export class WorldWizard extends CardTypeWizard {
@@ -20,7 +20,13 @@ export class WorldWizard extends CardTypeWizard {
 
         this.initializeWorldWizard();
 
-        await stopAllAmbiencesAndStartNewOne([{ src: './sounds/dream-world.mp3', volume: 3 }], 1000, 1000);
+        await stopAllAmbiencesAndStartNewOne([{ id: 'dream-world', srcs: randomizeAmbienceGroupSrc(
+            [
+                { src: './sounds/dream-world.mp3', fadeDurationMs: 1000, volume: 3 },
+                { src: './sounds/rem.mp3', fadeDurationMs: 1000, volume: 1 },
+                { src: './sounds/critter.mp3', fadeDurationMs: 1000, volume: 1.5 },
+            ],
+        ) }], 1000);
     }
 
     async initializeWorldWizard() {
