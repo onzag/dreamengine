@@ -38,7 +38,7 @@ function setTempSoundDisable() {
 /**
  * @type {Array<{src: string, volume: number}>|null}
  */
-let currentAmbience = null;
+let CURRENT_AMBIENCES_MEANT_TO_BE_PLAYING = null;
 
 function playCancelSound() {
   if (!fxEnabled || TEMP_SOUND_DISABLE) return;
@@ -104,8 +104,8 @@ function toggleAmbience() {
       amb.context.close();
       return false;
     });
-  } else if (currentAmbience) {
-    for (const src of currentAmbience) {
+  } else if (CURRENT_AMBIENCES_MEANT_TO_BE_PLAYING) {
+    for (const src of CURRENT_AMBIENCES_MEANT_TO_BE_PLAYING) {
       playAmbience(src.src, src.volume);
     }
   }
@@ -183,12 +183,12 @@ function setGainImmediate(amb, value) {
  * @param {number} token
  * @param {number} fromVolume
  * @param {number} toVolume
- * @param {number} durationMs
+ * @param {number} fadeDurationMs
  * @returns {Promise<boolean>} true if the fade ran to completion
  */
-async function runFade(amb, src, token, fromVolume, toVolume, durationMs) {
+async function runFade(amb, src, token, fromVolume, toVolume, fadeDurationMs) {
   const steps = 20;
-  const stepDuration = Math.max(1, durationMs / steps);
+  const stepDuration = Math.max(1, fadeDurationMs / steps);
   const delta = (toVolume - fromVolume) / steps;
 
   setGainImmediate(amb, fromVolume);
@@ -273,7 +273,7 @@ async function playAmbience(src, volume = 0.75) {
   const token = nextOpToken(src);
   // Desired-state bookkeeping: dedupe by src so toggleAmbience doesn't
   // re-spawn duplicates.
-  currentAmbience = (currentAmbience || []).filter(s => s.src !== src).concat({ src, volume });
+  CURRENT_AMBIENCES_MEANT_TO_BE_PLAYING = (CURRENT_AMBIENCES_MEANT_TO_BE_PLAYING || []).filter(s => s.src !== src).concat({ src, volume });
   if (!ambienceEnabled) return;
 
   if (window.API.mode === "web") {
@@ -308,25 +308,25 @@ function stopAmbience(src) {
     }
   }
   AMBIENCES = remaining;
-  if (currentAmbience) {
-    currentAmbience = currentAmbience.filter(s => s.src !== src);
+  if (CURRENT_AMBIENCES_MEANT_TO_BE_PLAYING) {
+    CURRENT_AMBIENCES_MEANT_TO_BE_PLAYING = CURRENT_AMBIENCES_MEANT_TO_BE_PLAYING.filter(s => s.src !== src);
   }
 }
 
 /**
  * @param {string} src
- * @param {number} durationMs
+ * @param {number} fadeDurationMs
  */
-async function stopAmbienceWithFade(src, durationMs) {
+async function stopAmbienceWithFade(src, fadeDurationMs) {
   const token = nextOpToken(src);
-  if (currentAmbience) {
-    currentAmbience = currentAmbience.filter(s => s.src !== src);
+  if (CURRENT_AMBIENCES_MEANT_TO_BE_PLAYING) {
+    CURRENT_AMBIENCES_MEANT_TO_BE_PLAYING = CURRENT_AMBIENCES_MEANT_TO_BE_PLAYING.filter(s => s.src !== src);
   }
   const amb = AMBIENCES.find(a => a.src === src);
   if (!amb) return;
 
   const fromVolume = amb.gainNode.gain.value;
-  const completed = await runFade(amb, src, token, fromVolume, 0, durationMs);
+  const completed = await runFade(amb, src, token, fromVolume, 0, fadeDurationMs);
 
   // A newer op took over (e.g. start ramping it back up). Leave it alive.
   if (!completed || !isLatestOp(src, token)) return;
@@ -338,12 +338,12 @@ async function stopAmbienceWithFade(src, durationMs) {
 
 /**
  * @param {string} src
- * @param {number} durationMs
+ * @param {number} fadeDurationMs
  * @param {number} volume
  */
-async function startAmbienceWithFade(src, durationMs, volume = 0.75) {
+async function startAmbienceWithFade(src, fadeDurationMs, volume = 0.75) {
   const token = nextOpToken(src);
-  currentAmbience = (currentAmbience || []).filter(s => s.src !== src).concat({ src, volume });
+  CURRENT_AMBIENCES_MEANT_TO_BE_PLAYING = (CURRENT_AMBIENCES_MEANT_TO_BE_PLAYING || []).filter(s => s.src !== src).concat({ src, volume });
   if (!ambienceEnabled) return;
 
   if (window.API.mode === "web") {
@@ -363,7 +363,23 @@ async function startAmbienceWithFade(src, durationMs, volume = 0.75) {
   }
 
   amb.targetVolume = volume;
-  await runFade(amb, src, token, fromVolume, volume, durationMs);
+  await runFade(amb, src, token, fromVolume, volume, fadeDurationMs);
+}
+
+/**
+ * Starts multiple ambiences in the order they are given using the startAmbienceWithFade function and plays
+ * them in the order they are given
+ * 
+ * For that it calls a special startAmbienceWithFade that only runs one repetition and then it will call the next one in the array, because it waits
+ * until the last one is completely done there is not really a crossfade effect, the next one fades in
+ * 
+ * Then after all ambiences are done it will repeat the cycle again
+ * 
+ * @param {string} id a special id to identify the group cycle
+ * @param {Array<{src: string; fadeDurationMs: number; volume: number}>} srcs
+ */
+async function startAmbiencesWithFade(id, srcs) {
+  
 }
 
 /**
@@ -377,10 +393,10 @@ let lastNumberId = 0;
 
 /**
  * @param {Array<{src: string, volume: number}>} srcs
- * @param {number} stopDurationMs
- * @param {number} durationMs
+ * @param {number} stopfadeDurationMs
+ * @param {number} fadeDurationMs
  */
-async function stopAllAmbiencesAndStartNewOne(srcs, stopDurationMs, durationMs) {
+async function stopAllAmbiencesAndStartNewOne(srcs, stopfadeDurationMs, fadeDurationMs) {
   const numberId = ++lastNumberId;
   const newSrcSet = new Set(srcs.map(s => s.src));
 
@@ -390,7 +406,7 @@ async function stopAllAmbiencesAndStartNewOne(srcs, stopDurationMs, durationMs) 
   // call, the deferred cleanup won't kill it.
   const stopPromises = AMBIENCES
     .filter(a => !newSrcSet.has(a.src))
-    .map(a => stopAmbienceWithFade(a.src, stopDurationMs)
+    .map(a => stopAmbienceWithFade(a.src, stopfadeDurationMs)
       .catch(err => console.log('Error stopping ambience with fade:', err)));
 
   // If a newer call has already superseded us, don't start anything.
@@ -399,7 +415,7 @@ async function stopAllAmbiencesAndStartNewOne(srcs, stopDurationMs, durationMs) 
     return;
   }
 
-  const startPromises = srcs.map(s => startAmbienceWithFade(s.src, durationMs, s.volume)
+  const startPromises = srcs.map(s => startAmbienceWithFade(s.src, fadeDurationMs, s.volume)
     .catch(err => console.log('Error starting ambience with fade:', err)));
 
   await Promise.all([...stopPromises, ...startPromises]);
