@@ -75,7 +75,7 @@ export class CardTypeWizard extends HTMLElement {
         await stopAllAmbiencesAndStartNewOne([{ id: 'dream-world', srcs: randomizeAmbienceGroupSrc(
             [
                 { src: './sounds/dream-world.mp3', fadeDurationMs: 1000, volume: 3 },
-                { src: './sounds/rem.mp3', fadeDurationMs: 1000, volume: 1 },
+                { src: './sounds/rem-with-fade.mp3', fadeDurationMs: 1000, volume: 1 },
                 { src: './sounds/critter.mp3', fadeDurationMs: 1000, volume: 1.5 },
             ],
         ) }], 1000);

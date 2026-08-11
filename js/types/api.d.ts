@@ -33,6 +33,9 @@ declare interface DEAPI {
 
   saveFile(namespace: string, id: string, saveName: string, saveData: string, saveIndexData?: any): Promise<void>;
   deleteSaveFile(namespace: string, id: string, saveName: string): Promise<void>;
+
+  startDiffusionProcess(): Promise<void>;
+  stopDiffusionProcess(): Promise<void>;
 }
 
 declare global {

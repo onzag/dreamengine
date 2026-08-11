@@ -281,9 +281,25 @@ document.querySelector(".ambience")?.addEventListener("click", () => {
 let WORKER_READY = false;
 let DOM_READY = false;
 
-const index = Math.floor(Math.random() * 3);
-window.DREAM_AMBIENCE_CHOSEN = ["./sounds/dream.mp3", "./sounds/dream-2.mp3", "./sounds/dream-3.mp3"][index];
-window.DREAM_AMBIENCE_CHOSEN_VOLUME = [3, 1.2, 1.5][index];
+const index = Math.floor(Math.random() * 7);
+window.DREAM_AMBIENCE_CHOSEN = [
+    "./sounds/dream.mp3",
+    "./sounds/dream.mp3",
+    "./sounds/dream.mp3",
+    "./sounds/dream-2.mp3",
+    "./sounds/dream-2.mp3",
+    "./sounds/dream-2.mp3",
+    "./sounds/dream-3.mp3",
+][index];
+window.DREAM_AMBIENCE_CHOSEN_VOLUME = [
+    3,
+    3,
+    3,
+    1.2,
+    1.2,
+    1.2,
+    1.2,
+][index];
 
 // Initialize sound icons based on settings
 window.addEventListener('DOMContentLoaded', () => {

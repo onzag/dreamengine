@@ -226,6 +226,39 @@ export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
         await this.initialize();
     }
 
+    async pause() {
+        if (!this.socket) {
+            throw new Error("WebSocket is not initialized");
+        }
+
+        const rid = cheapRID();
+
+        this.socket.send(JSON.stringify({ action: "unload-model", rid }));
+        await (new Promise((resolve, reject) => {
+            this.listener[rid] = [resolve, (err) => {
+                delete this.listener[rid];
+                reject(new Error(err));
+            }];
+        }));
+        delete this.listener[rid];
+    }
+
+    async resume() {
+        if (!this.socket) {
+            throw new Error("WebSocket is not initialized");
+        }
+
+        const rid = cheapRID();
+        this.socket.send(JSON.stringify({ action: "reload-model", rid }));
+        await (new Promise((resolve, reject) => {
+            this.listener[rid] = [resolve, (err) => {
+                delete this.listener[rid];
+                reject(new Error(err));
+            }];
+        }));
+        delete this.listener[rid];
+    }
+
     getSupportedLanguages() {
         return this.supportedLanguages;
     }
@@ -266,6 +299,27 @@ export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
             this.rejectInitializePromise = reject;
 
             let lastClosureReason = "";
+
+            // @ts-ignore
+            this.socket.onopen = () => {
+                if (this.resolveInitializePromise) {
+                    this.resolveInitializePromise();
+                }
+            };
+
+            // @ts-ignore
+            this.socket.onerror = (event) => {
+                if (this.rejectInitializePromise) {
+                    const err = new Error("WebSocket error: failed to connect to " + (this.options.host || 'ws://127.0.0.1:8765'));
+                    this.rejectInitializePromise(err);
+                    this.resolveInitializePromise = null;
+                    this.rejectInitializePromise = null;
+                    this.reason = err.message;
+                    this.triggerOnConnectionStatusChange(false, err.message);
+                    this.connected = false;
+                    this.socket = null;
+                }
+            };
 
             // @ts-ignore
             this.socket.onclose = (event) => {
@@ -410,8 +464,8 @@ export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
         // TODO add special tags based on what sounds are available [cough] [laugh] [sigh] [scream] [sniffle] [snore] [sneeze] [yawn] [grunt] [groan] [gasp] [moan] [whistle] [cheer] [applause] [clap] [snap] [stomp] [thump] [bang] [crash] [slam]
         const nextMessageMustBeInform = "\n# Write the next message like this\n\n" + (
             options.narration ?
-            `Write the next passage as a single paragraph of third-person narration, the way an outside narrator describes a scene in a novel. Keep everyone, including ${character.name}, in the third person, referred to by name or as he, she, or they. Describe ${character.name}'s actions, feelings, and surroundings as an observer who is watching the scene from outside of it.` :
-            `Write the single line ${character.name} says out loud right now, in ${character.name}'s own voice. The line is spoken words, but you may interrupt those words with a short beat of third-person narration wrapped in em dashes (—), the way a novel breaks a line of dialogue with a small action before the speech resumes. Put nothing but the brief action or attribution between the em dashes, and keep the spoken words on either side. For example: \`${character.name}: spoken words — *${character.name} does some small action* — the spoken words continue.\` Only the text between the em dashes is narration; everything outside them is what ${character.name} actually says. Do not write narration on its own separate line, and do not describe any other character's actions, thoughts, or feelings.`
+                `Write the next passage as a single paragraph of third-person narration, the way an outside narrator describes a scene in a novel. Keep everyone, including ${character.name}, in the third person, referred to by name or as he, she, or they. Describe ${character.name}'s actions, feelings, and surroundings as an observer who is watching the scene from outside of it.` :
+                `Write the single line ${character.name} says out loud right now, in ${character.name}'s own voice. The line is spoken words, but you may interrupt those words with a short beat of third-person narration wrapped in em dashes (—), the way a novel breaks a line of dialogue with a small action before the speech resumes. Put nothing but the brief action or attribution between the em dashes, and keep the spoken words on either side. For example: \`${character.name}: spoken words — *${character.name} does some small action* — the spoken words continue.\` Only the text between the em dashes is narration; everything outside them is what ${character.name} actually says. Do not write narration on its own separate line, and do not describe any other character's actions, thoughts, or feelings.`
         ) + "\n\nAdvance the scene with new events. Do not repeat, summarize, or paraphrase any previous paragraph.";
 
         const continuationRequestPrompt = replaceMultipleNewLines(`
@@ -423,7 +477,7 @@ ${options.followingAction ? `# IMPORTANT:\n\n${options.followingAction}\n` : ""}
 
 ${nextMessageMustBeInform}
 `
-).trim() + "\n";
+        ).trim() + "\n";
 
         let tokensExhaustedApprox = 512; // initial buffer
         let contextWindowSize = this.contextWindowSize
@@ -518,7 +572,7 @@ ${nextMessageMustBeInform}
             if (this.__debug_last10TalkPayloads.length > 10) {
                 this.__debug_last10TalkPayloads.shift();
             }
-    }
+        }
 
         const rid = cheapRID();
         if (this.options.useExperimentalTestMode) {
@@ -1074,7 +1128,7 @@ ${this.buildSystemCharacterDescription(character, { description, externalDescrip
 
             if (grammarParsed) {
                 const options = [...grammarParsed]
-                
+
                 canEnd = false;
                 const validChars = new Set();
                 const invalidChars = new Set();

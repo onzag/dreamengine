@@ -191,6 +191,18 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
             return { ok: true };
         },
 
+        async pauseInference() {
+            const adapter = engine.inferenceAdapter;
+            await adapter.pause();
+            return { ok: true };
+        },
+
+        async resumeInference() {
+            const adapter = engine.inferenceAdapter;
+            await adapter.resume();
+            return { ok: true };
+        },
+
         /**
          * Provide the full script list from the main thread (since file:// can't list directories).
          * @param {{ scripts: Array<{namespace: string, id: string}> }} args

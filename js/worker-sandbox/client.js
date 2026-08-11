@@ -150,6 +150,9 @@ export class EngineWorkerClient {
         });
     }
 
+    pauseInference() { return this.#call("pauseInference"); }
+    resumeInference() { return this.#call("resumeInference"); }
+
     // ── DEngine methods ─────────────────────────────────────────────
 
     /**

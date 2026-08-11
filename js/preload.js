@@ -144,5 +144,19 @@ contextBridge.exposeInMainWorld('API', {
      */
     deleteSaveFile: (namespace, id, saveName) => {
         return ipcRenderer.invoke('deleteSaveFile', namespace, id, saveName);
-    }
+    },
+
+    /**
+     * @returns {Promise<void>}
+     */
+    startDiffusionProcess: () => {
+        return ipcRenderer.invoke('startDiffusionProcess');
+    },
+
+    /**
+     * @returns {Promise<void>}
+     */
+    stopDiffusionProcess: () => {
+        return ipcRenderer.invoke('stopDiffusionProcess');
+    },
 });

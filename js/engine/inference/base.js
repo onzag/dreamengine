@@ -70,6 +70,14 @@ export class BaseInferenceAdapter {
         throw new Error("Method 'ensureInitialized()' must be implemented.");
     }
 
+    async pause() {
+        throw new Error("Method 'pause()' not supported by this adapter.");
+    }
+
+    async resume() {
+        throw new Error("Method 'resume()' not supported by this adapter.");
+    }
+
     /**
      * @returns {Array<string>} the list of supported languages
      */

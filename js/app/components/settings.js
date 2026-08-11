@@ -1,5 +1,6 @@
 import './overlay.js';
 import "./profile-image.js";
+import "./diffusion/image-edit.js";
 import { playCancelSound, playConfirmSound, playHoverSound, playPauseSound } from '../sound.js';
 import { supportedLanguages, supportedLanguageNames } from '../localization/index.js';
 
@@ -89,12 +90,6 @@ class Settings extends HTMLElement {
         const tabsContainer = this.root.querySelector('app-overlay-tabs');
 
         if (this.currentSectionIndex === 0 && tabsContainer) {
-            const debug_desc = "Debug mode is not meant for playing, allows you to hear the voices of schizophrenic characters, see the system inference reasoning, rolling chances, you get debug commands, and more. Only use this mode for testing and debugging purposes.";
-            const easy_desc = "Easy mode shows characters hidden states, bond strengths, second bond strength, and shows how they feel about each other, making it easier to role-play and interact with them; editing messages is fully allowed in this mode.";
-            const normal_desc = "Normal mode is the default gameplay experience, characters will have hidden states and feelings, making interactions more immersive and challenging, editing is limited to typos and minor changes but you still are able to undo inferences, and get back to a previous state. (multiple timelines)";
-            const hard_desc = "Hard mode increases the challenge by removing the ability to undo inferences, making choices permanent; (single timeline)";
-            const diff_array = [debug_desc, easy_desc, normal_desc, hard_desc];
-
             tabsContainer.innerHTML = `<app-overlay-section section-title="User">
             <div class="main-profile-image-container">
                 <app-profile-image image-url="profile" editable="true"></app-profile-image>
@@ -342,6 +337,15 @@ class Settings extends HTMLElement {
                     input-type="number"
                     input-is-percentage="true"
                 ></app-overlay-input>
+            </app-overlay-section>`;
+        } else if (this.currentSectionIndex === 1 && tabsContainer) {
+            const debug_desc = "Debug mode is not meant for playing, allows you to hear the voices of schizophrenic characters, see the system inference reasoning, rolling chances, you get debug commands, and more. Only use this mode for testing and debugging purposes.";
+            const easy_desc = "Easy mode shows characters hidden states, bond strengths, second bond strength, and shows how they feel about each other, making it easier to role-play and interact with them; editing messages is fully allowed in this mode.";
+            const normal_desc = "Normal mode is the default gameplay experience, characters will have hidden states and feelings, making interactions more immersive and challenging, editing is limited to typos and minor changes but you still are able to undo inferences, and get back to a previous state. (multiple timelines)";
+            const hard_desc = "Hard mode increases the challenge by removing the ability to undo inferences, making choices permanent; (single timeline)";
+            const diff_array = [debug_desc, easy_desc, normal_desc, hard_desc];
+
+            tabsContainer.innerHTML = `<app-overlay-section section-title="Simulation">
                 <app-overlay-select
                     label="Difficulty"
                     input-options='["Debug", "Easy", "Normal", "Hard"]'
@@ -351,7 +355,7 @@ class Settings extends HTMLElement {
                     input-data-location="difficulty"
                 ></app-overlay-select>
             </app-overlay-section>`;
-        } else if (this.currentSectionIndex === 1 && tabsContainer) {
+        } else if (this.currentSectionIndex === 2 && tabsContainer) {
             const langOptions = JSON.stringify(["auto"].concat(supportedLanguages));
             // @ts-ignore
             const langLabels = JSON.stringify(["-"].concat(supportedLanguages.map(code => supportedLanguageNames[code] || code)));
@@ -365,7 +369,7 @@ class Settings extends HTMLElement {
                 ></app-overlay-select>
                 <div style="margin-top:1vh;color:#ff6b6b;font-size:3vh;">&#9888; The app must be restarted after changing the language, the language affects which characters and worlds are available</div>
             </app-overlay-section>`;
-        } else if (this.currentSectionIndex === 2 && tabsContainer) {
+        } else if (this.currentSectionIndex === 3 && tabsContainer) {
             tabsContainer.innerHTML = `<app-overlay-section section-title="AI Inference Settings">
                 <app-overlay-input
                     label="Inference host"
@@ -392,15 +396,70 @@ class Settings extends HTMLElement {
             </app-overlay-section>`;
 
             // If detection of the optional `gbnf` dependency is still in
-            // flight when the AI Settings tab is first opened, re-render
+            // flight when the Inference Settings tab is first opened, re-render
             // once it completes so the experimental toggle can appear.
             if (!gbnfDetected) {
                 gbnfDetectionPromise.then(() => {
-                    if (this.currentSectionIndex === 1 && this.isConnected) {
+                    if (this.currentSectionIndex === 3 && this.isConnected) {
                         this.renderSection();
                     }
                 });
             }
+        } else if (this.currentSectionIndex === 4 && tabsContainer) {
+            tabsContainer.innerHTML = `<app-overlay-section section-title="AI Diffusion Settings">
+                <app-overlay-input
+                    label="Diffusion host"
+                    input-placeholder="Enter AIHub diffusion host"
+                    title="This is the host address for an AIHub enabled image diffusion server, you can define all parameters here for the remote server, for example wss://myserver.com:1234?model=custom&param=value, the protocol must be ws:// or wss://"
+                    input-data-location="diffusionHost"
+                ></app-overlay-input>
+                <app-overlay-input
+                    label="Diffusion api secret"
+                    input-placeholder="Enter API secret"
+                    title="This is the API secret used by the AI diffusion server"
+                    input-data-location="diffusionApiKey"
+                ></app-overlay-input>
+                <app-overlay-input
+                    label="Diffusion executable path"
+                    input-placeholder="Enter executable path of the diffusion application"
+                    title="Optional path to the diffusion executable, if you have a local diffusion application installed with AIHub support like ComfyUI, you can specify the path to the executable here"
+                    input-data-location="diffusionExecutablePath"
+                ></app-overlay-input><app-overlay-input-boolean
+                    label="Handle diffusion executable (VRAM save mode)"
+                    title="Allows to have the inference server turned off when diffusion is running, and automatically turned back on when diffusion stops, this saves VRAM substantially; this requires the diffusion executable path to be set"
+                    input-data-location="handleDiffusionExecutable"
+                ></app-overlay-input-boolean>
+                ${window.API.mode === "web" ? `<div style="margin-top:1vh;color:#ff6b6b;font-size:3vh;">&#9888; The app must be restarted after changing the diffusion host or secret.</div>` : `<app-overlay-input-boolean
+                    label="Allow self-signed SSL certificates"
+                    title="Allow connecting to diffusion servers with self-signed SSL certificates, only enable this if you are connecting to a trusted server with a self-signed certificate, enabling this will make your connection less secure and vulnerable"
+                    input-data-location="allowDiffusionSelfSigned"
+                ></app-overlay-input-boolean><div style="margin-top:1vh;color:#ff6b6b;font-size:3vh;">&#9888; The app must be restarted after changing the diffusion host, secret or self-signed SSL certificate settings.</div>`}
+                <app-overlay-button id="test-diffusion-connection" play-sound-on-click="false" aria-key="t" title="Open an editor to check the diffusion settings">Test Diffusion</app-overlay-button>
+            </app-overlay-section>`;
+
+            // @ts-expect-error
+            tabsContainer.querySelector('#test-diffusion-connection').addEventListener('click', () => {
+                const dialog = document.createElement('app-dialog');
+                dialog.innerHTML = `
+                    <image-edit image-width="1024" image-height="1024"></image-edit>
+                `;
+                dialog.setAttribute('dialog-title', 'Diffusion Test');
+                dialog.setAttribute('confirmation', 'true');
+                dialog.setAttribute('confirm-text', 'Close');
+                dialog.setAttribute('cancel-text-disable', 'true');
+                dialog.setAttribute('extra-z-index', '100');
+                dialog.setAttribute("large", "true");
+                dialog.setAttribute("pre-expand", "true");
+                document.body.appendChild(dialog);
+
+                const exit = () => {
+                    this.dispatchEvent(new CustomEvent('exit', { bubbles: true, composed: true }));
+                    if (dialog.parentNode) dialog.parentNode.removeChild(dialog);
+                };
+                // Both confirm and cancel (Escape / backdrop click) wake up.
+                dialog.addEventListener('confirm', exit);
+                dialog.addEventListener('cancel', exit);
+            });
         };
     }
 
@@ -482,7 +541,7 @@ class Settings extends HTMLElement {
             }
         </style>
         <app-overlay overlay-title="Settings" cancel-text="Cancel" confirm-text="Save & Close">
-            <app-overlay-tabs current="${this.currentSectionIndex}" sections='["General", "Language", "AI Settings"]'>              
+            <app-overlay-tabs current="${this.currentSectionIndex}" sections='["Profile", "Simulation", "Language", "Inference", "Diffusion"]'>              
             </app-overlay-tabs>
         </app-overlay>`;
     }

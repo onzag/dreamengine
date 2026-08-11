@@ -139,6 +139,7 @@ engine.exports = {
             maxWeightOnTopKg: 40,
             ontopCharacters: [],
             wearableProperties: {
+                underwear: false,
                 coversTopNakedness: true,
                 coversBottomNakedness: true,
                 volumeRangeMinLiters: 50,
@@ -152,7 +153,6 @@ engine.exports = {
                 fullyProtectsFromWeathers: ["Vaccuum", "Rain", "Snow"],
                 partiallyProtectsFromWeathers: [],
             },
-            isConsumable: false,
             owner: null,
             communicator: null,
         }
@@ -180,7 +180,6 @@ engine.exports = {
             maxVolumeOnTopLiters: 100,
             maxWeightOnTopKg: 100,
             ontopCharacters: [],
-            isConsumable: false,
             owner: null,
             communicator: null,
         };
@@ -208,7 +207,6 @@ engine.exports = {
             containingCharacters: [],
             maxVolumeOnTopLiters: 100,
             maxWeightOnTopKg: 100,
-            isConsumable: false,
             owner: null,
             communicator: null,
         };
@@ -230,7 +228,6 @@ engine.exports = {
             maxVolumeOnTopLiters: 1,
             maxWeightOnTopKg: 10,
             ontopCharacters: [],
-            isConsumable: false,
             owner: null,
             communicator: null,
         };
@@ -252,7 +249,6 @@ engine.exports = {
             maxVolumeOnTopLiters: 1,
             maxWeightOnTopKg: 10,
             ontopCharacters: [],
-            isConsumable: false,
             owner: null,
             communicator: null,
         };
@@ -280,7 +276,6 @@ engine.exports = {
             maxVolumeOnTopLiters: 0,
             maxWeightOnTopKg: 0,
             ontopCharacters: [],
-            isConsumable: false,
             owner: null,
             communicator: null,
         };
@@ -308,7 +303,6 @@ engine.exports = {
             maxVolumeOnTopLiters: 0,
             maxWeightOnTopKg: 0,
             ontopCharacters: [],
-            isConsumable: false,
             owner: null,
             communicator: null,
         };
@@ -336,7 +330,6 @@ engine.exports = {
             maxVolumeOnTopLiters: 0,
             maxWeightOnTopKg: 0,
             ontopCharacters: [],
-            isConsumable: false,
             owner: null,
             communicator: null,
         };
@@ -364,7 +357,6 @@ engine.exports = {
             ontopCharacters: [],
             consumableProperties: null,
             containing: [cabinetDrawerKitchenware, cabinetDrawerBowls],
-            isConsumable: false,
             owner: null,
             communicator: null,
         };
@@ -389,7 +381,6 @@ engine.exports = {
             maxVolumeOnTopLiters: 0,
             maxWeightOnTopKg: 0,
             ontopCharacters: [],
-            isConsumable: true,
             owner: null,
             communicator: null,
         };
@@ -417,7 +408,6 @@ engine.exports = {
             maxVolumeOnTopLiters: 100,
             maxWeightOnTopKg: 100,
             ontopCharacters: [],
-            isConsumable: false,
             owner: null,
             communicator: null,
         };
@@ -439,7 +429,6 @@ engine.exports = {
             maxVolumeOnTopLiters: 100,
             maxWeightOnTopKg: 300,
             ontopCharacters: [],
-            isConsumable: false,
             owner: null,
             communicator: null,
         };
@@ -484,7 +473,6 @@ engine.exports = {
                             maxVolumeOnTopLiters: 10,
                             maxWeightOnTopKg: 1000,
                             ontopCharacters: [],
-                            isConsumable: false,
                             owner: null,
                             communicator: null,
                         }
@@ -640,7 +628,6 @@ engine.exports = {
                                 maxVolumeOnTopLiters: 500,
                                 maxWeightOnTopKg: 400,
                                 ontopCharacters: [],
-                                isConsumable: false,
                                 owner: null,
                                 communicator: null,
                             }

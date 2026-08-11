@@ -80,7 +80,6 @@ const clothes = {
             wearableProperties: null,
             containerProperties: null,
             description: "A brand new stick of bubble gum. It looks delicious.",
-            isConsumable: true,
             owner: null,
         }
     ],
@@ -103,7 +102,6 @@ const clothes = {
         addedCarryingCapacityLiters: 0,
         extraBodyVolumeWhenWornLiters: 1,
     },
-    isConsumable: false,
     name: "Space Clothes",
     owner: "Onza",
     state: {},
@@ -127,7 +125,6 @@ const TIGHT_CLOTHING_TEST = false;
 const massiveDumbell = {
     amount: 1,
     description: "A massive dumbell meant for testing the limits of carrying capacity of a character. It is very heavy and bulky, and not meant to be easily carried.",
-    isConsumable: false,
     name: "Massive Dumbell",
     consumableProperties: null,
     containing: [],
@@ -147,7 +144,6 @@ const massiveDumbell = {
 const sticks = {
     amount: 100,
     description: "A sturdy stick that can be used for various purposes.",
-    isConsumable: false,
     canSeeContentsFromOutside: false,
     name: "Stick",
     consumableProperties: null,
@@ -168,7 +164,6 @@ const sticks = {
 const giantBox = {
     amount: 1,
     description: "A giant box that can be used for various purposes.",
-    isConsumable: false,
     canSeeContentsFromOutside: false,
     name: "Giant Box",
     consumableProperties: null,

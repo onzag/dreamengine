@@ -266,5 +266,29 @@ pre { margin:0; padding:16px; line-height:1.5; white-space:pre-wrap; word-wrap:b
                 throw new Error(`deleteSaveFile("${namespace}/${id}/${saveName}") failed: ${detail}`);
             }
         },
+
+        startDiffusionProcess: async () => {
+            const res = await fetch('/api/diffusion/start', {
+                method: 'POST',
+                credentials: 'same-origin',
+            });
+            if (!res.ok) {
+                let detail = `${res.status} ${res.statusText}`;
+                try { const d = await res.json(); if (d?.error) detail = d.error; } catch { /* */ }
+                throw new Error(`startDiffusionProcess failed: ${detail}`);
+            }
+        },
+
+        stopDiffusionProcess: async () => {
+            const res = await fetch('/api/diffusion/stop', {
+                method: 'POST',
+                credentials: 'same-origin',
+            });
+            if (!res.ok) {
+                let detail = `${res.status} ${res.statusText}`;
+                try { const d = await res.json(); if (d?.error) detail = d.error; } catch { /* */ }
+                throw new Error(`stopDiffusionProcess failed: ${detail}`);
+            }
+        },
     }
 }
