@@ -595,7 +595,7 @@ import { BaseDiffusionAdapter } from "./base.js";
  * @property {string} label
  * @property {string} project_type
  * @property {boolean} project_type_init
- * @property {AIHubExpose[]} exposes
+ * @property {Record<string, AIHubExpose>} expose
  */
 
 /**

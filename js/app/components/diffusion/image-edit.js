@@ -1,6 +1,7 @@
 import { DiffusionAdapterAIHub } from "../../../engine/diffusion/adapter-aihub.js";
+import "./aihub-custom-selector.js";
 
-class ImageEdit extends HTMLElement {
+export class ImageEdit extends HTMLElement {
     constructor() {
         super();
         this.root = this.attachShadow({ mode: 'open' });
@@ -29,6 +30,11 @@ class ImageEdit extends HTMLElement {
         /** @type {HTMLElement} */
         this.canvasStack = /** @type {any} */ (null);
 
+        /** @type {Array<() => void>} listeners notified (debounced) when the image changes */
+        this.imageChangeListeners = [];
+        /** @type {any} debounce timer handle for image change notifications */
+        this.imageChangeTimer = null;
+
         // bound handlers
         this.onPointerDown = this.onPointerDown.bind(this);
         this.onPointerMove = this.onPointerMove.bind(this);
@@ -49,14 +55,17 @@ class ImageEdit extends HTMLElement {
      * @param {import("../../../engine/diffusion/adapter-aihub.js").AiHubInfoList} data
      */
     onInfoList(data) {
-        // TODO loop in the workflows, we want to use all the workflows that have no project_type
-        // and we want to focus on image only for the workflow type at "context" must be "image"
-        // category is an arbitrary string that represents a group of workflows within a context, since we only
-        // have the image context, we will group by category
-
-        // use localStorage to store the last selected workflow, as well as category, as well as what was saved for each expose of each given id
-
-        // for rendering each expose check the definitions in the types, as when selecting a workflow the exposes are selected
+        const selector = /** @type {import("./aihub-custom-selector.js").AIHubCustomSelector | null} */ (
+            this.root.getElementById('aihub-selector')
+        );
+        if (!selector) return;
+        // Limit to image workflows that are not project-scoped; the selector
+        // groups them by category and renders one component per expose.
+        selector.configure({
+            infoList: data,
+            canvas: this,
+            limit: { context: 'image', projectType: null },
+        });
     }
 
     /**
@@ -316,12 +325,8 @@ class ImageEdit extends HTMLElement {
                         <div class="btn" id="move-layer-down" title="Move active layer down">&#9660;</div>
                     </div>
                     <div id="layers-list"></div>
-                    <div class="section-title" style="margin-top:1.5vh;">Custom operations</div>
-                    <div id="custom-ops">
-                        <div style="font-size:1.4vh;color:#a98fd0;">
-                            Operations can read combined layers by their indices via
-                            <code>getCombinedLayers([...indices])</code>.
-                        </div>
+                    <div style="margin-top:1.5vh;">
+                        <aihub-custom-selector id="aihub-selector"></aihub-custom-selector>
                     </div>
                 </div>
             </div>
@@ -419,6 +424,7 @@ class ImageEdit extends HTMLElement {
             const layer = this.layers[layerIndex];
             if (layer) layer.ctx.drawImage(img, 0, 0, this.imageWidth, this.imageHeight);
             this.fitToView();
+            this.notifyImageChanged();
         };
         img.onerror = () => {
             this.setStatus('Failed to load the image source.', 'error');
@@ -448,6 +454,7 @@ class ImageEdit extends HTMLElement {
         this.activeLayerIndex = this.layers.length - 1;
         this.updateLayerStacking();
         this.renderLayersList();
+        this.notifyImageChanged();
     }
 
     /** Keep canvas z-order and opacity in sync with the layers array. */
@@ -471,6 +478,7 @@ class ImageEdit extends HTMLElement {
         this.activeLayerIndex = to;
         this.updateLayerStacking();
         this.renderLayersList();
+        this.notifyImageChanged();
     }
 
     /** Render the layers list in the sidebar. */
@@ -494,6 +502,7 @@ class ImageEdit extends HTMLElement {
                 layer.visible = !layer.visible;
                 this.updateLayerStacking();
                 this.renderLayersList();
+                this.notifyImageChanged();
             });
             const nameEl = /** @type {HTMLElement} */ (el.querySelector('.layer-name'));
             nameEl.addEventListener('click', () => {
@@ -505,6 +514,7 @@ class ImageEdit extends HTMLElement {
                 e.stopPropagation();
                 layer.opacity = parseInt(opacity.value, 10) / 100;
                 this.updateLayerStacking();
+                this.notifyImageChanged();
             });
             list.appendChild(el);
         }
@@ -690,9 +700,11 @@ class ImageEdit extends HTMLElement {
     }
 
     onPointerUp() {
+        const wasDrawing = this.isDrawing;
         this.isDrawing = false;
         this.isErasing = false;
         this.lastPoint = null;
+        if (wasDrawing) this.notifyImageChanged();
     }
 
     /**
@@ -797,6 +809,97 @@ class ImageEdit extends HTMLElement {
         }
         ctx.globalAlpha = 1;
         return out;
+    }
+
+    /**
+     * Combine all visible layers except the given index into a new canvas.
+     * @param {number} excludeIndex
+     * @returns {HTMLCanvasElement}
+     */
+    getCombinedLayersExcluding(excludeIndex) {
+        const indices = this.layers
+            .map((_, i) => i)
+            .filter((i) => i !== excludeIndex && this.layers[i].visible);
+        return this.getCombinedLayers(indices);
+    }
+
+    /**
+     * Produce a fresh canvas snapshot for a given AIHubExposeImage source type.
+     * Because every layer matches the image size, the "*_intersection" variants
+     * are equivalent to their non-intersection counterparts.
+     * @param {string} type
+     * @returns {HTMLCanvasElement}
+     */
+    getImageCanvasForType(type) {
+        switch (type) {
+            case 'current_layer':
+            case 'current_layer_at_image_intersection': {
+                const out = document.createElement('canvas');
+                out.width = this.imageWidth;
+                out.height = this.imageHeight;
+                const ctx = /** @type {CanvasRenderingContext2D} */ (out.getContext('2d'));
+                const layer = this.layers[this.activeLayerIndex];
+                if (layer) ctx.drawImage(layer.canvas, 0, 0);
+                return out;
+            }
+            case 'merged_image_without_current_layer':
+            case 'merged_image_current_layer_intersection_without_current_layer':
+                return this.getCombinedLayersExcluding(this.activeLayerIndex);
+            case 'merged_image':
+            case 'merged_image_current_layer_intersection':
+            case 'upload':
+            default:
+                return this.getCombinedLayers();
+        }
+    }
+
+    /**
+     * Return one canvas per visible layer (bottom to top), each at image size.
+     * @returns {HTMLCanvasElement[]}
+     */
+    getLayerCanvases() {
+        /** @type {HTMLCanvasElement[]} */
+        const result = [];
+        for (const layer of this.layers) {
+            if (!layer.visible) continue;
+            const out = document.createElement('canvas');
+            out.width = this.imageWidth;
+            out.height = this.imageHeight;
+            const ctx = /** @type {CanvasRenderingContext2D} */ (out.getContext('2d'));
+            ctx.globalAlpha = layer.opacity;
+            ctx.drawImage(layer.canvas, 0, 0);
+            result.push(out);
+        }
+        return result;
+    }
+
+    /**
+     * Register a listener notified (debounced) when the image changes.
+     * @param {() => void} cb
+     */
+    addImageChangeListener(cb) {
+        if (!this.imageChangeListeners.includes(cb)) this.imageChangeListeners.push(cb);
+    }
+
+    /**
+     * @param {() => void} cb
+     */
+    removeImageChangeListener(cb) {
+        this.imageChangeListeners = this.imageChangeListeners.filter((l) => l !== cb);
+    }
+
+    /**
+     * Notify listeners that the image changed, debounced so that in-progress
+     * drawing does not trigger a flood of blob regenerations.
+     */
+    notifyImageChanged() {
+        if (this.imageChangeTimer) clearTimeout(this.imageChangeTimer);
+        this.imageChangeTimer = setTimeout(() => {
+            this.imageChangeTimer = null;
+            for (const cb of this.imageChangeListeners) {
+                try { cb(); } catch (err) { console.error('ImageEdit: image change listener failed', err); }
+            }
+        }, 600);
     }
 
     async disconnectedCallback() {
