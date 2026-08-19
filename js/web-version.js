@@ -17,6 +17,7 @@ import https from 'https';
 import { buildDreamEngineHome } from './util/build-dreamengine-home.js';
 import { watchScripts } from './util/watch-scripts.js';
 import express from 'express';
+import { startDiffusionProcess, stopDiffusionProcess } from './diffussion.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -733,6 +734,16 @@ async function startWebServer(creds) {
         req.on('close', () => {
             scriptChangeClients.delete(res);
         });
+    });
+
+    app.post('/api/diffusion/start', async (/** @type {any} */ req, /** @type {any} */ res) => {
+        await startDiffusionProcess(config.diffusionExecutable);
+        res.json({ ok: true });
+    });
+
+    app.post('/api/diffusion/stop', async (/** @type {any} */ req, /** @type {any} */ res) => {
+        await stopDiffusionProcess();
+        res.json({ ok: true });
     });
 
     watchScripts(SCRIPT_FOLDER, ({ namespace, id, options }) => {

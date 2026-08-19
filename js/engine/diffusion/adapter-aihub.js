@@ -632,6 +632,43 @@ export class DiffusionAdapterAIHub extends BaseDiffusionAdapter {
          * @type {Array<(data: AiHubInfoList) => void>}
          */
         this.infoListCallbacks = [];
+
+        /**
+         * @type {Array<(data: any, binaryData: Blob | null) => void>}
+         */
+        this.messageCallbacks = [];
+    }
+
+    /**
+     * Register a listener notified for every message received from the server.
+     * @param {(data: any, binaryData: Blob | null) => void} callback
+     */
+    addListenerOnMessage(callback) {
+        if (!this.messageCallbacks.includes(callback)) this.messageCallbacks.push(callback);
+    }
+
+    /**
+     * @param {(data: any, binaryData: Blob | null) => void} callback
+     */
+    removeListenerOnMessage(callback) {
+        this.messageCallbacks = this.messageCallbacks.filter(cb => cb !== callback);
+    }
+
+    /**
+     * Queue a workflow run on the server.
+     * @param {string} workflowId
+     * @param {any} request extra request payload (exposed values, uploaded file references, etc.)
+     * @returns {void}
+     */
+    sendWorkflowOperation(workflowId, request) {
+        if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+            throw new Error("Not connected to the diffusion server.");
+        }
+        this.socket.send(JSON.stringify({
+            ...request,
+            type: "WORKFLOW_OPERATION",
+            workflow_id: workflowId,
+        }));
     }
 
     /**
@@ -671,10 +708,34 @@ export class DiffusionAdapterAIHub extends BaseDiffusionAdapter {
      */
     onData(event) {
         try {
+            // check if binary data
+            const isBinary = event.data instanceof Blob;
+            if (isBinary && !this.lastFileEvent) {
+                console.warn("DiffusionAdapterAIHub: Received binary data but no file header was set, ignoring.");
+                return;
+            } else if (isBinary) {
+                const fileEvent = this.lastFileEvent;
+                this.lastFileEvent = null;
+                const fileData = event.data;
+                this.messageCallbacks.forEach(callback => {
+                    try { callback(fileEvent, fileData); } catch (err) { console.error("DiffusionAdapterAIHub: message listener failed", err); }
+                });
+            }
+
             const data = JSON.parse(event.data);
+
+            const isFileHeader = data.type === "FILE";
+            if (isFileHeader) {
+                this.lastFileEvent = data;
+                return;
+            }
+
             if (data.type === "INFO_LIST") {
                 this.onInfoList(data);
             }
+            this.messageCallbacks.forEach(callback => {
+                try { callback(data, null); } catch (err) { console.error("DiffusionAdapterAIHub: message listener failed", err); }
+            });
         } catch (err) {
             console.error("Error parsing data from diffusion server:", err);
         }
@@ -789,5 +850,30 @@ export class DiffusionAdapterAIHub extends BaseDiffusionAdapter {
         }
 
         await this.initialize();
+    }
+
+    /**
+     * @param {string} workflowId 
+     * @returns {string}
+     */
+    getImageURLForWorkflowId(workflowId) {
+        return this.httpHost + "workflows/" + encodeURIComponent(workflowId) + ".png";
+    }
+
+    /**
+     * 
+     * @param {string} modelId 
+     * @returns {string}
+     */
+    getImageURLForModelId(modelId) {
+        return this.httpHost + "models/" + encodeURIComponent(modelId) + ".png";
+    }
+
+    /**
+     * @param {string} loraId 
+     * @returns {string}
+     */
+    getImageURLForLoraId(loraId) {
+        return this.httpHost + "loras/" + encodeURIComponent(loraId) + ".png";
     }
 }

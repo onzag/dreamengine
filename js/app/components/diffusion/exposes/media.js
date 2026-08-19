@@ -15,6 +15,8 @@ export class AIHubExposeImageComponent extends AIHubExposeBase {
         this._previewUrl = null;
         /** @type {Blob | null} custom uploaded image */
         this._uploadedBlob = null;
+        /** @type {string | null} server path of the uploaded file, set after a successful uploadFile() */
+        this.uploadedFilePath = null;
     }
 
     defaultValue() { return this._expose.data.type || 'merged_image'; }
@@ -72,6 +74,9 @@ export class AIHubExposeImageComponent extends AIHubExposeBase {
         if (!source) return;
         // @ts-ignore
         source.toBlob((blob) => { if (blob) this._setBlob(blob); });
+
+        const layerId = type.includes("current_layer") ? canvas.getActiveLayerId() : "";
+        this.layerId = layerId;
     }
 
     /**
@@ -85,7 +90,77 @@ export class AIHubExposeImageComponent extends AIHubExposeBase {
         if (img) img.src = this._previewUrl;
     }
 
-    getValue() { return this._blob; }
+    async uploadFile() {
+        if (!this._blob) return;
+        const blob = this._blob;
+
+        const arrayBuffer = await blob.arrayBuffer();
+        const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
+        const hash = Array.from(new Uint8Array(hashBuffer))
+            .map((b) => b.toString(16).padStart(2, '0')).join('');
+
+        const adapter = this._context?.adapter;
+        if (!adapter?.socket) throw new Error('No active connection to the diffusion server');
+        const workflowId = this._context?.workflowId || '';
+
+        /**
+         * Wait for the next matching WebSocket message, with a timeout.
+         * @param {number} timeoutMs
+         * @returns {Promise<any>}
+         */
+        const waitForMessage = (timeoutMs) => new Promise((resolve, reject) => {
+            const timer = setTimeout(() => {
+                adapter.socket.removeEventListener('message', handler);
+                reject(new Error('Timeout waiting for server response'));
+            }, timeoutMs);
+            /** @param {MessageEvent} event */
+            function handler(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    clearTimeout(timer);
+                    adapter.socket.removeEventListener('message', handler);
+                    resolve(data);
+                } catch { /* ignore non-JSON frames */ }
+            }
+            adapter.socket.addEventListener('message', handler);
+        });
+
+        adapter.socket.send(JSON.stringify({
+            type: 'FILE_UPLOAD',
+            filename: hash,
+            workflow_id: workflowId,
+            if_not_exists: true,
+        }));
+
+        const response1 = await waitForMessage(10000);
+
+        if (response1.type === 'ERROR') {
+            throw new Error('Error uploading file: ' + (response1.message || 'Unknown error'));
+        } else if (response1.type === 'UPLOAD_ACK') {
+            adapter.socket.send(arrayBuffer);
+            const response2 = await waitForMessage(10000);
+            if (response2.type === 'ERROR') {
+                throw new Error('Error uploading file: ' + (response2.message || 'Unknown error'));
+            } else if (response2.type === 'FILE_UPLOAD_SUCCESS') {
+                if (!response2.file) throw new Error('Error uploading file: No file path returned by server');
+                this.uploadedFilePath = response2.file;
+            } else {
+                throw new Error('Unexpected response from server: ' + (response2.message || 'Unknown error'));
+            }
+        } else if (response1.type === 'FILE_UPLOAD_SKIP') {
+            if (!response1.file) throw new Error('Error uploading file: No file path returned by server');
+            this.uploadedFilePath = response1.file;
+        }
+    }
+
+    getValue() {
+        return {
+            local_file: this.uploadedFilePath,
+            pos_x: 0,
+            pos_y: 0,
+            layer_id: this.layerId || "",
+        }
+    }
 }
 customElements.define('aihub-expose-image', AIHubExposeImageComponent);
 

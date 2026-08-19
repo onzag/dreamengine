@@ -3,8 +3,10 @@
  *
  * @typedef {Object} AIHubExposeContext
  * @property {import("../../../../engine/diffusion/adapter-aihub.js").AiHubInfoList} infoList
+ * @property {(import("../../../../engine/diffusion/adapter-aihub.js").DiffusionAdapterAIHub | null)} adapter - diffusion adapter, used for asset URLs
  * @property {() => (import("../image-edit.js").ImageEdit | any)} getCanvas - accessor to the owning image editor
  * @property {(id: string) => any} getExposeValueById - read the current value of a sibling expose (for dynamic bounds)
+ * @property {string} workflowId - the id of the currently selected workflow
  * @property {(key: string) => any} loadSaved - read a persisted value (scoped to the workflow)
  * @property {(key: string, value: any) => void} saveValue - persist a value (scoped to the workflow)
  * @property {() => void} notifyChange - notify the selector that a value changed
@@ -28,6 +30,14 @@ export class AIHubExposeBase extends HTMLElement {
         this._context = null;
         /** @type {any} */
         this._value = undefined;
+    }
+
+    /**
+     * override this method to handle file uploads. The default implementation does nothing.
+     * @returns {Promise<void>}
+     */
+    async uploadFile() {
+
     }
 
     /**

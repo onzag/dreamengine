@@ -8,9 +8,10 @@ export class ImageEdit extends HTMLElement {
 
         this.ownsDiffusionProcess = false;
 
-        /** @type {Array<{name: string, canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, visible: boolean, opacity: number}>} */
+        /** @type {Array<{name: string, canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, visible: boolean, opacity: number, id: string}>} */
         this.layers = [];
-        this.activeLayerIndex = 0;
+        this.activeLayerId = null;
+        this._layerIdCounter = 0;
 
         this.brushSize = 20;
         this.brushColor = '#000000';
@@ -23,6 +24,10 @@ export class ImageEdit extends HTMLElement {
         this.isDrawing = false;
         this.isErasing = false;
         this.lastPoint = null;
+
+        /** @type {Array<{layerId: string, imageData: ImageData}>} recent brush operations for undo */
+        this.undoHistory = [];
+        this.maxUndoSteps = 10;
 
         this.imageWidth = 512;
         this.imageHeight = 512;
@@ -43,8 +48,8 @@ export class ImageEdit extends HTMLElement {
         this.onPointerEnter = this.onPointerEnter.bind(this);
         this.onPointerLeave = this.onPointerLeave.bind(this);
         this.onInfoList = this.onInfoList.bind(this);
+        this.onWorkflowMessage = this.onWorkflowMessage.bind(this);
     }
-
     connectedCallback() {
         // Build the editor UI immediately so it is available while the connection is set up.
         this.buildImageEditUI();
@@ -59,13 +64,159 @@ export class ImageEdit extends HTMLElement {
             this.root.getElementById('aihub-selector')
         );
         if (!selector) return;
-        // Limit to image workflows that are not project-scoped; the selector
-        // groups them by category and renders one component per expose.
         selector.configure({
             infoList: data,
             canvas: this,
+            adapter: this.diffusionAdapter,
             limit: { context: 'image', projectType: null },
         });
+
+        const runBtn = /** @type {HTMLButtonElement|null} */ (this.root.getElementById('run-workflow'));
+        if (runBtn) {
+            // Show the button immediately if a workflow is already selected.
+            runBtn.disabled = !selector.getValue()?.workflowId;
+            // Keep it in sync whenever the selection changes.
+            selector.addEventListener('change', (e) => {
+                runBtn.disabled = !/** @type {CustomEvent} */ (e).detail?.workflowId;
+            });
+            runBtn.addEventListener('click', () => this.runWorkflow());
+        }
+    }
+
+    /** Run the currently selected workflow. */
+    runWorkflow() {
+        if (this.isRunningWorkflow) {
+            this.cancelRunWorkflow();
+        } else {
+            this.doRunWorkflow();
+        }
+    }
+
+    async doRunWorkflow() {
+        this.isRunningWorkflow = true;
+        const runBtn = /** @type {HTMLButtonElement|null} */ (this.root.getElementById('run-workflow'));
+        if (runBtn) runBtn.innerHTML = '&#10074;&#10074; Cancel';
+
+        const selector = /** @type {import("./aihub-custom-selector.js").AIHubCustomSelector | null} */ (
+            this.root.getElementById('aihub-selector')
+        );
+        if (!selector) { this.finishRunWorkflow(); return; }
+
+        this.setStatus('Uploading files&hellip;', 'loading');
+        try {
+            await selector.uploadAllFiles();
+        } catch (err) {
+            this.setStatus('Failed to upload files: ' + this.errorText(err), 'error');
+            this.finishRunWorkflow();
+            return;
+        }
+
+        const data = selector.getValue();
+        const workflowId = data?.workflowId;
+        if (!workflowId) {
+            this.setStatus('No workflow selected.', 'error');
+            this.finishRunWorkflow();
+            return;
+        }
+
+        // Track the run so incoming messages can be matched to it.
+        this.currentWorkflowId = workflowId;
+        this.currentRunId = null;
+
+        if (!this.diffusionAdapter) {
+            this.setStatus('Not connected to the diffusion server.', 'error');
+            this.finishRunWorkflow();
+            return;
+        }
+
+        try {
+            this.diffusionAdapter.addListenerOnMessage(this.onWorkflowMessage);
+            this.setStatus('Queueing workflow&hellip;', 'loading');
+            this.diffusionAdapter.sendWorkflowOperation(workflowId, {expose: data.values});
+        } catch (err) {
+            this.setStatus('Failed to start the workflow: ' + this.errorText(err), 'error');
+            this.finishRunWorkflow();
+        }
+    }
+
+    /**
+     * Handle workflow-related messages coming back from the diffusion server.
+     * @param {any} msg
+     * @param {Blob | null} binaryData
+     */
+    onWorkflowMessage(msg, binaryData) {
+        if (!msg || !this.isRunningWorkflow) return;
+        // Only react to messages for the workflow we launched.
+        if (msg.workflow_id && this.currentWorkflowId && msg.workflow_id !== this.currentWorkflowId) return;
+
+        switch (msg.type) {
+            case 'WORKFLOW_AWAIT': {
+                this.currentRunId = msg.id;
+                const ahead = typeof msg.before_this === 'number' ? msg.before_this : 0;
+                if (ahead > 0) {
+                    this.setStatus(`Queued (${ahead} ahead)&hellip;`, 'loading');
+                } else {
+                    this.setStatus('Queued, starting soon&hellip;', 'loading');
+                }
+                break;
+            }
+            case 'WORKFLOW_STATUS': {
+                // Ignore progress for a different run if we already know our id.
+                if (this.currentRunId && msg.id && msg.id !== this.currentRunId) break;
+                const total = msg.total || 1;
+                const progress = msg.progress || 0;
+                const pct = Math.round((progress / total) * 100);
+                const nodeName = msg.node_name || msg.node_id || 'workflow';
+                this.setStatus(`${nodeName}: ${pct}% (${progress}/${total})`, 'loading');
+                break;
+            }
+            case 'WORKFLOW_FINISHED': {
+                if (this.currentRunId && msg.id && msg.id !== this.currentRunId) break;
+                if (msg.error || msg.cancelled) {
+                    this.setStatus(msg.error_message || 'Workflow cancelled.', 'error');
+                } else {
+                    this.setStatus('Workflow finished.', 'ok');
+                }
+                this.finishRunWorkflow();
+                break;
+            }
+            case 'FILE': {
+                const dataType = msg.data_type; // should be defined if not it is invalid
+                const action = msg.action; // should be defined if not it is invalid
+
+                // example message {"type": "FILE", "workflow_id": "basic_inpaint", "id": "8c19fe03-ffcf-4199-bc8b-5cff73790732", "data_type": "image/png", "action": {"action": "NEW_LAYER", "width": 1024, "height": 1024, "type": "image/png", "pos_x": 0, "pos_y": 0, "reference_layer_id": "1", "reference_layer_action": "REPLACE", "name": "new layer", "file_name": "new_layer.png", "file_action": ""}}
+                // potential actions: NEW_LAYER, NEW_IMAGE (ignore all others)
+                // potential reference_layer_action: REPLACE, NEW_BEFORE, NEW_AFTER (ignore all others)
+                // NOTE about the implementation is NEW_LAYER with REPLACE, do not delete the reference layer; just hide it and do the same as NEW_AFTER; this is to avoid destructive changes, even when it says REPLACE we will not do it like that
+                // reference_layer_id the name of the layer that is in reference
+                // make sure when inserting a layer with the same name to add a number if the layer name already exists
+                // pos_x and pos_y are the position of the new layer relative to the reference layer, since the image is the same size; notice that there is technically no guarantee that the image is the same size as the canvas
+                // as all our layers are the same size as the canvas as this is a small tool and not a full image editor, just draw the image from the pos_x and pos_y given in the canvas and crop anything that is outside this box
+            }
+            case 'ERROR': {
+                this.setStatus(msg.message || 'Workflow error.', 'error');
+                this.finishRunWorkflow();
+                break;
+            }
+        }
+    }
+
+    /** Reset the run state and restore the Run button. */
+    finishRunWorkflow() {
+        this.isRunningWorkflow = false;
+        this.currentRunId = null;
+        this.currentWorkflowId = null;
+        if (this.diffusionAdapter) {
+            this.diffusionAdapter.removeListenerOnMessage(this.onWorkflowMessage);
+        }
+        const runBtn = /** @type {HTMLButtonElement|null} */ (this.root.getElementById('run-workflow'));
+        if (runBtn) runBtn.innerHTML = '&#9654; Run Workflow';
+    }
+
+    cancelRunWorkflow() {
+        // TODO: send a cancel request to the server once the protocol is defined.
+        this.setStatus('Cancelling&hellip;', 'loading');
+        this.finishRunWorkflow();
     }
 
     /**
@@ -74,13 +225,13 @@ export class ImageEdit extends HTMLElement {
      * @param {'loading'|'error'|'ok'} [kind]
      */
     setStatus(html, kind = 'loading') {
-        const status = this.root.getElementById('status');
-        if (!status) return;
+        const statusText = this.root.getElementById('status-text');
+        if (!statusText) return;
         let color = '#c9a7ff';
         let icon = '&#9203;'; // hourglass
         if (kind === 'error') { color = '#ff6b6b'; icon = '&#9888;'; }
         else if (kind === 'ok') { color = '#7CFC8A'; icon = '&#10003;'; }
-        status.innerHTML = `<span style="color:${color};">${icon} ${html}</span>`;
+        statusText.innerHTML = `<span style="color:${color};">${icon} ${html}</span>`;
     }
 
     async setupConnectionToDiffusionServer() {
@@ -170,7 +321,25 @@ export class ImageEdit extends HTMLElement {
                 font-size: 2vh;
                 border-bottom: 0.2vh solid rgba(150, 80, 220, 0.4);
                 min-height: 3vh;
+                display: flex;
+                align-items: center;
+                gap: 1.5vh;
             }
+            #status-text { flex: 1 1 auto; }
+            #run-workflow {
+                flex: 0 0 auto;
+                padding: 0.7vh 1.5vh;
+                font-size: 1.8vh;
+                border-radius: 0.7vh;
+                cursor: pointer;
+                color: #fff;
+                background: rgba(100, 0, 180, 0.75);
+                border: 0.15vh solid rgba(180, 100, 255, 0.7);
+                user-select: none;
+                white-space: nowrap;
+            }
+            #run-workflow:not([disabled]):hover { background: rgba(130, 0, 230, 0.9); }
+            #run-workflow[disabled] { opacity: 0.45; cursor: default; }
             .main {
                 flex: 1 1 auto;
                 display: flex;
@@ -270,6 +439,8 @@ export class ImageEdit extends HTMLElement {
             }
             .layer input[type="range"] { width: 6vh; accent-color: #8a2be2; }
             .layer .layer-toggle { cursor: pointer; font-size: 1.9vh; }
+            .layer .layer-delete { cursor: pointer; font-size: 1.6vh; opacity: 0.5; line-height: 1; padding: 0 0.3vh; }
+            .layer .layer-delete:hover { opacity: 1; color: #ff6b6b; }
             .zoom-controls {
                 display: flex; align-items: center; gap: 0.7vh; justify-content: space-between;
             }
@@ -277,7 +448,10 @@ export class ImageEdit extends HTMLElement {
             .zoom-value { font-size: 1.6vh; min-width: 6vh; text-align: center; }
         </style>
         <div class="editor">
-            <div id="status" class="status-region"></div>
+            <div id="status" class="status-region">
+                <span id="status-text"></span>
+                <button id="run-workflow" disabled="disabled">&#9654; Run Workflow</button>
+            </div>
             <div class="main">
                 <div class="toolbar">
                     <div class="section-title">Brush</div>
@@ -307,6 +481,11 @@ export class ImageEdit extends HTMLElement {
                         <div class="btn" id="zoom-reset">Reset zoom</div>
                     </div>
                     <div class="tool-group">
+                        <label>Actions</label>
+                        <div class="btn" id="undo">&#8630; Undo</div>
+                        <div class="btn" id="download">&#8595; Download PNG</div>
+                    </div>
+                    <div class="tool-group">
                         <label>Hint</label>
                         <div style="font-size:1.4vh;color:#a98fd0;">
                             Left click paints, right click erases. Scroll to zoom, drag with the middle mouse button to pan.
@@ -319,6 +498,9 @@ export class ImageEdit extends HTMLElement {
                 </div>
                 <div class="sidebar">
                     <div class="section-title">Layers</div>
+                    <div class="zoom-controls">
+                        <div class="btn" id="import-layer">Import Layer</div>
+                    </div>
                     <div class="zoom-controls">
                         <div class="btn" id="add-layer">+ Add layer</div>
                         <div class="btn" id="move-layer-up" title="Move active layer up">&#9650;</div>
@@ -367,9 +549,17 @@ export class ImageEdit extends HTMLElement {
         // @ts-ignore
         this.root.getElementById('zoom-reset').addEventListener('click', () => this.setZoom(1));
 
+        // undo / download
+        // @ts-ignore
+        this.root.getElementById('undo').addEventListener('click', () => this.undo());
+        // @ts-ignore
+        this.root.getElementById('download').addEventListener('click', () => this.downloadMergedImage());
+
         // add layer
         // @ts-ignore
         this.root.getElementById('add-layer').addEventListener('click', () => this.addLayer());
+        // @ts-ignore
+        this.root.getElementById('import-layer').addEventListener('click', () => this.importLayer());
         // @ts-ignore
         this.root.getElementById('move-layer-up').addEventListener('click', () => this.moveActiveLayer(1));
         // @ts-ignore
@@ -444,6 +634,7 @@ export class ImageEdit extends HTMLElement {
         this.canvasStack.appendChild(canvas);
 
         const layer = {
+            id: String(this._layerIdCounter++),
             name: name || ('Layer ' + this.layers.length),
             canvas,
             ctx,
@@ -451,10 +642,68 @@ export class ImageEdit extends HTMLElement {
             opacity: 1,
         };
         this.layers.push(layer);
-        this.activeLayerIndex = this.layers.length - 1;
+        this.activeLayerId = layer.id;
         this.updateLayerStacking();
         this.renderLayersList();
         this.notifyImageChanged();
+    }
+
+    /**
+     * Delete a layer by id. Picks a neighbouring layer as active if needed.
+     * @param {string} id
+     */
+    deleteLayer(id) {
+        const idx = this.layers.findIndex((l) => l.id === id);
+        if (idx === -1) return;
+        const [removed] = this.layers.splice(idx, 1);
+        removed.canvas.remove();
+        if (this.activeLayerId === id) {
+            // prefer the layer that was above (now at the same index), else below
+            const next = this.layers[idx] || this.layers[idx - 1] || null;
+            this.activeLayerId = next ? next.id : null;
+        }
+        this.updateLayerStacking();
+        this.renderLayersList();
+        this.notifyImageChanged();
+    }
+
+    importLayer() {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/*';
+        input.addEventListener('change', () => {
+            const file = input.files && input.files[0];
+            if (!file) return;
+            const url = URL.createObjectURL(file);
+            const img = new Image();
+            img.onload = () => {
+                // Add a new layer named after the file (without extension)
+                const layerName = file.name.replace(/\.[^.]+$/, '') || 'Imported';
+                this.addLayer(layerName);
+                const layer = this.layers[this.layers.length - 1];
+
+                // Cover: scale uniformly so the image fills the entire canvas,
+                // then center it — cropping any overflow (no stretching).
+                const scale = Math.max(
+                    this.imageWidth / img.naturalWidth,
+                    this.imageHeight / img.naturalHeight
+                );
+                const scaledW = img.naturalWidth * scale;
+                const scaledH = img.naturalHeight * scale;
+                const dx = (this.imageWidth - scaledW) / 2;
+                const dy = (this.imageHeight - scaledH) / 2;
+
+                layer.ctx.drawImage(img, dx, dy, scaledW, scaledH);
+                URL.revokeObjectURL(url);
+                this.notifyImageChanged();
+            };
+            img.onerror = () => {
+                URL.revokeObjectURL(url);
+                this.setStatus('Failed to load the imported image.', 'error');
+            };
+            img.src = url;
+        });
+        input.click();
     }
 
     /** Keep canvas z-order and opacity in sync with the layers array. */
@@ -470,12 +719,12 @@ export class ImageEdit extends HTMLElement {
      * @param {number} direction
      */
     moveActiveLayer(direction) {
-        const from = this.activeLayerIndex;
+        const from = this.layers.findIndex((l) => l.id === this.activeLayerId);
         const to = from + direction;
         if (to < 0 || to >= this.layers.length) return;
         const [layer] = this.layers.splice(from, 1);
         this.layers.splice(to, 0, layer);
-        this.activeLayerIndex = to;
+        // activeLayerId stays the same; only the position changed
         this.updateLayerStacking();
         this.renderLayersList();
         this.notifyImageChanged();
@@ -489,12 +738,13 @@ export class ImageEdit extends HTMLElement {
         for (let i = this.layers.length - 1; i >= 0; i--) {
             const layer = this.layers[i];
             const el = document.createElement('div');
-            el.className = 'layer' + (i === this.activeLayerIndex ? ' active' : '');
+            el.className = 'layer' + (layer.id === this.activeLayerId ? ' active' : '');
             el.innerHTML = `
                 <span class="layer-toggle" title="Toggle visibility">${layer.visible ? '&#128065;' : '&#128584;'}</span>
                 <span class="layer-index">${i}</span>
                 <span class="layer-name">${layer.name}</span>
                 <input type="range" min="0" max="100" value="${Math.round(layer.opacity * 100)}" title="Opacity" />
+                <span class="layer-delete" title="Delete layer">&#10005;</span>
             `;
             const toggle = /** @type {HTMLElement} */ (el.querySelector('.layer-toggle'));
             toggle.addEventListener('click', (e) => {
@@ -506,7 +756,7 @@ export class ImageEdit extends HTMLElement {
             });
             const nameEl = /** @type {HTMLElement} */ (el.querySelector('.layer-name'));
             nameEl.addEventListener('click', () => {
-                this.activeLayerIndex = i;
+                this.activeLayerId = layer.id;
                 this.renderLayersList();
             });
             const opacity = /** @type {HTMLInputElement} */ (el.querySelector('input[type="range"]'));
@@ -515,6 +765,11 @@ export class ImageEdit extends HTMLElement {
                 layer.opacity = parseInt(opacity.value, 10) / 100;
                 this.updateLayerStacking();
                 this.notifyImageChanged();
+            });
+            const deleteBtn = /** @type {HTMLElement} */ (el.querySelector('.layer-delete'));
+            deleteBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.deleteLayer(layer.id);
             });
             list.appendChild(el);
         }
@@ -590,6 +845,7 @@ export class ImageEdit extends HTMLElement {
         }
         if (e.button !== 0 && e.button !== 2) return;
         e.preventDefault();
+        this.pushUndoSnapshot();
         this.isDrawing = true;
         this.isErasing = e.button === 2;
         this.lastPoint = this.getCanvasCoords(e);
@@ -711,8 +967,47 @@ export class ImageEdit extends HTMLElement {
      * @returns {CanvasRenderingContext2D | null}
      */
     getActiveCtx() {
-        const layer = this.layers[this.activeLayerIndex];
+        const layer = this.layers.find((l) => l.id === this.activeLayerId);
         return layer ? layer.ctx : null;
+    }
+
+    /**
+     * Capture the active layer's pixels before a brush stroke so it can be
+     * reverted. Keeps at most {@link maxUndoSteps} entries.
+     */
+    pushUndoSnapshot() {
+        const layer = this.layers.find((l) => l.id === this.activeLayerId);
+        if (!layer) return;
+        const imageData = layer.ctx.getImageData(0, 0, this.imageWidth, this.imageHeight);
+        // @ts-ignore
+        this.undoHistory.push({ layerId: this.activeLayerId, imageData });
+        while (this.undoHistory.length > this.maxUndoSteps) {
+            this.undoHistory.shift();
+        }
+    }
+
+    /** Revert the most recent brush operation. */
+    undo() {
+        const entry = this.undoHistory.pop();
+        if (!entry) return;
+        const layer = this.layers.find((l) => l.id === entry.layerId);
+        if (!layer) return;
+        layer.ctx.putImageData(entry.imageData, 0, 0);
+        this.notifyImageChanged();
+    }
+
+    /** Download the merged visible image as a PNG file. */
+    downloadMergedImage() {
+        const merged = this.getCombinedLayers();
+        merged.toBlob((blob) => {
+            if (!blob) return;
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'image.png';
+            a.click();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+        }, 'image/png');
     }
 
     /**
@@ -813,13 +1108,13 @@ export class ImageEdit extends HTMLElement {
 
     /**
      * Combine all visible layers except the given index into a new canvas.
-     * @param {number} excludeIndex
+     * @param {string} excludeId
      * @returns {HTMLCanvasElement}
      */
-    getCombinedLayersExcluding(excludeIndex) {
+    getCombinedLayersExcluding(excludeId) {
         const indices = this.layers
             .map((_, i) => i)
-            .filter((i) => i !== excludeIndex && this.layers[i].visible);
+            .filter((i) => this.layers[i].id !== excludeId && this.layers[i].visible);
         return this.getCombinedLayers(indices);
     }
 
@@ -838,19 +1133,24 @@ export class ImageEdit extends HTMLElement {
                 out.width = this.imageWidth;
                 out.height = this.imageHeight;
                 const ctx = /** @type {CanvasRenderingContext2D} */ (out.getContext('2d'));
-                const layer = this.layers[this.activeLayerIndex];
+                const layer = this.layers.find((l) => l.id === this.activeLayerId);
                 if (layer) ctx.drawImage(layer.canvas, 0, 0);
                 return out;
             }
             case 'merged_image_without_current_layer':
             case 'merged_image_current_layer_intersection_without_current_layer':
-                return this.getCombinedLayersExcluding(this.activeLayerIndex);
+                // @ts-ignore
+                return this.getCombinedLayersExcluding(this.activeLayerId);
             case 'merged_image':
             case 'merged_image_current_layer_intersection':
             case 'upload':
             default:
                 return this.getCombinedLayers();
         }
+    }
+
+    getActiveLayerId() {
+        return this.activeLayerId;
     }
 
     /**

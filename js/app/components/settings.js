@@ -434,7 +434,8 @@ class Settings extends HTMLElement {
                     title="Allow connecting to diffusion servers with self-signed SSL certificates, only enable this if you are connecting to a trusted server with a self-signed certificate, enabling this will make your connection less secure and vulnerable"
                     input-data-location="allowDiffusionSelfSigned"
                 ></app-overlay-input-boolean><div style="margin-top:1vh;color:#ff6b6b;font-size:3vh;">&#9888; The app must be restarted after changing the diffusion host, secret or self-signed SSL certificate settings.</div>`}
-                <app-overlay-button id="test-diffusion-connection" play-sound-on-click="false" aria-key="t" title="Open an editor to check the diffusion settings">Test Diffusion</app-overlay-button>
+                <br />
+                <app-overlay-button id="test-diffusion-connection" play-sound-on-click="false" aria-key="t" title="Open an editor to check the diffusion settings">Launch Editor</app-overlay-button>
             </app-overlay-section>`;
 
             // @ts-expect-error
@@ -455,6 +456,7 @@ class Settings extends HTMLElement {
                 const exit = () => {
                     this.dispatchEvent(new CustomEvent('exit', { bubbles: true, composed: true }));
                     if (dialog.parentNode) dialog.parentNode.removeChild(dialog);
+                    playCancelSound();
                 };
                 // Both confirm and cancel (Escape / backdrop click) wake up.
                 dialog.addEventListener('confirm', exit);

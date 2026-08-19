@@ -22,8 +22,12 @@ export class BaseDiffusionAdapter {
         throw new Error("Method 'getAllWorkflows()' must be implemented.");
     }
 
-    async runWorkflow(workflowId, inputData) {
-        throw new Error("Method 'runWorkflow()' must be implemented.");
+    /**
+     * @param {string} workflowId 
+     * @param {any} request 
+     */
+    sendWorkflowOperation(workflowId, request) {
+        throw new Error("Method 'sendWorkflowOperation()' must be implemented.");
     }
 
     /**

@@ -19,6 +19,8 @@ export class AIHubCustomSelector extends HTMLElement {
         this._infoList = null;
         /** @type {any} the owning image editor */
         this._canvas = null;
+        /** @type {import("../../../engine/diffusion/adapter-aihub.js").DiffusionAdapterAIHub | null} */
+        this._adapter = null;
         /** @type {{ context: string, projectType: (string|null) }} */
         this._limit = { context: 'image', projectType: null };
         /** @type {import("./exposes/base.js").AIHubExposeBase[]} */
@@ -32,15 +34,17 @@ export class AIHubCustomSelector extends HTMLElement {
      * @param {{
      *   infoList: import("../../../engine/diffusion/adapter-aihub.js").AiHubInfoList,
      *   canvas: any,
+     *   adapter?: import("../../../engine/diffusion/adapter-aihub.js").DiffusionAdapterAIHub,
      *   limit?: { context: string, projectType?: (string|null) }
      * }} options
      */
-    configure({ infoList, canvas, limit }) {
+    configure({ infoList, canvas, adapter, limit }) {
         if (this._canvas && typeof this._canvas.removeImageChangeListener === 'function') {
             this._canvas.removeImageChangeListener(this._onCanvasImageChanged);
         }
         this._infoList = infoList;
         this._canvas = canvas;
+        if (adapter) this._adapter = adapter;
         if (limit) this._limit = { context: limit.context, projectType: limit.projectType ?? null };
         if (canvas && typeof canvas.addImageChangeListener === 'function') {
             canvas.addImageChangeListener(this._onCanvasImageChanged);
@@ -119,6 +123,11 @@ export class AIHubCustomSelector extends HTMLElement {
                 }
                 .advanced-body { display: none; border-top: 0.15vh solid rgba(150,80,220,0.3); padding-top: 1vh; }
                 .advanced-body.open { display: block; }
+                .workflow-image {
+                    display: none; width: 100%; box-sizing: border-box;
+                    border-radius: 0.5vh; margin-bottom: 1vh;
+                    border: 0.15vh solid rgba(150,80,220,0.5);
+                }
             </style>
             <div class="section-title">Workflow</div>
             ${categories.length ? `
@@ -138,6 +147,7 @@ export class AIHubCustomSelector extends HTMLElement {
                             </option>`).join('')}
                     </select>
                 </div>
+                <img class="workflow-image" alt="" />
                 <div class="exposes"></div>
                 <span class="advanced-toggle" style="display:none;">&#9662; Show advanced</span>
                 <div class="advanced-body"></div>
@@ -181,10 +191,12 @@ export class AIHubCustomSelector extends HTMLElement {
         const workflow = this._selectedWorkflow();
         if (!workflow) return;
 
+        this._loadWorkflowImage(workflow);
+
         const context = this._makeContext(workflow);
         const exposes = [...Object.values(workflow.expose || {})].sort(
             // @ts-ignore
-            (a, b) => (a.data?.index || 0) - (b.data?.index || 0));
+            (a, b) => (b.data?.index || 0) - (a.data?.index || 0));
 
         let hasAdvanced = false;
         for (const expose of exposes) {
@@ -208,6 +220,20 @@ export class AIHubCustomSelector extends HTMLElement {
     }
 
     /**
+     * Load the workflow's preview image (workflowId + ".png"). The image may
+     * not exist (e.g. 404), in which case the element stays hidden.
+     * @param {import("../../../engine/diffusion/adapter-aihub.js").AIHubWorkflow} workflow
+     */
+    _loadWorkflowImage(workflow) {
+        const img = /** @type {HTMLImageElement|null} */ (this.root.querySelector('.workflow-image'));
+        if (!img || !this._adapter) return;
+        img.style.display = 'none';
+        img.onload = () => { img.style.display = 'block'; };
+        img.onerror = () => { img.style.display = 'none'; };
+        img.src = this._adapter.getImageURLForWorkflowId(workflow.id);
+    }
+
+    /**
      * @param {import("../../../engine/diffusion/adapter-aihub.js").AIHubWorkflow} workflow
      * @returns {import("./exposes/base.js").AIHubExposeContext}
      */
@@ -217,6 +243,8 @@ export class AIHubCustomSelector extends HTMLElement {
         return {
             // @ts-ignore infoList is set before exposes render
             infoList: this._infoList,
+            workflowId: workflow.id,
+            adapter: this._adapter,
             getCanvas: () => self._canvas,
             getExposeValueById: (id) => {
                 const c = self._exposeComponents.find((comp) => comp._expose?.data?.id === id);
@@ -262,6 +290,15 @@ export class AIHubCustomSelector extends HTMLElement {
             workflowId: workflow ? workflow.id : null,
             values,
         };
+    }
+
+    async uploadAllFiles() {
+        // Do it in order as it matters due to the header and then the binary upload needing to be sequential.
+        for (const c of this._exposeComponents) {
+            if (typeof c.uploadFile === 'function') {
+                await c.uploadFile();
+            }
+        }
     }
 
     disconnectedCallback() {
