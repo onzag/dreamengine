@@ -198,10 +198,10 @@ export class DEJSEngine {
             engine.exports.metadata = {};
         }
 
-        engine.exports.metadata.__placeholder = file.src.startsWith("//@placeholder");
+        engine.exports.metadata.__placeholder = engine.exports.metadata.__placeholder || file.src.startsWith("//@placeholder");
 
         if (file.src.startsWith("//@state") && !engine.exports.metadata.__placeholder) {
-            engine.exports.metadata.__in_progress = /"guidedWizardInProgress"\s*:\s*true/.test(file.src)
+            engine.exports.metadata.__in_progress = engine.exports.metadata.__in_progress || /"guidedWizardInProgress"\s*:\s*true/.test(file.src)
                 || /"automaticWizardInProgress"\s*:\s*true/.test(file.src);
         }
 

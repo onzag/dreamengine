@@ -55,7 +55,7 @@ engine.exports = {
         });
 
         DE.world.initialScenes.push("Default Scene");
-        DE.world.state.theme = {asset: "luna.mp3", volume: 1.3};
+        DE.world.state.theme = {asset: "@assets/worlds/simple-lunar-station/luna.mp3", volume: 1.3};
         DE.world.name = "Simple Lunar Station";
 
         DE.world.lore = "The world is set on a small lunar station orbiting the Moon. The station serves as a research outpost and habitat for astronauts and scientists studying the lunar environment. The station is equipped with life support systems, scientific laboratories, living quarters, and communication facilities. Outside the station, the barren surface of the Moon stretches out, dotted with craters and rocks. The sky above is a pitch-black void, with the Earth hanging in the distance. The silence is absolute, broken only by the faint hum of the station's machinery";
@@ -447,7 +447,7 @@ engine.exports = {
             maxWeightKg: 0,
             ownWeatherSystem: [vaccuumWeatherSystem],
             state: {
-                asset: "surface_of_the_moon.jpg",
+                asset: "@assets/worlds/simple-lunar-station/surface_of_the_moon.jpg",
             },
             temp: {},
             parent: null,
@@ -515,7 +515,7 @@ engine.exports = {
             ownWeatherSystem: [],
             parent: "Surface of the Moon",
             state: {
-                asset: "image",
+                asset: "@assets/worlds/simple-lunar-station/image",
             },
             temp: {},
             slots: {
@@ -528,7 +528,7 @@ engine.exports = {
                     maxVolumeLiters: 2000,
                     maxWeightKg: 2000,
                     state: {
-                        asset: "common_area.jpg",
+                        asset: "@assets/worlds/simple-lunar-station/common_area.jpg",
                     },
                     temp: {},
                 },
@@ -543,7 +543,7 @@ engine.exports = {
                     maxVolumeLiters: 2000,
                     maxWeightKg: 2000,
                     state: {
-                        asset: "cooking_area.jpg",
+                        asset: "@assets/worlds/simple-lunar-station/cooking_area.jpg",
                     },
                     temp: {},
                 },
@@ -601,7 +601,7 @@ engine.exports = {
                 ownWeatherSystem: [],
                 parent: "Lunar Station",
                 state: {
-                    asset: "bedroom.jpg",
+                    asset: "@assets/worlds/simple-lunar-station/bedroom.jpg",
                 },
                 temp: {},
                 slots: {
@@ -610,7 +610,7 @@ engine.exports = {
                         maxVolumeLiters: 2000,
                         maxWeightKg: 2000,
                         state: {
-                            asset: "bedroom_area.jpg",
+                            asset: "@assets/worlds/simple-lunar-station/bedroom_area.jpg",
                         },
                         temp: {},
                         items: [

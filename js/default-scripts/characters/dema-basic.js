@@ -162,6 +162,7 @@ engine.exports = {
             heroism: 1,
             state: {
                 IS_ROBOT: true,
+                asset: "@assets/characters/dema-basic/profile",
             },
             attractions: [],
             species: "robot",

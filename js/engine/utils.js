@@ -1272,7 +1272,7 @@ export const deEngineUtilsFn = (DE) => ({
             return Object.keys(DE.stateFor).filter((charName) => !DE.stateFor[charName].deadEnded).map(name => DE.characters[name]);
         },
         allWorldCharactersButUser() {
-            return Object.keys(DE.stateFor).filter(name => name !== DE.user.name && !DE.stateFor[name].deadEnded).map(name => DE.characters[name]);
+            return Object.keys(DE.stateFor).filter(name => name !== DE.user && !DE.stateFor[name].deadEnded).map(name => DE.characters[name]);
         },
         currentLocation() {
             return DE.world.currentLocation;
@@ -1398,7 +1398,7 @@ export const deEngineUtilsFn = (DE) => ({
             return DE.characters[potentialCharacter] || null;
         },
         isUser(char) {
-            return DE.user.name === char.name;
+            return DE.user === char.name;
         },
         isPresentMember(char) {
             const currentLocation = DE.world.currentLocation;
@@ -1633,7 +1633,7 @@ async function onStateTriggeredOnCharacter(deObject, character, stateName) {
     }
 
     // if the new state triggered is from the user, make a message about it
-    if (deObject.user && deObject.user.name === character.name) {
+    if (deObject.user && deObject.user === character.name) {
         let stateDescriptionText = typeof characterStateDescription.general === "string" ? characterStateDescription.general : await characterStateDescription.general({
             char: character,
             causes: characterStateInfo.causes,
@@ -1641,7 +1641,7 @@ async function onStateTriggeredOnCharacter(deObject, character, stateName) {
         if (!stateDescriptionText.endsWith(".")) {
             stateDescriptionText += ".";
         }
-        makeUserStoryMasterMessage(deObject, `${deObject.user.name} is now being affected by the state: ${stateName.split("_").map((w) => w[0].toUpperCase() + w.slice(1)).join(" ")}.\n${stateDescriptionText}`);
+        makeUserStoryMasterMessage(deObject, `${deObject.user} is now being affected by the state: ${stateName.split("_").map((w) => w[0].toUpperCase() + w.slice(1)).join(" ")}.\n${stateDescriptionText}`);
     }
 
     // now check for states that triggered by this one
@@ -1735,7 +1735,7 @@ async function onStateTriggeredOnCharacter(deObject, character, stateName) {
             deObject.stateFor[character.name].dead = true;
         }
 
-        if (character.name === deObject.user.name) {
+        if (character.name === deObject.user) {
             console.log(`The user character ${character.name} has reached a dead-end: ${deadEndPotential}, game over.`);
 
             if (characterStateDescription.deadEndIsDeath) {
@@ -1755,8 +1755,8 @@ async function onStateTriggeredOnCharacter(deObject, character, stateName) {
  * @param {string} stateName 
  */
 export async function onStateRemovedOnCharacter(deObject, character, stateName) {
-    if (deObject.user && deObject.user.name === character.name) {
-        makeUserStoryMasterMessage(deObject, `${deObject.user.name} is no longer affected by the state: ${stateName.split("_").map((w) => w[0].toUpperCase() + w.slice(1)).join(" ")}.`);
+    if (deObject.user && deObject.user === character.name) {
+        makeUserStoryMasterMessage(deObject, `${deObject.user} is no longer affected by the state: ${stateName.split("_").map((w) => w[0].toUpperCase() + w.slice(1)).join(" ")}.`);
     }
 
     const characterState = deObject.stateFor[character.name];
@@ -1860,7 +1860,7 @@ export async function onStateRelievedOnCharacter(deObject, character, stateName)
     }
 
     // if the new state triggered is from the user, make a message about it
-    if (deObject.user && deObject.user.name === character.name) {
+    if (deObject.user && deObject.user === character.name) {
         let stateDescriptionText = ".\n";
 
         if (characterStateDescription.relieving && stateDescriptionText) {
@@ -1875,7 +1875,7 @@ export async function onStateRelievedOnCharacter(deObject, character, stateName)
             stateDescriptionText = "";
         }
 
-        makeUserStoryMasterMessage(deObject, `${deObject.user.name} is has begun to relieve: ${stateName.split("_").map((w) => w[0].toUpperCase() + w.slice(1)).join(" ")}${stateDescriptionText}`);
+        makeUserStoryMasterMessage(deObject, `${deObject.user} is has begun to relieve: ${stateName.split("_").map((w) => w[0].toUpperCase() + w.slice(1)).join(" ")}${stateDescriptionText}`);
     }
 
     // states triggered when relieving starts

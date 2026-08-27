@@ -276,7 +276,7 @@ class CharacterOverlay extends HTMLElement {
             const description = thisFileInfo?.description || "No description available";
 
             const isSystemNamespace = this.currentCharacterNamespace.startsWith('@');
-            const profileImageUrl = `assets/${this.currentCharacterNamespace}/${this.currentCharacterId}/profile`;
+            const profileImageUrl = `${isSystemNamespace ? '@' : ''}assets/${isSystemNamespace ? this.currentCharacterNamespace.slice(1) : this.currentCharacterNamespace}/${this.currentCharacterId}/profile`;
 
             tabsContainer.innerHTML = `
                 <app-overlay-section section-title="Character Image">

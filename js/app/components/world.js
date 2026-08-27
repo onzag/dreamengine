@@ -22,12 +22,14 @@ class WorldOverlay extends HTMLElement {
 
         this.currentWorldId = "";
         this.currentWorldNamespace = "";
+        this.currentWorldAssetPath = "";
         this.currentSectionIndex = 0;
     }
 
     async connectedCallback() {
         this.currentWorldId = this.getAttribute("world-id") || "";
         this.currentWorldNamespace = this.getAttribute("world-namespace") || "";
+        this.currentWorldAssetPath = this.getAttribute("world-asset-path") || "";
 
         if (!this.currentWorldId || !this.currentWorldNamespace) {
             await this.createNewFile();
@@ -110,10 +112,11 @@ class WorldOverlay extends HTMLElement {
                 }
 
                 try {
-                    await window.API.newScriptFile(namespace, name, "//@placeholder\n\nengine.exports = {type: \"world\"}");
+                    await window.API.newScriptFile(namespace, name, "//@placeholder\n\nengine.exports = {type: \"world\", metadata: {asset: \"assets/" + namespace + "/" + name + "/image\"}};");
                     localStorage.setItem('lastWorldNamespace', namespace);
                     this.currentWorldId = name;
                     this.currentWorldNamespace = namespace;
+                    this.currentWorldAssetPath = `assets/${namespace}/${name}/image`;
                     playConfirmSound();
                 } catch (err) {
                     console.error('Failed to create script file:', err);
@@ -169,7 +172,7 @@ class WorldOverlay extends HTMLElement {
         if (!tabsContainer) return;
 
         const isSystemNamespace = this.currentWorldNamespace.startsWith('@');
-        const worldImageUrl = `assets/${this.currentWorldNamespace}/${this.currentWorldId}/image`;
+        const worldImageUrl = `${isSystemNamespace ? '@' : ''}assets/${isSystemNamespace ? this.currentWorldNamespace.slice(1) : this.currentWorldNamespace}/${this.currentWorldId}/image`;
 
         if (this.currentSectionIndex === 0) {
             const scriptSource = await window.ENGINE_WORKER_CLIENT.getRawScriptSource({ namespace: this.currentWorldNamespace, id: this.currentWorldId });

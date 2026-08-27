@@ -792,7 +792,7 @@ class PlayOverlay extends HTMLElement {
                      data-id="${escapeHTML(w.id)}"
                      ${disabled ? 'data-disabled="true"' : ''}>
                     <div class="world-card-image">
-                        <app-world-image image-url="assets/${escapeHTML(ns)}/${escapeHTML(w.id)}/image"></app-world-image>
+                        <app-world-image image-url="${ns.startsWith("@") ? "@" : ""}assets/${escapeHTML(ns.startsWith("@") ? ns.replace("@", "") : ns)}/${escapeHTML(w.id)}/image"></app-world-image>
                     </div>
                     <div class="world-card-name">${formatName(escapeHTML(w.id))}</div>
                     ${disabled ? `<div class="character-card-disabled-note">${escapeHTML(reason)}</div>` : ''}

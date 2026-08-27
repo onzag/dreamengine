@@ -4,6 +4,10 @@ declare type DECharacterTier = "insect" | "critter" | "human" | "apex" | "street
 
 declare interface DEMinimalCharacterReference {
     /**
+     * Arbitrary state attached to the character
+     */
+    state: Record<string, any>;
+    /**
      * Name of the character
      */
     name: Readonly<string>;
@@ -1041,10 +1045,6 @@ declare interface DEVoiceDescription {
 // confronted 
 
 declare interface DECompleteCharacterReference extends DEMinimalCharacterReference {
-    /**
-     * Arbitrary state attached to the character
-     */
-    state: Record<string, any>;
     temp: Record<string, any>;
 
     /**
@@ -3894,7 +3894,7 @@ declare interface DEWorldRule {
 }
 
 declare interface DEObject {
-    user: DEMinimalCharacterReference;
+    user: string;
     party: string[];
     characters: Record<string, DECompleteCharacterReference>;
     bonds: Record<string, DEBondDescription>;

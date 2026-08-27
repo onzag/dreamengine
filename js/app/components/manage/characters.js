@@ -93,7 +93,7 @@ class AppManageCharacters extends HTMLElement {
         const characterElements = infoMapForNamespace.map(characterFile => `
                 <div class="character-item" role="button" tabindex="0" data-de-aria-key="e" data-de-aria-horizontal-alignment="end-inside" data-character-id="${characterFile.id}" data-character-namespace="${this.currentNamespace}">
                     <div class="character-icon">
-                        <app-profile-image aria-label="${characterFile.id}" image-url="assets/${this.currentNamespace}/${characterFile.id}/profile" tabindex="-1"></app-profile-image>
+                        <app-profile-image aria-label="${characterFile.id}" image-url="${this.currentNamespace.startsWith("@") ? "@" : ""}assets/${this.currentNamespace.startsWith("@") ? this.currentNamespace.slice(1) : this.currentNamespace}/${characterFile.id}/profile" tabindex="-1"></app-profile-image>
                     </div>
                     <div class="character-name">
                         ${formatName(characterFile.id)}

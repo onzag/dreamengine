@@ -913,7 +913,10 @@ async function testMessageFeasibilityForce(engine, character) {
                         description: internalDescriptionInfo.general,
                         externalDescription: await getExternalDescriptionOfCharacter(engine.deObject, character.name, true),
                         relationships: [
-                            relationshipOfOwnCharacterTowardsForcedCharacter,
+                            {
+                                title: forcedCharacterName,
+                                description: relationshipOfOwnCharacterTowardsForcedCharacter,
+                            },
                         ],
                         expressiveStates: internalDescriptionInfo.expressiveStates,
                         scenario: null,
@@ -945,7 +948,10 @@ async function testMessageFeasibilityForce(engine, character) {
                         description: internalDescriptionInfoForcedCharacter.general,
                         externalDescription: await getExternalDescriptionOfCharacter(engine.deObject, forcedCharacterName, true),
                         relationships: [
-                            relationshipOfForcedCharacterTowardsOwnCharacter,
+                            {
+                                title: character.name,
+                                description: relationshipOfForcedCharacterTowardsOwnCharacter,
+                            },
                         ],
                         expressiveStates: internalDescriptionInfoForcedCharacter.expressiveStates,
                         scenario: null,
@@ -1042,7 +1048,7 @@ export default async function testMessageFeasibilityForCharacter(engine, charact
     // this is for users only as a check, because we will deny the message if
     // it was not feasible, eg. they forced a giant dragon to a mountain (which may be impossible if they are weak)
     // we will try to detect such situations and reject the message as infeasible
-    if (character.name === engine.deObject.user.name) {
+    if (character.name === engine.deObject.user) {
         const returnValue = await testMessageFeasibilityForce(engine, character);
         if (returnValue) {
             return returnValue;

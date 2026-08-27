@@ -81,6 +81,68 @@ export class ImageEdit extends HTMLElement {
             });
             runBtn.addEventListener('click', () => this.runWorkflow());
         }
+
+        const showDiagnostics = this.getAttribute('show-diagnostics') === 'true';
+
+        if (showDiagnostics && this.diffusionAdapter) {
+            const warnings = this.diffusionAdapter.getAnalysisWarnings();
+            if (warnings.length > 0) {
+                const dialog = document.createElement('app-dialog');
+                dialog.setAttribute('dialog-title', '&#9888; Diffusion Endpoint Diagnostics');
+                dialog.setAttribute('confirmation', 'true');
+                dialog.setAttribute('confirm-text', 'Dismiss');
+                dialog.setAttribute('cancel-text-disable', 'true');
+                dialog.setAttribute('large', 'true');
+                dialog.setAttribute('extra-z-index', '200');
+
+                const body = document.createElement('div');
+                body.style.cssText = 'display:flex;flex-direction:column;gap:0.8vh;';
+
+                const intro = document.createElement('p');
+                intro.style.cssText = 'margin:0 0 0.8vh 0;font-size:1.7vh;color:#c9a7ff;';
+                intro.textContent = `${warnings.length} issue${warnings.length === 1 ? '' : 's'} found while analyzing the diffusion endpoint. The LLM may not correctly handle the image workflows until these issues are resolved.`;
+                body.appendChild(intro);
+
+                for (const warning of warnings) {
+                    const row = document.createElement('div');
+                    row.style.cssText = [
+                        'display:flex',
+                        'align-items:flex-start',
+                        'gap:0.8vh',
+                        'padding:0.9vh 1.1vh',
+                        'background:rgba(180,80,0,0.18)',
+                        'border:0.15vh solid rgba(255,160,60,0.35)',
+                        'border-radius:0.6vh',
+                        'font-size:1.55vh',
+                        'line-height:1.45',
+                        'color:#ffd9a0',
+                    ].join(';');
+
+                    const icon = document.createElement('span');
+                    icon.textContent = '⚠';
+                    icon.style.cssText = 'flex:0 0 auto;color:#ffb347;font-size:1.7vh;line-height:1.45;';
+
+                    const text = document.createElement('span');
+                    text.style.cssText = 'flex:1 1 auto;word-break:break-word;';
+                    text.textContent = warning;
+
+                    row.appendChild(icon);
+                    row.appendChild(text);
+                    body.appendChild(row);
+                }
+
+                dialog.appendChild(body);
+
+                dialog.addEventListener('confirm', () => {
+                    if (dialog.parentNode) dialog.parentNode.removeChild(dialog);
+                });
+                dialog.addEventListener('cancel', () => {
+                    if (dialog.parentNode) dialog.parentNode.removeChild(dialog);
+                });
+
+                document.body.appendChild(dialog);
+            }
+        }
     }
 
     /** Run the currently selected workflow. */

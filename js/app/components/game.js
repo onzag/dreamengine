@@ -520,6 +520,9 @@ class GameOverlay extends HTMLElement {
 
                         user = {
                             name,
+                            state: {
+                                asset: "profile",
+                            },
                             sex: sex || "male",
                             gender: gender || sex || "male",
                             heightCm: typeof heightCm === "number" ? Number(heightCm) : 175,
@@ -580,6 +583,7 @@ class GameOverlay extends HTMLElement {
                 if (!isSelfInsert && characterName) {
                     if (characterName.startsWith('script://')) {
                         const [namespace, id] = characterName.substring('script://'.length).split('/');
+                        // TODO handle multiple characters added by the same script with the same id (e.g. a script that adds multiple characters with the same id but different names)
                         const charInfo = engineScriptInfo.charactersAdded.find(c => c.byNamespace === namespace && c.byId === id);
                         if (charInfo) {
                             await window.ENGINE_WORKER_CLIENT.assumeCharacterIdentity({ characterName: charInfo.name });
@@ -645,13 +649,11 @@ class GameOverlay extends HTMLElement {
             });
             if (!themeSong || !themeSong.asset) return;
 
-            const worldNamespace = this.getAttribute('world-namespace') || '';
-            const worldId = this.getAttribute('world-id') || '';
-            const isSystemAsset = worldNamespace.startsWith('@');
+            const isSystemAsset = themeSong.asset.startsWith('@');
             const base = isSystemAsset
                 ? window.DREAMENGINE_DEFAULT_SCRIPTS_HOME
                 : window.DREAMENGINE_HOME;
-            const themeUrl = `${base}/assets/${worldNamespace}/${worldId}/${themeSong.asset}`;
+            const themeUrl = `${base}/${isSystemAsset ? themeSong.asset.replace("@", "") : themeSong.asset}`;
 
             // Hold until the dream starts being revealed, then swell the theme
             // in over the same window the world fades up.
@@ -758,13 +760,6 @@ class GameOverlay extends HTMLElement {
 
             this.updateCurrentLocation(changedRootLocation);
 
-            const worldNamespace = this.getAttribute('world-namespace') || '';
-            const worldId = this.getAttribute('world-id') || '';
-            const isSystemAsset = worldNamespace.startsWith('@');
-            const base = isSystemAsset
-                ? window.DREAMENGINE_DEFAULT_SCRIPTS_HOME
-                : window.DREAMENGINE_HOME;
-
             // THEME SONG LOGIC:
             const locationStateInfo = await window.ENGINE_WORKER_CLIENT.queryDEObject({
                 path: ["world", "locations", location, "state"],
@@ -789,7 +784,10 @@ class GameOverlay extends HTMLElement {
             });
 
             if (themeSongLocationSlot && themeSongLocationSlot.asset) {
-                const themeUrl = `${base}/assets/${worldNamespace}/${worldId}/${themeSongLocationSlot.asset}`;
+                const tsAsset = themeSongLocationSlot.asset;
+                const isTsSystem = tsAsset.startsWith('@');
+                const tsBase = isTsSystem ? window.DREAMENGINE_DEFAULT_SCRIPTS_HOME : window.DREAMENGINE_HOME;
+                const themeUrl = `${tsBase}/${isTsSystem ? tsAsset.replace('@', '') : tsAsset}`;
                 (async () => {
                     try {
                         await stopAllAmbiencesAndStartNewOne([{ id: themeUrl, srcs: [{ src: themeUrl, fadeDurationMs: 1000, volume: themeSongLocationSlot.volume || 1 }] }], 1000);
@@ -798,7 +796,10 @@ class GameOverlay extends HTMLElement {
                     }
                 })();
             } else if (themeSongLocation && themeSongLocation.asset) {
-                const themeUrl = `${base}/assets/${worldNamespace}/${worldId}/${themeSongLocation.asset}`;
+                const tlAsset = themeSongLocation.asset;
+                const isTlSystem = tlAsset.startsWith('@');
+                const tlBase = isTlSystem ? window.DREAMENGINE_DEFAULT_SCRIPTS_HOME : window.DREAMENGINE_HOME;
+                const themeUrl = `${tlBase}/${isTlSystem ? tlAsset.replace('@', '') : tlAsset}`;
                 (async () => {
                     try {
                         await stopAllAmbiencesAndStartNewOne([{ id: themeUrl, srcs: [{ src: themeUrl, fadeDurationMs: 1000, volume: themeSong.volume || 1 }] }], 1000);
@@ -807,7 +808,10 @@ class GameOverlay extends HTMLElement {
                     }
                 })();
             } else if (themeSong && themeSong.asset) {
-                const themeUrl = `${base}/assets/${worldNamespace}/${worldId}/${themeSong.asset}`;
+                const twAsset = themeSong.asset;
+                const isTwSystem = twAsset.startsWith('@');
+                const twBase = isTwSystem ? window.DREAMENGINE_DEFAULT_SCRIPTS_HOME : window.DREAMENGINE_HOME;
+                const themeUrl = `${twBase}/${isTwSystem ? twAsset.replace('@', '') : twAsset}`;
                 (async () => {
                     try {
                         await stopAllAmbiencesAndStartNewOne([{ id: themeUrl, srcs: [{ src: themeUrl, fadeDurationMs: 1000, volume: themeSong.volume || 1 }] }], 1000);
@@ -827,9 +831,11 @@ class GameOverlay extends HTMLElement {
              * @param {string} asset
              */
             const buildCandidate = (asset) => {
-                if (!asset || !worldNamespace || !worldId) return null;
-                const assetPath = `assets/${worldNamespace}/${worldId}/${asset}`;
-                const fullUrl = `${base}/${assetPath}`.replace(/\\/g, '/');
+                if (!asset) return null;
+                const isSystem = asset.startsWith('@');
+                const base = isSystem ? window.DREAMENGINE_DEFAULT_SCRIPTS_HOME : window.DREAMENGINE_HOME;
+                const assetPath = asset;
+                const fullUrl = `${base}/${isSystem ? asset.replace('@', '') : asset}`.replace(/\\/g, '/');
                 return { assetPath, fullUrl };
             };
 
@@ -841,10 +847,6 @@ class GameOverlay extends HTMLElement {
             if (slotCandidate) candidates.push(slotCandidate);
             const locationCandidate = buildCandidate(locationStateInfo?.asset);
             if (locationCandidate) candidates.push(locationCandidate);
-            if (!this._worldImageAssetDoesNotExist) {
-                const worldCandidate = buildCandidate('image');
-                if (worldCandidate) candidates.push({ ...worldCandidate, isWorldImage: true });
-            }
 
             let chosenAssetPath = ''; // empty -> <app-asset-image> shows default
             let chosenFullUrl = fallbackBgUrl;
@@ -994,9 +996,7 @@ class GameOverlay extends HTMLElement {
                     pick: ["asset"],
                 });
                 const asset = stateInfo?.asset || '';
-                const assetPath = (asset && worldNamespace && worldId)
-                    ? `assets/${worldNamespace}/${worldId}/${asset}`
-                    : '';
+                const assetPath = asset || '';
 
                 // eslint-disable-next-line no-await-in-loop
                 const description = await window.ENGINE_WORKER_CLIENT.callCharOnlyTemplate({
@@ -1243,8 +1243,6 @@ class GameOverlay extends HTMLElement {
             }
             if (emptyEl) emptyEl.remove();
 
-            const engineInfo = await window.ENGINE_WORKER_CLIENT.getEngineScriptInfo();
-
             for (const char of charactersAtLocation) {
                 let card = /** @type {HTMLElement | null} */ (
                     Array.from(list.querySelectorAll('.game-present-character'))
@@ -1304,11 +1302,8 @@ class GameOverlay extends HTMLElement {
                     path: ["characters", char.name, "state", "asset"],
                 }) || "profile";
 
-                const charInfo = engineInfo.charactersAdded.find(c => c.name === char.name);
                 const img = card.querySelector('app-asset-image');
-                const newUrl = charInfo
-                    ? `assets/${charInfo.byNamespace}/${charInfo.byId}/${assetImage}`
-                    : '';
+                const newUrl = `assets/${assetImage}`;
                 if (img) {
                     if (img.getAttribute('image-url') !== newUrl) img.setAttribute('image-url', newUrl);
                 }
@@ -1505,24 +1500,9 @@ class GameOverlay extends HTMLElement {
                 const text = msg.message || '';
                 const isGroupStart = !isNarration && senderName !== lastSenderName;
 
-                let assetImage = !isNarration ? (await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                const assetImage = !isNarration ? (await window.ENGINE_WORKER_CLIENT.queryDEObject({
                     path: ["characters", senderName, "state", "asset"],
-                }) || "profile") : "";
-                if (assetImage) {
-                    const engineInfo = await window.ENGINE_WORKER_CLIENT.getEngineScriptInfo();
-                    const charInfo = engineInfo.charactersAdded.find(c => c.name === senderName);
-                    if (charInfo) {
-                        assetImage = `assets/${charInfo.byNamespace}/${charInfo.byId}/${assetImage}`;
-                    } else {
-                        const userNameBySettings = await window.API.getConfigValue('user.name');
-                        const isSelfInsert = this.saveObject ? this.saveObject.__self_insert : this.getAttribute('is-self-insert') === 'true';
-                        if (isSelfInsert && userNameBySettings === senderName) {
-                            assetImage = "profile";
-                        } else {
-                            assetImage = "";
-                        }
-                    }
-                }
+                }) || "") : "";
 
                 resolvedMsgs.push({ gid: String(gid), senderName, isNarration, isUser, isGroupStart, assetImage, text });
                 lastSenderName = isNarration ? '' : senderName;
@@ -1792,22 +1772,10 @@ class GameOverlay extends HTMLElement {
             // world coordinates are available (handled by the default-image attr).
             const portraitImg = this.root.querySelector('.game-sidebar-portrait app-asset-image');
             if (portraitImg) {
-                const engineInfo = await window.ENGINE_WORKER_CLIENT.getEngineScriptInfo();
-
-                // find that character to see its scriptKey that contains the asset
-                const charInfo = engineInfo.charactersAdded.find(c => c.name === actualUserName);
-                if (charInfo) {
-                    const portraitAssetPath = `assets/${charInfo.byNamespace}/${charInfo.byId}/${assetImage}`;
-                    portraitImg.setAttribute('image-url', portraitAssetPath);
+                if (assetImage) {
+                    portraitImg.setAttribute('image-url', assetImage);
                 } else {
-                    const userNameBySettings = await window.API.getConfigValue('user.name');
-                    const isSelfInsert = this.saveObject ? this.saveObject.__self_insert : this.getAttribute('is-self-insert') === 'true';
-                    if (isSelfInsert && userNameBySettings === actualUserName) {
-                        // In self insert mode with the character name being our own, our image is likely the profile
-                        portraitImg.setAttribute('image-url', "profile");
-                    } else {
-                        portraitImg.setAttribute('image-url', ""); // fallback to default image
-                    }
+                    portraitImg.setAttribute('image-url', ""); // fallback to default image
                 }
             }
 
@@ -2405,29 +2373,13 @@ class GameOverlay extends HTMLElement {
         const worldId = this.getAttribute('world-id') || '';
         const characterAsset = this.getAttribute('character-asset') || '';
 
-        // Resolve the world background image. System namespaces (those whose
-        // name starts with '@') live under DREAMENGINE_DEFAULT_SCRIPTS_HOME;
-        // user namespaces live under DREAMENGINE_HOME. Falls back to the
-        // built-in default-world image if no world is set or if the world's
-        // image asset 404s (handled in connectedCallback via a probe for
-        // .game-root, and via the <app-asset-image> default for .game-background).
+        // World background starts as the built-in fallback. updateLocation()
+        // will overwrite it once the engine reports the actual asset path.
         const fallbackBgUrl = './images/default-world.png';
-        let worldBgUrl = fallbackBgUrl;
-        // Asset path consumed by <app-asset-image> (e.g. "assets/@ns/id/image").
-        // Empty string means "no world set", which causes the component to
-        // immediately load its default image.
-        const worldAssetPath = (worldNamespace && worldId)
-            ? `assets/${worldNamespace}/${worldId}/image`
-            : '';
-        if (worldNamespace && worldId) {
-            const isSystem = worldNamespace.startsWith('@');
-            const base = isSystem
-                ? window.DREAMENGINE_DEFAULT_SCRIPTS_HOME
-                : window.DREAMENGINE_HOME;
-            // Normalize Windows backslashes to forward slashes — CSS url()
-            // treats `\` as an escape character (so `\e` becomes U+000E etc.).
-            worldBgUrl = `${base}/assets/${worldNamespace}/${worldId}/image`.replace(/\\/g, '/');
-        }
+        const worldBgUrl = fallbackBgUrl;
+        // Asset path is empty on initial render; <app-asset-image> shows its
+        // default-image until updateLocation() resolves the actual asset.
+        const worldAssetPath = '';
 
         this.root.innerHTML = `
         <link rel="stylesheet" href="components/game.css">

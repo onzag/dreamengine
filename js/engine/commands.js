@@ -45,26 +45,26 @@ export const commands = {
             }
             const currentLocation = engine.deObject.world.locations[engine.deObject.world.currentLocation];
             const currentWeather = currentLocation.internalState.currentWeather;
-            const isSheltered = await isCharacterShelteredFromWeather(engine.deObject, engine.deObject.user.name, currentWeather, engine.deObject.world.currentLocation, engine.deObject.world.currentLocationSlot);
+            const isSheltered = await isCharacterShelteredFromWeather(engine.deObject, engine.deObject.user, currentWeather, engine.deObject.world.currentLocation, engine.deObject.world.currentLocationSlot);
             const weatherSystem = getWeatherSystemForLocationAndWeather(engine.deObject, engine.deObject.world.currentLocation, currentWeather);
             if (isSheltered.fullySheltered) {
                 const noEffectDescription = typeof weatherSystem.noEffectDescription === "string" ? weatherSystem.noEffectDescription : await weatherSystem.noEffectDescription({
-                    char: engine.deObject.characters[engine.deObject.user.name],
+                    char: engine.deObject.characters[engine.deObject.user],
                 });
                 return `The current weather in your location is "${currentWeather}". However, you are fully sheltered from its effects. ${isSheltered.reason || ""}, therefore ${noEffectDescription || "no weather effects apply to you."}`;
             } else if (isSheltered.partiallySheltered) {
                 const partialEffectDescription = typeof weatherSystem.partialEffectDescription === "string" ? weatherSystem.partialEffectDescription : await weatherSystem.partialEffectDescription({
-                    char: engine.deObject.characters[engine.deObject.user.name],
+                    char: engine.deObject.characters[engine.deObject.user],
                 });
                 return `The current weather in your location is "${currentWeather}". You are partially sheltered from its effects. ${isSheltered.reason || ""}, therefore ${partialEffectDescription || "some weather effects may apply to you."}`;
             } else if (isSheltered.negativelyExposed) {
                 const negativeEffectsDescription = typeof weatherSystem.negativelyExposedDescription === "string" ? weatherSystem.negativelyExposedDescription : await weatherSystem.negativelyExposedDescription({
-                    char: engine.deObject.characters[engine.deObject.user.name],
+                    char: engine.deObject.characters[engine.deObject.user],
                 });
                 return `The current weather in your location is "${currentWeather}". You are negatively exposed to its effects. ${isSheltered.reason || ""}, therefore ${negativeEffectsDescription || "strongly negative weather effects apply to you."}`;
             } else {
                 const effectDescription = typeof weatherSystem.fullEffectDescription === "string" ? weatherSystem.fullEffectDescription : await weatherSystem.fullEffectDescription({
-                    char: engine.deObject.characters[engine.deObject.user.name],
+                    char: engine.deObject.characters[engine.deObject.user],
                 });
                 return `The current weather in your location is "${currentWeather}". ${isSheltered.reason || ""}, therefore ${effectDescription || "all weather effects apply to you."}`;
             }
@@ -185,7 +185,7 @@ export const commands = {
             if (!engine.deObject.user) {
                 throw new Error("DEngine has no user character defined");
             }
-            const info = await getCharacterCanSee(engine.deObject, engine.deObject.user.name);
+            const info = await getCharacterCanSee(engine.deObject, engine.deObject.user);
             return info.everything;
         },
         help: "Lists the objects you can see in your current location.",
@@ -201,9 +201,9 @@ export const commands = {
                 throw new Error("DEngine has no user character defined");
             }
 
-            const userState = engine.deObject.stateFor[engine.deObject.user.name];
+            const userState = engine.deObject.stateFor[engine.deObject.user];
             if (!userState) {
-                throw new Error(`No state found for character "${engine.deObject.user.name}".`);
+                throw new Error(`No state found for character "${engine.deObject.user}".`);
             }
 
             let answer = `The following characters are interacting with you in your current location:\n\n`;
@@ -214,7 +214,7 @@ export const commands = {
 
             const conversationId = engine.deObject.conversations[userState.conversationId];
             for (const participantName of conversationId.participants) {
-                if (participantName === engine.deObject.user.name) {
+                if (participantName === engine.deObject.user) {
                     continue;
                 }
                 const characterInfo = engine.deObject.characters[participantName];

@@ -442,7 +442,7 @@ class Settings extends HTMLElement {
             tabsContainer.querySelector('#test-diffusion-connection').addEventListener('click', () => {
                 const dialog = document.createElement('app-dialog');
                 dialog.innerHTML = `
-                    <image-edit image-width="1024" image-height="1024"></image-edit>
+                    <image-edit image-width="1024" image-height="1024" show-diagnostics="true"></image-edit>
                 `;
                 dialog.setAttribute('dialog-title', 'Diffusion Test');
                 dialog.setAttribute('confirmation', 'true');

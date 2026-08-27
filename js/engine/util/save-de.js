@@ -38,9 +38,22 @@ export function removeUnnecessaryPropertiesFromDE(object) {
         },
     };
     for (const [charId, char] of Object.entries(object.characters)) {
-        cleanedDE.characters[charId] = {
-            state: char.state,
-        };
+        if (charId === object.user) {
+            cleanedDE.characters[charId] = char; // keep the user character as-is, since it may contain important information
+            // after all user might be unmanaged, and therefore nothing will recreate it, so we need to keep it as-is
+
+            // let's remove anything non serializable from the user character, since it may contain functions or other non-serializable data
+            for (const key of Object.keys(cleanedDE.characters[charId])) {
+                const value = cleanedDE.characters[charId][key];
+                if (typeof value === "function" || typeof value === "symbol" || typeof value === "undefined") {
+                    delete cleanedDE.characters[charId][key];
+                }
+            }
+        } else {
+            cleanedDE.characters[charId] = {
+                state: char.state,
+            };
+        }
     }
     for (const [locId, loc] of Object.entries(object.world.locations)) {
         cleanedDE.world.locations[locId] = {
@@ -120,12 +133,13 @@ export function regenerateDEFromSavedDE(engine, savedDE) {
     properDE.utils = deEngineUtilsFn(properDE);
 
     for (const [charId, char] of Object.entries(savedDE.characters)) {
-        const isUser = charId === savedDE.user?.name;
+        const isUser = charId === savedDE.user;
         if (isUser) {
             const user = properDE.user;
             if (user) {
-                const userCharacter = {...savedDE.characters[user.name]};
-                const converted = createCharacterFromUser(repairPotentialUserWithDefaults(user));
+                const userCharacter = {...savedDE.characters[user]};
+                // @ts-ignore
+                const converted = createCharacterFromUser(repairPotentialUserWithDefaults({ name: user }));
                 for (const key of Object.keys(converted)) {
                     // @ts-ignore
                     if (typeof userCharacter[key] === "undefined") {

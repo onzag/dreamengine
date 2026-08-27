@@ -77,7 +77,7 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
         // Namespaces starting with "@" load from bundled default-scripts,
         // all others load from the user's local scripts folder.
         if (namespace.startsWith('@')) {
-            const defaultUrl = `${defaultScriptsBase}/${namespace}/${id}.js`;
+            const defaultUrl = `${defaultScriptsBase}/${namespace.replace("@", "")}/${id}.js`;
             const resp = await fetch(defaultUrl).catch(() => null);
             if (resp && resp.ok) {
                 return { src: await resp.text(), srcUrl: defaultUrl };
@@ -102,7 +102,7 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
         // Namespaces starting with "@" load from bundled default-scripts,
         // all others load from the user's local scripts folder.
         if (namespace.startsWith('@')) {
-            const defaultUrl = `${defaultScriptsBase}/${namespace}/${id}.js`;
+            const defaultUrl = `${defaultScriptsBase}/${namespace.replace("@", "")}/${id}.js`;
             return { srcUrl: defaultUrl };
         } else {
             const userUrl = `${userScriptsBase}/${namespace}/${id}.js`;

@@ -281,20 +281,14 @@ document.querySelector(".ambience")?.addEventListener("click", () => {
 let WORKER_READY = false;
 let DOM_READY = false;
 
-const index = Math.floor(Math.random() * 7);
+const index = Math.floor(Math.random() * 4);
 window.DREAM_AMBIENCE_CHOSEN = [
-    "./sounds/dream.mp3",
-    "./sounds/dream.mp3",
-    "./sounds/dream.mp3",
     "./sounds/dream-2.mp3",
     "./sounds/dream-2.mp3",
     "./sounds/dream-2.mp3",
     "./sounds/dream-3.mp3",
 ][index];
 window.DREAM_AMBIENCE_CHOSEN_VOLUME = [
-    3,
-    3,
-    3,
     1.2,
     1.2,
     1.2,

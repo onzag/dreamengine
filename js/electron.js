@@ -348,8 +348,7 @@ ipcMain.handle('listScriptFiles', async (event) => {
         for (const entry of fs.readdirSync(defaultScriptsDir, { withFileTypes: true })) {
             if (entry.isDirectory()) {
                 const namespace = entry.name;
-                if (!namespace.startsWith('@')) {
-                    // console.warn(`Warning: default script namespace '${namespace}' does not start with '@', skipping`);
+                if (namespace === "assets") {
                     continue;
                 }
                 const nsPath = path.join(defaultScriptsDir, namespace);
@@ -357,7 +356,7 @@ ipcMain.handle('listScriptFiles', async (event) => {
                     if (file.endsWith('.js')) {
                         const id = file.replace(/\.js$/, '');
                         if (!results.some(r => r.namespace === namespace && r.id === id)) {
-                            results.push({ id, namespace });
+                            results.push({ id, namespace: "@" + namespace });
                         }
                     }
                 }

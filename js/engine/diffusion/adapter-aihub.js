@@ -637,6 +637,25 @@ export class DiffusionAdapterAIHub extends BaseDiffusionAdapter {
          * @type {Array<(data: any, binaryData: Blob | null) => void>}
          */
         this.messageCallbacks = [];
+
+        /**
+         * @type {AiHubInfoList|null}
+         */
+        this.infoList = null;
+
+        /**
+         * @type {Array<{label: string; id: string; description: string | null;}>}
+         */
+        this.createWorkflows = [];
+        /**
+         * @type {Array<{label: string; id: string; description: string | null;}>}
+         */
+        this.editWorkflows = [];
+
+        /**
+         * @type {Array<string>}
+         */
+        this.analysisWarnings = [];
     }
 
     /**
@@ -671,6 +690,128 @@ export class DiffusionAdapterAIHub extends BaseDiffusionAdapter {
         }));
     }
 
+    analyzeEndpoint() {
+        const infoList = this.infoList;
+
+        if (!infoList) {
+            throw new Error("DiffusionAdapterAIHub: Cannot analyze endpoint, info list not available yet.");
+        }
+
+        const operationsPrefixed = {
+            "de-create-": {
+                needsOnly: [
+                    {
+                        exposeId: "positive_prompt",
+                        type: "AIHubExposeString",
+                    },
+                ],
+                target: "createWorkflows",
+            },
+            "de-edit-": {
+                needsOnly: [
+                    {
+                        exposeId: "positive_prompt",
+                        type: "AIHubExposeString",
+                    },
+                    {
+                        exposeId: "reference_image",
+                        type: "AIHubExposeImage",
+                    },
+                ],
+                target: "editWorkflows",
+            },
+        };
+
+        // Reset all workflow arrays and warnings before repopulating
+        this.createWorkflows = [];
+        this.editWorkflows = [];
+        this.analysisWarnings = [];
+
+        const workflows = infoList.workflows || {};
+
+        for (const [workflowId, workflow] of Object.entries(workflows)) {
+            // Find which prefix this workflow matches
+            let matchedPrefix = null;
+            for (const prefix of Object.keys(operationsPrefixed)) {
+                if (workflowId.startsWith(prefix)) {
+                    matchedPrefix = prefix;
+                    break;
+                }
+            }
+
+            if (!matchedPrefix) {
+                continue; // Not a recognized DE workflow prefix, skip
+            }
+
+            // @ts-ignore
+            const operation = operationsPrefixed[matchedPrefix];
+            const needsOnly = operation.needsOnly;
+            const expose = workflow.expose || {};
+            const exposeKeys = Object.keys(expose);
+            // @ts-ignore
+            const requiredIds = new Set(needsOnly.map(n => n.exposeId));
+
+            let valid = true;
+
+            // Category must be "image"
+            if (workflow.category !== "image") {
+                this.analysisWarnings.push(
+                    `Workflow "${workflowId}": expected category "image" but got "${workflow.category}".`
+                );
+                valid = false;
+            }
+
+            // Each required expose must be present with the correct type
+            for (const required of needsOnly) {
+                const exposeEntry = expose[required.exposeId];
+                if (!exposeEntry) {
+                    this.analysisWarnings.push(
+                        `Workflow "${workflowId}": missing required expose "${required.exposeId}" (expected type "${required.type}").`
+                    );
+                    valid = false;
+                } else if (exposeEntry.type !== required.type) {
+                    this.analysisWarnings.push(
+                        `Workflow "${workflowId}": expose "${required.exposeId}" has type "${exposeEntry.type}" but expected "${required.type}".`
+                    );
+                    valid = false;
+                }
+            }
+
+            // No extra exposes are allowed beyond the standard form
+            for (const key of exposeKeys) {
+                if (!requiredIds.has(key)) {
+                    this.analysisWarnings.push(
+                        `Workflow "${workflowId}": unexpected expose "${key}" found (not part of the standard form for prefix "${matchedPrefix}").`
+                    );
+                    valid = false;
+                }
+            }
+
+            if (!valid) {
+                continue;
+            }
+
+            // @ts-ignore
+            this[operation.target].push({
+                label: workflow.label,
+                id: workflowId,
+                description: workflow.description || null,
+            });
+        }
+
+        // Warn if no valid workflows were found for create or edit
+        if (this.createWorkflows.length === 0) {
+            this.analysisWarnings.push(
+                `No valid workflows found for prefix "de-create-". At least one workflow starting with this prefix is required.`
+            );
+        }
+        if (this.editWorkflows.length === 0) {
+            this.analysisWarnings.push(
+                `No valid workflows found for prefix "de-edit-". At least one workflow starting with this prefix is required.`
+            );
+        }
+    }
+
     /**
      * @param {*} data 
      */
@@ -681,6 +822,7 @@ export class DiffusionAdapterAIHub extends BaseDiffusionAdapter {
         }
         console.log("DiffusionAdapterAIHub: Received INFO_LIST from server", data);
         this.infoList = data;
+        this.analyzeEndpoint();
         this.infoListCallbacks.forEach(callback => callback(data));
     }
 
@@ -693,6 +835,10 @@ export class DiffusionAdapterAIHub extends BaseDiffusionAdapter {
         } else {
             callback(this.infoList);
         }
+    }
+
+    getAnalysisWarnings() {
+        return this.analysisWarnings;
     }
 
     /**

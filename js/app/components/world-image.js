@@ -13,13 +13,13 @@ import { profileImageCacheVersions } from './profile-image.js';
  */
 function resolveAssetUrl(imageUrl) {
     if (!imageUrl) return '';
-    const isSystemAsset = imageUrl.startsWith('assets/@');
+    const isSystemAsset = imageUrl.startsWith('@');
     const base = isSystemAsset
         ? window.DREAMENGINE_DEFAULT_SCRIPTS_HOME
         : window.DREAMENGINE_HOME;
     const cacheVersion = profileImageCacheVersions.get(imageUrl) || 0;
     const cacheBuster = cacheVersion ? `?v=${cacheVersion}` : '';
-    return `${base}/${imageUrl}${cacheBuster}`;
+    return `${base}/${isSystemAsset ? imageUrl.replace("@", "") : imageUrl}${cacheBuster}`;
 }
 
 /**

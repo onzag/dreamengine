@@ -94,41 +94,6 @@ export function repairPotentialUserWithDefaults(character) {
 }
 
 /**
- * @param {DECompleteCharacterReference} character
- * @returns {DEMinimalCharacterReference}
- */
-function minimizeCharacterFromComplete(character) {
-    return {
-        name: character.name,
-        sex: character.sex,
-        gender: character.gender,
-        heightCm: character.heightCm,
-        weightKg: character.weightKg,
-        ageYears: character.ageYears,
-        carryingCapacityLiters: character.carryingCapacityLiters,
-        carryingCapacityKg: character.carryingCapacityKg,
-        maintenanceCaloriesPerDay: character.maintenanceCaloriesPerDay,
-        rangeMeters: character.rangeMeters,
-        locomotionSpeedMetersPerSecond: character.locomotionSpeedMetersPerSecond,
-        maintenanceHydrationLitersPerDay: character.maintenanceHydrationLitersPerDay,
-        shortDescription: character.shortDescription,
-        shortDescriptionTopNakedAdd: character.shortDescriptionTopNakedAdd,
-        shortDescriptionBottomNakedAdd: character.shortDescriptionBottomNakedAdd,
-        stealth: character.stealth,
-        perception: character.perception,
-        attractiveness: character.attractiveness,
-        charisma: character.charisma,
-        tier: character.tier,
-        tierValue: character.tierValue,
-        powerGrowthRate: character.powerGrowthRate,
-        species: character.species,
-        speciesType: character.speciesType,
-        race: character.race,
-        groupBelonging: [...character.groupBelonging],
-    };
-}
-
-/**
  * @param {DEMinimalCharacterReference} user
  * @returns {DECompleteCharacterReference}
  */
@@ -153,7 +118,7 @@ export function createCharacterFromUser(user) {
         },
         apparentTier: user.apparentTier,
         apparentTierValue: user.apparentTierValue,
-        name: user.name,
+        name: user,
         autism: 0,
         gender: user.gender,
         heightCm: user.heightCm,
@@ -349,7 +314,7 @@ export class DEngine {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
         }
-        this.deObject.characters[this.deObject.user.name].schizophrenia = 1;
+        this.deObject.characters[this.deObject.user].schizophrenia = 1;
         this.backupDEObject();
     }
 
@@ -447,8 +412,9 @@ export class DEngine {
          * @type {DETimeDescription}
          */
         const defaultTimeDEFormat = millisecondsToTime((new Date()).getTime());
+        const userValue = user ? repairPotentialUserWithDefaults(user) : repairPotentialUserWithDefaults(/**@type {DEMinimalCharacterReference} */({ name: "Player" }));
         this.deObject = {
-            user: user ? repairPotentialUserWithDefaults(user) : repairPotentialUserWithDefaults(/**@type {DEMinimalCharacterReference} */({ name: "Player" })),
+            user: userValue.name,
             party: [],
             world: {
                 name: "Unnamed World",
@@ -495,7 +461,7 @@ export class DEngine {
 
         this.backupDEObject();
 
-        const userCharacter = user ? createCharacterFromUser(repairPotentialUserWithDefaults(user)) : null;
+        const userCharacter = user ? createCharacterFromUser(userValue) : null;
         if (userCharacter) {
             this.deObject.characters[userCharacter.name] = userCharacter;
         }
@@ -536,9 +502,8 @@ export class DEngine {
         }
 
         const userCharacter = this.deObject.characters[characterName];
-        const user = minimizeCharacterFromComplete(userCharacter);
 
-        this.deObject.user = user;
+        this.deObject.user = characterName;
         this.deObject.world.currentLocation = this.deObject.stateFor[characterName].location;
         this.deObject.world.currentLocationSlot = this.deObject.stateFor[characterName].locationSlot;
 
@@ -704,17 +669,17 @@ export class DEngine {
 
         if (this.deObject.user) {
             if (newName) {
-                this.deObject.user.name = newName;
-                this.deObject.characters[this.deObject.user.name].name = newName;
+                this.deObject.user = newName;
+                this.deObject.characters[this.deObject.user].name = newName;
             }
-            const stateForUserChar = this.deObject.stateFor[this.deObject.user.name];
+            const stateForUserChar = this.deObject.stateFor[this.deObject.user];
             if (!stateForUserChar) {
-                const randomLocation = this.pickRandomLocationForCharacter(this.deObject.characters[this.deObject.user.name]);
+                const randomLocation = this.pickRandomLocationForCharacter(this.deObject.characters[this.deObject.user]);
                 const allNamesInLowerCase = Object.keys(this.deObject.characters).map(name => name.toLowerCase());
-                if (allNamesInLowerCase.includes(this.deObject.user.name.toLowerCase())) {
-                    throw new Error(`Name Conflict, The player and a character in the world share the same name ${this.deObject.user.name}, which is not allowed. Please change the player's name to be different.`);
+                if (allNamesInLowerCase.includes(this.deObject.user.toLowerCase())) {
+                    throw new Error(`Name Conflict, The player and a character in the world share the same name ${this.deObject.user}, which is not allowed. Please change the player's name to be different.`);
                 }
-                this.addCharacter(this.deObject.characters[this.deObject.user.name], randomLocation.location, randomLocation.locationSlot);
+                this.addCharacter(this.deObject.characters[this.deObject.user], randomLocation.location, randomLocation.locationSlot);
             }
         }
 
@@ -966,7 +931,7 @@ export class DEngine {
                     throw new Error("DEngine not initialized");
                 }
 
-                timeForwardsMessages = await timeForwardsUsingLastMessage(this, this.deObject.characters[this.deObject.user.name]);
+                timeForwardsMessages = await timeForwardsUsingLastMessage(this, this.deObject.characters[this.deObject.user]);
             }
 
             /**
@@ -1001,8 +966,8 @@ export class DEngine {
                 rerollWorldWeather(this);
             }
 
-            this.deObject.stateFor[this.deObject.user.name].location = sceneObject.location;
-            this.deObject.stateFor[this.deObject.user.name].locationSlot = sceneObject.locationSlot;
+            this.deObject.stateFor[this.deObject.user].location = sceneObject.location;
+            this.deObject.stateFor[this.deObject.user].locationSlot = sceneObject.locationSlot;
 
             const didChangeLocation = sceneObject.location !== this.deObject.world.currentLocation;
 
@@ -1012,7 +977,7 @@ export class DEngine {
             const expectedParticipants = (sceneObject.engagedCharacters ? (
                 typeof sceneObject.engagedCharacters === "function" ? sceneObject.engagedCharacters() : sceneObject.engagedCharacters
             ) : []).map((v) => typeof v === "string" ? v : v.name);
-            expectedParticipants.push(this.deObject.user.name);
+            expectedParticipants.push(this.deObject.user);
 
             // ensure these are at the given location, if not, teleport them there
             for (const participantName of expectedParticipants) {
@@ -1026,7 +991,7 @@ export class DEngine {
             }
 
             const narration = typeof sceneObject.narration === "string" ? sceneObject.narration : await sceneObject.narration({
-                char: this.deObject.characters[this.deObject.user.name],
+                char: this.deObject.characters[this.deObject.user],
             });
 
             this.deObject.conversations[sceneId] = {
@@ -1141,7 +1106,7 @@ export class DEngine {
             await this.callFunctionInScripts(allScripts, (script) => `Running onSceneStarted for script ${script.scriptKey} at the start of scene ${sceneId}`, "onSceneStarted", this.deObject, scene);
 
             this.informCycleState("info", "Pre-calculating item changes and effects...");
-            let lastItemChangesInfo = await calculateItemChanges(this, this.deObject.characters[this.deObject.user.name]);
+            let lastItemChangesInfo = await calculateItemChanges(this, this.deObject.characters[this.deObject.user]);
 
             if (lastItemChangesInfo.storyMasterMessages.length > 0) {
                 await addMessageForStoryMaster(lastItemChangesInfo.storyMasterMessages);
@@ -1227,8 +1192,8 @@ export class DEngine {
 
             this.informThinking(true, null, true);
 
-            this.informCycleState("info", "Running all triggers for " + this.deObject.user.name + "...");
-            const triggerResults = await runAllTriggersFor(this, this.deObject.characters[this.deObject.user.name], lastItemChangesInfo.interactedCharacters);
+            this.informCycleState("info", "Running all triggers for " + this.deObject.user + "...");
+            const triggerResults = await runAllTriggersFor(this, this.deObject.characters[this.deObject.user], lastItemChangesInfo.interactedCharacters);
 
             const nextActionsProduced = this.deObject.internalState.NEXT_ACTIONS || [];
             delete this.deObject.internalState.NEXT_ACTIONS;
@@ -1253,11 +1218,11 @@ export class DEngine {
             // so that they are ready for the user's first turn, even though
             // the user has no real affecting states, they are forced upon the user
             // as information bits
-            this.informCycleState("info", "Pre-calculating initial states for " + this.deObject.user.name + " and the world...");
-            await calculateStateChange(this, this.deObject.characters[this.deObject.user.name], lastItemChangesInfo.interactedCharacters);
+            this.informCycleState("info", "Pre-calculating initial states for " + this.deObject.user + " and the world...");
+            await calculateStateChange(this, this.deObject.characters[this.deObject.user], lastItemChangesInfo.interactedCharacters);
 
             this.informCycleState("info", "Pre-calculating initial bonds for your character...");
-            await calculateBondsChangesDueToMessages(this, this.deObject.characters[this.deObject.user.name], lastItemChangesInfo.interactedCharacters);
+            await calculateBondsChangesDueToMessages(this, this.deObject.characters[this.deObject.user], lastItemChangesInfo.interactedCharacters);
 
             /**
              * @type {string[]}
@@ -1434,9 +1399,9 @@ export class DEngine {
             return;
         }
 
-        const userCharacterState = this.deObject.stateFor[this.user.name];
+        const userCharacterState = this.deObject.stateFor[this.user];
         if (!userCharacterState) {
-            throw new Error(`Character state for user ${this.user.name} not found.`);
+            throw new Error(`Character state for user ${this.user} not found.`);
         }
 
         const deObjectBackup = deepCopy(this.deObject);
@@ -1457,7 +1422,7 @@ export class DEngine {
                  * @type {DEConversationMessage}
                  */
                 const messageToAdd = {
-                    sender: user.name,
+                    sender: user,
                     content: userMessage,
                     duration: { inMinutes: 0, inHours: 0, inDays: 0, inSeconds: 0 },
                     // @ts-expect-error typescript issue as usual
@@ -1495,16 +1460,16 @@ export class DEngine {
                     this.deObject.conversations[expectedFutureConversationIdIfNotFound] = {
                         id: expectedFutureConversationIdIfNotFound,
                         previousConversationIdsPerParticipant: {
-                            [user.name]: null,
+                            [user]: null,
                         },
                         // @ts-expect-error typescript issue as usual
                         startTime: { ...this.deObject.currentTime },
                         messages: [messageToAdd],
-                        participants: [user.name],
+                        participants: [user],
                         remoteParticipants: [],
                         location: userCharacterState.location,
                         pseudoConversation: false,
-                        bondsAtStart: getFrozenBonds(this, [user.name]),
+                        bondsAtStart: getFrozenBonds(this, [user]),
                         bondsAtEnd: null,
                     };
                     return expectedFutureConversationIdIfNotFound;
@@ -1575,7 +1540,7 @@ export class DEngine {
 
             const nextCharacterToTalk = feasibilityResults.nextCharacterToTalk;
 
-            if (!nextCharacterToTalk || nextCharacterToTalk.name === this.user.name) {
+            if (!nextCharacterToTalk || nextCharacterToTalk.name === this.user) {
                 this.informCycleState("info", `Calculating state changes for user character`);
                 await calculateStateChange(this, this.userCharacter);
                 this.informCycleState("info", `Cycle completed successfully`);
@@ -1740,11 +1705,11 @@ export class DEngine {
             rumors: [],
         };
 
-        let userConversationId = this.deObject.stateFor[this.user.name].conversationId;
+        let userConversationId = this.deObject.stateFor[this.user].conversationId;
         if (!userConversationId) {
             userConversationId = crypto.randomUUID();
             // @ts-ignore
-            const userCharacterState = this.deObject.stateFor[this.user.name];
+            const userCharacterState = this.deObject.stateFor[this.user];
             const userCharacterStateCopy = deepCopyNoHistory(userCharacterState);
             userCharacterState.history.push(userCharacterStateCopy)
             userCharacterState.conversationId = userConversationId;
@@ -1753,15 +1718,15 @@ export class DEngine {
             this.deObject.conversations[userConversationId] = {
                 id: userConversationId,
                 previousConversationIdsPerParticipant: {
-                    [this.user.name]: null,
+                    [this.user]: null,
                 },
                 startTime: { ...this.deObject.currentTime },
                 messages: [messageToAdd],
-                participants: [this.user.name],
+                participants: [this.user],
                 remoteParticipants: [],
                 location: userCharacterState.location,
                 pseudoConversation: false,
-                bondsAtStart: getFrozenBonds(this, [this.user.name]),
+                bondsAtStart: getFrozenBonds(this, [this.user]),
                 bondsAtEnd: null,
             };
         } else {
