@@ -406,7 +406,7 @@ class Settings extends HTMLElement {
                 });
             }
         } else if (this.currentSectionIndex === 4 && tabsContainer) {
-            tabsContainer.innerHTML = `<app-overlay-section section-title="AI Diffusion Settings">
+            tabsContainer.innerHTML = `<app-overlay-section section-title="AI Image Generation Settings">
                 <app-overlay-input
                     label="Diffusion host"
                     input-placeholder="Enter AIHub diffusion host"
@@ -445,6 +445,50 @@ class Settings extends HTMLElement {
                     <image-edit image-width="1024" image-height="1024"></image-edit>
                 `;
                 dialog.setAttribute('dialog-title', 'Diffusion Test');
+                dialog.setAttribute('confirmation', 'true');
+                dialog.setAttribute('confirm-text', 'Close');
+                dialog.setAttribute('cancel-text-disable', 'true');
+                dialog.setAttribute('extra-z-index', '100');
+                dialog.setAttribute("large", "true");
+                dialog.setAttribute("pre-expand", "true");
+                document.body.appendChild(dialog);
+
+                const exit = () => {
+                    this.dispatchEvent(new CustomEvent('exit', { bubbles: true, composed: true }));
+                    if (dialog.parentNode) dialog.parentNode.removeChild(dialog);
+                    playCancelSound();
+                };
+                // Both confirm and cancel (Escape / backdrop click) wake up.
+                dialog.addEventListener('confirm', exit);
+                dialog.addEventListener('cancel', exit);
+            });
+        } else if (this.currentSectionIndex === 5 && tabsContainer) {
+            tabsContainer.innerHTML = `<app-overlay-section section-title="Voice Generation Settings">
+                <app-overlay-input
+                    label="Vocalizer host"
+                    input-placeholder="Enter Vocalizer host"
+                    title="This is the host address for the Vocalizer server, you can define all parameters here for the remote server, for example wss://myserver.com:1234?model=custom&param=value, the protocol must be ws:// or wss://"
+                    input-data-location="vocalizerHost"
+                ></app-overlay-input>
+                <app-overlay-input
+                    label="Vocalizer api secret"
+                    input-placeholder="Enter API secret"
+                    title="This is the API secret used by the Vocalizer server"
+                    input-data-location="vocalizerApiKey"
+                ></app-overlay-input>
+                ${window.API.mode === "web" ? `<div style="margin-top:1vh;color:#ff6b6b;font-size:3vh;">&#9888; The app must be restarted after changing the vocalizer host or secret.</div>` : `<app-overlay-input-boolean
+                    label="Allow self-signed SSL certificates"
+                    title="Allow connecting to Vocalizer servers with self-signed SSL certificates, only enable this if you are connecting to a trusted server with a self-signed certificate, enabling this will make your connection less secure and vulnerable"
+                    input-data-location="allowVocalizerSelfSigned"
+                    input-data-location="allowVocalizerSelfSigned"
+                ></app-overlay-input-boolean><div style="margin-top:1vh;color:#ff6b6b;font-size:3vh;">&#9888; The app must be restarted after changing the vocalizer host, secret or self-signed SSL certificate settings.</div>`}
+                <app-overlay-button id="test-vocalizer-connection" play-sound-on-click="false" aria-key="t" title="Open a vocalizer field to check the vocalizer settings">Test Vocalizer</app-overlay-button>
+            </app-overlay-section>`;
+
+            // @ts-expect-error
+            tabsContainer.querySelector('#test-vocalizer-connection').addEventListener('click', () => {
+                const dialog = document.createElement('app-dialog');
+                dialog.setAttribute('dialog-title', 'Vocalizer Test');
                 dialog.setAttribute('confirmation', 'true');
                 dialog.setAttribute('confirm-text', 'Close');
                 dialog.setAttribute('cancel-text-disable', 'true');
@@ -543,7 +587,7 @@ class Settings extends HTMLElement {
             }
         </style>
         <app-overlay overlay-title="Settings" cancel-text="Cancel" confirm-text="Save & Close">
-            <app-overlay-tabs current="${this.currentSectionIndex}" sections='["Profile", "Simulation", "Language", "Inference", "Diffusion"]'>              
+            <app-overlay-tabs current="${this.currentSectionIndex}" sections='["Profile", "Simulation", "Language", "Inference", "Image Gen", "Voice Gen"]'>              
             </app-overlay-tabs>
         </app-overlay>`;
     }

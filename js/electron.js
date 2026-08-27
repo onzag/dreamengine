@@ -74,6 +74,18 @@ const createWindow = () => {
                 // invalid or empty host config, fall through to default
             }
         }
+        if (config.allowVocalizerSelfSigned) {
+            const vocalizerHost = config.vocalizerHost || '';
+            try {
+                const hostUrl = new URL(vocalizerHost);
+                if (request.hostname === hostUrl.hostname) {
+                    callback(0); // trust self-signed cert for vocalizer server
+                    return;
+                }
+            } catch {
+                // invalid or empty host config, fall through to default
+            }
+        }
         callback(-3); // -3 = use default Chromium verification
     });
 
@@ -676,7 +688,8 @@ ipcMain.handle('deleteSaveFile', async (event, namespace, id, saveName) => {
 });
 
 ipcMain.handle('startDiffusionProcess', () => {
-    const diffusionExecutable = config.diffusionExecutable;
+    const diffusionExecutable = config.diffusionExecutablePath;
+    console.log("Starting diffusion process with executable:", diffusionExecutable);
     return startDiffusionProcess(diffusionExecutable);
 });
 

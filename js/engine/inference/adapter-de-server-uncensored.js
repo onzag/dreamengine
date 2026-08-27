@@ -213,6 +213,14 @@ export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
         }
 
         if (this.connected) {
+            /**
+             * Just in case the server has been paused and we want to resume it
+             */
+            try {
+                await this.resume();
+            } catch (e) {
+                // do nothing, it might not support resuming or pausing
+            }
             return;
         }
 
@@ -224,6 +232,11 @@ export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
         }
 
         await this.initialize();
+        try {
+            await this.resume();
+        } catch (e) {
+            // do nothing, it might not support resuming or pausing
+        }
     }
 
     async pause() {
@@ -249,7 +262,7 @@ export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
         }
 
         const rid = cheapRID();
-        this.socket.send(JSON.stringify({ action: "reload-model", rid }));
+        this.socket.send(JSON.stringify({ action: "load-model", rid }));
         await (new Promise((resolve, reject) => {
             this.listener[rid] = [resolve, (err) => {
                 delete this.listener[rid];
@@ -260,6 +273,7 @@ export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
     }
 
     getSupportedLanguages() {
+        debugger;
         return this.supportedLanguages;
     }
 
@@ -302,9 +316,10 @@ export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
 
             // @ts-ignore
             this.socket.onopen = () => {
-                if (this.resolveInitializePromise) {
-                    this.resolveInitializePromise();
-                }
+                // The handshake is not complete just because the socket opened.
+                // We must wait for the first message from the server, which is
+                // expected to be a "ready" message (handled in onData). Any other
+                // first message is treated as an error and rejects this promise.
             };
 
             // @ts-ignore
@@ -377,7 +392,7 @@ export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
      * @param {MessageEvent<any>} event 
      */
     onData(event) {
-        // get the data
+        // get the data 
         try {
             const data = JSON.parse(event.data);
 
@@ -404,6 +419,13 @@ export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
                     this.resolveInitializePromise = null;
                     this.rejectInitializePromise = null;
                 }
+            } else if (this.rejectInitializePromise) {
+                // We are still waiting for the initial handshake message, but the
+                // first message the server sent was not "ready". Treat this as an
+                // error and reject the initialization promise.
+                this.rejectInitializePromise(new Error("Expected 'ready' handshake message from server but received message of type: " + data.type));
+                this.resolveInitializePromise = null;
+                this.rejectInitializePromise = null;
             }
 
             if (data.rid) {

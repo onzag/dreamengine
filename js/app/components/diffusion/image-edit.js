@@ -192,7 +192,13 @@ export class ImageEdit extends HTMLElement {
                 // make sure when inserting a layer with the same name to add a number if the layer name already exists
                 // pos_x and pos_y are the position of the new layer relative to the reference layer, since the image is the same size; notice that there is technically no guarantee that the image is the same size as the canvas
                 // as all our layers are the same size as the canvas as this is a small tool and not a full image editor, just draw the image from the pos_x and pos_y given in the canvas and crop anything that is outside this box
+                if (!action || !binaryData) break;
+                if (action.action !== 'NEW_LAYER' && action.action !== 'NEW_IMAGE') break;
+                if (dataType && typeof dataType === 'string' && !dataType.startsWith('image/')) break;
+                this.applyIncomingFile(action, binaryData);
+                break;
             }
+
             case 'ERROR': {
                 this.setStatus(msg.message || 'Workflow error.', 'error');
                 this.finishRunWorkflow();
@@ -665,6 +671,101 @@ export class ImageEdit extends HTMLElement {
         this.updateLayerStacking();
         this.renderLayersList();
         this.notifyImageChanged();
+    }
+
+    /**
+     * Make a layer name unique by appending a number when it already exists.
+     * @param {string} name
+     * @returns {string}
+     */
+    uniqueLayerName(name) {
+        const base = name || 'Layer';
+        if (!this.layers.some((l) => l.name === base)) return base;
+        let n = 2;
+        while (this.layers.some((l) => l.name === `${base} ${n}`)) n++;
+        return `${base} ${n}`;
+    }
+
+    /**
+     * Create a new layer and insert it at a specific position in the stack
+     * (0 = bottom). The name is made unique automatically.
+     * @param {string} name
+     * @param {number} index
+     * @returns {{name: string, canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, visible: boolean, opacity: number, id: string}}
+     */
+    insertLayerAt(name, index) {
+        const canvas = document.createElement('canvas');
+        canvas.width = this.imageWidth;
+        canvas.height = this.imageHeight;
+        const ctx = /** @type {CanvasRenderingContext2D} */ (canvas.getContext('2d'));
+        this.canvasStack.appendChild(canvas);
+
+        const layer = {
+            id: String(this._layerIdCounter++),
+            name: this.uniqueLayerName(name),
+            canvas,
+            ctx,
+            visible: true,
+            opacity: 1,
+        };
+        const clamped = Math.max(0, Math.min(this.layers.length, index));
+        this.layers.splice(clamped, 0, layer);
+        return layer;
+    }
+
+    /**
+     * Apply an incoming FILE action from the diffusion server by inserting the
+     * received image as a new layer.
+     * @param {{action: string, pos_x?: number, pos_y?: number, reference_layer_id?: string, reference_layer_action?: string, name?: string}} action
+     * @param {Blob} binaryData
+     */
+    applyIncomingFile(action, binaryData) {
+        const url = URL.createObjectURL(binaryData);
+        const img = new Image();
+        img.onload = () => {
+            try {
+                const posX = action.pos_x || 0;
+                const posY = action.pos_y || 0;
+
+                // Default (NEW_IMAGE): insert on top of the whole stack.
+                let insertIndex = this.layers.length;
+
+                if (action.action === 'NEW_LAYER') {
+                    const refIdx = this.layers.findIndex((l) => l.id === String(action.reference_layer_id));
+                    if (refIdx !== -1) {
+                        const refAction = action.reference_layer_action;
+                        if (refAction === 'NEW_BEFORE') {
+                            // below the reference layer
+                            insertIndex = refIdx;
+                        } else if (refAction === 'NEW_AFTER' || refAction === 'REPLACE') {
+                            // above the reference layer
+                            insertIndex = refIdx + 1;
+                            // REPLACE is treated non-destructively: hide the
+                            // reference layer instead of deleting it.
+                            if (refAction === 'REPLACE') this.layers[refIdx].visible = false;
+                        } else {
+                            // unknown reference action: ignore this file
+                            return;
+                        }
+                    }
+                }
+
+                const layer = this.insertLayerAt(action.name || 'new layer', insertIndex);
+                // Draw at the given position; the canvas clips anything outside.
+                layer.ctx.drawImage(img, posX, posY);
+                this.activeLayerId = layer.id;
+                this.updateLayerStacking();
+                this.renderLayersList();
+                this.notifyImageChanged();
+            } finally {
+                URL.revokeObjectURL(url);
+            }
+        };
+        img.onerror = () => {
+            URL.revokeObjectURL(url);
+            this.setStatus('Failed to load an incoming image from the server.', 'error');
+        };
+        img.src = url;
     }
 
     importLayer() {
