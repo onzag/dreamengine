@@ -23,6 +23,21 @@ class ProfileImage extends HTMLElement {
 
         this.currentObjectUrl = null;
         this.currentFileObject = null;
+        this.triedFallback = false;
+    }
+
+    /**
+     * Resolve a DE asset path (optionally `@`-prefixed) into an absolute URL.
+     * Absolute http(s)/blob/data URLs are returned unchanged.
+     * @param {string} url
+     * @returns {string}
+     */
+    resolveAssetUrl(url) {
+        if (!url) return url;
+        if (/^(https?:|blob:|data:|\.\/)/.test(url)) return url;
+        const isSystemAsset = url.startsWith('@');
+        const base = isSystemAsset ? window.DREAMENGINE_DEFAULT_SCRIPTS_HOME : window.DREAMENGINE_HOME;
+        return base + "/" + (isSystemAsset ? url.slice(1) : url);
     }
 
     connectedCallback() {
@@ -31,8 +46,19 @@ class ProfileImage extends HTMLElement {
         // @ts-expect-error
         this.root.querySelector('.profile-image').addEventListener('error', () => {
             const isWorld = this.getAttribute("world") === "true";
+            const fallbackUrl = this.getAttribute('fallback-url');
+            const imgEl = this.root.querySelector('.profile-image');
+            // If the primary image is missing, fall back to the provided
+            // fallback source (used as the editing base too) before giving up
+            // on the generic default image.
+            if (fallbackUrl && !this.triedFallback) {
+                this.triedFallback = true;
+                // @ts-expect-error
+                imgEl.src = this.resolveAssetUrl(fallbackUrl);
+                return;
+            }
             // @ts-expect-error
-            this.root.querySelector('.profile-image').src = isWorld ? './images/default-world.png' : './images/default-profile.png';
+            imgEl.src = isWorld ? './images/default-world.png' : './images/default-profile.png';
         });
 
         if (this.hasAttribute('editable')) {

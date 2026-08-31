@@ -2,6 +2,7 @@ import { isScriptTypeGeneratorFile, parseScriptGeneratorFrom } from '../../scrip
 import { playCancelSound, playConfirmSound, playHoverSound, playPauseSound, setTempSoundDisable } from '../sound.js';
 import './profile-image.js';
 import './wizard/character-overview.js';
+import { emotions } from '../../engine/util/emotions.js';
 
 /**
  * 
@@ -314,12 +315,28 @@ class CharacterOverlay extends HTMLElement {
                 overview.setAttribute('character-id', this.currentCharacterId);
                 document.body.appendChild(overview);
             });
-        } else if (this.currentSectionIndex === 1) {
+        } else if (this.currentSectionIndex === 3) {
             tabsContainer.innerHTML = `<app-overlay-section section-title="Script Info">
                 <app-script-info
                     script-id="${this.currentCharacterId.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')}"
                     script-namespace="${this.currentCharacterNamespace.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')}"
                 ></app-script-info>
+            </app-overlay-section>`;
+        } else if (this.currentSectionIndex === 1) {
+            const isSystemNamespace = this.currentCharacterNamespace.startsWith('@');
+            const baseUrl = `${isSystemNamespace ? '@' : ''}assets/${isSystemNamespace ? this.currentCharacterNamespace.slice(1) : this.currentCharacterNamespace}/${this.currentCharacterId}`;
+            tabsContainer.innerHTML = `<app-overlay-section section-title="Emotions">
+                <div class="emotions-grid">
+                    ${emotions.map(emotion => `
+                        <div class="emotion-item">
+                            <app-profile-image image-url="${escapeHTML(baseUrl)}/${emotion}" fallback-url="${escapeHTML(baseUrl)}/profile"${isSystemNamespace ? '' : ' editable="true"'}></app-profile-image>
+                            <span class="emotion-label">${escapeHTML(emotion)}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            </app-overlay-section>`;
+        } else if (this.currentSectionIndex === 2) {
+            tabsContainer.innerHTML = `<app-overlay-section section-title="Emotional Vocal Effects">
             </app-overlay-section>`;
         }
     }
@@ -334,7 +351,7 @@ class CharacterOverlay extends HTMLElement {
                 confirm-text="Apply Changes"
                 cancel-text="Go Back"
             >
-                <app-overlay-tabs current="${this.currentSectionIndex}" sections='["Configure", "Script Info"]'>
+                <app-overlay-tabs current="${this.currentSectionIndex}" sections='["Configure", "Emotions", "Vocal Expressions", "Script Info"]'>
                 </app-overlay-tabs>
             </app-overlay>
         `;

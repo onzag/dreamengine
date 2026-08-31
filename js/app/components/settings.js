@@ -3,6 +3,7 @@ import "./profile-image.js";
 import "./diffusion/image-edit.js";
 import { playCancelSound, playConfirmSound, playHoverSound, playPauseSound } from '../sound.js';
 import { supportedLanguages, supportedLanguageNames } from '../localization/index.js';
+import './voice/test.js';
 
 // Optional dependency: `gbnf` is declared as an optionalDependency in
 // package.json, so it may or may not be present at runtime. We attempt a
@@ -555,7 +556,11 @@ class Settings extends HTMLElement {
                 dialog.setAttribute("pre-expand", "true");
                 document.body.appendChild(dialog);
 
+                const testComponent = document.createElement('vocalizer-test');
+                dialog.appendChild(testComponent);
+
                 const exit = () => {
+                    if (testComponent.parentNode) testComponent.parentNode.removeChild(testComponent);
                     this.dispatchEvent(new CustomEvent('exit', { bubbles: true, composed: true }));
                     if (dialog.parentNode) dialog.parentNode.removeChild(dialog);
                     playCancelSound();

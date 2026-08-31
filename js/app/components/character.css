@@ -27,3 +27,32 @@ table thead {
     align-items: flex-start;
     justify-content: center;
 }
+
+.emotions-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, max(15vh, 15vw));
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 0;
+}
+
+.emotion-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.emotion-item app-profile-image {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    display: block;
+}
+
+.emotion-label {
+    font-size: 3vh;
+    text-align: center;
+    word-break: break-word;
+    color: inherit;
+    opacity: 0.85;
+}

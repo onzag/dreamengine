@@ -1084,16 +1084,16 @@ export class CardTypeWizard extends HTMLElement {
 
                         const chooseBtn = document.createElement('div');
                         chooseBtn.className = 'guider-audio-choose-btn';
-                        chooseBtn.textContent = 'Choose MP3';
+                        chooseBtn.textContent = 'Choose Audio';
                         chooseBtn.setAttribute('tabindex', '0');
                         chooseBtn.setAttribute('role', 'button');
-                        chooseBtn.setAttribute('aria-label', 'Choose MP3 file');
+                        chooseBtn.setAttribute('aria-label', 'Choose audio file');
                         chooseBtn.setAttribute('data-de-aria-key', 'c');
                         chooseBtn.addEventListener('mouseenter', playHoverSound);
 
                         const fileInput = document.createElement('input');
                         fileInput.type = 'file';
-                        fileInput.accept = 'audio/mpeg,.mp3';
+                        fileInput.accept = 'audio/mpeg,.mp3,.ogg';
                         fileInput.style.display = 'none';
 
                         chooseBtn.addEventListener('click', () => {
@@ -1103,9 +1103,9 @@ export class CardTypeWizard extends HTMLElement {
                         fileInput.addEventListener('change', () => {
                             const file = fileInput.files && fileInput.files[0];
                             if (!file) return;
-                            // Only accept mp3 — the server can't handle other formats and we don't want wav.
-                            const isMp3 = file.type === 'audio/mpeg' || /\.mp3$/i.test(file.name);
-                            if (!isMp3) {
+                            // Only accept mp3 or ogg files
+                            const isValidFormat = file.type === 'audio/mpeg' || /\.mp3$/i.test(file.name) || file.type === 'audio/ogg' || /\.ogg$/i.test(file.name);
+                            if (!isValidFormat) {
                                 fileInput.value = '';
                                 return;
                             }
