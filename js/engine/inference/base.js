@@ -60,6 +60,11 @@ export class BaseInferenceAdapter {
          * @type {Array<[() => void, (err: string) => void]>}
          */
         this.onConnectionStatusChangePromises = [];
+
+        /**
+         * @type {Array<() => Promise<void>>}
+         */
+        this.beforeInferenceFns = [];
     }
     
     async initialize() {
@@ -310,5 +315,19 @@ export class BaseInferenceAdapter {
      */
     removeEventListenerOnConnectStatusChange(callback) {
         this.onConnectionStatusChangeFns = this.onConnectionStatusChangeFns.filter(fn => fn !== callback);
+    }
+
+    /**
+     * @param {() => Promise<void>} callback
+     */
+    addBlockingEventListenerBeforeInference(callback) {
+        this.beforeInferenceFns.push(callback);
+    }
+
+    /**
+     * @param {() => Promise<void>} callback
+     */
+    removeBlockingEventListenerBeforeInference(callback) {
+        this.beforeInferenceFns = this.beforeInferenceFns.filter(fn => fn !== callback);
     }
 }

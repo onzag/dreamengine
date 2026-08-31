@@ -235,6 +235,8 @@ export function getJsScriptFromGenerator(base, baseTabCount = 0, noImportsNorSta
  * @property {(id: string | {id: string, reask: boolean, recalcdefault?: boolean, step: boolean} | null, question: string, options: Record<string, Array<ScriptTypeGuiderOption | string>> | null, defaultValue: string[] | (() => Promise<string[]>)) => Promise<{value: string[]}>} askList
  * @property {(id: string | {id: string, reask: boolean, recalcdefault?: boolean, step: boolean} | null, question: string, defaultValue: string[] | (() => Promise<string[]>)) => Promise<{value: string[]}>} askArbitraryList
  * @property {(id: string | {id: string, reask: boolean, recalcdefault?: boolean, step: boolean} | null, question: string, defaultValue: string[] | (() => Promise<string[] | null>)) => Promise<{value: string[] | null}>} askAcceptArbitraryList
+ * @property {(id: string | {id: string, reask: boolean, recalcdefault?: boolean, step: boolean} | null, question: string, options: {generate: {width: number, height: number, prompt: string, referenceImage: string | null} | null}, defaultValue: string) => Promise<{value: string}>} askImageAsset
+ * @property {(id: string | {id: string, reask: boolean, recalcdefault?: boolean, step: boolean} | null, question: string, options: {generate: {duration: number, prompt: string} | null}, defaultValue: string) => Promise<{value: string}>} askAudioAsset
  */
 
 /**

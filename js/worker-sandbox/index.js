@@ -228,7 +228,24 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
         },
 
         async setupInferenceAdapter({ host, secret, allowSelfSigned, useExperimentalTestMode }) {
-            engine.setInferenceAdapter(new InferenceAdapterLlamaUncensored(engine, { host, secret, useExperimentalTestMode }));
+            const adapter = new InferenceAdapterLlamaUncensored(engine, { host, secret, useExperimentalTestMode });
+            engine.setInferenceAdapter(adapter);
+            adapter.addBlockingEventListenerBeforeInference(async () => {
+                // Ask the main thread to stop any active diffusion process, then
+                // block until it confirms (or a 30-second safety timeout fires).
+                const callId = ++mainThreadCallId;
+                /**
+                 * @type {Promise<void>}
+                 */
+                const callPromise = new Promise((resolve, reject) => {
+                    pendingMainThreadCalls.set(callId, { resolve, reject });
+                });
+                self.postMessage({ type: "event", event: "stopDiffusionRequest", data: { callId } });
+                const timeoutPromise = new Promise((_, reject) => {
+                    setTimeout(() => reject(new Error("stopDiffusionProcess timed out after 30s")), 30_000);
+                });
+                await Promise.race([callPromise, timeoutPromise]);
+            });
             return { ok: true };
         },
 
@@ -724,6 +741,12 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
     }
 
     /** @type {number} */
+    let mainThreadCallId = 0;
+
+    /** @type {Map<number, {resolve: () => void, reject: (err: Error) => void}>} */
+    const pendingMainThreadCalls = new Map();
+
+    /** @type {number} */
     let guiderQuestionId = 0;
 
     /** @type {Map<number, (answer: any) => void>} */
@@ -764,10 +787,9 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
             if (extra.options && Array.isArray(extra.options)) {
                 availableOptions = extra.options.map(/** @param {*} o */ o => typeof o === 'string' ? o : o.value);
             } else if (typeof extra.options === "object" && extra.options !== null) {
-                availableOptions = [];
                 for (const key in extra.options) {
                     if (Array.isArray(extra.options[key])) {
-                        availableOptions = availableOptions.concat(extra.options[key].map(/** @param {*} o */ o => typeof o === 'string' ? o : o.value));
+                        availableOptions = extra.options[key].map(/** @param {*} o */ o => typeof o === 'string' ? o : o.value);
                         break;
                     }
                 }
@@ -852,6 +874,12 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
             async askAcceptArbitraryList(id, question, defaultValue) {
                 return ask("askAcceptArbitraryList", question, { id, defaultValue });
             },
+            async askImageAsset(id, question, options, defaultValue) {
+                return ask("askImageAsset", question, { id, options, defaultValue });
+            },
+            async askAudioAsset(id, question, options, defaultValue) {
+                return ask("askAudioAsset", question, { id, options, defaultValue });
+            },
         };
     }
 
@@ -871,6 +899,21 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
     // ── Message listener ────────────────────────────────────────────────
     self.onmessage = async (e) => {
         const msg = e.data;
+
+        // Handle stopDiffusionProcess response from main thread
+        if (msg.type === "mainThreadCallResponse") {
+            const { callId, error } = msg;
+            const pending = pendingMainThreadCalls.get(callId);
+            if (pending) {
+                pendingMainThreadCalls.delete(callId);
+                if (error) {
+                    pending.reject(new Error(error));
+                } else {
+                    pending.resolve();
+                }
+            }
+            return;
+        }
 
         // Handle guider answer from main thread
         if (msg.type === "ScriptTypeGuiderAnswer") {

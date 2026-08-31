@@ -309,7 +309,7 @@ export class ImageEdit extends HTMLElement {
             const diffusionHost = await window.API.getConfigValue("diffusionHost");
             const diffusionApiKey = await window.API.getConfigValue("diffusionApiKey");
             const diffusionExecutable = await window.API.getConfigValue("diffusionExecutablePath");
-            const handleDiffusionExecutable = await window.API.getConfigValue("handleDiffusionExecutable");
+            const handleDiffusionExecutable = this.hasAttribute('dont-handle-diffusion-executable') ? false : await window.API.getConfigValue("handleDiffusionExecutable");
 
             if (!diffusionHost) {
                 this.setStatus('Diffusion is not supported.', 'error');
@@ -551,7 +551,7 @@ export class ImageEdit extends HTMLElement {
                     <div class="tool-group">
                         <label>Actions</label>
                         <div class="btn" id="undo">&#8630; Undo</div>
-                        <div class="btn" id="download">&#8595; Download PNG</div>
+                        <div class="btn" id="download">&#8595; Download</div>
                     </div>
                     <div class="tool-group">
                         <label>Hint</label>
@@ -670,6 +670,27 @@ export class ImageEdit extends HTMLElement {
     loadImageIntoLayer(src, layerIndex) {
         const img = new Image();
         img.onload = () => {
+            // When lock-size is set, keep the canvas at its configured
+            // dimensions and cover them with the image (preserving aspect
+            // ratio, centered, cropping any overflow) instead of resizing the
+            // canvas to the image.
+            if (this.getAttribute('lock-size') === 'true') {
+                const layer = this.layers[layerIndex];
+                if (layer) {
+                    const scale = Math.max(
+                        this.imageWidth / (img.naturalWidth || this.imageWidth),
+                        this.imageHeight / (img.naturalHeight || this.imageHeight)
+                    );
+                    const scaledW = (img.naturalWidth || this.imageWidth) * scale;
+                    const scaledH = (img.naturalHeight || this.imageHeight) * scale;
+                    const dx = (this.imageWidth - scaledW) / 2;
+                    const dy = (this.imageHeight - scaledH) / 2;
+                    layer.ctx.drawImage(img, dx, dy, scaledW, scaledH);
+                }
+                this.fitToView();
+                this.notifyImageChanged();
+                return;
+            }
             this.imageWidth = img.naturalWidth || this.imageWidth;
             this.imageHeight = img.naturalHeight || this.imageHeight;
             // resize every existing layer canvas to match
@@ -1167,10 +1188,10 @@ export class ImageEdit extends HTMLElement {
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = 'image.png';
+            a.download = 'image.webp';
             a.click();
             setTimeout(() => URL.revokeObjectURL(url), 1000);
-        }, 'image/png');
+        }, 'image/webp', 0.9);
     }
 
     /**
@@ -1370,19 +1391,21 @@ export class ImageEdit extends HTMLElement {
         this.canvasStack?.removeEventListener('pointermove', this.onPointerMove);
         window.removeEventListener('pointerup', this.onPointerUp);
 
-        if (this.ownsDiffusionProcess) {
-            try {
-                await window.API.stopDiffusionProcess();
-                try {
-                    await window.ENGINE_WORKER_CLIENT.resumeInference();
-                } catch (err) {
-                    console.error('ImageEdit: failed to resume inference', err);
-                }
-            } catch (err) {
-                // nothing to display, the component is being torn down
-                console.error('ImageEdit: failed to stop diffusion process', err);
-            }
-        }
+        // We do not stop diffusion anymore when the component is torn down
+        // we let the inference adapter handle that when it is appropriate
+        // if (this.ownsDiffusionProcess) {
+        //     try {
+        //         await window.API.stopDiffusionProcess();
+        //         try {
+        //             await window.ENGINE_WORKER_CLIENT.resumeInference();
+        //         } catch (err) {
+        //             console.error('ImageEdit: failed to resume inference', err);
+        //         }
+        //     } catch (err) {
+        //         // nothing to display, the component is being torn down
+        //         console.error('ImageEdit: failed to stop diffusion process', err);
+        //     }
+        // }
     }
 }
 

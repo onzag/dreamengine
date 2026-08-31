@@ -110,6 +110,7 @@ export async function stopDiffusionProcess() {
     if (diffusionProcess) {
         diffusionProcess.kill();
         diffusionProcess = null;
+        return await new Promise(resolve => setTimeout(resolve, 1000));
     }
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    return;
 }

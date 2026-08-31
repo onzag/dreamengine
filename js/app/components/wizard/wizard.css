@@ -287,6 +287,43 @@
             rgba(0, 60, 100, 0.4));
 }
 
+/* askAudioAsset */
+.guider-audio-asset {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2vh;
+}
+
+.guider-audio-preview {
+    width: 100%;
+    max-width: 60vh;
+}
+
+.guider-audio-choose-btn {
+    font-size: 2.5vh;
+    cursor: pointer;
+    color: rgba(120, 200, 240, 0.7);
+    transition: color 0.2s ease, text-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+    text-align: center;
+    padding: 1vh 2.5vh;
+    border: 1px solid rgba(80, 180, 220, 0.25);
+    border-radius: 0.5vh;
+    background: linear-gradient(to right,
+            rgba(0, 30, 55, 0.4),
+            rgba(0, 50, 80, 0.3));
+}
+
+.guider-audio-choose-btn:hover,
+.guider-audio-choose-btn:focus {
+    color: #60d0ff;
+    text-shadow: 0 0 14px rgba(60, 180, 255, 0.4);
+    border-color: rgba(80, 180, 220, 0.5);
+    background: linear-gradient(to right,
+            rgba(0, 40, 70, 0.5),
+            rgba(0, 60, 100, 0.4));
+}
+
 /* askOption */
 .guider-options {
     display: flex;

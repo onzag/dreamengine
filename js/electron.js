@@ -688,7 +688,6 @@ ipcMain.handle('deleteSaveFile', async (event, namespace, id, saveName) => {
 
 ipcMain.handle('startDiffusionProcess', () => {
     const diffusionExecutable = config.diffusionExecutablePath;
-    console.log("Starting diffusion process with executable:", diffusionExecutable);
     return startDiffusionProcess(diffusionExecutable);
 });
 

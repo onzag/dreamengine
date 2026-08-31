@@ -217,6 +217,7 @@ export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
              * Just in case the server has been paused and we want to resume it
              */
             try {
+                await Promise.all(this.beforeInferenceFns.map(fn => fn()));
                 await this.resume();
             } catch (e) {
                 // do nothing, it might not support resuming or pausing
@@ -233,6 +234,7 @@ export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
 
         await this.initialize();
         try {
+            await Promise.all(this.beforeInferenceFns.map(fn => fn()));
             await this.resume();
         } catch (e) {
             // do nothing, it might not support resuming or pausing

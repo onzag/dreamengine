@@ -1,6 +1,7 @@
 import { getJsScriptFromGenerator, isScriptTypeGeneratorFile, parseScriptGeneratorFrom } from '../../../script-generation/base.js';
 import { playCancelSound, playConfirmSound, playHoverSound, randomizeAmbienceGroupSrc, setTempSoundDisable, stopAllAmbiencesAndStartNewOne } from '../../sound.js';
 import './character-overview.js';
+import '../profile-image.js';
 
 export class CardTypeWizard extends HTMLElement {
     constructor() {
@@ -294,6 +295,12 @@ export class CardTypeWizard extends HTMLElement {
                 case 'askAcceptArbitraryList':
                     result = await guider.askAcceptArbitraryList(id, question, defaultValue);
                     break;
+                case 'askImageAsset':
+                    result = await guider.askImageAsset(id, question, options, defaultValue);
+                    break;
+                case 'askAudioAsset':
+                    result = await guider.askAudioAsset(id, question, options, defaultValue);
+                    break;
                 default:
                     result = { value: defaultValue };
             }
@@ -491,34 +498,65 @@ export class CardTypeWizard extends HTMLElement {
          * @param {(container: HTMLElement) => any} extractValueFn - extracts the value on submit
          * @param {any} defaultValue
          * @param {boolean} [hasTryAgainOption]
+         * @param {(() => AsyncGenerator<string, void, unknown>) | null} [prepareUI] - optional async generator; the UI is built first, then this runs and its yielded strings are shown as status messages until exhausted before the UI becomes interactive
          * @returns {Promise<any>}
          */
-        function presentQuestion(question, buildInputFn, extractValueFn, defaultValue, hasTryAgainOption) {
+        async function presentQuestion(question, buildInputFn, extractValueFn, defaultValue, hasTryAgainOption, prepareUI) {
+            self.endOverlay();
+
+            const contentArea = self.root.querySelector('.wizard-content');
+            if (!contentArea) { return defaultValue; }
+
+            contentArea.innerHTML = '';
+
+            const container = document.createElement('div');
+            container.className = 'guider-question';
+
+            const questionLabel = document.createElement('div');
+            questionLabel.className = 'guider-label';
+            questionLabel.innerHTML = highlightKeywordsInQuestion(question);
+            questionLabel.setAttribute("data-de-aria-text", "true");
+            questionLabel.setAttribute("tabindex", "0");
+            container.appendChild(questionLabel);
+
+            const inputArea = buildInputFn();
+            container.appendChild(inputArea);
+
+            const buttonsContainer = document.createElement('div');
+            buttonsContainer.className = 'buttons-container';
+            container.appendChild(buttonsContainer);
+
+            contentArea.appendChild(container);
+
+            // If a prepareUI generator is provided, overlay the container while it runs.
+            if (prepareUI) {
+                const prepOverlay = document.createElement('div');
+                prepOverlay.className = 'wizard-loading-overlay visible';
+
+                const spinner = document.createElement('div');
+                spinner.className = 'wizard-spinner';
+
+                const statusText = document.createElement('div');
+                statusText.className = 'wizard-loading-text';
+
+                prepOverlay.appendChild(spinner);
+                prepOverlay.appendChild(statusText);
+                container.style.position = 'relative';
+                container.appendChild(prepOverlay);
+
+                try {
+                    for await (const message of prepareUI()) {
+                        statusText.textContent = message;
+                    }
+                } catch (err) {
+                    console.error('prepareUI generator error:', err);
+                } finally {
+                    prepOverlay.remove();
+                    container.style.position = '';
+                }
+            }
+
             return new Promise((resolve) => {
-                self.endOverlay();
-
-                const contentArea = self.root.querySelector('.wizard-content');
-                if (!contentArea) { resolve(defaultValue); return; }
-
-                contentArea.innerHTML = '';
-
-                const container = document.createElement('div');
-                container.className = 'guider-question';
-
-                const questionLabel = document.createElement('div');
-                questionLabel.className = 'guider-label';
-                questionLabel.innerHTML = highlightKeywordsInQuestion(question);
-                questionLabel.setAttribute("data-de-aria-text", "true");
-                questionLabel.setAttribute("tabindex", "0");
-                container.appendChild(questionLabel);
-
-                const inputArea = buildInputFn();
-                container.appendChild(inputArea);
-
-                const buttonsContainer = document.createElement('div');
-                buttonsContainer.className = 'buttons-container';
-                container.appendChild(buttonsContainer);
-
                 if (hasTryAgainOption) {
                     const tryAgainBtn = document.createElement('div');
                     tryAgainBtn.className = 'guider-try-again-btn';
@@ -552,8 +590,6 @@ export class CardTypeWizard extends HTMLElement {
                     submitted = true;
                 });
                 buttonsContainer.appendChild(submitBtn);
-
-                contentArea.appendChild(container);
             });
         }
 
@@ -926,6 +962,178 @@ export class CardTypeWizard extends HTMLElement {
             async askAcceptArbitraryList(id, question, defaultValueFnOrValue) {
                 const defaultValue = typeof defaultValueFnOrValue === 'function' ? await defaultValueFnOrValue() : defaultValueFnOrValue;
                 const finalValue = await presentArbitraryList(question, defaultValue || undefined, true);
+
+                return { value: finalValue };
+            },
+
+            /**
+             * @param {string | {id: string, reask: boolean, recalcdefault?: boolean, step: boolean} | null} id
+             * @param {string} question
+             * @param {{generate: {width: number, height: number, prompt: string, referenceImage: string | null} | null}} options
+             * @param {string | (() => Promise<string> | string)} defaultValueFnOrValue - the filename to store the asset under
+             * @returns {Promise<{value: string}>}
+             */
+            async askImageAsset(id, question, options, defaultValueFnOrValue) {
+                const characterId = self.getAttribute('character-id') || '';
+                const characterNamespace = self.getAttribute('character-namespace') || '';
+
+                const defaultValue = typeof defaultValueFnOrValue === 'function' ? await defaultValueFnOrValue() : defaultValueFnOrValue;
+
+                const isSystemNamespace = characterNamespace.startsWith('@');
+                const cleanNamespace = isSystemNamespace ? characterNamespace.slice(1) : characterNamespace;
+                const assetPath = defaultValue ? `${isSystemNamespace ? '@' : ''}assets/${cleanNamespace}/${characterId}/${defaultValue}` : '';
+
+                const generate = options && options.generate ? options.generate : null;
+                const editorWidth = generate && generate.width ? generate.width : 1024;
+                const editorHeight = generate && generate.height ? generate.height : 1024;
+                const referenceImage = generate && generate.referenceImage ? generate.referenceImage : null;
+
+                /** @type {any} */
+                let profileImageEl = null;
+
+                const finalValue = await presentQuestion(
+                    question,
+                    () => {
+                        const wrapper = document.createElement('div');
+                        wrapper.className = 'guider-image-asset';
+
+                        /** @type {any} */
+                        const img = document.createElement('app-profile-image');
+                        img.setAttribute('image-url', assetPath);
+                        img.setAttribute('editable', 'true');
+                        img.setAttribute('editor-width', String(editorWidth));
+                        img.setAttribute('editor-height', String(editorHeight));
+                        img.setAttribute('dont-handle-diffusion-executable', 'true');
+                        wrapper.appendChild(img);
+                        profileImageEl = img;
+
+                        // If a reference image is provided, load it as the starting/displayed
+                        // image while keeping the target save path, so that on accept it is
+                        // copied to the asset path.
+                        if (referenceImage && !assetPath) {
+                            let referenceImageWithAsset = `assets/${cleanNamespace}/${characterId}/${referenceImage}`;
+                            if (referenceImage.startsWith("assets") || referenceImage.startsWith("@assets")) {
+                                referenceImageWithAsset = referenceImage;
+                            }
+                            requestAnimationFrame(() => {
+                                if (typeof img.loadReferenceImage === 'function') {
+                                    img.loadReferenceImage(referenceImageWithAsset);
+                                }
+                            });
+                        }
+
+                        return wrapper;
+                    },
+                    async () => {
+                        if (profileImageEl && typeof profileImageEl.saveValueToUserData === 'function') {
+                            try {
+                                await profileImageEl.saveValueToUserData();
+                            } catch (err) {
+                                console.error('Failed to save image asset:', err);
+                            }
+                        }
+                        return assetPath;
+                    },
+                    defaultValue,
+                );
+
+                return { value: finalValue };
+            },
+
+            /**
+             * @param {string | {id: string, reask: boolean, recalcdefault?: boolean, step: boolean} | null} id
+             * @param {string} question
+             * @param {{generate: {duration: number, prompt: string} | null}} options
+             * @param {string | (() => Promise<string> | string)} defaultValueFnOrValue - the filename to store the asset under
+             * @returns {Promise<{value: string}>}
+             */
+            async askAudioAsset(id, question, options, defaultValueFnOrValue) {
+                const characterId = self.getAttribute('character-id') || '';
+                const characterNamespace = self.getAttribute('character-namespace') || '';
+
+                const defaultValue = typeof defaultValueFnOrValue === 'function' ? await defaultValueFnOrValue() : defaultValueFnOrValue;
+
+                const isSystemNamespace = characterNamespace.startsWith('@');
+                const cleanNamespace = isSystemNamespace ? characterNamespace.slice(1) : characterNamespace;
+                const assetPath = defaultValue ? `${isSystemNamespace ? '@' : ''}assets/${cleanNamespace}/${characterId}/${defaultValue}` : '';
+
+                // Resolve an existing asset to a playable URL, mirroring how app-profile-image builds its src.
+                const isSystemAsset = assetPath.startsWith('@');
+                const existingSrc = assetPath
+                    ? (isSystemAsset ? window.DREAMENGINE_DEFAULT_SCRIPTS_HOME : window.DREAMENGINE_HOME) + "/" + (isSystemAsset ? assetPath.slice(1) : assetPath)
+                    : '';
+
+                /** @type {File | null} */
+                let selectedFile = null;
+                /** @type {string | null} */
+                let objectUrl = null;
+
+                const finalValue = await presentQuestion(
+                    question,
+                    () => {
+                        const wrapper = document.createElement('div');
+                        wrapper.className = 'guider-audio-asset';
+
+                        const audio = document.createElement('audio');
+                        audio.className = 'guider-audio-preview';
+                        audio.setAttribute('controls', 'true');
+                        audio.setAttribute('data-de-aria-key', 'p');
+                        audio.setAttribute('data-de-aria-action', 'play');
+                        audio.setAttribute('tabindex', '0');
+                        if (existingSrc) audio.src = existingSrc;
+
+                        const chooseBtn = document.createElement('div');
+                        chooseBtn.className = 'guider-audio-choose-btn';
+                        chooseBtn.textContent = 'Choose MP3';
+                        chooseBtn.setAttribute('tabindex', '0');
+                        chooseBtn.setAttribute('role', 'button');
+                        chooseBtn.setAttribute('aria-label', 'Choose MP3 file');
+                        chooseBtn.setAttribute('data-de-aria-key', 'c');
+                        chooseBtn.addEventListener('mouseenter', playHoverSound);
+
+                        const fileInput = document.createElement('input');
+                        fileInput.type = 'file';
+                        fileInput.accept = 'audio/mpeg,.mp3';
+                        fileInput.style.display = 'none';
+
+                        chooseBtn.addEventListener('click', () => {
+                            fileInput.click();
+                        });
+
+                        fileInput.addEventListener('change', () => {
+                            const file = fileInput.files && fileInput.files[0];
+                            if (!file) return;
+                            // Only accept mp3 — the server can't handle other formats and we don't want wav.
+                            const isMp3 = file.type === 'audio/mpeg' || /\.mp3$/i.test(file.name);
+                            if (!isMp3) {
+                                fileInput.value = '';
+                                return;
+                            }
+                            if (objectUrl) URL.revokeObjectURL(objectUrl);
+                            objectUrl = URL.createObjectURL(file);
+                            selectedFile = file;
+                            audio.src = objectUrl;
+                        });
+
+                        wrapper.appendChild(audio);
+                        wrapper.appendChild(chooseBtn);
+                        wrapper.appendChild(fileInput);
+
+                        return wrapper;
+                    },
+                    async () => {
+                        if (selectedFile && assetPath) {
+                            try {
+                                await window.API.uploadFileToDEPath(assetPath, selectedFile);
+                            } catch (err) {
+                                console.error('Failed to save audio asset:', err);
+                            }
+                        }
+                        if (objectUrl) URL.revokeObjectURL(objectUrl);
+                        return assetPath;
+                    },
+                    defaultValue,
+                );
 
                 return { value: finalValue };
             },

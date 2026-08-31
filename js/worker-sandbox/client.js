@@ -129,6 +129,15 @@ export class EngineWorkerClient {
                     case "cardTypeWizardComplete":
                         this.onCardTypeWizardComplete?.(msg.data);
                         break;
+                    case "stopDiffusionRequest": {
+                        const { callId } = msg.data;
+                        window.API.stopDiffusionProcess().then(() => {
+                            this.#worker.postMessage({ type: "mainThreadCallResponse", callId });
+                        }).catch((/** @type {any} */ err) => {
+                            this.#worker.postMessage({ type: "mainThreadCallResponse", callId, error: err?.message ?? String(err) });
+                        });
+                        break;
+                    }
                 }
                 return;
             }
@@ -151,7 +160,7 @@ export class EngineWorkerClient {
     }
 
     pauseInference() { return this.#call("pauseInference"); }
-    resumeInference() { return this.#call("resumeInference"); }
+    resumeInference() { return this.#call("resumeInference");}
 
     // ── DEngine methods ─────────────────────────────────────────────
 

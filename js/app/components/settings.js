@@ -407,36 +407,65 @@ class Settings extends HTMLElement {
             }
         } else if (this.currentSectionIndex === 4 && tabsContainer) {
             tabsContainer.innerHTML = `<app-overlay-section section-title="AI Image Generation Settings">
-                <app-overlay-input
-                    label="Diffusion host"
-                    input-placeholder="Enter AIHub diffusion host"
-                    title="This is the host address for an AIHub enabled image diffusion server, you can define all parameters here for the remote server, for example wss://myserver.com:1234?model=custom&param=value, the protocol must be ws:// or wss://"
-                    input-data-location="diffusionHost"
-                ></app-overlay-input>
-                <app-overlay-input
-                    label="Diffusion api secret"
-                    input-placeholder="Enter API secret"
-                    title="This is the API secret used by the AI diffusion server"
-                    input-data-location="diffusionApiKey"
-                ></app-overlay-input>
-                <app-overlay-input
-                    label="Diffusion executable path"
-                    input-placeholder="Enter executable path of the diffusion application"
-                    title="Optional path to the diffusion executable, if you have a local diffusion application installed with AIHub support like ComfyUI, you can specify the path to the executable here"
-                    input-data-location="diffusionExecutablePath"
-                ></app-overlay-input><app-overlay-input-boolean
-                    label="Handle diffusion executable (VRAM save mode)"
-                    title="Allows to have the inference server turned off when diffusion is running, and automatically turned back on when diffusion stops, this saves VRAM substantially; this requires the diffusion executable path to be set"
-                    input-data-location="handleDiffusionExecutable"
+                <app-overlay-input-boolean
+                    id="diffusion-enabled-toggle"
+                    label="Enabled"
+                    title="Enable or disable image generation."
+                    input-data-location="diffusionEnabled"
+                    input-default-value="false"
                 ></app-overlay-input-boolean>
-                ${window.API.mode === "web" ? `<div style="margin-top:1vh;color:#ff6b6b;font-size:3vh;">&#9888; The app must be restarted after changing the diffusion host or secret.</div>` : `<app-overlay-input-boolean
-                    label="Allow self-signed SSL certificates"
-                    title="Allow connecting to diffusion servers with self-signed SSL certificates, only enable this if you are connecting to a trusted server with a self-signed certificate, enabling this will make your connection less secure and vulnerable"
-                    input-data-location="allowDiffusionSelfSigned"
-                ></app-overlay-input-boolean><div style="margin-top:1vh;color:#ff6b6b;font-size:3vh;">&#9888; The app must be restarted after changing the diffusion host, secret or self-signed SSL certificate settings.</div>`}
-                <br />
-                <app-overlay-button id="test-diffusion-connection" play-sound-on-click="false" aria-key="t" title="Open an editor to check the diffusion settings">Launch Editor</app-overlay-button>
+                <div id="diffusion-settings-body">
+                    <app-overlay-input
+                        label="Diffusion host"
+                        input-placeholder="Enter AIHub diffusion host"
+                        title="This is the host address for an AIHub enabled image diffusion server, you can define all parameters here for the remote server, for example wss://myserver.com:1234?model=custom&param=value, the protocol must be ws:// or wss://"
+                        input-data-location="diffusionHost"
+                    ></app-overlay-input>
+                    <app-overlay-input
+                        label="Diffusion api secret"
+                        input-placeholder="Enter API secret"
+                        title="This is the API secret used by the AI diffusion server"
+                        input-data-location="diffusionApiKey"
+                    ></app-overlay-input>
+                    <app-overlay-input
+                        label="Diffusion executable path"
+                        input-placeholder="Enter executable path of the diffusion application"
+                        title="Optional path to the diffusion executable, if you have a local diffusion application installed with AIHub support like ComfyUI, you can specify the path to the executable here"
+                        input-data-location="diffusionExecutablePath"
+                    ></app-overlay-input><app-overlay-input-boolean
+                        label="Handle diffusion executable (VRAM save mode)"
+                        title="Allows to have the inference server turned off when diffusion is running, and automatically turned back on when diffusion stops, this saves VRAM substantially; this requires the diffusion executable path to be set"
+                        input-data-location="handleDiffusionExecutable"
+                    ></app-overlay-input-boolean>
+                    ${window.API.mode === "web" ? `<div style="margin-top:1vh;color:#ff6b6b;font-size:3vh;">&#9888; The app must be restarted after changing the diffusion host or secret.</div>` : `<app-overlay-input-boolean
+                        label="Allow self-signed SSL certificates"
+                        title="Allow connecting to diffusion servers with self-signed SSL certificates, only enable this if you are connecting to a trusted server with a self-signed certificate, enabling this will make your connection less secure and vulnerable"
+                        input-data-location="allowDiffusionSelfSigned"
+                    ></app-overlay-input-boolean><div style="margin-top:1vh;color:#ff6b6b;font-size:3vh;">&#9888; The app must be restarted after changing the diffusion host, secret or self-signed SSL certificate settings.</div>`}
+                    <br />
+                    <app-overlay-button id="test-diffusion-connection" play-sound-on-click="false" aria-key="t" title="Open an editor to check the diffusion settings">Launch Editor</app-overlay-button>
+                </div>
             </app-overlay-section>`;
+
+            const diffusionEnabledToggle = tabsContainer.querySelector('#diffusion-enabled-toggle');
+            const diffusionSettingsBody = /** @type {HTMLElement|null} */ (tabsContainer.querySelector('#diffusion-settings-body'));
+            /**
+             * 
+             * @param {boolean} enabled 
+             */
+            const applyDiffusionGrayState = (enabled) => {
+                if (diffusionSettingsBody) {
+                    diffusionSettingsBody.style.opacity = enabled ? '' : '0.4';
+                    diffusionSettingsBody.style.pointerEvents = enabled ? '' : 'none';
+                }
+            };
+            window.API.getConfigValue('diffusionEnabled').then((val) => {
+                applyDiffusionGrayState(!!val);
+            });
+            diffusionEnabledToggle?.addEventListener('input-change', () => {
+                // @ts-ignore
+                applyDiffusionGrayState(diffusionEnabledToggle.getValue());
+            });
 
             // @ts-expect-error
             tabsContainer.querySelector('#test-diffusion-connection').addEventListener('click', () => {
@@ -464,26 +493,55 @@ class Settings extends HTMLElement {
             });
         } else if (this.currentSectionIndex === 5 && tabsContainer) {
             tabsContainer.innerHTML = `<app-overlay-section section-title="Voice Generation Settings">
-                <app-overlay-input
-                    label="Vocalizer host"
-                    input-placeholder="Enter Vocalizer host"
-                    title="This is the host address for the Vocalizer server, you can define all parameters here for the remote server, for example wss://myserver.com:1234?model=custom&param=value, the protocol must be ws:// or wss://"
-                    input-data-location="vocalizerHost"
-                ></app-overlay-input>
-                <app-overlay-input
-                    label="Vocalizer api secret"
-                    input-placeholder="Enter API secret"
-                    title="This is the API secret used by the Vocalizer server"
-                    input-data-location="vocalizerApiKey"
-                ></app-overlay-input>
-                ${window.API.mode === "web" ? `<div style="margin-top:1vh;color:#ff6b6b;font-size:3vh;">&#9888; The app must be restarted after changing the vocalizer host or secret.</div>` : `<app-overlay-input-boolean
-                    label="Allow self-signed SSL certificates"
-                    title="Allow connecting to Vocalizer servers with self-signed SSL certificates, only enable this if you are connecting to a trusted server with a self-signed certificate, enabling this will make your connection less secure and vulnerable"
-                    input-data-location="allowVocalizerSelfSigned"
-                    input-data-location="allowVocalizerSelfSigned"
-                ></app-overlay-input-boolean><div style="margin-top:1vh;color:#ff6b6b;font-size:3vh;">&#9888; The app must be restarted after changing the vocalizer host, secret or self-signed SSL certificate settings.</div>`}
-                <app-overlay-button id="test-vocalizer-connection" play-sound-on-click="false" aria-key="t" title="Open a vocalizer field to check the vocalizer settings">Test Vocalizer</app-overlay-button>
+                <app-overlay-input-boolean
+                    id="vocalizer-enabled-toggle"
+                    label="Enabled"
+                    title="Enable or disable voice generation."
+                    input-data-location="vocalizerEnabled"
+                    input-default-value="false"
+                ></app-overlay-input-boolean>
+                <div id="vocalizer-settings-body">
+                    <app-overlay-input
+                        label="Vocalizer host"
+                        input-placeholder="Enter Vocalizer host"
+                        title="This is the host address for the Vocalizer server, you can define all parameters here for the remote server, for example wss://myserver.com:1234?model=custom&param=value, the protocol must be ws:// or wss://"
+                        input-data-location="vocalizerHost"
+                    ></app-overlay-input>
+                    <app-overlay-input
+                        label="Vocalizer api secret"
+                        input-placeholder="Enter API secret"
+                        title="This is the API secret used by the Vocalizer server"
+                        input-data-location="vocalizerApiKey"
+                    ></app-overlay-input>
+                    ${window.API.mode === "web" ? `<div style="margin-top:1vh;color:#ff6b6b;font-size:3vh;">&#9888; The app must be restarted after changing the vocalizer host or secret.</div>` : `<app-overlay-input-boolean
+                        label="Allow self-signed SSL certificates"
+                        title="Allow connecting to Vocalizer servers with self-signed SSL certificates, only enable this if you are connecting to a trusted server with a self-signed certificate, enabling this will make your connection less secure and vulnerable"
+                        input-data-location="allowVocalizerSelfSigned"
+                    ></app-overlay-input-boolean><div style="margin-top:1vh;color:#ff6b6b;font-size:3vh;">&#9888; The app must be restarted after changing the vocalizer host, secret or self-signed SSL certificate settings.</div>`}
+                    <app-overlay-button id="test-vocalizer-connection" play-sound-on-click="false" aria-key="t" title="Open a vocalizer field to check the vocalizer settings">Test Vocalizer</app-overlay-button>
+                </div>
             </app-overlay-section>`;
+
+            const vocalizerEnabledToggle = tabsContainer.querySelector('#vocalizer-enabled-toggle');
+            const vocalizerSettingsBody = /** @type {HTMLElement|null} */ (tabsContainer.querySelector('#vocalizer-settings-body'));
+
+            /**
+             * 
+             * @param {boolean} enabled 
+             */
+            const applyVocalizerGrayState = (enabled) => {
+                if (vocalizerSettingsBody) {
+                    vocalizerSettingsBody.style.opacity = enabled ? '' : '0.4';
+                    vocalizerSettingsBody.style.pointerEvents = enabled ? '' : 'none';
+                }
+            };
+            window.API.getConfigValue('vocalizerEnabled').then((val) => {
+                applyVocalizerGrayState(!!val);
+            });
+            vocalizerEnabledToggle?.addEventListener('input-change', () => {
+                // @ts-ignore
+                applyVocalizerGrayState(vocalizerEnabledToggle.getValue());
+            });
 
             // @ts-expect-error
             tabsContainer.querySelector('#test-vocalizer-connection').addEventListener('click', () => {

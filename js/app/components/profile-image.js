@@ -1,3 +1,5 @@
+import "./diffusion/image-edit.js";
+
 /** @type {Map<string, number>} */
 export const profileImageCacheVersions = new Map();
 
@@ -38,9 +40,18 @@ class ProfileImage extends HTMLElement {
             const editOverlay = this.root.querySelector('.edit-overlay');
 
             // @ts-expect-error
-            editOverlay.addEventListener('click', () => {
-                // @ts-expect-error
-                fileInput.click();
+            editOverlay.addEventListener('click', async () => {
+
+                const supportsDiffusion = await window.API.getConfigValue("diffusionEnabled");
+                const diffusionHost = await window.API.getConfigValue("diffusionHost");
+                const actuallySupportsDiffusion = diffusionHost && diffusionHost.length > 0 && supportsDiffusion;
+
+                if (actuallySupportsDiffusion) {
+                    this.openImageSourceChoiceDialog();
+                } else {
+                    // @ts-expect-error
+                    fileInput.click();
+                }
             });
 
             // @ts-expect-error
@@ -61,8 +72,165 @@ class ProfileImage extends HTMLElement {
         }
     }
 
+    /**
+     * Present a choice between generating/editing the image in the image editor
+     * or uploading a file. Diffusion support has already been verified.
+     */
+    openImageSourceChoiceDialog() {
+        const dialog = document.createElement('app-dialog');
+        dialog.setAttribute('dialog-title', 'Change Image');
+        dialog.setAttribute('extra-z-index', '200');
+        dialog.innerHTML = `
+            <style>
+                .image-source-choices {
+                    display: flex;
+                    gap: 2vh;
+                    justify-content: center;
+                    flex-wrap: wrap;
+                    padding: 2vh 0;
+                }
+                .image-source-choice {
+                    font-size: 3vh;
+                    padding: 2vh 3vh;
+                    border-radius: 1vh;
+                    background: rgba(100, 0, 200, 0.3);
+                    border: solid 2px black;
+                    cursor: pointer;
+                    color: white;
+                    user-select: none;
+                }
+                .image-source-choice:hover, .image-source-choice:focus {
+                    background: rgba(100, 0, 200, 0.6);
+                    color: #FF6B6B;
+                }
+            </style>
+            <div class="image-source-choices">
+                <div class="image-source-choice" id="choice-editor" role="button" tabindex="0" data-de-aria-key="e">Use Image Editor</div>
+                <div class="image-source-choice" id="choice-upload" role="button" tabindex="0" data-de-aria-key="u">Upload Image</div>
+            </div>
+        `;
+        document.body.appendChild(dialog);
+
+        const closeDialog = () => {
+            if (dialog.parentNode) dialog.parentNode.removeChild(dialog);
+        };
+
+        dialog.addEventListener('cancel', closeDialog);
+
+        // @ts-expect-error
+        dialog.querySelector('#choice-upload').addEventListener('click', () => {
+            closeDialog();
+            const fileInput = this.root.querySelector('input[type="file"]');
+            // @ts-expect-error
+            fileInput.click();
+        });
+
+        // @ts-expect-error
+        dialog.querySelector('#choice-editor').addEventListener('click', () => {
+            closeDialog();
+            this.openImageEditorDialog();
+        });
+    }
+
+    /**
+     * Open the image editor seeded with the current image (if any), enforcing a
+     * 1024x1024 canvas. On accept, the merged layers become the new image.
+     */
+    openImageEditorDialog() {
+        const currentSrc = this.currentObjectUrl
+            // @ts-expect-error
+            || (this.root.querySelector('.profile-image')?.src || '');
+
+        const dialog = document.createElement('app-dialog');
+        dialog.setAttribute('dialog-title', 'Image Editor');
+        dialog.setAttribute('confirmation', 'true');
+        dialog.setAttribute('confirm-text', 'Accept');
+        dialog.setAttribute('cancel-text', 'Cancel');
+        dialog.setAttribute('extra-z-index', '200');
+        dialog.setAttribute('large', 'true');
+        dialog.setAttribute('pre-expand', 'true');
+
+        const editorWidth = this.getAttribute('editor-width') || '1024';
+        const editorHeight = this.getAttribute('editor-height') || '1024';
+
+        const editor = document.createElement('image-edit');
+        editor.setAttribute('image-width', editorWidth);
+        editor.setAttribute('image-height', editorHeight);
+        editor.setAttribute('lock-size', 'true');
+        if (this.hasAttribute('dont-handle-diffusion-executable')) {
+            editor.setAttribute('dont-handle-diffusion-executable', 'true');
+        }
+        if (currentSrc) editor.setAttribute('img-src', currentSrc);
+        dialog.appendChild(editor);
+
+        document.body.appendChild(dialog);
+
+        const closeDialog = () => {
+            if (dialog.parentNode) dialog.parentNode.removeChild(dialog);
+        };
+
+        dialog.addEventListener('cancel', closeDialog);
+
+        dialog.addEventListener('confirm', () => {
+            // @ts-ignore
+            const merged = editor.getCombinedLayers && editor.getCombinedLayers();
+            if (!merged) {
+                closeDialog();
+                return;
+            }
+            merged.toBlob((/** @type {Blob | null} */ blob) => {
+                if (blob) {
+                    const urlBlob = URL.createObjectURL(blob);
+                    if (this.currentObjectUrl) {
+                        URL.revokeObjectURL(this.currentObjectUrl);
+                    }
+                    this.currentObjectUrl = urlBlob;
+                    this.currentFileObject = new File([blob], 'image.webp', { type: 'image/webp' });
+                    // @ts-expect-error
+                    this.root.querySelector('.profile-image').src = urlBlob;
+                }
+                closeDialog();
+            }, 'image/webp', 0.8);
+        });
+    }
+
     hasBeenModified() {
         return this.currentObjectUrl !== null;
+    }
+
+    /**
+     * Load an external reference image and treat it as a user-provided change so
+     * that {@link saveValueToUserData} will copy it to this element's `image-url`
+     * path. The displayed image and image editor seed are updated to match.
+     * @param {string} referenceUrl - a DE asset path (optionally `@`-prefixed) or an absolute http(s)/blob/data URL
+     */
+    async loadReferenceImage(referenceUrl) {
+        if (!referenceUrl) return;
+
+        let resolved = referenceUrl;
+        if (!/^(https?:|blob:|data:)/.test(referenceUrl)) {
+            const isSystemAsset = referenceUrl.startsWith('@');
+            const base = isSystemAsset ? window.DREAMENGINE_DEFAULT_SCRIPTS_HOME : window.DREAMENGINE_HOME;
+            resolved = base + "/" + (isSystemAsset ? referenceUrl.slice(1) : referenceUrl);
+        }
+
+        try {
+            const response = await fetch(resolved);
+            if (!response.ok) return;
+            const blob = await response.blob();
+            const urlBlob = URL.createObjectURL(blob);
+            if (this.currentObjectUrl) {
+                URL.revokeObjectURL(this.currentObjectUrl);
+            }
+            this.currentObjectUrl = urlBlob;
+            const ext = (blob.type && blob.type.split('/')[1]) || 'webp';
+            this.currentFileObject = new File([blob], 'image.' + ext, { type: blob.type || 'image/webp' });
+            const imgEl = this.root.querySelector('.profile-image');
+            // @ts-expect-error
+            if (imgEl) imgEl.src = urlBlob;
+        } catch (err) {
+            console.error('Failed to load reference image:', err);
+        }
     }
 
     // on dismount revoke any created object URLs to free memory

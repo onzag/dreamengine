@@ -73,7 +73,7 @@ export class AIHubExposeImageComponent extends AIHubExposeBase {
         const source = canvas.getImageCanvasForType(type);
         if (!source) return;
         // @ts-ignore
-        source.toBlob((blob) => { if (blob) this._setBlob(blob); });
+        source.toBlob((blob) => { if (blob) this._setBlob(blob); }, 'image/webp', 0.8);
 
         const layerId = type.includes("current_layer") ? canvas.getActiveLayerId() : "";
         this.layerId = layerId;
@@ -110,6 +110,7 @@ export class AIHubExposeImageComponent extends AIHubExposeBase {
          */
         const waitForMessage = (timeoutMs) => new Promise((resolve, reject) => {
             const timer = setTimeout(() => {
+                // @ts-ignore
                 adapter.socket.removeEventListener('message', handler);
                 reject(new Error('Timeout waiting for server response'));
             }, timeoutMs);
@@ -118,10 +119,12 @@ export class AIHubExposeImageComponent extends AIHubExposeBase {
                 try {
                     const data = JSON.parse(event.data);
                     clearTimeout(timer);
+                    // @ts-ignore
                     adapter.socket.removeEventListener('message', handler);
                     resolve(data);
                 } catch { /* ignore non-JSON frames */ }
             }
+            // @ts-ignore
             adapter.socket.addEventListener('message', handler);
         });
 
