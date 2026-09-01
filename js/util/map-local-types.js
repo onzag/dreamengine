@@ -169,7 +169,7 @@ function extractExportsMembers(sourceFile, checker) {
 /**
  * Creates a TypeScript Program for the given script + type files and
  * extracts typedef declarations and engine.exports member types.
- * @param {Array<{namespace: string, id: string, filePath: string}>} scripts
+ * @param {Array<{key: string, namespace: string, id: string, filePath: string}>} scripts
  * @param {string[]} typeFiles
  * @returns {Map<string, {typedefs: string[], members: string[], hasExports: boolean}>}
  */
@@ -191,8 +191,7 @@ function analyzeScripts(scripts, typeFiles) {
     /** @type {Map<string, {typedefs: string[], members: string[], hasExports: boolean}>} */
     const results = new Map();
 
-    for (const { namespace, id, filePath } of scripts) {
-        const key = `${namespace}/${id}`;
+    for (const { key, filePath } of scripts) {
         const sourceFile = program.getSourceFile(filePath);
         if (!sourceFile) continue;
 
@@ -221,7 +220,7 @@ export async function generateScriptRegistryContent(options) {
     const scriptMap = new Map();
 
     const defaultScripts = await discoverScripts(defaultScriptsDir);
-    for (const s of defaultScripts) scriptMap.set(`${s.namespace}/${s.id}`, s);
+    for (const s of defaultScripts) scriptMap.set(`@${s.namespace}/${s.id}`, s);
 
     if (!localOnly) {
         const localDEScriptsDir = path.join(localDEPathAtHomeDir, 'scripts');
@@ -229,7 +228,7 @@ export async function generateScriptRegistryContent(options) {
         for (const s of localDEScripts) scriptMap.set(`${s.namespace}/${s.id}`, s);
     }
 
-    const scripts = [...scriptMap.values()];
+    const scripts = [...scriptMap.entries()].map(([key, s]) => ({ ...s, key }));
     const typeFiles = await collectTypeFiles(typesDir);
 
     const analysisResults = analyzeScripts(scripts, typeFiles);

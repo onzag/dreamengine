@@ -1,4 +1,5 @@
 import { VoiceAdapterWebsocketVocalizer } from "../../engine/voice/adapter-websocket-vocalizer.js";
+import { playHoverSound } from "../sound.js";
 
 /** @type {Map<string, number>} */
 export const profileVoiceCacheVersions = new Map();
@@ -89,7 +90,7 @@ class ProfileVoice extends HTMLElement {
         return base + "/" + (isSystemAsset ? url.slice(1) : url);
     }
 
-    connectedCallback() {
+    async connectedCallback() {
         this.render();
 
         /** @type {HTMLAudioElement} */
@@ -130,8 +131,9 @@ class ProfileVoice extends HTMLElement {
 
         if (this.hasAttribute('editable')) {
             const fileInput = this.root.querySelector('input[type="file"]');
+            const enabled = await window.API.getConfigValue("vocalizerEnabled");
+
             this.root.querySelector('.edit-btn')?.addEventListener('click', async () => {
-                const enabled = await window.API.getConfigValue("vocalizerEnabled");
                 const host = await window.API.getConfigValue("vocalizerHost");
                 const vocalizerAvailable = enabled && host && host.length > 0;
 
@@ -141,6 +143,19 @@ class ProfileVoice extends HTMLElement {
                     this.promptUploadFile();
                 }
             });
+
+            this.root.querySelector('.edit-btn')?.addEventListener("mouseenter", playHoverSound);
+
+            
+            const testBtn = this.root.querySelector('.test-btn');
+            if (!enabled) {
+                testBtn?.setAttribute('disabled', 'true');
+            } else {
+                testBtn?.addEventListener('click', async () => {
+                    this.openVoiceGenerationDialog('test');
+                });
+                testBtn?.addEventListener("mouseenter", playHoverSound);
+            }
 
             // @ts-expect-error
             fileInput.addEventListener('change', (event) => {
@@ -165,6 +180,17 @@ class ProfileVoice extends HTMLElement {
      * @param {File|Blob} file
      */
     setLocalAudioFile(file) {
+        if (file.size > 1 * 1024 * 1024) {
+            const dialog = document.createElement('app-dialog');
+            dialog.setAttribute('dialog-title', 'File Too Large');
+            dialog.setAttribute('confirm-text', 'OK');
+            dialog.setAttribute('extra-z-index', '200');
+            dialog.innerHTML = `<div style="font-size:2.8vh;line-height:1.5;">The selected file is too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Please choose a file under 1 MB.</div>`;
+            document.body.appendChild(dialog);
+            dialog.addEventListener('confirm', () => dialog.parentNode?.removeChild(dialog));
+            dialog.addEventListener('cancel', () => dialog.parentNode?.removeChild(dialog));
+            return;
+        }
         const urlBlob = URL.createObjectURL(file);
         if (this.currentObjectUrl) {
             URL.revokeObjectURL(this.currentObjectUrl);
@@ -337,9 +363,8 @@ class ProfileVoice extends HTMLElement {
                 }
             </style>
             <div class="voice-source-choices">
-                <div class="voice-source-choice" id="choice-upload" role="button" tabindex="0" data-de-aria-key="u">Upload File</div>
-                <div class="voice-source-choice" id="choice-generate" role="button" tabindex="0" data-de-aria-key="g">Generate Voice <span style="font-size:2vh;opacity:0.6;">(not recommended)</span></div>
-                <div class="voice-source-choice" id="choice-test" role="button" tabindex="0" data-de-aria-key="t">Test Voice</div>
+            <div class="voice-source-choice" id="choice-upload" role="button" tabindex="0" data-de-aria-key="u">Upload File</div>
+            <div class="voice-source-choice" id="choice-generate" role="button" tabindex="0" data-de-aria-key="g">Generate Voice <span style="font-size:2vh;opacity:0.6;">(not recommended)</span></div>
             </div>
         `;
         document.body.appendChild(dialog);
@@ -374,7 +399,7 @@ class ProfileVoice extends HTMLElement {
         const isGenerate = mode === 'generate';
 
         const defaultPrompt = this.getAttribute('voice-prompt') || '';
-        const canUseSelfReference = this.hasAudio;
+        const canUseSelfReference = this.hasAudio && isGenerate;
 
         const dialog = document.createElement('app-dialog');
         dialog.setAttribute('dialog-title', isGenerate ? 'Generate Voice' : 'Test Voice');
@@ -436,13 +461,13 @@ class ProfileVoice extends HTMLElement {
                 input-default-value="${escapeAttr(defaultPrompt)}"
                 aria-key="v"
             ></app-overlay-input>
-            <div class="vg-ref-row${canUseSelfReference ? '' : ' disabled'}" id="vg-ref-row">
+            ${isGenerate ? '' : '<!--'}<div class="vg-ref-row${canUseSelfReference ? '' : ' disabled'}" id="vg-ref-row">
                 <label>
                     <input type="checkbox" id="vg-ref-checkbox" ${canUseSelfReference ? '' : 'disabled'} />
                     Use current voice as reference
                 </label>
                 <span class="vg-ref-hint">${canUseSelfReference ? 'Clones the existing voice' : 'No audio available'}</span>
-            </div>
+            </div>${isGenerate ? '' : '-->'}
             <div class="vg-status" id="vg-status"></div>
         `;
         document.body.appendChild(dialog);
@@ -474,7 +499,7 @@ class ProfileVoice extends HTMLElement {
             /** @type {File|null} */
             let refFile = null;
             let refName = null;
-            if (useSelfReference) {
+            if (useSelfReference || !isGenerate) {
                 try {
                     refFile = await this.getCurrentAudioAsFile();
                     refName = refFile ? refFile.name : null;
@@ -532,8 +557,7 @@ class ProfileVoice extends HTMLElement {
         const response = await fetch(src);
         if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
         const blob = await response.blob();
-        const ext = (blob.type && blob.type.split('/')[1]) || 'ogg';
-        return new File([blob], `reference.${ext}`, { type: blob.type || 'audio/ogg' });
+        return new File([blob], this.getAttribute("reference-name") || "reference", { type: blob.type });
     }
 
     /**
@@ -646,7 +670,7 @@ class ProfileVoice extends HTMLElement {
                     opacity: 0.85;
                     text-align: center;
                 }
-                .edit-btn {
+                .edit-btn, .test-btn {
                     position: absolute;
                     bottom: 6%;
                     right: 6%;
@@ -664,11 +688,12 @@ class ProfileVoice extends HTMLElement {
                     padding: 0;
                     color: white;
                 }
-                .edit-btn:hover, .edit-btn:focus {
+                .test-btn { left: 6%; right: auto; }
+                .edit-btn:hover, .edit-btn:focus, .test-btn:hover, .test-btn:focus {
                     opacity: 1;
                     background: rgba(100, 0, 200, 0.7);
                 }
-                .edit-btn svg {
+                .edit-btn svg, .test-btn svg {
                     width: 55%;
                     height: 55%;
                     pointer-events: none;
@@ -685,12 +710,15 @@ class ProfileVoice extends HTMLElement {
                     </button>
                 </div>
                 <div class="voice-status"></div>
+                <button class="test-btn" title="Test voice" aria-label="Test voice">
+                    <svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg"><path fill="#fff" d="M256 32C132.3 32 32 132.3 32 256s100.3 224 224 224s224-100.3 224-224S379.7 32 256 32zm0 400c-97.2 0-176-78.8-176-176S158.8 80 256 80s176 78.8 176 176s-78.8 176-176 176z"/><path fill="#fff" d="M256 128c-70.7 0-128 57.3-128 128s57.3 128 128 128s128-57.3 128-128s-57.3-128-128-128zm0 224c-53 0-96-43-96-96s43-96 96-96s96 43 96 96s-43 96-96 96z"/></svg>
+                </button>
                 ${isEditable ? `<button class="edit-btn" title="Change voice" aria-label="Change voice" data-de-aria-key="v">
                     <svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg"><path fill="#fff" d="M441 58.9L453.1 71c9.4 9.4 9.4 24.6 0 33.9L424 134.1 377.9 88 407 58.9c9.4-9.4 24.6-9.4 33.9 0zM209.8 256.2L344 121.9 390.1 168 255.8 302.2c-2.9 2.9-6.5 5-10.4 6.1l-58.5 16.7 16.7-58.5c1.1-3.9 3.2-7.5 6.1-10.4zM373.1 25L175.8 222.2c-8.7 8.7-15 19.4-18.3 31.1l-28.6 100c-2.4 8.4-.1 17.4 6.1 23.6s15.2 8.5 23.6 6.1l100-28.6c11.8-3.4 22.5-9.7 31.1-18.3L487 138.9c28.1-28.1 28.1-73.7 0-101.8L474.9 25C446.8-3.1 401.2-3.1 373.1 25zM88 64C39.4 64 0 103.4 0 152L0 424c0 48.6 39.4 88 88 88l272 0c48.6 0 88-39.4 88-88l0-112c0-13.3-10.7-24-24-24s-24 10.7-24 24l0 112c0 22.1-17.9 40-40 40L88 464c-22.1 0-40-17.9-40-40l0-272c0-22.1 17.9-40 40-40l112 0c13.3 0 24-10.7 24-24s-10.7-24-24-24L88 64z"/></svg>
                 </button>` : ''}
             </div>
             <audio class="voice-audio" preload="metadata" src="${resolved}"></audio>
-            <input type="file" accept=".mp3,.ogg,.wav,audio/mpeg,audio/ogg,audio/wav" style="display:none;" />
+            <input type="file" accept=".mp3,.ogg,.wav,audio/mpeg,audio/ogg" style="display:none;" />
         `;
     }
 }

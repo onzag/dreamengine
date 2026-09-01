@@ -216,9 +216,9 @@ class PlayOverlay extends HTMLElement {
         this.selectedCharacter = null;
         /** @type {'narrator' | 'schizophrenia' | null} */
         this.selectedSpecialMode = null;
-        /** @type {Array<{ namespace: string, id: string }>} */
+        /** @type {Array<{ namespace: string, id: string, singleCharacter: boolean }>} */
         this.selectedPartyCharacters = [];
-        /** @type {Record<string, Array<{ namespace: string, id: string }>> | null} */
+        /** @type {Record<string, Array<{ namespace: string, id: string, singleCharacter: boolean }>> | null} */
         this.partyCharacterRefs = null;
         /** @type {Record<string, Array<{ namespace: string, id: string, description: string, metadata: Record<string, any>, language: string }>>} */
         this.partyNamespaceCache = {};
@@ -420,7 +420,7 @@ class PlayOverlay extends HTMLElement {
             return {};
         }
 
-        /** @type {Record<string, Array<{ namespace: string, id: string }>>} */
+        /** @type {Record<string, Array<{ namespace: string, id: string, singleCharacter: boolean }>>} */
         const grouped = {};
         for (const info of Object.values(infoMap)) {
             // @ts-ignore
@@ -430,7 +430,7 @@ class PlayOverlay extends HTMLElement {
             // @ts-ignore
             const id = info.id;
             if (!grouped[ns]) grouped[ns] = [];
-            grouped[ns].push({ namespace: ns, id });
+            grouped[ns].push({ namespace: ns, id, singleCharacter: !!info.metadata?.__single_character });
         }
         for (const ns of Object.keys(grouped)) {
             grouped[ns].sort((a, b) => a.id.localeCompare(b.id));
@@ -631,15 +631,18 @@ class PlayOverlay extends HTMLElement {
             const isSelected = this.isPartyCharacterSelected(c);
             const { disabled, reason } = getScriptDisabledState(c.metadata, c.language);
             const detailsHTML = renderCharacterDetails(c.metadata || {});
+            const isSingleCharacter = !!c.metadata?.__single_character;
+            const isSystem = c.namespace.startsWith('@');
             return `
                 <div class="character-card party-card${isSelected ? ' selected' : ''}${disabled ? ' disabled' : ''}"
                      data-namespace="${escapeHTML(c.namespace)}"
                      data-id="${escapeHTML(c.id)}"
                      ${disabled ? 'data-disabled="true"' : ''}>
                     <div class="character-card-image">
-                        <app-asset-image image-url="assets/${escapeHTML(c.namespace)}/${escapeHTML(c.id)}/profile" default-image="./images/default-profile.png"></app-asset-image>
+                        <app-asset-image image-url="${isSystem ? "@" : ""}assets/${escapeHTML(isSystem ? c.namespace.slice(1) : c.namespace)}/${escapeHTML(c.id)}/profile" default-image="./images/default-profile.png"></app-asset-image>
                     </div>
                     <div class="character-card-name">${formatName(escapeHTML((c.metadata && c.metadata.__name) ? String(c.metadata.__name) : c.id))}</div>
+                    ${!isSingleCharacter ? '<div class="character-card-mcs">Multiple-character script</div>' : ''}
                     ${c.description ? `<div class="character-card-desc">${escapeHTML(c.description)}</div>` : ''}
                     ${detailsHTML}
                     ${disabled ? `<div class="character-card-disabled-note">${escapeHTML(reason)}</div>` : ''}
@@ -659,6 +662,7 @@ class PlayOverlay extends HTMLElement {
                 if (card.getAttribute('data-disabled') === 'true') return;
                 const cns = card.getAttribute('data-namespace') || '';
                 const cid = card.getAttribute('data-id') || '';
+                const isSingleCharacter = this.partyNamespaceCache[cns]?.find(c => c.id === cid)?.metadata?.__single_character === true;
                 const wasSelected = card.classList.contains('selected');
                 if (wasSelected) {
                     this.selectedPartyCharacters = this.selectedPartyCharacters.filter(
@@ -673,7 +677,7 @@ class PlayOverlay extends HTMLElement {
                     }
                     playCancelSound();
                 } else {
-                    this.selectedPartyCharacters.push({ namespace: cns, id: cid });
+                    this.selectedPartyCharacters.push({ namespace: cns, id: cid, singleCharacter: !!isSingleCharacter });
                     card.classList.add('selected');
                     playConfirmSound();
                 }
@@ -1120,7 +1124,7 @@ class PlayOverlay extends HTMLElement {
 
         // Party-derived options: each character the user picked in the party
         // step is also a valid "play as" choice.
-        /** @type {Array<{ name: string, scriptKey: string, namespace: string, description: string, asset: string | null, details: any, isSelf?: boolean, source: 'self' | 'party' | 'world' }>} */
+        /** @type {Array<{ name: string, scriptKey: string, namespace: string, description: string, asset: string | null, details: any, isSelf?: boolean, source: 'self' | 'party' | 'world', singleCharacter: boolean }>} */
         const partyOptions = [];
         if (this.selectedPartyCharacters.length > 0) {
             // Load metadata for each unique namespace in the selected party.
@@ -1131,29 +1135,32 @@ class PlayOverlay extends HTMLElement {
             for (const ref of this.selectedPartyCharacters) {
                 const cached = (this.partyNamespaceCache[ref.namespace] || [])
                     .find(c => c.id === ref.id);
+                const isSingleCharacter = cached?.metadata?.__single_character === true;
                 partyOptions.push({
                     // the name is not really known nor exposed in the ref until the character is loaded
                     name: ref.id,
                     scriptKey: `${ref.namespace}/${ref.id}`,
                     namespace: ref.namespace,
                     description: cached?.description || '',
-                    asset: `assets/${ref.namespace}/${ref.id}/profile`,
+                    asset: (ref.namespace.startsWith("@") ? "@" : "") + `assets/${ref.namespace.slice(ref.namespace.startsWith("@") ? 1 : 0)}/${ref.id}/profile`,
+                    singleCharacter: isSingleCharacter,
                     details: cached?.metadata || null,
                     source: 'party',
                 });
             }
         }
 
-        /** @type {Array<{ name: string, scriptKey: string, namespace: string, description: string, asset: string | null, details: any, isSelf?: boolean, source: 'self' | 'party' | 'world' }>} */
+        /** @type {Array<{ name: string, scriptKey: string, namespace: string, description: string, asset: string | null, details: any, isSelf?: boolean, source: 'self' | 'party' | 'world', singleCharacter: boolean }>} */
         const exposedOptions = exposed.map(c => ({
             ...c,
             // @ts-ignore
             details: /** @type {any} */ (c).details,
             source: /** @type {const} */ ('world'),
+            singleCharacter: true,
         }));
 
-        /** @type {Array<{ name: string, scriptKey: string, namespace: string, description: string, asset: string | null, details: any, isSelf?: boolean, source: 'self' | 'party' | 'world' }>} */
-        const selfOptions = [{ ...selfCharacter, details: null, source: 'self' }];
+        /** @type {Array<{ name: string, scriptKey: string, namespace: string, description: string, asset: string | null, details: any, isSelf?: boolean, source: 'self' | 'party' | 'world', singleCharacter: boolean }>} */
+        const selfOptions = [{ ...selfCharacter, details: null, source: 'self', singleCharacter: true }];
 
         const pane = body.querySelector('.step-pane');
         if (!pane) return;
@@ -1202,9 +1209,12 @@ class PlayOverlay extends HTMLElement {
                      ${disabled ? 'data-disabled="true"' : ''}>
                     <div class="character-card-image">${imageHTML}</div>
                     <div class="character-card-name">${displayName}</div>
+                    ${!c.singleCharacter ? '<div class="character-card-mcs">Multiple-character script</div>' : ''}
                     ${c.description ? `<div class="character-card-desc">${escapeHTML(c.description)}</div>` : ''}
                     ${detailsHTML}
-                    ${disabled ? '<div class="character-card-disabled-note">Not available with this mode</div>' : ''}
+                    ${disabled ? (
+                        '<div class="character-card-disabled-note">Not available with this mode</div>'
+                    ) : ''}
                 </div>
             `;
         };

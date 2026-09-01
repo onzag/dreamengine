@@ -797,6 +797,14 @@
     text-transform: uppercase;
 }
 
+.character-card-mcs {
+    font-size: 2vh;
+    color: rgba(255, 255, 255, 0.7);
+    margin-bottom: 0.6vh;
+    text-align: center;
+    letter-spacing: 0.05em;
+}
+
 .character-card-image {
     width: 16vh;
     height: 16vh;

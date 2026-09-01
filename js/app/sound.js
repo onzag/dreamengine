@@ -119,6 +119,30 @@ function toggleAmbience() {
   return ambienceEnabled;
 }
 
+/**
+ * @param {number} factor
+ * @param {number} [fadeDurationMs]
+ */
+async function setAllAmbiencesVolume(factor, fadeDurationMs = 500) {
+  await Promise.all(AMBIENCES.map(async amb => {
+    const newVolume = amb.targetVolume * factor;
+    const token = ambienceOpTokens.get(amb.id) || 0;
+    const fromVolume = amb.gainNode.gain.value;
+    await runFade(amb, amb.id, token, fromVolume, newVolume, fadeDurationMs);
+  }));
+}
+
+/**
+ * @param {number} [fadeDurationMs]
+ */
+async function restoreAllAmbiencesVolume(fadeDurationMs = 500) {
+  await Promise.all(AMBIENCES.map(async amb => {
+    const token = ambienceOpTokens.get(amb.id) || 0;
+    const fromVolume = amb.gainNode.gain.value;
+    await runFade(amb, amb.id, token, fromVolume, amb.targetVolume, fadeDurationMs);
+  }));
+}
+
 function isFXEnabled() {
   return fxEnabled;
 }
@@ -542,5 +566,6 @@ export {
   toggleAmbience, isFXEnabled, isAmbienceEnabled, playAmbience, stopAmbience,
   stopAmbienceWithFade, startAmbienceWithFade, startAmbiencesWithFade,
   isAmbiencePlaying, setTempSoundDisable, playSound,
-  stopAllAmbiencesAndStartNewOne, randomizeAmbienceGroupSrc
+  stopAllAmbiencesAndStartNewOne, randomizeAmbienceGroupSrc,
+  setAllAmbiencesVolume, restoreAllAmbiencesVolume
 };

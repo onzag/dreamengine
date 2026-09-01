@@ -1,9 +1,9 @@
 import { isScriptTypeGeneratorFile, parseScriptGeneratorFrom } from '../../script-generation/base.js';
-import { playCancelSound, playConfirmSound, playHoverSound, playPauseSound, setTempSoundDisable } from '../sound.js';
+import { setAllAmbiencesVolume, playCancelSound, playConfirmSound, playHoverSound, playPauseSound, restoreAllAmbiencesVolume, setTempSoundDisable } from '../sound.js';
 import './profile-image.js';
 import './profile-voice.js';
 import './wizard/character-overview.js';
-import { emotions, emotionsToVoicePromptDescription } from '../../engine/util/emotions.js';
+import { emotions, emotionsGrouped, emotionsToVoicePromptDescription } from '../../engine/util/emotions.js';
 
 /**
  * 
@@ -26,6 +26,10 @@ class CharacterOverlay extends HTMLElement {
         this.currentCharacterId = "";
         this.currentCharacterNamespace = "";
         this.currentSectionIndex = 0;
+    }
+
+    disconnectedCallback() {
+        restoreAllAmbiencesVolume();
     }
 
     async connectedCallback() {
@@ -177,14 +181,20 @@ class CharacterOverlay extends HTMLElement {
         const tabsContainer = this.root.querySelector('app-overlay-tabs');
         if (!tabsContainer) return;
 
+        const scriptSource = await window.ENGINE_WORKER_CLIENT.getRawScriptSource({ namespace: this.currentCharacterNamespace, id: this.currentCharacterId });
+        const infoMap = await window.ENGINE_WORKER_CLIENT.jsEngineGetInfoMapForScripts({
+            scripts: [
+                { namespace: this.currentCharacterNamespace, id: this.currentCharacterId },
+            ]
+        });
+        const thisFileInfo = infoMap[this.currentCharacterNamespace + "/" + this.currentCharacterId];
+
+        const isNewFile = scriptSource.src.startsWith("//@placeholder");
+        const isCardType = isScriptTypeGeneratorFile(scriptSource.src);
+        const isStandard = isNewFile || isCardType || scriptSource.src.startsWith("//@standard");
+
         if (this.currentSectionIndex === 0) {
-            const scriptSource = await window.ENGINE_WORKER_CLIENT.getRawScriptSource({ namespace: this.currentCharacterNamespace, id: this.currentCharacterId });
-
-            const isNewFile = scriptSource.src.startsWith("//@placeholder");
-            const isCardType = isScriptTypeGeneratorFile(scriptSource.src);
-
-            const infoMap = await window.ENGINE_WORKER_CLIENT.jsEngineGetInfoMap();
-            const thisFileInfo = infoMap[this.currentCharacterNamespace + "/" + this.currentCharacterId];
+            restoreAllAmbiencesVolume();
 
             let cardtypeWizardContent = '';
 
@@ -320,6 +330,7 @@ class CharacterOverlay extends HTMLElement {
                 document.body.appendChild(overview);
             });
         } else if (this.currentSectionIndex === 3) {
+            restoreAllAmbiencesVolume();
             tabsContainer.innerHTML = `<app-overlay-section section-title="Script Info">
                 <app-script-info
                     script-id="${this.currentCharacterId.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')}"
@@ -327,36 +338,69 @@ class CharacterOverlay extends HTMLElement {
                 ></app-script-info>
             </app-overlay-section>`;
         } else if (this.currentSectionIndex === 1) {
-            const isSystemNamespace = this.currentCharacterNamespace.startsWith('@');
-            const baseUrl = `${isSystemNamespace ? '@' : ''}assets/${isSystemNamespace ? this.currentCharacterNamespace.slice(1) : this.currentCharacterNamespace}/${this.currentCharacterId}`;
-            tabsContainer.innerHTML = `<app-overlay-section section-title="Emotions">
-                <div class="emotions-grid">
-                    ${emotions.map(emotion => `
-                        <div class="emotion-item">
-                            <app-profile-image image-url="${escapeHTML(baseUrl)}/${emotion}" fallback-url="${escapeHTML(baseUrl)}/profile"${isSystemNamespace ? '' : ' editable="true"'}></app-profile-image>
-                            <span class="emotion-label">${escapeHTML(emotion)}</span>
+            if (isStandard) {
+                restoreAllAmbiencesVolume();
+                const isSystemNamespace = this.currentCharacterNamespace.startsWith('@');
+                const baseUrl = `${isSystemNamespace ? '@' : ''}assets/${isSystemNamespace ? this.currentCharacterNamespace.slice(1) : this.currentCharacterNamespace}/${this.currentCharacterId}`;
+                tabsContainer.innerHTML = `<app-overlay-section section-title="Emotions">
+                        <div class="emotions-groups">
+                            ${Object.keys(emotionsGrouped).map(emotionKey => `
+                                <div class="emotions-group">
+                                    <h3 class="emotions-group-title">${escapeHTML(emotionKey[0].toUpperCase() + emotionKey.slice(1))}</h3>
+                                    <div class="emotions-grid">
+                                        ${emotionsGrouped[emotionKey].map(emotion => `
+                                            <div class="emotion-item">
+                                                <app-profile-image image-url="${escapeHTML(baseUrl)}/${emotion}" fallback-url="${escapeHTML(baseUrl)}/profile"${isSystemNamespace ? '' : ' editable="true"'}></app-profile-image>
+                                                <span class="emotion-label">${escapeHTML(emotion)}</span>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                            `).join('')}
                         </div>
-                    `).join('')}
-                </div>
-            </app-overlay-section>`;
+                </app-overlay-section>`;
+            } else {
+                tabsContainer.innerHTML = `<app-overlay-section section-title="Emotions">
+                    <p data-de-aria-text="true" tabindex="0">
+                        This character script is in non-standard format. Emotions are not available for this character.
+                    </p>
+                </app-overlay-section>`;
+            }
         } else if (this.currentSectionIndex === 2) {
-            const isSystemNamespace = this.currentCharacterNamespace.startsWith('@');
-            const baseUrl = `${isSystemNamespace ? '@' : ''}assets/${isSystemNamespace ? this.currentCharacterNamespace.slice(1) : this.currentCharacterNamespace}/${this.currentCharacterId}`;
-            tabsContainer.innerHTML = `<app-overlay-section section-title="Emotional Vocal Effects">
-                <div class="emotions-grid">
-                    ${emotions.map(emotion => `
-                        <div class="emotion-item">
-                            <app-profile-voice
-                                voice-url="${escapeHTML(baseUrl)}/voice_${emotion}"
-                                fallback-url="${escapeHTML(baseUrl)}/voice"
-                                download-name="voice_${emotion}"${isSystemNamespace ? '' : ' editable="true"'}
-                                voice-prompt="${escapeHTML(emotionsToVoicePromptDescription[emotion] || 'No description available')}"
-                            ></app-profile-voice>
-                            <span class="emotion-label">${escapeHTML(emotion)}</span>
-                        </div>
-                    `).join('')}
-                </div>
-            </app-overlay-section>`;
+            if (isStandard) {
+                setAllAmbiencesVolume(0.3);
+                const isSystemNamespace = this.currentCharacterNamespace.startsWith('@');
+                const baseUrl = `${isSystemNamespace ? '@' : ''}assets/${isSystemNamespace ? this.currentCharacterNamespace.slice(1) : this.currentCharacterNamespace}/${this.currentCharacterId}`;
+                tabsContainer.innerHTML = `<app-overlay-section section-title="Emotional Vocal Effects">
+                    <div class="emotions-groups">
+                        ${Object.keys(emotionsGrouped).map(emotionKey => `
+                            <div class="emotions-group">
+                                <h3 class="emotions-group-title">${escapeHTML(emotionKey[0].toUpperCase() + emotionKey.slice(1))}</h3>
+                                <div class="emotions-grid">
+                                    ${emotionsGrouped[emotionKey].map(emotion => `
+                                        <div class="emotion-item">
+                                            <app-profile-voice
+                                                voice-url="${escapeHTML(baseUrl)}/voice_${emotion}"
+                                                fallback-url="${escapeHTML(baseUrl)}/voice"
+                                                download-name="voice_${emotion}"${isSystemNamespace ? '' : ' editable="true"'}
+                                                voice-prompt="${escapeHTML(emotionsToVoicePromptDescription[emotion] || 'No description available')}"
+                                                reference-name="voice_${emotion}"
+                                            ></app-profile-voice>
+                                            <span class="emotion-label">${escapeHTML(emotion)}</span>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </app-overlay-section>`;
+            } else {
+                tabsContainer.innerHTML = `<app-overlay-section section-title="Emotional Vocal Effects">
+                    <p data-de-aria-text="true" tabindex="0">
+                        This character script is in non-standard format. Emotional vocal effects are not available for this character.
+                    </p>
+                </app-overlay-section>`;
+            }
         }
     }
 

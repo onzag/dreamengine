@@ -1045,6 +1045,13 @@ declare interface DEVoiceDescription {
 // confronted 
 
 declare interface DECompleteCharacterReference extends DEMinimalCharacterReference {
+    /**
+     * Arbitrary metadata
+     */
+    metadata: Record<string, any>;
+    /**
+     * Arbitrary temporary data
+     */
     temp: Record<string, any>;
 
     /**
@@ -3417,6 +3424,10 @@ declare interface DEWorld {
      * Temporary properties to use during inference cycles, they do not persist
      */
     temp: Record<string, any>;
+    /**
+     * Arbitrary metadata about the world
+     */
+    metadata: Record<string, any>;
 }
 
 declare interface DENarrationStyle {

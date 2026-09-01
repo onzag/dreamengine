@@ -4,7 +4,7 @@ This app is an UI frontend for the Dreamengine itself, in theory the engine is a
 
 Because an app is a frontend, it supports extra metadata that is not designed to be used by the engine itself, but rather to help the app to work better with the engine.
 
-## Root Metadata Fields (Characters)
+## Script Level Metadata Fields (Characters)
 
 ### __name
 
@@ -56,14 +56,6 @@ The `speciesType` field is used to specify the type of species of a character. T
 
 Format: `speciesType = "feral" | "animal" | "humanoid"`
 
-### voice
-
-The `voice` field is used to specify how the voice of a character sounds, it should be distributed by different emotions, based on the emotions.js file.
-
-The sample should be a wav file.
-
-Format: `voice = {emotions: {happy: {sample: "voice_happy.wav", prompt: "a soft happy voice"}, sad: {sample: "voice_sad.wav", prompt: "a soft sad voice"}, angry: {sample: "voice_angry.wav", prompt: "a soft angry voice"}, ...}}, modifiers: {mumbling: {sample: "voice_mumbling.wav", prompt: "a soft mumbling voice"}, whispering: {sample: "voice_whispering.wav", prompt: "a soft whispering voice"}, screaming: {sample: "voice_screaming.wav", prompt: "a screaming voice"}, ...}}`
-
 ### sounds
 
 TODO implement the sound system in the app, maybe move it to DE as standard?... how would the sound engine even work, hmmm?...
@@ -76,7 +68,7 @@ The sounds should be wav files.
 
 Format: `sounds = {cough: ["cough1.wav", "cough2.wav", "cough3.wav"], laugh: ["laugh1.wav", "laugh2.wav", "laugh3.wav"], sigh: ["sigh1.wav", "sigh2.wav", "sigh3.wav"], ...}`
 
-## Root Metadata Fields (World)
+## Script Level Metadata Fields (World)
 
 ### intro
 
@@ -92,34 +84,70 @@ The voice of the narrator of the world, this is used to specify how the narrator
 
 Format: `voice = {sample: "voice_narrator.wav", prompt: "a powerful narrator voice"}`
 
-## Stateful Fields
+## Internal Metadata Fields
 
-### DE.world.state.theme
+### DE.world.metadata.theme
 
 The theme song of the world, this is used to specify the base theme song of the world, and the app can use this field to play the theme song when loading the world.
 
-Format: `DE.world.state.theme = {asset: "song.mp3", volume: 1.0}`
+Format: `DE.world.metadata.theme = {asset: "song.mp3", volume: 1.0}`
 
-### DE.world[locationID].state.theme
+### DE.world[locationID].metadata.theme
 
 The theme song of a specific location, this is used to specify the theme song of a specific location, and the app can use this field to play the theme song when loading the location.
 
-Format: `DE.world[locationID].state.theme = {asset: "song.mp3", volume: 1.0}`
+Format: `DE.world[locationID].metadata.theme = {asset: "song.mp3", volume: 1.0}`
 
-### DE.world[locationID].slots[slotID].state.theme
+### DE.world[locationID].slots[slotID].metadata.theme
 
 The theme song of a specific slot, this is used to specify the theme song of a specific slot, and the app can use this field to play the theme song when loading the slot.
 
-Format: `DE.world[locationID].slots[slotID].state.theme = {asset: "song.mp3", volume: 1.0}`
+Format: `DE.world[locationID].slots[slotID].metadata.theme = {asset: "song.mp3", volume: 1.0}`
 
-### DE.world[locationID].state.asset
+### DE.world[locationID].metadata.asset
 
 The image asset of a specific location, this is used to specify the image asset of a specific location, and the app can use this field to display the image when loading the location.
 
-Format: `DE.world[locationID].state.asset = "image.png"`
+Format: `DE.world[locationID].metadata.asset = "image.png"`
 
-### DE.world[locationID].slots[slotID].state.asset
+### DE.world[locationID].slots[slotID].metadata.asset
 
 The image asset of a specific slot, this is used to specify the image asset of a specific slot, and the app can use this field to display the image when loading the slot.
 
-Format: `DE.world[locationID].slots[slotID].state.asset = "image.png"`
+Format: `DE.world[locationID].slots[slotID].metadata.asset = "image.png"`
+
+### DE.characters[characterID].metadata.asset[emotion]
+
+The image asset of a specific character's emotion, this is used to specify the image asset of a specific character's emotion, and the app can use this field to display the image when loading the character's emotion.
+
+Format: `DE.characters[characterID].metadata.asset[emotion] = "image.png"`
+
+### DE.characters[characterID].metadata.asset[emotion].voice
+
+The `voice` field is used to specify how the voice of a character sounds, it should be distributed by different emotions, based on the emotions.js file.
+
+The sample should be an ogg/mp3 file less than 1MB in size, the transcript is not required by default.
+
+Format: `DE.characters[characterID].metadata.voice[emotion].voice = {sample: "voice_happy.ogg", transcript: "hello..."}`
+
+### DE.characters[characterID].metadata.voiceModifiers[name]
+
+The `voiceModifiers` field is used to specify modifiers the character's voice can have, it should be distributed by different emotions, based on the emotions.js file, for example, whispering, mumbling, shouting, etc...
+
+The sample should be an ogg/mp3 file less than 1MB in size, the transcript is not required by default.
+
+The name is arbitrary, but should be descriptive of the modifier, for example, "whispering", "mumbling", "shouting", etc...
+
+Format: `DE.characters[characterID].metadata.voiceModifiers[name] = {sample: "voicemod_whispering.ogg", prompt: "whispering", transcript: "hello..."}`
+
+### DE.characters[characterID].metadata.sounds[name]
+
+The `sounds` field is used to specify sounds the character can make, it should be distributed by different emotions, based on the emotions.js file, for example, cough, laugh, sigh, etc...
+
+The samples array should be an ogg/mp3 file less than 1MB in size, for options, the name is arbitrary, but should be descriptive of the sound, for example, "cough", "laugh", "sigh", etc...
+
+Format: `DE.characters[characterID].metadata.sounds[name] = {samples: ["sound_cough_0.ogg", "sound_cough_1.ogg"], written: "{char} coughs", type: "narrative"}`
+
+Format: `DE.characters[characterID].metadata.sounds[name] = {samples: ["sound_scream_0.ogg", "sound_scream_1.ogg"], written: "ARGH!", type: "dialogue"}`
+
+Format: `DE.characters[characterID].metadata.sounds[name] = {samples: ["sound_sigh_0.ogg", "sound_sigh_1.ogg"], type: "invisible"}`
