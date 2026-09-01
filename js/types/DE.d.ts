@@ -2204,6 +2204,7 @@ declare interface DEItem {
     weightKg: number;
     description: string;
     state: Record<string, any>;
+    metadata: Record<string, any>;
     consumableProperties?: {
         calories: number;
         hydrationLiters: number;

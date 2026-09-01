@@ -1,9 +1,11 @@
+const standardApp = await importScript("@std", "standard-app");
+
 engine.exports = {
     type: "world",
     description: "A serene lunar station orbiting earth, featuring advanced technology and breathtaking views of space.",
     language: "en",
     metadata: {
-        intro: [
+        __intro: [
             {
                 title: "Moon Surface, Year 2307",
                 subtitle: "After two centuries of severe global warming, and severe scientific setback due to the Artemis Catastrophe, humanity has finally established a small lunar station on the moon surface.",
@@ -55,7 +57,9 @@ engine.exports = {
         });
 
         DE.world.initialScenes.push("Default Scene");
-        DE.world.state.theme = {asset: "@assets/worlds/simple-lunar-station/luna.mp3", volume: 1.3};
+        DE.world.metadata = standardApp.buildWorldMetadata({
+            theme: {asset: "@assets/worlds/simple-lunar-station/luna.mp3", volume: 1.3},
+        });
         DE.world.name = "Simple Lunar Station";
 
         DE.world.lore = "The world is set on a small lunar station orbiting the Moon. The station serves as a research outpost and habitat for astronauts and scientists studying the lunar environment. The station is equipped with life support systems, scientific laboratories, living quarters, and communication facilities. Outside the station, the barren surface of the Moon stretches out, dotted with craters and rocks. The sky above is a pitch-black void, with the Earth hanging in the distance. The silence is absolute, broken only by the faint hum of the station's machinery";
@@ -130,6 +134,9 @@ engine.exports = {
             weightKg: 20,
             volumeLiters: 150,
             state: {},
+            metadata: standardApp.buildItemMetadata({
+                asset: "@assets/worlds/simple-lunar-station/space_suit.jpg",
+            }),
             amount: 2,
             consumableProperties: null,
             containing: [],
@@ -170,8 +177,11 @@ engine.exports = {
                 capacityKg: 50,
                 capacityLiters: 1000,
                 structure: "rigid",
-            canSeeContentsFromOutside: false,
+                canSeeContentsFromOutside: false,
             },
+            metadata: standardApp.buildItemMetadata({
+                asset: "@assets/worlds/simple-lunar-station/locker.jpg",
+            }),
             amount: 1,
             consumableProperties: null,
             containing: [spaceSuit],
@@ -197,8 +207,11 @@ engine.exports = {
                 capacityKg: 100,
                 capacityLiters: 20,
                 structure: "rigid",
-            canSeeContentsFromOutside: false,
+                canSeeContentsFromOutside: false,
             },
+            metadata: standardApp.buildItemMetadata({
+                asset: "@assets/worlds/simple-lunar-station/stove.jpg",
+            }),
             amount: 1,
             consumableProperties: null,
             containing: [],
@@ -220,6 +233,9 @@ engine.exports = {
             weightKg: 0.1,
             volumeLiters: 0.05,
             state: {},
+            metadata: standardApp.buildItemMetadata({
+                asset: "@assets/worlds/simple-lunar-station/fork.jpg",
+            }),
             amount: 10,
             consumableProperties: null,
             containing: [],
@@ -241,6 +257,9 @@ engine.exports = {
             weightKg: 0.1,
             volumeLiters: 0.05,
             state: {},
+            metadata: standardApp.buildItemMetadata({
+                asset: "@assets/worlds/simple-lunar-station/spoon.jpg",
+            }),
             amount: 10,
             consumableProperties: null,
             containing: [],
@@ -266,8 +285,11 @@ engine.exports = {
                 capacityKg: 10,
                 capacityLiters: 20,
                 structure: "rigid",
-            canSeeContentsFromOutside: false,
+                canSeeContentsFromOutside: false,
             },
+            metadata: standardApp.buildItemMetadata({
+                asset: "@assets/worlds/simple-lunar-station/cabinet_drawer.jpg",
+            }),
             amount: 1,
             consumableProperties: null,
             containing: [fork, spoon],
@@ -289,11 +311,14 @@ engine.exports = {
             weightKg: 0.2,
             volumeLiters: 0.5,
             state: {},
+            metadata: standardApp.buildItemMetadata({
+                asset: "@assets/worlds/simple-lunar-station/bowl.jpg",
+            }),
             containerProperties: {
                 capacityKg: 1,
                 capacityLiters: 0.5,
                 structure: "rigid",
-            canSeeContentsFromOutside: false,
+                canSeeContentsFromOutside: false,
             },
             amount: 5,
             consumableProperties: null,
@@ -320,8 +345,11 @@ engine.exports = {
                 capacityKg: 10,
                 capacityLiters: 20,
                 structure: "rigid",
-            canSeeContentsFromOutside: false,
+                canSeeContentsFromOutside: false,
             },
+            metadata: standardApp.buildItemMetadata({
+                asset: "@assets/worlds/simple-lunar-station/cabinet_drawer.jpg",
+            }),
             amount: 1,
             consumableProperties: null,
             containing: [bowl],
@@ -343,11 +371,14 @@ engine.exports = {
             weightKg: 50,
             volumeLiters: 200,
             state: {},
+            metadata: standardApp.buildItemMetadata({
+                asset: "@assets/worlds/simple-lunar-station/cabinet.jpg",
+            }),
             containerProperties: {
                 capacityKg: 100,
                 capacityLiters: 200,
                 structure: "rigid",
-            canSeeContentsFromOutside: false,
+                canSeeContentsFromOutside: false,
             },
             amount: 1,
             ontop: [],
@@ -370,6 +401,9 @@ engine.exports = {
             weightKg: 0.5,
             volumeLiters: 0.3,
             state: {},
+            metadata: standardApp.buildItemMetadata({
+                asset: "@assets/worlds/simple-lunar-station/space_food_pack.jpg",
+            }),
             amount: 10000,
             consumableProperties: {
                 calories: 2500,
@@ -398,8 +432,11 @@ engine.exports = {
                 capacityKg: spaceFoodPack.weightKg * spaceFoodPack.amount + 100,
                 capacityLiters: spaceFoodPack.volumeLiters * spaceFoodPack.amount + 100,
                 structure: "rigid",
-            canSeeContentsFromOutside: false,
+                canSeeContentsFromOutside: false,
             },
+            metadata: standardApp.buildItemMetadata({
+                asset: "@assets/worlds/simple-lunar-station/large_cabinet.jpg",
+            }),
             amount: 1,
             consumableProperties: null,
             containing: [spaceFoodPack],
@@ -421,6 +458,9 @@ engine.exports = {
             weightKg: 5,
             volumeLiters: 30,
             state: {},
+            metadata: standardApp.buildItemMetadata({
+                asset: "@assets/worlds/simple-lunar-station/chair.jpg",
+            }),
             amount: 4,
             consumableProperties: null,
             containing: [],
@@ -446,9 +486,10 @@ engine.exports = {
             maxVolumeLiters: 0,
             maxWeightKg: 0,
             ownWeatherSystem: [vaccuumWeatherSystem],
-            state: {
-                asset: "@assets/worlds/simple-lunar-station/surface_of_the_moon.jpg",
-            },
+            metadata: standardApp.buildLocationMetadata({
+                asset: "@assets/worlds/simple-lunar-station/moon_surface.jpg",
+            }),
+            state: {},
             temp: {},
             parent: null,
             slots: {
@@ -458,6 +499,9 @@ engine.exports = {
                     maxWeightKg: 0,
                     state: {},
                     temp: {},
+                    metadata: standardApp.buildLocationSlotMetadata({
+                        asset: "@assets/worlds/simple-lunar-station/moon_surface.jpg",
+                    }),
                     items: [
                         {
                             name: "Lunar rock",
@@ -465,6 +509,9 @@ engine.exports = {
                             weightKg: 0.5,
                             volumeLiters: 0.2,
                             state: {},
+                            metadata: standardApp.buildItemMetadata({
+                                asset: "@assets/worlds/simple-lunar-station/lunar_rock.jpg",
+                            }),
                             amount: 10000,
                             consumableProperties: null,
                             containing: [],
@@ -514,10 +561,11 @@ engine.exports = {
             maxWeightKg: 2000,
             ownWeatherSystem: [],
             parent: "Surface of the Moon",
-            state: {
+            metadata: standardApp.buildLocationMetadata({
                 asset: "@assets/worlds/simple-lunar-station/image",
-            },
+            }),
             temp: {},
+            state: {},
             slots: {
                 "Common Area": {
                     description: "The common area of the lunar station, featuring a few chairs, a table, and a small kitchenette. The walls are lined with control panels and monitors displaying various data about the station's systems",
@@ -527,10 +575,11 @@ engine.exports = {
                     ],
                     maxVolumeLiters: 2000,
                     maxWeightKg: 2000,
-                    state: {
+                    metadata: standardApp.buildLocationSlotMetadata({
                         asset: "@assets/worlds/simple-lunar-station/common_area.jpg",
-                    },
+                    }),
                     temp: {},
+                    state: {},
                 },
                 "Cooking Area": {
                     description: "A small kitchenette area with a compact stove, a sink, and storage cabinets. There are a few packaged food items and utensils stored here for the crew to use",
@@ -542,9 +591,10 @@ engine.exports = {
                     ],
                     maxVolumeLiters: 2000,
                     maxWeightKg: 2000,
-                    state: {
+                    metadata: standardApp.buildLocationSlotMetadata({
                         asset: "@assets/worlds/simple-lunar-station/cooking_area.jpg",
-                    },
+                    }),
+                    state: {},
                     temp: {},
                 },
             },
@@ -600,18 +650,20 @@ engine.exports = {
                 maxWeightKg: 500,
                 ownWeatherSystem: [],
                 parent: "Lunar Station",
-                state: {
+                metadata: standardApp.buildLocationMetadata({
                     asset: "@assets/worlds/simple-lunar-station/bedroom.jpg",
-                },
+                }),
+                state: {},
                 temp: {},
                 slots: {
                     "Bedroom Area": {
                         description: "The bedroom area of the lunar station, featuring a bunk bed, a small desk, and a locker for personal belongings",
                         maxVolumeLiters: 2000,
                         maxWeightKg: 2000,
-                        state: {
+                        metadata: standardApp.buildLocationSlotMetadata({
                             asset: "@assets/worlds/simple-lunar-station/bedroom_area.jpg",
-                        },
+                        }),
+                        state: {},
                         temp: {},
                         items: [
                             {
@@ -620,6 +672,9 @@ engine.exports = {
                                 weightKg: 20,
                                 volumeLiters: 100,
                                 state: {},
+                                metadata: standardApp.buildItemMetadata({
+                                    asset: "@assets/worlds/simple-lunar-station/bunk_bed.jpg",
+                                }),
                                 amount: 1,
                                 consumableProperties: null,
                                 containing: [],

@@ -920,6 +920,34 @@
     font-style: normal;
 }
 
+.game-character-option {
+    display: flex;
+    align-items: center;
+    gap: 1.4vh;
+}
+
+.game-character-option-portrait {
+    flex: 0 0 auto;
+    width: 7vh;
+    height: 7vh;
+    border-radius: 1vh;
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(200, 220, 240, 0.25);
+}
+
+.game-character-option-portrait app-asset-image {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.game-character-option-body {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
 .game-scene-picker-footer {
     display: flex;
     justify-content: flex-end;

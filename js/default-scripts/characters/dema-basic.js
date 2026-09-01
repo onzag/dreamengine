@@ -1,5 +1,5 @@
 const fss = await importScript("@bond-systems", "full-standard-bond-system");
-const stdapp = await importScript("@std", "deapp");
+const stdapp = await importScript("@std", "standard-app");
 
 engine.exports = {
     type: "characters",
@@ -106,9 +106,12 @@ engine.exports = {
         function demaTie(base) { return { family: base, nonFamily: base }; }
 
         const Dema = DE.utils.newCharacter(fss.setup(DE, {
-            metadata: {
-                asset: "@assets/characters/dema-basic/profile",
-            },
+            metadata: stdapp.buildCharacterMetadata({
+                assets: {
+                    neutral: "@assets/characters/dema-basic/profile",
+                },
+                sounds: {},
+            }),
             name: "Dema",
             shortDescription: "A human sized anthropomorphic robot with a blue and white color scheme and a reflective visor.",
             shortDescriptionTopNakedAdd: "showing its sleek robotic body.",

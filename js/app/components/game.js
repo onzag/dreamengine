@@ -153,7 +153,7 @@ class GameOverlay extends HTMLElement {
                     scripts: [{ namespace: introWorldNamespace, id: introWorldId }],
                 });
                 const introWorldInfo = introInfoMap?.[`${introWorldNamespace}/${introWorldId}`];
-                const intro = introWorldInfo?.metadata?.intro;
+                const intro = introWorldInfo?.metadata?.__intro;
                 if (Array.isArray(intro)) introMessages = intro;
             } catch (error) {
                 console.error('Failed to load world intro messages:', error);
@@ -595,7 +595,41 @@ class GameOverlay extends HTMLElement {
                                 throw new Error(`Character with script key ${namespace + "/" + id} not found among characters added by the world and party scripts.` + JSON.stringify(engineScriptInfo.charactersAdded));
                             }
                         } else {
-                            // TODO handle multiple characters added by the same script with the same id (e.g. a script that adds multiple characters with the same id but different names)
+                            // The script added several characters. Let the player
+                            // pick which one to assume the identity of, showing a
+                            // portrait and short description for each (same
+                            // mechanism used for the user's own sidebar info).
+                            /** @type {Array<{ name: string, description: string, assetImage: string }>} */
+                            const characterOptions = [];
+                            for (const charInfo of potentialChars) {
+                                // eslint-disable-next-line no-await-in-loop
+                                const description = await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                                    path: ["utils", "getExternalDescriptionOfCharacter"],
+                                    call: [{ char: charInfo.name }, true, false],
+                                });
+                                // eslint-disable-next-line no-await-in-loop
+                                const assetImage = await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                                    path: ["characters", charInfo.name, "metadata", "asset", "neutral"],
+                                }) || "";
+                                characterOptions.push({
+                                    name: charInfo.name,
+                                    description: typeof description === 'string' ? description : '',
+                                    assetImage,
+                                });
+                            }
+
+                            // Show the picker only once the dream is being revealed,
+                            // otherwise the white "falling asleep" overlay would sit
+                            // on top of it.
+                            await this.lightFadePromise;
+
+                            const chosenCharacterName = await this.promptCharacterSelection(characterOptions);
+                            await window.ENGINE_WORKER_CLIENT.assumeCharacterIdentity({ characterName: chosenCharacterName });
+
+                            // Keep the host attribute in sync so the rest of the UI
+                            // (sidebar title, input placeholder, etc.) reflects the
+                            // chosen character.
+                            this.setAttribute('character-name', chosenCharacterName);
                         }
                     } else {
                         await window.ENGINE_WORKER_CLIENT.assumeCharacterIdentity({ characterName });
@@ -1761,6 +1795,120 @@ class GameOverlay extends HTMLElement {
                     option.classList.add('selected');
                     selectedOption = option;
                     selectedScene = sceneName;
+                    beginBtn.disabled = false;
+                });
+                list.appendChild(option);
+            }
+
+            picker.appendChild(footer);
+            background.appendChild(picker);
+        });
+    }
+
+    /**
+     * Render the character-selection picker as an in-place overlay on top of
+     * the world background (replacing the "Entering dream..." message).
+     * Resolves with the chosen character's name once the player picks one.
+     * Used when a script adds several characters and the player must choose
+     * which one's identity to assume. Each option shows a portrait (the
+     * character's neutral asset, if any) alongside its name and short
+     * external description. Reuses the same surface style as the scene picker.
+     *
+     * @param {Array<{ name: string, description: string, assetImage: string }>} characterOptions
+     * @returns {Promise<string>}
+     */
+    promptCharacterSelection(characterOptions) {
+        return new Promise(resolve => {
+            const background = this.root.querySelector('.game-background');
+            if (!background) {
+                // Fallback: nothing to mount onto. Resolve with the first
+                // option (or empty) so the caller can proceed.
+                resolve(characterOptions[0]?.name || '');
+                return;
+            }
+
+            // Hide the loading message; the picker takes its place.
+            const loadingMessage = background.querySelector('.game-background-message');
+            if (loadingMessage) /** @type {HTMLElement} */ (loadingMessage).style.display = 'none';
+
+            const picker = document.createElement('div');
+            picker.className = 'game-scene-picker';
+
+            const heading = document.createElement('div');
+            heading.className = 'game-scene-picker-title';
+            heading.textContent = 'Who do you become?';
+            picker.appendChild(heading);
+
+            const list = document.createElement('div');
+            list.className = 'game-scene-picker-list';
+            picker.appendChild(list);
+
+            /** @type {string | null} */
+            let selectedCharacter = null;
+            /** @type {HTMLButtonElement | null} */
+            let selectedOption = null;
+
+            const footer = document.createElement('div');
+            footer.className = 'game-scene-picker-footer';
+
+            const beginBtn = document.createElement('button');
+            beginBtn.type = 'button';
+            beginBtn.className = 'game-scene-picker-begin';
+            beginBtn.textContent = 'Begin';
+            beginBtn.disabled = true;
+            footer.appendChild(beginBtn);
+
+            const finish = () => {
+                if (!selectedCharacter) return;
+                playConfirmSound();
+                picker.remove();
+                if (loadingMessage) loadingMessage.remove();
+                resolve(selectedCharacter);
+            };
+
+            beginBtn.addEventListener('mouseenter', () => { if (!beginBtn.disabled) playHoverSound(); });
+            beginBtn.addEventListener('click', finish);
+
+            for (const character of characterOptions) {
+                const option = document.createElement('button');
+                option.type = 'button';
+                option.className = 'game-scene-option game-character-option';
+                option.setAttribute('data-character', character.name);
+
+                if (character.assetImage) {
+                    const portrait = document.createElement('div');
+                    portrait.className = 'game-character-option-portrait';
+                    const img = document.createElement('app-asset-image');
+                    img.setAttribute('default-image', './images/default-profile.png');
+                    img.setAttribute('no-transition', 'true');
+                    img.setAttribute('image-url', character.assetImage);
+                    portrait.appendChild(img);
+                    option.appendChild(portrait);
+                }
+
+                const body = document.createElement('div');
+                body.className = 'game-character-option-body';
+
+                const title = document.createElement('div');
+                title.className = 'game-scene-option-title';
+                title.textContent = character.name;
+                body.appendChild(title);
+
+                const desc = document.createElement('div');
+                desc.className = 'game-scene-option-desc';
+                desc.textContent = character.description;
+                body.appendChild(desc);
+
+                option.appendChild(body);
+
+                option.addEventListener('mouseenter', () => playHoverSound());
+                option.addEventListener('click', () => {
+                    if (selectedOption === option) return;
+                    playConfirmSound();
+                    if (selectedOption) selectedOption.classList.remove('selected');
+                    option.classList.add('selected');
+                    selectedOption = option;
+                    selectedCharacter = character.name;
                     beginBtn.disabled = false;
                 });
                 list.appendChild(option);
