@@ -153,6 +153,8 @@ export function makeTimestamp(deObject, time, includeNowLabel = true) {
  * @property {boolean} storyMaster whether this message is from the story master or not
  * @property {string[]} interactingCharacters the interacting characters in this message
  * @property {string} gid a global id, always available, always unique, can be used to identify a message uniquely
+ * @property {DEEmotionNames|null} emotion the primary emotion of the message, provided there is a sender
+ * @property {DEEmotionNames[]|null} emotionalRange the emotional range of the message
  */
 
 /**
@@ -236,6 +238,8 @@ export async function* getHistoryForCharacter(engine, character, options) {
             interactingCharacters: [
                 character.name,
             ],
+            emotion: null,
+            emotionalRange: null,
         };
     };
 
@@ -291,6 +295,8 @@ export async function* getHistoryForCharacter(engine, character, options) {
                     hidden: false,
                     interactingCharacters: currentConversationObject.participants,
                     gid: expectedId,
+                    emotion: null,
+                    emotionalRange: null,
                 };
                 if (!keepgoing) {
                     return;
@@ -311,6 +317,8 @@ export async function* getHistoryForCharacter(engine, character, options) {
                         hidden: message.isHiddenMessage,
                         interactingCharacters: message.interactingCharacters || [],
                         gid: message.id,
+                        emotion: message.emotion,
+                        emotionalRange: message.emotionalRange,
                     });
                     if (!keepgoing) {
                         return;
@@ -333,6 +341,8 @@ export async function* getHistoryForCharacter(engine, character, options) {
                         hidden: false,
                         interactingCharacters: currentConversationObject.participants,
                         gid: `story-master-${state.conversationId}-interaction-info`,
+                        emotion: null,
+                        emotionalRange: null,
                     };
                     if (!keepgoing) {
                         return;

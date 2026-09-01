@@ -2505,6 +2505,10 @@ declare interface DELocationSlot {
      */
     state: Record<string, any>;
     /**
+     * Arbitrary metadata at this slot, useful for storing information that is not part of the state but is useful for the game logic
+     */
+    metadata: Record<string, any>;
+    /**
      * Temporary properties to use during inference cycles, they do not persist
      */
     temp: Record<string, any>;
@@ -2822,6 +2826,11 @@ declare interface DELocationDefinition {
      * Temporary properties to use during inference cycles, they do not persist
      */
     temp: Record<string, any>;
+    /**
+     * Arbitrary metadata of the location that can be used for various purposes
+     * mostly meant to use with whatever dreamengine client is used
+     */
+    metadata: Record<string, any>;
     /**
      * The parent location ID, null if none, this means that the location is inside another location
      * for example, a bedroom is inside a house, so the bedroom's parent would be the house location ID

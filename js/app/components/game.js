@@ -4,6 +4,7 @@ import './dialog.js';
 import './game-messages/message.js';
 import './debug/debug-character.js';
 import './game/cycle-inform.js';
+import { emotionsGrouped } from '../../engine/util/emotions.js';
 
 /**
  * The main in-dream game UI. Renders a transition ("falling asleep" white
@@ -583,12 +584,18 @@ class GameOverlay extends HTMLElement {
                 if (!isSelfInsert && characterName) {
                     if (characterName.startsWith('script://')) {
                         const [namespace, id] = characterName.substring('script://'.length).split('/');
-                        // TODO handle multiple characters added by the same script with the same id (e.g. a script that adds multiple characters with the same id but different names)
-                        const charInfo = engineScriptInfo.charactersAdded.find(c => c.byNamespace === namespace && c.byId === id);
-                        if (charInfo) {
-                            await window.ENGINE_WORKER_CLIENT.assumeCharacterIdentity({ characterName: charInfo.name });
+                        const potentialChars = engineScriptInfo.charactersAdded.filter(c => c.byNamespace === namespace && c.byId === id);
+                        if (potentialChars.length === 0) {
+                            throw new Error(`Character with script key ${namespace + "/" + id} did not add any characters to the world.`);
+                        } else if (potentialChars.length === 1) {
+                            const charInfo = potentialChars[0];
+                            if (charInfo) {
+                                await window.ENGINE_WORKER_CLIENT.assumeCharacterIdentity({ characterName: charInfo.name });
+                            } else {
+                                throw new Error(`Character with script key ${namespace + "/" + id} not found among characters added by the world and party scripts.` + JSON.stringify(engineScriptInfo.charactersAdded));
+                            }
                         } else {
-                            throw new Error(`Character with script key ${namespace + "/" + id} not found among characters added by the world and party scripts.` + JSON.stringify(engineScriptInfo.charactersAdded));
+                            // TODO handle multiple characters added by the same script with the same id (e.g. a script that adds multiple characters with the same id but different names)
                         }
                     } else {
                         await window.ENGINE_WORKER_CLIENT.assumeCharacterIdentity({ characterName });
@@ -645,7 +652,7 @@ class GameOverlay extends HTMLElement {
         this._initialThemeSongStarted = true;
         try {
             const themeSong = await window.ENGINE_WORKER_CLIENT.queryDEObject({
-                path: ["world", "state", "theme"],
+                path: ["world", "metadata", "theme"],
             });
             if (!themeSong || !themeSong.asset) return;
 
@@ -761,26 +768,26 @@ class GameOverlay extends HTMLElement {
             this.updateCurrentLocation(changedRootLocation);
 
             // THEME SONG LOGIC:
-            const locationStateInfo = await window.ENGINE_WORKER_CLIENT.queryDEObject({
-                path: ["world", "locations", location, "state"],
+            const locationMetadataInfo = await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                path: ["world", "locations", location, "metadata"],
                 pick: ["asset"]
             });
 
-            const locationSlotStateInfo = await window.ENGINE_WORKER_CLIENT.queryDEObject({
-                path: ["world", "locations", location, "slots", locationSlot, "state"],
+            const locationSlotMetadataInfo = await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                path: ["world", "locations", location, "slots", locationSlot, "metadata"],
                 pick: ["asset"]
             });
 
             const themeSongLocationSlot = await window.ENGINE_WORKER_CLIENT.queryDEObject({
-                path: ["world", "locations", location, "slots", locationSlot, "state", "theme"],
+                path: ["world", "locations", location, "slots", locationSlot, "metadata", "theme"],
             });
 
             const themeSongLocation = await window.ENGINE_WORKER_CLIENT.queryDEObject({
-                path: ["world", "locations", location, "state", "theme"],
+                path: ["world", "locations", location, "metadata", "theme"],
             });
 
             const themeSong = await window.ENGINE_WORKER_CLIENT.queryDEObject({
-                path: ["world", "state", "theme"],
+                path: ["world", "metadata", "theme"],
             });
 
             if (themeSongLocationSlot && themeSongLocationSlot.asset) {
@@ -843,9 +850,9 @@ class GameOverlay extends HTMLElement {
             //   1. slot asset, 2. location asset, 3. world image, 4. default.
             /** @type {Array<{ assetPath: string, fullUrl: string, isWorldImage?: boolean }>} */
             const candidates = [];
-            const slotCandidate = buildCandidate(locationSlotStateInfo?.asset);
+            const slotCandidate = buildCandidate(locationSlotMetadataInfo?.asset);
             if (slotCandidate) candidates.push(slotCandidate);
-            const locationCandidate = buildCandidate(locationStateInfo?.asset);
+            const locationCandidate = buildCandidate(locationMetadataInfo?.asset);
             if (locationCandidate) candidates.push(locationCandidate);
 
             let chosenAssetPath = ''; // empty -> <app-asset-image> shows default
@@ -991,11 +998,11 @@ class GameOverlay extends HTMLElement {
             const slotEntries = [];
             for (const slotName of slotNames) {
                 // eslint-disable-next-line no-await-in-loop
-                const stateInfo = await window.ENGINE_WORKER_CLIENT.queryDEObject({
-                    path: ["world", "locations", location, "slots", slotName, "state"],
+                const metadataInfo = await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                    path: ["world", "locations", location, "slots", slotName, "metadata"],
                     pick: ["asset"],
                 });
-                const asset = stateInfo?.asset || '';
+                const asset = metadataInfo?.asset || '';
                 const assetPath = asset || '';
 
                 // eslint-disable-next-line no-await-in-loop
@@ -1299,11 +1306,11 @@ class GameOverlay extends HTMLElement {
                 // Resolve portrait: state asset > script default 'image' > default-profile fallback.
                 // eslint-disable-next-line no-await-in-loop
                 const assetImage = await window.ENGINE_WORKER_CLIENT.queryDEObject({
-                    path: ["characters", char.name, "state", "asset"],
-                }) || "profile";
+                    path: ["characters", char.name, "metadata", "asset", "neutral"],
+                }) || "";
 
                 const img = card.querySelector('app-asset-image');
-                const newUrl = `assets/${assetImage}`;
+                const newUrl = assetImage;
                 if (img) {
                     if (img.getAttribute('image-url') !== newUrl) img.setAttribute('image-url', newUrl);
                 }
@@ -1500,9 +1507,31 @@ class GameOverlay extends HTMLElement {
                 const text = msg.message || '';
                 const isGroupStart = !isNarration && senderName !== lastSenderName;
 
-                const assetImage = !isNarration ? (await window.ENGINE_WORKER_CLIENT.queryDEObject({
-                    path: ["characters", senderName, "state", "asset"],
+                const emotion = msg.emotion || "neutral";
+
+                let assetImage = !isNarration ? (await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                    path: ["characters", senderName, "metadata", "assets", emotion],
                 }) || "") : "";
+
+                if (!isNarration && !assetImage) {
+                    const keyOfEmotion = Object.keys(emotionsGrouped).find((groupKey) => {
+                        if (emotionsGrouped[groupKey].includes(emotion)) {
+                            return true;
+                        }
+                    });
+
+                    const alternatives = keyOfEmotion ? emotionsGrouped[keyOfEmotion] : [];
+                    for (const altEmotion of alternatives) {
+                        if (altEmotion === emotion) continue;
+                        const altAssetImage = await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                            path: ["characters", senderName, "metadata", "assets", altEmotion],
+                        });
+                        if (altAssetImage) {
+                            assetImage = altAssetImage;
+                            break;
+                        }
+                    }
+                }
 
                 resolvedMsgs.push({ gid: String(gid), senderName, isNarration, isUser, isGroupStart, assetImage, text });
                 lastSenderName = isNarration ? '' : senderName;
@@ -1745,12 +1774,12 @@ class GameOverlay extends HTMLElement {
     async onCharacterUpdateUI() {
         try {
             const actualUserName = await window.ENGINE_WORKER_CLIENT.queryDEObject({
-                path: ["user", "name"],
+                path: ["user"],
             });
             if (typeof actualUserName !== 'string' || !actualUserName) return;
 
             const assetImage = await window.ENGINE_WORKER_CLIENT.queryDEObject({
-                path: ["characters", actualUserName, "state", "asset"],
+                path: ["characters", actualUserName, "metadata", "asset", "neutral"],
             }) || "profile";
 
             const userCharacter = await window.ENGINE_WORKER_CLIENT.queryDEObject({
