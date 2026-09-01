@@ -1,8 +1,9 @@
 import { isScriptTypeGeneratorFile, parseScriptGeneratorFrom } from '../../script-generation/base.js';
 import { playCancelSound, playConfirmSound, playHoverSound, playPauseSound, setTempSoundDisable } from '../sound.js';
 import './profile-image.js';
+import './profile-voice.js';
 import './wizard/character-overview.js';
-import { emotions } from '../../engine/util/emotions.js';
+import { emotions, emotionsToVoicePromptDescription } from '../../engine/util/emotions.js';
 
 /**
  * 
@@ -156,15 +157,18 @@ class CharacterOverlay extends HTMLElement {
     async saveProfileImage() {
         const tabsContainer = this.root.querySelector('app-overlay-tabs');
         if (!tabsContainer) return;
-        const profileImage = tabsContainer.querySelector('app-profile-image');
-        if (!profileImage) return;
-        // @ts-ignore
-        if (typeof profileImage.saveValueToUserData === 'function') {
-            try {
-                // @ts-ignore
-                await profileImage.saveValueToUserData();
-            } catch (err) {
-                console.error('Failed to save character image:', err);
+        // Save every editable profile image/voice currently rendered in the
+        // active section (the character image as well as per-emotion assets).
+        const editables = tabsContainer.querySelectorAll('app-profile-image, app-profile-voice');
+        for (const el of editables) {
+            // @ts-ignore
+            if (typeof el.saveValueToUserData === 'function') {
+                try {
+                    // @ts-ignore
+                    await el.saveValueToUserData();
+                } catch (err) {
+                    console.error('Failed to save character asset:', err);
+                }
             }
         }
     }
@@ -336,7 +340,22 @@ class CharacterOverlay extends HTMLElement {
                 </div>
             </app-overlay-section>`;
         } else if (this.currentSectionIndex === 2) {
+            const isSystemNamespace = this.currentCharacterNamespace.startsWith('@');
+            const baseUrl = `${isSystemNamespace ? '@' : ''}assets/${isSystemNamespace ? this.currentCharacterNamespace.slice(1) : this.currentCharacterNamespace}/${this.currentCharacterId}`;
             tabsContainer.innerHTML = `<app-overlay-section section-title="Emotional Vocal Effects">
+                <div class="emotions-grid">
+                    ${emotions.map(emotion => `
+                        <div class="emotion-item">
+                            <app-profile-voice
+                                voice-url="${escapeHTML(baseUrl)}/voice_${emotion}"
+                                fallback-url="${escapeHTML(baseUrl)}/voice"
+                                download-name="voice_${emotion}"${isSystemNamespace ? '' : ' editable="true"'}
+                                voice-prompt="${escapeHTML(emotionsToVoicePromptDescription[emotion] || 'No description available')}"
+                            ></app-profile-voice>
+                            <span class="emotion-label">${escapeHTML(emotion)}</span>
+                        </div>
+                    `).join('')}
+                </div>
             </app-overlay-section>`;
         }
     }
