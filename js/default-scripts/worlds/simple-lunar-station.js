@@ -147,6 +147,7 @@ engine.exports = {
             ontopCharacters: [],
             wearableProperties: {
                 underwear: false,
+                preferredGender: "any",
                 coversTopNakedness: true,
                 coversBottomNakedness: true,
                 volumeRangeMinLiters: 50,

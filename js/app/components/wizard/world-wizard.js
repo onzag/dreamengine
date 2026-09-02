@@ -110,8 +110,8 @@ export class WorldWizard extends CardTypeWizard {
      * @param {"guided"} mode
      */
     async continueProcess(parsedCard, mode) {
-        const guided = mode === 'guided';
-        const guider = this.createGuider(guided);
+        //const guided = mode === 'guided';
+        const guider = this.createGuider();
         const client = window.ENGINE_WORKER_CLIENT;
 
         const worldId = this.getAttribute('world-id');

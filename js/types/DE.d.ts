@@ -4,9 +4,9 @@ declare type DECharacterTier = "insect" | "critter" | "human" | "apex" | "street
 
 declare interface DEMinimalCharacterReference {
     /**
-     * Arbitrary state attached to the character
+     * Arbitrary metadata attached to the character
      */
-    state: Record<string, any>;
+    metadata: Record<string, any>;
     /**
      * Name of the character
      */
@@ -19,6 +19,10 @@ declare interface DEMinimalCharacterReference {
      * Gender identity of the character
      */
     gender: "male" | "female" | "ambiguous";
+    /**
+     * Clothing of the character, "auto" and variants means the world will automatically handle clothing
+     */
+    clothing: "auto-tight" | "auto-loose" | "auto" | "custom";
     /**
      * Height in centimeters
      */
@@ -1046,9 +1050,9 @@ declare interface DEVoiceDescription {
 
 declare interface DECompleteCharacterReference extends DEMinimalCharacterReference {
     /**
-     * Arbitrary metadata
+     * Arbitrary state attached to the character
      */
-    metadata: Record<string, any>;
+    state: Record<string, any>;
     /**
      * Arbitrary temporary data
      */
@@ -2216,6 +2220,7 @@ declare interface DEItem {
         coversTopNakedness: boolean;
         coversBottomNakedness: boolean;
         underwear: boolean;
+        preferredGender: "male" | "female" | "any";
         /**
          * The minimum and maximum volume in liters that this item is meant to fit when worn by the character
          */
@@ -4039,6 +4044,18 @@ declare interface DEScript {
      * @param DE 
      */
     initialize?(DE: DEObject): Promise<void> | void;
+
+    /**
+     * Called when a character needs clothing, during spawn time allowing the script to provide appropriate clothing for the character
+     * 
+     * Note that this is a special script call (basically called after the first scene has started and the clock is ready) and only called for characters that are set with the "clothing" property set to "auto"
+     * if you want to override all clothing regardless of the value of this property, you can use onWorldClockReady and override whatever clothing you might want
+     * 
+     * @param DE 
+     * @param character
+     * @returns true if the character was handled and given clothing, false if the character was not handled
+     */
+    onCharacterNeedsClothing?(DE: DEObject, character: DECompleteCharacterReference, fitment: "tight" | "loose" | "normal"): Promise<boolean> | boolean;
 
     /**
      * Important script where all the logic for the world is installed, this is where you set up the world, locations, characters, connections, etc... and also where you set up the main scene of the world and other important scenes

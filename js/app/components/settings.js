@@ -91,10 +91,21 @@ class Settings extends HTMLElement {
         const tabsContainer = this.root.querySelector('app-overlay-tabs');
 
         if (this.currentSectionIndex === 0 && tabsContainer) {
+            const optionsClothingDescriptions = [
+                "The world determines the initial clothing based on your species and other traits, this is the default option; note if the world does not handle clothing, you will spawn naked.",
+                "You will spawn naked, useful if you are an animal or feral creature, or if you want to role-play a nudist character.",
+            ];
+
             tabsContainer.innerHTML = `<app-overlay-section section-title="User">
             <div class="main-profile-image-container">
                 <app-profile-image image-url="profile" editable="true"></app-profile-image>
             </div>
+                <div class="profile-information-container" tabindex="0" role="text">
+                    <p>This is your own profile information for quick self-inserts, a self-insert is limited to be a very basic representation of a character that you handle during roleplay.</p>
+                    <p>If you want to get further complex experiences, specify clothing styles, spawning with specific items, and play as different personas, create a new character in the character generator; then when starting a world, play as that character instead of doing a self-insert.</p>
+                    <p>A proper character has emotional expressions, voice, sounds, and supports narration mode. Meanwhile Self-Inserts remain useful for quick roleplay.</p>
+                    <p>The AI agents cannot tell apart a self-insert from a proper fully fledged character, so both can be used effectively in roleplay. The difference is the experience they provide and narration mode support.</p>
+                </div>
                 <div class="profile-image-spacer"></div>
                 <app-overlay-input-warning>Changing any of these options will not affect previous game campaigns, only new ones.</app-overlay-input-warning>
                 <app-overlay-input
@@ -117,6 +128,21 @@ class Settings extends HTMLElement {
                     title="The type of species will affect how the AI interacts with your character in-game, influencing behaviors and interactions based on the species type."
                     input-data-location="user.speciesType"
                     input-default-value="humanoid"
+                ></app-overlay-select>
+                <app-overlay-select
+                    label="Initial Clothing"
+                    input-options='["auto", "naked"]'
+                    input-options-descriptions='${JSON.stringify(optionsClothingDescriptions)}'
+                    title="Sets the initial clothing of the character, this uses a default clothing that will try to fit your character and be randomly generated, you can change your clothes in-game, note that some worlds might override your initial clothing with their own, specially if you specify 'auto'."
+                    input-data-location="user.initialClothing"
+                    input-default-value="auto"
+                ></app-overlay-select>
+                <app-overlay-select
+                    label="Initial Clothing Fitment"
+                    input-options='["tight", "loose", "normal"]'
+                    title="Sets how tight or loose the initial clothing is on the character, this will affect how the clothing looks on your character and may influence how other characters perceive and interact with you in the game world."
+                    input-data-location="user.initialClothingFitment"
+                    input-default-value="normal"
                 ></app-overlay-select>
                 <app-overlay-input
                     label="Race"

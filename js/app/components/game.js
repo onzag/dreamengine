@@ -506,7 +506,7 @@ class GameOverlay extends HTMLElement {
                             shortDescription, shortDescriptionTopNakedAdd, shortDescriptionBottomNakedAdd,
                             stealth, perception, attractiveness, charisma,
                             tier, tierValue, apparentTier, apparentTierValue, powerGrowthRate,
-                            species, speciesType, race, groupBelonging,
+                            species, speciesType, race, groupBelonging, initialClothing, initialClothingFitment
                         ] = await Promise.all([
                             cfg('user.name'), cfg('user.sex'), cfg('user.gender'),
                             cfg('user.heightCm'), cfg('user.weightKg'), cfg('user.ageYears'),
@@ -516,14 +516,15 @@ class GameOverlay extends HTMLElement {
                             cfg('user.shortDescription'), cfg('user.shortDescriptionTopNakedAdd'), cfg('user.shortDescriptionBottomNakedAdd'),
                             cfg('user.stealth'), cfg('user.perception'), cfg('user.attractiveness'), cfg('user.charisma'),
                             cfg('user.tier'), cfg('user.tierValue'), cfg('user.apparentTier'), cfg('user.apparentTierValue'), cfg('user.powerGrowthRate'),
-                            cfg('user.species'), cfg('user.speciesType'), cfg('user.race'), cfg('user.groupBelonging'),
+                            cfg('user.species'), cfg('user.speciesType'), cfg('user.race'), cfg('user.groupBelonging'), cfg('user.initialClothing'), cfg('user.initialClothingFitment')
                         ]);
 
                         user = {
                             name,
-                            state: {
+                            metadata: {
                                 asset: "profile",
                             },
+                            clothing: initialClothing !== "auto" ? "custom" : (initialClothingFitment === "tight" ? "auto-tight" : (initialClothingFitment === "loose" ? "auto-loose" : "auto")),
                             sex: sex || "male",
                             gender: gender || sex || "male",
                             heightCm: typeof heightCm === "number" ? Number(heightCm) : 175,

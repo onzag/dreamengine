@@ -281,7 +281,16 @@ document.querySelector(".ambience")?.addEventListener("click", () => {
 let WORKER_READY = false;
 let DOM_READY = false;
 
-const index = Math.floor(Math.random() * 4);
+for (let i = 0; i < 10; i++) {
+    console.log(i, Math.random());
+}
+
+const array = new Uint32Array(1);
+crypto.getRandomValues(array);
+
+// used to use Math.random but somehow it was not random enough, so now we use crypto.getRandomValues to get a better random number
+// the streaks were statistically improbable, but they happened often enough to be noticeable, so we switched to a better random number generator
+const index = array[0] % 4;
 window.DREAM_AMBIENCE_CHOSEN = [
     "./sounds/dream-2.mp3",
     "./sounds/dream-2.mp3",
