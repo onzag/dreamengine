@@ -1029,7 +1029,7 @@ class PlayOverlay extends HTMLElement {
         } else if (this.selectedDreamStability === 'very unstable') {
             overlay.classList.add('stability-very-unstable');
 
-            await stopAllAmbiencesAndStartNewOne([{ id: 'awakening-astral', srcs: [{ src: './sounds/awakening-astral.mp3', fadeDurationMs: 1000, volume: 2 }] }], 1000);
+            await stopAllAmbiencesAndStartNewOne([{ id: 'awakening-astral', srcs: [{ src: './sounds/awakening-astral.mp3', fadeDurationMs: 2000, volume: 1.5 }] }], 1000);
         } else {
             await stopAllAmbiencesAndStartNewOne([{ id: 'awakening-ambience', srcs: [{ src: './sounds/awakening-ambience.mp3', fadeDurationMs: 1000, volume: 1.5 }] }], 1000);
         }

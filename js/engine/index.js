@@ -18,6 +18,7 @@ import { talk } from "./gears/talk.js";
 import { millisecondsToTime } from "./util/time.js";
 import { regenerateDEFromSavedDE, removeUnnecessaryPropertiesFromDE } from "./util/save-de.js";
 import runAllTriggersFor from "./gears/triggers-run.js";
+import { giveCharacterRandomClothing } from "./util/clothing.js";
 
 const INVALID_NAMES = ["system", "assistant", "user", "everyone", "nobody",
     "anyone", "somebody", "narrator", "observer", "admin", "moderator",
@@ -1032,21 +1033,7 @@ export class DEngine {
                         // check if the character is naked and humanoid, if so try to find some clothes at least
                         const charState = this.deObject.stateFor[charName];
                         if (char.speciesType === "humanoid") {
-                            const isBottomNaked = !charState.wearing.some(item => item.wearableProperties?.coversBottomNakedness);
-                            let isTopNaked = !charState.wearing.some(item => item.wearableProperties?.coversTopNakedness);
-                            if (isBottomNaked) {
-                                // first let's find underwear that covers bottom nakedness, if we can
-                                // find something in the world that covers bottom nakedness and clone that...
-                                // hoping it is not some legendary item
-                                // TODO
-                                // TODO update isTopNaked if that what we found covers top nakedness too
-                            }
-                            if (isTopNaked) {
-                                // first find underwear that cover tops nakedness if the character is female
-                                // find something in the world that covers top nakedness and clone that...
-                                // hoping it is not some legendary item
-                                // TODO
-                            }
+                            giveCharacterRandomClothing(char, charState, this.deObject.world, fitment);
                         }
                     }
                 }

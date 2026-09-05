@@ -2222,6 +2222,18 @@ declare interface DEItem {
         underwear: boolean;
         preferredGender: "male" | "female" | "any";
         /**
+         * Prevents this item from being randomly spawned and duplicated on a character, for example
+         * a legendary robe should not be randomly given to a character, the random clothing spawn
+         * system is used when the World does not handle clothing for a naked character that requests
+         * to be dressed, so this boolean prevents that system from randomly giving this item to a character.
+         * 
+         * This should also be used if the item is too specific to a body size or type, as the standard
+         * clothing spawn system will copy and resize the item to fit.
+         * 
+         * Normally the world should handle clothing for characters, the world script might ignore this boolean attribute, but the engine cares.
+         */
+        noRandomClothingSpawn: boolean;
+        /**
          * The minimum and maximum volume in liters that this item is meant to fit when worn by the character
          */
         volumeRangeMinLiters: number;
