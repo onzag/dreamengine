@@ -2232,7 +2232,7 @@ declare interface DEItem {
          * 
          * Normally the world should handle clothing for characters, the world script might ignore this boolean attribute, but the engine cares.
          */
-        noRandomClothingSpawn: boolean;
+        noRandomClothingSpawn?: boolean;
         /**
          * The minimum and maximum volume in liters that this item is meant to fit when worn by the character
          */

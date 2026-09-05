@@ -108,6 +108,7 @@
 /**
  * @typedef {Object} WorldMetadataFields
  * @property {ThemeSong} [theme] - the theme song of the world
+ * @property {CharacterVoiceEntry} [narrationVoice] - the voice of the narrator, if not specified, the default narrator voice will be used
  */
 
 /**

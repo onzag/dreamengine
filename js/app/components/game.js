@@ -522,7 +522,9 @@ class GameOverlay extends HTMLElement {
                         user = {
                             name,
                             metadata: {
-                                asset: "profile",
+                                assets: {
+                                    neutral: "profile",
+                                },
                             },
                             clothing: initialClothing !== "auto" ? "custom" : (initialClothingFitment === "tight" ? "auto-tight" : (initialClothingFitment === "loose" ? "auto-loose" : "auto")),
                             sex: sex || "male",
@@ -610,7 +612,7 @@ class GameOverlay extends HTMLElement {
                                 });
                                 // eslint-disable-next-line no-await-in-loop
                                 const assetImage = await window.ENGINE_WORKER_CLIENT.queryDEObject({
-                                    path: ["characters", charInfo.name, "metadata", "asset", "neutral"],
+                                    path: ["characters", charInfo.name, "metadata", "assets", "neutral"],
                                 }) || "";
                                 characterOptions.push({
                                     name: charInfo.name,
@@ -710,7 +712,7 @@ class GameOverlay extends HTMLElement {
     async onInitialSceneSelect() {
         try {
             const actualUserName = await window.ENGINE_WORKER_CLIENT.queryDEObject({
-                path: ["user", "name"],
+                path: ["user"],
             });
             const currentSelectedScene = await window.ENGINE_WORKER_CLIENT.queryDEObject({
                 path: ["world", "selectedScene"],
@@ -890,6 +892,13 @@ class GameOverlay extends HTMLElement {
             const locationCandidate = buildCandidate(locationMetadataInfo?.asset);
             if (locationCandidate) candidates.push(locationCandidate);
 
+            const worldId = this.getAttribute('world-id') || '';
+            const worldNamespace = this.getAttribute('world-namespace') || '';
+            const isSystemNamespace = worldNamespace.startsWith('@');
+            const base = isSystemNamespace ? window.DREAMENGINE_DEFAULT_SCRIPTS_HOME : window.DREAMENGINE_HOME;
+            const worldImageAssetDefault = base + "/" + (isSystemNamespace ? "@" : "") + `assets/${isSystemNamespace ? worldNamespace.slice(1) : worldNamespace}/${worldId}/image`;
+            candidates.push({ assetPath: worldImageAssetDefault, fullUrl: worldImageAssetDefault, isWorldImage: true });
+
             let chosenAssetPath = ''; // empty -> <app-asset-image> shows default
             let chosenFullUrl = fallbackBgUrl;
 
@@ -1025,7 +1034,7 @@ class GameOverlay extends HTMLElement {
             const isIndoors = !!locationGeneralInfo?.isIndoors;
 
             const userCharacterName = await window.ENGINE_WORKER_CLIENT.queryDEObject({
-                path: ["user", "name"],
+                path: ["user"],
             });
 
             // Resolve each slot's asset path and metadata.
@@ -1238,7 +1247,7 @@ class GameOverlay extends HTMLElement {
                 path: ["world", "currentLocationSlot"],
             });
             const userName = await window.ENGINE_WORKER_CLIENT.queryDEObject({
-                path: ["user", "name"],
+                path: ["user"],
             });
             const charactersAtLocation = await Promise.all((await window.ENGINE_WORKER_CLIENT.queryDEObject({
                 path: ["utils", "allCharactersAtLocation"],
@@ -1341,7 +1350,7 @@ class GameOverlay extends HTMLElement {
                 // Resolve portrait: state asset > script default 'image' > default-profile fallback.
                 // eslint-disable-next-line no-await-in-loop
                 const assetImage = await window.ENGINE_WORKER_CLIENT.queryDEObject({
-                    path: ["characters", char.name, "metadata", "asset", "neutral"],
+                    path: ["characters", char.name, "metadata", "assets", "neutral"],
                 }) || "";
 
                 const img = card.querySelector('app-asset-image');
@@ -1503,7 +1512,7 @@ class GameOverlay extends HTMLElement {
     async updateStory() {
         try {
             const actualUserName = await window.ENGINE_WORKER_CLIENT.queryDEObject({
-                path: ["user", "name"],
+                path: ["user"],
             });
             const history = await window.ENGINE_WORKER_CLIENT.getHistoryForCharacter({
                 characterName: actualUserName,
@@ -1928,7 +1937,7 @@ class GameOverlay extends HTMLElement {
             if (typeof actualUserName !== 'string' || !actualUserName) return;
 
             const assetImage = await window.ENGINE_WORKER_CLIENT.queryDEObject({
-                path: ["characters", actualUserName, "metadata", "asset", "neutral"],
+                path: ["characters", actualUserName, "metadata", "assets", "neutral"],
             }) || "profile";
 
             const userCharacter = await window.ENGINE_WORKER_CLIENT.queryDEObject({
@@ -2380,7 +2389,7 @@ class GameOverlay extends HTMLElement {
         let saveNameIsEstablished = true;
         if (!saveName) {
             const actualUserName = await window.ENGINE_WORKER_CLIENT.queryDEObject({
-                path: ["user", "name"],
+                path: ["user"],
             });
             saveName = await window.ENGINE_WORKER_CLIENT.queryDEObject({
                 path: ["world", "selectedScene"],
@@ -2555,9 +2564,10 @@ class GameOverlay extends HTMLElement {
         // will overwrite it once the engine reports the actual asset path.
         const fallbackBgUrl = './images/default-world.png';
         const worldBgUrl = fallbackBgUrl;
-        // Asset path is empty on initial render; <app-asset-image> shows its
-        // default-image until updateLocation() resolves the actual asset.
-        const worldAssetPath = '';
+        // Default asset path determined by world-id and namespace
+
+        const isSystemAsset = worldNamespace.startsWith('@');
+        const worldAssetPath = (isSystemAsset ? "@" : "") + `assets/${isSystemAsset ? worldNamespace.slice(1) : worldNamespace}/${worldId}/image`;
 
         this.root.innerHTML = `
         <link rel="stylesheet" href="components/game.css">
