@@ -2978,6 +2978,23 @@ declare interface DEStatefulLocationDefinition extends DELocationDefinition {
     }
 }
 
+declare interface DEConversationMessageNarration {
+    type: "narration";
+    text: string;
+    __debug_id?: string;
+}
+
+declare interface DEConversationMessageDialogue {
+    type: "dialogue";
+    fragments: Array<DEConversationMessageDialogueFragment>;
+    __debug_id?: string;
+}
+
+declare interface DEConversationMessageDialogueFragment {
+    type: "narration" | "dialogue";
+    text: string;
+}
+
 declare interface DEConversationMessage {
     /**
      * Id of the message
@@ -3030,7 +3047,7 @@ declare interface DEConversationMessage {
     /**
      * The content of the message
      */
-    content: string;
+    content: Array<DEConversationMessageNarration | DEConversationMessageDialogue>;
     /**
      * Hidden content, metadata, etc...
      */

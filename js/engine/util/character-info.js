@@ -286,7 +286,7 @@ export function isTopNaked(deObject, characterName) {
 
     const wearingItems = charState.wearing;
     for (const item of wearingItems) {
-        if (item.amount > 0) {
+        if (item.amount <= 0) {
             continue;
         }
         if (item.wearableProperties?.coversTopNakedness) {
@@ -309,7 +309,7 @@ export function isBottomNaked(deObject, characterName) {
 
     const wearingItems = charState.wearing;
     for (const item of wearingItems) {
-        if (item.amount > 0) {
+        if (item.amount <= 0) {
             continue;
         }
         if (item.wearableProperties?.coversBottomNakedness) {
@@ -650,27 +650,25 @@ export async function getExternalDescriptionOfCharacter(deObject, characterName,
     const topNaked = isTopNaked(deObject, characterName);
     const bottomNaked = isBottomNaked(deObject, characterName);
 
-    const hasItemsCoveringTopNakedness = !topNaked;
-    if (!hasItemsCoveringTopNakedness && character.shortDescriptionTopNakedAdd) {
+    if (topNaked && character.shortDescriptionTopNakedAdd) {
         const lowercaseFirstLetter = character.shortDescriptionTopNakedAdd.charAt(0).toLowerCase();
         const restOfString = character.shortDescriptionTopNakedAdd.slice(1);
         finalDescription += ` Not wearing any clothes on the upper body, ${lowercaseFirstLetter + restOfString}`;
         if (!finalDescription.endsWith(".")) {
             finalDescription += ".";
         }
-    } else if (!hasItemsCoveringTopNakedness) {
+    } else if (topNaked) {
         finalDescription += ` Not wearing any clothes on the upper body.`;
     }
 
-    const hasItemsCoveringBottomNakedness = !bottomNaked;
-    if (!hasItemsCoveringBottomNakedness && character.shortDescriptionBottomNakedAdd) {
+    if (bottomNaked && character.shortDescriptionBottomNakedAdd) {
         const lowercaseFirstLetter = character.shortDescriptionBottomNakedAdd.charAt(0).toLowerCase();
         const restOfString = character.shortDescriptionBottomNakedAdd.slice(1);
         finalDescription += ` Not wearing any clothes on the lower body, ${lowercaseFirstLetter + restOfString}`;
         if (!finalDescription.endsWith(".")) {
             finalDescription += ".";
         }
-    } else if (!hasItemsCoveringBottomNakedness) {
+    } else if (bottomNaked) {
         finalDescription += ` Not wearing any clothes on the lower body.`;
     }
     

@@ -522,7 +522,7 @@ export async function talk(engine, character, options) {
      */
     const nextMessage = {
         canOnlyBeSeenByCharacter: null,
-        content: "",
+        content: [],
         // This gets set later by time-forwards.js
         duration: {
             inDays: 0,
@@ -591,14 +591,10 @@ export async function talk(engine, character, options) {
     let nextToGenerate = getNextToGenerate();
     let nextToGenerateIsSameAsPreviousButNarrativeAction = false;
 
-    let hasHiddenContent = false;
-    let hasStandardContent = false;
     let fragmentCount = -1;
     while (nextToGenerate) {
         fragmentCount++;
         let generatedMessage = "";
-        let hasYieldDoubleLineHidden = false;
-        let hasYieldDoubleLineStandard = false;
 
         /**
          * @type {string|null}
@@ -608,9 +604,32 @@ export async function talk(engine, character, options) {
             followingAction = (`${nextToGenerate.narrativeAction}`);
             console.log("Generating next narrative action: " + nextToGenerate.narrativeAction);
         } else if (nextToGenerate.action) {
-            followingAction = (`OOC, '${character.name} must take the following action next: ${nextToGenerate.action}`);
+            followingAction = (`OOC, '${character.name} must take the following action next: ${nextToGenerate.action}'`);
             console.log("Generating next " + nextToGenerate.type + (nextToGenerate.action ? ` with action: ${nextToGenerate.action}` : ""));
         }
+
+        const nextIsNarration = nextToGenerateIsSameAsPreviousButNarrativeAction ? true : nextToGenerate.type === "narration"
+
+        /**
+         * @type {DEConversationMessageDialogue | DEConversationMessageNarration}
+         */
+        const currentBlock = nextIsNarration ? {
+            type: "narration",
+            text: "",
+            __debug_id: nextMessage.id + "__" + fragmentCount,
+        } : {
+            type: "dialogue",
+            fragments: [],
+            __debug_id: nextMessage.id + "__" + fragmentCount,
+        };
+        nextMessage.content.push(currentBlock);
+
+        engine.triggerInferingOverConversationMessage(engine.deObject, {
+            conversationId: charState.conversationId,
+            messageId: nextMessage.id,
+            event: nextIsNarration ? "add-narration-block" : "add-dialogue-block",
+            __debug_id: nextMessage.id + "__" + fragmentCount,
+        });
 
         const generator = engine.inferenceAdapter.inferNextStoryFragmentFor(
             character,
@@ -623,7 +642,7 @@ export async function talk(engine, character, options) {
                 narrativeEffects,
                 grammar: nextToGenerateIsSameAsPreviousButNarrativeAction ? grammar.narrative : (nextToGenerate.type === "dialogue" ? grammar.dialogue : grammar.narrative),
                 activeStates,
-                narration: nextToGenerateIsSameAsPreviousButNarrativeAction ? true : nextToGenerate.type === "narration",
+                narration: nextIsNarration,
 
                 __debug_id: nextMessage.id + "__" + fragmentCount,
 
@@ -632,6 +651,9 @@ export async function talk(engine, character, options) {
             },
         );
 
+        // dialogue specific
+        let insideNarration = nextIsNarration;
+
         let next = await generator.next(true);
         while (!next.done || next.value) {
             const info = next.value;
@@ -639,38 +661,72 @@ export async function talk(engine, character, options) {
                 if (info.type === "warning") {
                     engine.informCycleState("warning", info.content);
                 } else if (info.type === "hidden") {
-                    const contentToSend = hasStandardContent && !hasYieldDoubleLineHidden ? "\n\n" + info.content : info.content;
-                    engine.triggerInferingOverConversationMessage(engine.deObject, {
-                        conversationId: charState.conversationId,
-                        messageId: nextMessage.id,
-                        text: contentToSend,
-                        hidden: true,
-                    });
-                    if (!nextMessage.hiddenContent) {
-                        nextMessage.hiddenContent = contentToSend;
-                    } else {
-                        nextMessage.hiddenContent += contentToSend;
+
+                } else if (info.type === "text" && nextIsNarration) {
+                    // replace all asterisks with nothing
+                    let textToStream = info.content.replace(/\*/g, "");
+                    if (!generatedMessage.length) {
+                        textToStream = textToStream.trimStart();
                     }
-                    hasYieldDoubleLineHidden = true;
-                    hasHiddenContent = true;
-                } else if (info.type === "text") {
+
                     generatedMessage += info.content;
-                    const contentToSend = hasStandardContent && !hasYieldDoubleLineStandard ? "\n\n" + info.content : info.content;
-                    engine.triggerInferingOverConversationMessage(engine.deObject, {
-                        conversationId: charState.conversationId,
-                        messageId: nextMessage.id,
-                        text: contentToSend,
-                        hidden: false,
-                    });
-                    nextMessage.content += contentToSend;
-                    hasYieldDoubleLineStandard = true;
-                    hasStandardContent = true;
+
+                    if (textToStream) {
+                        engine.triggerInferingOverConversationMessage(engine.deObject, {
+                            conversationId: charState.conversationId,
+                            messageId: nextMessage.id,
+                            text: textToStream,
+                            event: "add-narration",
+                        });
+                    }
+                } else if (info.type === "text" && !nextIsNarration) {
+                    // replace all asterisks with nothing
+                    let textToStream = info.content.replace(/\*/g, "");
+                    if (!generatedMessage.length) {
+                        textToStream = textToStream.trimStart();
+                    }
+
+                    generatedMessage += info.content;
+
+                    // check if em dash in the text
+                    if (textToStream.includes("—")) {
+                        const splitted = textToStream.split("—").map((s) => s.trim());
+                        for (let i = 0; i < splitted.length; i++) {
+                            const part = splitted[i];
+                            const needsFlipping = i > 0;
+                            if (needsFlipping) {
+                                insideNarration = !insideNarration;
+                            }
+
+                            if (part) {
+                                engine.triggerInferingOverConversationMessage(engine.deObject, {
+                                    conversationId: charState.conversationId,
+                                    messageId: nextMessage.id,
+                                    text: part,
+                                    event: insideNarration ? "add-narration" : "add-dialogue",
+                                });
+                            }
+                        }
+                    } else if (textToStream) {
+                        engine.triggerInferingOverConversationMessage(engine.deObject, {
+                            conversationId: charState.conversationId,
+                            messageId: nextMessage.id,
+                            text: textToStream,
+                            event: insideNarration ? "add-narration" : "add-dialogue",
+                        });
+                    }
                 }
             }
             if (!next.done) {
                 next = await generator.next(true);
             }
         }
+
+        engine.triggerInferingOverConversationMessage(engine.deObject, {
+            conversationId: charState.conversationId,
+            messageId: nextMessage.id,
+            event: "done",
+        });
 
         console.log("\nFinished receiving text chunk from inference adapter.");
         trailingMessages.push(generatedMessage);

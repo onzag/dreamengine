@@ -40,6 +40,15 @@ const INVALID_NAMES = ["system", "assistant", "user", "everyone", "nobody",
  */
 
 /**
+ * @typedef {Object} EngineConversationEvent
+ * @property {string} conversationId
+ * @property {string} messageId
+ * @property {string} [text]
+ * @property {string} [__debug_id]
+ * @property {"add-narration-block" | "add-dialogue-block" | "add-hidden-block" | "add-narration" | "add-dialogue" | "done" } event
+ */
+
+/**
  * @param {DEMinimalCharacterReference} character 
  * @return {DEMinimalCharacterReference}
  */
@@ -108,6 +117,7 @@ export function createCharacterFromUser(user) {
             likelyhood: 0,
             questions: [],
         },
+        clothing: user.clothing || "auto",
         metadata: user.metadata || {},
         curiosity: 0,
         skepticism: 0,
@@ -245,7 +255,7 @@ export class DEngine {
          */
         this.thinkingListeners = [];
         /**
-         * @type {((obj: DEObject, data: {conversationId: string, messageId: string, text: string, hidden: boolean}) => void)[]}
+         * @type {((obj: DEObject, event: EngineConversationEvent) => void)[]}
          */
         this.startsToInferOverConversationMessageListeners = [];
 
@@ -1050,7 +1060,12 @@ export class DEngine {
                         id: `${sceneId}_MESSAGE_0`,
                         canOnlyBeSeenByCharacter: null,
                         // we specify the weather changing only if we stayed at the same place
-                        content: !didChangeLocation && timeForwardsMessages.length ? (timeForwardsMessages.join("\n\n") + "\n\n" + narration) : narration,
+                        content: [
+                            {
+                                type: "narration",
+                                text: !didChangeLocation && timeForwardsMessages.length ? (timeForwardsMessages.join("\n\n") + "\n\n" + narration) : narration,
+                            },
+                        ],
                         sender: "Story Master",
                         duration: {
                             inDays: 0,
@@ -1104,14 +1119,15 @@ export class DEngine {
                     return;
                 }
 
-                index++;
+                // some normalization
+                const actualMessages = messages.map((text) => text.trim()).filter((text) => text.length > 0).join("\n\n").split("\n\n");
 
-                const messageCombined = messages.join("\n\n");
+                index++;
                 this.deObject.conversations[sceneId].messages.push({
                     id: `${sceneId}_MESSAGE_${index}`,
                     // @ts-ignore
                     canOnlyBeSeenByCharacter: userOnly ? this.userCharacter.name : null,
-                    content: messageCombined,
+                    content: actualMessages.map((text) => ({ type: "narration", text })),
                     sender: "Story Master",
                     duration: {
                         inDays: 0,
@@ -1657,14 +1673,14 @@ export class DEngine {
     }
 
     /**
-     * @param {(obj: DEObject, data: {conversationId: string, messageId: string, text: string, hidden: boolean}) => void} listener 
+     * @param {(obj: DEObject, event: EngineConversationEvent) => void} listener 
      */
     addInferringOverConversationMessageListener(listener) {
         this.startsToInferOverConversationMessageListeners.push(listener);
     }
 
     /**
-     * @param {(obj: DEObject, data: {conversationId: string, messageId: string, text: string, hidden: boolean}) => void} listener 
+     * @param {(obj: DEObject, event: EngineConversationEvent) => void} listener 
      */
     removeInferringOverConversationMessageListener(listener) {
         this.startsToInferOverConversationMessageListeners = this.startsToInferOverConversationMessageListeners.filter(l => l !== listener);
@@ -1672,12 +1688,12 @@ export class DEngine {
 
     /**
      * @param {DEObject} deObject 
-     * @param {{conversationId: string, messageId: string, text: string, hidden: boolean}} data
+     * @param {EngineConversationEvent} event
      */
-    triggerInferingOverConversationMessage(deObject, data) {
+    triggerInferingOverConversationMessage(deObject, event) {
         for (const listener of this.startsToInferOverConversationMessageListeners) {
             try {
-                listener(deObject, data);
+                listener(deObject, event);
             } catch (e) {
                 console.error("Error in inferring over conversation message listener:", e);
             }
@@ -1690,8 +1706,6 @@ export class DEngine {
     async executeCommand(commandText) {
         if (!this.deObject) {
             throw new Error("DEngine not initialized");
-        } else if (!this.user) {
-            throw new Error("DEngine has no user character defined");
         }
         const command = commandText.slice(1).trim().split(" ")[0].toLowerCase();
 

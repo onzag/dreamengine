@@ -97,6 +97,19 @@ function buildClothingSearchOrder(world, startLocationId) {
 }
 
 /**
+ * Recursively collects all items from an item tree (containing + ontop) that
+ * satisfy `matchFn`.
+ * @param {DEItem} item
+ * @param {(item: DEItem) => boolean} matchFn
+ * @param {DEItem[]} out
+ */
+function collectMatchingItems(item, matchFn, out) {
+    if (matchFn(item)) out.push(item);
+    for (const child of item.containing) collectMatchingItems(child, matchFn, out);
+    for (const child of item.ontop) collectMatchingItems(child, matchFn, out);
+}
+
+/**
  * Searches every location in `searchOrder` for an item that satisfies `matchFn`.
  * Items within each location are checked in a randomised order so different
  * calls return variety even when the same location is visited.
@@ -111,16 +124,18 @@ function findClothingItem(world, searchOrder, matchFn) {
         const location = world.locations[locationId];
         if (!location) continue;
 
+        /**
+         * @type {DEItem[]}
+         */
         const candidates = [];
         for (const slot of Object.values(location.slots)) {
             for (const item of slot.items) {
-                if (matchFn(item)) candidates.push(item);
+                collectMatchingItems(item, matchFn, candidates);
             }
         }
 
         if (candidates.length > 0) {
-            shuffleArray(candidates);
-            return candidates[0];
+            return candidates[Math.floor(Math.random() * candidates.length)];
         }
     }
     return null;
@@ -133,6 +148,7 @@ function findClothingItem(world, searchOrder, matchFn) {
  */
 export function resizeClothingItem(item, character, fitment) {
     const newItem = structuredClone(item);
+    newItem.amount = 1; // ensure we only give one of the item, not a stack
     if (!newItem.wearableProperties) return newItem; // narrows type; structuredClone doesn't carry through the guard above
     const idealWeightForItem = (newItem.wearableProperties.volumeRangeMaxLiters + newItem.wearableProperties.volumeRangeMinLiters) / 2;
     const step = (newItem.wearableProperties.volumeRangeMaxLiters - newItem.wearableProperties.volumeRangeMinLiters);
@@ -200,11 +216,11 @@ export function resizeClothingItem(item, character, fitment) {
  * @param {"tight" | "loose" | "normal"} fitment
  */
 export function giveCharacterRandomClothing(character, charState, world, fitment) {
-    const isNotWearingBottomClothes = !charState.wearing.some(item => item.wearableProperties?.coversBottomNakedness && !item.wearableProperties.underwear);
-    const isNotWearingBottomUnderwear = !charState.wearing.some(item => item.wearableProperties?.coversBottomNakedness && item.wearableProperties.underwear);
-    const isNotWearingTopClothes = !charState.wearing.some(item => item.wearableProperties?.coversTopNakedness && !item.wearableProperties.underwear);
+    let isNotWearingBottomClothes = !charState.wearing.some(item => item.wearableProperties?.coversBottomNakedness && !item.wearableProperties.underwear);
+    let isNotWearingBottomUnderwear = !charState.wearing.some(item => item.wearableProperties?.coversBottomNakedness && item.wearableProperties.underwear);
+    let isNotWearingTopClothes = !charState.wearing.some(item => item.wearableProperties?.coversTopNakedness && !item.wearableProperties.underwear);
     // we don't want to give a male character top underwear so it defaults to true for male
-    const isNotWearingTopUnderwear = character.gender === "male" ? true : !charState.wearing.some(item => item.wearableProperties?.coversTopNakedness && item.wearableProperties.underwear);
+    let isNotWearingTopUnderwear = character.gender === "male" ? false : !charState.wearing.some(item => item.wearableProperties?.coversTopNakedness && item.wearableProperties.underwear);
 
     /**
      * Returns true when the item's preferred gender is compatible with this character.
@@ -241,7 +257,12 @@ export function giveCharacterRandomClothing(character, charState, world, fitment
                 isGenderCompatible(item)
             );
         }
-        if (item) charState.wearing.push(structuredClone(item));
+        if (item) {
+            charState.wearing.push(resizeClothingItem(item, character, fitment));
+            if (item.wearableProperties?.coversTopNakedness) {
+                isNotWearingTopClothes = false;
+            }
+        }
     }
 
     if (isNotWearingBottomUnderwear) {
@@ -252,7 +273,12 @@ export function giveCharacterRandomClothing(character, charState, world, fitment
             !item.wearableProperties.noRandomClothingSpawn &&
             isGenderCompatible(item)
         );
-        if (item) charState.wearing.push(structuredClone(item));
+        if (item) {
+            charState.wearing.push(resizeClothingItem(item, character, fitment));
+            if (item.wearableProperties?.coversTopNakedness) {
+                isNotWearingTopUnderwear = false;
+            }
+        }
     }
 
     if (isNotWearingTopClothes) {
@@ -274,7 +300,7 @@ export function giveCharacterRandomClothing(character, charState, world, fitment
                 isGenderCompatible(item)
             );
         }
-        if (item) charState.wearing.push(structuredClone(item));
+        if (item) charState.wearing.push(resizeClothingItem(item, character, fitment));
     }
 
     // Top underwear (e.g. bras) is only relevant for non-male characters.
@@ -288,6 +314,6 @@ export function giveCharacterRandomClothing(character, charState, world, fitment
             !item.wearableProperties.noRandomClothingSpawn &&
             isGenderCompatible(item)
         );
-        if (item) charState.wearing.push(structuredClone(item));
+        if (item) charState.wearing.push(resizeClothingItem(item, character, fitment));
     }
 }

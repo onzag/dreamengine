@@ -112,6 +112,7 @@ engine.exports = {
                 },
                 sounds: {},
             }),
+            clothing: "custom",
             name: "Dema",
             shortDescription: "A human sized anthropomorphic robot with a blue and white color scheme and a reflective visor.",
             shortDescriptionTopNakedAdd: "showing its sleek robotic body.",
