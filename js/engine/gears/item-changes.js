@@ -1,6 +1,6 @@
 import { DEngine } from "../index.js";
 import { getBeingCarriedByCharacter, getCharacterExactLocation, getExternalDescriptionOfCharacter } from "../util/character-info.js";
-import { getHistoryFragmentForCharacter } from "../util/messages.js";
+import { convertMessagesToSimpleList, getHistoryFragmentForCharacter } from "../util/messages.js";
 import { getCharacterCarryingCapacity, getCharacterVolume, getCharacterWeight, getItemExcessElements, getItemVolume, getItemWeight, getWearableFitment, isAlreadyPlural, isSingularOfPlural, locationPathToMessage, locationPathToMessageWithoutItemName, resolvePath, utilItemCount } from "../util/weight-and-volume.js";
 import { yesNoGrammar, isYes } from "../util/grammar.js";
 import { getFullItemListAtLocation } from "../util/items.js";
@@ -117,8 +117,10 @@ export default async function calculateItemChanges(engine, character) {
         msgLimit: "LAST_CYCLE",
     })).messages;
 
+    const lastCycleExpandedConverted = convertMessagesToSimpleList(lastCycleExpanded);
+
     // collect matched items with their first occurrence index so we can sort by mention order
-    const lastCycleMessagesCombinedLowerCase = lastCycleMessages.map(m => m.message).join("\n\n").toLowerCase();
+    const lastCycleMessagesCombinedLowerCase = convertMessagesToSimpleList(lastCycleMessages).map(m => m.message).join("\n\n").toLowerCase();
     const matchedItems = [];
     for (const item of itemsAtLocation) {
         const itemLowerCase = item.toLowerCase();
@@ -149,7 +151,7 @@ export default async function calculateItemChanges(engine, character) {
             {
                 system: systemPromptItemsInteracted,
                 contextInfoBefore: null,
-                messages: lastCycleExpanded,
+                messages: lastCycleExpandedConverted,
                 contextInfoAfter: null,
                 remarkLastStoryFragmentForAnalysis: true,
             },
@@ -252,7 +254,7 @@ export default async function calculateItemChanges(engine, character) {
         {
             system: systemPromptCharactersInteracted,
             contextInfoBefore: null,
-            messages: lastCycleExpanded,
+            messages: lastCycleExpandedConverted,
             contextInfoAfter: null,
             remarkLastStoryFragmentForAnalysis: true,
         },
@@ -320,7 +322,7 @@ export default async function calculateItemChanges(engine, character) {
         {
             system: systemPrompt,
             contextInfoBefore: null,
-            messages: lastCycleExpanded,
+            messages: lastCycleExpandedConverted,
             contextInfoAfter: null,
             remarkLastStoryFragmentForAnalysis: true,
         },
@@ -1745,7 +1747,7 @@ export default async function calculateItemChanges(engine, character) {
 
     await interactionGenerator.next(null); // finish the generator
 
-    await cleanAll(engine, charState.location, lastCycleMessages, addedMessagesForStoryMaster, charactersThatMoved);
+    await cleanAll(engine, charState.location, convertMessagesToSimpleList(lastCycleMessages), addedMessagesForStoryMaster, charactersThatMoved);
 
     // Update interacting characters
     for (const message of lastCycleMessages) {

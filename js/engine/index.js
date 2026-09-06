@@ -9,8 +9,6 @@ import testMessageFeasibilityForCharacter from "./gears/feasibility-check.js";
 import { getCharacterVolume, getCharacterWeight, getItemVolume, getItemWeight, getWearableFitment, locationPathToMessage } from "./util/weight-and-volume.js";
 import { getAllItemsCharacterIsInsideOf, getBeingCarriedByCharacter, getCharacterExactLocation, getExternalDescriptionOfCharacter, getListOfCarriedCharactersByCharacter, getSurroundingCharacters, isBottomNaked, isTopNaked } from "./util/character-info.js";
 import { DEJSEngine } from "../jsengine/index.js";
-import defaultNamePool from "./util/name-pool.js";
-import { getHistoryFragmentForCharacter } from "./util/messages.js";
 import calculatePostureChange from "./gears/posture-change.js";
 import calculateItemChanges from "./gears/item-changes.js";
 import timeForwardsUsingLastMessage, { rerollWorldWeather, timeForwardsToNewTime } from "./gears/time-forwards.js";
@@ -43,6 +41,7 @@ const INVALID_NAMES = ["system", "assistant", "user", "everyone", "nobody",
  * @typedef {Object} EngineConversationEvent
  * @property {string} conversationId
  * @property {string} messageId
+ * @property {number} contentIndex
  * @property {string} [text]
  * @property {string} [__debug_id]
  * @property {"add-narration-block" | "add-dialogue-block" | "add-hidden-block" | "add-narration" | "add-dialogue" | "done" } event

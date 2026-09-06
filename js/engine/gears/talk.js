@@ -2,7 +2,7 @@ import { DEngine } from "../index.js";
 import { getCharacterCanSee, getSysPromptForCharacter } from "../util/character-info.js";
 import { emotions } from "../util/emotions.js";
 import { createGrammarFromList, generateGrammarForVocabulary, parseListFromGrammarResponse } from "../util/grammar.js";
-import { getHistoryFragmentForCharacter } from "../util/messages.js";
+import { convertMessagesToSimpleList, getHistoryFragmentForCharacter } from "../util/messages.js";
 import { mergeVocabularyLimits } from "../util/vocabulary.js";
 
 /**
@@ -277,7 +277,7 @@ export async function talk(engine, character, options) {
         const generator = engine.inferenceAdapter.runQuestioningCustomAgentOn("talk", {
             system: systemPromptForEmotion,
             contextInfoBefore: null,
-            messages: lastCycleExtended.messages,
+            messages: convertMessagesToSimpleList(lastCycleExtended.messages),
             contextInfoAfter: ([
                 emotionsList,
                 ...characterSystemPrompt.internalDescription.stateInjections,
@@ -628,13 +628,14 @@ export async function talk(engine, character, options) {
             conversationId: charState.conversationId,
             messageId: nextMessage.id,
             event: nextIsNarration ? "add-narration-block" : "add-dialogue-block",
+            contentIndex: nextMessage.content.length - 1,
             __debug_id: nextMessage.id + "__" + fragmentCount,
         });
 
         const generator = engine.inferenceAdapter.inferNextStoryFragmentFor(
             character,
             {
-                messages,
+                messages: convertMessagesToSimpleList(messages),
                 messagesTrail: trailingMessages,
                 system: characterSystemPrompt.sysprompt,
                 stateInjections: characterSystemPrompt.internalDescription.stateInjections,
@@ -677,6 +678,7 @@ export async function talk(engine, character, options) {
                             messageId: nextMessage.id,
                             text: textToStream,
                             event: "add-narration",
+                            contentIndex: nextMessage.content.length - 1,
                         });
                     }
                 } else if (info.type === "text" && !nextIsNarration) {
@@ -696,6 +698,11 @@ export async function talk(engine, character, options) {
                             const needsFlipping = i > 0;
                             if (needsFlipping) {
                                 insideNarration = !insideNarration;
+                                const currentBlockAsDialoge = /** @type {DEConversationMessageDialogue} */ (currentBlock);
+                                currentBlockAsDialoge.fragments.push({
+                                    type: insideNarration ? "narration" : "dialogue",
+                                    text: part || "",
+                                });
                             }
 
                             if (part) {
@@ -704,6 +711,7 @@ export async function talk(engine, character, options) {
                                     messageId: nextMessage.id,
                                     text: part,
                                     event: insideNarration ? "add-narration" : "add-dialogue",
+                                    contentIndex: nextMessage.content.length - 1,
                                 });
                             }
                         }
@@ -713,7 +721,10 @@ export async function talk(engine, character, options) {
                             messageId: nextMessage.id,
                             text: textToStream,
                             event: insideNarration ? "add-narration" : "add-dialogue",
+                            contentIndex: nextMessage.content.length - 1,
                         });
+                        const currentBlockAsDialoge = /** @type {DEConversationMessageDialogue} */ (currentBlock);
+                        currentBlockAsDialoge.fragments[currentBlockAsDialoge.fragments.length - 1].text += textToStream;
                     }
                 }
             }
@@ -726,6 +737,7 @@ export async function talk(engine, character, options) {
             conversationId: charState.conversationId,
             messageId: nextMessage.id,
             event: "done",
+            contentIndex: nextMessage.content.length - 1,
         });
 
         console.log("\nFinished receiving text chunk from inference adapter.");

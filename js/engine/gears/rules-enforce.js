@@ -2,7 +2,7 @@ import { DEngine } from "../index.js";
 import { getExternalDescriptionOfCharacter, getSurroundingCharacters } from "../util/character-info.js";
 import { isYes } from "../util/grammar.js";
 import { describeItemsAvailableToCharacterForInference, getFullItemListAtLocation } from "../util/items.js";
-import { getHistoryFragmentForCharacter } from "../util/messages.js";
+import { convertMessagesToSimpleList, getHistoryFragmentForCharacter } from "../util/messages.js";
 
 /**
  * Removes any punctuation from a string.
@@ -56,7 +56,7 @@ export default async function testWorldRulesOn(engine, character) {
     }
     const charState = engine.deObject.stateFor[character.name];
 
-    const isUser = character.name === engine.user?.name;
+    const isUser = character.name === engine.deObject.user;
 
     if (engine.disabledWorldRules && isUser) {
         console.warn(`World rules testing is disabled, skipping world rules test for character ${character.name}.`);
@@ -121,12 +121,14 @@ export default async function testWorldRulesOn(engine, character) {
         "Answer no for any of " + [...characterSurroundInfo.totalStrangers, ...characterSurroundInfo.nonStrangers, character.name].map(name => `"${name}"`).join(", "),
     ], null);
 
+    const lastCycleExpandedMessagesConverted = convertMessagesToSimpleList(lastCycleMessagesExpanded.messages);
+
     const characterInteractionGenerator = engine.inferenceAdapter.runQuestioningCustomAgentOn(
         "rules-enforce",
         {
             system: systemPromptCharacterInteractionsIntroduction,
             contextInfoBefore: contextInfoSurroundingCharacters.value,
-            messages: lastCycleMessagesExpanded.messages,
+            messages: lastCycleExpandedMessagesConverted,
             contextInfoAfter: null,
             remarkLastStoryFragmentForAnalysis: true,
         },
@@ -179,7 +181,7 @@ export default async function testWorldRulesOn(engine, character) {
                 `The blunder is that ${character.name} was the one who introduced ${failureReason} as a physically present character or characters, even though that character is not actually present according to the known world state.`,
             ], null);
 
-            const schizophreniaGenerator = engine.inferenceAdapter.runQuestioningCustomAgentOn("rules-enforce", { system: schizophreniaSystemPrompt, contextInfoBefore: null, messages: lastCycleMessagesExpanded.messages, contextInfoAfter: null, remarkLastStoryFragmentForAnalysis: true });
+            const schizophreniaGenerator = engine.inferenceAdapter.runQuestioningCustomAgentOn("rules-enforce", { system: schizophreniaSystemPrompt, contextInfoBefore: null, messages: lastCycleExpandedMessagesConverted, contextInfoAfter: null, remarkLastStoryFragmentForAnalysis: true });
 
             const readySchizo = await schizophreniaGenerator.next(); // start the generator
             if (readySchizo.done) {
@@ -221,7 +223,7 @@ export default async function testWorldRulesOn(engine, character) {
             null,
         );
 
-        const generatorSpecial = engine.inferenceAdapter.runQuestioningCustomAgentOn("rules-enforce", { system: systemPromptSpecial, contextInfoBefore: null, messages: lastCycleMessagesExpanded.messages, contextInfoAfter: contextInfoSurroundingCharacters.value, remarkLastStoryFragmentForAnalysis: true });
+        const generatorSpecial = engine.inferenceAdapter.runQuestioningCustomAgentOn("rules-enforce", { system: systemPromptSpecial, contextInfoBefore: null, messages: lastCycleExpandedMessagesConverted, contextInfoAfter: contextInfoSurroundingCharacters.value, remarkLastStoryFragmentForAnalysis: true });
         const readySpecial = await generatorSpecial.next(); // start the generator
         if (readySpecial.done) {
             throw new Error("Inference adapter questioning generator ended unexpectedly.");
@@ -333,7 +335,7 @@ export default async function testWorldRulesOn(engine, character) {
             });
         }))).filter((v) => v !== null && v !== undefined && v !== "");
 
-        const generator = engine.inferenceAdapter.runQuestioningCustomAgentOn("rules-enforce", { system: systemPrompt, contextInfoBefore: null, messages: lastCycleMessages.messages, contextInfoAfter: null, remarkLastStoryFragmentForAnalysis: true });
+        const generator = engine.inferenceAdapter.runQuestioningCustomAgentOn("rules-enforce", { system: systemPrompt, contextInfoBefore: null, messages: lastCycleExpandedMessagesConverted, contextInfoAfter: null, remarkLastStoryFragmentForAnalysis: true });
         const ready = await generator.next(); // start the generator
         if (ready.done) {
             throw new Error("Inference adapter questioning generator ended unexpectedly.");
@@ -450,7 +452,7 @@ export default async function testWorldRulesOn(engine, character) {
         {
             system: systemPromptSpawnItems,
             contextInfoBefore: availableItemsContextInfo.value,
-            messages: lastCycleMessages.messages,
+            messages: lastCycleExpandedMessagesConverted,
             contextInfoAfter: null,
         },
     );
@@ -524,7 +526,7 @@ export default async function testWorldRulesOn(engine, character) {
                         `The blunder is that ${character.name} interacted with an item called "${itemNameMentioned}" which does not exist at their current location, the item must vanish or be revealed as not real.`,
                     ], null);
 
-                    const schizophreniaGenerator = engine.inferenceAdapter.runQuestioningCustomAgentOn("rules-enforce-storymode", { system: schizophreniaSystemPrompt, contextInfoBefore: null, messages: lastCycleMessages.messages, contextInfoAfter: null, remarkLastStoryFragmentForAnalysis: true });
+                    const schizophreniaGenerator = engine.inferenceAdapter.runQuestioningCustomAgentOn("rules-enforce-storymode", { system: schizophreniaSystemPrompt, contextInfoBefore: null, messages: lastCycleExpandedMessagesConverted, contextInfoAfter: null, remarkLastStoryFragmentForAnalysis: true });
 
                     const readySchizo = await schizophreniaGenerator.next();
                     if (readySchizo.done) {

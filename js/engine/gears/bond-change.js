@@ -5,7 +5,7 @@
 import { DEngine } from "../index.js";
 import { getFamilyBondRelation, getRelationship } from "../util/character-info.js";
 import { yesNoGrammar } from "../util/grammar.js";
-import { getHistoryFragmentForCharacter } from "../util/messages.js";
+import { convertMessagesToSimpleList, getHistoryFragmentForCharacter } from "../util/messages.js";
 
 /**
  * 
@@ -63,7 +63,7 @@ export default async function calculateBondsChangesDueToMessages(engine, charact
         {
             system: engine.inferenceAdapter.buildSystemPromptForQuestioningAgent(systemPrompt, [], null),
             contextInfoBefore: null,
-            messages: lastCycleExpanded.messages,
+            messages: convertMessagesToSimpleList(lastCycleExpanded.messages),
             contextInfoAfter: null,
         },
     );

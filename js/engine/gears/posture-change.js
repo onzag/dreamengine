@@ -1,7 +1,7 @@
 import { DEngine } from "../index.js";
 import { getBasicPostures, getExtendedPosturesOf, getExternalDescriptionOfCharacter, getExternalDescriptionOfCharacterPostureOnly, humanReadablePostureToPosture, POSTURE_MAP, postureToText } from "../util/character-info.js";
 import { createGrammarFromList, yesNoGrammar } from "../util/grammar.js";
-import { getHistoryFragmentForCharacter } from "../util/messages.js";
+import { convertMessagesToSimpleList, getHistoryFragmentForCharacter } from "../util/messages.js";
 
 /**
  * @param {DEngine} engine
@@ -52,7 +52,7 @@ export default async function calculatePostureChange(engine, character, knownCha
         {
             system: systemPrompt,
             contextInfoBefore: null,
-            messages: lastCycle.messages,
+            messages: convertMessagesToSimpleList(lastCycle.messages),
             contextInfoAfter: null,
             remarkLastStoryFragmentForAnalysis: true,
         },
@@ -198,7 +198,7 @@ export default async function calculatePostureChange(engine, character, knownCha
                 {
                     system: systemPrompt,
                     contextInfoBefore: null,
-                    messages: lastCycle.messages,
+                    messages: convertMessagesToSimpleList(lastCycle.messages),
                     contextInfoAfter: null,
                     remarkLastStoryFragmentForAnalysis: true,
                 },

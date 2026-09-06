@@ -4,7 +4,7 @@
 
 import { DEngine } from "../index.js";
 import { getExternalDescriptionOfCharacter, getInternalDescriptionOfCharacter, getRelationshipBetweenCharacters, getSurroundingCharacters } from "../util/character-info.js";
-import { getHistoryFragmentForCharacter } from "../util/messages.js";
+import { convertMessagesToSimpleList, getHistoryFragmentForCharacter } from "../util/messages.js";
 
 /**
  * @typedef {Object} DEngineInteraction
@@ -806,7 +806,7 @@ async function testMessageFeasibilityForce(engine, character) {
         "An attempt to force does not count, only successful compliance.",
         "Consider only the last story fragment",
     ], null);
-    const generator = engine.inferenceAdapter.runQuestioningCustomAgentOn("feasibility-check", { system: systemPrompt, contextInfoBefore: contextInfoSurroundingCharacters.value, messages: lastCycleExpanded, contextInfoAfter: null, remarkLastStoryFragmentForAnalysis: true });
+    const generator = engine.inferenceAdapter.runQuestioningCustomAgentOn("feasibility-check", { system: systemPrompt, contextInfoBefore: contextInfoSurroundingCharacters.value, messages: convertMessagesToSimpleList(lastCycleExpanded), contextInfoAfter: null, remarkLastStoryFragmentForAnalysis: true });
     const ready = await generator.next();
     if (ready.value !== "ready") {
         throw new Error("Questioning agent could not be started properly.");
@@ -988,7 +988,7 @@ async function testMessageFeasibilityForce(engine, character) {
                 "If the answer is no, elaborate briefly on why it is not feasible.",
             ], null);
 
-            const feasibilityGenerator = engine.inferenceAdapter.runQuestioningCustomAgentOn("feasibility-check", { system: feasibilitySystemPrompt, contextInfoBefore: isolatedCharacterInfo, messages: lastCycleExpanded, contextInfoAfter: null, remarkLastStoryFragmentForAnalysis: true });
+            const feasibilityGenerator = engine.inferenceAdapter.runQuestioningCustomAgentOn("feasibility-check", { system: feasibilitySystemPrompt, contextInfoBefore: isolatedCharacterInfo, messages: convertMessagesToSimpleList(lastCycleExpanded), contextInfoAfter: null, remarkLastStoryFragmentForAnalysis: true });
             const feasibilityReady = await feasibilityGenerator.next();
             if (feasibilityReady.value !== "ready") {
                 throw new Error("Questioning agent could not be started properly for feasibility check.");

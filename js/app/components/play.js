@@ -170,13 +170,6 @@ const STEPS = [
     { id: 'character', label: 'Character' },
 ];
 
-// Placeholder list — real save loading is not yet implemented.
-const EXAMPLE_SAVES = [
-    { id: 'save-1', name: 'A Quiet Morning in Eldhaven', timestamp: '2026-04-21 09:14' },
-    { id: 'save-2', name: 'The Storm at the Crossroads', timestamp: '2026-04-18 22:03' },
-    { id: 'save-3', name: 'Whispers Beneath the Hollow', timestamp: '2026-04-12 17:48' },
-];
-
 const DREAM_STABILITY_OPTIONS = [
     {
         id: 'stable',

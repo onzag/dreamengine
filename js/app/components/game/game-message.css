@@ -4,15 +4,15 @@
     display: block;
 }
 
-/* A single message parses into one or more stacked boxes (dialogue and/or
-   narration paragraphs). */
-.boxes {
+/* A single message is composed of one or more stacked blocks (dialogue
+   and/or narration). */
+.blocks {
     display: flex;
     flex-direction: column;
     align-items: stretch;
 }
 
-.boxes > .message + .message {
+.blocks > .message + .message {
     margin-top: 0.8vh;
 }
 
@@ -35,7 +35,8 @@
     margin-top: 2.2vh;
 }
 
-/* Avatar circle (shown on the first message of each group). */
+/* Avatar circle (shown on the first dialogue block of each group when the
+   avatar is enabled). */
 .avatar {
     flex-shrink: 0;
     width: 5.5vh;
@@ -72,7 +73,8 @@
     height: 100%;
 }
 
-/* Spacer that aligns continuation-message text under the name line. */
+/* Spacer that aligns continuation-message text under the name line when the
+   avatar is enabled but not drawn for this particular block. */
 .avatar-spacer {
     flex-shrink: 0;
     width: 5.5vh;
@@ -85,7 +87,7 @@
     min-width: 0;
 }
 
-/* Sender name (shown only on group-start messages). */
+/* Sender name (shown only on the first block of each group). */
 .name {
     font-size: 1.8vh;
     font-weight: 700;
@@ -96,7 +98,7 @@
     text-shadow: 0 0 1px rgba(0, 0, 0, 0.8);
 }
 
-/* The current player's own name appears in warm green. */
+/* The current player's own name appears with a stronger outline. */
 .message.self .name {
     text-shadow: 0 0 1px black, 0 0 1px black, 0 0 1px black, 0 0 1px black,
                  0 0 1px black, 0 0 1px black, 0 0 1px black, 0 0 1px black, 0 0 1px black;
@@ -114,18 +116,18 @@
                  0 0 1px black, 0 0 1px black, 0 0 1px black, 0 0 1px black, 0 0 1px black;
 }
 
-/* Inline narration/action embedded within a dialogue line (from *...*).
-   Styled like narration (italic amber) but kept inline in the dialogue. */
+/* Inline narration/action embedded within a dialogue block. Styled like
+   narration (italic amber) but kept inline within the dialogue run. */
 .inline-narration {
     font-style: italic;
     color: rgba(255, 224, 165, 0.86);
     letter-spacing: 0.02em;
 }
 
-/* ── Narration messages (story master) ──────────────────────────────
-   No avatar, no sender label. Centered italic prose on a warm amber
-   tint — visually distinct from any character's dialogue. Flanked by
-   thin decorative rules so it reads as a god-level narration beat. */
+/* ── Narration blocks (story master) ────────────────────────────────
+   No avatar, no sender label. Italic prose on a warm amber tint —
+   visually distinct from any character's dialogue. Flanked by thin
+   decorative rules so it reads as a god-level narration beat. */
 .message.narration {
     display: block;
     padding: 0 2vh;
@@ -176,15 +178,15 @@
 }
 
 /* ── Streaming tokens ───────────────────────────────────────────────
-   Each chunk appended by addText() arrives as a .token span that
+   Each chunk consumed from the buffer arrives as a .token span that
    fades in with a very short blur-to-clear animation, giving the
-   illusion of characters materialising as the model generates them. */
+   illusion of characters materialising as they are produced. */
 .token {
     display: inline;
     animation: token-in 0.13s ease forwards;
 }
 
-/* Non-animated variant used when text is added immediately. */
+/* Non-animated variant used when text is added immediately (loading). */
 .token-instant {
     display: inline;
 }

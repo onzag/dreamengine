@@ -1,10 +1,23 @@
 import { playCancelSound, playConfirmSound, playHoverSound, stopAllAmbiencesAndStartNewOne } from '../sound.js';
 import './world-image.js';
 import './dialog.js';
-import './game-messages/message.js';
+import './game/game-message.js';
 import './debug/debug-character.js';
 import './game/cycle-inform.js';
 import { emotionsGrouped } from '../../engine/util/emotions.js';
+
+/**
+ * @typedef {Object} MessageBufferEntry
+ * @property {string} gid
+ * @property {string} senderName
+ * @property {string} assetImage
+ * @property {boolean} isGroupStart
+ * @property {boolean} isUser
+ * @property {boolean} isNarration
+ * @property {boolean} stream
+ * @property {boolean} pseudostream
+ * @property {Array<DEConversationMessageDialogue | DEConversationMessageNarration>} content
+ */
 
 /**
  * The main in-dream game UI. Renders a transition ("falling asleep" white
@@ -63,9 +76,6 @@ class GameOverlay extends HTMLElement {
             this.lightFadeOutStartedResolve = resolve;
         });
 
-        /** @type {ReturnType<typeof setTimeout> | null} */
-        this._charUpdateTimer = null;
-
         /**
          * Global keydown handler installed while the world intro plays. Kept
          * on the instance so disconnectedCallback can detach it if we unmount
@@ -78,6 +88,24 @@ class GameOverlay extends HTMLElement {
          * @type {string | null}
          */
         this.lastMessageGid = null;
+
+        /**
+         * @type {Array<MessageBufferEntry>}
+         */
+        this.messageBuffer = [];
+        /**
+         * @type {Array<import('../../engine/index.js').EngineConversationEvent>}
+         */
+        this.inferringEventBuffer = [];
+        /**
+         * @type {Record<string, Promise<void>>}
+         */
+        this._inferringEventPromises = {};
+        /**
+         * @type {Record<string, () => void>}
+         */
+        this._inferringEventResolvers = {};
+        this._isResolvingMessageBuffer = false;
 
         /**
          * @type {"normal" | "hard" | "easy" | "debug"}
@@ -209,7 +237,7 @@ class GameOverlay extends HTMLElement {
             saveBtn.addEventListener('mouseenter', () => playHoverSound());
             saveBtn.addEventListener('click', this.onSaveClick);
         }
-        
+
         document.addEventListener('keydown', this.onF5Keydown);
 
         const sidebarPortrait = this.root.querySelector('.game-sidebar-portrait');
@@ -467,7 +495,7 @@ class GameOverlay extends HTMLElement {
                         });
                     }
 
-                    await window.ENGINE_WORKER_CLIENT.initializeFromJSONState({json: this.saveObject});
+                    await window.ENGINE_WORKER_CLIENT.initializeFromJSONState({ json: this.saveObject });
                 } else {
                     await window.ENGINE_WORKER_CLIENT.jsEngineImportScript({
                         namespace: this.getAttribute('world-namespace') || '',
@@ -1509,21 +1537,75 @@ class GameOverlay extends HTMLElement {
         delete tooltip.dataset.forCharacter;
     }
 
+    async resolveBuffer() {
+        if (this._isResolvingMessageBuffer) return;
+        this._isResolvingMessageBuffer = true;
+
+        let next = this.messageBuffer.shift();
+        while (next) {
+            const contentpieces = next.content;
+
+            // there might not be content pieces whatsoever
+            for (let i = 0; i < contentpieces.length; i++) {
+                const piece = contentpieces[i];
+                const el = this._createMessageElement(next, piece, i);
+
+                if (next.pseudostream) {
+                    /**
+                     * @type {Promise<void>}
+                     */
+                    const promiseResolve = new Promise(resolve => {
+                        el.addEventListener('on-pseudostream-finished', () => {
+                            const container = this.root.querySelector('.game-story-content-list');
+                            if (container) container.scrollTop = container.scrollHeight;
+                            resolve();
+                        }, { once: true });
+                    });
+                    await promiseResolve;
+                }
+            }
+
+            if (next.stream) {
+                await this._inferringEventPromises[next.gid];
+                this.consumeRemainingInferringBuffer(next.gid);
+            }
+
+            next = this.messageBuffer.shift();
+        }
+    }
+
+    /**
+     * Public entry point. Guards against concurrent runs (which could
+     * otherwise create duplicate message elements) by serialising them.
+     */
     async updateStory() {
         try {
             const actualUserName = await window.ENGINE_WORKER_CLIENT.queryDEObject({
                 path: ["user"],
             });
+
+            // TODO we have to optimize this somehow, because this will get every single message
+            // and if the history is too long, this might cause performance issues. We should probably only get the last 50 messages or so, and then if the user scrolls up, we can fetch more.
             const history = await window.ENGINE_WORKER_CLIENT.getHistoryForCharacter({
                 characterName: actualUserName,
                 lastMessageGid: this.lastMessageGid,
             });
 
-            const hadNoPreviousMessages = this.lastMessageGid === null;
-
             if (!history || !Array.isArray(history) || history.length === 0) return;
 
-            const historyReversed = history.reverse(); // this list contains the most recent messages last
+            /**
+             * Determines if this is the first time we are loading the story, this means it is the first
+             * time we are loading the story, and we should most certainly not stream the messages
+             * 
+             * One exception applies, if there is no save file, then we should stream all the messages, including that initial preset
+             * narration
+             */
+            const isTheFirstLoad = !this.lastMessageGid;
+            const shouldStreamMessages = this.hasAttribute("save-id") ? isTheFirstLoad : true;
+
+            this.lastMessageGid = history[history.length - 1].gid;
+
+            const historyReversed = history.reverse(); // this list contains the most recent messages first
             // and we want to render them in the order from oldest to newest, so we reverse the list before rendering
 
             const list = this.root.querySelector('.game-story-content-list');
@@ -1538,7 +1620,7 @@ class GameOverlay extends HTMLElement {
             /**
              * Pre-resolve all message metadata so we can enqueue them without
              * async work inside the chained event handler.
-             * @type {Array<{ gid: string, senderName: string, isNarration: boolean, isUser: boolean, isGroupStart: boolean, assetImage: string, text: string }>}
+             * @type {Array<MessageBufferEntry>}
              */
             const resolvedMsgs = [];
             for (const msg of historyReversed) {
@@ -1548,7 +1630,8 @@ class GameOverlay extends HTMLElement {
                 const senderName = msg.name || '';
                 const isNarration = !!msg.storyMaster;
                 const isUser = senderName === actualUserName;
-                const text = msg.message || '';
+
+                const content = msg.content;
                 const isGroupStart = !isNarration && senderName !== lastSenderName;
 
                 const emotion = msg.emotion || "neutral";
@@ -1575,59 +1658,78 @@ class GameOverlay extends HTMLElement {
                             break;
                         }
                     }
+
+                    if (!assetImage) {
+                        const altAssetImage2 = await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                            path: ["characters", senderName, "metadata", "assets", "neutral"],
+                        });
+                        if (altAssetImage2) {
+                            assetImage = altAssetImage2;
+                        }
+                    }
                 }
 
-                resolvedMsgs.push({ gid: String(gid), senderName, isNarration, isUser, isGroupStart, assetImage, text });
+                const stream = content.length ? false : shouldStreamMessages;
+                const pseudostream = content.length ? shouldStreamMessages : false;
+                resolvedMsgs.push({
+                    gid: String(gid),
+                    senderName,
+                    isNarration,
+                    isUser,
+                    isGroupStart,
+                    assetImage,
+                    content,
+                    stream,
+                    pseudostream,
+                });
+                if (stream) {
+                    this._inferringEventPromises[gid] = new Promise(resolve => {
+                        this._inferringEventResolvers[gid] = resolve;
+                    });
+                }
                 lastSenderName = isNarration ? '' : senderName;
             }
 
-            /**
-             * Append one resolved message entry, then wait for its stream to
-             * finish before appending the next.
-             * @param {number} index
-             */
-            const appendNext = (index) => {
-                if (index >= resolvedMsgs.length) return;
-                const { gid, senderName, isNarration, isUser, isGroupStart, assetImage, text } = resolvedMsgs[index];
+            for (const msg of resolvedMsgs) {
+                this.messageBuffer.push(msg);
+            }
 
-                const el = /** @type {HTMLElement} */ (document.createElement('app-game-message'));
-                el.dataset.gid = gid;
-                el.setAttribute('text', text);
-                el.setAttribute('image-url', assetImage);
-                el.setAttribute("gid", gid);
-                el.setAttribute("debug", this.gameDifficulty === 'debug' ? 'true' : 'false');
-                if (hadNoPreviousMessages) {
-                    el.setAttribute('no-stream-simulation', 'true');
-                }
-                if (isNarration) {
-                    el.setAttribute('is-narration', '');
-                } else {
-                    el.dataset.senderName = senderName;
-                    el.setAttribute('sender-name', senderName);
-                    if (isUser) el.setAttribute('is-self', '');
-                    if (isGroupStart) el.setAttribute('is-group-start', '');
-                }
-
-                this.lastMessageGid = gid;
-
-                // Keep the chat scrolled to the latest message.
-                const container = this.root.querySelector('.game-story-content-list');
-
-                el.addEventListener('on-simulated-stream-finished', () => {
-                    if (container) container.scrollTop = container.scrollHeight;
-                    appendNext(index + 1);
-                }, { once: true });
-
-                list.appendChild(el);
-                if (container) container.scrollTop = container.scrollHeight;
-            };
-
-            appendNext(0);
+            this.resolveBuffer();
 
         } catch (error) {
             console.error('Error updating story:', error);
         }
     }
+
+    /**
+     * Create and configure an app-game-message element. Attributes that are
+     * live-updatable (sender-name, image-url) are patched by later updateStory
+     * runs if they change.
+     * @param {MessageBufferEntry} entry
+     * @param {DEConversationMessageDialogue | DEConversationMessageNarration} piece
+     * @param {number} index
+     * @returns {any}
+     */
+    _createMessageElement(entry, piece, index) {
+        const el = /** @type {any} */ (document.createElement('app-game-message'));
+        el.setAttribute('gid', entry.gid);
+        el.setAttribute('content-index', String(index));
+        el.setAttribute('debug-id', piece.__debug_id || '');
+        el.setAttribute('image-url', entry.assetImage || '');
+        el.setAttribute('debug', this.gameDifficulty === 'debug' ? 'true' : 'false');
+        el.setAttribute('show-avatar', entry.isNarration ? 'false' : (entry.isGroupStart ? 'true' : 'false'));
+        el.setAttribute('type', entry.isNarration ? 'narration' : 'dialogue');
+        el.setAttribute('stream', entry.stream ? 'true' : 'false');
+        el.setAttribute('pseudostream', entry.pseudostream ? 'true' : 'false');
+        if (!entry.isNarration) {
+            el.setAttribute('sender-name', entry.senderName);
+        }
+        if (entry.pseudostream) {
+            el.pseudostreamContent(piece);
+        }
+        return el;
+    }
+
 
     /**
      * @param {"info" | "warning" | "error"} level 
@@ -1702,20 +1804,104 @@ class GameOverlay extends HTMLElement {
     }
 
     /**
-     * 
-     * @param {{conversationId: string, messageId: string, text: string, hidden: boolean}} data 
+     * @param {string} gid
+     */
+    async consumeRemainingInferringBuffer(gid) {
+        while (this.inferringEventBuffer.length > 0) {
+            const event = this.inferringEventBuffer.shift();
+            if (!event) break;
+
+            if (event.messageId !== gid) {
+                console.error(`consumeRemainingInferringBuffer: event messageId ${event.messageId} does not match gid ${gid}. Ignoring.`);
+                continue;
+            }
+
+            await new Promise(resolve => setTimeout(resolve, 20)); // make the events slower to show the streaming effect better
+            this.onInferringOverConversationMessage(event);
+            if (event?.event === "add-dialogue-block" || event?.event === "add-narration-block" || event?.event === "done") {
+                break; // stop after adding a new message element, the newly added element should handle continuing
+            }
+        }
+    }
+
+    /**
+     * Handle a streamed engine conversation event. Events are routed to the
+     * matching app-game-message element, which buffers and paces them itself.
+     * If the element has not been created yet (updateStory hasn't caught up),
+     * the event is buffered and a story refresh is scheduled to create it.
+     *
+     * @param {import('../../engine/index.js').EngineConversationEvent} data
      */
     onInferringOverConversationMessage(data) {
-        if (data.hidden) return;
-
+        const gid = data.messageId;
+        const index = data.contentIndex;
         const list = this.root.querySelector('.game-story-content-list');
         if (!list) return;
 
-        const el = /** @type {HTMLElement | null} */ (
-            list.querySelector(`[data-gid="${CSS.escape(data.messageId)}"]`)
-        );
-        if (el && typeof /** @type {any} */ (el).addText === 'function') {
-            /** @type {any} */ (el).addText(data.text);
+        // find the element with the matching gid and content-index
+        let msgEl = /** @type {any} */ (list.querySelector(`app-game-message[gid="${CSS.escape(gid)}"][content-index="${index}"]`));
+
+        if (!msgEl) {
+            if (data.event !== "add-narration-block" && data.event !== "add-dialogue-block") {
+                console.error(`Received conversation event for message ${gid} content index ${index}, but the message element does not exist yet. Event:`, data);
+                return;
+            }
+            const allElsWithTheSameGid = Array.from(list.querySelectorAll(`app-game-message[gid="${CSS.escape(gid)}"]`));
+            const currentlyStreamingElWithTheSameGid = allElsWithTheSameGid.find(el => el.isStreaming());
+            if (currentlyStreamingElWithTheSameGid) {
+                // If there's already a streaming message with the same gid and streaming, we don't need to do anything but save the event for later
+                this.inferringEventBuffer.push(data);
+                return;
+            } else {
+                if (data.event === "add-narration-block") {
+                    // If the event is an "add-narration-block" event, we can create a new message element for it.
+                    const entry = this.messageBuffer.find(e => e.gid === gid);
+                    if (!entry) {
+                        console.warn(`Received add-narration-block event for unknown message gid ${gid} that is not currently in the buffer. Ignoring.`);
+                        return;
+                    }
+
+                    msgEl = this._createMessageElement(entry, {
+                        type: "narration",
+                        text: "",
+                        __debug_id: data.__debug_id,
+                    }, index);
+
+                    msgEl.addEventListener('on-stream-finished', this.consumeRemainingInferringBuffer.bind(this));
+                } else if (data.event === "add-dialogue-block") {
+                    // If the event is an "add-dialogue-block" event, we can create a new message element for it.
+                    const entry = this.messageBuffer.find(e => e.gid === gid);
+                    if (!entry) {
+                        console.warn(`Received add-dialogue-block event for unknown message gid ${gid} that is not currently in the buffer. Ignoring.`);
+                        return;
+                    }
+
+                    msgEl = this._createMessageElement(entry, {
+                        type: "dialogue",
+                        fragments: [],
+                        __debug_id: data.__debug_id,
+                    }, index);
+
+                    msgEl.addEventListener('on-stream-finished', this.consumeRemainingInferringBuffer.bind(this));
+                } else {
+                    console.warn(`Received event ${data.event} for unknown message gid ${gid} that is not currently in the buffer. Ignoring.`);
+                }
+            }
+        } else if (msgEl.isStreaming()) {
+            msgEl.feedEvent(data);
+
+            if (data.event === "done") {
+                msgEl.addEventListener('on-stream-finished', () => {
+                    const resolver = this._inferringEventResolvers[gid];
+                    if (resolver) {
+                        resolver();
+                        delete this._inferringEventResolvers[gid];
+                        delete this._inferringEventPromises[gid];
+                    }
+                });
+            }
+        } else {
+            console.error(`Received conversation event for message ${gid} content index ${index}, but the message is not streaming. Event:`, data);
         }
     }
 
@@ -1993,7 +2179,7 @@ class GameOverlay extends HTMLElement {
 
             const subtitleParts = [];
             if (specialMode === 'narrator') subtitleParts.push('Narrator');
-            else if (specialMode === 'schizophrenia') subtitleParts.push('Voice in the head' );
+            else if (specialMode === 'schizophrenia') subtitleParts.push('Voice in the head');
             else if (isSelfInsert) subtitleParts.push('Self-insert');
             if (worldNamespace && worldId) {
                 const ns = worldNamespace.startsWith('@') ? worldNamespace.slice(1) : worldNamespace;
@@ -2449,7 +2635,7 @@ class GameOverlay extends HTMLElement {
             }
         }
 
-        
+
         dialog.innerHTML = `
             <app-overlay-input
                 label="Savefile Name"

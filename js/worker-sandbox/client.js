@@ -30,7 +30,7 @@ export class EngineWorkerClient {
     onCycleInform = null;
     /** @type {((thinking: boolean, characterName: string | null, noMoreCharactersToTalk: boolean) => void) | null} */
     onThinkingInform = null;
-    /** @type {((data: any) => void) | null} */
+    /** @type {((data: import('../engine/index.js').EngineConversationEvent) => void) | null} */
     onInferringOverConversationMessage = null;
     /** @type {((data: {qid: number, questionType: string, question: string, options?: string[], defaultValue?: any}) => void) | null} */
     onScriptTypeGuiderQuestion = null;

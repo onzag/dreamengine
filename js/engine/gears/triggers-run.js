@@ -2,7 +2,7 @@ import { weightedRandomWithNullsIfNoWeight } from "../../util/random.js";
 import { DEngine } from "../index.js";
 import { getBondDeclarationFromBondDescription, getBondDeclarationFromName, getFamilyBondRelation, getRelationship, getSurroundingCharacters } from "../util/character-info.js";
 import { isYes, numberGrammar, yesNoGrammar } from "../util/grammar.js";
-import { getHistoryFragmentForCharacter } from "../util/messages.js";
+import { getHistoryFragmentForCharacter, convertMessagesToSimpleList } from "../util/messages.js";
 
 /**
  * @param {DEngine} engine 
@@ -344,7 +344,7 @@ export default async function runAllTriggersFor(engine, character, interactedCha
         {
             system: engine.inferenceAdapter.buildSystemPromptForQuestioningAgent(systemPrompt, [], null),
             contextInfoBefore: null,
-            messages: lastCycleMessagesInfo.messages,
+            messages: convertMessagesToSimpleList(lastCycleMessagesInfo.messages),
             contextInfoAfter: null,
         },
     );

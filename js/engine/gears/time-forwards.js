@@ -1,6 +1,6 @@
 import { weightedRandomByLikelihood } from "../../util/random.js";
 import { deepCopyNoHistory, DEngine } from "../index.js";
-import { getHistoryFragmentForCharacter } from "../util/messages.js";
+import { convertMessagesToSimpleList, getHistoryFragmentForCharacter } from "../util/messages.js";
 import { millisecondsToDuration, millisecondsToTime } from "../util/time.js";
 
 /**
@@ -180,7 +180,7 @@ export default async function timeForwardsUsingLastMessage(engine, character) {
         "Vary your estimates naturally - do not default to 1 of any unit. Consider the actual duration implied by the actions described, don't be afraid to estimate or guess if it is unclear and give variety in your responses.",
         "If the story fragment does not provide enough information to determine the time passed, give a rough estimate regardless.",
     ], null);
-    const timePassedGenerator = engine.inferenceAdapter.runQuestioningCustomAgentOn("time-forwards", { system: systemPrompt, contextInfoBefore: null, messages: lastStoryFragment, contextInfoAfter: null, remarkLastStoryFragmentForAnalysis: true });
+    const timePassedGenerator = engine.inferenceAdapter.runQuestioningCustomAgentOn("time-forwards", { system: systemPrompt, contextInfoBefore: null, messages: convertMessagesToSimpleList(lastStoryFragment), contextInfoAfter: null, remarkLastStoryFragmentForAnalysis: true });
 
     const timePassedResponse = await timePassedGenerator.next();
     if (timePassedResponse.done) {

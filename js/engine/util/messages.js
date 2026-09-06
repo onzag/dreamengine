@@ -144,7 +144,7 @@ export function makeTimestamp(deObject, time, includeNowLabel = true) {
 /**
  * @typedef {Object} DEObjectMessageGeneratorResult
  * @property {string} name the name of the character or entity that generated the message
- * @property {string} message the message content, can be a narrative or a dialogue
+ * @property {Array<DEConversationMessageNarration | DEConversationMessageDialogue>} content the message content, can be a narrative or a dialogue
  * @property {string | null} conversationId the id of the conversation this message belongs to, if any, otherwise null
  * @property {string | null} id the id of the message, if this is a conversation message, otherwise null
  * @property {boolean} debug wether this is a debug message
@@ -225,9 +225,19 @@ export async function* getHistoryForCharacter(engine, character, options) {
         statesAccumulatedAtLocation = null;
         statesAccumulatedFromTime = null;
 
+        /**
+         * @type {DEConversationMessageNarration}
+         */
+        const narrationMessage = {
+            type: "narration",
+            text: message,
+        };
+
         return {
             name: "Story Master",
-            message: message,
+            content: [
+                narrationMessage,
+            ],
             id: null,
             gid: `story-master-states-${character.name}-${fromTime.time}`,
             conversationId: null,
@@ -286,7 +296,12 @@ export async function* getHistoryForCharacter(engine, character, options) {
                 const expectedId = `story-master-${state.conversationId}-summary`;
                 const keepgoing = yield {
                     name: "Story Master",
-                    message: (timeMark === "Now" ? "Right Now" : "At " + timeMark) + ", " + character.name + " is at " + conversationLocation + " " + withOrAlone + ". The interaction happened as follows:\n\n" + currentConversationObject.pseudoConversationSummary,
+                    content: [
+                        {
+                            type: "narration",
+                            text: (timeMark === "Now" ? "Right Now" : "At " + timeMark) + ", " + character.name + " is at " + conversationLocation + " " + withOrAlone + ". The interaction happened as follows:\n\n" + currentConversationObject.pseudoConversationSummary,
+                        },
+                    ],
                     id: null,
                     conversationId: state.conversationId,
                     debug: false,
@@ -308,7 +323,7 @@ export async function* getHistoryForCharacter(engine, character, options) {
                     }
                     const keepgoing = yield ({
                         name: message.sender,
-                        message: message.content,
+                        content: message.content,
                         id: message.id,
                         conversationId: state.conversationId,
                         debug: message.isDebugMessage,
@@ -332,7 +347,12 @@ export async function* getHistoryForCharacter(engine, character, options) {
                     const withOrAlone = participantsExcludingCharacter.length === 0 ? "on their own" : "with " + engine.deObject.utils.formatAnd(participantsExcludingCharacter);
                     const keepgoing = yield {
                         name: "Story Master",
-                        message: "The following interaction took place " + timeMarkDetailed + ", " + character.name + " is at " + conversationLocation + withOrAlone + ".",
+                        content: [
+                            {
+                                type: "narration",
+                                text: "The following interaction took place " + timeMarkDetailed + ", " + character.name + " is at " + conversationLocation + withOrAlone + ".",
+                            },
+                        ],
                         id: null,
                         conversationId: state.conversationId,
                         debug: false,
@@ -381,6 +401,50 @@ export async function* getHistoryForCharacter(engine, character, options) {
 }
 
 /**
+ * @param {Array<DEConversationMessageNarration | DEConversationMessageDialogue>} content
+ * @param {string} author
+ * @param {boolean} storyMaster
+ */
+export function convertContentToSimpleList(content, author, storyMaster) {
+    /**
+     * @type {Array<{author: string, message: string, storyMaster: boolean}>}
+     */
+    const finalList = [];
+    for (const contentPart of content) {
+        if (contentPart.type === "narration") {
+            finalList.push({
+                author: storyMaster ? "Story Master" : author,
+                message: "*" + contentPart.text + "*",
+                storyMaster: storyMaster,
+            });
+        } else if (contentPart.type === "dialogue") {
+            let dialogueText = author + ": ";
+            for (const fragment of contentPart.fragments) {
+                if (fragment.type === "narration") {
+                    dialogueText += fragment.text;
+                } else if (fragment.type === "dialogue") {
+                    dialogueText += fragment.text;
+                }
+            }
+            finalList.push({
+                author: author,
+                message: dialogueText,
+                storyMaster: storyMaster,
+            });
+        }
+    }
+    return finalList;
+}
+
+/**
+ * @param {Array<{content: Array<DEConversationMessageNarration | DEConversationMessageDialogue>, author: string, storyMaster: boolean, id: string | null, conversationId: string | null}>} messages 
+ */
+export function convertMessagesToSimpleList(messages) {
+    const accumulatedLists = messages.map(msg => convertContentToSimpleList(msg.content, msg.author, msg.storyMaster));
+    return accumulatedLists.flat();
+}
+
+/**
  * Returns a chunk of the history for the character up to the specified depth, if the depth
  * is 0, returns all history.
  * 
@@ -397,6 +461,7 @@ export async function* getHistoryForCharacter(engine, character, options) {
  *   msgLimit: "LAST_CYCLE" | "LAST_CYCLE_EXCLUDE_CHAR" | "LAST_STORY_FRAGMENT_FROM_CHAR" | "LAST_CYCLE_EXPANDED" | "LAST_CYCLE_EXPANDED_EXCLUDE_CHAR" | "ALL",
  *   useExponentialShrinkingSelectiveContextWindowStrategy?: boolean,
  * }} options
+ * @returns {Promise<{messages: Array<{content: Array<DEConversationMessageNarration | DEConversationMessageDialogue>, author: string, storyMaster: boolean, id: string | null, conversationId: string | null}>, conversingCharacters: string[], mentionedCharacters: string[]}>}
  */
 export async function getHistoryFragmentForCharacter(engine, character, options) {
     if (!engine.deObject) {
@@ -406,7 +471,7 @@ export async function getHistoryFragmentForCharacter(engine, character, options)
     let generator = await allHistory.next();
 
     /**
-     * @type {Array<{message: string, author: string, storyMaster: boolean, id: string | null, conversationId: string | null}>}
+     * @type {Array<{content: Array<DEConversationMessageNarration | DEConversationMessageDialogue>, author: string, storyMaster: boolean, id: string | null, conversationId: string | null}>}
      */
     let messagesToAdd = [];
     /**
@@ -428,7 +493,7 @@ export async function getHistoryFragmentForCharacter(engine, character, options)
             let shouldAddMessage = false;
             let shouldStopAddingMessages = false;
 
-            const messageParsed = generator.value.debug ? generator.value.message : parseMessageInComponentsAsText(generator.value.name, generator.value.message);
+            const content = generator.value.content;
 
             if (options.msgLimit === "ALL") {
                 shouldStopAddingMessages = false;
@@ -459,7 +524,7 @@ export async function getHistoryFragmentForCharacter(engine, character, options)
 
             if (shouldAddMessage) {
                 messagesToAdd.push({
-                    message: messageParsed,
+                    content: content,
                     author: generator.value.name,
                     storyMaster: generator.value.storyMaster,
                     id: generator.value.id,
@@ -480,8 +545,16 @@ export async function getHistoryFragmentForCharacter(engine, character, options)
                     // we want to extract mentioned characters from the story master messages as well, because they can contain important information about the world and the interactions that took place, so we want to make sure to include them in the context of the character, even if they are not directly interacting with them, because they can be mentioned in the story master messages as part of the interactions that took place
                     for (const charName of Object.keys(engine.deObject.characters)) {
                         const pattern = new RegExp(`(?<![\\w])${charName}(?![\\w])`, 'i');
-                        if (pattern.test(generator.value.message) && !mentionedCharacters.includes(charName)) {
-                            mentionedCharacters.push(charName);
+                        for (const contentPart of content) {
+                            if (contentPart.type === "narration" && pattern.test(contentPart.text) && !mentionedCharacters.includes(charName)) {
+                                mentionedCharacters.push(charName);
+                            } else if (contentPart.type === "dialogue") {
+                                for (const fragment of contentPart.fragments) {
+                                    if (fragment.type === "narration" && pattern.test(fragment.text) && !mentionedCharacters.includes(charName)) {
+                                        mentionedCharacters.push(charName);
+                                    }
+                                }
+                            }
                         }
                     }
                 }
