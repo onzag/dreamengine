@@ -522,6 +522,7 @@ export async function talk(engine, character, options) {
      */
     const nextMessage = {
         canOnlyBeSeenByCharacter: null,
+        streaming: true,
         content: [],
         // This gets set later by time-forwards.js
         duration: {
@@ -683,9 +684,22 @@ export async function talk(engine, character, options) {
                     }
                 } else if (info.type === "text" && !nextIsNarration) {
                     // replace all asterisks with nothing
-                    let textToStream = info.content.replace(/\*/g, "");
+                    let textToStream = info.content.replace(/\*/g, "").replace(/"/g, "");
                     if (!generatedMessage.length) {
                         textToStream = textToStream.trimStart();
+                    }
+
+                    const currentBlockAsDialoge = /** @type {DEConversationMessageDialogue} */ (currentBlock);
+                    if (currentBlockAsDialoge.fragments.length === 0) {
+                        if (info.content.trim()[0] === "*") {
+                            // this shouldn't happen, it should always start with dialogue, but in case it starts with the asterisk
+                            // we will treat it as narration
+                            insideNarration = true;
+                        }
+                        currentBlockAsDialoge.fragments.push({
+                            type: insideNarration ? "narration" : "dialogue",
+                            text: "",
+                        });
                     }
 
                     generatedMessage += info.content;
@@ -723,7 +737,6 @@ export async function talk(engine, character, options) {
                             event: insideNarration ? "add-narration" : "add-dialogue",
                             contentIndex: nextMessage.content.length - 1,
                         });
-                        const currentBlockAsDialoge = /** @type {DEConversationMessageDialogue} */ (currentBlock);
                         currentBlockAsDialoge.fragments[currentBlockAsDialoge.fragments.length - 1].text += textToStream;
                     }
                 }
@@ -754,7 +767,6 @@ export async function talk(engine, character, options) {
 
     const totalGeneratedThusFar = finalMessages.join("\n\n");
     console.log("Final generated narration/dialogue: " + totalGeneratedThusFar);
-
 
     if (deadEndAction) {
         console.log(`Finalizing dead end action for character ${character.name}: ${deadEndAction.text}`);
@@ -813,6 +825,8 @@ export async function talk(engine, character, options) {
 
         hasDeadEnded = true;
     }
+
+    nextMessage.streaming = false;
 
     await engine.informDEObjectUpdated();
 

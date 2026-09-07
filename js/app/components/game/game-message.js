@@ -3,429 +3,369 @@ import '../dialog.js';
 import '../debug/debug-message.js';
 
 /**
- * A single message in the in-dream story feed.
+ * A SINGLE story block in the in-dream feed.
  *
- * Unlike the previous implementation, this component does NOT parse raw text
- * into dialogue/narration. The engine (talk.js) now streams already-structured
- * events, and this component simply materialises them into stacked UI blocks.
+ * Each `app-game-message` element now represents exactly ONE block — either a
+ * narration block or a dialogue block — as opposed to a whole message. The
+ * host (game.js) creates one element per content piece and drives it in one of
+ * two ways:
  *
- * ── Event model ─────────────────────────────────────────────────────
- * A message is built from a stream of events (see EngineConversationEvent):
+ *   • Pseudo-stream (`pseudostream="true"`): the host already has the finished
+ *     block object (a `DEConversationMessageNarration` or
+ *     `DEConversationMessageDialogue`) and calls `pseudostreamContent(piece)`
+ *     once. The element simulates a token stream and, when done, runs the
+ *     shared async finaliser and fires `on-pseudostream-finished`.
  *
- *   - "add-narration-block"  Start a new block of pure textual narration.
- *   - "add-dialogue-block"   Start a new dialogue block. A dialogue block is
- *                            itself composed of dialogue and inline-narration
- *                            fragments, delivered as the events below.
- *   - "add-narration"        Append narration text. Inside a narration block it
- *                            grows the narration paragraph; inside a dialogue
- *                            block it grows (or opens) an inline-narration
- *                            fragment.
- *   - "add-dialogue"         Append spoken text to the current dialogue block.
- *   - "done"                 The message is complete; no more events will come.
+ *   • Real stream (`stream="true"`): the block is being generated live. The
+ *     host feeds raw engine events through `feedEvent(data)` as they arrive
+ *     (`add-narration`, `add-dialogue`, `done`). The element regenerates the
+ *     same block object internally while it writes, and on `done` runs the
+ *     shared async finaliser and fires `on-stream-finished`.
  *
- * A block is considered finished when the next block starts or when "done"
- * arrives. This lets us run per-block async hooks (see below).
+ * A dialogue block may contain both dialogue and narration fragments; an em
+ * dash ( — ) is rendered between adjacent fragments of differing kind so it
+ * reads like the novel it represents. A narration block only accepts
+ * narration; a dialogue block accepts both. A `stream` that feeds `add-dialogue`
+ * to a narration block is rejected.
  *
- * ── Buffered, paced consumption ─────────────────────────────────────
- * Events are never rendered synchronously. They are pushed into an internal
- * buffer and drained by a single async pump at a deliberately measured pace so
- * the story never appears to flash into existence — but also never lags too
- * far behind. If the buffer grows large (a burst of events arrived) the pump
- * speeds up so it stays close to real time without looking robotic.
+ * The element inserts ITSELF into the story list (`.game-story-content-list`
+ * inside the `app-game` shadow root) the first time it is driven, because the
+ * host does not append it.
  *
- * ── Per-block async hooks ───────────────────────────────────────────
- * Callers may assign two async functions that gate block consumption. While a
- * hook is awaited the pump is paused and further events simply accumulate in
- * the buffer:
- *
- *   element.beforeBlock = async (info) => { ... };  // before a block renders
- *   element.afterBlock  = async (info) => { ... };  // after a block finishes
- *
- * `info` is `{ type: 'narration' | 'dialogue', index, message }`.
- *
- * ── Loading existing messages ───────────────────────────────────────
- * `loadContent(content, { stream })` converts an already-stored message body
- * (a content array of DEConversationMessageNarration | DEConversationMessage-
- * Dialogue, or a plain narration string) into the same event stream. When
- * `stream` is true it pseudo-streams exactly like a freshly generated message;
- * when false it renders instantly (used when loading history).
- *
- * ── Attributes ──────────────────────────────────────────────────────
- *  - is-self          (boolean) Message sent by the player's own character.
- *  - is-group-start   (boolean) First message in a consecutive run from one
- *                     sender; when false the first dialogue block omits the
- *                     avatar/name to continue the previous message visually.
- *  - show-avatar      (boolean) Whether dialogue blocks render the avatar/name
- *                     (Discord-like). Toggled by the host (game.js). Live.
- *  - sender-name      Display name of the sender. Live.
- *  - image-url        Asset path for the sender's portrait. Live.
- *  - debug            (boolean-ish "true"/"false") Enables the per-block debug
- *                     dialog on click. Live.
+ * ── Attributes (set before driving) ─────────────────────────────────
+ *  - type           "narration" | "dialogue"  — the kind of block.
+ *  - gid            Message global id (shared by every block of a message).
+ *  - content-index  Index of this block within its message's content array.
+ *  - debug-id       The block's `__debug_id` (gid + "__" + index).
+ *  - image-url      Portrait asset path (dialogue blocks with an avatar).
+ *  - sender-name    Display name (dialogue blocks with an avatar).
+ *  - show-avatar    "true" | "false" — whether to draw the avatar + name.
+ *  - stream         "true" | "false" — this block is a live stream.
+ *  - pseudostream   "true" | "false" — this block is a simulated stream.
+ *  - debug          "true" | "false" — enable the per-block debug dialog.
  *
  * ── Public API ──────────────────────────────────────────────────────
- *  - pushEngineEvent(data)   Enqueue a raw EngineConversationEvent.
- *  - loadContent(content, opts)  Enqueue a stored message body as events.
- *  - beforeBlock / afterBlock   Assignable async hooks (see above).
+ *  - pseudostreamContent(piece)  Simulate a stream of a finished block object.
+ *  - feedEvent(data)             Feed one live engine conversation event.
+ *  - isStreaming()               True while a live stream is in progress.
+ *  - finalizeBlock()             Overridable async hook run right before the
+ *                                block signals completion (both stream types).
  *
  * ── Events ──────────────────────────────────────────────────────────
- *  - on-stream-finished   Fired once the buffer has fully drained after a
- *                         "done" event (or after instant load). Used by the
- *                         host to append the next message in sequence.
+ *  - on-stream-finished          Real stream complete (after finalizeBlock).
+ *  - on-pseudostream-finished    Pseudo stream complete (after finalizeBlock).
  */
 class GameMessage extends HTMLElement {
     constructor() {
         super();
         this.root = this.attachShadow({ mode: 'open' });
 
-        /**
-         * Pending events awaiting consumption by the pump.
-         * @type {Array<{ kind: 'narration-block' | 'dialogue-block' | 'narration' | 'dialogue' | 'done', text?: string }>}
-         */
-        this._queue = [];
+        /** Whether the shadow DOM box has been built. */
+        this._rendered = false;
 
-        /** Whether the pump loop is currently running. */
-        this._pumping = false;
-
-        /** When true, text is materialised instantly with no per-token delay. */
-        this._instant = false;
+        /** Whether a real (live) stream has fully finished. */
+        this._finished = false;
 
         /**
-         * The currently open block, or null.
-         * @type {null | {
-         *   type: 'narration' | 'dialogue',
-         *   index: number,
-         *   box: HTMLElement,
-         *   textEl: HTMLElement,
-         *   fragEl: HTMLElement | null,
-         *   fragType: null | 'narration' | 'dialogue',
-         * }}
+         * Regenerated block object, built as the stream progresses. Matches
+         * DEConversationMessageNarration | DEConversationMessageDialogue.
+         * @type {any}
          */
-        this._current = null;
+        this._piece = null;
 
-        /** Running count of blocks created (also the debug index). */
-        this._blockIndex = 0;
-
-        /** Whether any dialogue block has already rendered its avatar/name. */
-        this._firstDialogueRendered = false;
-
+        // ── Dialogue-block fragment bookkeeping ──
         /** @type {HTMLElement | null} */
-        this._blocksEl = null;
+        this._msgTextEl = null;
+        /** @type {HTMLElement | null} */
+        this._curFragEl = null;
+        /** @type {null | 'narration' | 'dialogue'} */
+        this._curFragType = null;
 
-        /**
-         * Optional async hook run immediately before a block is rendered.
-         * @type {null | ((info: { type: 'narration' | 'dialogue', index: number, message: GameMessage }) => Promise<any> | any)}
-         */
-        this.beforeBlock = null;
-
-        /**
-         * Optional async hook run immediately after a block is finished.
-         * @type {null | ((info: { type: 'narration' | 'dialogue', index: number, message: GameMessage }) => Promise<any> | any)}
-         */
-        this.afterBlock = null;
+        // ── Narration-block target ──
+        /** @type {HTMLElement | null} */
+        this._narrationTextEl = null;
     }
 
     static get observedAttributes() {
-        return ['sender-name', 'image-url', 'debug', 'show-avatar'];
+        return ['sender-name', 'image-url'];
     }
 
     connectedCallback() {
-        this.render();
-    }
-
-    disconnectedCallback() {
-        // Abandon any in-flight pump; the buffer is discarded with the element.
-        this._pumping = false;
-        this._queue = [];
+        this._ensureRendered();
     }
 
     /**
      * @param {string} name
-     * @param {string | null} oldValue
+     * @param {string | null} _oldValue
      * @param {string | null} newValue
      */
-    attributeChangedCallback(name, oldValue, newValue) {
-        if (oldValue === newValue || !this.isConnected) return;
+    attributeChangedCallback(name, _oldValue, newValue) {
+        if (!this.isConnected) return;
         if (name === 'image-url') {
             for (const img of Array.from(this.root.querySelectorAll('app-asset-image'))) {
                 img.setAttribute('image-url', newValue || '');
             }
         } else if (name === 'sender-name') {
-            for (const nameEl of Array.from(this.root.querySelectorAll('.name'))) {
-                nameEl.textContent = newValue || '';
-            }
+            const nameEl = this.root.querySelector('.name');
+            if (nameEl) nameEl.textContent = newValue || '';
         }
-        // `debug` and `show-avatar` are read live where needed.
     }
 
-    render() {
-        this.root.innerHTML = `
-            <link rel="stylesheet" href="components/game-messages/game-message.css">
-            <div class="blocks"></div>`;
-        this._blocksEl = /** @type {HTMLElement} */ (this.root.querySelector('.blocks'));
+    // ── Block kind ───────────────────────────────────────────────────
+
+    /** @returns {'narration' | 'dialogue'} */
+    _blockType() {
+        return this.getAttribute('type') === 'narration' ? 'narration' : 'dialogue';
     }
 
     // ── Public API ───────────────────────────────────────────────────
 
     /**
-     * Enqueue a raw engine conversation event.
+     * True while a live stream is in progress (created with stream="true" and
+     * not yet finalised). Pseudo-stream and static blocks report false.
+     * @returns {boolean}
+     */
+    isStreaming() {
+        return this.getAttribute('stream') === 'true' && !this._finished;
+    }
+
+    /**
+     * Feed a single live engine conversation event into this block.
      * @param {import('../../../engine/index.js').EngineConversationEvent} data
      */
-    pushEngineEvent(data) {
+    feedEvent(data) {
         if (!data || !data.event) return;
+        //this._attachToList();
+        this._ensureRendered();
+
         switch (data.event) {
-            case 'add-narration-block':
-                this._enqueue({ kind: 'narration-block' });
-                break;
-            case 'add-dialogue-block':
-                this._enqueue({ kind: 'dialogue-block' });
-                break;
             case 'add-narration':
-                this._enqueue({ kind: 'narration', text: data.text || '' });
+                this._appendFragment('narration', data.text || '', false);
                 break;
             case 'add-dialogue':
-                this._enqueue({ kind: 'dialogue', text: data.text || '' });
+                if (this._blockType() === 'narration') {
+                    console.error('game-message: narration block rejected an add-dialogue event.', data);
+                    return;
+                }
+                this._appendFragment('dialogue', data.text || '', false);
                 break;
             case 'done':
-                this._enqueue({ kind: 'done' });
+            case 'add-narration-block':
+            case 'add-dialogue-block':
+            case 'add-hidden-block':
+                this._finishRealStream();
                 break;
             default:
-                // add-hidden-block and any unknown events are ignored here.
+                // Block-start events are handled by the host (they spawn a new
+                // element); nothing to do here.
                 break;
         }
     }
 
     /**
-     * Convert a stored message body into the same event stream and enqueue it.
-     * @param {string | Array<DEConversationMessageNarration | DEConversationMessageDialogue>} content
-     * @param {{ stream?: boolean }} [opts]
+     * Simulate a stream of an already-finished block object, then finalise.
+     * @param {DEConversationMessageNarration | DEConversationMessageDialogue} piece
      */
-    loadContent(content, opts = {}) {
-        this._instant = !opts.stream;
+    async pseudostreamContent(piece) {
+        //this._attachToList();
+        this._ensureRendered();
 
-        if (typeof content === 'string') {
-            const text = content.trim();
-            if (text) {
-                this._enqueue({ kind: 'narration-block' });
-                this._enqueue({ kind: 'narration', text });
-            }
-        } else if (Array.isArray(content)) {
-            for (const block of content) {
-                if (!block) continue;
-                if (block.type === 'narration') {
-                    this._enqueue({ kind: 'narration-block' });
-                    if (block.text) this._enqueue({ kind: 'narration', text: block.text });
-                } else if (block.type === 'dialogue') {
-                    this._enqueue({ kind: 'dialogue-block' });
-                    for (const frag of (block.fragments || [])) {
-                        if (!frag || !frag.text) continue;
-                        this._enqueue({
-                            kind: frag.type === 'narration' ? 'narration' : 'dialogue',
-                            text: frag.text,
-                        });
-                    }
-                }
+        if (this._blockType() === 'narration' && piece.type !== 'narration') {
+            console.error('game-message: narration block cannot pseudo-stream a dialogue piece.', piece);
+            await this._finishPseudostream();
+            return;
+        }
+
+        if (piece.type === 'narration') {
+            await this._appendFragment('narration', /** @type {any} */(piece).text || '', true);
+        } else {
+            for (const frag of (/** @type {any} */(piece).fragments || [])) {
+                if (!frag || !frag.text) continue;
+                const mode = frag.type === 'narration' ? 'narration' : 'dialogue';
+                await this._appendFragment(mode, frag.text, true);
             }
         }
 
-        this._enqueue({ kind: 'done' });
-    }
-
-    // ── Buffered pump ────────────────────────────────────────────────
-
-    /**
-     * @param {{ kind: 'narration-block' | 'dialogue-block' | 'narration' | 'dialogue' | 'done', text?: string }} ev
-     */
-    _enqueue(ev) {
-        this._queue.push(ev);
-        this._ensurePump();
-    }
-
-    _ensurePump() {
-        if (this._pumping) return;
-        this._pumping = true;
-        // Kick off asynchronously so a burst of _enqueue calls batches up first.
-        Promise.resolve().then(() => this._pump());
-    }
-
-    async _pump() {
-        while (this._queue.length) {
-            const ev = /** @type {any} */ (this._queue.shift());
-            if (!this.isConnected) { this._pumping = false; return; }
-            await this._handleEvent(ev);
-        }
-        this._pumping = false;
-        // Guard against events enqueued during the final await.
-        if (this._queue.length) this._ensurePump();
+        await this._finishPseudostream();
     }
 
     /**
-     * @param {{ kind: string, text?: string }} ev
+     * Overridable async hook run right before a block signals completion, for
+     * BOTH the real and pseudo streams. Resolves immediately by default; the
+     * host may replace it to perform extra work (e.g. voice playback) before
+     * the finished event fires. To be defined later.
+     * @param {DEConversationMessageNarration | DEConversationMessageDialogue} piece
+     * @returns {Promise<void>}
      */
-    async _handleEvent(ev) {
-        switch (ev.kind) {
-            case 'narration-block':
-                await this._closeCurrentBlock();
-                await this._openBlock('narration');
-                break;
-            case 'dialogue-block':
-                await this._closeCurrentBlock();
-                await this._openBlock('dialogue');
-                break;
-            case 'narration':
-                await this._appendText(ev.text || '', 'narration');
-                break;
-            case 'dialogue':
-                await this._appendText(ev.text || '', 'dialogue');
-                break;
-            case 'done':
-                await this._closeCurrentBlock();
-                this._finish();
-                break;
-        }
+    async finalizeBlock(piece) {
+        // Intentionally empty — to be defined later.
     }
 
-    _finish() {
+    // ── Finalisation ─────────────────────────────────────────────────
+
+    async _finishRealStream() {
+        if (this._finished) return;
         this._hideCursor();
+        await this.finalizeBlock(this._piece);
+        this._finished = true;
         this.dispatchEvent(new CustomEvent('on-stream-finished', { bubbles: true, composed: true }));
     }
 
-    // ── Block lifecycle ──────────────────────────────────────────────
-
-    /**
-     * @param {'narration' | 'dialogue'} type
-     */
-    async _openBlock(type) {
-        if (typeof this.beforeBlock === 'function') {
-            await this.beforeBlock({ type, index: this._blockIndex, message: this });
-        }
-        if (type === 'narration') this._createNarrationBlock();
-        else this._createDialogueBlock();
-    }
-
-    async _closeCurrentBlock() {
-        const block = this._current;
-        if (!block) return;
+    async _finishPseudostream() {
         this._hideCursor();
-        this._current = null;
-        if (typeof this.afterBlock === 'function') {
-            await this.afterBlock({ type: block.type, index: block.index, message: this });
+        await this.finalizeBlock(this._piece);
+        this.dispatchEvent(new CustomEvent('on-pseudostream-finished', { bubbles: true, composed: true }));
+    }
+
+    // // ── Self-insertion into the story list ───────────────────────────
+
+    // _attachToList() {
+    //     if (this.isConnected) return;
+    //     const overlay = document.querySelector('app-game');
+    //     const list = overlay && overlay.shadowRoot
+    //         ? overlay.shadowRoot.querySelector('.game-story-content-list')
+    //         : null;
+    //     if (list) list.appendChild(this);
+    // }
+
+    // ── Rendering ────────────────────────────────────────────────────
+
+    _ensureRendered() {
+        if (this._rendered) return;
+        this._rendered = true;
+
+        this.root.innerHTML = `
+            <link rel="stylesheet" href="components/game/game-message.css">
+            <div class="block-root"></div>`;
+        const rootEl = /** @type {HTMLElement} */ (this.root.querySelector('.block-root'));
+
+        if (this._blockType() === 'narration') {
+            this._piece = { type: 'narration', text: '' };
+            this._buildNarrationBox(rootEl);
+        } else {
+            this._piece = { type: 'dialogue', fragments: [] };
+            this._buildDialogueBox(rootEl);
         }
     }
 
-    _createNarrationBlock() {
+    /** @param {HTMLElement} rootEl */
+    _buildNarrationBox(rootEl) {
         const box = document.createElement('div');
         box.className = 'message narration';
         const p = document.createElement('p');
         p.className = 'narration-text';
         box.appendChild(p);
-        this._blocksEl?.appendChild(box);
-        this._current = { type: 'narration', index: this._blockIndex, box, textEl: p, fragEl: null, fragType: null };
-        this._wireBlockDebugClick(box, this._blockIndex);
-        this._blockIndex++;
-        this._scrollParent();
+        rootEl.appendChild(box);
+        this._narrationTextEl = p;
+        this._wireBlockDebugClick(box);
     }
 
-    _createDialogueBlock() {
-        const showAvatar = this.getAttribute('show-avatar') !== 'false';
-        const isSelf = this.hasAttribute('is-self');
-        const isGroupStart = this.hasAttribute('is-group-start');
-        // The first dialogue block of a continuation message (not a group start)
-        // hides the avatar/name so it reads as part of the previous message.
-        const continuation = !this._firstDialogueRendered && !isGroupStart;
-        const drawAvatar = showAvatar && !continuation;
+    /** @param {HTMLElement} rootEl */
+    _buildDialogueBox(rootEl) {
+        const showAvatar = this.getAttribute('show-avatar') === 'true';
+        const isSelf = this.hasAttribute('is-self') || this.getAttribute('is-self') === 'true';
 
         const box = document.createElement('div');
-        box.className = 'message chat' + (isSelf ? ' self' : '') + (isGroupStart ? ' group-start' : '');
+        box.className = 'message chat' + (isSelf ? ' self' : '') + (showAvatar ? ' group-start' : '');
 
         const body = document.createElement('div');
         body.className = 'body';
 
         if (showAvatar) {
-            if (drawAvatar) {
-                const avatar = document.createElement('div');
-                avatar.className = 'avatar';
-                const img = document.createElement('app-asset-image');
-                img.setAttribute('image-url', this.getAttribute('image-url') || '');
-                img.setAttribute('default-image', './images/default-profile.png');
-                img.setAttribute('no-transition', 'true');
-                avatar.appendChild(img);
-                box.appendChild(avatar);
+            const avatar = document.createElement('div');
+            avatar.className = 'avatar';
+            const img = document.createElement('app-asset-image');
+            img.setAttribute('image-url', this.getAttribute('image-url') || '');
+            img.setAttribute('default-image', './images/default-profile.png');
+            img.setAttribute('no-transition', 'true');
+            avatar.appendChild(img);
+            box.appendChild(avatar);
 
-                const nameEl = document.createElement('div');
-                nameEl.className = 'name';
-                nameEl.textContent = this.getAttribute('sender-name') || '';
-                body.appendChild(nameEl);
-            } else {
-                const spacer = document.createElement('div');
-                spacer.className = 'avatar-spacer';
-                spacer.setAttribute('aria-hidden', 'true');
-                box.appendChild(spacer);
-            }
+            const nameEl = document.createElement('div');
+            nameEl.className = 'name';
+            nameEl.textContent = this.getAttribute('sender-name') || '';
+            body.appendChild(nameEl);
+        } else {
+            const spacer = document.createElement('div');
+            spacer.className = 'avatar-spacer';
+            spacer.setAttribute('aria-hidden', 'true');
+            box.appendChild(spacer);
         }
 
         const txt = document.createElement('div');
         txt.className = 'msg-text';
         body.appendChild(txt);
         box.appendChild(body);
-
-        this._blocksEl?.appendChild(box);
-        this._current = { type: 'dialogue', index: this._blockIndex, box, textEl: txt, fragEl: null, fragType: null };
-        this._firstDialogueRendered = true;
-        this._wireBlockDebugClick(box, this._blockIndex);
-        this._blockIndex++;
-        this._scrollParent();
+        rootEl.appendChild(box);
+        this._msgTextEl = txt;
+        this._wireBlockDebugClick(box);
     }
 
     // ── Text materialisation ─────────────────────────────────────────
 
     /**
-     * Append text to the current block, dripping it token-by-token unless in
-     * instant mode.
-     * @param {string} text
+     * Append (and record) a chunk of text to the current block. For dialogue
+     * blocks the text is routed into a dialogue/narration fragment, with an em
+     * dash inserted between fragments of differing kind. When `animate` is
+     * true the text drips token-by-token; otherwise it is written instantly.
      * @param {'narration' | 'dialogue'} mode
+     * @param {string} text
+     * @param {boolean} animate
      */
-    async _appendText(text, mode) {
+    async _appendFragment(mode, text, animate) {
+        text = (text || '').replace(/\*/g, '');
         if (!text) return;
-        if (!this._current) {
-            // Defensive: a stray text event with no block — open a narration one.
-            await this._openBlock('narration');
-        }
-        const block = /** @type {any} */ (this._current);
 
-        // Resolve the target element the text should grow into.
         let target;
-        if (block.type === 'narration') {
-            target = block.textEl;
+        if (this._blockType() === 'narration') {
+            this._piece.text += text;
+            target = this._narrationTextEl;
         } else {
-            // Within a dialogue block, dialogue and narration alternate as
-            // fragments. A change of fragment type starts a new fragment span.
-            if (block.fragType !== mode || !block.fragEl) {
-                const span = document.createElement('span');
-                span.className = mode === 'narration' ? 'inline-narration' : 'dialogue-frag';
-                // Separate consecutive fragments with a space when needed.
-                if (block.textEl.textContent && !/\s$/.test(block.textEl.textContent) && !/^\s/.test(text)) {
-                    block.textEl.appendChild(document.createTextNode(' '));
-                }
-                block.textEl.appendChild(span);
-                block.fragEl = span;
-                block.fragType = mode;
+            target = this._ensureDialogueFragment(mode);
+            const frags = this._piece.fragments;
+            frags[frags.length - 1].text += text;
+        }
+        if (!target) return;
+
+        if (animate) await this._drip(target, text);
+        else this._writeInstant(target, text);
+    }
+
+    /**
+     * Ensure there is an open fragment span of the given kind in the dialogue
+     * box, inserting an em dash before it when switching kinds. Returns the
+     * span the text should grow into.
+     * @param {'narration' | 'dialogue'} mode
+     * @returns {HTMLElement}
+     */
+    _ensureDialogueFragment(mode) {
+        if (this._curFragType !== mode || !this._curFragEl) {
+            if (this._curFragEl && this._msgTextEl) {
+                const dash = document.createElement('span');
+                dash.className = 'em-dash';
+                dash.textContent = ' — ';
+                this._msgTextEl.appendChild(dash);
             }
-            target = block.fragEl;
-        }
-
-        text = text.replace(/\*/g, '');
-        if (!text) return;
-
-        if (this._instant) {
             const span = document.createElement('span');
-            span.className = 'token-instant';
-            span.textContent = text;
-            target.appendChild(span);
-            this._scrollParent();
-            return;
+            span.className = mode === 'narration' ? 'inline-narration' : 'dialogue-frag';
+            /** @type {HTMLElement} */ (this._msgTextEl).appendChild(span);
+            this._curFragEl = span;
+            this._curFragType = mode;
+            this._piece.fragments.push({ type: mode, text: '' });
         }
+        return /** @type {HTMLElement} */ (this._curFragEl);
+    }
 
-        await this._drip(target, text);
+    /**
+     * @param {HTMLElement} target
+     * @param {string} text
+     */
+    _writeInstant(target, text) {
+        const span = document.createElement('span');
+        span.className = 'token';
+        span.textContent = text;
+        target.appendChild(span);
+        this._scrollParent();
     }
 
     /**
@@ -449,20 +389,13 @@ class GameMessage extends HTMLElement {
     }
 
     /**
-     * Compute the per-token delay. Deliberately unhurried, but adaptive: the
-     * larger the pending buffer, the faster it drains so it never lags behind.
+     * Per-token delay for the pseudo-stream. Deliberately unhurried but with a
+     * natural rhythm.
      * @returns {Promise<void>}
      */
     _delay() {
-        const backlog = this._queue.length;
-        // Base pace: gentle, human-readable.
         let base = 26 + Math.random() * 30; // 26–56 ms
-        // Occasional longer beat for a natural rhythm (~7% of the time).
         if (Math.random() < 0.07) base *= 2.4 + Math.random() * 2;
-        // Speed up progressively as the buffer builds so we stay close to live.
-        if (backlog > 24) base *= 0.28;
-        else if (backlog > 12) base *= 0.5;
-        else if (backlog > 6) base *= 0.72;
         return new Promise(resolve => setTimeout(resolve, base));
     }
 
@@ -526,12 +459,12 @@ class GameMessage extends HTMLElement {
      * Attach a click handler that opens the debug-message dialog for this
      * block when the `debug` attribute is "true".
      * @param {HTMLElement} box
-     * @param {number} index
      */
-    _wireBlockDebugClick(box, index) {
+    _wireBlockDebugClick(box) {
         box.addEventListener('click', () => {
             if (this.getAttribute('debug') !== 'true') return;
-            const gid = this.dataset.gid || this.getAttribute('data-gid') || this.getAttribute('gid') || '';
+            const gid = this.getAttribute('gid') || '';
+            const index = this.getAttribute('content-index') || '0';
             const senderName = this.getAttribute('sender-name') || '';
             const dialog = document.createElement('app-dialog');
             dialog.setAttribute('dialog-title', `Message debug — block ${index}`);

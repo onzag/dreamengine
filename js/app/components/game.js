@@ -94,6 +94,10 @@ class GameOverlay extends HTMLElement {
          */
         this.messageBuffer = [];
         /**
+         * @type {Array<MessageBufferEntry>}
+         */
+        this.loadedMessageBuffer = [];
+        /**
          * @type {Array<import('../../engine/index.js').EngineConversationEvent>}
          */
         this.inferringEventBuffer = [];
@@ -547,6 +551,9 @@ class GameOverlay extends HTMLElement {
                             cfg('user.species'), cfg('user.speciesType'), cfg('user.race'), cfg('user.groupBelonging'), cfg('user.initialClothing'), cfg('user.initialClothingFitment')
                         ]);
 
+                        const actualInitialClothing = initialClothing || "auto";
+                        const actualInitialClothingFitment = initialClothingFitment || "normal";
+
                         user = {
                             name,
                             metadata: {
@@ -554,7 +561,7 @@ class GameOverlay extends HTMLElement {
                                     neutral: "profile",
                                 },
                             },
-                            clothing: initialClothing !== "auto" ? "custom" : (initialClothingFitment === "tight" ? "auto-tight" : (initialClothingFitment === "loose" ? "auto-loose" : "auto")),
+                            clothing: actualInitialClothing !== "auto" ? "custom" : (actualInitialClothingFitment === "tight" ? "auto-tight" : (actualInitialClothingFitment === "loose" ? "auto-loose" : "auto")),
                             sex: sex || "male",
                             gender: gender || sex || "male",
                             heightCm: typeof heightCm === "number" ? Number(heightCm) : 175,
@@ -784,6 +791,7 @@ class GameOverlay extends HTMLElement {
                 if (loadingMessage) /** @type {HTMLElement} */ (loadingMessage).style.display = 'none';
 
                 bindMethods();
+                await this.updateStory(false);
                 this.onDEObjectUpdated();
             }
         } catch (error) {
@@ -801,7 +809,7 @@ class GameOverlay extends HTMLElement {
             this.onCharacterUpdateUI();
             this.updateLocation();
             this.updatePresentCharacters();
-            this.updateStory();
+            this.updateStory(true);
         }, 100);
     }
 
@@ -1545,12 +1553,25 @@ class GameOverlay extends HTMLElement {
         while (next) {
             const contentpieces = next.content;
 
-            // there might not be content pieces whatsoever
-            for (let i = 0; i < contentpieces.length; i++) {
-                const piece = contentpieces[i];
-                const el = this._createMessageElement(next, piece, i);
+            // Only PSEUDOSTREAM (finished) messages are materialised from their
+            // content here. A live STREAM message must have its elements created
+            // lazily by the incoming engine events (via
+            // onInferringOverConversationMessage), because feedEvent treats an
+            // "add-*-block" event as the END of the current block — so a
+            // pre-created element would be finished the instant its start event
+            // arrived, and the following text events would hit a finished
+            // element ("message is not streaming").
+            if (next.pseudostream) {
+                for (let i = 0; i < contentpieces.length; i++) {
+                    const piece = contentpieces[i];
 
-                if (next.pseudostream) {
+                    // If this message was previously live and its stream
+                    // events/promise are still lingering, dispose of them now so
+                    // they can't feed a since-detached element or leak.
+                    this._disposeInferringForGid(next.gid);
+
+                    const el = this._createMessageElement(next, piece, i);
+
                     /**
                      * @type {Promise<void>}
                      */
@@ -1566,19 +1587,21 @@ class GameOverlay extends HTMLElement {
             }
 
             if (next.stream) {
-                await this._inferringEventPromises[next.gid];
                 this.consumeRemainingInferringBuffer(next.gid);
+                await this._inferringEventPromises[next.gid];
             }
 
             next = this.messageBuffer.shift();
         }
+        this._isResolvingMessageBuffer = false;
     }
 
     /**
      * Public entry point. Guards against concurrent runs (which could
      * otherwise create duplicate message elements) by serialising them.
+     * @param {boolean} shouldStreamMessages - whether to stream messages (true) or render them instantly (false). This is usually false when loading a save file, and true when starting a new game.
      */
-    async updateStory() {
+    async updateStory(shouldStreamMessages) {
         try {
             const actualUserName = await window.ENGINE_WORKER_CLIENT.queryDEObject({
                 path: ["user"],
@@ -1592,16 +1615,6 @@ class GameOverlay extends HTMLElement {
             });
 
             if (!history || !Array.isArray(history) || history.length === 0) return;
-
-            /**
-             * Determines if this is the first time we are loading the story, this means it is the first
-             * time we are loading the story, and we should most certainly not stream the messages
-             * 
-             * One exception applies, if there is no save file, then we should stream all the messages, including that initial preset
-             * narration
-             */
-            const isTheFirstLoad = !this.lastMessageGid;
-            const shouldStreamMessages = this.hasAttribute("save-id") ? isTheFirstLoad : true;
 
             this.lastMessageGid = history[history.length - 1].gid;
 
@@ -1669,8 +1682,13 @@ class GameOverlay extends HTMLElement {
                     }
                 }
 
-                const stream = content.length ? false : shouldStreamMessages;
-                const pseudostream = content.length ? shouldStreamMessages : false;
+                // A message that is currently streaming (the worker is still
+                // emitting live events for it) must use the real stream so those
+                // events drive it. Once it is done (streaming === false) it is
+                // replayed as a pseudostream. shouldStreamMessages gates whether
+                // finished messages animate at all (vs. appear instantly).
+                const stream = msg.streaming;
+                const pseudostream = !stream && shouldStreamMessages;
                 resolvedMsgs.push({
                     gid: String(gid),
                     senderName,
@@ -1692,6 +1710,9 @@ class GameOverlay extends HTMLElement {
 
             for (const msg of resolvedMsgs) {
                 this.messageBuffer.push(msg);
+                if (msg.stream) {
+                    this.loadedMessageBuffer.push(msg);
+                }
             }
 
             this.resolveBuffer();
@@ -1724,6 +1745,7 @@ class GameOverlay extends HTMLElement {
         if (!entry.isNarration) {
             el.setAttribute('sender-name', entry.senderName);
         }
+        this.root.querySelector('.game-story-content-list')?.appendChild(el);
         if (entry.pseudostream) {
             el.pseudostreamContent(piece);
         }
@@ -1804,6 +1826,21 @@ class GameOverlay extends HTMLElement {
     }
 
     /**
+     * Dispose of any lingering live-stream state for a message. Drops every
+     * buffered inferring event belonging to the gid and resolves + deletes its
+     * pending promise/resolver so nothing keeps feeding a since-finished
+     * message (which would otherwise leak the promise and its resolver).
+     * @param {string} gid
+     */
+    _disposeInferringForGid(gid) {
+        this.inferringEventBuffer = this.inferringEventBuffer.filter(e => e.messageId !== gid);
+        const resolver = this._inferringEventResolvers[gid];
+        if (resolver) resolver();
+        delete this._inferringEventResolvers[gid];
+        delete this._inferringEventPromises[gid];
+    }
+
+    /**
      * @param {string} gid
      */
     async consumeRemainingInferringBuffer(gid) {
@@ -1847,7 +1884,10 @@ class GameOverlay extends HTMLElement {
                 return;
             }
             const allElsWithTheSameGid = Array.from(list.querySelectorAll(`app-game-message[gid="${CSS.escape(gid)}"]`));
-            const currentlyStreamingElWithTheSameGid = allElsWithTheSameGid.find(el => el.isStreaming());
+            const currentlyStreamingElWithTheSameGid = allElsWithTheSameGid.find(el => {
+                // @ts-ignore
+                return el.isStreaming();
+            });
             if (currentlyStreamingElWithTheSameGid) {
                 // If there's already a streaming message with the same gid and streaming, we don't need to do anything but save the event for later
                 this.inferringEventBuffer.push(data);
@@ -1855,9 +1895,11 @@ class GameOverlay extends HTMLElement {
             } else {
                 if (data.event === "add-narration-block") {
                     // If the event is an "add-narration-block" event, we can create a new message element for it.
-                    const entry = this.messageBuffer.find(e => e.gid === gid);
+                    const entry = this.loadedMessageBuffer.find(e => e.gid === gid);
                     if (!entry) {
-                        console.warn(`Received add-narration-block event for unknown message gid ${gid} that is not currently in the buffer. Ignoring.`);
+                        // Entry not loaded yet (updateStory hasn't run). Buffer and trigger.
+                        this.inferringEventBuffer.push(data);
+                        this.updateStory(true);
                         return;
                     }
 
@@ -1870,9 +1912,11 @@ class GameOverlay extends HTMLElement {
                     msgEl.addEventListener('on-stream-finished', this.consumeRemainingInferringBuffer.bind(this));
                 } else if (data.event === "add-dialogue-block") {
                     // If the event is an "add-dialogue-block" event, we can create a new message element for it.
-                    const entry = this.messageBuffer.find(e => e.gid === gid);
+                    const entry = this.loadedMessageBuffer.find(e => e.gid === gid);
                     if (!entry) {
-                        console.warn(`Received add-dialogue-block event for unknown message gid ${gid} that is not currently in the buffer. Ignoring.`);
+                        // Entry not loaded yet (updateStory hasn't run). Buffer and trigger.
+                        this.inferringEventBuffer.push(data);
+                        this.updateStory(true);
                         return;
                     }
 
@@ -1900,6 +1944,12 @@ class GameOverlay extends HTMLElement {
                     }
                 });
             }
+        } else if (msgEl.getAttribute('pseudostream') === 'true') {
+            // The message finished (streaming === false) and updateStory already
+            // rendered it as a pseudostream. Any live events still arriving for it
+            // are stale leftovers — drop them and clean up its stream state so
+            // nothing lingers.
+            this._disposeInferringForGid(gid);
         } else {
             console.error(`Received conversation event for message ${gid} content index ${index}, but the message is not streaming. Event:`, data);
         }

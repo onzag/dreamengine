@@ -106,8 +106,8 @@ export async function startDiffusionProcess(diffusionExecutable) {
 }
 
 export async function stopDiffusionProcess() {
-    console.log("Stopping diffusion process");
     if (diffusionProcess) {
+        console.log("Stopping diffusion process");
         diffusionProcess.kill();
         diffusionProcess = null;
         return await new Promise(resolve => setTimeout(resolve, 1000));

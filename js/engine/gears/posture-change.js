@@ -16,6 +16,8 @@ export default async function calculatePostureChange(engine, character, knownCha
         throw new Error("Inference adapter not initialized");
     }
 
+    // TODO instead of ask each posture one by one, we can better try asking which posture better describes the character
+
     const basicPostures = getBasicPostures();
 
     const yesNoGrammarObject = yesNoGrammar(engine);

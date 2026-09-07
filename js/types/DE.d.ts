@@ -3001,6 +3001,10 @@ declare interface DEConversationMessage {
      */
     id: Readonly<string>;
     /**
+     * A stateful value on whether is currently streaming tokens and running and not ready completely
+     */
+    streaming: boolean;
+    /**
      * Who sent this message
      */
     sender: string;
