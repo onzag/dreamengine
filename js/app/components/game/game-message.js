@@ -1,6 +1,8 @@
 import '../world-image.js';
 import '../dialog.js';
 import '../debug/debug-message.js';
+import { emotionsGrouped } from '../../../engine/util/emotions.js';
+import { playNarration } from '../../sound.js';
 
 /**
  * A SINGLE story block in the in-dream feed.
@@ -198,7 +200,97 @@ class GameMessage extends HTMLElement {
      * @returns {Promise<void>}
      */
     async finalizeBlock(piece) {
-        // Intentionally empty — to be defined later.
+        if (piece.type === "narration") {
+            const narratorVoice = await this.getNarratorVoice();
+            if (!narratorVoice) return;
+            await this.speakNarration(piece, narratorVoice);
+        } else {
+            const narratorVoice = await this.getNarratorVoice();
+
+            if (!narratorVoice) return;
+
+            const characterName = this.getAttribute('sender-name');
+
+            let characterVoiceInfo = !characterName ? {
+                neutral: narratorVoice,
+            } : await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                path: ["characters", characterName, "metadata", "voice"],
+            });
+
+            if (!characterVoiceInfo || !characterVoiceInfo.neutral) {
+                characterVoiceInfo = {
+                    neutral: narratorVoice,
+                };
+            }
+
+            await this.speakDialogue(piece, narratorVoice, characterVoiceInfo);
+        }
+    }
+
+    /**
+     * 
+     * @param {DEConversationMessageNarration} piece 
+     * @param {CharacterVoiceEntry} narratorVoice 
+     */
+    async speakNarration(piece, narratorVoice) {
+        const textToSpeak = piece.text;
+        // TODO the payload for the vocalizer
+        const audioSrc = await this.getSrcFromVocalizer();
+        await playNarration(audioSrc, 1);
+    }
+
+    /**
+     * 
+     * @param {DEConversationMessageDialogue} piece 
+     * @param {CharacterVoiceEntry} narratorVoice 
+     * @param {CharacterVoiceAssets} characterVoiceInfo
+     */
+    async speakDialogue(piece, narratorVoice, characterVoiceInfo) {
+        for (const frag of piece.fragments) {
+            if (frag.type === "narration") {
+                // TODO set the payload
+            } else {
+                const emotion = this.getAttribute("emotion") || "neutral";
+                // @ts-ignore
+                let specificVoice = /** @type {CharacterVoiceEntry} */ (characterVoiceInfo[emotion]);
+                if (!specificVoice) {
+                    const keyOfEmotion = Object.keys(emotionsGrouped).find((groupKey) => {
+                        if (emotionsGrouped[groupKey].includes(emotion)) {
+                            return true;
+                        }
+                    });
+
+                    const alternatives = keyOfEmotion ? emotionsGrouped[keyOfEmotion] : [];
+                    for (const altEmotion of alternatives) {
+                        if (altEmotion === emotion) continue;
+                        // @ts-ignore
+                        specificVoice = /** @type {CharacterVoiceEntry} */ (characterVoiceInfo[altEmotion]);
+                        if (specificVoice) {
+                            break;
+                        }
+                    }
+
+                    if (!specificVoice) {
+                        // @ts-ignore
+                        specificVoice = /** @type {CharacterVoiceEntry} */ (characterVoiceInfo["neutral"]);
+                    }
+                }
+
+                if (!specificVoice || !specificVoice.asset || specificVoice.asset === "@none" || typeof specificVoice.asset !== "string") {
+                    specificVoice = narratorVoice;
+                }
+
+                // TODO set the payload for dialogue
+            }
+        }
+    }
+
+    /**
+     * TODO the params for the payload
+     * @return {Promise<string>} the audio that was generated
+     */
+    async getSrcFromVocalizer(payload) {
+        
     }
 
     // ── Finalisation ─────────────────────────────────────────────────
@@ -453,6 +545,10 @@ class GameMessage extends HTMLElement {
         }
     }
 
+    /**
+     * 
+     * @returns {Promise<CharacterVoiceEntry|null>}
+     */
     async getNarratorVoice() {
         const supportsVocalizer = await window.API.getConfigValue("vocalizerEnabled");
         if (!supportsVocalizer) return null;

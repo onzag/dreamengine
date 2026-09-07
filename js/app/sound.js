@@ -94,14 +94,24 @@ let currentNarrationSound = null;
  * 
  * @param {string} src
  * @param {number} volume
- * @returns {void}
+ * @returns {Promise<void>}
  */
-function playNarration(src, volume = 1) {
+async function playNarration(src, volume = 1) {
   if (currentNarrationSound) {
     currentNarrationSound.pause();
     currentNarrationSound.src = '';
     currentNarrationSound = null;
   }
+  /**
+   * @type {(() => void) | null}
+   */
+  let promiseResolve = null;
+  /**
+   * @type {Promise<void>}
+   */
+  const promise = new Promise(resolve => {
+    promiseResolve = resolve;
+  });
   const sound = new Audio(src);
   sound.volume = volume;
   sound.play().catch(err => console.log('Sound play failed:', err));
@@ -111,8 +121,12 @@ function playNarration(src, volume = 1) {
     if (currentNarrationSound === sound) {
       currentNarrationSound = null;
     }
+    if (promiseResolve) {
+      promiseResolve();
+    }
   });
   currentNarrationSound = sound;
+  return promise;
 }
 
 function stopNarration() {
@@ -321,27 +335,27 @@ async function createAmbience(id, src, startingGain, token, loop = true) {
   if (audioContext.state === 'suspended') {
     try { await audioContext.resume(); } catch { /* ignore */ }
   }
-  if (!isLatestOp(id, token)) { try { audioContext.close(); } catch {} return null; }
+  if (!isLatestOp(id, token)) { try { audioContext.close(); } catch { } return null; }
 
   let arrayBuffer;
   try {
     arrayBuffer = await fetch(src).then(res => res.arrayBuffer());
   } catch (err) {
     console.log('Ambience fetch failed:', err);
-    try { audioContext.close(); } catch {}
+    try { audioContext.close(); } catch { }
     return null;
   }
-  if (!isLatestOp(id, token)) { try { audioContext.close(); } catch {} return null; }
+  if (!isLatestOp(id, token)) { try { audioContext.close(); } catch { } return null; }
 
   let audioBuffer;
   try {
     audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
   } catch (err) {
     console.log('Ambience decode failed:', err);
-    try { audioContext.close(); } catch {}
+    try { audioContext.close(); } catch { }
     return null;
   }
-  if (!isLatestOp(id, token)) { try { audioContext.close(); } catch {} return null; }
+  if (!isLatestOp(id, token)) { try { audioContext.close(); } catch { } return null; }
 
   const gainNode = audioContext.createGain();
   const source = audioContext.createBufferSource();

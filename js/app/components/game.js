@@ -16,6 +16,8 @@ import { emotionsGrouped } from '../../engine/util/emotions.js';
  * @property {boolean} isNarration
  * @property {boolean} stream
  * @property {boolean} pseudostream
+ * @property {string} emotion
+ * @property {string[]} emotionalRange
  * @property {Array<DEConversationMessageDialogue | DEConversationMessageNarration>} content
  */
 
@@ -1702,6 +1704,7 @@ class GameOverlay extends HTMLElement {
                 const isGroupStart = !isNarration && senderName !== lastSenderName;
 
                 const emotion = msg.emotion || "neutral";
+                const emotionalRange = msg.emotionalRange || [];
 
                 let assetImage = !isNarration ? (await window.ENGINE_WORKER_CLIENT.queryDEObject({
                     path: ["characters", senderName, "metadata", "assets", emotion],
@@ -1753,6 +1756,8 @@ class GameOverlay extends HTMLElement {
                     content,
                     stream,
                     pseudostream,
+                    emotion,
+                    emotionalRange,
                 });
                 if (stream) {
                     this._inferringEventPromises[gid] = new Promise(resolve => {
@@ -1801,6 +1806,8 @@ class GameOverlay extends HTMLElement {
         el.setAttribute('type', isNarration ? 'narration' : 'dialogue');
         el.setAttribute('stream', entry.stream ? 'true' : 'false');
         el.setAttribute('pseudostream', entry.pseudostream ? 'true' : 'false');
+        el.setAttribute("emotion", entry.emotion || "neutral");
+        el.setAttribute("emotional-range", JSON.stringify(entry.emotionalRange || []));
         if (!isNarration) {
             el.setAttribute('sender-name', entry.senderName);
         }
