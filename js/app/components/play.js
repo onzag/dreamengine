@@ -1,4 +1,4 @@
-import { playCancelSound, playConfirmSound, playHoverSound, playSound, stopAllAmbiencesAndStartNewOne } from '../sound.js';
+import { playCancelSound, playConfirmSound, playHoverSound, playSound, playNarration, setAllAmbiencesVolume, stopAllAmbiencesAndStartNewOne, stopNarration } from '../sound.js';
 import './world-image.js';
 
 /**
@@ -209,6 +209,16 @@ class PlayOverlay extends HTMLElement {
         this.selectedCharacter = null;
         /** @type {'narrator' | 'schizophrenia' | null} */
         this.selectedSpecialMode = null;
+        /** @type {string} The selected narrator voice value (with extension, `@`-prefixed for system voices). `@none` means no narrator. */
+        this.selectedNarrator = localStorage.getItem('defaultNarratorVoice') || '@none';
+        /** @type {boolean} Whether the world's own narrator(s) should be overridden with the default. */
+        this.overrideWorldNarrator = localStorage.getItem('defaultNarratorVoiceOverride') === 'true';
+        /** @type {boolean} */
+        this.vocalizerEnabled = false;
+        /** @type {boolean} Whether ambience volume is currently lowered for the narration step. */
+        this.ambienceLowered = false;
+        /** @type {Array<{ id: string, label: string }>} */
+        this.steps = STEPS.slice();
         /** @type {Array<{ namespace: string, id: string, singleCharacter: boolean }>} */
         this.selectedPartyCharacters = [];
         /** @type {Record<string, Array<{ namespace: string, id: string, singleCharacter: boolean }>> | null} */
@@ -222,6 +232,16 @@ class PlayOverlay extends HTMLElement {
     }
 
     async connectedCallback() {
+        try {
+            this.vocalizerEnabled = !!(await window.API.getConfigValue('vocalizerEnabled'));
+        } catch (err) {
+            console.error('Failed to read vocalizerEnabled config:', err);
+            this.vocalizerEnabled = false;
+        }
+        this.steps = this.vocalizerEnabled
+            ? [...STEPS, { id: 'narration', label: 'Narration' }]
+            : STEPS.slice();
+
         this.render();
 
         setTimeout(() => {
@@ -278,6 +298,7 @@ class PlayOverlay extends HTMLElement {
 
     async disconnectedCallback() {
         document.removeEventListener('keydown', this.onDocumentKeydown);
+        this.restoreAmbienceVolume();
         if (!this.startedGame) {
             // @ts-expect-error
             document.querySelector('.sky').style.display = 'block';
@@ -296,6 +317,8 @@ class PlayOverlay extends HTMLElement {
         }
         if (this.currentStepIndex === 2) return true; // empty party = solo is allowed
         if (this.currentStepIndex === 3) return !!this.selectedCharacter;
+        // Narration step: selecting a narrator is optional.
+        if (this.steps[this.currentStepIndex]?.id === 'narration') return true;
         return false;
     }
 
@@ -307,7 +330,7 @@ class PlayOverlay extends HTMLElement {
         }
         if (continueBtn) {
             continueBtn.classList.toggle('disabled', !this.canContinue());
-            const isLast = this.currentStepIndex === STEPS.length - 1;
+            const isLast = this.currentStepIndex === this.steps.length - 1;
             continueBtn.textContent = isLast ? 'Start' : 'Continue';
         }
         this.updateStepIndicator();
@@ -333,7 +356,7 @@ class PlayOverlay extends HTMLElement {
         playConfirmSound();
         // When loading a save, skip party/character steps and start immediately.
         const isLoadingFromSave = this.currentStepIndex === 1 && this.selectedMode === 'load';
-        if (!isLoadingFromSave && this.currentStepIndex < STEPS.length - 1) {
+        if (!isLoadingFromSave && this.currentStepIndex < this.steps.length - 1) {
             this.currentStepIndex += 1;
             this.renderStep();
         } else {
@@ -347,6 +370,8 @@ class PlayOverlay extends HTMLElement {
                     partyCharacters: this.selectedPartyCharacters,
                     dreamStability: this.selectedDreamStability,
                     voiceName: this.userSelfName || '',
+                    defaultNarratorVoice: this.selectedNarrator || '@none',
+                    defaultNarratorVoiceOverride: this.overrideWorldNarrator,
                 },
             }));
             this.startedGame = true;
@@ -371,6 +396,7 @@ class PlayOverlay extends HTMLElement {
             setTimeout(() => {
                 playSound("./sounds/transition.mp3", 0.8);
             }, 300);
+            this.restoreAmbienceVolume();
             await stopAllAmbiencesAndStartNewOne([], 1000);
         }
     }
@@ -378,6 +404,13 @@ class PlayOverlay extends HTMLElement {
     async renderStep() {
         const body = this.root.querySelector('.play-body');
         if (!body) return;
+
+        const stepId = this.steps[this.currentStepIndex]?.id;
+
+        // Restore ambience to normal volume whenever we leave the narration step.
+        if (stepId !== 'narration') {
+            this.restoreAmbienceVolume();
+        }
 
         if (this.currentStepIndex === 0) {
             await this.renderWorldStep(body);
@@ -387,10 +420,181 @@ class PlayOverlay extends HTMLElement {
             await this.renderPartyStep(body);
         } else if (this.currentStepIndex === 3) {
             await this.renderCharacterStep(body);
+        } else if (stepId === 'narration') {
+            await this.renderNarrationStep(body);
         }
 
-        this.applyStabilityTheme();
+        // applyStabilityTheme restarts the ambience via stopAllAmbiencesAndStartNewOne
+        // which bumps op-tokens. Skip it on the narration step so it doesn't race with
+        // lowerAmbienceForNarration.
+        if (stepId !== 'narration') {
+            this.applyStabilityTheme();
+        } else {
+            // Lower the ambience AFTER all rendering and ambience operations are done,
+            // so applyStabilityTheme can't bump tokens out from under us.
+            this.lowerAmbienceForNarration();
+        }
+
         this.updateFooter();
+    }
+
+    /**
+     * Lower all ambience volumes for the narration preview step (idempotent).
+     */
+    lowerAmbienceForNarration() {
+        if (this.ambienceLowered) return;
+        this.ambienceLowered = true;
+        setAllAmbiencesVolume(0.3).catch(err => console.error('Failed to lower ambience volume:', err));
+    }
+
+    /**
+     * Restore all ambience volumes to their normal level (idempotent).
+     */
+    restoreAmbienceVolume() {
+        if (!this.ambienceLowered) return;
+        this.ambienceLowered = false;
+        setAllAmbiencesVolume(1).catch(err => console.error('Failed to restore ambience volume:', err));
+    }
+
+    /**
+     * Resolve a narrator voice value into an absolute, playable URL. System
+     * voices (prefixed with `@`) live under the default scripts home in
+     * `/voices/`, while user voices live under the DreamEngine home in
+     * `/narrators/`.
+     * @param {string} value narrator value including its file extension
+     * @returns {string}
+     */
+    resolveNarratorUrl(value) {
+        const isSystem = value.startsWith('@');
+        const base = isSystem ? window.DREAMENGINE_DEFAULT_SCRIPTS_HOME : window.DREAMENGINE_HOME;
+        const folder = isSystem ? 'voices' : 'narrators';
+        const fileName = isSystem ? value.slice(1) : value;
+        return `${base}/${folder}/${fileName}`;
+    }
+
+    /**
+     * Human-readable label for a narrator value: `(System)` prefix for system
+     * voices and the file extension stripped off.
+     * @param {string} value
+     * @returns {string}
+     */
+    narratorDisplayName(value) {
+        const isSystem = value.startsWith('@');
+        const name = (isSystem ? value.slice(1) : value).replace(/\.[^/.]+$/, '');
+        return isSystem ? `(System) ${name}` : name;
+    }
+
+    /**
+     * ── Step 5: Narration ────────────────────────────────────────────
+     * Shown only when the Vocalizer is enabled. Lets the user pick a default
+     * narrator voice and choose whether it overrides a world's own narrator(s).
+     * Selecting a voice previews it by playing the audio file.
+     * @param {Element} body
+     */
+    async renderNarrationStep(body) {
+        body.innerHTML = `
+            <div class="step-pane">
+                <div class="step-heading">
+                    <h2>Choose a narrator voice</h2>
+                    <p class="step-sub">Pick a default voice to narrate your story. Select one to hear a preview.</p>
+                </div>
+                <div class="world-loading">Loading narrators…</div>
+            </div>
+        `;
+
+        /** @type {string[]} */
+        let narrators = [];
+        try {
+            narrators = await window.API.listNarrators();
+        } catch (err) {
+            console.error('Failed to list narrators:', err);
+        }
+
+        const pane = body.querySelector('.step-pane');
+        if (!pane) return;
+
+        // Resolve the initial selection: prefer the last saved value (if still
+        // available), otherwise default to the first available voice. `@none`
+        // is honored explicitly and never triggers a preview.
+        const saved = localStorage.getItem('defaultNarratorVoice');
+        let selected;
+        let shouldPreview = false;
+        if (saved === '@none') {
+            selected = '@none';
+        } else if (saved && narrators.includes(saved)) {
+            selected = saved;
+            shouldPreview = true;
+        } else if (narrators.length > 0) {
+            selected = narrators[0];
+            shouldPreview = true;
+        } else {
+            selected = '@none';
+        }
+        this.selectedNarrator = selected;
+
+        const cardsHTML = narrators.map(value => {
+            const isSelected = this.selectedNarrator === value;
+            return `
+                <div class="narrator-card${isSelected ? ' selected' : ''}" data-value="${escapeHTML(value)}">
+                    <div class="narrator-card-icon">🎙️</div>
+                    <div class="narrator-card-name">${escapeHTML(this.narratorDisplayName(value))}</div>
+                </div>
+            `;
+        }).join('');
+
+        const noneSelected = this.selectedNarrator === '@none';
+
+        pane.innerHTML = `
+            <div class="step-heading">
+                <h2>Choose a narrator voice</h2>
+                <p class="step-sub">Pick a default voice to narrate your story. Select one to hear a preview.</p>
+            </div>
+            <div class="narrator-grid">
+                <div class="narrator-card${noneSelected ? ' selected' : ''}" data-value="@none">
+                    <div class="narrator-card-icon">🔇</div>
+                    <div class="narrator-card-name">No narrator</div>
+                </div>
+                ${cardsHTML}
+            </div>
+            <label class="narrator-override">
+                <input type="checkbox" id="narrator-override-cb" ${this.overrideWorldNarrator ? 'checked' : ''} />
+                <span class="narrator-override-label">Override world narrator with default</span>
+                <span class="narrator-override-note">Worlds might have their own narrators; enable this to always use your default narrator instead.</span>
+            </label>
+        `;
+
+        pane.querySelectorAll('.narrator-card').forEach(card => {
+            card.addEventListener('mouseenter', playHoverSound);
+            card.addEventListener('click', () => {
+                const value = card.getAttribute('data-value') || '@none';
+                pane.querySelectorAll('.narrator-card').forEach(c => c.classList.remove('selected'));
+                card.classList.add('selected');
+                this.selectedNarrator = value;
+                localStorage.setItem('defaultNarratorVoice', value);
+                if (value !== '@none') {
+                    playNarration(this.resolveNarratorUrl(value));
+                } else {
+                    stopNarration();
+                    playConfirmSound();
+                }
+                this.updateFooter();
+            });
+        });
+
+        const overrideCb = /** @type {HTMLInputElement | null} */ (pane.querySelector('#narrator-override-cb'));
+        if (overrideCb) {
+            overrideCb.addEventListener('change', () => {
+                this.overrideWorldNarrator = overrideCb.checked;
+                localStorage.setItem('defaultNarratorVoiceOverride', String(overrideCb.checked));
+                if (overrideCb.checked) playConfirmSound();
+                else playCancelSound();
+            });
+        }
+
+        // Preview the initially-selected voice so the user hears their default.
+        if (shouldPreview && this.selectedNarrator !== '@none') {
+            playNarration(this.resolveNarratorUrl(this.selectedNarrator));
+        }
     }
 
     // ── Step 4: Party ────────────────────────────────────────────────
@@ -1339,7 +1543,7 @@ class PlayOverlay extends HTMLElement {
     }
 
     render() {
-        const stepsHTML = STEPS.map((s, i) => `
+        const stepsHTML = this.steps.map((s, i) => `
             <div class="step" data-step="${s.id}">
                 <div class="step-num">${i + 1}</div>
                 <div class="step-label">${s.label}</div>

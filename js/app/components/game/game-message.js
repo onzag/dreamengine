@@ -453,6 +453,33 @@ class GameMessage extends HTMLElement {
         }
     }
 
+    async getNarratorVoice() {
+        const supportsVocalizer = await window.API.getConfigValue("vocalizerEnabled");
+        if (!supportsVocalizer) return null;
+        // TODO use the transcript
+        let narrator = (await window.ENGINE_WORKER_CLIENT.queryDEObject({
+            path: ["state", "__INTERNAL_NARRATOR_OVERRIDE"],
+        })) || await window.ENGINE_WORKER_CLIENT.queryDEObject({
+            path: ["world", "metadata", "narrationVoice"],
+        });
+        const defaultNarrator = await window.ENGINE_WORKER_CLIENT.queryDEObject({
+            path: ["state", "__INTERNAL_NARRATOR"],
+        });
+        narrator = narrator || defaultNarrator;
+        const narratorValue = {
+            asset: narrator?.asset || defaultNarrator?.asset || null,
+            transcript: narrator?.transcript || defaultNarrator?.transcript || null,
+            tags: narrator?.tags || defaultNarrator?.tags || [
+                "narrative",
+                "insightful",
+            ],
+        };
+        if (narratorValue?.asset === "@none" || !narratorValue?.asset) {
+            return null;
+        }
+        return narratorValue;
+    }
+
     // ── Debug ────────────────────────────────────────────────────────
 
     /**

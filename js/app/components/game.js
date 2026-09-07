@@ -610,6 +610,24 @@ class GameOverlay extends HTMLElement {
                 const dreamStability = this.getAttribute('dream-stability') || 'stable';
                 await window.ENGINE_WORKER_CLIENT.setDreamStability({ stability: dreamStability === "stable" ? 1 : (dreamStability === "unstable" ? 0.99 : 0.95) });
 
+                const defaultNarratorVoice = this.getAttribute('default-narrator-voice') || '';
+                const defaultNarratorVoiceOverride = this.getAttribute('default-narrator-voice-override') || '';
+                if (defaultNarratorVoiceOverride && defaultNarratorVoice) {
+                    await window.ENGINE_WORKER_CLIENT.forceSetDEObject({
+                        path: ["state", "__INTERNAL_NARRATOR_OVERRIDE"],
+                        value: {
+                            asset: defaultNarratorVoiceOverride,
+                        },
+                    });
+                } else if (defaultNarratorVoice) {
+                    await window.ENGINE_WORKER_CLIENT.forceSetDEObject({
+                        path: ["state", "__INTERNAL_NARRATOR"],
+                        value: {
+                            asset: defaultNarratorVoice,
+                        },
+                    });
+                }
+
                 // adding characters that were added by those scripts as the party members, the reason is that
                 // a script can add many characters and not just one, so they all need to be added by name
                 // everything is dynamic so we don't necessarily know by the namespace and id

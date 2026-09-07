@@ -770,7 +770,7 @@ async function startWebServer(creds) {
                 for (const file of fs.readdirSync(narratorsDir)) {
                     const ext = path.extname(file).toLowerCase();
                     if (AUDIO_EXTS.includes(ext)) {
-                        narrators.push(path.basename(file, ext));
+                        narrators.push(file);
                     }
                 }
             }
@@ -779,9 +779,8 @@ async function startWebServer(creds) {
                 for (const file of fs.readdirSync(defaultNarratorsDir)) {
                     const ext = path.extname(file).toLowerCase();
                     if (AUDIO_EXTS.includes(ext)) {
-                        const narratorName = path.basename(file, ext);
-                        if (!narrators.includes(narratorName)) {
-                            narrators.push('@' + narratorName);
+                        if (!narrators.includes(file)) {
+                            narrators.push('@' + file);
                         }
                     }
                 }

@@ -883,3 +883,92 @@
     background: rgba(0, 0, 0, 0.12);
     letter-spacing: 0.05em;
 }
+
+/* ── Narration step ── */
+.narrator-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(20vh, 1fr));
+    gap: 2vh;
+    margin-top: 2vh;
+}
+
+.narrator-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1vh;
+    padding: 2.4vh 1.8vh;
+    border-radius: 1.2vh;
+    background: rgba(0, 0, 0, 0.18);
+    border: 1px solid rgba(255, 200, 150, 0.18);
+    cursor: pointer;
+    transition: transform 0.2s ease, border-color 0.2s ease,
+                background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.narrator-card:hover {
+    transform: translateY(-0.4vh);
+    background: rgba(255, 184, 122, 0.08);
+    border-color: rgba(255, 184, 122, 0.55);
+    box-shadow: 0 0 1.6vh rgba(255, 184, 122, 0.2);
+}
+
+.narrator-card.selected {
+    background: rgba(255, 184, 122, 0.15);
+    border-color: #ffb87a;
+    box-shadow: 0 0 2vh rgba(255, 184, 122, 0.45);
+}
+
+.narrator-card-icon {
+    font-size: 4vh;
+    line-height: 1;
+}
+
+.narrator-card-name {
+    font-size: 2.2vh;
+    text-align: center;
+    color: #fff1de;
+    letter-spacing: 0.03em;
+    word-break: break-word;
+}
+
+.narrator-override {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    column-gap: 1.2vh;
+    margin-top: 3vh;
+    padding: 2vh 2.4vh;
+    border-radius: 1.2vh;
+    background: rgba(0, 0, 0, 0.18);
+    border: 1px solid rgba(255, 200, 150, 0.18);
+    cursor: pointer;
+    transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.narrator-override:hover {
+    background: rgba(255, 184, 122, 0.08);
+    border-color: rgba(255, 184, 122, 0.55);
+}
+
+.narrator-override input[type="checkbox"] {
+    width: 2.4vh;
+    height: 2.4vh;
+    accent-color: #ffb87a;
+    cursor: pointer;
+}
+
+.narrator-override-label {
+    font-size: 2.2vh;
+    color: #fff1de;
+    letter-spacing: 0.03em;
+}
+
+.narrator-override-note {
+    grid-column: 2;
+    font-size: 1.6vh;
+    color: rgba(255, 220, 180, 0.65);
+    letter-spacing: 0.02em;
+    line-height: 1.4;
+    margin-top: 0.4vh;
+}

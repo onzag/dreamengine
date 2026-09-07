@@ -283,6 +283,15 @@ export class EngineWorkerClient {
     queryDEObject(args) { return this.#call("queryDEObject", args); }
 
     /**
+     * Forcefully set a value of a portion of the deObject
+     * @param {object} args
+     * @param {string | string[]} args.path - dot path or array of segments into deObject to set
+     * @param {any} args.value - value to set at the target path
+     * @returns 
+     */
+    forceSetDEObject(args) { return this.#call("forceSetDEObject", args); }
+
+    /**
      * 
      * @param {object} args
      * @param {string|string[]} args.path - path of template to call on the worker

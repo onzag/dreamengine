@@ -87,19 +87,40 @@ function playSound(src, volume = 1) {
 }
 
 /**
+ * @type {HTMLAudioElement | null}
+ */
+let currentNarrationSound = null;
+/**
  * 
  * @param {string} src
  * @param {number} volume
  * @returns {void}
  */
 function playNarration(src, volume = 1) {
+  if (currentNarrationSound) {
+    currentNarrationSound.pause();
+    currentNarrationSound.src = '';
+    currentNarrationSound = null;
+  }
   const sound = new Audio(src);
   sound.volume = volume;
   sound.play().catch(err => console.log('Sound play failed:', err));
   sound.addEventListener('ended', () => {
     // release the audio element from memory once it's done playing
     sound.src = '';
+    if (currentNarrationSound === sound) {
+      currentNarrationSound = null;
+    }
   });
+  currentNarrationSound = sound;
+}
+
+function stopNarration() {
+  if (currentNarrationSound) {
+    currentNarrationSound.pause();
+    currentNarrationSound.src = '';
+    currentNarrationSound = null;
+  }
 }
 
 function playConfirmSound() {
@@ -581,7 +602,7 @@ export {
   playCancelSound, playPauseSound, playHoverSound, playConfirmSound, toggleFX,
   toggleAmbience, isFXEnabled, isAmbienceEnabled, playAmbience, stopAmbience,
   stopAmbienceWithFade, startAmbienceWithFade, startAmbiencesWithFade,
-  isAmbiencePlaying, setTempSoundDisable, playSound, playNarration,
+  isAmbiencePlaying, setTempSoundDisable, playSound, playNarration, stopNarration,
   stopAllAmbiencesAndStartNewOne, randomizeAmbienceGroupSrc,
   setAllAmbiencesVolume, restoreAllAmbiencesVolume
 };

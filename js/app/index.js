@@ -138,6 +138,8 @@ playBtn?.addEventListener('click', async () => {
         game.setAttribute('is-self-insert', isSelfInsert ? 'true' : 'false');
         game.setAttribute('special-mode', detail.specialMode || '');
         game.setAttribute('voice-name', detail.voiceName || '');
+        game.setAttribute('default-narrator-voice', detail.defaultNarratorVoice || '@none');
+        game.setAttribute('default-narrator-voice-override', detail.defaultNarratorVoiceOverride ? 'true' : 'false');
         game.setAttribute('world-namespace', world.namespace || '');
         game.setAttribute('world-id', world.id || '');
         game.setAttribute('mode', detail.mode || '');

@@ -568,6 +568,21 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
             return result;
         },
 
+        async forceSetDEObject({ path, value }) {
+            const de = engine.getDEObject();
+            const segments = !path ? [] : Array.isArray(path) ? path : path.split(".");
+
+            let target = de;
+            for (let i = 0; i < segments.length - 1; i++) {
+                const seg = segments[i];
+                if (target[seg] === undefined || target[seg] === null || typeof target[seg] !== "object") {
+                    target[seg] = {};
+                }
+                target = target[seg];
+            }
+            target[segments[segments.length - 1]] = value;
+        },
+
         // cardtype-wizard RPCs
 
         /**
