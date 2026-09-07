@@ -115,6 +115,17 @@ class GameOverlay extends HTMLElement {
         this._inferringEventResolvers = {};
         this._isResolvingMessageBuffer = false;
 
+        /**
+         * Serialised queue of incoming engine conversation events. The worker
+         * fires them back-to-back without awaiting, so they are processed one
+         * at a time by _pumpInferringEvents — critically, a block's "done" is
+         * awaited until its finalizeBlock (voice) fully completes before the
+         * next block/message is processed.
+         * @type {Array<import('../../engine/index.js').EngineConversationEvent>}
+         */
+        this._eventQueue = [];
+        this._pumpingEvents = false;
+
         // Serialisation guards for updateStory so overlapping runs can't create
         // duplicate message elements.
         this._updateStoryRunning = false;
@@ -1611,22 +1622,11 @@ class GameOverlay extends HTMLElement {
                     });
                     await promiseResolve;
                 }
-            } else if (next.stream) {
-                // Live message: its elements are created and driven entirely by
-                // the incoming engine events (onInferringOverConversationMessage).
-                // Replay, in order, any events that arrived before this entry's
-                // metadata was loaded, then wait until the stream signals it is
-                // done before moving on to keep messages ordered.
-                const gid = next.gid;
-                const pending = this.inferringEventBuffer.filter(e => e.messageId === gid);
-                this.inferringEventBuffer = this.inferringEventBuffer.filter(e => e.messageId !== gid);
-                for (const ev of pending) {
-                    this.onInferringOverConversationMessage(ev);
-                }
-                await this._inferringEventPromises[gid];
-                delete this._inferringEventPromises[gid];
-                delete this._inferringEventResolvers[gid];
             }
+            // Live (stream) entries are NOT handled here — their elements are
+            // created and driven entirely by the serialised event pump
+            // (_pumpInferringEvents), which also waits for each block's
+            // finalizeBlock to finish before the next one starts.
 
             next = this.messageBuffer.shift();
         }
@@ -1765,11 +1765,6 @@ class GameOverlay extends HTMLElement {
                     emotion,
                     emotionalRange,
                 });
-                if (stream) {
-                    this._inferringEventPromises[gid] = new Promise(resolve => {
-                        this._inferringEventResolvers[gid] = resolve;
-                    });
-                }
                 lastSenderName = isNarration ? '' : senderName;
             }
 
@@ -1898,34 +1893,67 @@ class GameOverlay extends HTMLElement {
     }
 
     /**
-     * Handle a streamed engine conversation event. Live (streaming) messages are
-     * built entirely from these events: an "add-*-block" event spawns a fresh
-     * element for the new block, and the subsequent text / "done" events drive
-     * it. Finished messages never receive events (they are pseudostreamed from
-     * their content), so any event always belongs to a live block.
+     * Entry point for streamed engine conversation events. The worker fires
+     * these back-to-back without awaiting, so they are merely enqueued here;
+     * the serialised pump (_pumpInferringEvents) processes them one at a time.
      *
      * @param {import('../../engine/index.js').EngineConversationEvent} data
      */
     onInferringOverConversationMessage(data) {
+        this._eventQueue.push(data);
+        this._pumpInferringEvents();
+    }
+
+    /**
+     * Drain the event queue strictly one event at a time. Because a block's
+     * "done" awaits its full finalisation (finalizeBlock — e.g. voice synthesis
+     * and playback) before returning, the next block/message cannot begin until
+     * the current one has completely finished.
+     */
+    async _pumpInferringEvents() {
+        if (this._pumpingEvents) return;
+        this._pumpingEvents = true;
+        try {
+            while (this._eventQueue.length > 0) {
+                const data = this._eventQueue.shift();
+                if (!data) continue;
+                await this._processInferringEvent(data);
+            }
+        } finally {
+            this._pumpingEvents = false;
+        }
+    }
+
+    /**
+     * Process a single engine conversation event. Live (streaming) messages are
+     * built entirely from these events: an "add-*-block" event spawns a fresh
+     * element for the new block, and the subsequent text / "done" events drive
+     * it. On "done" this awaits the element's finalisation so the pump blocks
+     * until the block (and its voice) is completely done.
+     *
+     * @param {import('../../engine/index.js').EngineConversationEvent} data
+     */
+    async _processInferringEvent(data) {
         const gid = data.messageId;
         const index = data.contentIndex;
         const list = this.root.querySelector('.game-story-content-list');
         if (!list) return;
 
-        const msgEl = /** @type {any} */ (list.querySelector(`app-game-message[gid="${CSS.escape(gid)}"][content-index="${index}"]`));
         const isBlockStart = data.event === "add-narration-block" || data.event === "add-dialogue-block";
 
         if (isBlockStart) {
-            // Start of a new block → spawn a fresh live-streaming element.
-            if (msgEl) return; // already created (duplicate start), ignore
+            // Already created (duplicate start) → ignore.
+            if (list.querySelector(`app-game-message[gid="${CSS.escape(gid)}"][content-index="${index}"]`)) return;
 
-            const entry = this.loadedMessageBuffer.find(e => e.gid === gid);
+            let entry = this.loadedMessageBuffer.find(e => e.gid === gid);
             if (!entry) {
                 // Metadata not loaded yet (the event beat the debounced
-                // updateStory). Buffer it and pull history; resolveBuffer will
-                // replay it, in order, once the entry exists.
-                this.inferringEventBuffer.push(data);
-                this.updateStory(true);
+                // updateStory). Pull history now, then retry the lookup.
+                await this.updateStory(true);
+                entry = this.loadedMessageBuffer.find(e => e.gid === gid);
+            }
+            if (!entry) {
+                console.warn(`Received ${data.event} for message ${gid} but its metadata could not be loaded. Ignoring.`);
                 return;
             }
 
@@ -1936,23 +1964,31 @@ class GameOverlay extends HTMLElement {
             return;
         }
 
-        // add-narration / add-dialogue / done / add-hidden-block → feed the block.
+        const msgEl = /** @type {any} */ (list.querySelector(`app-game-message[gid="${CSS.escape(gid)}"][content-index="${index}"]`));
         if (!msgEl) {
-            // The block-start for this index hasn't been processed yet. Buffer
-            // so it is replayed after the element is created.
-            this.inferringEventBuffer.push(data);
+            // No block-start was seen for this index. Since events are processed
+            // in order this should not happen; drop it defensively.
+            console.warn(`Received ${data.event} for message ${gid} index ${index} with no element. Ignoring.`);
             return;
         }
 
-        if (msgEl.isStreaming()) {
-            msgEl.feedEvent(data);
-        }
-        // If the element already finished, this is a trailing/duplicate event for
-        // a completed block — safely ignored.
-
         if (data.event === "done") {
-            const resolver = this._inferringEventResolvers[gid];
-            if (resolver) resolver();
+            if (msgEl.isStreaming()) {
+                // feedEvent's "done" path internally waits for every queued
+                // token to finish dripping in AND for the block's finaliser
+                // (finalizeBlock — voice synthesis + playback) to fully
+                // complete. Awaiting it directly guarantees the pump does not
+                // process the next block/message until this one is 100% done.
+                await msgEl.feedEvent(data);
+            }
+            return;
+        }
+
+        // add-narration / add-dialogue / add-hidden-block → feed the block.
+        // Await so the text fully drips in (animated) before the next queued
+        // event is processed — otherwise batched events would pop in instantly.
+        if (msgEl.isStreaming()) {
+            await msgEl.feedEvent(data);
         }
     }
 

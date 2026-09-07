@@ -10,7 +10,7 @@
  */
 
 /** Default VoxCPM generation parameters, matching the voice profile UI. */
-const DEFAULT_GENERATION = { cfg_value: 2.0, inference_timesteps: 20, normalize: true };
+const DEFAULT_GENERATION = { cfg_value: 1.0, inference_timesteps: 10, normalize: true };
 
 /** Maximum bytes of reference audio to keep resident before evicting (LRU). */
 const MAX_CACHE_BYTES = 25 * 1024 * 1024;

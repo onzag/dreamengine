@@ -19,6 +19,7 @@
     padding: 0.3vh 0.8vh;
     border-radius: 0.5vh;
     transition: background 0.1s ease;
+    position: relative;
 }
 
 .message:hover {
@@ -182,7 +183,58 @@
     white-space: pre-wrap;
     margin: 0;
     padding: 0;
-    display: inline;
+}
+
+.replay-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    vertical-align: middle;
+    margin-left: 0.8vh;
+    width: 2.6vh;
+    height: 2.6vh;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: rgba(100, 0, 200, 0.35);
+    color: #fff;
+    cursor: pointer;
+    opacity: 0.75;
+    transition: opacity 0.15s ease-in-out;
+    position: absolute;
+    right: 1vh;
+    top: 1vh;
+}
+
+@keyframes _vgi_pulse{0%,80%,100%{transform:scale(0.6);opacity:0.4}40%{transform:scale(1);opacity:1}}
+
+.voice-gen-indicator {
+    display:inline-flex;
+    align-items:center;
+    gap: 0.3vh;
+    vertical-align: middle;
+    margin-left: 0.8vh;
+    opacity: 0.7;
+    position: absolute;
+    right: 1vh;
+    top: 1vh;
+}
+
+.voice-gen-indicator .dot {
+    width: 0.6vh;
+    height: 0.6vh;
+    border-radius: 50%;
+    background-color: #fff;
+}
+
+.voice-gen-indicator .dot:nth-child(1) {
+    animation: _vgi_pulse 1.4s infinite ease-in-out 0s;
+}
+.voice-gen-indicator .dot:nth-child(2) {
+    animation: _vgi_pulse 1.4s infinite ease-in-out 0.2s;
+}
+.voice-gen-indicator .dot:nth-child(3) {
+    animation: _vgi_pulse 1.4s infinite ease-in-out 0.4s;
 }
 
 /* ── Streaming tokens ───────────────────────────────────────────────

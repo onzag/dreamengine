@@ -58,6 +58,14 @@ import { playNarration } from '../../sound.js';
  *  - on-pseudostream-finished    Pseudo stream complete (after finalizeBlock).
  */
 class GameMessage extends HTMLElement {
+    /**
+     * Shared serialisation chain for block finalisers across all instances, so
+     * concurrently-created live blocks can't run their finalizeBlock (voice)
+     * work at the same time.
+     * @type {Promise<any>}
+     */
+    static _finalizerChain = Promise.resolve();
+
     constructor() {
         super();
         this.root = this.attachShadow({ mode: 'open' });
@@ -100,6 +108,24 @@ class GameMessage extends HTMLElement {
          * @type {string | null}
          */
         this._audioSrc = null;
+
+        // ── Live-stream drip queue ──
+        /**
+         * Pending live text chunks waiting to be dripped in. Live events append
+         * here instantly (never blocking the real stream) and a background pump
+         * (_runDripPump) animates them, speeding up when a backlog builds so it
+         * never adds more time than the real stream's own pace.
+         * @type {Array<{ mode: 'narration' | 'dialogue', text: string }>}
+         */
+        this._pendingChunks = [];
+        /** Whether the background drip pump is currently running. */
+        this._dripPumping = false;
+        /**
+         * Promise for the in-flight drip pump, awaited by the "done" handler so
+         * finalisation waits for every queued token to be rendered.
+         * @type {Promise<void> | null}
+         */
+        this._dripPumpPromise = null;
     }
 
     static get observedAttributes() {
@@ -146,36 +172,134 @@ class GameMessage extends HTMLElement {
     }
 
     /**
-     * Feed a single live engine conversation event into this block.
+     * Feed a single live engine conversation event into this block. Text events
+     * are appended to the drip queue INSTANTLY (they never block the real
+     * stream); a background pump animates them, catching up when batched. The
+     * "done" event waits for the queue to fully drain before finalising.
      * @param {import('../../../engine/index.js').EngineConversationEvent} data
+     * @returns {Promise<void>}
      */
-    feedEvent(data) {
+    async feedEvent(data) {
         if (!data || !data.event) return;
         //this._attachToList();
         this._ensureRendered();
 
         switch (data.event) {
             case 'add-narration':
-                this._appendFragment('narration', data.text || '', false);
+                this._enqueueLiveText('narration', data.text || '');
                 break;
             case 'add-dialogue':
                 if (this._blockType() === 'narration') {
                     console.error('game-message: narration block rejected an add-dialogue event.', data);
                     return;
                 }
-                this._appendFragment('dialogue', data.text || '', false);
+                this._enqueueLiveText('dialogue', data.text || '');
                 break;
             case 'done':
             case 'add-narration-block':
             case 'add-dialogue-block':
             case 'add-hidden-block':
-                this._finishRealStream();
+                // Wait for EVERY queued token to finish dripping in (the drip
+                // pump may restart if a chunk arrived late), then run the shared
+                // finaliser. Looping on the live promise guarantees a fully
+                // drained queue before finalisation.
+                while (this._dripPumping || this._pendingChunks.length > 0) {
+                    await this._dripPumpPromise;
+                }
+                await this._finishRealStream();
                 break;
             default:
                 // Block-start events are handled by the host (they spawn a new
                 // element); nothing to do here.
                 break;
         }
+    }
+
+    /**
+     * Queue a chunk of live text for animated rendering and ensure the drip
+     * pump is running. Returns immediately so incoming events are never
+     * throttled by the animation.
+     * @param {'narration' | 'dialogue'} mode
+     * @param {string} text
+     */
+    _enqueueLiveText(mode, text) {
+        text = (text || '').replace(/\*/g, '');
+        if (!text) return;
+        this._pendingChunks.push({ mode, text });
+        if (!this._dripPumping) {
+            this._dripPumpPromise = this._runDripPump();
+        }
+    }
+
+    /**
+     * Background loop that drips queued live-stream chunks token-by-token. The
+     * per-token delay adapts to the backlog: with little pending text (the real
+     * stream is keeping pace) it drips at a natural reading rhythm; as the
+     * backlog grows (batched / late-arriving events) it accelerates — down to
+     * zero — so it never adds more latency than the real stream itself.
+     * @returns {Promise<void>}
+     */
+    async _runDripPump() {
+        this._dripPumping = true;
+        try {
+            while (this._pendingChunks.length > 0) {
+                const chunk = this._pendingChunks.shift();
+                if (!chunk) break;
+
+                const target = this._blockType() === 'narration'
+                    ? this._narrationTextEl
+                    : this._ensureDialogueFragment(chunk.mode);
+                if (!target) continue;
+
+                for (const tok of this._tokenize(chunk.text)) {
+                    // Keep the regenerated piece object in sync with the DOM.
+                    if (this._blockType() === 'narration') {
+                        this._piece.text += tok;
+                    } else {
+                        const frags = this._piece.fragments;
+                        frags[frags.length - 1].text += tok;
+                    }
+
+                    if (!this.isConnected) {
+                        this._writeInstant(target, tok);
+                        continue;
+                    }
+                    this._hideCursor();
+                    const span = document.createElement('span');
+                    span.className = 'token';
+                    span.textContent = tok;
+                    target.appendChild(span);
+                    this._placeCursor(target);
+                    this._scrollParent();
+                    await this._adaptiveDelay();
+                }
+            }
+        } finally {
+            this._dripPumping = false;
+        }
+    }
+
+    /** Total characters still queued to be dripped in. */
+    _pendingChars() {
+        return this._pendingChunks.reduce((sum, c) => sum + c.text.length, 0);
+    }
+
+    /**
+     * Per-token delay for the LIVE stream, scaled by the current backlog so the
+     * animation never falls behind the real event pace.
+     * @returns {Promise<void>}
+     */
+    _adaptiveDelay() {
+        const backlog = this._pendingChars();
+        let base;
+        if (backlog > 240) base = 0;          // far behind: dump as fast as possible
+        else if (backlog > 120) base = 5;
+        else if (backlog > 40) base = 14;
+        else {
+            base = 26 + Math.random() * 30;   // caught up: natural rhythm
+            if (Math.random() < 0.07) base *= 2.4 + Math.random() * 2;
+        }
+        return new Promise(resolve => setTimeout(resolve, base));
     }
 
     /**
@@ -372,14 +496,9 @@ class GameMessage extends HTMLElement {
         el.className = 'voice-gen-indicator';
         el.setAttribute('aria-label', 'Generating voice…');
         el.title = 'Generating voice…';
-        el.style.cssText = 'display:inline-flex;align-items:center;gap:0.3vh;vertical-align:middle;margin-left:0.8vh;opacity:0.7;';
-        const keyframes = `@keyframes _vgi_pulse{0%,80%,100%{transform:scale(0.6);opacity:0.4}40%{transform:scale(1);opacity:1}}`;
-        const style = document.createElement('style');
-        style.textContent = keyframes;
-        el.appendChild(style);
         for (let i = 0; i < 3; i++) {
             const dot = document.createElement('span');
-            dot.style.cssText = `display:inline-block;width:0.5vh;height:0.5vh;border-radius:50%;background:rgba(180,140,255,0.9);animation:_vgi_pulse 1.2s ease-in-out ${i * 0.2}s infinite;`;
+            dot.className = 'dot';
             el.appendChild(dot);
         }
         box.appendChild(el);
@@ -405,15 +524,25 @@ class GameMessage extends HTMLElement {
         btn.className = 'replay-btn';
         btn.title = 'Replay voice';
         btn.setAttribute('aria-label', 'Replay voice');
-        btn.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;margin-left:0.8vh;width:2.6vh;height:2.6vh;padding:0;border:none;border-radius:50%;background:rgba(100,0,200,0.35);color:#fff;cursor:pointer;opacity:0.75;transition:opacity 0.15s;';
         btn.innerHTML = '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="width:60%;height:60%;pointer-events:none;"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>';
         btn.addEventListener('mouseenter', () => { btn.style.opacity = '1'; });
         btn.addEventListener('mouseleave', () => { btn.style.opacity = '0.75'; });
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
-            if (this._audioSrc) playNarration(this._audioSrc, 1);
+            this.playNarration();
         });
         box.appendChild(btn);
+    }
+
+    async playNarration() {
+        if (this._audioSrc) {
+            await playNarration(this._audioSrc, 1);
+            // find a potential next message next to this one and play its voice if it has one
+            const nextMsg = this.nextElementSibling;
+            if (nextMsg instanceof GameMessage && nextMsg._audioSrc) {
+                nextMsg.playNarration();
+            }
+        }
     }
 
     // ── Finalisation ─────────────────────────────────────────────────
@@ -421,15 +550,32 @@ class GameMessage extends HTMLElement {
     async _finishRealStream() {
         if (this._finished) return;
         this._hideCursor();
-        await this.finalizeBlock(this._piece);
+        await GameMessage._runFinalizer(() => this.finalizeBlock(this._piece));
         this._finished = true;
         this.dispatchEvent(new CustomEvent('on-stream-finished', { bubbles: true, composed: true }));
     }
 
     async _finishPseudostream() {
         this._hideCursor();
-        await this.finalizeBlock(this._piece);
+        await GameMessage._runFinalizer(() => this.finalizeBlock(this._piece));
         this.dispatchEvent(new CustomEvent('on-pseudostream-finished', { bubbles: true, composed: true }));
+    }
+
+    /**
+     * Run a block finaliser serially across ALL game-message instances. Live
+     * blocks are created independently as engine events arrive, so without this
+     * their finalizeBlock calls (e.g. voice synthesis + playback) would overlap.
+     * Chaining them guarantees each block fully completes before the next one
+     * begins.
+     * @param {() => Promise<void>} task
+     * @returns {Promise<void>}
+     */
+    static _runFinalizer(task) {
+        const run = GameMessage._finalizerChain.then(task, task);
+        // Swallow errors on the chain so one failure doesn't wedge the queue,
+        // but still surface them to the caller of _runFinalizer.
+        GameMessage._finalizerChain = run.catch(() => { });
+        return run;
     }
 
     // // ── Self-insertion into the story list ───────────────────────────
