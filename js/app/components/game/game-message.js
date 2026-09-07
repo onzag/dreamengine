@@ -86,6 +86,20 @@ class GameMessage extends HTMLElement {
         // ── Narration-block target ──
         /** @type {HTMLElement | null} */
         this._narrationTextEl = null;
+
+        /**
+         * The rendered `.message` box for this block (narration or dialogue),
+         * used as the mount point for the replay button.
+         * @type {HTMLElement | null}
+         */
+        this._blockBoxEl = null;
+
+        /**
+         * Object URL of the synthesized audio for this block, if any. Set once
+         * the Vocalizer finishes rendering; drives the replay button.
+         * @type {string | null}
+         */
+        this._audioSrc = null;
     }
 
     static get observedAttributes() {
@@ -228,69 +242,178 @@ class GameMessage extends HTMLElement {
     }
 
     /**
-     * 
-     * @param {DEConversationMessageNarration} piece 
-     * @param {CharacterVoiceEntry} narratorVoice 
+     * Synthesize and play a narration block through the global Vocalizer
+     * session. A single speech segment is rendered with the narrator voice.
+     * @param {DEConversationMessageNarration} piece
+     * @param {CharacterVoiceEntry} narratorVoice
      */
     async speakNarration(piece, narratorVoice) {
-        const textToSpeak = piece.text;
-        // TODO the payload for the vocalizer
-        const audioSrc = await this.getSrcFromVocalizer();
+        const session = window.GAME_VOCALIZER;
+        if (!session) return;
+
+        const segment = await session.buildSpeechSegment(piece.text, narratorVoice);
+        if (!segment) return;
+
+        this._showVoiceGenerating();
+        const audioSrc = await this.getSrcFromVocalizer([segment]);
+        if (!audioSrc) { this._hideVoiceGenerating(); return; }
+
+        this._setAudioSource(audioSrc);
         await playNarration(audioSrc, 1);
     }
 
     /**
-     * 
-     * @param {DEConversationMessageDialogue} piece 
-     * @param {CharacterVoiceEntry} narratorVoice 
+     * Synthesize and play a dialogue block. Each fragment becomes its own
+     * speech segment: narration fragments use the narrator voice, dialogue
+     * fragments use the character's emotion-matched voice (falling back through
+     * grouped emotions, then neutral, then the narrator). All segments render
+     * into a single continuous clip.
+     * @param {DEConversationMessageDialogue} piece
+     * @param {CharacterVoiceEntry} narratorVoice
      * @param {CharacterVoiceAssets} characterVoiceInfo
      */
     async speakDialogue(piece, narratorVoice, characterVoiceInfo) {
+        const session = window.GAME_VOCALIZER;
+        if (!session) return;
+
+        /** @type {import("../../../engine/voice/base.js").VocalizerSpeechSegment[]} */
+        const segments = [];
+
+        let crashed = false;
         for (const frag of piece.fragments) {
+            let voice;
             if (frag.type === "narration") {
-                // TODO set the payload
+                voice = narratorVoice;
             } else {
-                const emotion = this.getAttribute("emotion") || "neutral";
-                // @ts-ignore
-                let specificVoice = /** @type {CharacterVoiceEntry} */ (characterVoiceInfo[emotion]);
-                if (!specificVoice) {
-                    const keyOfEmotion = Object.keys(emotionsGrouped).find((groupKey) => {
-                        if (emotionsGrouped[groupKey].includes(emotion)) {
-                            return true;
-                        }
-                    });
-
-                    const alternatives = keyOfEmotion ? emotionsGrouped[keyOfEmotion] : [];
-                    for (const altEmotion of alternatives) {
-                        if (altEmotion === emotion) continue;
-                        // @ts-ignore
-                        specificVoice = /** @type {CharacterVoiceEntry} */ (characterVoiceInfo[altEmotion]);
-                        if (specificVoice) {
-                            break;
-                        }
-                    }
-
-                    if (!specificVoice) {
-                        // @ts-ignore
-                        specificVoice = /** @type {CharacterVoiceEntry} */ (characterVoiceInfo["neutral"]);
-                    }
-                }
-
-                if (!specificVoice || !specificVoice.asset || specificVoice.asset === "@none" || typeof specificVoice.asset !== "string") {
-                    specificVoice = narratorVoice;
-                }
-
-                // TODO set the payload for dialogue
+                voice = this._resolveFragmentVoice(narratorVoice, characterVoiceInfo);
             }
+            const segment = await session.buildSpeechSegment(frag.text, voice);
+            if (!segment) {
+                crashed = true;
+                break;
+            };
+            if (segment) segments.push(segment);
         }
+
+        if (crashed) {
+            console.error("GameMessage: failed to build one or more speech segments for dialogue block, skipping voice playback.");
+        }
+
+        this._showVoiceGenerating();
+        const audioSrc = await this.getSrcFromVocalizer(segments);
+        if (!audioSrc) { this._hideVoiceGenerating(); return; }
+
+        this._setAudioSource(audioSrc);
+        await playNarration(audioSrc, 1);
     }
 
     /**
-     * TODO the params for the payload
-     * @return {Promise<string>} the audio that was generated
+     * Pick the character voice for a dialogue fragment based on the block's
+     * `emotion` attribute, falling back through the emotion's group, then
+     * neutral, then the narrator voice.
+     * @param {CharacterVoiceEntry} narratorVoice
+     * @param {CharacterVoiceAssets} characterVoiceInfo
+     * @returns {CharacterVoiceEntry}
      */
-    async getSrcFromVocalizer(payload) {
-        
+    _resolveFragmentVoice(narratorVoice, characterVoiceInfo) {
+        const emotion = this.getAttribute("emotion") || "neutral";
+        // @ts-ignore
+        let specificVoice = /** @type {CharacterVoiceEntry} */ (characterVoiceInfo[emotion]);
+        if (!specificVoice) {
+            const keyOfEmotion = Object.keys(emotionsGrouped).find((groupKey) => {
+                if (emotionsGrouped[groupKey].includes(emotion)) {
+                    return true;
+                }
+            });
+
+            const alternatives = keyOfEmotion ? emotionsGrouped[keyOfEmotion] : [];
+            for (const altEmotion of alternatives) {
+                if (altEmotion === emotion) continue;
+                // @ts-ignore
+                specificVoice = /** @type {CharacterVoiceEntry} */ (characterVoiceInfo[altEmotion]);
+                if (specificVoice) {
+                    break;
+                }
+            }
+
+            if (!specificVoice) {
+                // @ts-ignore
+                specificVoice = /** @type {CharacterVoiceEntry} */ (characterVoiceInfo["neutral"]);
+            }
+        }
+
+        if (!specificVoice || !specificVoice.asset || specificVoice.asset === "@none" || typeof specificVoice.asset !== "string") {
+            specificVoice = narratorVoice;
+        }
+
+        return specificVoice;
+    }
+
+    /**
+     * Render a list of Vocalizer speech segments into a playable audio object
+     * URL via the global session.
+     * @param {import("../../../engine/voice/base.js").VocalizerSpeechSegment[]} segments
+     * @return {Promise<string|null>} the object URL of the generated audio, or null
+     */
+    async getSrcFromVocalizer(segments) {
+        const session = window.GAME_VOCALIZER;
+        if (!session) return null;
+        return session.renderSegments(segments);
+    }
+
+    /**
+     * Show a small pulsing "generating voice" indicator on the message box.
+     * Safe to call multiple times; only one indicator is ever inserted.
+     */
+    _showVoiceGenerating() {
+        const box = this._blockBoxEl;
+        if (!box || box.querySelector('.voice-gen-indicator')) return;
+        const el = document.createElement('span');
+        el.className = 'voice-gen-indicator';
+        el.setAttribute('aria-label', 'Generating voice…');
+        el.title = 'Generating voice…';
+        el.style.cssText = 'display:inline-flex;align-items:center;gap:0.3vh;vertical-align:middle;margin-left:0.8vh;opacity:0.7;';
+        const keyframes = `@keyframes _vgi_pulse{0%,80%,100%{transform:scale(0.6);opacity:0.4}40%{transform:scale(1);opacity:1}}`;
+        const style = document.createElement('style');
+        style.textContent = keyframes;
+        el.appendChild(style);
+        for (let i = 0; i < 3; i++) {
+            const dot = document.createElement('span');
+            dot.style.cssText = `display:inline-block;width:0.5vh;height:0.5vh;border-radius:50%;background:rgba(180,140,255,0.9);animation:_vgi_pulse 1.2s ease-in-out ${i * 0.2}s infinite;`;
+            el.appendChild(dot);
+        }
+        box.appendChild(el);
+    }
+
+    /** Remove the generating indicator (called when audio arrives or fails). */
+    _hideVoiceGenerating() {
+        this._blockBoxEl?.querySelector('.voice-gen-indicator')?.remove();
+    }
+
+    /**
+     * Record the synthesized audio source for this block, remove the
+     * generating indicator, and reveal a replay button.
+     * @param {string} src
+     */
+    _setAudioSource(src) {
+        this._hideVoiceGenerating();
+        this._audioSrc = src;
+        const box = this._blockBoxEl;
+        if (!box || box.querySelector('.replay-btn')) return;
+
+        const btn = document.createElement('button');
+        btn.className = 'replay-btn';
+        btn.title = 'Replay voice';
+        btn.setAttribute('aria-label', 'Replay voice');
+        btn.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;margin-left:0.8vh;width:2.6vh;height:2.6vh;padding:0;border:none;border-radius:50%;background:rgba(100,0,200,0.35);color:#fff;cursor:pointer;opacity:0.75;transition:opacity 0.15s;';
+        btn.innerHTML = '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="width:60%;height:60%;pointer-events:none;"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>';
+        btn.addEventListener('mouseenter', () => { btn.style.opacity = '1'; });
+        btn.addEventListener('mouseleave', () => { btn.style.opacity = '0.75'; });
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (this._audioSrc) playNarration(this._audioSrc, 1);
+        });
+        box.appendChild(btn);
     }
 
     // ── Finalisation ─────────────────────────────────────────────────
@@ -349,6 +472,7 @@ class GameMessage extends HTMLElement {
         box.appendChild(p);
         rootEl.appendChild(box);
         this._narrationTextEl = p;
+        this._blockBoxEl = box;
         this._wireBlockDebugClick(box);
     }
 
@@ -390,6 +514,7 @@ class GameMessage extends HTMLElement {
         box.appendChild(body);
         rootEl.appendChild(box);
         this._msgTextEl = txt;
+        this._blockBoxEl = box;
         this._wireBlockDebugClick(box);
     }
 
@@ -566,8 +691,9 @@ class GameMessage extends HTMLElement {
             asset: narrator?.asset || defaultNarrator?.asset || null,
             transcript: narrator?.transcript || defaultNarrator?.transcript || null,
             tags: narrator?.tags || defaultNarrator?.tags || [
-                "narrative",
-                "insightful",
+                "expressive",
+                "warm",
+                "engaging",
             ],
         };
         if (narratorValue?.asset === "@none" || !narratorValue?.asset) {

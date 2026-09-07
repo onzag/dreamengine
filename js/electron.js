@@ -716,9 +716,9 @@ ipcMain.handle('listNarrators', async () => {
         const files = fs.readdirSync(narratorsDir);
         for (const file of files) {
             const ext = path.extname(file).toLowerCase();
-            if (['.wav', '.mp3', '.ogg', '.flac'].includes(ext)) {
+            if (['.wav', '.mp3', '.flac'].includes(ext)) {
                 // return with the extension
-                narrators.push(file);
+                narrators.push("narrators/" + file);
             }
         }
     }
@@ -727,10 +727,10 @@ ipcMain.handle('listNarrators', async () => {
         const files = fs.readdirSync(defaultNarratorsDir);
         for (const file of files) {
             const ext = path.extname(file).toLowerCase();
-            if (['.wav', '.mp3', '.ogg', '.flac'].includes(ext)) {
+            if (['.wav', '.mp3', '.flac'].includes(ext)) {
                 if (!narrators.includes(file)) {
                     // Prefix default narrators with @ to distinguish them from user-uploaded narrators
-                    narrators.push("@" + file);
+                    narrators.push("@voices/" + file);
                 }
             }
         }

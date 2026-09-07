@@ -761,7 +761,7 @@ async function startWebServer(creds) {
         try {
             const narratorsDir = path.join(DREAMENGINE_HOME, 'narrators');
             const defaultNarratorsDir = path.join(__dirname, 'default-scripts', 'voices');
-            const AUDIO_EXTS = ['.wav', '.mp3', '.ogg', '.flac'];
+            const AUDIO_EXTS = ['.wav', '.mp3', '.flac'];
 
             /** @type {string[]} */
             const narrators = [];
@@ -770,7 +770,7 @@ async function startWebServer(creds) {
                 for (const file of fs.readdirSync(narratorsDir)) {
                     const ext = path.extname(file).toLowerCase();
                     if (AUDIO_EXTS.includes(ext)) {
-                        narrators.push(file);
+                        narrators.push("narrators/" + file);
                     }
                 }
             }
@@ -780,7 +780,7 @@ async function startWebServer(creds) {
                     const ext = path.extname(file).toLowerCase();
                     if (AUDIO_EXTS.includes(ext)) {
                         if (!narrators.includes(file)) {
-                            narrators.push('@' + file);
+                            narrators.push('@voices/' + file);
                         }
                     }
                 }

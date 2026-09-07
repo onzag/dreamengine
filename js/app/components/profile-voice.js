@@ -718,7 +718,7 @@ class ProfileVoice extends HTMLElement {
                 </button>` : ''}
             </div>
             <audio class="voice-audio" preload="metadata" src="${resolved}"></audio>
-            <input type="file" accept=".mp3,.ogg,.wav,audio/mpeg,audio/ogg" style="display:none;" />
+            <input type="file" accept=".mp3,.wav,audio/mpeg" style="display:none;" />
         `;
     }
 }

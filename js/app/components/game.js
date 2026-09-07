@@ -5,6 +5,8 @@ import './game/game-message.js';
 import './debug/debug-character.js';
 import './game/cycle-inform.js';
 import { emotionsGrouped } from '../../engine/util/emotions.js';
+import { VoiceAdapterWebsocketVocalizer } from '../../engine/voice/adapter-websocket-vocalizer.js';
+import { GameVocalizerSession } from './game/vocalizer-session.js';
 
 /**
  * @typedef {Object} MessageBufferEntry
@@ -139,6 +141,10 @@ class GameOverlay extends HTMLElement {
 
     async connectedCallback() {
         this.render();
+
+        // Establish the shared Vocalizer connection (if enabled) so every
+        // message block can synthesize speech through the one global session.
+        this._initVocalizer();
 
         // @ts-ignore
         document.querySelector('.fx').style.zIndex = '50'; // ensure fx controls are above the game UI
@@ -613,12 +619,12 @@ class GameOverlay extends HTMLElement {
                 await window.ENGINE_WORKER_CLIENT.setDreamStability({ stability: dreamStability === "stable" ? 1 : (dreamStability === "unstable" ? 0.99 : 0.95) });
 
                 const defaultNarratorVoice = this.getAttribute('default-narrator-voice') || '';
-                const defaultNarratorVoiceOverride = this.getAttribute('default-narrator-voice-override') || '';
+                const defaultNarratorVoiceOverride = (this.getAttribute('default-narrator-voice-override') || 'false') === 'true';
                 if (defaultNarratorVoiceOverride && defaultNarratorVoice) {
                     await window.ENGINE_WORKER_CLIENT.forceSetDEObject({
                         path: ["state", "__INTERNAL_NARRATOR_OVERRIDE"],
                         value: {
-                            asset: defaultNarratorVoiceOverride,
+                            asset: defaultNarratorVoice,
                         },
                     });
                 } else if (defaultNarratorVoice) {
@@ -2513,7 +2519,42 @@ class GameOverlay extends HTMLElement {
         this.stopEngine();
         document.removeEventListener('keydown', this.onF5Keydown);
 
+        // Tear down the shared Vocalizer connection.
+        if (window.GAME_VOCALIZER) {
+            try { window.GAME_VOCALIZER.close(); } catch (_e) { /* ignore */ }
+            window.GAME_VOCALIZER = null;
+        }
+
         await stopAllAmbiencesAndStartNewOne([{ id: 'dream-ambience', srcs: [{ src: window.DREAM_AMBIENCE_CHOSEN, fadeDurationMs: 2000, volume: window.DREAM_AMBIENCE_CHOSEN_VOLUME }] }], 1000);
+    }
+
+    /**
+     * Create the single, game-wide Vocalizer session shared by all message
+     * blocks and expose it as `window.GAME_VOCALIZER`. No-op (and clears the
+     * global) when voice generation is disabled or unconfigured. The socket
+     * connects lazily in the background; failures are non-fatal.
+     */
+    async _initVocalizer() {
+        try {
+            const enabled = await window.API.getConfigValue("vocalizerEnabled");
+            const host = enabled ? await window.API.getConfigValue("vocalizerHost") : null;
+            if (!enabled || !host) {
+                window.GAME_VOCALIZER = null;
+                return;
+            }
+            const secret = await window.API.getConfigValue("vocalizerApiKey");
+            const adapter = new VoiceAdapterWebsocketVocalizer({
+                host: (host || "wss://127.0.0.1:8222").toString(),
+                secret: (secret || "").toString(),
+            });
+            window.GAME_VOCALIZER = new GameVocalizerSession(adapter);
+            adapter.ensureInitialized().catch(err => {
+                console.error("GameOverlay: Vocalizer connection failed", err);
+            });
+        } catch (err) {
+            console.error("GameOverlay: failed to initialise Vocalizer", err);
+            window.GAME_VOCALIZER = null;
+        }
     }
 
     async stopEngine() {

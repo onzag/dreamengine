@@ -360,6 +360,7 @@ class PlayOverlay extends HTMLElement {
             this.currentStepIndex += 1;
             this.renderStep();
         } else {
+            stopNarration();
             this.dispatchEvent(new CustomEvent('start', {
                 detail: {
                     world: this.selectedWorld,
@@ -467,9 +468,8 @@ class PlayOverlay extends HTMLElement {
     resolveNarratorUrl(value) {
         const isSystem = value.startsWith('@');
         const base = isSystem ? window.DREAMENGINE_DEFAULT_SCRIPTS_HOME : window.DREAMENGINE_HOME;
-        const folder = isSystem ? 'voices' : 'narrators';
         const fileName = isSystem ? value.slice(1) : value;
-        return `${base}/${folder}/${fileName}`;
+        return `${base}/${fileName}`;
     }
 
     /**
@@ -480,7 +480,9 @@ class PlayOverlay extends HTMLElement {
      */
     narratorDisplayName(value) {
         const isSystem = value.startsWith('@');
-        const name = (isSystem ? value.slice(1) : value).replace(/\.[^/.]+$/, '');
+        const splitted = value.split("/");
+        const last = splitted[splitted.length - 1];
+        const name = last.replace(/\.[^/.]+$/, '');
         return isSystem ? `(System) ${name}` : name;
     }
 

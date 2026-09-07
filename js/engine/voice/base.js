@@ -122,6 +122,7 @@ export class BaseVoiceAdapter {
     /**
      * @param {Blob} file
      * @param {string} filename
+     * @returns {Promise<{skipped: boolean, filename: string, hash?: string, size?: number}>}
      */
     sendFile(file, filename) {
         throw new Error("Method 'sendFile()' must be implemented.");

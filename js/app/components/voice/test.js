@@ -19,7 +19,7 @@ import { playSound } from "../../sound.js";
  * resolve if a file with that name has been uploaded first.
  */
 const DEFAULT_WORKFLOW = {
-    output_format: "ogg",
+    output_format: "mp3",
     generation: { cfg_value: 2.0, inference_timesteps: 10, normalize: true },
     segments: [
         { voice_prompt: "an older man, gravelly voice", text: "If you can hear me, it works." },
@@ -158,7 +158,7 @@ export class VocalizerTest extends HTMLElement {
             <div class="vt-section-title">Upload audio (mp3 / ogg)</div>
             <div class="vt-row">
                 <input type="text" data-el="upload-name" placeholder="reference name e.g. emotion.mp3" style="flex:1;min-width:20ch;" />
-                <input type="file" data-el="upload-file" accept=".mp3,.ogg,audio/mpeg,audio/ogg" />
+                <input type="file" data-el="upload-file" accept=".mp3,audio/mpeg" />
                 <button class="vt-btn" data-el="upload-btn" disabled>Upload</button>
             </div>
             <div class="vt-files" data-el="files"></div>
@@ -250,7 +250,7 @@ export class VocalizerTest extends HTMLElement {
 
         renderBtn.disabled = true;
         renderStatus.textContent = "rendering…";
-        this._log(`Rendering (output_format=${request.output_format || "ogg"})…`);
+        this._log(`Rendering (output_format=${request.output_format || "mp3"})…`);
         try {
             const blob = await this.adapter.runWorkflow(request);
             this._log(`Render complete: ${blob.size} bytes (${blob.type}).`);
@@ -273,11 +273,11 @@ export class VocalizerTest extends HTMLElement {
 
     _onDownloadClick() {
         if (!this.lastRenderUrl) return;
-        let ext = "ogg";
+        let ext = "mp3";
         try {
             const parsed = JSON.parse(this._el("payload").value);
             if (parsed.output_format === "mp3") ext = "mp3";
-        } catch (_e) { /* ignore, default ogg */ }
+        } catch (_e) { /* ignore, default mp3 */ }
         const a = document.createElement("a");
         a.href = this.lastRenderUrl;
         a.download = `vocalizer-test.${ext}`;
