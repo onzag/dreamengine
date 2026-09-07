@@ -16,6 +16,7 @@ import { DEngine } from "../index.js";
  * @property {string} trail
  * @property {number} maxParagraphs
  * @property {number} maxCharacters
+ * @property {boolean} maxCharactersCutOnDot - Whether to cut on dot when max characters is reached, not just newline, default false
  * @property {number} maxSafetyCharacters
  * @property {WordRejectionSettings} wordRejection
  * @property {Array<string>} stopAfter
@@ -36,6 +37,7 @@ import { DEngine } from "../index.js";
      * stopAt: Array<string>,
      * maxParagraphs: number,
      * maxCharacters: number,
+     * maxCharactersCutOnDot?: boolean,
      * maxSafetyCharacters: number,
      * } | null>} QuestionAgentGeneratorResponse
      */

@@ -298,6 +298,7 @@ export async function talk(engine, character, options) {
             maxCharacters: 100,
             maxParagraphs: 1,
             maxSafetyCharacters: 100,
+            maxCharactersCutOnDot: true,
             nextQuestion: nextQuestion,
             stopAt: ["\n"],
             stopAfter: [],
@@ -642,7 +643,7 @@ export async function talk(engine, character, options) {
                 stateInjections: characterSystemPrompt.internalDescription.stateInjections,
                 visibleEnviroment: characterCanSee.everything,
                 narrativeEffects,
-                grammar: nextToGenerateIsSameAsPreviousButNarrativeAction ? grammar.narrative : (nextToGenerate.type === "dialogue" ? grammar.dialogue : grammar.narrative),
+                grammar: nextIsNarration ? grammar.narrative : grammar.dialogue,
                 activeStates,
                 narration: nextIsNarration,
 
@@ -655,6 +656,7 @@ export async function talk(engine, character, options) {
 
         // dialogue specific
         let insideNarration = nextIsNarration;
+        let ignoreFirstNCharactersDialogueOnly = nextIsNarration ? 0 : (character.name + ": ").length;
 
         let next = await generator.next(true);
         while (!next.done || next.value) {
@@ -667,10 +669,6 @@ export async function talk(engine, character, options) {
                 } else if (info.type === "text" && nextIsNarration) {
                     // replace all asterisks with nothing
                     let textToStream = info.content.replace(/\*/g, "");
-                    if (!generatedMessage.length) {
-                        textToStream = textToStream.trimStart();
-                    }
-
                     generatedMessage += info.content;
 
                     if (textToStream) {
@@ -683,15 +681,22 @@ export async function talk(engine, character, options) {
                         });
                     }
                 } else if (info.type === "text" && !nextIsNarration) {
-                    // replace all asterisks with nothing
-                    let textToStream = info.content.replace(/\*/g, "").replace(/"/g, "");
-                    if (!generatedMessage.length) {
-                        textToStream = textToStream.trimStart();
+                    let actualInfoContent = info.content;
+
+                    if (ignoreFirstNCharactersDialogueOnly) {
+                        actualInfoContent = actualInfoContent.substring(ignoreFirstNCharactersDialogueOnly);
+                        ignoreFirstNCharactersDialogueOnly -= info.content.length;
+                        if (ignoreFirstNCharactersDialogueOnly < 0) {
+                            ignoreFirstNCharactersDialogueOnly = 0;
+                        }
                     }
+
+                    // replace all asterisks with nothing
+                    let textToStream = actualInfoContent.replace(/\*/g, "").replace(/"/g, "");
 
                     const currentBlockAsDialoge = /** @type {DEConversationMessageDialogue} */ (currentBlock);
                     if (currentBlockAsDialoge.fragments.length === 0) {
-                        if (info.content.trim()[0] === "*") {
+                        if (actualInfoContent.trim()[0] === "*") {
                             // this shouldn't happen, it should always start with dialogue, but in case it starts with the asterisk
                             // we will treat it as narration
                             insideNarration = true;
@@ -702,7 +707,7 @@ export async function talk(engine, character, options) {
                         });
                     }
 
-                    generatedMessage += info.content;
+                    generatedMessage += actualInfoContent;
 
                     // check if em dash in the text
                     if (textToStream.includes("—")) {

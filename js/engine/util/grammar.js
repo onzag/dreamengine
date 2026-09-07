@@ -203,6 +203,6 @@ export function generateGrammarForVocabulary(engine, vocabulary, charName) {
     
     return {
         narrative: `root ::= "*" [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] .+`,
-        dialogue: `root ::= ${JSON.stringify(charName + ": ")} [^—] [^—] [^—] .+`,
+        dialogue: `root ::= ${JSON.stringify(charName + ": ")} [^*—] [^*—] [^*—] .+`,
     };
 }

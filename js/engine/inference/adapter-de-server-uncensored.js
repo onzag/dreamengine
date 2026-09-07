@@ -570,7 +570,8 @@ ${nextMessageMustBeInform}
             trail: assistantPromptTrail,
             maxParagraphs: 1,
             maxCharacters: 200,
-            maxSafetyCharacters: 500,
+            maxCharactersCutOnDot: true,
+            maxSafetyCharacters: 1000,
             stopAt: [],
             stopAfter: [],
             grammar: grammar || null,
@@ -762,6 +763,7 @@ ${nextMessageMustBeInform}
                 stopAfter: nextQuestion.stopAfter,
                 maxParagraphs: nextQuestion.maxParagraphs,
                 maxCharacters: nextQuestion.maxCharacters,
+                maxCharactersCutOnDot: nextQuestion.maxCharactersCutOnDot || false,
                 maxSafetyCharacters: nextQuestion.maxSafetyCharacters,
                 trail: "# Answer:\n\n" + (nextQuestion.answerTrail || ""),
                 grammar: nextQuestion.grammar || null,
@@ -1106,6 +1108,7 @@ ${this.buildSystemCharacterDescription(character, { description, externalDescrip
      *   trail: string,
      *   maxParagraphs: number,
      *   maxCharacters: number,
+     *   maxCharactersCutOnDot: boolean,
      *   maxSafetyCharacters: number,
      *   stopAt: string[],
      *   stopAfter: string[],
@@ -1118,6 +1121,7 @@ ${this.buildSystemCharacterDescription(character, { description, externalDescrip
      *   stopAfter: string[],
      *   maxParagraphs: number,
      *   maxCharacters: number,
+     *   maxCharactersCutOnDot: boolean,
      *   maxSafetyCharacters: number,
      *   trail: string,
      *   grammar: string | null,
@@ -1277,6 +1281,10 @@ ${this.buildSystemCharacterDescription(character, { description, externalDescrip
             }
 
             if (_payload.maxCharacters && currentTextCharLen >= _payload.maxCharacters && (nextChar === "\n")) {
+                break;
+            }
+
+            if (_payload.maxCharacters && _payload.maxCharactersCutOnDot && currentTextCharLen >= _payload.maxCharacters && (nextChar === "." || nextChar === "\n")) {
                 break;
             }
 

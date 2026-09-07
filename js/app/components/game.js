@@ -111,6 +111,12 @@ class GameOverlay extends HTMLElement {
         this._inferringEventResolvers = {};
         this._isResolvingMessageBuffer = false;
 
+        // Serialisation guards for updateStory so overlapping runs can't create
+        // duplicate message elements.
+        this._updateStoryRunning = false;
+        this._updateStoryPending = false;
+        this._pendingShouldStream = false;
+
         /**
          * @type {"normal" | "hard" | "easy" | "debug"}
          */
@@ -1562,14 +1568,9 @@ class GameOverlay extends HTMLElement {
             // arrived, and the following text events would hit a finished
             // element ("message is not streaming").
             if (next.pseudostream) {
+                // Finished message: replay each block as a paced pseudostream.
                 for (let i = 0; i < contentpieces.length; i++) {
                     const piece = contentpieces[i];
-
-                    // If this message was previously live and its stream
-                    // events/promise are still lingering, dispose of them now so
-                    // they can't feed a since-detached element or leak.
-                    this._disposeInferringForGid(next.gid);
-
                     const el = this._createMessageElement(next, piece, i);
 
                     /**
@@ -1584,11 +1585,21 @@ class GameOverlay extends HTMLElement {
                     });
                     await promiseResolve;
                 }
-            }
-
-            if (next.stream) {
-                this.consumeRemainingInferringBuffer(next.gid);
-                await this._inferringEventPromises[next.gid];
+            } else if (next.stream) {
+                // Live message: its elements are created and driven entirely by
+                // the incoming engine events (onInferringOverConversationMessage).
+                // Replay, in order, any events that arrived before this entry's
+                // metadata was loaded, then wait until the stream signals it is
+                // done before moving on to keep messages ordered.
+                const gid = next.gid;
+                const pending = this.inferringEventBuffer.filter(e => e.messageId === gid);
+                this.inferringEventBuffer = this.inferringEventBuffer.filter(e => e.messageId !== gid);
+                for (const ev of pending) {
+                    this.onInferringOverConversationMessage(ev);
+                }
+                await this._inferringEventPromises[gid];
+                delete this._inferringEventPromises[gid];
+                delete this._inferringEventResolvers[gid];
             }
 
             next = this.messageBuffer.shift();
@@ -1602,6 +1613,31 @@ class GameOverlay extends HTMLElement {
      * @param {boolean} shouldStreamMessages - whether to stream messages (true) or render them instantly (false). This is usually false when loading a save file, and true when starting a new game.
      */
     async updateStory(shouldStreamMessages) {
+        // Serialise runs so two overlapping calls (e.g. the debounced refresh
+        // racing a live-event-triggered refresh) can't create duplicate
+        // elements. A call made while another is running just flags a re-run.
+        if (this._updateStoryRunning) {
+            this._updateStoryPending = true;
+            this._pendingShouldStream = shouldStreamMessages;
+            return;
+        }
+        this._updateStoryRunning = true;
+        try {
+            let stream = shouldStreamMessages;
+            do {
+                this._updateStoryPending = false;
+                await this._updateStoryOnce(stream);
+                stream = this._pendingShouldStream;
+            } while (this._updateStoryPending);
+        } finally {
+            this._updateStoryRunning = false;
+        }
+    }
+
+    /**
+     * @param {boolean} shouldStreamMessages
+     */
+    async _updateStoryOnce(shouldStreamMessages) {
         try {
             const actualUserName = await window.ENGINE_WORKER_CLIENT.queryDEObject({
                 path: ["user"],
@@ -1732,17 +1768,22 @@ class GameOverlay extends HTMLElement {
      * @returns {any}
      */
     _createMessageElement(entry, piece, index) {
+        // The block's narration/dialogue type is per-block: a single message can
+        // mix narration and dialogue blocks, so prefer the piece's own type
+        // (set from the engine event / content) and only fall back to the
+        // entry-level flag when the piece doesn't carry one.
+        const isNarration = piece && piece.type ? piece.type === 'narration' : entry.isNarration;
         const el = /** @type {any} */ (document.createElement('app-game-message'));
         el.setAttribute('gid', entry.gid);
         el.setAttribute('content-index', String(index));
         el.setAttribute('debug-id', piece.__debug_id || '');
         el.setAttribute('image-url', entry.assetImage || '');
         el.setAttribute('debug', this.gameDifficulty === 'debug' ? 'true' : 'false');
-        el.setAttribute('show-avatar', entry.isNarration ? 'false' : (entry.isGroupStart ? 'true' : 'false'));
-        el.setAttribute('type', entry.isNarration ? 'narration' : 'dialogue');
+        el.setAttribute('show-avatar', isNarration ? 'false' : (entry.isGroupStart ? 'true' : 'false'));
+        el.setAttribute('type', isNarration ? 'narration' : 'dialogue');
         el.setAttribute('stream', entry.stream ? 'true' : 'false');
         el.setAttribute('pseudostream', entry.pseudostream ? 'true' : 'false');
-        if (!entry.isNarration) {
+        if (!isNarration) {
             el.setAttribute('sender-name', entry.senderName);
         }
         this.root.querySelector('.game-story-content-list')?.appendChild(el);
@@ -1826,46 +1867,11 @@ class GameOverlay extends HTMLElement {
     }
 
     /**
-     * Dispose of any lingering live-stream state for a message. Drops every
-     * buffered inferring event belonging to the gid and resolves + deletes its
-     * pending promise/resolver so nothing keeps feeding a since-finished
-     * message (which would otherwise leak the promise and its resolver).
-     * @param {string} gid
-     */
-    _disposeInferringForGid(gid) {
-        this.inferringEventBuffer = this.inferringEventBuffer.filter(e => e.messageId !== gid);
-        const resolver = this._inferringEventResolvers[gid];
-        if (resolver) resolver();
-        delete this._inferringEventResolvers[gid];
-        delete this._inferringEventPromises[gid];
-    }
-
-    /**
-     * @param {string} gid
-     */
-    async consumeRemainingInferringBuffer(gid) {
-        while (this.inferringEventBuffer.length > 0) {
-            const event = this.inferringEventBuffer.shift();
-            if (!event) break;
-
-            if (event.messageId !== gid) {
-                console.error(`consumeRemainingInferringBuffer: event messageId ${event.messageId} does not match gid ${gid}. Ignoring.`);
-                continue;
-            }
-
-            await new Promise(resolve => setTimeout(resolve, 20)); // make the events slower to show the streaming effect better
-            this.onInferringOverConversationMessage(event);
-            if (event?.event === "add-dialogue-block" || event?.event === "add-narration-block" || event?.event === "done") {
-                break; // stop after adding a new message element, the newly added element should handle continuing
-            }
-        }
-    }
-
-    /**
-     * Handle a streamed engine conversation event. Events are routed to the
-     * matching app-game-message element, which buffers and paces them itself.
-     * If the element has not been created yet (updateStory hasn't caught up),
-     * the event is buffered and a story refresh is scheduled to create it.
+     * Handle a streamed engine conversation event. Live (streaming) messages are
+     * built entirely from these events: an "add-*-block" event spawns a fresh
+     * element for the new block, and the subsequent text / "done" events drive
+     * it. Finished messages never receive events (they are pseudostreamed from
+     * their content), so any event always belongs to a live block.
      *
      * @param {import('../../engine/index.js').EngineConversationEvent} data
      */
@@ -1875,83 +1881,47 @@ class GameOverlay extends HTMLElement {
         const list = this.root.querySelector('.game-story-content-list');
         if (!list) return;
 
-        // find the element with the matching gid and content-index
-        let msgEl = /** @type {any} */ (list.querySelector(`app-game-message[gid="${CSS.escape(gid)}"][content-index="${index}"]`));
+        const msgEl = /** @type {any} */ (list.querySelector(`app-game-message[gid="${CSS.escape(gid)}"][content-index="${index}"]`));
+        const isBlockStart = data.event === "add-narration-block" || data.event === "add-dialogue-block";
 
-        if (!msgEl) {
-            if (data.event !== "add-narration-block" && data.event !== "add-dialogue-block") {
-                console.error(`Received conversation event for message ${gid} content index ${index}, but the message element does not exist yet. Event:`, data);
-                return;
-            }
-            const allElsWithTheSameGid = Array.from(list.querySelectorAll(`app-game-message[gid="${CSS.escape(gid)}"]`));
-            const currentlyStreamingElWithTheSameGid = allElsWithTheSameGid.find(el => {
-                // @ts-ignore
-                return el.isStreaming();
-            });
-            if (currentlyStreamingElWithTheSameGid) {
-                // If there's already a streaming message with the same gid and streaming, we don't need to do anything but save the event for later
+        if (isBlockStart) {
+            // Start of a new block → spawn a fresh live-streaming element.
+            if (msgEl) return; // already created (duplicate start), ignore
+
+            const entry = this.loadedMessageBuffer.find(e => e.gid === gid);
+            if (!entry) {
+                // Metadata not loaded yet (the event beat the debounced
+                // updateStory). Buffer it and pull history; resolveBuffer will
+                // replay it, in order, once the entry exists.
                 this.inferringEventBuffer.push(data);
+                this.updateStory(true);
                 return;
-            } else {
-                if (data.event === "add-narration-block") {
-                    // If the event is an "add-narration-block" event, we can create a new message element for it.
-                    const entry = this.loadedMessageBuffer.find(e => e.gid === gid);
-                    if (!entry) {
-                        // Entry not loaded yet (updateStory hasn't run). Buffer and trigger.
-                        this.inferringEventBuffer.push(data);
-                        this.updateStory(true);
-                        return;
-                    }
-
-                    msgEl = this._createMessageElement(entry, {
-                        type: "narration",
-                        text: "",
-                        __debug_id: data.__debug_id,
-                    }, index);
-
-                    msgEl.addEventListener('on-stream-finished', this.consumeRemainingInferringBuffer.bind(this));
-                } else if (data.event === "add-dialogue-block") {
-                    // If the event is an "add-dialogue-block" event, we can create a new message element for it.
-                    const entry = this.loadedMessageBuffer.find(e => e.gid === gid);
-                    if (!entry) {
-                        // Entry not loaded yet (updateStory hasn't run). Buffer and trigger.
-                        this.inferringEventBuffer.push(data);
-                        this.updateStory(true);
-                        return;
-                    }
-
-                    msgEl = this._createMessageElement(entry, {
-                        type: "dialogue",
-                        fragments: [],
-                        __debug_id: data.__debug_id,
-                    }, index);
-
-                    msgEl.addEventListener('on-stream-finished', this.consumeRemainingInferringBuffer.bind(this));
-                } else {
-                    console.warn(`Received event ${data.event} for unknown message gid ${gid} that is not currently in the buffer. Ignoring.`);
-                }
             }
-        } else if (msgEl.isStreaming()) {
+
+            this._createMessageElement(entry, /** @type {any} */ ({
+                type: data.event === "add-narration-block" ? "narration" : "dialogue",
+                __debug_id: data.__debug_id,
+            }), index);
+            return;
+        }
+
+        // add-narration / add-dialogue / done / add-hidden-block → feed the block.
+        if (!msgEl) {
+            // The block-start for this index hasn't been processed yet. Buffer
+            // so it is replayed after the element is created.
+            this.inferringEventBuffer.push(data);
+            return;
+        }
+
+        if (msgEl.isStreaming()) {
             msgEl.feedEvent(data);
+        }
+        // If the element already finished, this is a trailing/duplicate event for
+        // a completed block — safely ignored.
 
-            if (data.event === "done") {
-                msgEl.addEventListener('on-stream-finished', () => {
-                    const resolver = this._inferringEventResolvers[gid];
-                    if (resolver) {
-                        resolver();
-                        delete this._inferringEventResolvers[gid];
-                        delete this._inferringEventPromises[gid];
-                    }
-                });
-            }
-        } else if (msgEl.getAttribute('pseudostream') === 'true') {
-            // The message finished (streaming === false) and updateStory already
-            // rendered it as a pseudostream. Any live events still arriving for it
-            // are stale leftovers — drop them and clean up its stream state so
-            // nothing lingers.
-            this._disposeInferringForGid(gid);
-        } else {
-            console.error(`Received conversation event for message ${gid} content index ${index}, but the message is not streaming. Event:`, data);
+        if (data.event === "done") {
+            const resolver = this._inferringEventResolvers[gid];
+            if (resolver) resolver();
         }
     }
 
