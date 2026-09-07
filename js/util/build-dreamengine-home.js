@@ -178,6 +178,20 @@ export async function buildDreamEngineHome() {
     await fsPromises.mkdir(savesDir, { recursive: true });
     console.log(`Ensured saves/ exists at ${savesDir}`);
 
+    const narratorsDir = path.join(localDEPathAtHomeDir, 'narrators');
+    await fsPromises.mkdir(narratorsDir, { recursive: true });
+    console.log(`Ensured narrators/ exists at ${narratorsDir}`);
+
+    const narratorsReadmePath = path.join(narratorsDir, 'Readme.md');
+    if (!fs.existsSync(narratorsReadmePath)) {
+        await fsPromises.writeFile(narratorsReadmePath, `# Narrators
+
+This folder contains narrator voices for the engine. You can add your own narrator voices here, supported formats are .mp3, .ogg, .wav and .flac
+
+You might check https://github.com/OwenTyme/voice-zero for many open source voices that can be used.
+        `);
+    }
+
     const configPath = path.join(localDEPathAtHomeDir, 'config.json');
     try {
         await fsPromises.access(configPath);

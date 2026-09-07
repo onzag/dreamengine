@@ -350,7 +350,7 @@ ipcMain.handle('listScriptFiles', async (event) => {
         for (const entry of fs.readdirSync(defaultScriptsDir, { withFileTypes: true })) {
             if (entry.isDirectory()) {
                 const namespace = entry.name;
-                if (namespace === "assets") {
+                if (namespace === "assets" || namespace === "voices") {
                     continue;
                 }
                 const nsPath = path.join(defaultScriptsDir, namespace);
@@ -525,7 +525,7 @@ ipcMain.handle('uploadBytesToDEPath', async (event, dePath, bytes) => {
     if (dePath.includes('..')) {
         throw new Error('Invalid path');
     }
-    if (dePath !== "profile" && !dePath.startsWith("assets/")) {
+    if (dePath !== "profile" && !dePath.startsWith("assets/") && !dePath.startsWith("narrators/")) {
         throw new Error('Unauthorized path for upload');
     }
     if (dePath.endsWith(".json") || dePath.endsWith(".js")) {
@@ -542,6 +542,24 @@ ipcMain.handle('uploadBytesToDEPath', async (event, dePath, bytes) => {
     }
     await fs.promises.mkdir(path.dirname(destPath), { recursive: true });
     await fs.promises.writeFile(destPath, buffer);
+    return true;
+});
+
+ipcMain.handle('deleteFileFromDEPath', async (event, dePath) => {
+    if (typeof dePath !== 'string' || dePath.length === 0) {
+        throw new Error('Invalid path');
+    }
+    if (dePath.includes('..')) {
+        throw new Error('Invalid path');
+    }
+    if (dePath !== "profile" && !dePath.startsWith("assets/") && !dePath.startsWith("narrators/")) {
+        throw new Error('Unauthorized path for deletion');
+    }
+    const targetPath = path.join(DREAMENGINE_HOME, dePath);
+    if (!fs.existsSync(targetPath)) {
+        throw new Error('File does not exist');
+    }
+    await fs.promises.unlink(targetPath);
     return true;
 });
 
@@ -686,6 +704,38 @@ ipcMain.handle('deleteSaveFile', async (event, namespace, id, saveName) => {
             fs.writeFileSync(saveIndexPath, JSON.stringify(indexData, null, 4));
         }
     }
+});
+
+ipcMain.handle('listNarrators', async () => {
+    const narratorsDir = path.join(DREAMENGINE_HOME, 'narrators');
+    const defaultNarratorsDir = path.join(__dirname, 'default-scripts', "voices");
+
+    const narrators = [];
+    if (fs.existsSync(narratorsDir)) {
+        // read all files, show only the .wav, .mp3, .ogg, .flac files without extension
+        const files = fs.readdirSync(narratorsDir);
+        for (const file of files) {
+            const ext = path.extname(file).toLowerCase();
+            if (['.wav', '.mp3', '.ogg', '.flac'].includes(ext)) {
+                // return with the extension
+                narrators.push(file);
+            }
+        }
+    }
+
+    if (fs.existsSync(defaultNarratorsDir)) {
+        const files = fs.readdirSync(defaultNarratorsDir);
+        for (const file of files) {
+            const ext = path.extname(file).toLowerCase();
+            if (['.wav', '.mp3', '.ogg', '.flac'].includes(ext)) {
+                if (!narrators.includes(file)) {
+                    // Prefix default narrators with @ to distinguish them from user-uploaded narrators
+                    narrators.push("@" + file);
+                }
+            }
+        }
+    }
+    return narrators;
 });
 
 ipcMain.handle('startDiffusionProcess', () => {

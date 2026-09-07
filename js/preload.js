@@ -105,6 +105,14 @@ contextBridge.exposeInMainWorld('API', {
         const uint8Array = new Uint8Array(arrayBuffer);
         return ipcRenderer.invoke('uploadBytesToDEPath', dePath, uint8Array);
     },
+
+    /**
+     * @param {string} dePath 
+     * @returns 
+     */
+    deleteFileFromDEPath: (dePath) => {
+        return ipcRenderer.invoke('deleteFileFromDEPath', dePath);
+    },
     /**
      * Register a callback for when script files change on disk.
      * @param {(namespace: string, id: string, options?: { deleted?: boolean, moved?: { newNamespace: string, newId: string } }) => void} callback
@@ -158,5 +166,12 @@ contextBridge.exposeInMainWorld('API', {
      */
     stopDiffusionProcess: () => {
         return ipcRenderer.invoke('stopDiffusionProcess');
+    },
+
+    /**
+     * @returns {Promise<void>}
+     */
+    listNarrators: () => {
+        return ipcRenderer.invoke('listNarrators');
     },
 });

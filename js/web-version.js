@@ -432,7 +432,7 @@ async function startWebServer(creds) {
                     res.status(400).json({ error: 'Invalid path' });
                     return;
                 }
-                if (dePath !== 'profile' && !dePath.startsWith('assets/')) {
+                if (dePath !== 'profile' && !dePath.startsWith('assets/') && !dePath.startsWith('narrators/')) {
                     res.status(403).json({ error: 'Unauthorized path for upload' });
                     return;
                 }
@@ -711,6 +711,86 @@ async function startWebServer(creds) {
         } catch (err) {
             // @ts-ignore
             res.status(400).json({ error: err?.message || String(err) });
+        }
+    });
+
+    // --- Delete file from DE path --------------------------------------------
+    // Mirrors the ipcMain `deleteFileFromDEPath` handler in js/electron.js.
+    // The path must not contain ".." and must be "profile", under "assets/",
+    // or under "narrators/".
+
+    app.post('/api/delete', async (/** @type {any} */ req, /** @type {any} */ res) => {
+        try {
+            const dePath = String(req.query.path || '');
+            if (!dePath) {
+                res.status(400).json({ error: 'Invalid path' });
+                return;
+            }
+            if (dePath.includes('..')) {
+                res.status(400).json({ error: 'Invalid path' });
+                return;
+            }
+            if (dePath !== 'profile' && !dePath.startsWith('assets/') && !dePath.startsWith('narrators/')) {
+                res.status(403).json({ error: 'Unauthorized path for deletion' });
+                return;
+            }
+            const targetPath = path.join(DREAMENGINE_HOME, dePath);
+            // Defense-in-depth: ensure the resolved path stays inside the home dir.
+            if (!path.resolve(targetPath).startsWith(path.resolve(DREAMENGINE_HOME))) {
+                res.status(400).json({ error: 'Invalid path' });
+                return;
+            }
+            if (!fs.existsSync(targetPath)) {
+                res.status(404).json({ error: 'File does not exist' });
+                return;
+            }
+            await fs.promises.unlink(targetPath);
+            res.json({ ok: true });
+        } catch (err) {
+            console.error('deleteFileFromDEPath failed:', err);
+            res.status(500).json({ error: String(err) });
+        }
+    });
+
+    // --- Narrators list ------------------------------------------------------
+    // Mirrors the ipcMain `listNarrators` handler in js/electron.js.
+    // Returns an array of narrator names (without extension). User narrators
+    // come first; default narrators are prefixed with "@".
+
+    app.get('/api/narrators/list', (/** @type {any} */ _req, /** @type {any} */ res) => {
+        try {
+            const narratorsDir = path.join(DREAMENGINE_HOME, 'narrators');
+            const defaultNarratorsDir = path.join(__dirname, 'default-scripts', 'voices');
+            const AUDIO_EXTS = ['.wav', '.mp3', '.ogg', '.flac'];
+
+            /** @type {string[]} */
+            const narrators = [];
+
+            if (fs.existsSync(narratorsDir)) {
+                for (const file of fs.readdirSync(narratorsDir)) {
+                    const ext = path.extname(file).toLowerCase();
+                    if (AUDIO_EXTS.includes(ext)) {
+                        narrators.push(path.basename(file, ext));
+                    }
+                }
+            }
+
+            if (fs.existsSync(defaultNarratorsDir)) {
+                for (const file of fs.readdirSync(defaultNarratorsDir)) {
+                    const ext = path.extname(file).toLowerCase();
+                    if (AUDIO_EXTS.includes(ext)) {
+                        const narratorName = path.basename(file, ext);
+                        if (!narrators.includes(narratorName)) {
+                            narrators.push('@' + narratorName);
+                        }
+                    }
+                }
+            }
+
+            res.json(narrators);
+        } catch (err) {
+            console.error('listNarrators failed:', err);
+            res.status(500).json({ error: String(err) });
         }
     });
 

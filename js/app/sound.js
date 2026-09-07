@@ -86,6 +86,22 @@ function playSound(src, volume = 1) {
   });
 }
 
+/**
+ * 
+ * @param {string} src
+ * @param {number} volume
+ * @returns {void}
+ */
+function playNarration(src, volume = 1) {
+  const sound = new Audio(src);
+  sound.volume = volume;
+  sound.play().catch(err => console.log('Sound play failed:', err));
+  sound.addEventListener('ended', () => {
+    // release the audio element from memory once it's done playing
+    sound.src = '';
+  });
+}
+
 function playConfirmSound() {
   if (!fxEnabled || TEMP_SOUND_DISABLE) return;
   confirmSound.currentTime = 0;
@@ -565,7 +581,7 @@ export {
   playCancelSound, playPauseSound, playHoverSound, playConfirmSound, toggleFX,
   toggleAmbience, isFXEnabled, isAmbienceEnabled, playAmbience, stopAmbience,
   stopAmbienceWithFade, startAmbienceWithFade, startAmbiencesWithFade,
-  isAmbiencePlaying, setTempSoundDisable, playSound,
+  isAmbiencePlaying, setTempSoundDisable, playSound, playNarration,
   stopAllAmbiencesAndStartNewOne, randomizeAmbienceGroupSrc,
   setAllAmbiencesVolume, restoreAllAmbiencesVolume
 };

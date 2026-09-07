@@ -239,6 +239,26 @@ pre { margin:0; padding:16px; line-height:1.5; white-space:pre-wrap; word-wrap:b
             return true;
         },
 
+        deleteFileFromDEPath: async (dePath) => {
+            const res = await fetch(
+                `/api/delete?path=${encodeURIComponent(dePath)}`,
+                {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                },
+            );
+            if (!res.ok) {
+                let detail = `${res.status} ${res.statusText}`;
+                try {
+                    const data = await res.json();
+                    if (data && data.error) detail = data.error;
+                }
+                catch { /* not json */ }
+                throw new Error(`deleteFileFromDEPath("${dePath}") failed: ${detail}`);
+            }
+            return true;
+        },
+
         saveFile: async (namespace, id, saveName, saveData, saveIndexData) => {
             const res = await fetch('/api/save', {
                 method: 'POST',
@@ -290,5 +310,19 @@ pre { margin:0; padding:16px; line-height:1.5; white-space:pre-wrap; word-wrap:b
                 throw new Error(`stopDiffusionProcess failed: ${detail}`);
             }
         },
+
+        listNarrators: async () => {
+            const res = await fetch('/api/narrators/list', {
+                method: 'GET',
+                credentials: 'same-origin',
+            });
+            if (!res.ok) {
+                let detail = `${res.status} ${res.statusText}`;
+                try { const d = await res.json(); if (d?.error) detail = d.error; } catch { /* */ }
+                throw new Error(`listNarrators failed: ${detail}`);
+            }
+            return res.json();
+        },
+        
     }
 }

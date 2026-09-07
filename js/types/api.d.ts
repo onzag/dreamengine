@@ -25,6 +25,7 @@ declare interface DEAPI {
 
   getDreamEnginePaths(): Promise<string[]>;
   uploadFileToDEPath(dePath: string, file: File | Blob): Promise<boolean>;
+  deleteFileFromDEPath(dePath: string): Promise<boolean>;
   onScriptsChanged(callback: (
     namespace: string,
     id: string,
@@ -33,6 +34,8 @@ declare interface DEAPI {
 
   saveFile(namespace: string, id: string, saveName: string, saveData: string, saveIndexData?: any): Promise<void>;
   deleteSaveFile(namespace: string, id: string, saveName: string): Promise<void>;
+
+  listNarrators(): Promise<Array<string>>;
 
   startDiffusionProcess(): Promise<void>;
   stopDiffusionProcess(): Promise<void>;
