@@ -505,7 +505,8 @@ class Settings extends HTMLElement {
                         input-default-value="${adapterNames[0] || ''}"
                     ></app-overlay-select>
                     <div id="voice-adapter-settings" aria-live="polite">Loading adapter settings...</div>
-                    <app-overlay-button id="test-vocalizer-connection" play-sound-on-click="false" aria-key="t" title="Open a vocalizer field to check the vocalizer settings">Test Vocalizer</app-overlay-button>
+                    <br />
+                    <app-overlay-button id="test-vocalizer-connection" play-sound-on-click="false" aria-key="t" title="Open a voice generator to check the vocalizer settings">Test Voice Gen</app-overlay-button>
                 </div>
             </app-overlay-section>`;
 
@@ -651,7 +652,7 @@ class Settings extends HTMLElement {
                         ? []
                         : [this.renderAdapterSetting(dataLocation, setting)])
                     .join('');
-                const selfSignedField = adapterConfiguration.hasSelfSignedOption && window.API.mode === "web"
+                const selfSignedField = adapterConfiguration.hasSelfSignedOption && window.API.mode !== "web"
                     ? this.renderAdapterSetting(options.selfSignedDataLocation, {
                         label: "Allow self-signed SSL certificates",
                         description: options.selfSignedDescription,

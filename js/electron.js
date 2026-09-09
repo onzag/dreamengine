@@ -62,7 +62,6 @@ const createWindow = () => {
                 // invalid or empty host config, fall through to default
             }
         }
-        console.log("WHYNOTHERE")
         if (config.allowDiffusionSelfSigned) {
             const diffusionHost = config.diffusionHost || '';
             try {
@@ -77,7 +76,6 @@ const createWindow = () => {
         }
         if (config.allowVocalizerSelfSigned) {
             const vocalizerHost = config.vocalizerHost || '';
-            console.log("Checking vocalizer host", vocalizerHost, "against request hostname", request.hostname);
             try {
                 const hostUrl = new URL(vocalizerHost);
                 if (request.hostname === hostUrl.hostname) {
