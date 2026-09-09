@@ -56,6 +56,24 @@ const INVALID_NAMES = ["system", "assistant", "user", "everyone", "nobody",
 
 /**
  * @typedef {EngineConversationEventBase & {
+ *   contentIndex: number,
+ *   event: "end-narration-block",
+ *   text: string,
+ *   __debug_id?: string,
+ * }} EngineConversationEventEndNarrationBlock
+ */
+
+/**
+ * @typedef {EngineConversationEventBase & {
+ *   contentIndex: number,
+ *   event: "end-dialogue-block",
+ *   fragments: DEConversationMessageDialogueFragment[],
+ *   __debug_id?: string,
+ * }} EngineConversationEventEndDialogueBlock
+ */
+
+/**
+ * @typedef {EngineConversationEventBase & {
  *   event: "done"
  * }} EngineConversationEventDone
  */
@@ -75,7 +93,20 @@ const INVALID_NAMES = ["system", "assistant", "user", "everyone", "nobody",
  */
 
 /**
- * @typedef {EngineConversationEventModifyBlock | EngineConversationEventDone | EngineConversationEventNewMessage | EngineConversationEventNewConversation} EngineConversationEvent
+ * @typedef {{
+ * event: "start-inference"
+ * }} EngineConversationEventStartInference
+ */
+
+/**
+ * @typedef {{
+ * event: "end-inference"
+ * }} EngineConversationEventEndInference
+ */
+
+/**
+ * @typedef {EngineConversationEventModifyBlock | EngineConversationEventDone | EngineConversationEventNewMessage |
+ *  EngineConversationEventNewConversation | EngineConversationEventEndNarrationBlock | EngineConversationEventEndDialogueBlock | EngineConversationEventStartInference | EngineConversationEventEndInference} EngineConversationEvent
  */
 
 /**
@@ -965,6 +996,9 @@ export class DEngine {
 
         try {
             this.informThinking(true, null, false);
+            this.triggerConversationMessageUpdate(this.deObject, {
+                event: "start-inference",
+            });
 
             try {
                 await this.inferenceAdapter.initialize();
@@ -1097,7 +1131,6 @@ export class DEngine {
                             },
                         ],
                         sender: "Story Master",
-                        streaming: false,
                         duration: {
                             inDays: 0,
                             inHours: 0,
@@ -1110,7 +1143,6 @@ export class DEngine {
                         isRejectedMessage: false,
                         isHiddenMessage: false,
                         isStoryMasterMessage: true,
-                        isUser: false,
                         startTime: { ...this.deObject.currentTime },
                         perspectiveSummaryIds: {},
                         singleSummary: null,
@@ -1134,6 +1166,20 @@ export class DEngine {
                 this.deObject.conversations[sceneId].previousConversationIdsPerParticipant[participantName] = null;
             }
 
+            this.triggerConversationMessageUpdate(this.deObject, {
+                conversationId: sceneId,
+                messageId: this.deObject.conversations[sceneId].messages[0].id,
+                event: "new-conversation",
+                obj: this.deObject.conversations[sceneId],
+            });
+
+            this.triggerConversationMessageUpdate(this.deObject, {
+                conversationId: sceneId,
+                messageId: this.deObject.conversations[sceneId].messages[0].id,
+                event: "new-message",
+                obj: this.deObject.conversations[sceneId].messages[0],
+            });
+
             await this.informDEObjectUpdated();
 
             let index = 0;
@@ -1154,7 +1200,8 @@ export class DEngine {
                 const actualMessages = messages.map((text) => text.trim()).filter((text) => text.length > 0).join("\n\n").split("\n\n");
 
                 index++;
-                this.deObject.conversations[sceneId].messages.push({
+                /** @type {DEConversationMessage} */
+                const messageToAdd = {
                     id: `${sceneId}_MESSAGE_${index}`,
                     // @ts-ignore
                     canOnlyBeSeenByCharacter: userOnly ? this.userCharacter.name : null,
@@ -1166,12 +1213,10 @@ export class DEngine {
                         inMinutes: 0,
                         inSeconds: 0,
                     },
-                    streaming: false,
                     endTime: { ...this.deObject.currentTime },
                     isCharacter: false,
                     isDebugMessage: false,
                     isStoryMasterMessage: true,
-                    isUser: false,
                     startTime: { ...this.deObject.currentTime },
                     perspectiveSummaryIds: {},
                     singleSummary: null,
@@ -1181,6 +1226,14 @@ export class DEngine {
                     emotionalRange: null,
                     interactingCharacters: [],
                     rumors: [],
+                };
+                this.deObject.conversations[sceneId].messages.push(messageToAdd);
+
+                this.triggerConversationMessageUpdate(this.deObject, {
+                    conversationId: sceneId,
+                    messageId: messageToAdd.id,
+                    event: "new-message",
+                    obj: messageToAdd,
                 });
 
                 await this.informDEObjectUpdated();
@@ -1330,10 +1383,20 @@ export class DEngine {
             await this.callFunctionInScripts(allScripts, (script) => `Running onSceneReady for script ${script.scriptKey} at the end of scene ${sceneId}`, "onSceneReady", { untilTrue: false }, this.deObject, scene);
 
             this.backupDEObject();
+            this.triggerConversationMessageUpdate(this.deObject, {
+                event: "end-inference",
+            });
             this.informThinking(false, null, true);
 
             // Game on :)
         } catch (error) {
+            try {
+                this.triggerConversationMessageUpdate(this.deObject, {
+                    event: "end-inference",
+                });
+            } catch (e) {
+                console.error("Error during scene initialization while trying to end inference:", e);
+            }
             this.informThinking(false, null, true);
             console.error("Error during scene initialization:", error);
             throw error;
@@ -1502,6 +1565,8 @@ export class DEngine {
              * @returns 
              */
             const addUserMessage = (makeRejected) => {
+                const currentDEObject = /** @type {DEObject} */ (this.deObject);
+
                 /**
                  * @type {DEConversationMessage}
                  */
@@ -1517,7 +1582,6 @@ export class DEngine {
                     isCharacter: true,
                     isDebugMessage: false,
                     isHiddenMessage: false,
-                    isUser: true,
                     isStoryMasterMessage: false,
                     isRejectedMessage: makeRejected,
                     canOnlyBeSeenByCharacter: null,
@@ -1556,10 +1620,28 @@ export class DEngine {
                         bondsAtStart: getFrozenBonds(this, [user]),
                         bondsAtEnd: null,
                     };
+                    this.triggerConversationMessageUpdate(currentDEObject, {
+                        conversationId: expectedFutureConversationIdIfNotFound,
+                        messageId: messageToAdd.id,
+                        event: "new-conversation",
+                        obj: currentDEObject.conversations[expectedFutureConversationIdIfNotFound],
+                    });
+                    this.triggerConversationMessageUpdate(currentDEObject, {
+                        conversationId: expectedFutureConversationIdIfNotFound,
+                        messageId: messageToAdd.id,
+                        event: "new-message",
+                        obj: messageToAdd,
+                    });
                     return expectedFutureConversationIdIfNotFound;
                 } else {
                     // @ts-expect-error typescript issue as usual
                     this.deObject.conversations[userCharacterState.conversationId].messages.push(messageToAdd);
+                    this.triggerConversationMessageUpdate(currentDEObject, {
+                        conversationId: userCharacterState.conversationId,
+                        messageId: messageToAdd.id,
+                        event: "new-message",
+                        obj: messageToAdd,
+                    });
                     if (!makeRejected) {
                         userCharacterState.messageId = messageToAdd.id;
                     }
@@ -1575,8 +1657,8 @@ export class DEngine {
 
                 const conversationIdUsed = addUserMessage(true);
 
-                // @ts-ignore
-                this.deObject.conversations[conversationIdUsed].messages.push({
+                /** @type {any} */
+                const rejectionMessage = {
                     sender: "Story Master",
                     content: `Message rejected, ${reason}`,
                     duration: { inMinutes: 0, inHours: 0, inDays: 0, inSeconds: 0 },
@@ -1588,10 +1670,20 @@ export class DEngine {
                     isCharacter: false,
                     isDebugMessage: false,
                     isHiddenMessage: false,
-                    isUser: false,
                     isStoryMasterMessage: true,
                     // make it rejected so that characters don't pick it up when they check conversations
                     isRejectedMessage: true,
+                };
+                const currentDEObject = this.deObject;
+                if (!currentDEObject) {
+                    throw new Error("DEngine not initialized");
+                }
+                currentDEObject.conversations[conversationIdUsed].messages.push(rejectionMessage);
+                this.triggerConversationMessageUpdate(currentDEObject, {
+                    conversationId: conversationIdUsed,
+                    messageId: rejectionMessage.id,
+                    event: "new-message",
+                    obj: rejectionMessage,
                 });
 
                 await this.informDEObjectUpdated();
@@ -1773,7 +1865,6 @@ export class DEngine {
                     text: message,
                 },
             ],
-            streaming: false,
             duration: { inMinutes: 0, inHours: 0, inDays: 0, inSeconds: 0 },
             startTime: { ...this.deObject.currentTime },
             endTime: { ...this.deObject.currentTime },
@@ -1781,7 +1872,6 @@ export class DEngine {
             isCharacter: false,
             isDebugMessage: true,
             isHiddenMessage: false,
-            isUser: false,
             isStoryMasterMessage: true,
             isRejectedMessage: false,
             canOnlyBeSeenByCharacter: null,
@@ -1817,8 +1907,20 @@ export class DEngine {
                 bondsAtStart: getFrozenBonds(this, [this.deObject.user]),
                 bondsAtEnd: null,
             };
+            this.triggerConversationMessageUpdate(this.deObject, {
+                conversationId: userConversationId,
+                messageId: messageToAdd.id,
+                event: "new-conversation",
+                obj: this.deObject.conversations[userConversationId],
+            });
         } else {
             this.deObject.conversations[userConversationId].messages.push(messageToAdd);
+            this.triggerConversationMessageUpdate(this.deObject, {
+                conversationId: userConversationId,
+                messageId: messageToAdd.id,
+                event: "new-message",
+                obj: messageToAdd,
+            });
         }
 
         await this.informDEObjectUpdated();

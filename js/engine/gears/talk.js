@@ -2,7 +2,7 @@ import { DEngine } from "../index.js";
 import { getCharacterCanSee, getSysPromptForCharacter } from "../util/character-info.js";
 import { emotions } from "../util/emotions.js";
 import { createGrammarFromList, generateGrammarForVocabulary, parseListFromGrammarResponse } from "../util/grammar.js";
-import { convertMessagesToSimpleList, getHistoryFragmentForCharacter } from "../util/messages.js";
+import { convertContentToSimpleList, convertMessagesToSimpleList, getHistoryFragmentForCharacter } from "../util/messages.js";
 import { mergeVocabularyLimits } from "../util/vocabulary.js";
 
 /**
@@ -365,10 +365,6 @@ export async function talk(engine, character, options) {
     /**
      * @type string[]
      */
-    const trailingMessages = [];
-    /**
-     * @type string[]
-     */
     const finalMessages = [];
 
     const messages = (await getHistoryFragmentForCharacter(engine, character, {
@@ -523,7 +519,6 @@ export async function talk(engine, character, options) {
      */
     const nextMessage = {
         canOnlyBeSeenByCharacter: null,
-        streaming: true,
         content: [],
         // This gets set later by time-forwards.js
         duration: {
@@ -544,7 +539,6 @@ export async function talk(engine, character, options) {
         isHiddenMessage: false,
         isRejectedMessage: false,
         isStoryMasterMessage: false,
-        isUser: false,
         perspectiveSummaryIds: {},
         sender: character.name,
         rumors: [],
@@ -603,7 +597,6 @@ export async function talk(engine, character, options) {
     let fragmentCount = -1;
     while (nextToGenerate) {
         fragmentCount++;
-        let generatedMessage = "";
 
         /**
          * @type {string|null}
@@ -645,7 +638,7 @@ export async function talk(engine, character, options) {
             character,
             {
                 messages: convertMessagesToSimpleList(messages),
-                messagesTrail: trailingMessages,
+                messagesTrail: finalMessages,
                 system: characterSystemPrompt.sysprompt,
                 stateInjections: characterSystemPrompt.internalDescription.stateInjections,
                 visibleEnviroment: characterCanSee.everything,
@@ -676,7 +669,6 @@ export async function talk(engine, character, options) {
                 } else if (info.type === "text" && nextIsNarration) {
                     // replace all asterisks with nothing
                     let textToStream = info.content.replace(/\*/g, "");
-                    generatedMessage += info.content;
 
                     if (textToStream) {
                         engine.triggerConversationMessageUpdate(engine.deObject, {
@@ -687,6 +679,9 @@ export async function talk(engine, character, options) {
                             contentIndex: nextMessage.content.length - 1,
                         });
                     }
+
+                    const currentBlockAsNarration = /** @type {DEConversationMessageNarration} */ (currentBlock);
+                    currentBlockAsNarration.text += textToStream;
                 } else if (info.type === "text" && !nextIsNarration) {
                     let actualInfoContent = info.content;
 
@@ -713,8 +708,6 @@ export async function talk(engine, character, options) {
                             text: "",
                         });
                     }
-
-                    generatedMessage += actualInfoContent;
 
                     // check if em dash in the text
                     if (textToStream.includes("—")) {
@@ -753,20 +746,38 @@ export async function talk(engine, character, options) {
                     }
                 }
             }
+
             if (!next.done) {
                 next = await generator.next(true);
             }
         }
 
-        engine.triggerConversationMessageUpdate(engine.deObject, {
-            conversationId: charState.conversationId,
-            messageId: nextMessage.id,
-            event: "done",
-        });
-
         console.log("\nFinished receiving text chunk from inference adapter.");
-        trailingMessages.push(generatedMessage);
-        finalMessages.push(generatedMessage);
+
+        if (nextIsNarration) {
+            const currentBlockAsNarration = /** @type {DEConversationMessageNarration} */ (currentBlock);
+            engine.triggerConversationMessageUpdate(engine.deObject, {
+                conversationId: charState.conversationId,
+                messageId: nextMessage.id,
+                text: currentBlockAsNarration.text,
+                event: "end-narration-block",
+                contentIndex: nextMessage.content.length - 1,
+            });
+        } else {
+            const currentBlockAsDialoge = /** @type {DEConversationMessageDialogue} */ (currentBlock);
+            engine.triggerConversationMessageUpdate(engine.deObject, {
+                conversationId: charState.conversationId,
+                messageId: nextMessage.id,
+                fragments: currentBlockAsDialoge.fragments,
+                event: "end-dialogue-block",
+                contentIndex: nextMessage.content.length - 1,
+            });
+        }
+
+        const converted = convertContentToSimpleList([currentBlock], nextMessage.sender, false);
+        converted.forEach((ele) => {
+            finalMessages.push(ele.message);
+        });
 
         if (nextToGenerate.narrativeAction) {
             nextToGenerateIsSameAsPreviousButNarrativeAction = true;
@@ -775,6 +786,12 @@ export async function talk(engine, character, options) {
             nextToGenerateIsSameAsPreviousButNarrativeAction = false;
         }
     }
+
+    engine.triggerConversationMessageUpdate(engine.deObject, {
+        conversationId: charState.conversationId,
+        messageId: nextMessage.id,
+        event: "done",
+    });
 
     const totalGeneratedThusFar = finalMessages.join("\n\n");
     console.log("Final generated narration/dialogue: " + totalGeneratedThusFar);
@@ -836,8 +853,6 @@ export async function talk(engine, character, options) {
 
         hasDeadEnded = true;
     }
-
-    nextMessage.streaming = false;
 
     await engine.informDEObjectUpdated();
 

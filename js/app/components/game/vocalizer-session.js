@@ -18,9 +18,11 @@ const MAX_CACHE_BYTES = 25 * 1024 * 1024;
 export class GameVocalizerSession {
     /**
      * @param {import("../../../engine/voice/base.js").BaseVoiceAdapter} adapter
+     * @param {boolean} lowVramMode if true, the session will use a low-vram mode for caching voice assets
      */
-    constructor(adapter) {
+    constructor(adapter, lowVramMode = false) {
         this.adapter = adapter;
+        this.lowVramMode = lowVramMode;
 
         /**
          * Resolved-asset-path -> cached reference blob. Insertion order is used

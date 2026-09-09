@@ -150,7 +150,6 @@ export function makeTimestamp(deObject, time, includeNowLabel = true) {
  * @property {boolean} debug wether this is a debug message
  * @property {boolean} rejected whether this message was rejected by the story master or not
  * @property {boolean} hidden wheter this message is hidden or not
- * @property {boolean} streaming whether this message is currently being streamed or not
  * @property {boolean} storyMaster whether this message is from the story master or not
  * @property {string[]} interactingCharacters the interacting characters in this message
  * @property {string} gid a global id, always available, always unique, can be used to identify a message uniquely
@@ -248,7 +247,6 @@ export async function* getHistoryForCharacter(engine, character, options) {
             ],
             id: null,
             gid: `story-master-states-${character.name}-${fromTime.time}`,
-            streaming: false,
             conversationId: null,
             debug: false,
             rejected: false,
@@ -316,7 +314,6 @@ export async function* getHistoryForCharacter(engine, character, options) {
                     conversationId: state.conversationId,
                     debug: false,
                     rejected: false,
-                    streaming: false,
                     storyMaster: true,
                     hidden: false,
                     interactingCharacters: currentConversationObject.participants,
@@ -339,7 +336,6 @@ export async function* getHistoryForCharacter(engine, character, options) {
                         conversationId: state.conversationId,
                         debug: message.isDebugMessage,
                         rejected: message.isRejectedMessage,
-                        streaming: message.streaming,
                         storyMaster: message.isStoryMasterMessage,
                         hidden: message.isHiddenMessage,
                         interactingCharacters: message.interactingCharacters || [],
@@ -367,7 +363,6 @@ export async function* getHistoryForCharacter(engine, character, options) {
                         ],
                         id: null,
                         conversationId: state.conversationId,
-                        streaming: false,
                         debug: false,
                         rejected: false,
                         storyMaster: true,

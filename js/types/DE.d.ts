@@ -3001,10 +3001,6 @@ declare interface DEConversationMessage {
      */
     id: Readonly<string>;
     /**
-     * A stateful value on whether is currently streaming tokens and running and not ready completely
-     */
-    streaming: boolean;
-    /**
      * Who sent this message
      */
     sender: string;
@@ -3013,10 +3009,6 @@ declare interface DEConversationMessage {
      * this is also true for the user since the user is a character too
      */
     isCharacter: boolean;
-    /**
-     * Whether the sender is the user
-     */
-    isUser: boolean;
     /**
      * Whether the message was rejected by world rules or other constraints
      * and thus not actually sent

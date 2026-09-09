@@ -33,7 +33,7 @@ export class EngineWorkerClient {
     /** @type {((thinking: boolean, characterName: string | null, noMoreCharactersToTalk: boolean) => void) | null} */
     onThinkingInform = null;
     /** @type {((data: import('../engine/index.js').EngineConversationEvent) => void) | null} */
-    onInferringOverConversationMessage = null;
+    onMessageUpdate = null;
     /** @type {((data: {qid: number, questionType: string, question: string, options?: string[], defaultValue?: any}) => void) | null} */
     onScriptTypeGuiderQuestion = null;
     /** @type {((data: {currentCard: any}) => void) | null} */
@@ -122,8 +122,8 @@ export class EngineWorkerClient {
                     case "thinkingInform":
                         this.onThinkingInform?.(msg.data.thinking, msg.data.characterName, msg.data.noMoreCharactersToTalk);
                         break;
-                    case "inferringOverConversationMessage":
-                        this.onInferringOverConversationMessage?.(msg.data);
+                    case "messageUpdate":
+                        this.onMessageUpdate?.(msg.data);
                         break;
                     case "ScriptTypeGuiderQuestion":
                         this.onScriptTypeGuiderQuestion?.(msg.data);

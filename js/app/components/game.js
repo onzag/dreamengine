@@ -9,21 +9,6 @@ import { VOICE_ADAPTERS } from '../../engine/voice/all.js';
 import { GameVocalizerSession } from './game/vocalizer-session.js';
 
 /**
- * @typedef {Object} MessageBufferEntry
- * @property {string} gid
- * @property {string} senderName
- * @property {string} assetImage
- * @property {boolean} isGroupStart
- * @property {boolean} isUser
- * @property {boolean} isNarration
- * @property {boolean} stream
- * @property {boolean} pseudostream
- * @property {string} emotion
- * @property {string[]} emotionalRange
- * @property {Array<DEConversationMessageDialogue | DEConversationMessageNarration>} content
- */
-
-/**
  * The main in-dream game UI. Renders a transition ("falling asleep" white
  * tunnel) then settles into the main play screen with a hideable sidebar
  * and a multiline text input.
@@ -92,62 +77,10 @@ class GameOverlay extends HTMLElement {
          * @type {string | null}
          */
         this.lastMessageGid = null;
-
         /**
-         * @type {Array<MessageBufferEntry>}
+         * @type {string | null}
          */
-        this.messageBuffer = [];
-        /**
-         * @type {Array<MessageBufferEntry>}
-         */
-        this.loadedMessageBuffer = [];
-        this._isResolvingMessageBuffer = false;
-
-        /**
-         * THE single, strictly-ordered render pipeline. Every block that ever
-         * appears in the story feed — whether a finished PSEUDOSTREAM block or a
-         * live STREAM block — is appended here as a task and rendered by one
-         * pump (_pumpRender), one at a time, to completion (including each
-         * block's finalizeBlock / voice). This is what guarantees a pseudostream
-         * message and a real-stream message never render concurrently or out of
-         * order.
-         *
-         * Task shapes:
-         *   { type: 'pseudo', entry, piece, index }
-         *   { type: 'live',   entry, index, blockType, gid }
-         * @type {Array<any>}
-         */
-        this._renderQueue = [];
-        this._renderPumping = false;
-
-        /**
-         * The live block element currently being driven by the pump, and its
-         * "gid__index" key. Live text / done events are routed to it; events
-         * that arrive before their block becomes current are buffered per key.
-         * @type {any}
-         */
-        this._currentLiveEl = null;
-        /** @type {string | null} */
-        this._currentLiveKey = null;
-        /**
-         * Buffered live text/done events, keyed by "gid__index", awaiting their
-         * block element to become the current one.
-         * @type {Record<string, Array<import('../../engine/index.js').EngineConversationEvent>>}
-         */
-        this._liveEventBuffer = {};
-
-        /**
-         * Keys ("gid__index") of live blocks already enqueued, so a duplicate
-         * block-start event can't spawn a second element for the same block.
-         * @type {Set<string>}
-         */
-        this._liveKeysSeen = new Set();
-
-        // Serialisation guards for updateStory so overlapping runs can't create
-        // duplicate message elements.
-        this._updateStoryRunning = false;
-        this._updateStoryPending = false;
-        this._pendingShouldStream = false;
+        this.firstMessageGid = null;
 
         /**
          * @type {"normal" | "hard" | "easy" | "debug"}
@@ -164,7 +97,7 @@ class GameOverlay extends HTMLElement {
         this.onCharacterUpdateUI = this.onCharacterUpdateUI.bind(this);
         this.onCycleInform = this.onCycleInform.bind(this);
         this.onThinkingInform = this.onThinkingInform.bind(this);
-        this.onInferringOverConversationMessage = this.onInferringOverConversationMessage.bind(this);
+        this.onMessageUpdate = this.onMessageUpdate.bind(this);
     }
 
     async connectedCallback() {
@@ -172,7 +105,7 @@ class GameOverlay extends HTMLElement {
 
         // Establish the shared Vocalizer connection (if enabled) so every
         // message block can synthesize speech through the one global session.
-        this._initVocalizer();
+        await this._initVocalizer();
 
         // @ts-ignore
         document.querySelector('.fx').style.zIndex = '50'; // ensure fx controls are above the game UI
@@ -542,6 +475,7 @@ class GameOverlay extends HTMLElement {
                     }
 
                     await window.ENGINE_WORKER_CLIENT.initializeFromJSONState({ json: this.saveObject });
+                    await this.updateStory();
                 } else {
                     await window.ENGINE_WORKER_CLIENT.jsEngineImportScript({
                         namespace: this.getAttribute('world-namespace') || '',
@@ -637,6 +571,7 @@ class GameOverlay extends HTMLElement {
                     }
 
                     await window.ENGINE_WORKER_CLIENT.initialize({ user, playMode });
+                    await this.updateStory();
                 }
             } else {
                 await window.ENGINE_WORKER_CLIENT.completeDisruptedInitializationDueToNameConflict({ newName });
@@ -822,7 +757,7 @@ class GameOverlay extends HTMLElement {
                 window.ENGINE_WORKER_CLIENT.onDEObjectUpdated = this.onDEObjectUpdated.bind(this);
                 window.ENGINE_WORKER_CLIENT.onCycleInform = this.onCycleInform.bind(this);
                 window.ENGINE_WORKER_CLIENT.onThinkingInform = this.onThinkingInform.bind(this);
-                window.ENGINE_WORKER_CLIENT.onInferringOverConversationMessage = this.onInferringOverConversationMessage.bind(this);
+                window.ENGINE_WORKER_CLIENT.onMessageUpdate = this.onMessageUpdate.bind(this);
             };
 
             if (!currentSelectedScene) {
@@ -851,7 +786,6 @@ class GameOverlay extends HTMLElement {
                 if (loadingMessage) /** @type {HTMLElement} */ (loadingMessage).style.display = 'none';
 
                 bindMethods();
-                await this.updateStory(false);
                 this.onDEObjectUpdated();
             }
         } catch (error) {
@@ -1605,131 +1539,10 @@ class GameOverlay extends HTMLElement {
     }
 
     /**
-     * Drain the message buffer, enqueuing a render task for every block of each
-     * finished (pseudostream) message onto the single ordered render pipeline.
-     * Live (stream) messages enqueue nothing here — their blocks are appended to
-     * the same pipeline by the incoming block-start events, which (being the
-     * newest message) always arrive after these pseudostream tasks, preserving
-     * order.
+     * First run of update story, everything else relies on events and the event loop
      */
-    async resolveBuffer() {
-        if (this._isResolvingMessageBuffer) return;
-        this._isResolvingMessageBuffer = true;
-
-        let next = this.messageBuffer.shift();
-        while (next) {
-            if (next.pseudostream) {
-                for (let i = 0; i < next.content.length; i++) {
-                    this._renderQueue.push({
-                        type: 'pseudo',
-                        entry: next,
-                        piece: next.content[i],
-                        index: i,
-                    });
-                }
-            }
-            next = this.messageBuffer.shift();
-        }
-
-        this._isResolvingMessageBuffer = false;
-        this._pumpRender();
-    }
-
-    /**
-     * THE single render pump. Processes _renderQueue tasks strictly one at a
-     * time, fully finishing each block (including its finalizeBlock / voice)
-     * before starting the next — so pseudostream and live blocks can never
-     * overlap or reorder.
-     */
-    async _pumpRender() {
-        if (this._renderPumping) return;
-        this._renderPumping = true;
-        try {
-            while (this._renderQueue.length > 0) {
-                const task = this._renderQueue.shift();
-                if (!task) continue;
-
-                if (task.type === 'pseudo') {
-                    const el = this._createMessageElement(task.entry, task.piece, task.index);
-                    /** @type {Promise<void>} */
-                    const done = new Promise(resolve => {
-                        el.addEventListener('on-pseudostream-finished', () => resolve(undefined), { once: true });
-                    });
-                    await done;
-                    this._scrollStoryToBottom();
-                } else if (task.type === 'live') {
-                    const key = task.gid + '__' + task.index;
-                    const el = this._createMessageElement(task.entry, /** @type {any} */({
-                        type: task.blockType,
-                        __debug_id: key,
-                    }), task.index);
-
-                    // This block is now the current live target: route its
-                    // events here and flush anything that arrived early.
-                    this._currentLiveEl = el;
-                    this._currentLiveKey = key;
-
-                    /** @type {Promise<void>} */
-                    const done = new Promise(resolve => {
-                        // on-stream-finished fires only AFTER the block's drip
-                        // queue has drained and finalizeBlock (voice) completed.
-                        el.addEventListener('on-stream-finished', () => resolve(undefined), { once: true });
-                    });
-
-                    const buffered = this._liveEventBuffer[key] || [];
-                    delete this._liveEventBuffer[key];
-                    for (const ev of buffered) {
-                        el.feedEvent(ev);
-                    }
-
-                    await done;
-                    this._currentLiveEl = null;
-                    this._currentLiveKey = null;
-                    this._scrollStoryToBottom();
-                }
-            }
-        } finally {
-            this._renderPumping = false;
-        }
-    }
-
-    _scrollStoryToBottom() {
-        const container = this.root.querySelector('.game-story-content-list');
-        if (container) container.scrollTop = container.scrollHeight;
-    }
-
-    /**
-     * Public entry point. Guards against concurrent runs (which could
-     * otherwise create duplicate message elements) by serialising them.
-     * @param {boolean} shouldStreamMessages - whether to stream messages (true) or render them instantly (false). This is usually false when loading a save file, and true when starting a new game.
-     */
-    async updateStory(shouldStreamMessages) {
-        // Serialise runs so two overlapping calls (e.g. the debounced refresh
-        // racing a live-event-triggered refresh) can't create duplicate
-        // elements. A call made while another is running just flags a re-run.
-        if (this._updateStoryRunning) {
-            this._updateStoryPending = true;
-            this._pendingShouldStream = shouldStreamMessages;
-            return;
-        }
-        this._updateStoryRunning = true;
-        try {
-            let stream = shouldStreamMessages;
-            do {
-                this._updateStoryPending = false;
-                await this._updateStoryOnce(stream);
-                stream = this._pendingShouldStream;
-            } while (this._updateStoryPending);
-        } finally {
-            this._updateStoryRunning = false;
-        }
-    }
-
-    /**
-     * @param {boolean} shouldStreamMessages
-     */
-    async _updateStoryOnce(shouldStreamMessages) {
-        try {
+    async updateStory() {
+       try {
             const actualUserName = await window.ENGINE_WORKER_CLIENT.queryDEObject({
                 path: ["user"],
             });
@@ -1744,6 +1557,7 @@ class GameOverlay extends HTMLElement {
             if (!history || !Array.isArray(history) || history.length === 0) return;
 
             this.lastMessageGid = history[history.length - 1].gid;
+            this.firstMessageGid = history[0].gid;
 
             const historyReversed = history.reverse(); // this list contains the most recent messages first
             // and we want to render them in the order from oldest to newest, so we reverse the list before rendering
@@ -1757,31 +1571,25 @@ class GameOverlay extends HTMLElement {
             const lastRenderedItem = /** @type {HTMLElement | null} */ (list.lastElementChild);
             let lastSenderName = lastRenderedItem?.dataset.senderName || '';
 
-            /**
-             * Pre-resolve all message metadata so we can enqueue them without
-             * async work inside the chained event handler.
-             * @type {Array<MessageBufferEntry>}
-             */
-            const resolvedMsgs = [];
             for (const msg of historyReversed) {
                 const gid = msg.gid ?? msg.id;
                 if (gid == null) continue;
 
                 const senderName = msg.name || '';
-                const isNarration = !!msg.storyMaster;
+                const isStoryMasterNarration = !!msg.storyMaster;
                 const isUser = senderName === actualUserName;
 
                 const content = msg.content;
-                const isGroupStart = !isNarration && senderName !== lastSenderName;
+                const isGroupStart = !isStoryMasterNarration && senderName !== lastSenderName;
 
                 const emotion = msg.emotion || "neutral";
                 const emotionalRange = msg.emotionalRange || [];
 
-                let assetImage = !isNarration ? (await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                let assetImage = !isStoryMasterNarration ? (await window.ENGINE_WORKER_CLIENT.queryDEObject({
                     path: ["characters", senderName, "metadata", "assets", emotion],
                 }) || "") : "";
 
-                if (!isNarration && !assetImage) {
+                if (!isStoryMasterNarration && !assetImage) {
                     const keyOfEmotion = Object.keys(emotionsGrouped).find((groupKey) => {
                         if (emotionsGrouped[groupKey].includes(emotion)) {
                             return true;
@@ -1810,38 +1618,12 @@ class GameOverlay extends HTMLElement {
                     }
                 }
 
-                // A message that is currently streaming (the worker is still
-                // emitting live events for it) must use the real stream so those
-                // events drive it. Once it is done (streaming === false) it is
-                // replayed as a pseudostream. shouldStreamMessages gates whether
-                // finished messages animate at all (vs. appear instantly).
-                const stream = msg.streaming;
-                const pseudostream = !stream && shouldStreamMessages;
-                resolvedMsgs.push({
-                    gid: String(gid),
-                    senderName,
-                    isNarration,
-                    isUser,
-                    isGroupStart,
-                    assetImage,
-                    content,
-                    stream,
-                    pseudostream,
-                    emotion,
-                    emotionalRange,
-                });
-                lastSenderName = isNarration ? '' : senderName;
-            }
+                lastSenderName = isStoryMasterNarration ? '' : senderName;
 
-            for (const msg of resolvedMsgs) {
-                this.messageBuffer.push(msg);
-                if (msg.stream) {
-                    this.loadedMessageBuffer.push(msg);
+                for (const piece of content) {
+                    this._createMessageElement(msg, piece, content.indexOf(piece), assetImage, isGroupStart, isUser, false, false);
                 }
             }
-
-            this.resolveBuffer();
-
         } catch (error) {
             console.error('Error updating story:', error);
         }
@@ -1851,35 +1633,46 @@ class GameOverlay extends HTMLElement {
      * Create and configure an app-game-message element. Attributes that are
      * live-updatable (sender-name, image-url) are patched by later updateStory
      * runs if they change.
-     * @param {MessageBufferEntry} entry
+     * @param {import('../../engine/util/messages.js').DEObjectMessageGeneratorResult | DEConversationMessage} message
      * @param {DEConversationMessageDialogue | DEConversationMessageNarration} piece
      * @param {number} index
+     * @param {string} assetImage
+     * @param {boolean} isGroupStart
+     * @param {boolean} isUser
+     * @param {boolean} pseudostream
+     * @param {boolean} pseudoStreamImmediate
      * @returns {any}
      */
-    _createMessageElement(entry, piece, index) {
+    _createMessageElement(message, piece, index, assetImage, isGroupStart, isUser, pseudostream, pseudoStreamImmediate) {
         // The block's narration/dialogue type is per-block: a single message can
         // mix narration and dialogue blocks, so prefer the piece's own type
         // (set from the engine event / content) and only fall back to the
         // entry-level flag when the piece doesn't carry one.
-        const isNarration = piece && piece.type ? piece.type === 'narration' : entry.isNarration;
+        // @ts-ignore
+        const isNarration = piece && piece.type ? piece.type === 'narration' : (!!message.storyMaster || !!message.isStoryMasterMessage);
         const el = /** @type {any} */ (document.createElement('app-game-message'));
-        el.setAttribute('gid', entry.gid);
+        el.setAttribute('gid', message.id);
         el.setAttribute('content-index', String(index));
         el.setAttribute('debug-id', piece.__debug_id || '');
-        el.setAttribute('image-url', entry.assetImage || '');
+        el.setAttribute('image-url', assetImage || '');
         el.setAttribute('debug', this.gameDifficulty === 'debug' ? 'true' : 'false');
-        el.setAttribute('show-avatar', isNarration ? 'false' : (entry.isGroupStart ? 'true' : 'false'));
+        el.setAttribute('show-avatar', isNarration ? 'false' : (isGroupStart ? 'true' : 'false'));
         el.setAttribute('type', isNarration ? 'narration' : 'dialogue');
-        el.setAttribute('stream', entry.stream ? 'true' : 'false');
-        el.setAttribute('pseudostream', entry.pseudostream ? 'true' : 'false');
-        el.setAttribute("emotion", entry.emotion || "neutral");
-        el.setAttribute("emotional-range", JSON.stringify(entry.emotionalRange || []));
+        el.setAttribute('pseudostream', pseudostream ? 'true' : 'false');
+        el.setAttribute("emotion", message.emotion || "neutral");
+        el.setAttribute("emotional-range", JSON.stringify(message.emotionalRange || []));
         if (!isNarration) {
-            el.setAttribute('sender-name', entry.senderName);
+            // @ts-ignore
+            el.setAttribute('sender-name', message.name || message.sender || '');
         }
         this.root.querySelector('.game-story-content-list')?.appendChild(el);
-        if (entry.pseudostream) {
+        if (pseudostream) {
             el.pseudostreamContent(piece);
+            if (pseudoStreamImmediate) {
+                el.runPseudostream();
+            }
+        } else {
+            el.setContent(piece);
         }
         return el;
     }
@@ -1972,46 +1765,22 @@ class GameOverlay extends HTMLElement {
      *
      * @param {import('../../engine/index.js').EngineConversationEvent} data
      */
-    async onInferringOverConversationMessage(data) {
-        const gid = data.messageId;
-        const index = data.contentIndex;
-        const key = gid + '__' + index;
-        const isBlockStart = data.event === "add-narration-block" || data.event === "add-dialogue-block";
+    async onMessageUpdate(data) {
+        const willAlwaysUsePseudostream = !!window.GAME_VOCALIZER;
+        const needsToAwaitUntilInferenceEndsToTriggerPseudostreamVocalizationProcessing = window.GAME_VOCALIZER?.lowVramMode || false;
+        if (willAlwaysUsePseudostream) {
+            // if will always use pseudostream is true, then we will only care of the end-dialogue-block and end-narration-block events since they contain
+            // the full content of the block, we will set the data of the pseudostream block
 
-        if (isBlockStart) {
-            if (this._liveKeysSeen.has(key)) return; // duplicate block-start
-            let entry = this.loadedMessageBuffer.find(e => e.gid === gid);
-            if (!entry) {
-                // Metadata not loaded yet (the event beat the debounced
-                // updateStory). Pull history now, then retry.
-                await this.updateStory(true);
-                entry = this.loadedMessageBuffer.find(e => e.gid === gid);
-            }
-            if (!entry) {
-                console.warn(`Received ${data.event} for message ${gid} but its metadata could not be loaded. Ignoring.`);
-                return;
-            }
+            // if needsToAwaitUntilInferenceEndsToTriggerPseudostreamVocalizationProcessing is false, then we will run the pseudostream block immediately after the end-dialogue-block or end-narration-block events are received
+            // because it can do the voice processing in parallel with the next block
 
-            this._liveKeysSeen.add(key);
-            this._renderQueue.push({
-                type: 'live',
-                entry,
-                index,
-                blockType: data.event === "add-narration-block" ? "narration" : "dialogue",
-                gid,
-            });
-            this._pumpRender();
-            return;
-        }
-
-        // Text / done / hidden-block events belong to a specific block.
-        if (this._currentLiveKey === key && this._currentLiveEl) {
-            // This block is currently being driven — feed it directly.
-            this._currentLiveEl.feedEvent(data);
+            // if needsToAwaitUntilInferenceEndsToTriggerPseudostreamVocalizationProcessing is true, then we will not run the pseudostream block immediately, but we will wait until the end-inference event is received
+            // then in the end-inference event we will trigger the vocalizer processing by doing the runPseudostream() method of all blocks that we just added that
+            // are not streaming, for that we can check the isPseudoStreamAwait method of all the added blocks
         } else {
-            // Its block hasn't started rendering yet (earlier blocks/messages
-            // are still in the pipeline) — buffer until the pump reaches it.
-            (this._liveEventBuffer[key] || (this._liveEventBuffer[key] = [])).push(data);
+            // if a real stream is to be used then we will create the block when the add-dialogue-block or add-narration-block events are received
+            // make it visible right away, and feed events manually to the block, everything is immediate
         }
     }
 
@@ -2572,7 +2341,7 @@ class GameOverlay extends HTMLElement {
 
         window.ENGINE_WORKER_CLIENT.onCycleInform = null;
         window.ENGINE_WORKER_CLIENT.onThinkingInform = null;
-        window.ENGINE_WORKER_CLIENT.onInferringOverConversationMessage = null;
+        window.ENGINE_WORKER_CLIENT.onMessageUpdate = null;
         window.ENGINE_WORKER_CLIENT.onDEObjectUpdated = null;
 
         this.stopEngine();
@@ -2601,10 +2370,9 @@ class GameOverlay extends HTMLElement {
             if (enabled && adapterName && VOICE_ADAPTERS[adapterName]) {
                 try {
                     const adapter = await VOICE_ADAPTERS[adapterName].build(window.API.getConfigValue.bind(window.API));
-                    window.GAME_VOCALIZER = new GameVocalizerSession(adapter);
-                    adapter.ensureInitialized().catch(err => {
-                        console.error("GameOverlay: Vocalizer connection failed", err);
-                    });
+                    const usesLowVramMode = await window.API.getConfigValue("voiceLowVramMode");
+                    window.GAME_VOCALIZER = new GameVocalizerSession(adapter, usesLowVramMode);
+                    await adapter.ensureInitialized();
                 } catch (err) {
                     console.error("GameOverlay: failed to build Vocalizer adapter", err);
                     window.GAME_VOCALIZER = null;

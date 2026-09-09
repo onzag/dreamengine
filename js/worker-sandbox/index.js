@@ -157,7 +157,7 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
 
     // @ts-ignore
     engine.addMessageUpdateListener((deObject, data) => {
-        self.postMessage({ type: "event", event: "inferringOverConversationMessage", data });
+        self.postMessage({ type: "event", event: "messageUpdate", data });
     });
 
     /**
