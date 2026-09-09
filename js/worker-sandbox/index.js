@@ -233,20 +233,41 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
             const adapter = await INFERENCE_ADAPTERS[adapterName].build(engine, (v) => config[v]);
             engine.setInferenceAdapter(adapter);
             adapter.addBlockingEventListenerBeforeInference(async () => {
-                // Ask the main thread to stop any active diffusion process, then
-                // block until it confirms (or a 30-second safety timeout fires).
-                const callId = ++mainThreadCallId;
                 /**
-                 * @type {Promise<void>}
+                 * @param {"stopDiffusionRequest" | "stopVocalizerRequest"} event
+                 * @param {string} processName
+                 * @returns {Promise<void>}
                  */
-                const callPromise = new Promise((resolve, reject) => {
-                    pendingMainThreadCalls.set(callId, { resolve, reject });
-                });
-                self.postMessage({ type: "event", event: "stopDiffusionRequest", data: { callId } });
-                const timeoutPromise = new Promise((_, reject) => {
-                    setTimeout(() => reject(new Error("stopDiffusionProcess timed out after 30s")), 30_000);
-                });
-                await Promise.race([callPromise, timeoutPromise]);
+                const requestStop = (event, processName) => {
+                    const callId = ++mainThreadCallId;
+                    return new Promise((resolve, reject) => {
+                        const timeoutId = setTimeout(() => {
+                            pendingMainThreadCalls.delete(callId);
+                            reject(new Error(`${processName} timed out after 30s`));
+                        }, 30_000);
+
+                        pendingMainThreadCalls.set(callId, {
+                            resolve: () => {
+                                clearTimeout(timeoutId);
+                                resolve();
+                            },
+                            reject: (err) => {
+                                clearTimeout(timeoutId);
+                                reject(err);
+                            },
+                        });
+                        self.postMessage({ type: "event", event, data: { callId } });
+                    });
+                };
+
+                const stopRequests = [];
+                if (lowVramDiffusion) {
+                    stopRequests.push(requestStop("stopDiffusionRequest", "stopDiffusionProcess"));
+                }
+                if (lowVramVoice) {
+                    stopRequests.push(requestStop("stopVocalizerRequest", "stopVocalizerProcess"));
+                }
+                await Promise.all(stopRequests);
             });
             return { ok: true };
         },

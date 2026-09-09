@@ -18,11 +18,12 @@ const gbnfDetectionPromise = import('../../../node_modules/gbnf/dist/index.js')
     .finally(() => { gbnfDetected = true; });
 
 /**
- * @type {Object<string, {build: (engine: DEngine, getConfigValue: (key: string) => Promise<any>) => Promise<BaseInferenceAdapter>, hasSelfSignedOption?: boolean, settings: import("../setting").SettingsFunction}>}>}
+ * @type {Object<string, {checkConfig: (getConfigValue: (key: string) => Promise<any>) => Promise<{title: string, message: string} | null>, buildConfig: (getConfigValue: (key: string) => Promise<any>) => Promise<any>, build: (engine: DEngine, getConfigValue: (key: string) => Promise<any>) => Promise<BaseInferenceAdapter>, hasSelfSignedOption?: boolean, settings: import("../setting").SettingsFunction}>}>}
  */
 export const INFERENCE_ADAPTERS = {
     "DreamServer": {
         settings: async () => ({
+            // ALWAYS USE HOST when adding more adapters, this is used accross the app to determine the host regardless of the adapter
             host: {
                 label: "DreamServer Host",
                 description: "This is the host address for the DreamServer, you can define all parameters here for the remote server, for example wss://myserver.com:1234?model=custom&param=value, the protocol must be ws:// or wss://",
@@ -51,5 +52,26 @@ export const INFERENCE_ADAPTERS = {
             host: await getConfigValue("host") || "wss://localhost:8765",
             useExperimentalTestMode: await getConfigValue("useExperimentalTestMode") || false,
         }),
+        buildConfig: async (getConfigValue) => {
+            const rs = {
+                apiKey: await getConfigValue("apiKey") || "dev-secret-12345678900abcdef",
+                host: await getConfigValue("host") || "wss://localhost:8765",
+                useExperimentalTestMode: await getConfigValue("useExperimentalTestMode") || false,
+            };
+            if (!rs.host) {
+                return null;
+            }
+            return rs;
+        },
+        checkConfig: async (getConfigValue) => {
+            const apiKey = await getConfigValue("apiKey");
+            if (!apiKey) {
+                return {
+                    title: "No API Key Configured",
+                    message: "You have not configured an API key on your DreamServer. You can enter your API key in the settings. Please note that you will need an API key to use the application even using local self-hosted mode.",
+                }
+            }
+            return null;
+        },
     },
 }

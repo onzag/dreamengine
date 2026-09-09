@@ -30,6 +30,7 @@ import {
     toggleFX, isAmbienceEnabled, isFXEnabled,
     stopAllAmbiencesAndStartNewOne
 } from './sound.js';
+import { INFERENCE_ADAPTERS } from '../engine/inference/all.js';
 
 const initialPromise = new Promise((resolve, reject) => {
     window.API.getDreamEnginePaths().then((paths) => {
@@ -389,12 +390,13 @@ let INFERENCE_ADAPTER_ERROR = null;
 let INFERENCE_ADAPTER_WARNING = null;
 async function initialChecks() {
     // Check if the engine has any API keys configured, if not show the settings overlay
-    const apiKey = await window.API.getConfigValue('secret');
     const host = await window.API.getConfigValue('host');
-    if (!apiKey) {
+    const inferenceAdapter = await window.API.getConfigValue('inferenceAdapter');
+    const error = await INFERENCE_ADAPTERS[inferenceAdapter].checkConfig(window.API.getConfigValue.bind(window.API));
+    if (error) {
         const dialog = document.createElement('app-dialog');
-        dialog.setAttribute('dialog-title', 'No API Key Configured');
-        dialog.innerHTML = `<p tabindex="0" data-de-aria-text="true">You have not configured an API key yet. You can enter your API key in the settings. Please note that you will need an API key to use the application even using local self-hosted mode.</p>`;
+        dialog.setAttribute('dialog-title', error.title);
+        dialog.innerHTML = `<p tabindex="0" data-de-aria-text="true">${error.message}</p>`;
         dialog.setAttribute("confirmation", "true");
         dialog.setAttribute("confirm-text", "Open Settings");
         dialog.setAttribute("cancel-text", "Ignore");
@@ -542,17 +544,15 @@ client.ready.then(async () => {
     });
     await client.jsEnginePreloadAllScripts();
 
-    const host = await window.API.getConfigValue('host');
-    const secret = await window.API.getConfigValue('secret');
-    const allowSelfSigned = await window.API.getConfigValue('allowSelfSigned');
-    const useExperimentalTestMode = await window.API.getConfigValue('useExperimentalTestMode');
+    const adapterName = await window.API.getConfigValue('inferenceAdapter') || 'DreamServer';
+    const config = await INFERENCE_ADAPTERS[adapterName].buildConfig(window.API.getConfigValue.bind(window.API));
 
-    if (host && secret) {
+    if (config) {
         await client.setupInferenceAdapter({
-            host,
-            secret,
-            allowSelfSigned,
-            useExperimentalTestMode,
+            config,
+            adapterName,
+            lowVramDiffusion: await window.API.getConfigValue('handleDiffusionExecutable') || false,
+            lowVramVoice: await window.API.getConfigValue('lowVramVoice') || false,
         });
 
         try {

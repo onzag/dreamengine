@@ -2,11 +2,12 @@ import { VoiceAdapterWebsocketVocalizer } from "./adapter-websocket-vocalizer.js
 import { BaseVoiceAdapter } from "./base.js";
 
 /**
- * @type {Object<string, {build: (getConfigValue: (str: string) => Promise<any>) => Promise<BaseVoiceAdapter>, hasSelfSignedOption?: boolean, settings: import("../setting").SettingsFunction}>}
+ * @type {Object<string, {build: (getConfigValue: (str: string) => Promise<any>) => Promise<BaseVoiceAdapter>, hasSelfSignedOption?: boolean, hasLowVramOption?: boolean, settings: import("../setting").SettingsFunction}>}
  */
 export const VOICE_ADAPTERS = {
     "Vocalizer": {
         settings: () => ({
+            // ALWAYS USE vocalizerHost when adding more adapters, this is used accross the app to determine the host regardless of the adapter
             vocalizerHost: {
                 label: "Vocalizer Host",
                 placeholder: "Enter Vocalizer host",
@@ -23,6 +24,7 @@ export const VOICE_ADAPTERS = {
             },
         }),
         hasSelfSignedOption: true,
+        hasLowVramOption: true,
         build: async (getConfigValue) => new VoiceAdapterWebsocketVocalizer({
             host: await getConfigValue("vocalizerHost") || "wss://localhost:8222",
             secret: await getConfigValue("vocalizerApiKey") || "dev-secret-12345678900abcdef",
