@@ -5,20 +5,6 @@ import { playCancelSound, playConfirmSound, playHoverSound, playPauseSound } fro
 import { supportedLanguages, supportedLanguageNames } from '../localization/index.js';
 import './voice/test.js';
 
-// Optional dependency: `gbnf` is declared as an optionalDependency in
-// package.json, so it may or may not be present at runtime. We attempt a
-// dynamic ESM import of its bundled `dist/index.js` using a path that
-// resolves identically under both electron (file://) and the web server
-// (which mounts node_modules/gbnf at /node_modules/gbnf). If the import
-// fails (package not installed), the experimental test-mode toggle is
-// simply hidden.
-let gbnfAvailable = false;
-let gbnfDetected = false;
-const gbnfDetectionPromise = import('../../../node_modules/gbnf/dist/index.js')
-    .then(() => { gbnfAvailable = true; })
-    .catch(() => { /* optional dependency not installed */ })
-    .finally(() => { gbnfDetected = true; });
-
 class Settings extends HTMLElement {
     constructor() {
         super();

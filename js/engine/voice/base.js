@@ -10,6 +10,8 @@
  * @property {VocalizerSegment[]} segments
  */
 
+import { VoiceAdapterWebsocketVocalizer } from "./adapter-websocket-vocalizer";
+
 /**
  * Generation parameters shared by the whole scene (and overridable per speech
  * segment). Mirrors what vocalizer.py's `_resolve_generation_params` consumes.
@@ -99,6 +101,42 @@
  * @typedef {Blob} VocalizerJSONResponse
  */
 
+/**
+ * @type {Object<string, {build: (config: any) => BaseVoiceAdapter, hasSelfSignedOption?: boolean, settings: import("../setting").SettingsFunction}>}
+ */
+export const VOICE_ADAPTERS = {
+    "Vocalizer": {
+        settings: () => ({
+            vocalizerHost: {
+                label: "Vocalizer Host",
+                placeholder: "Enter Vocalizer host",
+                description: "This is the host address for the Vocalizer server, you can define all parameters here for the remote server, for example wss://myserver.com:1234?model=custom&param=value, the protocol must be ws:// or wss://",
+                default: "wss://localhost:8222",
+                type: "string",
+            },
+            vocalizerApiKey: {
+                label: "Vocalizer API Key",
+                placeholder: "Enter Vocalizer API key",
+                description: "This is the API key for the Vocalizer server, used for authentication.",
+                default: "dev-secret-12345678900abcdef",
+                type: "string",
+            },
+            useExperimentalTestMode: {
+                label: "Use Experimental Test Mode",
+                placeholder: "Enable experimental test mode",
+                description: "Enables experimental test mode for the Vocalizer server. This may enable additional features or logging for testing purposes.",
+                default: false,
+                type: "boolean",
+            },
+        }),
+        hasSelfSignedOption: true,
+        build: (config) => new VoiceAdapterWebsocketVocalizer({
+            host: config.vocalizerHost || "wss://localhost:8222",
+            secret: config.vocalizerApiKey || "dev-secret-12345678900abcdef",
+        }),
+    },
+}
+
 export class BaseVoiceAdapter {
     constructor() {
         /**
@@ -117,6 +155,18 @@ export class BaseVoiceAdapter {
 
     async ensureInitialized() {
         throw new Error("Method 'ensureInitialized()' must be implemented.");
+    }
+
+    async canBePaused() {
+        throw new Error("Method 'canBePaused()' must be implemented.");
+    }
+
+    async pause() {
+        throw new Error("Method 'pause()' must be implemented.");
+    }
+
+    async start() {
+        throw new Error("Method 'start()' must be implemented.");
     }
 
     /**

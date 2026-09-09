@@ -107,7 +107,6 @@ export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
      * @param {{
      *    host?: string;
      *    apiKey?: string;
-     *    secret?: string;
      *    useExperimentalTestMode?: boolean;
      * }} options
      */
@@ -140,7 +139,7 @@ export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
         this.__debug_last10TalkPayloads = [];
 
         /**
-         * @type {{ host?: string; apiKey?: string; secret?: string; useExperimentalTestMode?: boolean; }}
+         * @type {{ host?: string; apiKey?: string; useExperimentalTestMode?: boolean; }}
          */
         this.options = options;
 
@@ -293,7 +292,7 @@ export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
         console.log("InferenceAdapterLlamaUncensored: Initializing connection to server at " + (this.options.host || 'ws://127.0.0.1:8765'));
 
         // set a websocket to the local server
-        this.socket = new WebSocket((this.options.host || 'ws://127.0.0.1:8765') + "?apiKey=" + encodeURIComponent(this.options.apiKey || "") + "&secret=" + encodeURIComponent(this.options.secret || ""));
+        this.socket = new WebSocket((this.options.host || 'ws://127.0.0.1:8765') + "?secret=" + encodeURIComponent(this.options.apiKey || ""));
         this.socket.addEventListener("message", this.onData);
 
         /**
