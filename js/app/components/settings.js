@@ -3,6 +3,8 @@ import "./profile-image.js";
 import "./diffusion/image-edit.js";
 import { playCancelSound, playConfirmSound, playHoverSound, playPauseSound } from '../sound.js';
 import { supportedLanguages, supportedLanguageNames } from '../localization/index.js';
+import { INFERENCE_ADAPTERS } from '../../engine/inference/all.js';
+import { VOICE_ADAPTERS } from '../../engine/voice/all.js';
 import './voice/test.js';
 
 class Settings extends HTMLElement {
@@ -18,6 +20,9 @@ class Settings extends HTMLElement {
         this.onSaveAndCloseSettings = this.onSaveAndCloseSettings.bind(this);
 
         this.currentSectionIndex = 0;
+        this.sectionRenderId = 0;
+        this.adapterSettingsRenderId = 0;
+        this.pendingAdapterSettings = Promise.resolve();
     }
 
     connectedCallback() {
@@ -74,6 +79,7 @@ class Settings extends HTMLElement {
     }
 
     renderSection() {
+        const sectionRenderId = ++this.sectionRenderId;
         const tabsContainer = this.root.querySelector('app-overlay-tabs');
 
         if (this.currentSectionIndex === 0 && tabsContainer) {
@@ -383,41 +389,17 @@ class Settings extends HTMLElement {
                 <div style="margin-top:1vh;color:#ff6b6b;font-size:3vh;">&#9888; The app must be restarted after changing the language, the language affects which characters and worlds are available</div>
             </app-overlay-section>`;
         } else if (this.currentSectionIndex === 3 && tabsContainer) {
-            tabsContainer.innerHTML = `<app-overlay-section section-title="AI Inference Settings">
-                <app-overlay-input
-                    label="Inference host"
-                    input-placeholder="Enter inference host"
-                    title="This is the host address for DreamServer, you can define all parameters here for the remote server, for example wss://myserver.com:1234?model=custom&param=value, the protocol must be ws:// or wss://"
-                    input-data-location="host"
-                ></app-overlay-input>
-                <app-overlay-input
-                    label="Inference api secret"
-                    input-placeholder="Enter inference api secret"
-                    title="This is the API secret used by the AI inference DreamServer"
-                    input-data-location="secret"
-                ></app-overlay-input>
-                ${window.API.mode === "web" ? `<div style="margin-top:1vh;color:#ff6b6b;font-size:3vh;">&#9888; The app must be restarted after changing the inference host or secret.</div>` : `<app-overlay-input-boolean
-                    label="Allow self-signed SSL certificates"
-                    title="Allow connecting to inference servers with self-signed SSL certificates, only enable this if you are connecting to a trusted server with a self-signed certificate, enabling this will make your connection less secure and vulnerable"
-                    input-data-location="allowSelfSigned"
-                ></app-overlay-input-boolean><div style="margin-top:1vh;color:#ff6b6b;font-size:3vh;">&#9888; The app must be restarted after changing the inference host, secret or self-signed SSL certificate settings.</div>`}
-                ${gbnfAvailable ? `<app-overlay-input-boolean
-                    label="Use experimental test mode"
-                    title="A developer mode that generates random sentences on inference, meant for expert testing"
-                    input-data-location="useExperimentalTestMode"
-                ></app-overlay-input-boolean><div style="margin-top:1vh;color:#ff6b6b;font-size:3vh;">&#9888; The test mode only produces random results, it is meant for expert testing and if you are seeing this, it means you installed the optional <strong>gbnf</strong> package.</div>` : ''}
-            </app-overlay-section>`;
-
-            // If detection of the optional `gbnf` dependency is still in
-            // flight when the Inference Settings tab is first opened, re-render
-            // once it completes so the experimental toggle can appear.
-            if (!gbnfDetected) {
-                gbnfDetectionPromise.then(() => {
-                    if (this.currentSectionIndex === 3 && this.isConnected) {
-                        this.renderSection();
-                    }
-                });
-            }
+            this.renderAdapterSection({
+                tabsContainer,
+                sectionRenderId,
+                sectionTitle: "AI Inference Settings",
+                selectorLabel: "Inference Adapter",
+                selectorDataLocation: "inferenceAdapter",
+                settingsContainerId: "inference-adapter-settings",
+                registry: INFERENCE_ADAPTERS,
+                selfSignedDataLocation: "allowSelfSigned",
+                selfSignedDescription: "Allow connecting to inference servers with self-signed SSL certificates. Only enable this for a trusted server; doing so makes the connection less secure.",
+            });
         } else if (this.currentSectionIndex === 4 && tabsContainer) {
             tabsContainer.innerHTML = `<app-overlay-section section-title="AI Image Generation Settings">
                 <app-overlay-input-boolean
@@ -505,6 +487,7 @@ class Settings extends HTMLElement {
                 dialog.addEventListener('cancel', exit);
             });
         } else if (this.currentSectionIndex === 5 && tabsContainer) {
+            const adapterNames = Object.keys(VOICE_ADAPTERS);
             tabsContainer.innerHTML = `<app-overlay-section section-title="Voice Generation Settings">
                 <app-overlay-input-boolean
                     id="vocalizer-enabled-toggle"
@@ -514,30 +497,14 @@ class Settings extends HTMLElement {
                     input-default-value="false"
                 ></app-overlay-input-boolean>
                 <div id="vocalizer-settings-body">
-                    <app-overlay-input
-                        label="Vocalizer host"
-                        input-placeholder="Enter Vocalizer host"
-                        title="This is the host address for the Vocalizer server, you can define all parameters here for the remote server, for example wss://myserver.com:1234?model=custom&param=value, the protocol must be ws:// or wss://"
-                        input-data-location="vocalizerHost"
-                    ></app-overlay-input>
-                    <app-overlay-input
-                        label="Vocalizer api secret"
-                        input-placeholder="Enter API secret"
-                        title="This is the API secret used by the Vocalizer server"
-                        input-data-location="vocalizerApiKey"
-                    ></app-overlay-input>
-                    <app-overlay-input-boolean
-                        id="vocalizer-lowvram-mode"
-                        label="Low VRAM mode"
-                        title="Enable or disable low VRAM mode for the Vocalizer, must be supported by the server"
-                        input-data-location="vocalizerLowVramMode"
-                        input-default-value="false"
-                    ></app-overlay-input-boolean>
-                    ${window.API.mode === "web" ? `<div style="margin-top:1vh;color:#ff6b6b;font-size:3vh;">&#9888; The app must be restarted after changing the vocalizer host or secret.</div>` : `<app-overlay-input-boolean
-                        label="Allow self-signed SSL certificates"
-                        title="Allow connecting to Vocalizer servers with self-signed SSL certificates, only enable this if you are connecting to a trusted server with a self-signed certificate, enabling this will make your connection less secure and vulnerable"
-                        input-data-location="allowVocalizerSelfSigned"
-                    ></app-overlay-input-boolean><div style="margin-top:1vh;color:#ff6b6b;font-size:3vh;">&#9888; The app must be restarted after changing the vocalizer host, secret or self-signed SSL certificate settings.</div>`}
+                    <app-overlay-select
+                        id="voice-adapter-select"
+                        label="Voice Adapter"
+                        input-options='${JSON.stringify(adapterNames)}'
+                        input-data-location="voiceAdapter"
+                        input-default-value="${adapterNames[0] || ''}"
+                    ></app-overlay-select>
+                    <div id="voice-adapter-settings" aria-live="polite">Loading adapter settings...</div>
                     <app-overlay-button id="test-vocalizer-connection" play-sound-on-click="false" aria-key="t" title="Open a vocalizer field to check the vocalizer settings">Test Vocalizer</app-overlay-button>
                 </div>
             </app-overlay-section>`;
@@ -561,6 +528,17 @@ class Settings extends HTMLElement {
             vocalizerEnabledToggle?.addEventListener('input-change', () => {
                 // @ts-ignore
                 applyVocalizerGrayState(vocalizerEnabledToggle.getValue());
+            });
+
+            const voiceAdapterSelect = tabsContainer.querySelector('#voice-adapter-select');
+            const voiceAdapterSettings = tabsContainer.querySelector('#voice-adapter-settings');
+            this.pendingAdapterSettings = this.bindAdapterSettings({
+                adapterSelect: voiceAdapterSelect,
+                settingsContainer: voiceAdapterSettings,
+                registry: VOICE_ADAPTERS,
+                sectionRenderId,
+                selfSignedDataLocation: "allowVocalizerSelfSigned",
+                selfSignedDescription: "Allow connecting to voice servers with self-signed SSL certificates. Only enable this for a trusted server; doing so makes the connection less secure.",
             });
 
             // @ts-expect-error
@@ -589,6 +567,142 @@ class Settings extends HTMLElement {
                 dialog.addEventListener('cancel', exit);
             });
         };
+    }
+
+    /**
+     * Render a settings section whose fields are supplied by an adapter registry.
+     *
+     * @param {{
+     *   tabsContainer: Element,
+     *   sectionRenderId: number,
+     *   sectionTitle: string,
+     *   selectorLabel: string,
+     *   selectorDataLocation: string,
+     *   settingsContainerId: string,
+     *   registry: Record<string, {settings: import("../../engine/setting.js").SettingsFunction, hasSelfSignedOption?: boolean}>,
+     *   selfSignedDataLocation: string,
+     *   selfSignedDescription: string,
+     * }} options
+     */
+    renderAdapterSection(options) {
+        const adapterNames = Object.keys(options.registry);
+        options.tabsContainer.innerHTML = `<app-overlay-section section-title="${options.sectionTitle}">
+            <app-overlay-select
+                id="adapter-select"
+                label="${options.selectorLabel}"
+                input-options='${JSON.stringify(adapterNames)}'
+                input-data-location="${options.selectorDataLocation}"
+                input-default-value="${adapterNames[0] || ''}"
+            ></app-overlay-select>
+            <div id="${options.settingsContainerId}" aria-live="polite">Loading adapter settings...</div>
+        </app-overlay-section>`;
+
+        this.pendingAdapterSettings = this.bindAdapterSettings({
+            adapterSelect: options.tabsContainer.querySelector('#adapter-select'),
+            settingsContainer: options.tabsContainer.querySelector(`#${options.settingsContainerId}`),
+            registry: options.registry,
+            sectionRenderId: options.sectionRenderId,
+            selfSignedDataLocation: options.selfSignedDataLocation,
+            selfSignedDescription: options.selfSignedDescription,
+        });
+    }
+
+    /**
+     * Load and render the selected adapter's possibly asynchronous settings.
+     *
+     * @param {{
+     *   adapterSelect: any,
+     *   settingsContainer: Element|null,
+     *   registry: Record<string, {settings: import("../../engine/setting.js").SettingsFunction, hasSelfSignedOption?: boolean}>,
+     *   sectionRenderId: number,
+     *   selfSignedDataLocation: string,
+     *   selfSignedDescription: string,
+     * }} options
+     */
+    async bindAdapterSettings(options) {
+        const { adapterSelect, settingsContainer } = options;
+        if (!adapterSelect || !settingsContainer) return;
+
+        await adapterSelect.isReady();
+        if (options.sectionRenderId !== this.sectionRenderId || !settingsContainer.isConnected) return;
+
+        const renderSelectedAdapter = async () => {
+            const requestId = ++this.adapterSettingsRenderId;
+            const adapterName = adapterSelect.getValue();
+            const adapterConfiguration = options.registry[adapterName];
+
+            if (!adapterConfiguration) {
+                settingsContainer.innerHTML = `<app-overlay-input-warning>The selected adapter is not available.</app-overlay-input-warning>`;
+                return;
+            }
+
+            settingsContainer.textContent = 'Loading adapter settings...';
+            try {
+                const settings = await adapterConfiguration.settings();
+                if (requestId !== this.adapterSettingsRenderId ||
+                    options.sectionRenderId !== this.sectionRenderId ||
+                    !settingsContainer.isConnected ||
+                    adapterSelect.getValue() !== adapterName) {
+                    return;
+                }
+
+                const fields = Object.entries(settings || {})
+                    .flatMap(([dataLocation, setting]) => setting === null
+                        ? []
+                        : [this.renderAdapterSetting(dataLocation, setting)])
+                    .join('');
+                const selfSignedField = adapterConfiguration.hasSelfSignedOption && window.API.mode === "web"
+                    ? this.renderAdapterSetting(options.selfSignedDataLocation, {
+                        label: "Allow self-signed SSL certificates",
+                        description: options.selfSignedDescription,
+                        default: false,
+                        type: "boolean",
+                    })
+                    : '';
+
+                settingsContainer.innerHTML = `${fields}${selfSignedField}
+                    <div style="margin-top:1vh;color:#ff6b6b;font-size:3vh;">&#9888; The app must be restarted after changing the adapter or its settings.</div>`;
+            } catch (error) {
+                console.error(`Failed to load settings for ${adapterName}:`, error);
+                if (requestId === this.adapterSettingsRenderId && settingsContainer.isConnected) {
+                    settingsContainer.innerHTML = `<app-overlay-input-warning>Could not load settings for ${adapterName}.</app-overlay-input-warning>`;
+                }
+            }
+        };
+
+        const startRenderingSelectedAdapter = () => {
+            this.pendingAdapterSettings = renderSelectedAdapter();
+        };
+        const selectElement = adapterSelect.root?.querySelector('select');
+        selectElement?.addEventListener('change', startRenderingSelectedAdapter);
+        startRenderingSelectedAdapter();
+        await this.pendingAdapterSettings;
+    }
+
+    /**
+     * @param {string} dataLocation
+     * @param {import("../../engine/setting.js").SettingEntry} setting
+     * @returns {string}
+     */
+    renderAdapterSetting(dataLocation, setting) {
+        if (!setting || (setting.type !== "string" && setting.type !== "boolean")) {
+            console.warn(`Unsupported adapter setting type for ${dataLocation}.`);
+            return '';
+        }
+
+        const tagName = setting.type === "boolean" ? "app-overlay-input-boolean" : "app-overlay-input";
+        const placeholder = setting.placeholder
+            ? ` input-placeholder="${setting.placeholder}"`
+            : '';
+        const defaultValue = setting.default !== undefined
+            ? ` input-default-value="${setting.default}"`
+            : '';
+
+        return `<${tagName}
+            label="${setting.label}"
+            title="${setting.description}"
+            input-data-location="${dataLocation}"${placeholder}${defaultValue}
+        ></${tagName}>`;
     }
 
     /**
@@ -640,6 +754,8 @@ class Settings extends HTMLElement {
 
     async onSaveAndCloseSettings() {
         playConfirmSound();
+
+        await this.pendingAdapterSettings;
 
         await Promise.all(Array.from(this.root.querySelectorAll('app-overlay-input, app-overlay-select, app-profile-image, app-overlay-list-input, app-overlay-input-boolean')).map(inputComponent =>
             // @ts-ignore
