@@ -581,6 +581,9 @@ class ProfileVoice extends HTMLElement {
             await adapter.ensureInitialized();
             if (lowVramMode && await adapter.canBePaused()) {
                 await window.ENGINE_WORKER_CLIENT.pauseInference();
+                if (await window.API.getConfigValue("handleDiffusionExecutable")) {
+                    await window.API.stopDiffusionProcess();
+                }
                 await adapter.resume();
             }
             if (refFile && refName) {

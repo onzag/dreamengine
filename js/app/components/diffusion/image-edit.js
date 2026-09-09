@@ -320,6 +320,9 @@ export class ImageEdit extends HTMLElement {
                 try {
                     try {
                         await window.ENGINE_WORKER_CLIENT.pauseInference();
+                        if (await window.API.getConfigValue("voiceLowVramMode")) {
+                            await window.API.pauseVoice();
+                        }
                     } catch (err) {}
                     // this needs to run a local executable
                     this.setStatus('Starting Diffusion Server (VRAM Save Mode)&hellip;', 'loading');

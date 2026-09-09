@@ -142,37 +142,11 @@ export class EngineWorkerClient {
                     }
                     case "stopVocalizerRequest": {
                         const { callId } = msg.data;
-                        // this first is a hack way to pause the vocalizer
-                        // since we made it a global in game so it can be passed down other components easily
-                        // we can grab the session and pause it
-                        if (window.GAME_VOCALIZER) {
-                            window.GAME_VOCALIZER.adapter.canBePaused().then(() => {
-                                return window.GAME_VOCALIZER?.adapter.pause();
-                            }).then(() => {
-                                this.#worker.postMessage({ type: "mainThreadCallResponse", callId });
-                            }).catch((/** @type {any} */ err) => {
-                                this.#worker.postMessage({ type: "mainThreadCallResponse", callId, error: err?.message ?? String(err) });
-                            });
-                        } else {
-                            (async () => {
-                                try {
-                                    // No vocalizer adapter being used in game, we need to connect it to pause it.
-                                    // this is a highly possible scenario actually, eg. generating voices in manage, then going to the wizard
-                                    // and doing LLM calls, there is no voice adapter there and the connection would have been closed, so we need to connect it again to pause it.
-                                    // and then just close the connection afterwards
-                                    const adapterName = await window.API.getConfigValue("voiceAdapter");
-                                    const adapter = await VOICE_ADAPTERS[adapterName].build(window.API.getConfigValue.bind(window.API));
-                                    await adapter.ensureInitialized();
-                                    if (await adapter.canBePaused()) {
-                                        await adapter.pause();
-                                    }
-                                    adapter.close();
-                                } catch (/** @type {any} */ err) {
-                                    this.#worker.postMessage({ type: "mainThreadCallResponse", callId, error: err?.message ?? String(err) });
-                                    return;
-                                }
-                            })();
-                        }
+                        window.API.pauseVoice().then(() => {
+                            this.#worker.postMessage({ type: "mainThreadCallResponse", callId });
+                        }).catch((/** @type {any} */ err) => {
+                            this.#worker.postMessage({ type: "mainThreadCallResponse", callId, error: err?.message ?? String(err) });
+                        });
                         break;
                     }
                 }

@@ -391,8 +391,14 @@ let INFERENCE_ADAPTER_WARNING = null;
 async function initialChecks() {
     // Check if the engine has any API keys configured, if not show the settings overlay
     const host = await window.API.getConfigValue('host');
-    const inferenceAdapter = await window.API.getConfigValue('inferenceAdapter');
-    const error = await INFERENCE_ADAPTERS[inferenceAdapter].checkConfig(window.API.getConfigValue.bind(window.API));
+    const inferenceAdapter = await window.API.getConfigValue('inferenceAdapter') || 'DreamServer';
+    const error = !INFERENCE_ADAPTERS[inferenceAdapter] ? (
+        {
+            title: "Inference Adapter Not Found",
+            message: `The inference adapter "${inferenceAdapter}" is not available. Your configuration must be corrupted.`,
+        }
+    ) : await INFERENCE_ADAPTERS[inferenceAdapter].checkConfig(window.API.getConfigValue.bind(window.API));
+    
     if (error) {
         const dialog = document.createElement('app-dialog');
         dialog.setAttribute('dialog-title', error.title);
@@ -548,14 +554,14 @@ client.ready.then(async () => {
     const config = await INFERENCE_ADAPTERS[adapterName].buildConfig(window.API.getConfigValue.bind(window.API));
 
     if (config) {
-        await client.setupInferenceAdapter({
-            config,
-            adapterName,
-            lowVramDiffusion: await window.API.getConfigValue('handleDiffusionExecutable') || false,
-            lowVramVoice: await window.API.getConfigValue('lowVramVoice') || false,
-        });
-
         try {
+            await client.setupInferenceAdapter({
+                config,
+                adapterName,
+                lowVramDiffusion: await window.API.getConfigValue('handleDiffusionExecutable') || false,
+                lowVramVoice: await window.API.getConfigValue('voiceLowVramMode') || false,
+            });
+
             const rs = await client.initializeInferenceAdapter(window.DREAMENGINE_LANGUAGE || 'en');
             if (rs.warning) {
                 INFERENCE_ADAPTER_WARNING = rs.warning;

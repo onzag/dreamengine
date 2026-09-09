@@ -1,3 +1,5 @@
+import { VOICE_ADAPTERS } from "./engine/voice/all.js";
+
 if (!window.API) {
     window.API = {
         mode: 'web',
@@ -272,7 +274,7 @@ pre { margin:0; padding:16px; line-height:1.5; white-space:pre-wrap; word-wrap:b
                 throw new Error(`saveFile("${namespace}/${id}/${saveName}") failed: ${detail}`);
             }
         },
-        
+
         deleteSaveFile: async (namespace, id, saveName) => {
             const res = await fetch('/api/save/delete', {
                 method: 'POST',
@@ -323,6 +325,32 @@ pre { margin:0; padding:16px; line-height:1.5; white-space:pre-wrap; word-wrap:b
             }
             return res.json();
         },
-        
+        pauseVoice: async () => {
+            // will be defined
+        }
+    }
+}
+
+window.API.pauseVoice = async () => {
+    console.log("API.pauseVoice called");
+    // this first is a hack way to pause the vocalizer
+    // since we made it a global in game so it can be passed down other components easily
+    // we can grab the session and pause it
+    if (window.GAME_VOCALIZER) {
+        return window.GAME_VOCALIZER.adapter.canBePaused().then(() => {
+            return window.GAME_VOCALIZER?.adapter.pause();
+        });
+    } else {
+        // No vocalizer adapter being used in game, we need to connect it to pause it.
+        // this is a highly possible scenario actually, eg. generating voices in manage, then going to the wizard
+        // and doing LLM calls, there is no voice adapter there and the connection would have been closed, so we need to connect it again to pause it.
+        // and then just close the connection afterwards
+        const adapterName = await window.API.getConfigValue("voiceAdapter");
+        const adapter = await VOICE_ADAPTERS[adapterName].build(window.API.getConfigValue.bind(window.API));
+        await adapter.ensureInitialized();
+        if (await adapter.canBePaused()) {
+            await adapter.pause();
+        }
+        adapter.close();
     }
 }

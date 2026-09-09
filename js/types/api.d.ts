@@ -39,6 +39,7 @@ declare interface DEAPI {
 
   startDiffusionProcess(): Promise<void>;
   stopDiffusionProcess(): Promise<void>;
+  pauseVoice(): Promise<void>;
 }
 
 declare global {

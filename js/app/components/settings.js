@@ -401,7 +401,7 @@ class Settings extends HTMLElement {
                 selfSignedDescription: "Allow connecting to inference servers with self-signed SSL certificates. Only enable this for a trusted server; doing so makes the connection less secure.",
             });
         } else if (this.currentSectionIndex === 4 && tabsContainer) {
-            tabsContainer.innerHTML = `<app-overlay-section section-title="AI Image Generation Settings">
+            tabsContainer.innerHTML = `<app-overlay-section section-title="AIHub Image Generation Settings">
                 <app-overlay-input-boolean
                     id="diffusion-enabled-toggle"
                     label="Enabled"
@@ -428,8 +428,8 @@ class Settings extends HTMLElement {
                         title="Optional path to the diffusion executable, if you have a local diffusion application installed with AIHub support like ComfyUI, you can specify the path to the executable here"
                         input-data-location="diffusionExecutablePath"
                     ></app-overlay-input><app-overlay-input-boolean
-                        label="Handle diffusion executable (VRAM save mode)"
-                        title="Allows to have the inference server turned off when diffusion is running, and automatically turned back on when diffusion stops, this saves VRAM substantially; this requires the diffusion executable path to be set"
+                        label="Handle diffusion executable (LowVRAM mode)"
+                        title="Handles the diffusion executable as a child process, this will save VRAM memory by stopping inference when the app requires diffusion and restarting it when needed"
                         input-data-location="handleDiffusionExecutable"
                     ></app-overlay-input-boolean>
                     ${window.API.mode === "web" ? `<div style="margin-top:1vh;color:#ff6b6b;font-size:3vh;">&#9888; The app must be restarted after changing the diffusion host or secret.</div>` : `<app-overlay-input-boolean
@@ -540,6 +540,7 @@ class Settings extends HTMLElement {
                 sectionRenderId,
                 selfSignedDataLocation: "allowVocalizerSelfSigned",
                 selfSignedDescription: "Allow connecting to voice servers with self-signed SSL certificates. Only enable this for a trusted server; doing so makes the connection less secure.",
+                lowVramDataLocation: "voiceLowVramMode",
             });
 
             // @ts-expect-error
@@ -580,9 +581,10 @@ class Settings extends HTMLElement {
      *   selectorLabel: string,
      *   selectorDataLocation: string,
      *   settingsContainerId: string,
-     *   registry: Record<string, {settings: import("../../engine/setting.js").SettingsFunction, hasSelfSignedOption?: boolean}>,
+     *   registry: Record<string, {settings: import("../../engine/setting.js").SettingsFunction, hasSelfSignedOption?: boolean, hasLowVramOption?: boolean}>,
      *   selfSignedDataLocation: string,
      *   selfSignedDescription: string,
+     *   lowVramDataLocation?: string,
      * }} options
      */
     renderAdapterSection(options) {
@@ -605,6 +607,7 @@ class Settings extends HTMLElement {
             sectionRenderId: options.sectionRenderId,
             selfSignedDataLocation: options.selfSignedDataLocation,
             selfSignedDescription: options.selfSignedDescription,
+            lowVramDataLocation: options.lowVramDataLocation,
         });
     }
 
@@ -614,10 +617,11 @@ class Settings extends HTMLElement {
      * @param {{
      *   adapterSelect: any,
      *   settingsContainer: Element|null,
-     *   registry: Record<string, {settings: import("../../engine/setting.js").SettingsFunction, hasSelfSignedOption?: boolean}>,
+     *   registry: Record<string, {settings: import("../../engine/setting.js").SettingsFunction, hasSelfSignedOption?: boolean, hasLowVramOption?: boolean}>,
      *   sectionRenderId: number,
      *   selfSignedDataLocation: string,
      *   selfSignedDescription: string,
+     *   lowVramDataLocation?: string,
      * }} options
      */
     async bindAdapterSettings(options) {
@@ -660,8 +664,16 @@ class Settings extends HTMLElement {
                         type: "boolean",
                     })
                     : '';
+                const lowVramField = adapterConfiguration.hasLowVramOption && options.lowVramDataLocation
+                    ? this.renderAdapterSetting(options.lowVramDataLocation, {
+                        label: "Use low VRAM mode",
+                        description: "Unload the inference model when voice generation requires the VRAM, then load the inference model again afterward once voice is done.",
+                        default: false,
+                        type: "boolean",
+                    })
+                    : '';
 
-                settingsContainer.innerHTML = `${fields}${selfSignedField}
+                settingsContainer.innerHTML = `${fields}${lowVramField}${selfSignedField}
                     <div style="margin-top:1vh;color:#ff6b6b;font-size:3vh;">&#9888; The app must be restarted after changing the adapter or its settings.</div>`;
             } catch (error) {
                 console.error(`Failed to load settings for ${adapterName}:`, error);
