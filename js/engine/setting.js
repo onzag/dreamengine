@@ -3,9 +3,8 @@
  * @property {string} label
  * @property {string} [placeholder]
  * @property {string} description
- * @property {"boolean" | "string" | "select"} type
+ * @property {"boolean" | "string"} type
  * @property {string|boolean} [default]
- * @property {string[]} [options]
  */
 
 /**
