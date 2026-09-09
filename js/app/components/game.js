@@ -5,7 +5,7 @@ import './game/game-message.js';
 import './debug/debug-character.js';
 import './game/cycle-inform.js';
 import { emotionsGrouped } from '../../engine/util/emotions.js';
-import { VoiceAdapterWebsocketVocalizer } from '../../engine/voice/adapter-websocket-vocalizer.js';
+import { VOICE_ADAPTERS } from '../../engine/voice/all.js';
 import { GameVocalizerSession } from './game/vocalizer-session.js';
 
 /**
@@ -1660,7 +1660,7 @@ class GameOverlay extends HTMLElement {
                     this._scrollStoryToBottom();
                 } else if (task.type === 'live') {
                     const key = task.gid + '__' + task.index;
-                    const el = this._createMessageElement(task.entry, /** @type {any} */ ({
+                    const el = this._createMessageElement(task.entry, /** @type {any} */({
                         type: task.blockType,
                         __debug_id: key,
                     }), task.index);
@@ -2596,21 +2596,23 @@ class GameOverlay extends HTMLElement {
      */
     async _initVocalizer() {
         try {
-            const enabled = await window.API.getConfigValue("vocalizerEnabled");
-            const host = enabled ? await window.API.getConfigValue("vocalizerHost") : null;
-            if (!enabled || !host) {
+            const enabled = await window.API.getConfigValue("voiceEnabled");
+            const adapterName = await window.API.getConfigValue("voiceAdapter");
+
+            if (enabled && adapterName && VOICE_ADAPTERS[adapterName]) {
+                try {
+                    const adapter = await VOICE_ADAPTERS[adapterName].build(window.API.getConfigValue.bind(window.API));
+                    window.GAME_VOCALIZER = new GameVocalizerSession(adapter);
+                    adapter.ensureInitialized().catch(err => {
+                        console.error("GameOverlay: Vocalizer connection failed", err);
+                    });
+                } catch (err) {
+                    console.error("GameOverlay: failed to build Vocalizer adapter", err);
+                    window.GAME_VOCALIZER = null;
+                }
+            } else {
                 window.GAME_VOCALIZER = null;
-                return;
             }
-            const secret = await window.API.getConfigValue("vocalizerApiKey");
-            const adapter = new VoiceAdapterWebsocketVocalizer({
-                host: (host || "wss://127.0.0.1:8222").toString(),
-                secret: (secret || "").toString(),
-            });
-            window.GAME_VOCALIZER = new GameVocalizerSession(adapter);
-            adapter.ensureInitialized().catch(err => {
-                console.error("GameOverlay: Vocalizer connection failed", err);
-            });
         } catch (err) {
             console.error("GameOverlay: failed to initialise Vocalizer", err);
             window.GAME_VOCALIZER = null;

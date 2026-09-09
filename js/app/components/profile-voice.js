@@ -1,4 +1,4 @@
-import { VoiceAdapterWebsocketVocalizer } from "../../engine/voice/adapter-websocket-vocalizer.js";
+import { VOICE_ADAPTERS } from "../../engine/voice/all.js";
 import { playHoverSound } from "../sound.js";
 
 /** @type {Map<string, number>} */
@@ -570,20 +570,27 @@ class ProfileVoice extends HTMLElement {
      * @returns {Promise<Blob>}
      */
     async renderVoice(request, refFile, refName) {
-        const host = await window.API.getConfigValue("vocalizerHost");
-        const secret = await window.API.getConfigValue("vocalizerApiKey");
-        const adapter = new VoiceAdapterWebsocketVocalizer({
-            host: (host || "wss://127.0.0.1:8222").toString(),
-            secret: (secret || "").toString(),
-        });
+        const adapterName = await window.API.getConfigValue("voiceAdapter");
+        const lowVramMode = await window.API.getConfigValue("voiceAdapterLowVramMode");
+        /**
+         * @type {import("../../engine/voice/base.js").BaseVoiceAdapter | null}
+         */
+        let adapter = null;
         try {
+            adapter = await VOICE_ADAPTERS[adapterName].build(window.API.getConfigValue.bind(window.API));
             await adapter.ensureInitialized();
+            if (lowVramMode && await adapter.canBePaused()) {
+                await window.ENGINE_WORKER_CLIENT.pauseInference();
+                await adapter.resume();
+            }
             if (refFile && refName) {
                 await adapter.sendFile(refFile, refName);
             }
-            return await adapter.runWorkflow(request);
+            const rs = await adapter.runWorkflow(request);
+            adapter.close();
+            return rs;
         } finally {
-            try { adapter.close(); } catch (_e) { /* ignore */ }
+            try { if (adapter) adapter.close(); } catch (_e) { /* ignore */ }
         }
     }
 

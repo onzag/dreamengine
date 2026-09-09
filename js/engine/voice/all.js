@@ -2,7 +2,7 @@ import { VoiceAdapterWebsocketVocalizer } from "./adapter-websocket-vocalizer.js
 import { BaseVoiceAdapter } from "./base.js";
 
 /**
- * @type {Object<string, {build: (config: any) => BaseVoiceAdapter, hasSelfSignedOption?: boolean, settings: import("../setting").SettingsFunction}>}
+ * @type {Object<string, {build: (getConfigValue: (str: string) => Promise<any>) => Promise<BaseVoiceAdapter>, hasSelfSignedOption?: boolean, settings: import("../setting").SettingsFunction}>}
  */
 export const VOICE_ADAPTERS = {
     "Vocalizer": {
@@ -23,9 +23,9 @@ export const VOICE_ADAPTERS = {
             },
         }),
         hasSelfSignedOption: true,
-        build: (config) => new VoiceAdapterWebsocketVocalizer({
-            host: config.vocalizerHost || "wss://localhost:8222",
-            secret: config.vocalizerApiKey || "dev-secret-12345678900abcdef",
+        build: async (getConfigValue) => new VoiceAdapterWebsocketVocalizer({
+            host: await getConfigValue("vocalizerHost") || "wss://localhost:8222",
+            secret: await getConfigValue("vocalizerApiKey") || "dev-secret-12345678900abcdef",
         }),
     },
 }

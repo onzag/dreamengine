@@ -5,8 +5,10 @@
  * useless opaque "ErrorEvent".
  */
 
+import { INFERENCE_ADAPTERS } from "../engine/inference/all.js";
 import { getInternalDescriptionOfCharacter, getRelationship, getSysPromptForCharacter } from "../engine/util/character-info.js";
 import { getHistoryForCharacter } from "../engine/util/messages.js";
+import { VOICE_ADAPTERS } from "../engine/voice/all.js";
 import { isScriptTypeGeneratorFile, parseScriptGeneratorFrom } from "../script-generation/base.js";
 
 // Catch truly unexpected things (runtime errors after init)
@@ -227,8 +229,8 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
             return { ok: true };
         },
 
-        async setupInferenceAdapter({ host, secret, allowSelfSigned, useExperimentalTestMode }) {
-            const adapter = new InferenceAdapterLlamaUncensored(engine, { host, secret, useExperimentalTestMode });
+        async setupInferenceAdapter({config, adapterName, lowVramDiffusion, lowVramVoice}) {
+            const adapter = await INFERENCE_ADAPTERS[adapterName].build(engine, (v) => config[v]);
             engine.setInferenceAdapter(adapter);
             adapter.addBlockingEventListenerBeforeInference(async () => {
                 // Ask the main thread to stop any active diffusion process, then

@@ -18,7 +18,7 @@ const gbnfDetectionPromise = import('../../../node_modules/gbnf/dist/index.js')
     .finally(() => { gbnfDetected = true; });
 
 /**
- * @type {Object<string, {build: (engine: DEngine, config: any) => BaseInferenceAdapter, hasSelfSignedOption?: boolean, settings: import("../setting").SettingsFunction}>}>}
+ * @type {Object<string, {build: (engine: DEngine, getConfigValue: (key: string) => Promise<any>) => Promise<BaseInferenceAdapter>, hasSelfSignedOption?: boolean, settings: import("../setting").SettingsFunction}>}>}
  */
 export const INFERENCE_ADAPTERS = {
     "DreamServer": {
@@ -46,10 +46,10 @@ export const INFERENCE_ADAPTERS = {
             } : null)),
         }),
         hasSelfSignedOption: true,
-        build: (engine, config) => new InferenceAdapterLlamaUncensored(engine, {
-            apiKey: config.apiKey || "dev-secret-12345678900abcdef",
-            host: config.host || "wss://localhost:8765",
-            useExperimentalTestMode: config.useExperimentalTestMode || false,
+        build: async (engine, getConfigValue) => new InferenceAdapterLlamaUncensored(engine, {
+            apiKey: await getConfigValue("apiKey") || "dev-secret-12345678900abcdef",
+            host: await getConfigValue("host") || "wss://localhost:8765",
+            useExperimentalTestMode: await getConfigValue("useExperimentalTestMode") || false,
         }),
     },
 }

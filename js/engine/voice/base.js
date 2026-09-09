@@ -10,8 +10,6 @@
  * @property {VocalizerSegment[]} segments
  */
 
-import { VoiceAdapterWebsocketVocalizer } from "./adapter-websocket-vocalizer.js";
-
 /**
  * Generation parameters shared by the whole scene (and overridable per speech
  * segment). Mirrors what vocalizer.py's `_resolve_generation_params` consumes.
@@ -114,6 +112,9 @@ export class BaseVoiceAdapter {
         throw new Error("Method 'ensureInitialized()' must be implemented.");
     }
 
+    /**
+     * @returns {Promise<boolean>}
+     */
     async canBePaused() {
         throw new Error("Method 'canBePaused()' must be implemented.");
     }
@@ -122,8 +123,8 @@ export class BaseVoiceAdapter {
         throw new Error("Method 'pause()' must be implemented.");
     }
 
-    async start() {
-        throw new Error("Method 'start()' must be implemented.");
+    async resume() {
+        throw new Error("Method 'resume()' must be implemented.");
     }
 
     /**
@@ -173,6 +174,10 @@ export class BaseVoiceAdapter {
      */
     removeEventListenerOnConnectStatusChange(callback) {
         this.onConnectionStatusChangeFns = this.onConnectionStatusChangeFns.filter(fn => fn !== callback);
+    }
+
+    close() {
+        throw new Error("Method 'close()' must be implemented.");
     }
 }
 

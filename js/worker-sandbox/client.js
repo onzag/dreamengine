@@ -15,6 +15,8 @@
  * ```
  */
 
+import { VOICE_ADAPTERS } from '../engine/voice/all.js';
+
 export class EngineWorkerClient {
     /** @type {Worker} */
     #worker;
@@ -138,6 +140,34 @@ export class EngineWorkerClient {
                         });
                         break;
                     }
+                    case "stopVocalizerRequest": {
+                        const { callId } = msg.data;
+                        if (window.GAME_VOCALIZER) {
+                            window.GAME_VOCALIZER.adapter.canBePaused().then(() => {
+                                return window.GAME_VOCALIZER?.adapter.pause();
+                            }).then(() => {
+                                this.#worker.postMessage({ type: "mainThreadCallResponse", callId });
+                            }).catch((/** @type {any} */ err) => {
+                                this.#worker.postMessage({ type: "mainThreadCallResponse", callId, error: err?.message ?? String(err) });
+                            });
+                        } else {
+                            (async () => {
+                                try {
+                                    // No vocalizer adapter being used in game, we need to connect it to pause it.
+                                    const adapterName = await window.API.getConfigValue("voiceAdapter");
+                                    const adapter = await VOICE_ADAPTERS[adapterName].build(window.API.getConfigValue.bind(window.API));
+                                    await adapter.ensureInitialized();
+                                    if (await adapter.canBePaused()) {
+                                        await adapter.pause();
+                                    }
+                                } catch (/** @type {any} */ err) {
+                                    this.#worker.postMessage({ type: "mainThreadCallResponse", callId, error: err?.message ?? String(err) });
+                                    return;
+                                }
+                            })();
+                        }
+                        break;
+                    }
                 }
                 return;
             }
@@ -160,7 +190,7 @@ export class EngineWorkerClient {
     }
 
     pauseInference() { return this.#call("pauseInference"); }
-    resumeInference() { return this.#call("resumeInference");}
+    resumeInference() { return this.#call("resumeInference"); }
 
     // ── DEngine methods ─────────────────────────────────────────────
 
@@ -252,12 +282,7 @@ export class EngineWorkerClient {
         return this.#call("jsEngineGetInfoMapForScripts", args);
     }
     /**
-     * @param {{
-     *    host: string,
-     *    secret: string,
-     *    allowSelfSigned: boolean,
-     *    useExperimentalTestMode: boolean,
-     * }} args
+     * @param {{config: any, adapterName: string, lowVramDiffusion: boolean, lowVramVoice: boolean}} args
      */
     setupInferenceAdapter(args) { return this.#call("setupInferenceAdapter", args); }
 

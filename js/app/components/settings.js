@@ -493,7 +493,7 @@ class Settings extends HTMLElement {
                     id="vocalizer-enabled-toggle"
                     label="Enabled"
                     title="Enable or disable voice generation."
-                    input-data-location="vocalizerEnabled"
+                    input-data-location="voiceEnabled"
                     input-default-value="false"
                 ></app-overlay-input-boolean>
                 <div id="vocalizer-settings-body">
