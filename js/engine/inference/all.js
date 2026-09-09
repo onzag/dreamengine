@@ -34,7 +34,7 @@ export const INFERENCE_ADAPTERS = {
             apiKey: {
                 label: "DreamServer API Key",
                 description: "This is the API key for the DreamServer, used for authentication.",
-                default: "dev-secret-12345678900abcdef",
+                default: "",
                 type: "string",
                 placeholder: "Enter DreamServer API key",
             },
@@ -48,13 +48,13 @@ export const INFERENCE_ADAPTERS = {
         }),
         hasSelfSignedOption: true,
         build: async (engine, getConfigValue) => new InferenceAdapterLlamaUncensored(engine, {
-            apiKey: await getConfigValue("apiKey") || "dev-secret-12345678900abcdef",
+            apiKey: await getConfigValue("apiKey"),
             host: await getConfigValue("host") || "wss://localhost:8765",
             useExperimentalTestMode: await getConfigValue("useExperimentalTestMode") || false,
         }),
         buildConfig: async (getConfigValue) => {
             const rs = {
-                apiKey: await getConfigValue("apiKey") || "dev-secret-12345678900abcdef",
+                apiKey: await getConfigValue("apiKey"),
                 host: await getConfigValue("host") || "wss://localhost:8765",
                 useExperimentalTestMode: await getConfigValue("useExperimentalTestMode") || false,
             };
@@ -69,6 +69,13 @@ export const INFERENCE_ADAPTERS = {
                 return {
                     title: "No API Key Configured",
                     message: "You have not configured an API key on your DreamServer. You can enter your API key in the settings. Please note that you will need an API key to use the application even using local self-hosted mode.",
+                }
+            }
+            const host = await getConfigValue("host");
+            if (!host.startsWith("ws://") && !host.startsWith("wss://")) {
+                return {
+                    title: "Invalid Host",
+                    message: "The DreamServer host must start with ws:// or wss://. Please check your settings.",
                 }
             }
             return null;

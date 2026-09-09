@@ -1,6 +1,7 @@
 import { VOICE_ADAPTERS } from "./engine/voice/all.js";
 
-if (!window.API) {
+// @ts-ignore
+if (!window.eAPI) {
     window.API = {
         mode: 'web',
         closeApp: () => {
@@ -326,9 +327,17 @@ pre { margin:0; padding:16px; line-height:1.5; white-space:pre-wrap; word-wrap:b
             return res.json();
         },
         pauseVoice: async () => {
-            // will be defined
+            // to be defined
         }
     }
+} else {
+    // @ts-ignore
+    window.API = {};
+    // @ts-ignore
+    Object.keys(window.eAPI).forEach((key) => {
+        // @ts-ignore
+        window.API[key] = window.eAPI[key];
+    });
 }
 
 window.API.pauseVoice = async () => {
@@ -337,7 +346,10 @@ window.API.pauseVoice = async () => {
     // since we made it a global in game so it can be passed down other components easily
     // we can grab the session and pause it
     if (window.GAME_VOCALIZER) {
-        return window.GAME_VOCALIZER.adapter.canBePaused().then(() => {
+        return window.GAME_VOCALIZER.adapter.canBePaused().then((canBe) => {
+            if (!canBe) {
+                return;
+            }
             return window.GAME_VOCALIZER?.adapter.pause();
         });
     } else {
