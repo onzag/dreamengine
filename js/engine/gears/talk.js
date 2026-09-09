@@ -588,6 +588,13 @@ export async function talk(engine, character, options) {
 
     conversationObject.messages.push(nextMessage);
 
+    engine.triggerConversationMessageUpdate(engine.deObject, {
+        conversationId: charState.conversationId,
+        messageId: nextMessage.id,
+        event: "new-message",
+        obj: nextMessage,
+    });
+
     await engine.informDEObjectUpdated();
 
     let nextToGenerate = getNextToGenerate();
@@ -626,7 +633,7 @@ export async function talk(engine, character, options) {
         };
         nextMessage.content.push(currentBlock);
 
-        engine.triggerInferingOverConversationMessage(engine.deObject, {
+        engine.triggerConversationMessageUpdate(engine.deObject, {
             conversationId: charState.conversationId,
             messageId: nextMessage.id,
             event: nextIsNarration ? "add-narration-block" : "add-dialogue-block",
@@ -672,7 +679,7 @@ export async function talk(engine, character, options) {
                     generatedMessage += info.content;
 
                     if (textToStream) {
-                        engine.triggerInferingOverConversationMessage(engine.deObject, {
+                        engine.triggerConversationMessageUpdate(engine.deObject, {
                             conversationId: charState.conversationId,
                             messageId: nextMessage.id,
                             text: textToStream,
@@ -725,7 +732,7 @@ export async function talk(engine, character, options) {
                             }
 
                             if (part) {
-                                engine.triggerInferingOverConversationMessage(engine.deObject, {
+                                engine.triggerConversationMessageUpdate(engine.deObject, {
                                     conversationId: charState.conversationId,
                                     messageId: nextMessage.id,
                                     text: part,
@@ -735,7 +742,7 @@ export async function talk(engine, character, options) {
                             }
                         }
                     } else if (textToStream) {
-                        engine.triggerInferingOverConversationMessage(engine.deObject, {
+                        engine.triggerConversationMessageUpdate(engine.deObject, {
                             conversationId: charState.conversationId,
                             messageId: nextMessage.id,
                             text: textToStream,
@@ -751,11 +758,10 @@ export async function talk(engine, character, options) {
             }
         }
 
-        engine.triggerInferingOverConversationMessage(engine.deObject, {
+        engine.triggerConversationMessageUpdate(engine.deObject, {
             conversationId: charState.conversationId,
             messageId: nextMessage.id,
             event: "done",
-            contentIndex: nextMessage.content.length - 1,
         });
 
         console.log("\nFinished receiving text chunk from inference adapter.");

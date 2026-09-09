@@ -38,13 +38,44 @@ const INVALID_NAMES = ["system", "assistant", "user", "everyone", "nobody",
  */
 
 /**
- * @typedef {Object} EngineConversationEvent
+ * @typedef {Object} EngineConversationEventBase
  * @property {string} conversationId
  * @property {string} messageId
- * @property {number} contentIndex
- * @property {string} [text]
- * @property {string} [__debug_id]
- * @property {"add-narration-block" | "add-dialogue-block" | "add-hidden-block" | "add-narration" | "add-dialogue" | "done" } event
+ */
+
+/**
+ * @typedef {EngineConversationEventBase & {
+ *   contentIndex: number,
+ *   text?: string,
+ *   __debug_id?: string,
+ *   event: "add-narration-block" | "add-dialogue-block" |
+ *          "add-hidden-block" | "add-narration" |
+ *          "add-dialogue"
+ * }} EngineConversationEventModifyBlock
+ */
+
+/**
+ * @typedef {EngineConversationEventBase & {
+ *   event: "done"
+ * }} EngineConversationEventDone
+ */
+
+/**
+ * @typedef {EngineConversationEventBase & {
+ *  event: "new-message"
+ *  obj: DEConversationMessage;
+ * }} EngineConversationEventNewMessage
+ */
+
+/**
+ * @typedef {EngineConversationEventBase & {
+ *  event: "new-conversation"
+ *  obj: DEConversation;
+ * }} EngineConversationEventNewConversation
+ */
+
+/**
+ * @typedef {EngineConversationEventModifyBlock | EngineConversationEventDone | EngineConversationEventNewMessage | EngineConversationEventNewConversation} EngineConversationEvent
  */
 
 /**
@@ -256,7 +287,7 @@ export class DEngine {
         /**
          * @type {((obj: DEObject, event: EngineConversationEvent) => void)[]}
          */
-        this.startsToInferOverConversationMessageListeners = [];
+        this.messageUpdateListeners = [];
 
         /**
          * @type {BaseInferenceAdapter | null}
@@ -1066,6 +1097,7 @@ export class DEngine {
                             },
                         ],
                         sender: "Story Master",
+                        streaming: false,
                         duration: {
                             inDays: 0,
                             inHours: 0,
@@ -1134,6 +1166,7 @@ export class DEngine {
                         inMinutes: 0,
                         inSeconds: 0,
                     },
+                    streaming: false,
                     endTime: { ...this.deObject.currentTime },
                     isCharacter: false,
                     isDebugMessage: false,
@@ -1674,23 +1707,23 @@ export class DEngine {
     /**
      * @param {(obj: DEObject, event: EngineConversationEvent) => void} listener 
      */
-    addInferringOverConversationMessageListener(listener) {
-        this.startsToInferOverConversationMessageListeners.push(listener);
+    addMessageUpdateListener(listener) {
+        this.messageUpdateListeners.push(listener);
     }
 
     /**
      * @param {(obj: DEObject, event: EngineConversationEvent) => void} listener 
      */
-    removeInferringOverConversationMessageListener(listener) {
-        this.startsToInferOverConversationMessageListeners = this.startsToInferOverConversationMessageListeners.filter(l => l !== listener);
+    removeMessageUpdateListener(listener) {
+        this.messageUpdateListeners = this.messageUpdateListeners.filter(l => l !== listener);
     }
 
     /**
      * @param {DEObject} deObject 
      * @param {EngineConversationEvent} event
      */
-    triggerInferingOverConversationMessage(deObject, event) {
-        for (const listener of this.startsToInferOverConversationMessageListeners) {
+    triggerConversationMessageUpdate(deObject, event) {
+        for (const listener of this.messageUpdateListeners) {
             try {
                 listener(deObject, event);
             } catch (e) {
@@ -1734,7 +1767,13 @@ export class DEngine {
          */
         const messageToAdd = {
             sender: "System",
-            content: message,
+            content: [
+                {
+                    type: "narration",
+                    text: message,
+                },
+            ],
+            streaming: false,
             duration: { inMinutes: 0, inHours: 0, inDays: 0, inSeconds: 0 },
             startTime: { ...this.deObject.currentTime },
             endTime: { ...this.deObject.currentTime },
@@ -1754,28 +1793,28 @@ export class DEngine {
             rumors: [],
         };
 
-        let userConversationId = this.deObject.stateFor[this.user].conversationId;
+        let userConversationId = this.deObject.stateFor[this.deObject.user].conversationId;
         if (!userConversationId) {
             userConversationId = crypto.randomUUID();
             // @ts-ignore
-            const userCharacterState = this.deObject.stateFor[this.user];
+            const userCharacterState = this.deObject.stateFor[this.deObject.user];
             const userCharacterStateCopy = deepCopyNoHistory(userCharacterState);
-            userCharacterState.history.push(userCharacterStateCopy)
+            userCharacterState.history.push(userCharacterStateCopy);
             userCharacterState.conversationId = userConversationId;
             userCharacterState.messageId = null;
             userCharacterState.type = "INTERACTING";
             this.deObject.conversations[userConversationId] = {
                 id: userConversationId,
                 previousConversationIdsPerParticipant: {
-                    [this.user]: null,
+                    [this.deObject.user]: null,
                 },
                 startTime: { ...this.deObject.currentTime },
                 messages: [messageToAdd],
-                participants: [this.user],
+                participants: [this.deObject.user],
                 remoteParticipants: [],
                 location: userCharacterState.location,
                 pseudoConversation: false,
-                bondsAtStart: getFrozenBonds(this, [this.user]),
+                bondsAtStart: getFrozenBonds(this, [this.deObject.user]),
                 bondsAtEnd: null,
             };
         } else {

@@ -168,7 +168,14 @@ export function makeTimestamp(deObject, time, includeNowLabel = true) {
  * 
  * @param {import("../index.js").DEngine} engine
  * @param {DECompleteCharacterReference} character
- * @param {{ excludeFrom?: string[] | null, includeDebugMessages?: boolean | null, includeRejectedMessages?: boolean | null, includeHiddenMessages?: boolean | null}} options
+ * @param {{
+ *  excludeFrom?: string[] | null,
+ *  includeDebugMessages?: boolean | null,
+ *  includeRejectedMessages?: boolean | null,
+ *  includeHiddenMessages?: boolean | null,
+ *  useExponentialShrinkingSelectiveContextWindowStrategy?: boolean,
+ *  enrichedMode?: boolean | null,
+ * }} options
  * @return {AsyncGenerator<DEObjectMessageGeneratorResult, void, boolean>}
  */
 export async function* getHistoryForCharacter(engine, character, options) {
@@ -255,6 +262,7 @@ export async function* getHistoryForCharacter(engine, character, options) {
         };
     };
 
+    // TODO refactor this, need to figure enrichedMode and useExponentialShrinkingSelectiveContextWindowStrategy
     for (const state of characterStateWithCurrent) {
         if (state.conversationId && !consumedConversationIds.has(state.conversationId)) {
             consumedConversationIds.add(state.conversationId);
@@ -280,7 +288,7 @@ export async function* getHistoryForCharacter(engine, character, options) {
             const conversationStartTime = currentConversationObject.startTime;
             const firstMessageIsStoryMaster = conversationMessages.length > 0 && conversationMessages[0].sender === "Story Master";
 
-            if (currentConversationObject.pseudoConversationSummary || currentConversationObject.pseudoConversation) {
+            if ((currentConversationObject.pseudoConversationSummary || currentConversationObject.pseudoConversation) && options.enrichedMode) {
                 if (!currentConversationObject.pseudoConversationSummary) {
                     // generate summary, it doesn't exist yet, but we need to have a conversation for what this
                     // character has been through and been doing
@@ -344,7 +352,7 @@ export async function* getHistoryForCharacter(engine, character, options) {
                     }
                 }
 
-                if (!firstMessageIsStoryMaster) {
+                if (!firstMessageIsStoryMaster && options.enrichedMode) {
                     const participantsExcludingCharacter = currentConversationObject.participants.filter(p => p !== character.name);
                     const timeMark = makeTimestamp(engine.deObject, conversationStartTime);
                     const timeMarkDetailed = timeMark === "Now" ? "right now" : "at " + timeMark;
@@ -465,6 +473,7 @@ export function convertMessagesToSimpleList(messages) {
  *   includeHiddenMessages?: boolean | null,
  *   msgLimit: "LAST_CYCLE" | "LAST_CYCLE_EXCLUDE_CHAR" | "LAST_STORY_FRAGMENT_FROM_CHAR" | "LAST_CYCLE_EXPANDED" | "LAST_CYCLE_EXPANDED_EXCLUDE_CHAR" | "ALL",
  *   useExponentialShrinkingSelectiveContextWindowStrategy?: boolean,
+ *   enrichedMode?: boolean,
  * }} options
  * @returns {Promise<{messages: Array<{content: Array<DEConversationMessageNarration | DEConversationMessageDialogue>, author: string, storyMaster: boolean, id: string | null, conversationId: string | null}>, conversingCharacters: string[], mentionedCharacters: string[]}>}
  */
@@ -490,6 +499,14 @@ export async function getHistoryFragmentForCharacter(engine, character, options)
 
     if (options.useExponentialShrinkingSelectiveContextWindowStrategy && (options.includeDebugMessages || options.includeRejectedMessages || options.includeHiddenMessages)) {
         throw new Error("useExponentialShrinkingSelectiveContextWindowStrategy cannot be used with includeDebugMessages, includeRejectedMessages, or includeHiddenMessages");
+    }
+
+    if (options.useExponentialShrinkingSelectiveContextWindowStrategy && (options.enrichedMode === false)) {
+        throw new Error("useExponentialShrinkingSelectiveContextWindowStrategy cannot be used with enrichedMode set to an explicit false");
+    }
+
+    if (options.useExponentialShrinkingSelectiveContextWindowStrategy) {
+        throw new Error("useExponentialShrinkingSelectiveContextWindowStrategy is not yet implemented");
     }
 
     let cycleCount = 0;

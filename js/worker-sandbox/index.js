@@ -156,7 +156,7 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
     });
 
     // @ts-ignore
-    engine.addInferringOverConversationMessageListener((deObject, data) => {
+    engine.addMessageUpdateListener((deObject, data) => {
         self.postMessage({ type: "event", event: "inferringOverConversationMessage", data });
     });
 
@@ -700,7 +700,9 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
                     includeDebugMessages: true,
                     includeRejectedMessages: true,
                     includeHiddenMessages: true,
-                }
+                    enrichedMode: false,
+                    useExponentialShrinkingSelectiveContextWindowStrategy: false,
+                },
             );
             let next = await generator.next(true);
             while (!next.done) {

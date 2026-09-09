@@ -869,7 +869,6 @@ class GameOverlay extends HTMLElement {
             this.onCharacterUpdateUI();
             this.updateLocation();
             this.updatePresentCharacters();
-            this.updateStory(true);
         }, 100);
     }
 
