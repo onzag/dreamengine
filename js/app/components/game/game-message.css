@@ -16,7 +16,7 @@
     display: flex;
     flex-direction: row;
     align-items: flex-start;
-    padding: 0.3vh 0.8vh;
+    padding: 0.3vh 6vh 0.3vh 0.8vh;
     border-radius: 0.5vh;
     transition: background 0.1s ease;
     position: relative;
@@ -138,7 +138,7 @@
    decorative rules so it reads as a god-level narration beat. */
 .message.narration {
     display: block;
-    padding: 0 2vh;
+    padding: 0 6vh 0 2vh;
     background: rgba(0, 0, 0, 0.3);
     backdrop-filter: blur(100px);
     border-radius: 1vh;
