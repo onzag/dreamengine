@@ -10,7 +10,7 @@
 // connection and end-to-end functionality, not to be pretty. Append it to a
 // container (e.g. a dialog) to connect; remove it to dispose.
 
-import { VoiceAdapterWebsocketVocalizer } from "../../../engine/voice/adapter-websocket-vocalizer.js";
+import { VOICE_ADAPTERS } from "../../../engine/voice/all.js";
 import { playSound } from "../../sound.js";
 
 /**
@@ -31,7 +31,7 @@ export class VocalizerTest extends HTMLElement {
         super();
         this.root = this.attachShadow({ mode: "open" });
 
-        /** @type {VoiceAdapterWebsocketVocalizer|null} */
+        /** @type {import("../../../engine/voice/base.js").BaseVoiceAdapter|null} */
         this.adapter = null;
         /** @type {string[]} object URLs to revoke on disposal */
         this.objectUrls = [];
@@ -57,49 +57,8 @@ export class VocalizerTest extends HTMLElement {
         this.objectUrls.length = 0;
     }
 
-    /**
-     * Read the saved Vocalizer connection settings.
-     * @returns {Promise<{host: string, secret: string, allowSelfSigned: boolean}>}
-     */
-    async _readSettings() {
-        // @ts-ignore - window.API is provided by the app/electron/web bridge.
-        const api = window.API;
-        const [host, secret, allowSelfSigned] = await Promise.all([
-            api.getConfigValue("vocalizerHost"),
-            api.getConfigValue("vocalizerApiKey"),
-            api.getConfigValue("allowVocalizerSelfSigned"),
-        ]);
-        return {
-            host: (host || "wss://127.0.0.1:8222").toString(),
-            secret: (secret || "").toString(),
-            allowSelfSigned: !!allowSelfSigned,
-        };
-    }
-
-    /** @param {string} sel @returns {any} */
-    _el(sel) {
-        return this.root.querySelector(`[data-el="${sel}"]`);
-    }
-
-    /** @param {string} msg */
-    _log(msg) {
-        const logEl = this._el("log");
-        if (!logEl) return;
-        const time = new Date().toLocaleTimeString();
-        logEl.textContent += `[${time}] ${msg}\n`;
-        logEl.scrollTop = logEl.scrollHeight;
-    }
-
-    /** @param {"ok"|"bad"|"pending"} kind @param {string} text */
-    _setStatus(kind, text) {
-        const statusEl = this._el("status");
-        if (!statusEl) return;
-        statusEl.className = `vt-status ${kind}`;
-        statusEl.textContent = text;
-    }
-
     _refreshFiles() {
-        const filesEl = this._el("files");
+        const filesEl = this.root.querySelector('[data-el="files"]');
         if (!filesEl) return;
         if (this.uploaded.size === 0) {
             filesEl.innerHTML = `<div class="vt-file-item">No files uploaded yet.</div>`;
@@ -149,12 +108,6 @@ export class VocalizerTest extends HTMLElement {
             .vt-section-title { font-size: 2.1vh; font-weight: 700; color: #6cf; margin-top: 0.5vh; }
         </style>
         <div class="vt-wrap">
-            <div class="vt-row">
-                <span class="vt-label">Connection</span>
-                <span class="vt-status pending" data-el="status">connecting…</span>
-                <span data-el="host" style="color:#888;font-size:1.6vh;"></span>
-            </div>
-
             <div class="vt-section-title">Upload audio (mp3 / ogg)</div>
             <div class="vt-row">
                 <input type="text" data-el="upload-name" placeholder="reference name e.g. emotion.mp3" style="flex:1;min-width:20ch;" />
@@ -183,25 +136,53 @@ export class VocalizerTest extends HTMLElement {
         this._el("download-btn").addEventListener("click", this._onDownloadClick);
     }
 
+    /**
+     * @param {string} name 
+     * @returns {any}
+     */
+    _el(name) {
+        return /** @type {HTMLElement} */ (this.root.querySelector(`[data-el="${name}"]`));
+    }
+
     async _connect() {
         try {
-            const settings = await this._readSettings();
-            this._el("host").textContent = settings.host;
-            this._log(`Connecting to ${settings.host}…`);
-            this.adapter = new VoiceAdapterWebsocketVocalizer({ host: settings.host, secret: settings.secret });
-            await this.adapter.ensureInitialized();
-            this._setStatus("ok", "connected");
-            this._log("Connected. Server ready.");
-            if (this.adapter.serverInfo) {
-                this._log(`Server formats: ${(this.adapter.serverInfo.supported_output_formats || []).join(", ")}; `
-                    + `max upload ${this.adapter.serverInfo.max_upload_bytes} bytes.`);
+            const adapterName = await window.API.getConfigValue("voiceAdapter") || "Vocalizer";
+            const enabled = await window.API.getConfigValue("voiceEnabled");
+            if (!enabled) {
+                this._log(`Voice is disabled in settings; enable it to connect.`);
+                return;
             }
+            this.adapter = await VOICE_ADAPTERS[adapterName].build(window.API.getConfigValue.bind(window.API));
+            await this.adapter.ensureInitialized();
+
+            // hack to make prepare for use the same connection
+            // @ts-ignore
+            window.GAME_VOCALIZER = {
+                adapter: this.adapter,
+            }
+            await window.API.prepareFor("voice");
+            // @ts-ignore
+            window.GAME_VOCALIZER = null;
+
+            this._log(`Connected to Voice adapter "${adapterName}".`);
+
+            // @ts-ignore
             this._el("upload-btn").disabled = false;
+            // @ts-ignore
             this._el("render-btn").disabled = false;
         } catch (err) {
-            this._setStatus("bad", "failed");
             this._log(`Connection failed: ${err instanceof Error ? err.message : String(err)}`);
         }
+    }
+
+    /**
+     * @param {string} msg 
+     * @returns 
+     */
+    async _log(msg) {
+        const logEl = this.root.querySelector('[data-el="log"]');
+        if (!logEl) return;
+        logEl.textContent += `${msg}\n`;
     }
 
     async _onUploadClick() {

@@ -318,16 +318,18 @@ export class ImageEdit extends HTMLElement {
 
             if (diffusionExecutable && handleDiffusionExecutable) {
                 try {
-                    try {
-                        await window.ENGINE_WORKER_CLIENT.pauseInference();
-                        if (await window.API.getConfigValue("voiceLowVramMode")) {
-                            await window.API.pauseVoice();
-                        }
-                    } catch (err) {}
                     // this needs to run a local executable
                     this.setStatus('Starting Diffusion Server (VRAM Save Mode)&hellip;', 'loading');
-                    await window.API.startDiffusionProcess();
+                    await window.API.prepareFor("diffusion");
                     this.ownsDiffusionProcess = true;
+                } catch (err) {
+                    this.setStatus('Failed to start the diffusion process: ' + this.errorText(err), 'error');
+                    return;
+                }
+            } else {
+                this.ownsDiffusionProcess = false;
+                try {
+                    await window.API.prepareFor("diffusion");
                 } catch (err) {
                     this.setStatus('Failed to start the diffusion process: ' + this.errorText(err), 'error');
                     return;
@@ -1393,22 +1395,6 @@ export class ImageEdit extends HTMLElement {
         this.canvasStack?.removeEventListener('pointerdown', this.onPointerDown);
         this.canvasStack?.removeEventListener('pointermove', this.onPointerMove);
         window.removeEventListener('pointerup', this.onPointerUp);
-
-        // We do not stop diffusion anymore when the component is torn down
-        // we let the inference adapter handle that when it is appropriate
-        // if (this.ownsDiffusionProcess) {
-        //     try {
-        //         await window.API.stopDiffusionProcess();
-        //         try {
-        //             await window.ENGINE_WORKER_CLIENT.resumeInference();
-        //         } catch (err) {
-        //             console.error('ImageEdit: failed to resume inference', err);
-        //         }
-        //     } catch (err) {
-        //         // nothing to display, the component is being torn down
-        //         console.error('ImageEdit: failed to stop diffusion process', err);
-        //     }
-        // }
     }
 }
 

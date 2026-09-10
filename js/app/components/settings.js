@@ -399,6 +399,7 @@ class Settings extends HTMLElement {
                 registry: INFERENCE_ADAPTERS,
                 selfSignedDataLocation: "allowSelfSigned",
                 selfSignedDescription: "Allow connecting to inference servers with self-signed SSL certificates. Only enable this for a trusted server; doing so makes the connection less secure.",
+                lowVramDataLocation: "lowVramMode",
             });
         } else if (this.currentSectionIndex === 4 && tabsContainer) {
             tabsContainer.innerHTML = `<app-overlay-section section-title="AIHub Image Generation Settings">
@@ -666,8 +667,8 @@ class Settings extends HTMLElement {
                     : '';
                 const lowVramField = adapterConfiguration.hasLowVramOption && options.lowVramDataLocation
                     ? this.renderAdapterSetting(options.lowVramDataLocation, {
-                        label: "Use low VRAM mode",
-                        description: "Unload the inference model when voice generation requires the VRAM, then load the inference model again afterward once voice is done.",
+                        label: "Use low VRAM mode (if supported)",
+                        description: "Unload the model when other generation requires the VRAM, only supported by some servers, usually local servers.",
                         default: false,
                         type: "boolean",
                     })

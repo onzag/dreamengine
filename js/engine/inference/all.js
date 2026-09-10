@@ -18,7 +18,7 @@ const gbnfDetectionPromise = import('../../../node_modules/gbnf/dist/index.js')
     .finally(() => { gbnfDetected = true; });
 
 /**
- * @type {Object<string, {checkConfig: (getConfigValue: (key: string) => Promise<any>) => Promise<{title: string, message: string} | null>, buildConfig: (getConfigValue: (key: string) => Promise<any>) => Promise<any>, build: (engine: DEngine, getConfigValue: (key: string) => Promise<any>) => Promise<BaseInferenceAdapter>, hasSelfSignedOption?: boolean, settings: import("../setting").SettingsFunction}>}>}
+ * @type {Object<string, {checkConfig: (getConfigValue: (key: string) => Promise<any>) => Promise<{title: string, message: string} | null>, buildConfig: (getConfigValue: (key: string) => Promise<any>) => Promise<any>, build: (engine: DEngine, getConfigValue: (key: string) => Promise<any>) => Promise<BaseInferenceAdapter>, hasSelfSignedOption?: boolean, hasLowVramOption?: boolean, settings: import("../setting").SettingsFunction}>}>}
  */
 export const INFERENCE_ADAPTERS = {
     "DreamServer": {
@@ -47,6 +47,7 @@ export const INFERENCE_ADAPTERS = {
             } : null)),
         }),
         hasSelfSignedOption: true,
+        hasLowVramOption: true,
         build: async (engine, getConfigValue) => new InferenceAdapterLlamaUncensored(engine, {
             apiKey: await getConfigValue("apiKey"),
             host: await getConfigValue("host") || "wss://localhost:8765",

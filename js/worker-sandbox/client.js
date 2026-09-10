@@ -131,18 +131,9 @@ export class EngineWorkerClient {
                     case "cardTypeWizardComplete":
                         this.onCardTypeWizardComplete?.(msg.data);
                         break;
-                    case "stopDiffusionRequest": {
+                    case "prepareForInference": {
                         const { callId } = msg.data;
-                        window.API.stopDiffusionProcess().then(() => {
-                            this.#worker.postMessage({ type: "mainThreadCallResponse", callId });
-                        }).catch((/** @type {any} */ err) => {
-                            this.#worker.postMessage({ type: "mainThreadCallResponse", callId, error: err?.message ?? String(err) });
-                        });
-                        break;
-                    }
-                    case "stopVocalizerRequest": {
-                        const { callId } = msg.data;
-                        window.API.pauseVoice().then(() => {
+                        window.API.prepareFor("inference").then(() => {
                             this.#worker.postMessage({ type: "mainThreadCallResponse", callId });
                         }).catch((/** @type {any} */ err) => {
                             this.#worker.postMessage({ type: "mainThreadCallResponse", callId, error: err?.message ?? String(err) });
@@ -263,7 +254,7 @@ export class EngineWorkerClient {
         return this.#call("jsEngineGetInfoMapForScripts", args);
     }
     /**
-     * @param {{config: any, adapterName: string, lowVramDiffusion: boolean, lowVramVoice: boolean}} args
+     * @param {{config: any, adapterName: string }} args
      */
     setupInferenceAdapter(args) { return this.#call("setupInferenceAdapter", args); }
 

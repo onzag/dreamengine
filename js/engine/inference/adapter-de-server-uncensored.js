@@ -274,7 +274,6 @@ export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
     }
 
     getSupportedLanguages() {
-        debugger;
         return this.supportedLanguages;
     }
 

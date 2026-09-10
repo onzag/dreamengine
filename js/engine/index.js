@@ -1383,23 +1383,16 @@ export class DEngine {
             await this.callFunctionInScripts(allScripts, (script) => `Running onSceneReady for script ${script.scriptKey} at the end of scene ${sceneId}`, "onSceneReady", { untilTrue: false }, this.deObject, scene);
 
             this.backupDEObject();
+
+            // Game on :)
+        } catch (error) {
+            console.error("Error during scene initialization:", error);
+            throw error;
+        } finally {
             this.triggerConversationMessageUpdate(this.deObject, {
                 event: "end-inference",
             });
             this.informThinking(false, null, true);
-
-            // Game on :)
-        } catch (error) {
-            try {
-                this.triggerConversationMessageUpdate(this.deObject, {
-                    event: "end-inference",
-                });
-            } catch (e) {
-                console.error("Error during scene initialization while trying to end inference:", e);
-            }
-            this.informThinking(false, null, true);
-            console.error("Error during scene initialization:", error);
-            throw error;
         }
     }
 
@@ -1554,6 +1547,9 @@ export class DEngine {
         const deObjectBackup = deepCopy(this.deObject);
 
         try {
+            this.triggerConversationMessageUpdate(this.deObject, {
+                event: "start-inference",
+            });
             this.informCycleState("info", `Starting new message cycle`);
 
             const user = this.user;
@@ -1697,7 +1693,6 @@ export class DEngine {
             if (!testResults.passed) {
                 await simpleRollbackWithReason(testResults.reason || "Message broke world rules");
                 this.informCycleState("info", `The message has been rejected for breaking the world rules`);
-                this.executingCycle = false;
                 return;
             }
 
@@ -1706,7 +1701,6 @@ export class DEngine {
             if (!feasibilityResults.feasible) {
                 await simpleRollbackWithReason(feasibilityResults.reason || "Message is not feasible for character");
                 this.informCycleState("info", `The message has been rejected for being not feasible for the character`);
-                this.executingCycle = false;
                 return;
             }
 
@@ -1749,9 +1743,12 @@ export class DEngine {
             // restore deObject from backup
             this.deObject = deObjectBackup;
             await this.informDEObjectUpdated();
+        } finally {
+            this.executingCycle = false;
+            this.triggerConversationMessageUpdate(this.deObject || deObjectBackup, {
+                event: "end-inference",
+            });
         }
-
-        this.executingCycle = false;
     }
 
     /**

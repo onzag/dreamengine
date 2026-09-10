@@ -80,6 +80,11 @@ export class VoiceAdapterWebsocketVocalizer extends BaseVoiceAdapter {
         this._pendingRenders = new Map();
 
         /**
+         * @type {Map<string, {resolve: (v: any) => void, reject: (e: Error) => void}>}
+         */
+        this._pendingUnloadLoadModelsCalls = new Map();
+
+        /**
          * Registered generic message listeners.
          * @type {Array<(data: any, binaryData: Blob | null) => void>}
          */
@@ -105,6 +110,50 @@ export class VoiceAdapterWebsocketVocalizer extends BaseVoiceAdapter {
      */
     removeListenerOnMessage(callback) {
         this.messageCallbacks = this.messageCallbacks.filter(cb => cb !== callback);
+    }
+
+    /**
+     * Assume true
+     * @returns {Promise<boolean>}
+     */
+    async canBePaused() {
+        return true;
+    }
+
+    async pause() {
+        if (this.socket) {
+            const rid = this._nextRid();
+            const promise = new Promise((resolve, reject) => {
+                this._pendingUnloadLoadModelsCalls.set(rid, { resolve, reject });
+                this.socket?.send(JSON.stringify({
+                    action: "unload_model",
+                    rid,
+                }));
+            });
+            try {
+                await promise;
+            } catch (err) {
+                console.error("VoiceAdapterWebsocketVocalizer: pause error", err);
+            }
+        }
+    }
+
+    async resume() {
+        if (this.socket) {
+            const rid = this._nextRid();
+            const promise = new Promise((resolve, reject) => {
+                this._pendingUnloadLoadModelsCalls.set(rid, { resolve, reject });
+                this.socket?.send(JSON.stringify({
+                    action: "load_model",
+                    rid,
+                }));
+            });
+            try {
+                await promise;
+            } catch (err) {
+                console.error("VoiceAdapterWebsocketVocalizer: resume error", err);
+            }
+        }
     }
 
     /**
@@ -178,6 +227,24 @@ export class VoiceAdapterWebsocketVocalizer extends BaseVoiceAdapter {
                 if (pending) {
                     this._pendingUploads.delete(rid);
                     pending.resolve({ skipped: false, filename: data.filename, hash: data.hash, size: data.size });
+                }
+                break;
+            }
+
+            case "model_unloaded": {
+                const pending = this._pendingUnloadLoadModelsCalls.get(rid);
+                if (pending) {
+                    this._pendingUnloadLoadModelsCalls.delete(rid);
+                    pending.resolve(data);
+                }
+                break;
+            }
+
+            case "model_loaded": {
+                const pending = this._pendingUnloadLoadModelsCalls.get(rid);
+                if (pending) {
+                    this._pendingUnloadLoadModelsCalls.delete(rid);
+                    pending.resolve(data);
                 }
                 break;
             }

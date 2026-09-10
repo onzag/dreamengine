@@ -570,8 +570,7 @@ class ProfileVoice extends HTMLElement {
      * @returns {Promise<Blob>}
      */
     async renderVoice(request, refFile, refName) {
-        const adapterName = await window.API.getConfigValue("voiceAdapter");
-        const lowVramMode = await window.API.getConfigValue("voiceAdapterLowVramMode");
+        const adapterName = await window.API.getConfigValue("voiceAdapter") || "Vocalizer";
         /**
          * @type {import("../../engine/voice/base.js").BaseVoiceAdapter | null}
          */
@@ -579,13 +578,16 @@ class ProfileVoice extends HTMLElement {
         try {
             adapter = await VOICE_ADAPTERS[adapterName].build(window.API.getConfigValue.bind(window.API));
             await adapter.ensureInitialized();
-            if (lowVramMode && await adapter.canBePaused()) {
-                await window.ENGINE_WORKER_CLIENT.pauseInference();
-                if (await window.API.getConfigValue("handleDiffusionExecutable")) {
-                    await window.API.stopDiffusionProcess();
-                }
-                await adapter.resume();
+
+            // hack to make prepare for use the same connection
+            // @ts-ignore
+            window.GAME_VOCALIZER = {
+                adapter,
             }
+            await window.API.prepareFor("voice");
+            // @ts-ignore
+            window.GAME_VOCALIZER = null;
+
             if (refFile && refName) {
                 await adapter.sendFile(refFile, refName);
             }

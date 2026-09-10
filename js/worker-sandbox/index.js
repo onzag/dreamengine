@@ -229,21 +229,20 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
             return { ok: true };
         },
 
-        async setupInferenceAdapter({config, adapterName, lowVramDiffusion, lowVramVoice}) {
+        async setupInferenceAdapter({config, adapterName }) {
             const adapter = await INFERENCE_ADAPTERS[adapterName].build(engine, (v) => config[v]);
             engine.setInferenceAdapter(adapter);
             adapter.addBlockingEventListenerBeforeInference(async () => {
                 /**
-                 * @param {"stopDiffusionRequest" | "stopVocalizerRequest"} event
-                 * @param {string} processName
+                 * @param {string} event
                  * @returns {Promise<void>}
                  */
-                const requestStop = (event, processName) => {
+                const requestPrepareCall = (event) => {
                     const callId = ++mainThreadCallId;
                     return new Promise((resolve, reject) => {
                         const timeoutId = setTimeout(() => {
                             pendingMainThreadCalls.delete(callId);
-                            reject(new Error(`${processName} timed out after 30s`));
+                            reject(new Error(`${event} call timed out after 30s`));
                         }, 30_000);
 
                         pendingMainThreadCalls.set(callId, {
@@ -260,14 +259,9 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
                     });
                 };
 
-                const stopRequests = [];
-                if (lowVramDiffusion) {
-                    stopRequests.push(requestStop("stopDiffusionRequest", "stopDiffusionProcess"));
-                }
-                if (lowVramVoice) {
-                    stopRequests.push(requestStop("stopVocalizerRequest", "stopVocalizerProcess"));
-                }
-                await Promise.all(stopRequests);
+                await Promise.all([
+                    requestPrepareCall("prepareForInference"),
+                ]);
             });
             return { ok: true };
         },

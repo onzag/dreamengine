@@ -1576,6 +1576,11 @@ class GameOverlay extends HTMLElement {
             const lastRenderedItem = /** @type {HTMLElement | null} */ (list.lastElementChild);
             let lastSenderName = lastRenderedItem?.dataset.senderName || '';
 
+            console.log(historyReversed);
+            if (historyReversed.length) {
+                throw new Error("This is impossible");
+            }
+
             for (const msg of historyReversed) {
                 const gid = msg.gid ?? msg.id;
                 if (gid == null) continue;
@@ -1790,7 +1795,9 @@ class GameOverlay extends HTMLElement {
                 }
             } else if (data.event === "end-inference" && needsToAwaitUntilInferenceEndsToTriggerPseudostreamVocalizationProcessing) {
                 document.querySelectorAll('app-game-message').forEach((block) => {
+                    // @ts-ignore
                     if (block.isPseudoStreamAwait()) {
+                        // @ts-ignore
                         block.runPseudostream();
                     }
                 });
@@ -1803,6 +1810,7 @@ class GameOverlay extends HTMLElement {
                     const messageId = data.messageId;
                     const contentIndex = data.contentIndex;
                     const block = document.querySelector(`app-game-message[gid="${CSS.escape(messageId)}"][content-index="${contentIndex}"]`);
+                    // @ts-ignore
                     block.feedEvent(data);
                 } else if (data.event === "add-dialogue-block" || data.event === "add-narration-block") {
                     if (this.lastMessageAdded) {
@@ -2408,7 +2416,7 @@ class GameOverlay extends HTMLElement {
     async _initVocalizer() {
         try {
             const enabled = await window.API.getConfigValue("voiceEnabled");
-            const adapterName = await window.API.getConfigValue("voiceAdapter");
+            const adapterName = await window.API.getConfigValue("voiceAdapter") || "Vocalizer";
 
             if (enabled && adapterName && VOICE_ADAPTERS[adapterName]) {
                 try {

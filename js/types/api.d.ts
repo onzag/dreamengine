@@ -40,6 +40,8 @@ declare interface DEAPI {
   startDiffusionProcess(): Promise<void>;
   stopDiffusionProcess(): Promise<void>;
   pauseVoice(): Promise<void>;
+  resumeVoice(): Promise<void>;
+  prepareFor(option: "diffusion" | "voice" | "inference"): Promise<void>;
 }
 
 declare global {

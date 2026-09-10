@@ -1,3 +1,4 @@
+import { INFERENCE_ADAPTERS } from "./engine/inference/all.js";
 import { VOICE_ADAPTERS } from "./engine/voice/all.js";
 
 // @ts-ignore
@@ -328,7 +329,13 @@ pre { margin:0; padding:16px; line-height:1.5; white-space:pre-wrap; word-wrap:b
         },
         pauseVoice: async () => {
             // to be defined
-        }
+        },
+        resumeVoice: async () => {
+            // to be defined
+        },
+        prepareFor: async (option) => {
+            // to be defined
+        },
     }
 } else {
     // @ts-ignore
@@ -342,6 +349,18 @@ pre { margin:0; padding:16px; line-height:1.5; white-space:pre-wrap; word-wrap:b
 
 window.API.pauseVoice = async () => {
     console.log("API.pauseVoice called");
+
+    const enabledVoice = await window.API.getConfigValue("voiceEnabled");
+    if (!enabledVoice) {
+        console.log("API.pauseVoice rejected, voice is not enabled");
+        return;
+    }
+    const lowVRAM = await window.API.getConfigValue("voiceLowVramMode");
+    if (!lowVRAM) {
+        console.log("API.pauseVoice rejected, voice does not use low VRAM mode, so no need to pause");
+        return;
+    }
+
     // this first is a hack way to pause the vocalizer
     // since we made it a global in game so it can be passed down other components easily
     // we can grab the session and pause it
@@ -357,7 +376,7 @@ window.API.pauseVoice = async () => {
         // this is a highly possible scenario actually, eg. generating voices in manage, then going to the wizard
         // and doing LLM calls, there is no voice adapter there and the connection would have been closed, so we need to connect it again to pause it.
         // and then just close the connection afterwards
-        const adapterName = await window.API.getConfigValue("voiceAdapter");
+        const adapterName = await window.API.getConfigValue("voiceAdapter") || "Vocalizer";
         const adapter = await VOICE_ADAPTERS[adapterName].build(window.API.getConfigValue.bind(window.API));
         await adapter.ensureInitialized();
         if (await adapter.canBePaused()) {
@@ -366,3 +385,106 @@ window.API.pauseVoice = async () => {
         adapter.close();
     }
 }
+
+window.API.resumeVoice = async () => {
+    console.log("API.resumeVoice called");
+
+    const enabledVoice = await window.API.getConfigValue("voiceEnabled");
+    if (!enabledVoice) {
+        console.log("API.resumeVoice rejected, voice is not enabled");
+        return;
+    }
+    const lowVRAM = await window.API.getConfigValue("voiceLowVramMode");
+    if (!lowVRAM) {
+        console.log("API.resumeVoice rejected, voice does not use low VRAM mode, so no need to resume");
+        return;
+    }
+
+    // this first is a hack way to resume the vocalizer
+    // since we made it a global in game so it can be passed down other components easily
+    // we can grab the session and resume it
+    if (window.GAME_VOCALIZER) {
+        return window.GAME_VOCALIZER.adapter.canBePaused().then((canBe) => {
+            if (!canBe) {
+                return;
+            }
+            return window.GAME_VOCALIZER?.adapter.resume();
+        });
+    } else {
+        // No vocalizer adapter being used in game, we need to connect it to resume it.
+        // this is a highly possible scenario actually, eg. generating voices in manage, then going to the wizard
+        // and doing LLM calls, there is no voice adapter there and the connection would have been closed, so we need to connect it again to resume it.
+        // and then just close the connection afterwards
+        const adapterName = await window.API.getConfigValue("voiceAdapter") || "Vocalizer";
+        const adapter = await VOICE_ADAPTERS[adapterName].build(window.API.getConfigValue.bind(window.API));
+        await adapter.ensureInitialized();
+        if (await adapter.canBePaused()) {
+            await adapter.resume();
+        }
+        adapter.close();
+    }
+}
+
+/**
+ * @param {"diffusion" | "voice" | "inference"} option 
+ */
+window.API.prepareFor = async (option) => {
+    const lowVRAMDiffusion = await window.API.getConfigValue("handleDiffusionExecutable");
+    const _lowVRAMVoice = await window.API.getConfigValue("voiceLowVramMode");
+
+    const voiceAdapter = await window.API.getConfigValue("voiceAdapter") || "Vocalizer";
+    const adapterInfo = VOICE_ADAPTERS[voiceAdapter];
+
+    const lowVRAMVoice = adapterInfo?.hasLowVramOption ? _lowVRAMVoice : false;
+
+    const voiceEnabled = await window.API.getConfigValue("voiceEnabled");
+    const diffusionEnabled = await window.API.getConfigValue("diffusionEnabled");
+
+    const _lowVRAMInference = await window.API.getConfigValue("lowVramMode");
+    const adapterName = await window.API.getConfigValue("inferenceAdapter") || "DreamServer";
+    const inferenceAdapterInfo = INFERENCE_ADAPTERS[adapterName];
+    const lowVRAMInference = inferenceAdapterInfo?.hasLowVramOption ? _lowVRAMInference : false;
+
+    if (option === "diffusion" && !diffusionEnabled) {
+        return;
+    }
+
+    if (option === "voice" && !voiceEnabled) {
+        return;
+    }
+
+    switch (option) {
+        case "diffusion":
+            if (lowVRAMInference) {
+                await window.ENGINE_WORKER_CLIENT.pauseInference();
+            }
+            if (lowVRAMVoice && voiceEnabled) {
+                await window.API.pauseVoice();
+            }
+            if (lowVRAMDiffusion && diffusionEnabled) {
+                await window.API.startDiffusionProcess();
+            }
+            break;
+        case "voice":
+            if (lowVRAMInference) {
+                await window.ENGINE_WORKER_CLIENT.pauseInference();
+            }
+            if (lowVRAMDiffusion && diffusionEnabled) {
+                await window.API.stopDiffusionProcess();
+            }
+            if (lowVRAMVoice && voiceEnabled) {
+                await window.API.resumeVoice();
+            }
+            break;
+        case "inference":
+            if (lowVRAMDiffusion && diffusionEnabled) {
+                await window.API.stopDiffusionProcess();
+            }
+            if (lowVRAMVoice && voiceEnabled) {
+                await window.API.pauseVoice();
+            }
+            break;
+        default:
+            throw new Error(`Unknown prepareFor option: ${option}`);
+    }
+};

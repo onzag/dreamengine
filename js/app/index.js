@@ -558,8 +558,6 @@ client.ready.then(async () => {
             await client.setupInferenceAdapter({
                 config,
                 adapterName,
-                lowVramDiffusion: await window.API.getConfigValue('handleDiffusionExecutable') || false,
-                lowVramVoice: await window.API.getConfigValue('voiceLowVramMode') || false,
             });
 
             const rs = await client.initializeInferenceAdapter(window.DREAMENGINE_LANGUAGE || 'en');

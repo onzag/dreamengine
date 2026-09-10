@@ -90,51 +90,59 @@ function playSound(src, volume = 1) {
  * @type {HTMLAudioElement | null}
  */
 let currentNarrationSound = null;
+/** @type {(() => void) | null} */
+let finishCurrentNarration = null;
 /**
  * 
  * @param {string} src
  * @param {number} volume
- * @returns {Promise<void>}
+ * @param {AbortSignal} [signal]
+ * @returns {Promise<boolean>} Whether playback reached its natural end.
  */
-async function playNarration(src, volume = 1) {
-  if (currentNarrationSound) {
-    currentNarrationSound.pause();
-    currentNarrationSound.src = '';
-    currentNarrationSound = null;
-  }
-  /**
-   * @type {(() => void) | null}
-   */
-  let promiseResolve = null;
-  /**
-   * @type {Promise<void>}
-   */
-  const promise = new Promise(resolve => {
-    promiseResolve = resolve;
-  });
+async function playNarration(src, volume = 1, signal) {
+  if (signal?.aborted) return false;
+  stopNarration();
   const sound = new Audio(src);
   sound.volume = volume;
-  sound.play().catch(err => console.log('Sound play failed:', err));
-  sound.addEventListener('ended', () => {
-    // release the audio element from memory once it's done playing
-    sound.src = '';
-    if (currentNarrationSound === sound) {
-      currentNarrationSound = null;
-    }
-    if (promiseResolve) {
-      promiseResolve();
+  return new Promise(resolve => {
+    let finished = false;
+    const finish = (completed = false) => {
+      if (finished) return;
+      finished = true;
+      sound.removeEventListener('ended', onEnded);
+      sound.removeEventListener('error', onStopped);
+      signal?.removeEventListener('abort', onStopped);
+      if (currentNarrationSound === sound) {
+        currentNarrationSound = null;
+        finishCurrentNarration = null;
+      }
+      sound.pause();
+      sound.src = '';
+      resolve(completed);
+    };
+    const onEnded = () => finish(true);
+    const onStopped = () => finish();
+    /** @param {unknown} err */
+    const fail = (err) => {
+      if (finished) return;
+      console.log('Sound play failed:', err);
+      finish();
+    };
+    sound.addEventListener('ended', onEnded);
+    sound.addEventListener('error', onStopped);
+    signal?.addEventListener('abort', onStopped, { once: true });
+    currentNarrationSound = sound;
+    finishCurrentNarration = finish;
+    try {
+      sound.play().catch(fail);
+    } catch (err) {
+      fail(err);
     }
   });
-  currentNarrationSound = sound;
-  return promise;
 }
 
 function stopNarration() {
-  if (currentNarrationSound) {
-    currentNarrationSound.pause();
-    currentNarrationSound.src = '';
-    currentNarrationSound = null;
-  }
+  if (finishCurrentNarration) finishCurrentNarration();
 }
 
 function playConfirmSound() {
