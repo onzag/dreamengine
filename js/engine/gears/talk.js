@@ -759,7 +759,7 @@ export async function talk(engine, character, options) {
             engine.triggerConversationMessageUpdate(engine.deObject, {
                 conversationId: charState.conversationId,
                 messageId: nextMessage.id,
-                text: currentBlockAsNarration.text,
+                obj: currentBlockAsNarration,
                 event: "end-narration-block",
                 contentIndex: nextMessage.content.length - 1,
             });
@@ -768,7 +768,7 @@ export async function talk(engine, character, options) {
             engine.triggerConversationMessageUpdate(engine.deObject, {
                 conversationId: charState.conversationId,
                 messageId: nextMessage.id,
-                fragments: currentBlockAsDialoge.fragments,
+                obj: currentBlockAsDialoge,
                 event: "end-dialogue-block",
                 contentIndex: nextMessage.content.length - 1,
             });

@@ -83,6 +83,11 @@ class GameOverlay extends HTMLElement {
         this.firstMessageGid = null;
 
         /**
+         * @type {DEConversationMessage | null}
+         */
+        this.lastMessageAdded = null;
+
+        /**
          * @type {"normal" | "hard" | "easy" | "debug"}
          */
         this.gameDifficulty = "normal";
@@ -1585,6 +1590,7 @@ class GameOverlay extends HTMLElement {
                 const emotion = msg.emotion || "neutral";
                 const emotionalRange = msg.emotionalRange || [];
 
+                // TODO move asset image to the game-message logic
                 let assetImage = !isStoryMasterNarration ? (await window.ENGINE_WORKER_CLIENT.queryDEObject({
                     path: ["characters", senderName, "metadata", "assets", emotion],
                 }) || "") : "";
@@ -1621,7 +1627,7 @@ class GameOverlay extends HTMLElement {
                 lastSenderName = isStoryMasterNarration ? '' : senderName;
 
                 for (const piece of content) {
-                    this._createMessageElement(msg, piece, content.indexOf(piece), assetImage, isGroupStart, isUser, false, false);
+                    this._createMessageElement(msg, piece, content.indexOf(piece), false, false);
                 }
             }
         } catch (error) {
@@ -1636,14 +1642,11 @@ class GameOverlay extends HTMLElement {
      * @param {import('../../engine/util/messages.js').DEObjectMessageGeneratorResult | DEConversationMessage} message
      * @param {DEConversationMessageDialogue | DEConversationMessageNarration} piece
      * @param {number} index
-     * @param {string} assetImage
-     * @param {boolean} isGroupStart
-     * @param {boolean} isUser
      * @param {boolean} pseudostream
      * @param {boolean} pseudoStreamImmediate
      * @returns {any}
      */
-    _createMessageElement(message, piece, index, assetImage, isGroupStart, isUser, pseudostream, pseudoStreamImmediate) {
+    _createMessageElement(message, piece, index, pseudostream, pseudoStreamImmediate) {
         // The block's narration/dialogue type is per-block: a single message can
         // mix narration and dialogue blocks, so prefer the piece's own type
         // (set from the engine event / content) and only fall back to the
@@ -1654,9 +1657,7 @@ class GameOverlay extends HTMLElement {
         el.setAttribute('gid', message.id);
         el.setAttribute('content-index', String(index));
         el.setAttribute('debug-id', piece.__debug_id || '');
-        el.setAttribute('image-url', assetImage || '');
         el.setAttribute('debug', this.gameDifficulty === 'debug' ? 'true' : 'false');
-        el.setAttribute('show-avatar', isNarration ? 'false' : (isGroupStart ? 'true' : 'false'));
         el.setAttribute('type', isNarration ? 'narration' : 'dialogue');
         el.setAttribute('pseudostream', pseudostream ? 'true' : 'false');
         el.setAttribute("emotion", message.emotion || "neutral");
@@ -1768,6 +1769,10 @@ class GameOverlay extends HTMLElement {
     async onMessageUpdate(data) {
         const willAlwaysUsePseudostream = !!window.GAME_VOCALIZER;
         const needsToAwaitUntilInferenceEndsToTriggerPseudostreamVocalizationProcessing = window.GAME_VOCALIZER?.lowVramMode || false;
+        if (data.event === "new-message") {
+            this.lastMessageAdded = data.obj;
+        }
+
         if (willAlwaysUsePseudostream) {
             // if will always use pseudostream is true, then we will only care of the end-dialogue-block and end-narration-block events since they contain
             // the full content of the block, we will set the data of the pseudostream block
@@ -1778,9 +1783,47 @@ class GameOverlay extends HTMLElement {
             // if needsToAwaitUntilInferenceEndsToTriggerPseudostreamVocalizationProcessing is true, then we will not run the pseudostream block immediately, but we will wait until the end-inference event is received
             // then in the end-inference event we will trigger the vocalizer processing by doing the runPseudostream() method of all blocks that we just added that
             // are not streaming, for that we can check the isPseudoStreamAwait method of all the added blocks
+
+            if (data.event === "end-dialogue-block" || data.event === "end-narration-block") {
+                if (this.lastMessageAdded) {
+                    this._createMessageElement(this.lastMessageAdded, data.obj, data.contentIndex, true, false);
+                }
+            } else if (data.event === "end-inference" && needsToAwaitUntilInferenceEndsToTriggerPseudostreamVocalizationProcessing) {
+                document.querySelectorAll('app-game-message').forEach((block) => {
+                    if (block.isPseudoStreamAwait()) {
+                        block.runPseudostream();
+                    }
+                });
+            }
         } else {
             // if a real stream is to be used then we will create the block when the add-dialogue-block or add-narration-block events are received
             // make it visible right away, and feed events manually to the block, everything is immediate
+            if (data.event !== "end-inference" && data.event !== "start-inference") {
+                if (data.event === "add-dialogue" || data.event === "add-narration") {
+                    const messageId = data.messageId;
+                    const contentIndex = data.contentIndex;
+                    const block = document.querySelector(`app-game-message[gid="${CSS.escape(messageId)}"][content-index="${contentIndex}"]`);
+                    block.feedEvent(data);
+                } else if (data.event === "add-dialogue-block" || data.event === "add-narration-block") {
+                    if (this.lastMessageAdded) {
+                        this._createMessageElement(
+                            this.lastMessageAdded,
+                            data.event === "add-dialogue-block" ? {
+                                fragments: [],
+                                type: "dialogue",
+                                __debug_id: data.__debug_id || '',
+                            } : {
+                                text: "",
+                                type: "narration",
+                                __debug_id: data.__debug_id || '',
+                            },
+                            data.contentIndex,
+                            false,
+                            false,
+                        );
+                    }
+                }
+            }
         }
     }
 

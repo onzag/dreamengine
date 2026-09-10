@@ -58,7 +58,7 @@ const INVALID_NAMES = ["system", "assistant", "user", "everyone", "nobody",
  * @typedef {EngineConversationEventBase & {
  *   contentIndex: number,
  *   event: "end-narration-block",
- *   text: string,
+ *   obj: DEConversationMessageNarration,
  *   __debug_id?: string,
  * }} EngineConversationEventEndNarrationBlock
  */
@@ -67,7 +67,7 @@ const INVALID_NAMES = ["system", "assistant", "user", "everyone", "nobody",
  * @typedef {EngineConversationEventBase & {
  *   contentIndex: number,
  *   event: "end-dialogue-block",
- *   fragments: DEConversationMessageDialogueFragment[],
+ *   obj: DEConversationMessageDialogue,
  *   __debug_id?: string,
  * }} EngineConversationEventEndDialogueBlock
  */
