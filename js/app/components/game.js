@@ -9,6 +9,35 @@ import { VOICE_ADAPTERS } from '../../engine/voice/all.js';
 import { GameVocalizerSession } from './game/vocalizer-session.js';
 
 /**
+ * Wait until any one of the named events is dispatched by a target. Once an
+ * event wins, all listeners installed by this call are removed.
+ *
+ * @param {EventTarget} target
+ * @param {ReadonlyArray<string>} eventNames
+ * @returns {Promise<Event>}
+ */
+function waitForEventAny(target, eventNames) {
+    const names = [...new Set(eventNames)];
+    if (names.length === 0) {
+        return Promise.reject(new TypeError('waitForEventAny requires at least one event name.'));
+    }
+
+    return new Promise(resolve => {
+        /** @param {Event} event */
+        const onEvent = event => {
+            for (const name of names) {
+                target.removeEventListener(name, onEvent);
+            }
+            resolve(event);
+        };
+
+        for (const name of names) {
+            target.addEventListener(name, onEvent);
+        }
+    });
+}
+
+/**
  * The main in-dream game UI. Renders a transition ("falling asleep" white
  * tunnel) then settles into the main play screen with a hideable sidebar
  * and a multiline text input.
@@ -1807,9 +1836,14 @@ class GameOverlay extends HTMLElement {
                 for (const block of elems) {
                     // @ts-ignore
                     if (block.isPseudoStreamAwait()) {
+                        // we need to ensure the order of the calls for the voice generation is done in the right order for
+                        // the best performance, so we will wait for each block to do its init voice generation process
+                        // so we know it is queued in the right order since the server will use FIFO for the voice generation queue
+                        // so that way the voice generation will come in order
+                        const initialized = waitForEventAny(block, ['on-pseudostream-init-done', 'on-pseudostream-cancelled']);
                         // @ts-ignore
                         block.runPseudostream();
-                        await waitForEventAny(block, ['on-pseudostream-init-done', 'on-pseudostream-cancelled']);
+                        await initialized;
                     }
                 }
             }
