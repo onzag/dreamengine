@@ -1547,7 +1547,7 @@ class GameOverlay extends HTMLElement {
      * First run of update story, everything else relies on events and the event loop
      */
     async updateStory() {
-       try {
+        try {
             const actualUserName = await window.ENGINE_WORKER_CLIENT.queryDEObject({
                 path: ["user"],
             });
@@ -1575,11 +1575,6 @@ class GameOverlay extends HTMLElement {
             // in a run shows the avatar and name; subsequent ones show a spacer).
             const lastRenderedItem = /** @type {HTMLElement | null} */ (list.lastElementChild);
             let lastSenderName = lastRenderedItem?.dataset.senderName || '';
-
-            console.log(historyReversed);
-            if (historyReversed.length) {
-                throw new Error("This is impossible");
-            }
 
             for (const msg of historyReversed) {
                 const gid = msg.gid ?? msg.id;
@@ -1776,6 +1771,20 @@ class GameOverlay extends HTMLElement {
         const needsToAwaitUntilInferenceEndsToTriggerPseudostreamVocalizationProcessing = window.GAME_VOCALIZER?.lowVramMode || false;
         if (data.event === "new-message") {
             this.lastMessageAdded = data.obj;
+
+            if (this.lastMessageAdded.content && this.lastMessageAdded.content.length > 0) {
+                for (const piece of this.lastMessageAdded.content) {
+                    this._createMessageElement(
+                        this.lastMessageAdded,
+                        piece,
+                        this.lastMessageAdded.content.indexOf(piece),
+                        // we always use pseudostream here because we have everything on the piece
+                        true,
+                        !needsToAwaitUntilInferenceEndsToTriggerPseudostreamVocalizationProcessing,
+                    );
+                }
+            }
+            return;
         }
 
         if (willAlwaysUsePseudostream) {
@@ -1794,13 +1803,15 @@ class GameOverlay extends HTMLElement {
                     this._createMessageElement(this.lastMessageAdded, data.obj, data.contentIndex, true, false);
                 }
             } else if (data.event === "end-inference" && needsToAwaitUntilInferenceEndsToTriggerPseudostreamVocalizationProcessing) {
-                document.querySelectorAll('app-game-message').forEach((block) => {
+                const elems = Array.from(this.root.querySelectorAll('app-game-message'));
+                for (const block of elems) {
                     // @ts-ignore
                     if (block.isPseudoStreamAwait()) {
                         // @ts-ignore
                         block.runPseudostream();
+                        await waitForEventAny(block, ['on-pseudostream-init-done', 'on-pseudostream-cancelled']);
                     }
-                });
+                }
             }
         } else {
             // if a real stream is to be used then we will create the block when the add-dialogue-block or add-narration-block events are received
@@ -1809,7 +1820,7 @@ class GameOverlay extends HTMLElement {
                 if (data.event === "add-dialogue" || data.event === "add-narration") {
                     const messageId = data.messageId;
                     const contentIndex = data.contentIndex;
-                    const block = document.querySelector(`app-game-message[gid="${CSS.escape(messageId)}"][content-index="${contentIndex}"]`);
+                    const block = this.root.querySelector(`app-game-message[gid="${CSS.escape(messageId)}"][content-index="${contentIndex}"]`);
                     // @ts-ignore
                     block.feedEvent(data);
                 } else if (data.event === "add-dialogue-block" || data.event === "add-narration-block") {

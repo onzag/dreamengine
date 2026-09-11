@@ -1568,7 +1568,12 @@ export class DEngine {
                  */
                 const messageToAdd = {
                     sender: user,
-                    content: userMessage,
+                    content: [
+                        {
+                            type: "narration",
+                            text: userMessage,
+                        },
+                    ],
                     duration: { inMinutes: 0, inHours: 0, inDays: 0, inSeconds: 0 },
                     // @ts-expect-error typescript issue as usual
                     startTime: { ...this.deObject.currentTime },

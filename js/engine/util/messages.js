@@ -266,7 +266,7 @@ export async function* getHistoryForCharacter(engine, character, options) {
             consumedConversationIds.add(state.conversationId);
             const currentConversationObject = engine.deObject.conversations[state.conversationId];
 
-            if (!currentConversationId) {
+            if (!currentConversationId && options.enrichedMode) {
                 // time skipped and now we are into this conversation
                 // calculate time skipped, and specify in which state the character was
                 // maybe they were sleeping, eating, working, etc
@@ -381,7 +381,7 @@ export async function* getHistoryForCharacter(engine, character, options) {
             currentConversationId = state.conversationId;
         } else if (!state.conversationId) {
             currentConversationId = null;
-            if (statesAccumulatedAtLocation && statesAccumulatedAtLocation !== state.location) {
+            if (statesAccumulatedAtLocation && statesAccumulatedAtLocation !== state.location && options.enrichedMode) {
                 // location changed, consume accumulated states
                 const keepgoing = yield consumeAccumulatedStatesAndLocations(state.time);
                 if (!keepgoing) {
@@ -400,7 +400,7 @@ export async function* getHistoryForCharacter(engine, character, options) {
     }
 
     // consume any remaining accumulated states
-    if ((statesAccumulated.size > 0 || statesAccumulatedAtLocation) && lastStateObjectHandled) {
+    if ((statesAccumulated.size > 0 || statesAccumulatedAtLocation) && lastStateObjectHandled && options.enrichedMode) {
         const keepgoing = yield consumeAccumulatedStatesAndLocations(lastStateObjectHandled.time);
         if (!keepgoing) {
             return;
@@ -500,9 +500,9 @@ export async function getHistoryFragmentForCharacter(engine, character, options)
         throw new Error("useExponentialShrinkingSelectiveContextWindowStrategy cannot be used with enrichedMode set to an explicit false");
     }
 
-    if (options.useExponentialShrinkingSelectiveContextWindowStrategy) {
-        throw new Error("useExponentialShrinkingSelectiveContextWindowStrategy is not yet implemented");
-    }
+    // if (options.useExponentialShrinkingSelectiveContextWindowStrategy) {
+    //     throw new Error("useExponentialShrinkingSelectiveContextWindowStrategy is not yet implemented");
+    // }
 
     let cycleCount = 0;
     while (!generator.done) {

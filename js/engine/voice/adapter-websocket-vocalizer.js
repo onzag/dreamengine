@@ -73,6 +73,13 @@ export class VoiceAdapterWebsocketVocalizer extends BaseVoiceAdapter {
         this._pendingUploads = new Map();
 
         /**
+         * Tail of the FIFO upload queue. Keeping failures off the tail ensures
+         * one rejected upload does not prevent later uploads from starting.
+         * @type {Promise<void>}
+         */
+        this._sendFileQueueTail = Promise.resolve();
+
+        /**
          * Pending render requests keyed by rid. Each accumulates streamed binary
          * chunks until `render_done`.
          * @type {Map<string, {resolve: (b: Blob) => void, reject: (e: Error) => void, format: string, chunks: Blob[]}>}
@@ -211,7 +218,17 @@ export class VoiceAdapterWebsocketVocalizer extends BaseVoiceAdapter {
             case "upload_audio_proceed": {
                 // Server is ready to receive the file bytes as one binary frame.
                 const pending = this._pendingUploads.get(rid);
-                if (pending) this.socket && this.socket.send(pending.blob);
+                if (pending) {
+                    try {
+                        if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+                            throw new Error("Connection closed before the audio file could be sent.");
+                        }
+                        this.socket.send(pending.blob);
+                    } catch (err) {
+                        this._pendingUploads.delete(rid);
+                        pending.reject(err instanceof Error ? err : new Error(String(err)));
+                    }
+                }
                 break;
             }
             case "upload_audio_skip": {
@@ -386,6 +403,26 @@ export class VoiceAdapterWebsocketVocalizer extends BaseVoiceAdapter {
      * @returns {Promise<{skipped: boolean, filename: string, hash?: string, size?: number}>}
      */
     async sendFile(file, filename) {
+        const upload = this._sendFileQueueTail.then(() => this._sendFileNow(file, filename));
+
+        // Keep the queue usable after a failed upload without changing the
+        // promise returned to that upload's caller.
+        this._sendFileQueueTail = upload.then(
+            () => undefined,
+            () => undefined,
+        );
+
+        return upload;
+    }
+
+    /**
+     * Execute one upload after all earlier sendFile calls have settled.
+     *
+     * @param {Blob} file
+     * @param {string} [filename]
+     * @returns {Promise<{skipped: boolean, filename: string, hash?: string, size?: number}>}
+     */
+    async _sendFileNow(file, filename) {
         await this.ensureInitialized();
         if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
             throw new Error("Not connected to the Vocalizer server.");
@@ -403,12 +440,17 @@ export class VoiceAdapterWebsocketVocalizer extends BaseVoiceAdapter {
 
         return new Promise((resolve, reject) => {
             this._pendingUploads.set(rid, { resolve, reject, blob: file, filename: name });
-            socket.send(JSON.stringify({
-                action: "upload_audio",
-                rid,
-                filename: name,
-                hash,
-            }));
+            try {
+                socket.send(JSON.stringify({
+                    action: "upload_audio",
+                    rid,
+                    filename: name,
+                    hash,
+                }));
+            } catch (err) {
+                this._pendingUploads.delete(rid);
+                reject(err instanceof Error ? err : new Error(String(err)));
+            }
         });
     }
 

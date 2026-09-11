@@ -186,6 +186,9 @@ class GameMessage extends HTMLElement {
     async _runPseudostream() {
         try {
             await Promise.race([this.pseudostreamPrepare(), this._cancellation]);
+            if (this._cancelled) {
+                this.dispatchEvent(new CustomEvent('on-pseudostream-cancelled', { bubbles: true, composed: true }));
+            }
             if (this._cancelled || !this._hasContent()) return;
             this._pseudostreamState = 'running';
             this._ensureRendered();
@@ -233,7 +236,10 @@ class GameMessage extends HTMLElement {
      */
     async _prepareAudio() {
         const session = window.GAME_VOCALIZER;
-        if (!session || !this._hasContent()) return null;
+        if (!session || !this._hasContent()) {
+            this.dispatchEvent(new CustomEvent('on-pseudostream-init-done', { bubbles: true, composed: true }));
+            return null;
+        };
         const narratorVoice = await this.getNarratorVoice();
         const sender = this.getAttribute('sender-name');
         const characterVoices = this._blockType() === 'dialogue' && sender
@@ -252,7 +258,11 @@ class GameMessage extends HTMLElement {
             if (!segment) return null;
             segments.push(segment);
         }
-        return session.renderSegments(segments);
+        return session.renderSegments(segments, () => {
+            setTimeout(() => {
+                this.dispatchEvent(new CustomEvent('on-pseudostream-init-done', { bubbles: true, composed: true }));
+            }, 10); // yield to the event loop so the caller can attach a listener
+        });
     }
 
     /** @param {CharacterVoiceEntry | null} narratorVoice

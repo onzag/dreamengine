@@ -171,16 +171,21 @@ export class GameVocalizerSession {
     /**
      * Render a list of speech segments into a single audio object URL.
      * @param {import("../../../engine/voice/base.js").VocalizerSpeechSegment[]} segments
+     * @param {() => void} [onSegmentsSent] optional callback invoked after the segments have been sent to the server
      * @returns {Promise<string|null>} an object URL, or null on failure/empty input
      */
-    async renderSegments(segments) {
+    async renderSegments(segments, onSegmentsSent) {
         if (!segments || segments.length === 0) return null;
         try {
-            const blob = await this.adapter.runWorkflow({
+            await this.adapter.ensureInitialized();
+            await window.API.prepareFor("voice");
+            const workflowCall = this.adapter.runWorkflow({
                 output_format: "mp3",
                 generation: this.defaultGeneration,
                 segments,
             });
+            if (onSegmentsSent) onSegmentsSent();
+            const blob = await workflowCall;
             return URL.createObjectURL(blob);
         } catch (err) {
             console.error("GameVocalizerSession: render failed", err);
