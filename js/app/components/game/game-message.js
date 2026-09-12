@@ -442,9 +442,9 @@ class GameMessage extends HTMLElement {
 
         // if the replacement is empty, add a space
         if (!replacement || !replacement.trim()) {
-            console.warn('GameMessage: replacement is empty, adding a space instead.');
+            console.warn('GameMessage: replacement for sound ' + soundInfoAsVoiceSound.label + ' is empty, adding a space.');
             if (returnForDrip) return { type: 'dialogue', text: ' ' };
-            this._appendInstant('dialogue', '', true);
+            this._appendInstant('dialogue', ' ', true);
             return { type: 'dialogue', text: ' ' };
         }
 
