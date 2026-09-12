@@ -101,6 +101,88 @@ export function getLastParagraphChunkOf(text) {
     return "..." + truncated;
 }
 
+/**
+ * @param {string[]} tags
+ * @returns {string}
+ */
+function formatVoiceTags(tags) {
+    return tags.map((tag) => `[${tag}]`).join(", ");
+}
+
+/**
+ * @param {string[]} forcedSounds
+ * @returns {string}
+ */
+function describeForcedSounds(forcedSounds) {
+    /** @type {Map<string, number>} */
+    const counts = new Map();
+    for (const sound of forcedSounds) {
+        counts.set(sound, (counts.get(sound) || 0) + 1);
+    }
+
+    return Array.from(counts.entries()).map(([sound, count]) => {
+        const countDescription = count === 1 ? "once" : count === 2 ? "twice" : `${count} times`;
+        return `[${sound}] ${countDescription}`;
+    }).join(", ");
+}
+
+/**
+ * @param {{modes: string[]; sounds: string[]; forcedMode: string|null; forcedSounds: string[]}} options
+ * @returns {string}
+ */
+export function buildVoiceTagInstructions(options) {
+    const instructions = [];
+
+    if (options.forcedMode) {
+        instructions.push(`Start the dialogue with the voice mode tag [${options.forcedMode}].`);
+    } else if (options.modes.length > 0) {
+        instructions.push(`Optionally use one relevant voice mode tag from ${formatVoiceTags(options.modes)}; omit it if none fits.`);
+    }
+
+    const forcedSounds = options.forcedSounds.slice(0, 3);
+    const forcedSoundNames = new Set(forcedSounds);
+    const optionalSounds = Array.from(new Set(options.sounds.filter((sound) => !forcedSoundNames.has(sound))));
+
+    if (forcedSounds.length > 0) {
+        instructions.push(`Use at most 3 [sound tags] total. Include ${describeForcedSounds(forcedSounds)}.`);
+        const remainingSoundSlots = 3 - forcedSounds.length;
+        if (remainingSoundSlots > 0 && optionalSounds.length > 0) {
+            instructions.push(`Where relevant, use up to ${remainingSoundSlots} [sound tags] more from ${formatVoiceTags(optionalSounds)} to make the character more expressive, if not relevant, using none is fine if they don't fit.`);
+        }
+    } else if (optionalSounds.length > 0) {
+        instructions.push(`Use up to 3 [sound tags] from ${formatVoiceTags(optionalSounds)} where relevant to make the character more expressive; using none is fine if they don't fit.`);
+    } else {
+        instructions.push("Do not use [sound tags] as they are not applicable in the next dialogue.");
+    }
+
+    return instructions.join(" ");
+}
+
+/**
+ * @param {string} characterName
+ * @param {{narration: boolean; modes: string[]; sounds: string[]; forcedMode: string|null; forcedSounds: string[]}} options
+ * @param {boolean} includeThirdPersonBeat
+ * @returns {string}
+ */
+export function buildNextMessageInstructions(characterName, options, includeThirdPersonBeat) {
+    const instructions = [];
+
+    if (options.narration) {
+        instructions.push(`Write the next passage as one paragraph of third-person narration wrapped in asterisks (*). Keep everyone, including ${characterName}, in the third person, and describe ${characterName}'s actions, feelings, and surroundings as an outside observer.`);
+    } else {
+        instructions.push(`Write one line spoken aloud by ${characterName} in ${characterName}'s voice, beginning with "${characterName}:".`);
+        if (includeThirdPersonBeat) {
+            instructions.push(`You may interrupt the dialogue with one brief third-person action or attribution wrapped in em dashes, as in: ${characterName}: spoken words — *${characterName} acts* — more spoken words. Do not narrate on a separate line or describe another character's actions, thoughts, or feelings.`);
+        } else {
+            instructions.push("Use dialogue only, without narration or action beats.");
+        }
+        instructions.push(buildVoiceTagInstructions(options));
+    }
+
+    instructions.push("Advance the scene with new events. Do not repeat, summarize, or paraphrase previous text.");
+    return `\n# Write the next message like this\n\n${instructions.join(" ")}`;
+}
+
 export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
     /**
      * @param {DEngine} parent 
@@ -462,6 +544,10 @@ export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
      *   narration: boolean,
      *   primaryEmotion: string,
      *   activeStates: Array<{state: string, dominance: number}>,
+     *   modes: Array<string>,
+     *   sounds: Array<string>,
+     *   forcedMode: string|null,
+     *   forcedSounds: Array<string>,
      *   __debug_id?: string|null,
      * }} options
      * @returns {AsyncGenerator<{type: "text" | "warning" | "hidden", content: string}, void, boolean>}
@@ -482,13 +568,8 @@ export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
 
         let systemPrompt = replaceMultipleNewLines(system + visibleEnviroment).trim();
 
-        // TODO random chance alternative where they don't write these beat of third person action
-        // TODO add special tags based on what sounds are available [cough] [laugh] [sigh] [scream] [sniffle] [snore] [sneeze] [yawn] [grunt] [groan] [gasp] [moan] [whistle] [cheer] [applause] [clap] [snap] [stomp] [thump] [bang] [crash] [slam]
-        const nextMessageMustBeInform = "\n# Write the next message like this\n\n" + (
-            options.narration ?
-                `Write the next passage as a single paragraph of third-person narration wrapped in asterisks (*), the way an outside narrator describes a scene in a novel. Keep everyone, including ${character.name}, in the third person, referred to by name or as he, she, or they. Describe ${character.name}'s actions, feelings, and surroundings as an observer who is watching the scene from outside of it.` :
-                `Write the single line ${character.name} says out loud right now, in ${character.name}'s own voice, always start in dialogue first. The line is spoken words, but you may interrupt those words with a short beat of third-person narration wrapped in em dashes (—), the way a novel breaks a line of dialogue with a small action before the speech resumes. Put nothing but the brief action or attribution between the em dashes, and keep the spoken words on either side. For example: \`${character.name}: spoken words — *${character.name} does some small action* — the spoken words continue.\` Only the text between the em dashes is narration; everything outside them is what ${character.name} actually says. Do not write narration on its own separate line, and do not describe any other character's actions, thoughts, or feelings.`
-        ) + "\n\nAdvance the scene with new events. Do not repeat, summarize, or paraphrase any previous paragraph.";
+        const includeThirdPersonBeat = !options.narration && Math.random() >= 0.5;
+        const nextMessageMustBeInform = buildNextMessageInstructions(character.name, options, includeThirdPersonBeat);
 
         const continuationRequestPrompt = replaceMultipleNewLines(`
 ${stateInjections.length > 0 ? `# ${character.name}'s Current States:\n\n${stateInjections.join("\n\n")}` : ""}

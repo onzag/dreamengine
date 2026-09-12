@@ -360,8 +360,6 @@ export async function talk(engine, character, options) {
         }
     }
 
-    const grammar = generateGrammarForVoice(engine, baseVoice, character.name);
-
     let narrationStyle = engine.deObject.narrationStyle;
     if (baseVoice?.narrationStyle) {
         narrationStyle = baseVoice.narrationStyle;
@@ -645,6 +643,8 @@ export async function talk(engine, character, options) {
             __debug_id: nextMessage.id + "__" + fragmentCount,
         });
 
+        const grammar = generateGrammarForVoice(engine, baseVoice, character.name, forcedVoiceEffects.forcedMode);
+
         const generator = engine.inferenceAdapter.inferNextStoryFragmentFor(
             character,
             {
@@ -790,10 +790,10 @@ export async function talk(engine, character, options) {
                                 } else {
                                     const previousFragment = currentBlockAsDialoge.fragments[currentBlockAsDialoge.fragments.length - 1];
                                     if (previousFragment) {
-                                        const previousFragmentTextTrimmed = previousFragment.text.trim();
+                                        const previousFragmentTextTrimmed = previousFragment.text.trim().toLowerCase();
                                         const soundInfo = previousFragment.type === "sound" ? {
-                                            sound: minimizeSoundDescription(baseVoice.sounds.find((sound) => sound.label === previousFragmentTextTrimmed)),
-                                            mode: minimizeModeDescription(baseVoice.modes.find((mode) => mode.label === previousFragmentTextTrimmed)),
+                                            sound: minimizeSoundDescription(baseVoice.sounds.find((sound) => sound.label.toLowerCase() === previousFragmentTextTrimmed)),
+                                            mode: minimizeModeDescription(baseVoice.modes.find((mode) => mode.label.toLowerCase() === previousFragmentTextTrimmed)),
                                         } : undefined;
                                         if (previousFragment.type === "sound" && soundInfo) {
                                             previousFragment.soundInfo = soundInfo;
@@ -873,10 +873,10 @@ export async function talk(engine, character, options) {
             const currentBlockAsDialoge = /** @type {DEConversationMessageDialogue} */ (currentBlock);
             const lastFragment = currentBlockAsDialoge.fragments[currentBlockAsDialoge.fragments.length - 1];
             if (lastFragment) {
-                const lastFragmentTextTrimmed = lastFragment.text.trim();
+                const lastFragmentTextTrimmed = lastFragment.text.trim().toLowerCase();
                 const soundInfo = lastFragment.type === "sound" ? {
-                    sound: minimizeSoundDescription(baseVoice.sounds.find((sound) => sound.label === lastFragmentTextTrimmed)),
-                    mode: minimizeModeDescription(baseVoice.modes.find((mode) => mode.label === lastFragmentTextTrimmed)),
+                    sound: minimizeSoundDescription(baseVoice.sounds.find((sound) => sound.label.toLowerCase() === lastFragmentTextTrimmed)),
+                    mode: minimizeModeDescription(baseVoice.modes.find((mode) => mode.label.toLowerCase() === lastFragmentTextTrimmed)),
                 } : undefined;
                 if (lastFragment.type === "sound" && soundInfo) {
                     lastFragment.soundInfo = soundInfo;

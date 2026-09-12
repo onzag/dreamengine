@@ -185,9 +185,10 @@ export function isYes(answer) {
  * @param {DEngine} engine 
  * @param {DEVoiceDescription | null | undefined} voice 
  * @param {string} charName
+ * @param {string | null | undefined} forcedMode
  * @returns {{narrative: string | null; dialogue: string | null}}
  */
-export function generateGrammarForVoice(engine, voice, charName) {
+export function generateGrammarForVoice(engine, voice, charName, forcedMode) {
     if (!engine.inferenceAdapter) {
         throw new Error("Inference adapter is required to create grammar");
     } else if (!engine.deObject) {
@@ -200,9 +201,19 @@ export function generateGrammarForVoice(engine, voice, charName) {
             dialogue: null,
         };
     }
+
+    let forcedModeValid = false;
+    if (forcedMode) {
+        // ensure a-zA-Z characters only in forcedMode
+        if (/^[a-zA-Z]+$/.test(forcedMode)) {
+            forcedModeValid = true;
+        } else {
+            console.warn(`Invalid forcedMode "${forcedMode}" for character "${charName}". Forced mode must contain only letters a-z or A-Z.`);
+        }
+    }
     
     return {
         narrative: `root ::= "*" [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] .+`,
-        dialogue: `root ::= ${JSON.stringify(charName + ": ")} [^*—] [^*—] [^*—] .+`,
+        dialogue: forcedModeValid ? `root ::= ${JSON.stringify(charName + ": [" + forcedMode + "] ")} .+` : `root ::= ${JSON.stringify(charName + ": ")} [^*—] [^*—] [^*—] .+`,
     };
 }
