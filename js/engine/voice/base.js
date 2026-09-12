@@ -15,11 +15,6 @@
  * segment). Mirrors what vocalizer.py's `_resolve_generation_params` consumes.
  *
  * @typedef {Object} VocalizerGeneration
- * @property {number} [cfg_value]            // VoxCPM classifier-free guidance value
- * @property {number} [inference_timesteps]  // VoxCPM diffusion steps
- * @property {boolean} [normalize]           // whether VoxCPM normalizes text
- * @property {boolean} [denoise]             // run the ZipEnhancer denoiser
- * @property {number} [seed]                 // fixed RNG seed
  */
 
 /**
@@ -41,14 +36,9 @@
  * @property {string} text                    // the line to speak (required)
  * @property {string} [ref]                   // library filename of a voice reference clip
  * @property {string} [voice_prompt]          // parenthetical style hint prepended to the text
- * @property {string} [prompt_ref]            // library filename of a prompt wav (voice cloning)
- * @property {string} [prompt_text]           // transcript of prompt_ref
+ * @property {string} [prompt_ref]            // library filename of a prompt wav (voice cloning), you must specify prompt_text too if you specify this
+ * @property {string} [prompt_text]           // transcript of prompt_ref (required if prompt_ref is present)
  * @property {(number|[number, number])} [volume] // 1..9 or a [min,max] random range
- * @property {number} [cfg_value]
- * @property {number} [inference_timesteps]
- * @property {boolean} [normalize]
- * @property {boolean} [denoise]
- * @property {number} [seed]
  */
 
 /**

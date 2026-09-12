@@ -193,6 +193,10 @@ class PlayOverlay extends HTMLElement {
     constructor() {
         super();
         this.root = this.attachShadow({ mode: 'open' });
+        /**
+         * @type {CharacterVoiceEntryWithLanguage[]}
+         */
+        this.narrators = [];
         this.onDocumentKeydown = this.onDocumentKeydown.bind(this);
 
         /** @type {number} */
@@ -361,6 +365,9 @@ class PlayOverlay extends HTMLElement {
             this.renderStep();
         } else {
             stopNarration();
+
+            const narratorChosen = this.narrators.find(n => n.asset === this.selectedNarrator);
+
             this.dispatchEvent(new CustomEvent('start', {
                 detail: {
                     world: this.selectedWorld,
@@ -371,8 +378,10 @@ class PlayOverlay extends HTMLElement {
                     partyCharacters: this.selectedPartyCharacters,
                     dreamStability: this.selectedDreamStability,
                     voiceName: this.userSelfName || '',
-                    defaultNarratorVoice: this.selectedNarrator || '@none',
+                    defaultNarratorVoice: narratorChosen?.asset || '@none',
                     defaultNarratorVoiceOverride: this.overrideWorldNarrator,
+                    defaultNarratorVoiceTranscript: narratorChosen?.transcript || '',
+                    defaultNarratorVoiceTags: narratorChosen?.tags || [],
                 },
             }));
             this.startedGame = true;
@@ -504,10 +513,9 @@ class PlayOverlay extends HTMLElement {
             </div>
         `;
 
-        /** @type {string[]} */
-        let narrators = [];
         try {
-            narrators = await window.API.listNarrators();
+            const language = window.DREAMENGINE_LANGUAGE;
+            this.narrators = await window.API.listNarrators(language);
         } catch (err) {
             console.error('Failed to list narrators:', err);
         }
@@ -523,23 +531,27 @@ class PlayOverlay extends HTMLElement {
         let shouldPreview = false;
         if (saved === '@none') {
             selected = '@none';
-        } else if (saved && narrators.includes(saved)) {
+        } else if (saved && this.narrators.find(n => n.asset === saved)) {
             selected = saved;
             shouldPreview = true;
-        } else if (narrators.length > 0) {
-            selected = narrators[0];
+        } else if (this.narrators.length > 0) {
+            selected = this.narrators[0].asset;
             shouldPreview = true;
         } else {
             selected = '@none';
         }
         this.selectedNarrator = selected;
 
-        const cardsHTML = narrators.map(value => {
-            const isSelected = this.selectedNarrator === value;
+        const cardsHTML = this.narrators.map(value => {
+            const isSelected = this.selectedNarrator === value.asset;
+            const nameToUse = value.asset.split("/").pop()?.split(".")[0] || value.asset;
             return `
-                <div class="narrator-card${isSelected ? ' selected' : ''}" data-value="${escapeHTML(value)}">
+                <div
+                    class="narrator-card${isSelected ? ' selected' : ''}"
+                    data-value="${escapeHTML(value.asset)}"
+                >
                     <div class="narrator-card-icon">🎙️</div>
-                    <div class="narrator-card-name">${escapeHTML(this.narratorDisplayName(value))}</div>
+                    <div class="narrator-card-name">${escapeHTML(this.narratorDisplayName(nameToUse))}</div>
                 </div>
             `;
         }).join('');

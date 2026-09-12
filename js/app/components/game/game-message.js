@@ -245,17 +245,16 @@ class GameMessage extends HTMLElement {
         const characterVoices = this._blockType() === 'dialogue' && sender
             ? await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['characters', sender, 'metadata', 'voice'] })
             : null;
-        /** @type {import('../../../engine/voice/base.js').VocalizerSpeechSegment[]} */
+        /** @type {Array<import('../../../engine/voice/base.js').VocalizerSpeechSegment|import('../../../engine/voice/base.js').VocalizerDelaySegment>} */
         const segments = [];
         for (const fragment of this._fragments()) {
             if (this._cancelled) return null;
             if (!(fragment.text || '').trim()) continue;
             const voice = fragment.type === 'narration' ? narratorVoice
                 : this._resolveFragmentVoice(narratorVoice, characterVoices || {});
-            if (!voice) return null;
+
             const segment = await session.buildSpeechSegment(fragment.text, voice);
-            // A partial clip would not correspond to the displayed block.
-            if (!segment) return null;
+
             segments.push(segment);
         }
         return session.renderSegments(segments, () => {
@@ -273,9 +272,11 @@ class GameMessage extends HTMLElement {
         const emotion = this.getAttribute('emotion') || 'neutral';
         for (const key of this._emotionFallbacks(emotion)) {
             const voice = characterVoiceInfo[/** @type {keyof CharacterVoiceAssets} */ (key)];
-            if (voice?.asset && voice.asset !== '@none') return voice;
+            if (voice?.asset === '@none') return null;
+            if (voice?.asset === '@narrator') return narratorVoice;
+            if (voice?.asset) return voice;
         }
-        return narratorVoice;
+        return null;
     }
 
     /** @param {string} emotion */

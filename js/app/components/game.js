@@ -617,11 +617,15 @@ class GameOverlay extends HTMLElement {
 
                 const defaultNarratorVoice = this.getAttribute('default-narrator-voice') || '';
                 const defaultNarratorVoiceOverride = (this.getAttribute('default-narrator-voice-override') || 'false') === 'true';
+                const defaultNarratorVoiceTranscript = this.getAttribute('default-narrator-voice-transcript') || '';
+                const defaultNarratorVoiceTags = JSON.parse(this.getAttribute('default-narrator-voice-tags') || '[]');
                 if (defaultNarratorVoiceOverride && defaultNarratorVoice) {
                     await window.ENGINE_WORKER_CLIENT.forceSetDEObject({
                         path: ["state", "__INTERNAL_NARRATOR_OVERRIDE"],
                         value: {
                             asset: defaultNarratorVoice,
+                            transcript: defaultNarratorVoiceTranscript,
+                            tags: defaultNarratorVoiceTags,
                         },
                     });
                 } else if (defaultNarratorVoice) {
@@ -629,6 +633,8 @@ class GameOverlay extends HTMLElement {
                         path: ["state", "__INTERNAL_NARRATOR"],
                         value: {
                             asset: defaultNarratorVoice,
+                            transcript: defaultNarratorVoiceTranscript,
+                            tags: defaultNarratorVoiceTags,
                         },
                     });
                 }

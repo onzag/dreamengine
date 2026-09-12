@@ -293,6 +293,7 @@ export class VoiceAdapterWebsocketVocalizer extends BaseVoiceAdapter {
                 const err = new Error(data.message || "Vocalizer server error");
                 const upload = rid ? this._pendingUploads.get(rid) : undefined;
                 const render = rid ? this._pendingRenders.get(rid) : undefined;
+                const unloadLoadModel = rid ? this._pendingUnloadLoadModelsCalls.get(rid) : undefined;
                 if (upload) {
                     upload.reject(err);
                     this._pendingUploads.delete(rid);
@@ -300,6 +301,9 @@ export class VoiceAdapterWebsocketVocalizer extends BaseVoiceAdapter {
                     if (this._currentStreamingRid === rid) this._currentStreamingRid = null;
                     render.reject(err);
                     this._pendingRenders.delete(rid);
+                } else if (unloadLoadModel) {
+                    unloadLoadModel.reject(err);
+                    this._pendingUnloadLoadModelsCalls.delete(rid);
                 } else {
                     console.error("VoiceAdapterWebsocketVocalizer: server error", err.message);
                 }

@@ -10,7 +10,7 @@
  */
 
 /** Default VoxCPM generation parameters, matching the voice profile UI. */
-const DEFAULT_GENERATION = { cfg_value: 1.5, inference_timesteps: 30, normalize: true };
+const DEFAULT_GENERATION = { };
 
 /** Maximum bytes of reference audio to keep resident before evicting (LRU). */
 const MAX_CACHE_BYTES = 25 * 1024 * 1024;
@@ -141,16 +141,19 @@ export class GameVocalizerSession {
      * (VoxCPM voice cloning); otherwise the asset is used as a plain `ref`.
      *
      * @param {string} text
-     * @param {{ asset: string, transcript?: string|null, tags?: string[] }} voice
-     * @returns {Promise<import("../../../engine/voice/base.js").VocalizerSpeechSegment|null>}
+     * @param {{ asset: string, transcript: string|null, tags?: string[] } | null} voice
+     * @returns {Promise<import("../../../engine/voice/base.js").VocalizerSpeechSegment|import("../../../engine/voice/base.js").VocalizerDelaySegment>}
      */
     async buildSpeechSegment(text, voice) {
         const clean = (text || '').replace(/\*/g, '').trim();
-        if (!clean || !voice || !voice.asset) return null;
+        if (!clean || !voice || !voice.asset || voice.asset === "@none") {
+            // 1s wait
+            return { "duration_ms": 1000 };
+        }
 
         const refName = await this.ensureAssetUploaded(voice.asset);
 
-        if (!refName) return null;
+        if (!refName) return { "duration_ms": 1000 };
 
         /** @type {import("../../../engine/voice/base.js").VocalizerSpeechSegment} */
         const segment = { text: clean };
@@ -170,7 +173,7 @@ export class GameVocalizerSession {
 
     /**
      * Render a list of speech segments into a single audio object URL.
-     * @param {import("../../../engine/voice/base.js").VocalizerSpeechSegment[]} segments
+     * @param {Array<import("../../../engine/voice/base.js").VocalizerSpeechSegment|import("../../../engine/voice/base.js").VocalizerDelaySegment>} segments
      * @param {() => void} [onSegmentsSent] optional callback invoked after the segments have been sent to the server
      * @returns {Promise<string|null>} an object URL, or null on failure/empty input
      */

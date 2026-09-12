@@ -20,7 +20,7 @@ import { playSound } from "../../sound.js";
  */
 const DEFAULT_WORKFLOW = {
     output_format: "mp3",
-    generation: { cfg_value: 2.0, inference_timesteps: 10, normalize: true },
+    generation: { },
     segments: [
         { voice_prompt: "an older man, gravelly voice", text: "If you can hear me, it works." },
     ],

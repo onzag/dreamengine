@@ -526,7 +526,8 @@ ipcMain.handle('uploadBytesToDEPath', async (event, dePath, bytes) => {
     if (dePath !== "profile" && !dePath.startsWith("assets/") && !dePath.startsWith("narrators/")) {
         throw new Error('Unauthorized path for upload');
     }
-    if (dePath.endsWith(".json") || dePath.endsWith(".js")) {
+    const exception = dePath.endsWith(".json") && dePath.startsWith("narrators/");
+    if ((dePath.endsWith(".json") || dePath.endsWith(".js")) && !exception) {
         throw new Error('Uploading JSON or JS files is not allowed');
     }
     const destPath = path.join(DREAMENGINE_HOME, dePath);
@@ -637,10 +638,12 @@ ipcMain.handle('saveFile', async (event, namespace, id, saveName, saveData, save
     const saveIndexPath = path.join(SAVES_FOLDER, namespace, `${id}.json`);
 
     if (!fs.existsSync(saveIndexPath)) {
-        fs.writeFileSync(saveIndexPath, JSON.stringify({saves: [{
-            save: saveName,
-            data: saveIndexData,
-        }] }, null, 4));
+        fs.writeFileSync(saveIndexPath, JSON.stringify({
+            saves: [{
+                save: saveName,
+                data: saveIndexData,
+            }]
+        }, null, 4));
     } else {
         const indexContent = fs.readFileSync(saveIndexPath, 'utf-8');
         let indexData;
@@ -704,19 +707,65 @@ ipcMain.handle('deleteSaveFile', async (event, namespace, id, saveName) => {
     }
 });
 
-ipcMain.handle('listNarrators', async () => {
+ipcMain.handle('listNarrators', async (event, language) => {
     const narratorsDir = path.join(DREAMENGINE_HOME, 'narrators');
     const defaultNarratorsDir = path.join(__dirname, 'default-scripts', "voices");
 
+    /**
+     * @type {CharacterVoiceEntryWithLanguage[]}
+     */
     const narrators = [];
+
+    /**
+     * @param {string} prefix
+     * @param {string} narratorsDir 
+     * @param {string} file 
+     */
+    const confirmNarratorJSON = (prefix, narratorsDir, file) => {
+        const jsonData = JSON.parse(fs.readFileSync(path.join(narratorsDir, file), 'utf-8'));
+        // check that JSON data has the required fields, asset
+        if (!jsonData.asset || typeof jsonData.asset !== 'string') {
+            console.warn(`Narrator JSON ${file} is missing 'asset' field, skipping`);
+            return;
+        }
+        if (!jsonData.language || typeof jsonData.language !== 'string') {
+            console.warn(`Narrator JSON ${file} is missing 'language' field, skipping`);
+            return;
+        }
+        if (jsonData.language !== language && language !== 'all' && language !== '' && language !== "*") {
+            return;
+        }
+        if (jsonData.transcript && typeof jsonData.transcript !== 'string') {
+            console.warn(`Narrator JSON ${file} has invalid 'transcript' field, skipping`);
+            return;
+        }
+        if (jsonData.transcript && jsonData.transcript.length > 1000) {
+            console.warn(`Narrator JSON ${file} has 'transcript' field longer than 1000 characters, skipping`);
+            return;
+        }
+        if (jsonData.tags) {
+            // @ts-ignore
+            if (!Array.isArray(jsonData.tags) || !jsonData.tags.every(tag => typeof tag === 'string')) {
+                console.warn(`Narrator JSON ${file} has invalid 'tags' field, skipping`);
+                return;
+            }
+        }
+        narrators.push({
+            asset: jsonData.asset,
+            transcript: jsonData.transcript || "",
+            tags: jsonData.tags || [],
+            language: jsonData.language,
+        });
+    }
+
+    
     if (fs.existsSync(narratorsDir)) {
         // read all files, show only the .wav, .mp3, .ogg, .flac files without extension
         const files = fs.readdirSync(narratorsDir);
         for (const file of files) {
             const ext = path.extname(file).toLowerCase();
-            if (['.wav', '.mp3', '.flac'].includes(ext)) {
-                // return with the extension
-                narrators.push("narrators/" + file);
+            if (['.json'].includes(ext)) {
+                confirmNarratorJSON("", narratorsDir, file);
             }
         }
     }
@@ -725,11 +774,8 @@ ipcMain.handle('listNarrators', async () => {
         const files = fs.readdirSync(defaultNarratorsDir);
         for (const file of files) {
             const ext = path.extname(file).toLowerCase();
-            if (['.wav', '.mp3', '.flac'].includes(ext)) {
-                if (!narrators.includes(file)) {
-                    // Prefix default narrators with @ to distinguish them from user-uploaded narrators
-                    narrators.push("@voices/" + file);
-                }
+            if (['.json'].includes(ext)) {
+                confirmNarratorJSON("@voices/", defaultNarratorsDir, file);
             }
         }
     }

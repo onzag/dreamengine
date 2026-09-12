@@ -35,7 +35,7 @@ declare interface DEAPI {
   saveFile(namespace: string, id: string, saveName: string, saveData: string, saveIndexData?: any): Promise<void>;
   deleteSaveFile(namespace: string, id: string, saveName: string): Promise<void>;
 
-  listNarrators(): Promise<Array<string>>;
+  listNarrators(language: string): Promise<Array<CharacterVoiceEntryWithLanguage>>;
 
   startDiffusionProcess(): Promise<void>;
   stopDiffusionProcess(): Promise<void>;

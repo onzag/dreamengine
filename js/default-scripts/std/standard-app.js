@@ -67,8 +67,16 @@
 /**
  * @typedef {Object} CharacterVoiceEntry
  * @property {string} asset - The path to the voice asset file.
- * @property {string} [transcript] - The transcript of the voice line.
+ * @property {string} transcript - The transcript of the voice line.
  * @property {string[]} [tags] - Tags describing how the voice sounds (e.g. "soft", "raspy", "breathy").
+ */
+
+/**
+ * @typedef {Object} CharacterVoiceEntryWithLanguage
+ * @property {string} asset - The path to the voice asset file.
+ * @property {string} transcript - The transcript of the voice line.
+ * @property {string[]} [tags] - Tags describing how the voice sounds (e.g. "soft", "raspy", "breathy").
+ * @property {string} language - The language of the voice line.
  */
 
 /**

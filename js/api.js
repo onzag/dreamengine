@@ -315,8 +315,9 @@ pre { margin:0; padding:16px; line-height:1.5; white-space:pre-wrap; word-wrap:b
             }
         },
 
-        listNarrators: async () => {
-            const res = await fetch('/api/narrators/list', {
+        listNarrators: async (language) => {
+            const params = new URLSearchParams({ language });
+            const res = await fetch(`/api/narrators/list?${params}`, {
                 method: 'GET',
                 credentials: 'same-origin',
             });
@@ -456,10 +457,18 @@ window.API.prepareFor = async (option) => {
     switch (option) {
         case "diffusion":
             if (lowVRAMInference) {
-                await window.ENGINE_WORKER_CLIENT.pauseInference();
+                try {
+                    await window.ENGINE_WORKER_CLIENT.pauseInference();
+                } catch (error) {
+                    console.error("Failed to pause inference:", error);
+                }
             }
             if (lowVRAMVoice && voiceEnabled) {
-                await window.API.pauseVoice();
+                try {
+                    await window.API.pauseVoice();
+                } catch (error) {
+                    console.error("Failed to pause voice:", error);
+                }
             }
             if (lowVRAMDiffusion && diffusionEnabled) {
                 await window.API.startDiffusionProcess();
@@ -467,10 +476,18 @@ window.API.prepareFor = async (option) => {
             break;
         case "voice":
             if (lowVRAMInference) {
-                await window.ENGINE_WORKER_CLIENT.pauseInference();
+                try {
+                    await window.ENGINE_WORKER_CLIENT.pauseInference();
+                } catch (error) {
+                    console.error("Failed to pause inference:", error);
+                }
             }
             if (lowVRAMDiffusion && diffusionEnabled) {
-                await window.API.stopDiffusionProcess();
+                try {
+                    await window.API.stopDiffusionProcess();
+                } catch (error) {
+                    console.error("Failed to stop diffusion process:", error);
+                }
             }
             if (lowVRAMVoice && voiceEnabled) {
                 await window.API.resumeVoice();
@@ -478,10 +495,18 @@ window.API.prepareFor = async (option) => {
             break;
         case "inference":
             if (lowVRAMDiffusion && diffusionEnabled) {
-                await window.API.stopDiffusionProcess();
+                try {
+                    await window.API.stopDiffusionProcess();
+                } catch (error) {
+                    console.error("Failed to stop diffusion process:", error);
+                }
             }
             if (lowVRAMVoice && voiceEnabled) {
-                await window.API.pauseVoice();
+                try {
+                    await window.API.pauseVoice();
+                } catch (error) {
+                    console.error("Failed to pause voice:", error);
+                }
             }
             break;
         default:

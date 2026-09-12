@@ -45,7 +45,7 @@ const VOICE_SAMPLE_TEXT =
 /**
  * A sensible default generation block reused for both "generate" and "test".
  */
-const DEFAULT_GENERATION = { cfg_value: 2.0, inference_timesteps: 10, normalize: true };
+const DEFAULT_GENERATION = { };
 
 /**
  * `<app-profile-voice>` is the audio counterpart to `<app-profile-image>`.
