@@ -179,10 +179,99 @@ export function minimizeModeDescription(mode) {
 /**
  * 
  * @param {DEVoiceDescription} baseVoice
- * @param {DEEmotionNames} primaryEmotion 
- * @param {DEEmotionNames} emotionalRange 
+ * @param {DEEmotionNames | null} primaryEmotion
+ * @param {DEEmotionNames[]} emotionalRange
  * @param {Array<{state: string; dominance: number;}>} activeStates
+ * @returns {DEVoiceDescription}
  */
-function reweightVoiceForEmotion(baseVoice, primaryEmotion, emotionalRange, activeStates) {
-    const newVoice = { ...baseVoice };
+export function reweightVoiceForEmotion(baseVoice, primaryEmotion, emotionalRange, activeStates) {
+    const relevantEmotions = new Set(emotionalRange);
+    if (primaryEmotion) {
+        relevantEmotions.add(primaryEmotion);
+    }
+
+    /**
+     * @template {DEVoiceSound | DEVoiceMode} T
+     * @param {T} item
+     * @returns {T}
+     */
+    const reweightItem = (item) => {
+        let forcedLikelihood = item.forcedLikelihood || 0;
+
+        for (const emotion of relevantEmotions) {
+            forcedLikelihood += item.relatedToEmotion?.[emotion]?.forcedLikelihood || 0;
+        }
+
+        for (const activeState of activeStates) {
+            forcedLikelihood += item.relatedToState?.[activeState.state]?.forcedLikelihood || 0;
+        }
+
+        return {
+            ...item,
+            forcedLikelihood,
+        };
+    };
+
+    return {
+        ...baseVoice,
+        sounds: baseVoice.sounds.map(reweightItem),
+        modes: baseVoice.modes.map(reweightItem),
+    };
+}
+
+/**
+ * Randomly orders the available voice effects and rolls for one mode and up to
+ * three sounds. Each sound roll starts from the beginning of the randomized
+ * list, so the same sound can be selected more than once.
+ *
+ * @param {DEVoiceDescription} voice
+ * @returns {{forcedMode: string | null; forcedSounds: string[]}}
+ */
+export function selectForcedVoiceEffects(voice) {
+    /**
+     * @template T
+     * @param {T[]} items
+     * @returns {T[]}
+     */
+    const shuffled = (items) => {
+        const result = [...items];
+        for (let i = result.length - 1; i > 0; i--) {
+            const swapIndex = Math.floor(Math.random() * (i + 1));
+            [result[i], result[swapIndex]] = [result[swapIndex], result[i]];
+        }
+        return result;
+    };
+
+    /**
+     * @template {DEVoiceSound | DEVoiceMode} T
+     * @param {T[]} items
+     * @returns {T | null}
+     */
+    const rollForFirstWinner = (items) => {
+        for (const item of items) {
+            const likelihood = item.forcedLikelihood || 0;
+            if (likelihood >= 1 || Math.random() < likelihood) {
+                return item;
+            }
+        }
+        return null;
+    };
+
+    const modes = shuffled(voice.modes);
+    const sounds = shuffled(voice.sounds);
+    const selectedMode = rollForFirstWinner(modes);
+    /** @type {string[]} */
+    const forcedSounds = [];
+
+    for (let i = 0; i < 3; i++) {
+        const selectedSound = rollForFirstWinner(sounds);
+        if (selectedSound) {
+            forcedSounds.push(selectedSound.label);
+        }
+    }
+
+    return {
+        forcedMode: selectedMode?.label || null,
+        forcedSounds,
+    };
 }

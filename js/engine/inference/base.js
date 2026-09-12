@@ -110,7 +110,7 @@ export class BaseInferenceAdapter {
      *   activeStates: Array<{state: string, dominance: number}>,
      *   modes: Array<string>,
      *   sounds: Array<string>,
-     *   forcedMode: string,
+     *   forcedMode: string|null,
      *   forcedSounds: Array<string>,
      *   __debug_id?: string|null,
      * }} options

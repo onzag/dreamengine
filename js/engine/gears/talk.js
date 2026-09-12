@@ -1,11 +1,10 @@
-import { weightedRandom } from "../../util/random.js";
 import { DEngine } from "../index.js";
 import { getCharacterCanSee, getSysPromptForCharacter } from "../util/character-info.js";
 import { emotions } from "../util/emotions.js";
 import { createGrammarFromList, generateGrammarForVoice, parseListFromGrammarResponse } from "../util/grammar.js";
 import { convertContentToSimpleList, convertMessagesToSimpleList, getHistoryFragmentForCharacter } from "../util/messages.js";
 import { minimizeSoundDescription, minimizeModeDescription } from "../util/voice.js";
-import { mergeVoicesFrom, reweightVoiceForEmotion } from "../util/voice.js";
+import { mergeVoicesFrom, reweightVoiceForEmotion, selectForcedVoiceEffects } from "../util/voice.js";
 
 /**
  * @param {DEngine} engine 
@@ -619,6 +618,10 @@ export async function talk(engine, character, options) {
         }
 
         const nextIsNarration = nextToGenerateIsSameAsPreviousButNarrativeAction ? true : nextToGenerate.type === "narration"
+        const forcedVoiceEffects = nextIsNarration ? {
+            forcedMode: null,
+            forcedSounds: [],
+        } : selectForcedVoiceEffects(reweightedVoice);
 
         /**
          * @type {DEConversationMessageDialogue | DEConversationMessageNarration}
@@ -656,6 +659,8 @@ export async function talk(engine, character, options) {
                 narration: nextIsNarration,
                 modes: baseVoice?.modes.map((mode) => mode.label) || [],
                 sounds: baseVoice?.sounds.map((sound) => sound.label) || [],
+                forcedMode: forcedVoiceEffects.forcedMode,
+                forcedSounds: forcedVoiceEffects.forcedSounds,
 
                 __debug_id: nextMessage.id + "__" + fragmentCount,
 
