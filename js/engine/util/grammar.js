@@ -1,6 +1,6 @@
 import { DEngine } from "../index.js";
 import { getSurroundingCharacters } from "./character-info.js";
-import { BASIC_WORDS } from "./vocabulary.js";
+import { BASIC_WORDS } from "./voice.js";
 
 /**
  * @param {string} word 
@@ -183,18 +183,18 @@ export function isYes(answer) {
 /**
  * 
  * @param {DEngine} engine 
- * @param {DEVocabularyLimit | null | undefined} vocabulary 
+ * @param {DEVoiceDescription | null | undefined} voice 
  * @param {string} charName
  * @returns {{narrative: string | null; dialogue: string | null}}
  */
-export function generateGrammarForVocabulary(engine, vocabulary, charName) {
+export function generateGrammarForVoice(engine, voice, charName) {
     if (!engine.inferenceAdapter) {
         throw new Error("Inference adapter is required to create grammar");
     } else if (!engine.deObject) {
         throw new Error("DEngine must be initialized to create grammar");
     }
 
-    if (vocabulary?.mute) {
+    if (voice?.mute) {
         return {
             narrative: `root ::= "*" [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] .+`,
             dialogue: null,

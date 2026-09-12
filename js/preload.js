@@ -170,8 +170,9 @@ contextBridge.exposeInMainWorld('eAPI', {
 
     /**
      * @returns {Promise<void>}
+     * @param {string} language
      */
-    listNarrators: () => {
-        return ipcRenderer.invoke('listNarrators');
+    listNarrators: (language) => {
+        return ipcRenderer.invoke('listNarrators', language);
     },
 });

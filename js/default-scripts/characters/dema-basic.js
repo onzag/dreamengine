@@ -120,7 +120,7 @@ engine.exports = {
             skepticism: 0.4,
             antagonism: 0.1,
             correctiveness: {
-                likelyhood: 1,
+                likelihood: 1,
                 generalFacts: [
                     "The world is driven by science",
                     "Robots are a common part of society",

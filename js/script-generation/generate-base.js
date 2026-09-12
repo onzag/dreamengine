@@ -1338,7 +1338,7 @@ export async function generateBase(engine, scriptgenerator, guider, language) {
 
         insertSpecialComment(newCharacterSection.body, "base-vocabulary-limit");
         if (isMuteValue) {
-            newCharacterSection.body.push(`vocabularyLimit: {mute: true},`);
+            newCharacterSection.body.push(`voice: {mute: true, sounds: [], modes: []},`);
         }
     }
 
@@ -1560,12 +1560,12 @@ export async function generateBase(engine, scriptgenerator, guider, language) {
     }
 
     {
-        const correctivenessLikelyhoodValue = (await guider.askNumber(
-            "correctiveness-likelyhood",
+        const correctivenessLikelihoodValue = (await guider.askNumber(
+            "correctiveness-likelihood",
             "From 1 to 10 how likely is " + name + " to correct others when they say something wrong or incorrect? with 10 being extremely likely to always correct others and 1 being very unlikely to ever correct anyone",
             async () => {
                 await prime();
-                const correctivenessLikelyhoodValue = await generator.next({
+                const correctivenessLikelihoodValue = await generator.next({
                     maxCharacters: 100,
                     maxSafetyCharacters: 0,
                     maxParagraphs: 1,
@@ -1575,7 +1575,7 @@ export async function generateBase(engine, scriptgenerator, guider, language) {
                     grammar: `root ::= "very likely" | "somewhat likely" | "not very likely" | "not likely at all"`,
                 });
 
-                if (correctivenessLikelyhoodValue.done) {
+                if (correctivenessLikelihoodValue.done) {
                     throw new Error("Generator finished without producing output");
                 }
 
@@ -1587,11 +1587,11 @@ export async function generateBase(engine, scriptgenerator, guider, language) {
                 };
 
                 // @ts-ignore
-                return mapping[correctivenessLikelyhoodValue.value.trim().toLowerCase()];
+                return mapping[correctivenessLikelihoodValue.value.trim().toLowerCase()];
             },
         )).value;
 
-        const correctivenessGeneralFacts = correctivenessLikelyhoodValue >= 1 ? (await guider.askArbitraryList(
+        const correctivenessGeneralFacts = correctivenessLikelihoodValue >= 1 ? (await guider.askArbitraryList(
             "correctiveness-general-facts",
             "Provide a list of general facts and beliefs that " + name + " holds to be true about the world",
             async () => {
@@ -1616,7 +1616,7 @@ export async function generateBase(engine, scriptgenerator, guider, language) {
             },
         )).value : [];
 
-        const correctivenessPersonalQuestions = correctivenessLikelyhoodValue >= 1 ? (await guider.askArbitraryList(
+        const correctivenessPersonalQuestions = correctivenessLikelihoodValue >= 1 ? (await guider.askArbitraryList(
             "correctiveness-personal-questions",
             "Provide a list of personal situations where " + name + " would attempt to correct another character",
             async () => {
@@ -1641,7 +1641,7 @@ export async function generateBase(engine, scriptgenerator, guider, language) {
             },
         )).value : [];
 
-        const correctivenessWorldQuestions = correctivenessLikelyhoodValue >= 1 ? (await guider.askArbitraryList(
+        const correctivenessWorldQuestions = correctivenessLikelihoodValue >= 1 ? (await guider.askArbitraryList(
             "correctiveness-world-questions",
             "Provide a list of general world facts and beliefs that " + name + " would attempt to correct another character about",
             async () => {
@@ -1670,7 +1670,7 @@ export async function generateBase(engine, scriptgenerator, guider, language) {
 
         insertSpecialComment(newCharacterSection.body, "base-correctiveness");
         newCharacterSection.body.push(`correctiveness: {`);
-        newCharacterSection.body.push(`likelyhood: ${correctivenessLikelyhoodValue / 10},`);
+        newCharacterSection.body.push(`likelihood: ${correctivenessLikelihoodValue / 10},`);
         newCharacterSection.body.push(`generalFacts: ${JSON.stringify(correctivenessGeneralFacts)},`);
         newCharacterSection.body.push(`questions: [`);
 
@@ -1680,8 +1680,8 @@ export async function generateBase(engine, scriptgenerator, guider, language) {
                 .replace(/\{\{other\}\}/g, "OTHER_CHARACTER")
                 .replace(/\{\{char\}\}/g, name);
 
-            const correctivenessQuestionLikelyhoodValue = (await guider.askNumber(
-                "correctiveness-question-likelyhood-" + correctivenessQuestion,
+            const correctivenessQuestionLikelihoodValue = (await guider.askNumber(
+                "correctiveness-question-likelihood-" + correctivenessQuestion,
                 "From 1 to 10 how likely is " + name + " to bring up a correction when: \"" + correctivenessQuestion + "\"",
                 10,
             )).value;
@@ -1713,7 +1713,7 @@ export async function generateBase(engine, scriptgenerator, guider, language) {
             newCharacterSection.body.push(`{`);
             newCharacterSection.body.push(`askPer: "conversing_character",`);
             newCharacterSection.body.push(`question: (info) => ${toTemplateLiteral(correctivenessQuestion, name)},`);
-            newCharacterSection.body.push(`likelyhood: ${correctivenessQuestionLikelyhoodValue / 10},`);
+            newCharacterSection.body.push(`likelihood: ${correctivenessQuestionLikelihoodValue / 10},`);
             newCharacterSection.body.push(`correction: (info) => ${toTemplateLiteral(correctivenessCorrectionValue, name)},`);
             newCharacterSection.body.push(`},`);
         }

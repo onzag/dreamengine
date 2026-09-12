@@ -209,20 +209,20 @@ export async function generateAffectiveStates(engine, scriptgenerator, guider) {
      * @param {string} id
      * @param {string} act 
      * @param {boolean} consentDefaultNo
-     * @param {boolean} addVocabLimit 
+     * @param {boolean} addVoice 
      * @param {boolean} continous
      * @param {string} probabilityCondition
      * @param {import('./base.js').ScriptTypeGeneratorSection} section
      */
-    const generateIntimateAction = async (id, act, consentDefaultNo, addVocabLimit, continous, probabilityCondition, section) => {
+    const generateIntimateAction = async (id, act, consentDefaultNo, addVoice, continous, probabilityCondition, section) => {
         section.body.push(`{`)
         section.body.push(`action: (info) => ${toTemplateLiteral(act, name)},`);
         section.body.push(`probability: (char, other) => ${probabilityCondition},`);
 
         const actForInference = act.replace(/{{other}}/g, "other character").replace(/{{char}}/g, name);
 
-        if (addVocabLimit) {
-            const vocabularyLimits = [
+        if (addVoice) {
+            const voices = [
                 "moaning",
                 "gagging",
                 "panting",
@@ -237,38 +237,38 @@ export async function generateAffectiveStates(engine, scriptgenerator, guider) {
             ];
 
             const actForInferenceForGuider = replaceOtherCharNameWithPlaceholder(actForInference, name);
-            const vocabLimit = (await guider.askOption(
+            const voice = (await guider.askOption(
                 id + "-vocab-limit",
                 `What vocal/sound expression does ${name} make while the answer for the question is yes for: "${actForInferenceForGuider}"`,
-                vocabularyLimits,
+                voices,
                 async () => {
                     await prime();
                     const vocabResult = await generator.next({
                         maxCharacters: 20,
                         maxSafetyCharacters: 20,
                         maxParagraphs: 1,
-                        nextQuestion: `Given that ${name} is performing the following act: "${actForInference}", which of the following best describes ${name}'s vocal or sound expression during this act? Choose exactly one: ${vocabularyLimits.join(", ")}.`,
+                        nextQuestion: `Given that ${name} is performing the following act: "${actForInference}", which of the following best describes ${name}'s vocal or sound expression during this act? Choose exactly one: ${voices.join(", ")}.`,
                         stopAfter: [],
                         stopAt: [],
-                        instructions: `Reply with only one word from this list: ${vocabularyLimits.join(", ")}. Choose the one that best fits the act described.`,
+                        instructions: `Reply with only one word from this list: ${voices.join(", ")}. Choose the one that best fits the act described.`,
                         answerTrail: `${name}'s vocal expression during this act: `,
-                        grammar: `root ::= ${vocabularyLimits.map(v => JSON.stringify(v)).join(" | ")}`,
+                        grammar: `root ::= ${voices.map(v => JSON.stringify(v)).join(" | ")}`,
                     });
 
                     if (vocabResult.done) {
                         throw new Error("Generator finished without producing output");
                     }
 
-                    let vocabLimitParsed = vocabResult.value.trim().toLowerCase();
-                    if (!vocabularyLimits.includes(vocabLimitParsed)) {
-                        vocabLimitParsed = "none";
+                    let voiceParsed = vocabResult.value.trim().toLowerCase();
+                    if (!voices.includes(voiceParsed)) {
+                        voiceParsed = "none";
                     }
 
-                    return vocabLimitParsed;
+                    return voiceParsed;
                 }
             )).value;
 
-            section.body.push(`vocabularyLimit: DE.utils.createVocabularyLimitFromPreset(${JSON.stringify(vocabLimit)}),`);
+            section.body.push(`voice: DE.utils.createVoiceFromPreset(${JSON.stringify(voice)}),`);
         }
 
         if (continous) {
@@ -1024,7 +1024,7 @@ export async function generateAffectiveStates(engine, scriptgenerator, guider) {
                 const sexActQuestionForInference = sexActQuestion.replace(/\{\{other\}\}/g, "OTHER_CHARACTER").replace(/\{\{char\}\}/g, name);
                 const actForInferenceForGuider = replaceOtherCharNameWithPlaceholder(sexActQuestionForInference, name);
 
-                const vocabularyLimits = [
+                const voices = [
                     "moaning",
                     "gagging",
                     "panting",
@@ -1038,22 +1038,22 @@ export async function generateAffectiveStates(engine, scriptgenerator, guider) {
                     "normal",
                 ];
 
-                const vocabLimitParsed = (await guider.askOption(
+                const voiceParsed = (await guider.askOption(
                     `sex-acts-open-to-vocab-${sexActQuestion}`,
                     `What vocal/sound expression does ${name} make while the answer is yes for: "${actForInferenceForGuider}"`,
-                    vocabularyLimits,
+                    voices,
                     async () => {
                         await prime();
                         const vocabResult = await generator.next({
                             maxCharacters: 20,
                             maxSafetyCharacters: 20,
                             maxParagraphs: 1,
-                            nextQuestion: `Given that the following is happening between ${name} and OTHER_CHARACTER: "${sexActQuestionForInference}", which of the following best describes ${name}'s vocal or sound expression during this act? Choose exactly one: ${vocabularyLimits.join(", ")}.`,
+                            nextQuestion: `Given that the following is happening between ${name} and OTHER_CHARACTER: "${sexActQuestionForInference}", which of the following best describes ${name}'s vocal or sound expression during this act? Choose exactly one: ${voices.join(", ")}.`,
                             stopAfter: [],
                             stopAt: [],
-                            instructions: `Reply with only one word from this list: ${vocabularyLimits.join(", ")}. Choose the one that best fits the act described.`,
+                            instructions: `Reply with only one word from this list: ${voices.join(", ")}. Choose the one that best fits the act described.`,
                             answerTrail: `${name}'s vocal expression during this act: `,
-                            grammar: `root ::= ${vocabularyLimits.map(v => JSON.stringify(v)).join(" | ")}`,
+                            grammar: `root ::= ${voices.map(v => JSON.stringify(v)).join(" | ")}`,
                         });
 
                         if (vocabResult.done) {
@@ -1061,7 +1061,7 @@ export async function generateAffectiveStates(engine, scriptgenerator, guider) {
                         }
 
                         let parsed = vocabResult.value.trim().toLowerCase();
-                        if (!vocabularyLimits.includes(parsed)) {
+                        if (!voices.includes(parsed)) {
                             parsed = "none";
                         }
                         return parsed;
@@ -1096,7 +1096,7 @@ export async function generateAffectiveStates(engine, scriptgenerator, guider) {
                 intimateHead.body.push("{");
                 intimateHead.body.push(`question: (info) => ${toTemplateLiteral(sexActQuestion, name)},`);
                 intimateHead.body.push(`reaction: (info) => ${toTemplateLiteral(sexActReactionLoved, name)},`);
-                intimateHead.body.push(`vocabularyLimit: DE.utils.createVocabularyLimitFromPreset(${JSON.stringify(vocabLimitParsed)}),`);
+                intimateHead.body.push(`voice: DE.utils.createVoiceFromPreset(${JSON.stringify(voiceParsed)}),`);
                 intimateHead.body.push(`onlyAtLevel: ["slight", "moderate", "very"],`);
                 intimateHead.body.push(`},`);
 
@@ -1128,7 +1128,7 @@ export async function generateAffectiveStates(engine, scriptgenerator, guider) {
                 intimateHead.body.push("{");
                 intimateHead.body.push(`question: (info) => ${toTemplateLiteral(sexActQuestion, name)},`);
                 intimateHead.body.push(`reaction: (info) => ${toTemplateLiteral(sexActReactionUnloved, name)},`);
-                intimateHead.body.push(`vocabularyLimit: DE.utils.createVocabularyLimitFromPreset(${JSON.stringify(vocabLimitParsed)}),`);
+                intimateHead.body.push(`voice: DE.utils.createVoiceFromPreset(${JSON.stringify(voiceParsed)}),`);
                 intimateHead.body.push(`onlyAtLevel: ["not"],`);
                 intimateHead.body.push(`},`);
             }

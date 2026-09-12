@@ -286,10 +286,6 @@ document.querySelector(".ambience")?.addEventListener("click", () => {
 let WORKER_READY = false;
 let DOM_READY = false;
 
-for (let i = 0; i < 10; i++) {
-    console.log(i, Math.random());
-}
-
 const array = new Uint32Array(1);
 crypto.getRandomValues(array);
 

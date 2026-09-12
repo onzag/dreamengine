@@ -238,7 +238,7 @@ declare interface DEActionPromptInjection<TemplateType> {
      * 
      * Do not specify this if you do not want to limit vocabulary
      */
-    vocabularyLimit?: DEVocabularyLimit;
+    voice?: DEVoiceDescription;
 }
 
 declare interface DECharacterStateDefinition {
@@ -615,7 +615,7 @@ declare interface DECharacterStateDefinition {
      * 
      * This is state level and will apply if this state is active to all character messages
      */
-    vocabularyLimit?: DEVocabularyLimit;
+    voice?: DEVoiceDescription;
     /**
      * The primary emotion this state will cause
      */
@@ -652,22 +652,6 @@ declare interface DENarrationInstruction<TemplateType> {
 declare interface DEVocabularyToken {
     type: "WORD" | "GRAMMAR";
     value: string;
-}
-
-declare interface DEVocabularyLimit {
-    /**
-     * This makes the character mute
-     */
-    mute: boolean;
-    /**
-     * Description of the vocabulary limit for the character
-     * gets injected
-     */
-    description: DEStringTemplateCharOnly;
-    /**
-     * An override for the narration style provided that the vocabulary limit is active
-     */
-    narrationStyle?: DENarrationStyle;
 }
 
 declare interface DEIntimateAction {
@@ -726,7 +710,7 @@ declare interface DEIntimateAction {
     /**
      * Apply a vocabulary limit while performing the action
      */
-    vocabularyLimit?: DEVocabularyLimit;
+    voice?: DEVoiceDescription;
 
     /**
      * Bond change that happens when the action is performed successfully
@@ -842,7 +826,7 @@ declare interface DEIntimateOpenActivity {
     /**
      * vocabulary limit to apply to the reaction, if not specified, no limit is applied
      */
-    vocabularyLimit?: DEVocabularyLimit;
+    voice?: DEVoiceDescription;
     /**
      * The open to affection/intimate affection/sex response, it will only be considered if the character is at one of these bond levels, if not specified, it will be considered at any bond level
      */
@@ -903,7 +887,7 @@ declare interface DEBondIntimacyInfo {
      */
     openToAffectionResponses: Array<DEIntimateOpenActivity>;
     /**
-     * The likelyhood of the character to initiate an affectionate action with the other, and the actions they may perform
+     * The likelihood of the character to initiate an affectionate action with the other, and the actions they may perform
      * Make sure to keep in mind the circumstances
      */
     proneToInitiatingAffection: { probability: (char: DECompleteCharacterReference, other: DECompleteCharacterReference) => PromiseOrNot<number>, actions: DEIntimateAction[] };
@@ -924,7 +908,7 @@ declare interface DEBondIntimacyInfo {
      */
     openToIntimateAffectionResponses: Array<DEIntimateOpenActivity>;
     /**
-     * The likelyhood of the character to initiate an intimate affectionate action with the other, and the actions they may perform
+     * The likelihood of the character to initiate an intimate affectionate action with the other, and the actions they may perform
      * Make sure to keep in mind the circumstances
      */
     proneToInitiatingIntimateAffection: { probability: (char: DECompleteCharacterReference, other: DECompleteCharacterReference) => PromiseOrNot<number>, actions: DEIntimateAction[] };
@@ -945,7 +929,7 @@ declare interface DEBondIntimacyInfo {
      */
     openToSexResponses: Array<DEIntimateOpenActivity>;
     /**
-     * The likelyhood of the character to initiate a sexual action with the other, and the actions they may perform
+     * The likelihood of the character to initiate a sexual action with the other, and the actions they may perform
      * Make sure to keep in mind the circumstances
      */
     proneToInitiatingSex: { probability: (char: DECompleteCharacterReference, other: DECompleteCharacterReference) => PromiseOrNot<number>, actions: DEIntimateAction[] };
@@ -993,30 +977,95 @@ type DEEmotionNames =
     // cold
     "cold" | "indifferent" | "detached";
 
-declare interface DEVoiceSound {
+declare interface DEVoiceSoundMin {
     /**
      * The label of the sound, for example "laugh", "scream", "moan", "groan", "grunt", etc...
      * This is used to identify the sound and to trigger it in the character's actions
      */
     label: string;
     /**
-     * The replacement for the label, for example if the message is "[laughs], I cannot believe what you are saying!" and replacement is "- {{char}} laughs -", it will be converted to eg. "- {{char}} laughs - I cannot believe what you are saying".
+     * The replacement for the label, for example if the message is "[laughs], I cannot believe what you are saying!" and replacement is "— {{char}} laughs —", it will be converted to eg. "{{char}} laughs - I cannot believe what you are saying".
      * if not the replacement is a sort of expressive sound "hahaha, I cannot believe what you are saying!" replacement is "hahaha"
-     * You can use em dashes to express narrative replacement instead of sounds
      * 
-     * If you want to use dynamically generated values, instead of relying on purely random, use the getRandomSeedFromString and feed it the message source
-     * that way it guarantees future reloads remain consistent with the same message and source
+     * A comma will be automatically added before or after the replacement, or a dot at the end if it is the end of message
+     *
+     * Use {{char}} to refer to the character's name in the replacement
+     *  
+     * If you include em dashes in the replacement, they will be considered narration; all em dashes will be removed from the message nevertheless, they work for signaling only
+     * 
+     * If specified as an array, the replacement will be chosen at random
      */
-    replacement: DEStringTemplateCharOnlyWithMessage;
+    replacement: string | string[];
 }
 
-declare interface DEVoiceMode {
+declare interface DEVoiceSound extends DEVoiceSoundMin {
+    /**
+     * How likely is the sound to be used by the character, a number between 0 and 1
+     * do not use 1 as it will be used all the time, prefer low values such as 0.1
+     * 
+     * Forcing is good for example, for a cough sound if the character is sick, or if it is a common noise the character makes for no particular reason.
+     * For example you can simulate tourette syndrome.
+     */
+    forcedLikelihood?: number;
+    /**
+     * Whether the sound is related to an emotion, for example, a laugh is related to happiness, a scream is related to fear or anger, a moan is related to arousal, etc...
+     * This is used to help the character reason about their emotions and how they express them
+     */
+    relatedToEmotion?: Partial<Record<DEEmotionNames, {
+        /**
+         * This will act as extra weight for the sound to be used when the character is in this emotion, a number between 0 and 1
+         */
+        forcedLikelihood?: number;
+    }>>;
+    /**
+     * Whether the sound is related to a state, for example, a cough is related to being sick, a yawn is related to being tired, etc...
+     * This is used to help the character reason about their states and how they express them
+     */
+    relatedToState?: Partial<Record<string, {
+        /**
+         * This will act as extra weight for the sound to be used when the character is in this state, a number between 0 and 1
+         */
+        forcedLikelihood?: number;
+    }>>;
+}
+
+declare interface DEVoiceModeMin {
     /**
      * The label of the voice mode, for example "whispering", "screaming", "singing", etc...
      * 
      * prefer continous tense verbs, as they are more descriptive of the action being performed
      */
     label: string;
+}
+
+declare interface DEVoiceMode extends DEVoiceModeMin {
+    /**
+     * How likely is the mode to be used by the character, a number between 0 and 1
+     * do not use 1 as it will be used all the time, prefer low values such as 0.1
+     * 
+     * Forcing is good for example, for a sick voice if the character is sick
+     */
+    forcedLikelihood?: number;
+    /**
+     * Whether the sound is related to an emotion, for example, a laugh is related to happiness, a scream is related to fear or anger, a moan is related to arousal, etc...
+     * This is used to help the character reason about their emotions and how they express them
+     */
+    relatedToEmotion?: Partial<Record<DEEmotionNames, {
+        /**
+         * This will act as extra weight for the sound to be used when the character is in this emotion, a number between 0 and 1
+         */
+        forcedLikelihood?: number;
+    }>>;
+    /**
+     * Whether the sound is related to a state, for example, a cough is related to being sick, a yawn is related to being tired, etc...
+     * This is used to help the character reason about their states and how they express them
+     */
+    relatedToState?: Partial<Record<string, {
+        /**
+         * This will act as extra weight for the sound to be used when the character is in this state, a number between 0 and 1
+         */
+        forcedLikelihood?: number;
+    }>>;
 }
 
 /**
@@ -1030,10 +1079,18 @@ declare interface DEVoiceMode {
  */
 declare interface DEVoiceDescription {
     /**
+     * This makes the character mute
+     */
+    mute: boolean;
+    /**
+     * An override for the narration style provided that the vocabulary limit is active
+     */
+    narrationStyle?: DENarrationStyle;
+    /**
      * The description of how the character sounds
      * the argument for emotion is passed to the description template, so you can use it to describe how the character sounds when they are happy, sad, angry, etc...
      */
-    description: DEStringTemplateCharOnlyWithEmotion;
+    description?: DEStringTemplateCharOnlyWithEmotion;
     /**
      * The sounds that a character can make
      */
@@ -1448,26 +1505,8 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
 
     /**
      * Describes how the character talks
-     * 
-     * TODO implement
      */
     voice: DEVoiceDescription;
-
-    /**
-     * Limit vocabulary to these specific words or grammatical tokens, ensure to double quote strings
-     * that match specific words, these are used for grammar control so they should be in
-     * the form of grammatical patterns eg. "specific word", [A-Z]+, etc... they will be used a pipe
-     * in the grammar limit
-     * 
-     * Do not specify this if you do not want to limit vocabulary
-     * 
-     * This is a character level vocabulary limit that applies to the whole character,
-     * mainly useful to make characters with no vocabulary at all (eg. non-verbal characters)
-     * by setting this as an empty array, or very limited vocabulary for characters that can only say
-     * only specific words of phrases (eg. a parrot that can only say "hello" and "goodbye" by setting this)
-     * or something like groot that can only say "I am Groot" in different inflections
-     */
-    vocabularyLimit?: DEVocabularyLimit;
 
     /**
      * A number from 0 to 1 that represents how heroic the character is, higher means more likely to perform heroic actions and behaviours
@@ -1494,7 +1533,7 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
     skepticism: number;
 
     /**
-     * A number from 0 to 1 that is somewhat similar to skepticism, except this represents the likelyhood to run contrary to the other character given
+     * A number from 0 to 1 that is somewhat similar to skepticism, except this represents the likelihood to run contrary to the other character given
      * information, ideas or experiences, without any real reason to do so, higher means more likely to be antagonistic and run contrary to the other character
      * 
      * Some antagonism is good for characters, as this reduces the LLM from being too agreeable
@@ -1510,11 +1549,11 @@ declare interface DECompleteCharacterReference extends DEMinimalCharacterReferen
      */
     correctiveness: {
         /**
-         * General likelyhood
+         * General likelihood
          * 
          * A number from 0 to 1 that represents how likely is the character to correct the other character when they are wrong, higher means more likely to correct the other character when they are wrong
          */
-        likelyhood: number;
+        likelihood: number;
         /**
          * General facts that the character knows about the world, these are used to correct the other character when they are wrong about things that the character knows about
          */
@@ -1705,9 +1744,9 @@ declare type DECharacterQuestionWithAskPerForCharacters = DECharacterQuestionBas
 
 declare type DECharacterQuestionWithAskPerForCharactersWithLikelyhoodAndCorrection = DECharacterQuestionWithAskPerForCharacters & {
     /**
-     * The likelyhood of the question being checked, a number from 0 to 1, higher means more likely to be checked
+     * The likelihood of the question being checked, a number from 0 to 1, higher means more likely to be checked
      */
-    likelyhood: number;
+    likelihood: number;
     /**
      * The action correction the character will attempt to make to the other character if the answer is Yes, has access to {{other}} and {{other_family_relation}}
      */
@@ -2543,7 +2582,7 @@ declare interface DEWeatherSystem {
      */
     name: string;
     /**
-     * The likelyhood of the weather system occurring in the world
+     * The likelihood of the weather system occurring in the world
      * an arbitrary number, a weather system with double this number will
      * be double as likely to occur
      */
@@ -2990,9 +3029,20 @@ declare interface DEConversationMessageDialogue {
     __debug_id?: string;
 }
 
-declare interface DEConversationMessageDialogueFragment {
+declare type DEConversationMessageDialogueFragment = DEConversationMessageDialogueFragmentText | DEConversationMessageDialogueFragmentSound;
+
+declare interface DEConversationMessageDialogueFragmentText {
     type: "narration" | "dialogue";
     text: string;
+}
+
+declare interface DEConversationMessageDialogueFragmentSound {
+    type: "sound";
+    text: string;
+    soundInfo: {
+        sound?: DEVoiceSoundMin,
+        mode?: DEVoiceModeMin,
+    };
 }
 
 declare interface DEConversationMessage {
@@ -3236,12 +3286,6 @@ declare interface DEStringTemplateInfoCharOnly {
      */
     char: DECompleteCharacterReference,
 }
-declare interface DEStringTemplateInfoCharOnlyWithMessage extends DEStringTemplateInfoCharOnly {
-    /**
-     * The message associated with the template
-     */
-    message: string;
-}
 declare interface DEStringTemplateInfoCharOnlyWithEmotion extends DEStringTemplateInfoCharOnly {
     /**
      * The message associated with the template
@@ -3306,10 +3350,6 @@ declare interface DEStringTemplateInfoManyChars {
      */
     chars?: DECompleteCharacterReference[],
 }
-
-declare type DEStringTemplateCharOnlyWithMessage = string | ((
-    info: DEStringTemplateInfoCharOnlyWithMessage
-) => Promise<string> | string);
 
 declare type DEStringTemplateCharOnlyWithEmotion = string | ((
     info: DEStringTemplateInfoCharOnlyWithEmotion
@@ -3513,7 +3553,7 @@ declare interface DEUtils {
 
     isWithinAttractionGroupFor(option: "male" | "female" | "ambiguous", char1: string | DECompleteCharacterReference | null, potentialAttractiveChar2: string | DECompleteCharacterReference | null): boolean;
 
-    createVocabularyLimitFromPreset(presetName: string): DEVocabularyLimit;
+    createVoiceFromPreset(presetName: string): DEVoiceDescription;
 
     isAloneWith(char1: string | DECompleteCharacterReference | null, char2: string | DECompleteCharacterReference | null): boolean;
     isInPrivateLocation(char1: string | DECompleteCharacterReference | null): boolean;

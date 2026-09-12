@@ -50,7 +50,11 @@ const INVALID_NAMES = ["system", "assistant", "user", "everyone", "nobody",
  *   __debug_id?: string,
  *   event: "add-narration-block" | "add-dialogue-block" |
  *          "add-hidden-block" | "add-narration" |
- *          "add-dialogue"
+ *          "add-dialogue" | "add-sound" | "end-add-narration" | "end-add-dialogue" | "end-add-sound"
+ *   soundInfo?: {
+ *     sound?: DEVoiceSound,
+ *     mode?: DEVoiceMode,
+ *   },
  * }} EngineConversationEventModifyBlock
  */
 
@@ -175,7 +179,7 @@ export function createCharacterFromUser(user) {
         combat: [],
         correctiveness: {
             generalFacts: [],
-            likelyhood: 0,
+            likelihood: 0,
             questions: [],
         },
         clothing: user.clothing || "auto",
@@ -1302,7 +1306,7 @@ export class DEngine {
                         doNotMove: true,
                         injectedActions: nextActionsProduced,
                         microInjections: triggersResult.microInjections,
-                        microVocabularyLimits: triggersResult.microVocabularyLimits,
+                        microVoices: triggersResult.microVoices,
                     });
 
                     await addMessageForStoryMaster(talkResult.addedMessagesForStoryMaster);

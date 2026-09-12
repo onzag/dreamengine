@@ -110,7 +110,7 @@
  * @property {CharacterImageAssets} assets - the image assets for the character, this is a special property that is used to display the character in the UI
  * @property {CharacterVoiceAssets} [voice] - the sound assets for the character, this is a special property that is used to play the character's voice in the UI, do not specify if character is mute
  * @property {CharacterVoiceModifiersAssets} [voiceModifiers] - the sound assets for the character, this is a special property that is used to play the character's voice modifiers in the UI, do not specify if character has no voice modifiers
- * @property {CharacterSoundAssets} sounds - the sound assets for the character, this is a special property that is used to play the character's sounds in the UI
+ * @property {CharacterSoundAssets} [sounds] - the sound assets for the character, this is a special property that is used to play the character's sounds in the UI
  */
 
 /**

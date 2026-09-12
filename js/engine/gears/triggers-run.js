@@ -321,7 +321,7 @@ export async function runQuestion(engine, character, question, options) {
  * @param {DEngine} engine
  * @param {DECompleteCharacterReference} character
  * @param {string[]} interactedCharactersAccordingToItemChange
- * @returns {Promise<{microInjections: string[], microVocabularyLimits: DEVocabularyLimit[]}>}
+ * @returns {Promise<{microInjections: string[], microVoices: DEVoiceDescription[]}>}
  */
 export default async function runAllTriggersFor(engine, character, interactedCharactersAccordingToItemChange) {
     if (!engine.deObject) {
@@ -374,9 +374,9 @@ export default async function runAllTriggersFor(engine, character, interactedCha
     let microInjections = [];
 
     /**
-     * @type {DEVocabularyLimit[]}
+     * @type {DEVoiceDescription[]}
      */
-    let microVocabularyLimits = [];
+    let microVoices = [];
 
     /**
      * @type {Record<string, boolean>}
@@ -543,8 +543,8 @@ export default async function runAllTriggersFor(engine, character, interactedCha
 
                         microInjections.push(injection);
 
-                        if (questionToAsk.vocabularyLimit) {
-                            microVocabularyLimits.push(questionToAsk.vocabularyLimit);
+                        if (questionToAsk.voice) {
+                            microVoices.push(questionToAsk.voice);
                         }
                     }
                 }
@@ -821,8 +821,8 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                                             microInjections.push(behaviour);
                                         }
 
-                                        if (actionToChoose.vocabularyLimit) {
-                                            microVocabularyLimits.push(actionToChoose.vocabularyLimit);
+                                        if (actionToChoose.voice) {
+                                            microVoices.push(actionToChoose.voice);
                                         }
 
                                         // @ts-ignore typescript is wrong, it is not null
@@ -1086,8 +1086,8 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                                         microInjections.push(behaviour);
                                     }
 
-                                    if (actionToChoose.vocabularyLimit) {
-                                        microVocabularyLimits.push(actionToChoose.vocabularyLimit);
+                                    if (actionToChoose.voice) {
+                                        microVoices.push(actionToChoose.voice);
                                     }
 
                                     // @ts-ignore typescript is wrong, it is not null
@@ -1316,8 +1316,8 @@ export default async function runAllTriggersFor(engine, character, interactedCha
                                         microInjections.push(behaviour);
                                     }
 
-                                    if (actionToChoose.vocabularyLimit) {
-                                        microVocabularyLimits.push(actionToChoose.vocabularyLimit);
+                                    if (actionToChoose.voice) {
+                                        microVoices.push(actionToChoose.voice);
                                     }
 
                                     // @ts-ignore typescript is wrong, it is not null
@@ -1526,7 +1526,7 @@ export default async function runAllTriggersFor(engine, character, interactedCha
 
     return {
         microInjections,
-        microVocabularyLimits,
+        microVoices,
     };
 }
 

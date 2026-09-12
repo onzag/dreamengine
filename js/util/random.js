@@ -24,11 +24,11 @@ function mulberry32(seed) {
  * 
  * @example
  * const weather = [
- *   { type: 'sunny', likelyhood: 60 },
- *   { type: 'cloudy', likelyhood: 30 },
- *   { type: 'rainy', likelyhood: 10 }
+ *   { type: 'sunny', likelihood: 60 },
+ *   { type: 'cloudy', likelihood: 30 },
+ *   { type: 'rainy', likelihood: 10 }
  * ];
- * const selected = weightedRandom(weather, w => w.likelyhood);
+ * const selected = weightedRandom(weather, w => w.likelihood);
  */
 export function weightedRandom(items, getWeight, seed = null) {
     if (items.length === 0) return null;
@@ -63,11 +63,11 @@ export function weightedRandom(items, getWeight, seed = null) {
  * 
  * @example
  * const weather = [
- *   { type: 'sunny', likelyhood: 60 },
- *   { type: 'cloudy', likelyhood: 30 },
- *   { type: 'rainy', likelyhood: 10 }
+ *   { type: 'sunny', likelihood: 60 },
+ *   { type: 'cloudy', likelihood: 30 },
+ *   { type: 'rainy', likelihood: 10 }
  * ];
- * const selected = weightedRandom(weather, w => w.likelyhood);
+ * const selected = weightedRandom(weather, w => w.likelihood);
  */
 export function weightedRandomWithNullsIfNoWeight(items, getWeight, seed = null) {
     if (items.length === 0) return null;

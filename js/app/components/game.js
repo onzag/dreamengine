@@ -9,35 +9,6 @@ import { VOICE_ADAPTERS } from '../../engine/voice/all.js';
 import { GameVocalizerSession } from './game/vocalizer-session.js';
 
 /**
- * Wait until any one of the named events is dispatched by a target. Once an
- * event wins, all listeners installed by this call are removed.
- *
- * @param {EventTarget} target
- * @param {ReadonlyArray<string>} eventNames
- * @returns {Promise<Event>}
- */
-function waitForEventAny(target, eventNames) {
-    const names = [...new Set(eventNames)];
-    if (names.length === 0) {
-        return Promise.reject(new TypeError('waitForEventAny requires at least one event name.'));
-    }
-
-    return new Promise(resolve => {
-        /** @param {Event} event */
-        const onEvent = event => {
-            for (const name of names) {
-                target.removeEventListener(name, onEvent);
-            }
-            resolve(event);
-        };
-
-        for (const name of names) {
-            target.addEventListener(name, onEvent);
-        }
-    });
-}
-
-/**
  * The main in-dream game UI. Renders a transition ("falling asleep" white
  * tunnel) then settles into the main play screen with a hideable sidebar
  * and a multiline text input.
@@ -1617,47 +1588,8 @@ class GameOverlay extends HTMLElement {
 
                 const senderName = msg.name || '';
                 const isStoryMasterNarration = !!msg.storyMaster;
-                const isUser = senderName === actualUserName;
 
                 const content = msg.content;
-                const isGroupStart = !isStoryMasterNarration && senderName !== lastSenderName;
-
-                const emotion = msg.emotion || "neutral";
-                const emotionalRange = msg.emotionalRange || [];
-
-                // TODO move asset image to the game-message logic
-                let assetImage = !isStoryMasterNarration ? (await window.ENGINE_WORKER_CLIENT.queryDEObject({
-                    path: ["characters", senderName, "metadata", "assets", emotion],
-                }) || "") : "";
-
-                if (!isStoryMasterNarration && !assetImage) {
-                    const keyOfEmotion = Object.keys(emotionsGrouped).find((groupKey) => {
-                        if (emotionsGrouped[groupKey].includes(emotion)) {
-                            return true;
-                        }
-                    });
-
-                    const alternatives = keyOfEmotion ? emotionsGrouped[keyOfEmotion] : [];
-                    for (const altEmotion of alternatives) {
-                        if (altEmotion === emotion) continue;
-                        const altAssetImage = await window.ENGINE_WORKER_CLIENT.queryDEObject({
-                            path: ["characters", senderName, "metadata", "assets", altEmotion],
-                        });
-                        if (altAssetImage) {
-                            assetImage = altAssetImage;
-                            break;
-                        }
-                    }
-
-                    if (!assetImage) {
-                        const altAssetImage2 = await window.ENGINE_WORKER_CLIENT.queryDEObject({
-                            path: ["characters", senderName, "metadata", "assets", "neutral"],
-                        });
-                        if (altAssetImage2) {
-                            assetImage = altAssetImage2;
-                        }
-                    }
-                }
 
                 lastSenderName = isStoryMasterNarration ? '' : senderName;
 
@@ -1701,7 +1633,10 @@ class GameOverlay extends HTMLElement {
             // @ts-ignore
             el.setAttribute('sender-name', message.name || message.sender || '');
         }
-        this.root.querySelector('.game-story-content-list')?.appendChild(el);
+        const gameStoryList = this.root.querySelector('.game-story-content-list');
+        if (!gameStoryList) return el;
+        gameStoryList.appendChild(el);
+
         if (pseudostream) {
             el.pseudostreamContent(piece);
             if (pseudoStreamImmediate) {
@@ -1835,29 +1770,20 @@ class GameOverlay extends HTMLElement {
 
             if (data.event === "end-dialogue-block" || data.event === "end-narration-block") {
                 if (this.lastMessageAdded) {
-                    this._createMessageElement(this.lastMessageAdded, data.obj, data.contentIndex, true, false);
+                    this._createMessageElement(this.lastMessageAdded, data.obj, data.contentIndex, true, !needsToAwaitUntilInferenceEndsToTriggerPseudostreamVocalizationProcessing);
                 }
             } else if (data.event === "end-inference" && needsToAwaitUntilInferenceEndsToTriggerPseudostreamVocalizationProcessing) {
                 const elems = Array.from(this.root.querySelectorAll('app-game-message'));
                 for (const block of elems) {
                     // @ts-ignore
-                    if (block.isPseudoStreamAwait()) {
-                        // we need to ensure the order of the calls for the voice generation is done in the right order for
-                        // the best performance, so we will wait for each block to do its init voice generation process
-                        // so we know it is queued in the right order since the server will use FIFO for the voice generation queue
-                        // so that way the voice generation will come in order
-                        const initialized = waitForEventAny(block, ['on-pseudostream-init-done', 'on-pseudostream-cancelled']);
-                        // @ts-ignore
-                        block.runPseudostream();
-                        await initialized;
-                    }
+                    block.runPseudostream();
                 }
             }
         } else {
             // if a real stream is to be used then we will create the block when the add-dialogue-block or add-narration-block events are received
             // make it visible right away, and feed events manually to the block, everything is immediate
             if (data.event !== "end-inference" && data.event !== "start-inference") {
-                if (data.event === "add-dialogue" || data.event === "add-narration") {
+                if (data.event === "add-dialogue" || data.event === "add-narration" || data.event === "add-sound" || data.event === "end-add-dialogue" || data.event === "end-add-narration" || data.event === "end-add-sound") {
                     const messageId = data.messageId;
                     const contentIndex = data.contentIndex;
                     const block = this.root.querySelector(`app-game-message[gid="${CSS.escape(messageId)}"][content-index="${contentIndex}"]`);

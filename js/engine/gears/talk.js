@@ -1,9 +1,10 @@
 import { DEngine } from "../index.js";
 import { getCharacterCanSee, getSysPromptForCharacter } from "../util/character-info.js";
 import { emotions } from "../util/emotions.js";
-import { createGrammarFromList, generateGrammarForVocabulary, parseListFromGrammarResponse } from "../util/grammar.js";
+import { createGrammarFromList, generateGrammarForVoice, parseListFromGrammarResponse } from "../util/grammar.js";
 import { convertContentToSimpleList, convertMessagesToSimpleList, getHistoryFragmentForCharacter } from "../util/messages.js";
-import { mergeVocabularyLimits } from "../util/vocabulary.js";
+import { minimizeSoundDescription, minimizeModeDescription } from "../util/voice.js";
+import { mergeVoicesFrom } from "../util/voice.js";
 
 /**
  * @param {DEngine} engine 
@@ -12,7 +13,7 @@ import { mergeVocabularyLimits } from "../util/vocabulary.js";
  *   doNotMove: boolean, // if true, the character will not be allowed to change location
  *   injectedActions: Array<DEActionPromptInjection<DEStringTemplateCharOnly>>,
  *   microInjections: string[], // these are messages that are injected into the context of the inference adapter for this talk, but are not shown to the story master, they are meant to be used for micro-injections of information that the character would know but the story master doesn't need to know, such as "I see a monster in the bushes" or "I have a knife in my pocket", which can then be used by the inference adapter to generate more accurate dialogue and narration, but doesn't need to be shown to the story master
- *   microVocabularyLimits: DEVocabularyLimit[] // limits for the micro-injections vocabulary
+ *   microVoices: DEVoiceDescription[] // limits for the micro-injections voice
  * }} options
  */
 export async function talk(engine, character, options) {
@@ -128,11 +129,11 @@ export async function talk(engine, character, options) {
      */
     let emotionalRange = [];
 
-    let baseVocabularyLimit = engine.deObject.characters[character.name].vocabularyLimit;
-    for (const microVocabularyLimit of options.microVocabularyLimits || []) {
-        baseVocabularyLimit = baseVocabularyLimit ? mergeVocabularyLimits(baseVocabularyLimit, microVocabularyLimit) : microVocabularyLimit;
+    let baseVoice = engine.deObject.characters[character.name].voice;
+    for (const microVoice of options.microVoices || []) {
+        baseVoice = baseVoice ? mergeVoicesFrom(baseVoice, microVoice) : microVoice;
     }
-    let vocabularyLimitDominance = 0;
+    let voiceDominance = 0;
 
     /**
      * @type {string[]}
@@ -157,11 +158,11 @@ export async function talk(engine, character, options) {
             stateDominance = state.stateInfo.dominanceAfterRelief;
         }
 
-        if (state.stateInfo.vocabularyLimit && (stateDominance > vocabularyLimitDominance || !baseVocabularyLimit)) {
-            baseVocabularyLimit = state.stateInfo.vocabularyLimit;
-            vocabularyLimitDominance = stateDominance;
-        } else if (state.stateInfo.vocabularyLimit && stateDominance == vocabularyLimitDominance && baseVocabularyLimit) {
-            mergeVocabularyLimits(baseVocabularyLimit, state.stateInfo.vocabularyLimit);
+        if (state.stateInfo.voice && (stateDominance > voiceDominance || !baseVoice)) {
+            baseVoice = state.stateInfo.voice;
+            voiceDominance = stateDominance;
+        } else if (state.stateInfo.voice && stateDominance == voiceDominance && baseVoice) {
+            mergeVoicesFrom(baseVoice, state.stateInfo.voice);
         }
 
         if (state.stateInfo.primaryEmotion) {
@@ -214,11 +215,11 @@ export async function talk(engine, character, options) {
                 }
             }
 
-            if (action.action.action.vocabularyLimit && (vocabularyLimitDominance < stateDominance || !baseVocabularyLimit)) {
-                baseVocabularyLimit = action.action.action.vocabularyLimit;
-                vocabularyLimitDominance = stateDominance;
-            } else if (action.action.action.vocabularyLimit && vocabularyLimitDominance === stateDominance && baseVocabularyLimit) {
-                mergeVocabularyLimits(baseVocabularyLimit, action.action.action.vocabularyLimit);
+            if (action.action.action.voice && (voiceDominance < stateDominance || !baseVoice)) {
+                baseVoice = action.action.action.voice;
+                voiceDominance = stateDominance;
+            } else if (action.action.action.voice && voiceDominance === stateDominance && baseVoice) {
+                mergeVoicesFrom(baseVoice, action.action.action.voice);
             }
 
             if (action.action.action.narrativeEffect && narrativeEffectsDominance < stateDominance) {
@@ -344,22 +345,26 @@ export async function talk(engine, character, options) {
         narrativeEffects.push(`${character.name} must not walk away or go to another location`);
     }
 
-    if (baseVocabularyLimit?.mute) {
+    if (baseVoice?.mute && !baseVoice?.description) {
         narrativeEffects.push(`'${character.name}' is currently mute`);
     } else {
-        if (baseVocabularyLimit?.description) {
-            const description = typeof baseVocabularyLimit.description === "string" ? baseVocabularyLimit.description : await baseVocabularyLimit.description({ char: character });
+        if (baseVoice?.description) {
+            const description = typeof baseVoice.description === "string" ? baseVoice.description : await baseVoice.description({
+                char: character,
+                // @ts-ignore
+                emotion: primaryEmotion,
+            });
             if (description) {
-                narrativeEffects.push(`'${character.name}' vocabulary description: ${description}`);
+                narrativeEffects.push(`'${character.name}' voice description: ${description}`);
             }
         }
     }
 
-    const grammar = generateGrammarForVocabulary(engine, baseVocabularyLimit, character.name);
+    const grammar = generateGrammarForVoice(engine, baseVoice, character.name);
 
     let narrationStyle = engine.deObject.narrationStyle;
-    if (baseVocabularyLimit?.narrationStyle) {
-        narrationStyle = baseVocabularyLimit.narrationStyle;
+    if (baseVoice?.narrationStyle) {
+        narrationStyle = baseVoice.narrationStyle;
     }
 
     /**
@@ -461,7 +466,7 @@ export async function talk(engine, character, options) {
         const action = toConsume ? toConsume.text : null;
 
         if (generatedElements.length >= totalToGenerate) {
-            if (!generatedElements.includes("dialogue") && !baseVocabularyLimit?.mute) {
+            if (!generatedElements.includes("dialogue") && !baseVoice?.mute) {
                 // force dialogue if we haven't generated any yet
                 generatedElements.push("dialogue");
                 if (narrativeAction) {
@@ -500,7 +505,7 @@ export async function talk(engine, character, options) {
             }
         }
 
-        const isMute = baseVocabularyLimit?.mute || false;
+        const isMute = baseVoice?.mute || false;
         const areLastTwoElementsNarration = generatedElements.length >= 2 && generatedElements[generatedElements.length - 1] === "narration" && generatedElements[generatedElements.length - 2] === "narration";
         const nextType = isMute ? "narration" : (areLastTwoElementsNarration ? "dialogue" : (Math.random() < narrationStyle.narrativeBias ? "narration" : "dialogue"));
         generatedElements.push(nextType);
@@ -656,6 +661,7 @@ export async function talk(engine, character, options) {
 
         // dialogue specific
         let insideNarration = nextIsNarration;
+        let insideSound = false;
         let ignoreFirstNCharactersDialogueOnly = nextIsNarration ? 0 : (character.name + ": ").length;
 
         let next = await generator.next(true);
@@ -703,46 +709,129 @@ export async function talk(engine, character, options) {
                             // we will treat it as narration
                             insideNarration = true;
                         }
-                        currentBlockAsDialoge.fragments.push({
-                            type: insideNarration ? "narration" : "dialogue",
-                            text: "",
-                        });
+                        if (actualInfoContent.trim()[0] === "[" && !insideNarration) {
+                            insideSound = true;
+                        }
+                        const typeToAdd = insideNarration ? "narration" : (insideSound ? "sound" : "dialogue");
+                        if (typeToAdd === "sound") {
+                            currentBlockAsDialoge.fragments.push({
+                                type: typeToAdd,
+                                text: textToStream,
+                                // no way to get the info yet, it is still streaming
+                                soundInfo: {}
+                            });
+                        } else {
+                            currentBlockAsDialoge.fragments.push({
+                                type: typeToAdd,
+                                text: "",
+                            });
+                        }
                     }
 
-                    // check if em dash in the text
-                    if (textToStream.includes("—")) {
-                        const splitted = textToStream.split("—").map((s) => s.trim());
-                        for (let i = 0; i < splitted.length; i++) {
-                            const part = splitted[i];
-                            const needsFlipping = i > 0;
-                            if (needsFlipping) {
+                    // check if em dash in the text or one of the sound markers
+                    if (textToStream.includes("—") || textToStream.includes("[") || textToStream.includes("]")) {
+                        /**
+                         * @type {string[]}
+                         */
+                        const parts = [];
+                        /**
+                         * @type {Array<"narration" | "dialogue" | "sound">}
+                         */
+                        const types = [];
+                        let accum = "";
+                        for (let i = 0; i < textToStream.length; i++) {
+                            const char = textToStream[i];
+                            if (char === "—") {
+                                parts.push(accum.trim());
+                                types.push(insideNarration ? "narration" : (insideSound ? "sound" : "dialogue"));
+                                accum = "";
                                 insideNarration = !insideNarration;
-                                const currentBlockAsDialoge = /** @type {DEConversationMessageDialogue} */ (currentBlock);
-                                currentBlockAsDialoge.fragments.push({
-                                    type: insideNarration ? "narration" : "dialogue",
-                                    text: part || "",
-                                });
+                                if (insideNarration) {
+                                    insideSound = false;
+                                }
+                            } else if (char === "[" && !insideNarration && !insideSound) {
+                                parts.push(accum.trim());
+                                types.push(insideNarration ? "narration" : (insideSound ? "sound" : "dialogue"));
+                                accum = "";
+                                insideSound = true;
+                            } else if (char === "]" && !insideNarration && insideSound) {
+                                parts.push(accum.trim());
+                                types.push("sound");
+                                accum = "";
+                                insideSound = false;
+                            } else {
+                                accum += char;
                             }
+                        }
+
+                        if (accum.trim()) {
+                            parts.push(accum.trim());
+                            types.push(insideNarration ? "narration" : (insideSound ? "sound" : "dialogue"));
+                        }
+
+                        for (let i = 0; i < parts.length; i++) {
+                            const part = parts[i];
+                            const type = types[i];
 
                             if (part) {
+                                const isTypeSameAsLastFragment = currentBlockAsDialoge.fragments.length > 0 && currentBlockAsDialoge.fragments[currentBlockAsDialoge.fragments.length - 1].type === type;
+                                if (isTypeSameAsLastFragment) {
+                                    currentBlockAsDialoge.fragments[currentBlockAsDialoge.fragments.length - 1].text += part;
+                                } else {
+                                    const previousFragment = currentBlockAsDialoge.fragments[currentBlockAsDialoge.fragments.length - 1];
+                                    if (previousFragment) {
+                                        const previousFragmentTextTrimmed = previousFragment.text.trim();
+                                        const soundInfo = previousFragment.type === "sound" ? {
+                                            sound: minimizeSoundDescription(baseVoice.sounds.find((sound) => sound.label === previousFragmentTextTrimmed)),
+                                            mode: minimizeModeDescription(baseVoice.modes.find((mode) => mode.label === previousFragmentTextTrimmed)),
+                                        } : undefined;
+                                        if (previousFragment.type === "sound" && soundInfo) {
+                                            previousFragment.soundInfo = soundInfo;
+                                        }
+                                        engine.triggerConversationMessageUpdate(engine.deObject, {
+                                            conversationId: charState.conversationId,
+                                            messageId: nextMessage.id,
+                                            text: previousFragment.text,
+                                            event: previousFragment.type === "narration" ? "end-add-narration" : (previousFragment.type === "sound" ? "end-add-sound" : "end-add-dialogue"),
+                                            contentIndex: nextMessage.content.length - 1,
+                                            soundInfo: soundInfo,
+                                        });
+                                    }
+
+                                    if (type === "sound") {
+                                        currentBlockAsDialoge.fragments.push({
+                                            type: type,
+                                            text: part,
+                                            // no way to get the info yet, it is still streaming
+                                            soundInfo: {}
+                                        });
+                                    } else {
+                                        currentBlockAsDialoge.fragments.push({
+                                            type: type,
+                                            text: part,
+                                        });
+                                    }
+                                }
+
                                 engine.triggerConversationMessageUpdate(engine.deObject, {
                                     conversationId: charState.conversationId,
                                     messageId: nextMessage.id,
                                     text: part,
-                                    event: insideNarration ? "add-narration" : "add-dialogue",
+                                    event: type === "narration" ? "add-narration" : (type === "sound" ? "add-sound" : "add-dialogue"),
                                     contentIndex: nextMessage.content.length - 1,
                                 });
                             }
                         }
                     } else if (textToStream) {
+                        currentBlockAsDialoge.fragments[currentBlockAsDialoge.fragments.length - 1].text += textToStream;
+                        // simple processing case
                         engine.triggerConversationMessageUpdate(engine.deObject, {
                             conversationId: charState.conversationId,
                             messageId: nextMessage.id,
                             text: textToStream,
-                            event: insideNarration ? "add-narration" : "add-dialogue",
+                            event: insideNarration ? "add-narration" : (insideSound ? "add-sound" : "add-dialogue"),
                             contentIndex: nextMessage.content.length - 1,
                         });
-                        currentBlockAsDialoge.fragments[currentBlockAsDialoge.fragments.length - 1].text += textToStream;
                     }
                 }
             }
@@ -759,12 +848,38 @@ export async function talk(engine, character, options) {
             engine.triggerConversationMessageUpdate(engine.deObject, {
                 conversationId: charState.conversationId,
                 messageId: nextMessage.id,
+                text: currentBlockAsNarration.text,
+                event: "end-add-narration",
+                contentIndex: nextMessage.content.length - 1,
+            });
+            engine.triggerConversationMessageUpdate(engine.deObject, {
+                conversationId: charState.conversationId,
+                messageId: nextMessage.id,
                 obj: currentBlockAsNarration,
                 event: "end-narration-block",
                 contentIndex: nextMessage.content.length - 1,
             });
         } else {
             const currentBlockAsDialoge = /** @type {DEConversationMessageDialogue} */ (currentBlock);
+            const lastFragment = currentBlockAsDialoge.fragments[currentBlockAsDialoge.fragments.length - 1];
+            if (lastFragment) {
+                const lastFragmentTextTrimmed = lastFragment.text.trim();
+                const soundInfo = lastFragment.type === "sound" ? {
+                    sound: minimizeSoundDescription(baseVoice.sounds.find((sound) => sound.label === lastFragmentTextTrimmed)),
+                    mode: minimizeModeDescription(baseVoice.modes.find((mode) => mode.label === lastFragmentTextTrimmed)),
+                } : undefined;
+                if (lastFragment.type === "sound" && soundInfo) {
+                    lastFragment.soundInfo = soundInfo;
+                }
+                engine.triggerConversationMessageUpdate(engine.deObject, {
+                    conversationId: charState.conversationId,
+                    messageId: nextMessage.id,
+                    text: lastFragment.text,
+                    event: lastFragment.type === "narration" ? "end-add-narration" : (lastFragment.type === "sound" ? "end-add-sound" : "end-add-dialogue"),
+                    contentIndex: nextMessage.content.length - 1,
+                    soundInfo: soundInfo,
+                });
+            }
             engine.triggerConversationMessageUpdate(engine.deObject, {
                 conversationId: charState.conversationId,
                 messageId: nextMessage.id,

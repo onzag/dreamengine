@@ -927,8 +927,8 @@ export const deEngineUtilsFn = (DE) => ({
         return stateInfo.relieving;
     },
 
-    createVocabularyLimitFromPreset(presetName) {
-        // TODO implement presets const vocabularyLimits = [
+    createVoiceFromPreset(presetName) {
+        // TODO implement presets const voices = [
                 //     "moaning",
                 //     "gagging",
                 //     "panting",
@@ -944,7 +944,9 @@ export const deEngineUtilsFn = (DE) => ({
         return {
             mute: false,
             description: "",
-        }
+            sounds: [],
+            modes: [],
+        };
     },
 
     isAloneWith(char1, char2) {

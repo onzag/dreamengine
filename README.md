@@ -68,7 +68,7 @@ The extra inference also costs many input tokens, while it is mostly mere yes/no
 
 The more characters and the more things at a location at once, the more these extra costs.
 
-While it will still work with smaller models, there is increased likelyhood of "ghostly actions" and a disconnect of the game state with the flow of the story.
+While it will still work with smaller models, there is increased likelihood of "ghostly actions" and a disconnect of the game state with the flow of the story.
 
 ### Scripting
 

@@ -47,6 +47,10 @@ class GameMessage extends HTMLElement {
         this._pseudostreamFinishedPromise = null;
         /** @type {(() => void) | null} */
         this._resolvePseudostreamFinished = null;
+        /** @type {Promise<void> | null} */
+        this._pseudoStreamInitPromise = null;
+        /** @type {(() => void) | null} */
+        this._resolvePseudoStreamInitPromise = null;
         /** @type {string | null} */
         this._audioSrc = null;
         this._audioController = new AbortController();
@@ -85,7 +89,7 @@ class GameMessage extends HTMLElement {
         return this._piece?.type || (this.getAttribute('type') === 'narration' ? 'narration' : 'dialogue');
     }
 
-    /** @returns {Array<{type: 'narration' | 'dialogue', text: string}>} */
+    /** @returns {Array<DEConversationMessageDialogueFragment>} */
     _fragments() {
         if (!this._piece) return [];
         return this._piece.type === 'narration'
@@ -107,7 +111,11 @@ class GameMessage extends HTMLElement {
         if (!this._hasContent()) return;
         this._ensureRendered();
         for (const fragment of this._fragments()) {
-            this._appendInstant(fragment.type, fragment.text);
+            if (fragment.type === 'sound') {
+                this._appendSound(fragment.soundInfo.sound || fragment.soundInfo.mode || { label: fragment.text || 'unknown', replacement: '{{char}} does ' + (fragment.text || 'a sound') });
+            } else {
+                this._appendInstant(fragment.type, fragment.text);
+            }
         }
     }
 
@@ -122,6 +130,29 @@ class GameMessage extends HTMLElement {
                 this._appendInstant(mode, data.text || '');
                 break;
             }
+            case 'add-sound': {
+                // we do nothing because we want to wait for all of the data of the sound to be added before we display it, so we will wait for the end-add-sound event
+                break;
+            }
+            case 'end-add-narration':
+            case 'end-add-dialogue':
+                // do nothing here because we stream the text as it comes in, so we don't need to do anything when the end-add event is received
+                break;
+            case 'end-add-sound':
+                // we will display the sound here because we want to wait for all of the data of the sound to be added before we display it
+
+                // there is no sound in narration, this is dialogue specific
+                if (this._blockType() === 'narration') return;
+
+                if (data.soundInfo && (data.soundInfo.sound || data.soundInfo.mode)) {
+                    // @ts-ignore
+                    this._appendSound(data.soundInfo.sound || data.soundInfo.mode);
+                } else {
+                    console.warn('GameMessage: received end-add-sound event without soundInfo.');
+                    this._appendSound({ label: data.text || 'unknown', replacement: '{{char}} does ' + (data.text || 'a sound') });
+                }
+                
+                break;
             case 'end-narration-block':
             case 'end-dialogue-block':
             case 'done':
@@ -145,6 +176,9 @@ class GameMessage extends HTMLElement {
                 this._resolvePseudostreamFinished = resolve;
             });
         }
+        if (!this._pseudoStreamInitPromise) {
+            this._pseudoStreamInitPromise = new Promise(resolve => { this._resolvePseudoStreamInitPromise = resolve; });
+        }
     }
 
     isPseudoStreamAwait() {
@@ -152,6 +186,9 @@ class GameMessage extends HTMLElement {
     }
 
     /** Start once; every caller receives the same completion promise. */
+    /**
+     * @returns {Promise<void>}
+     */
     runPseudostream() {
         if (this._pseudostreamPromise) return this._pseudostreamPromise;
         if (!this.isPseudoStreamAwait()) return Promise.resolve();
@@ -167,9 +204,12 @@ class GameMessage extends HTMLElement {
     pseudostreamPrepare() {
         if (!this._preparationPromise) {
             const previous = this.previousElementSibling;
-            const predecessor = previous instanceof GameMessage
+            const predecessorPseudoFinished = previous instanceof GameMessage
                 ? previous._pseudostreamFinishedPromise : null;
-            const audio = this._prepareAudio().then(src => {
+            const predecessorInitFinished = previous instanceof GameMessage
+                ? previous._pseudoStreamInitPromise || Promise.resolve() : Promise.resolve();
+
+            const audio = predecessorInitFinished.then(() => this._prepareAudio()).then(src => {
                 if (this._cancelled) {
                     if (src) URL.revokeObjectURL(src);
                 } else {
@@ -178,7 +218,7 @@ class GameMessage extends HTMLElement {
             }).catch(error => {
                 console.error('GameMessage: voice preparation failed.', error);
             });
-            this._preparationPromise = Promise.all([audio, predecessor]).then(() => {});
+            this._preparationPromise = Promise.all([audio, predecessorPseudoFinished]).then(() => {});
         }
         return this._preparationPromise;
     }
@@ -220,13 +260,31 @@ class GameMessage extends HTMLElement {
     }
 
     async _animateContent() {
-        for (const fragment of this._fragments()) {
+        for (const fragmentSrc of this._fragments()) {
+            let fragment = fragmentSrc;
             if (this._cancelled) return;
-            const text = (fragment.text || '').replace(/\*/g, '');
+            const text = (fragment.text || '');
+            let markAsSound = false;
             if (!text) continue;
+            if (fragment.type === 'sound') {
+                const soundInfo = fragment.soundInfo.sound || fragment.soundInfo.mode || { label: fragment.text || 'unknown', replacement: '{{char}} does ' + (fragment.text || 'a sound') };
+                const resolved = this._appendSound(soundInfo, true);
+                if (resolved) {
+                    fragment = {
+                        text: resolved.text,
+                        // @ts-ignore
+                        type: resolved.type
+                    };
+                    markAsSound = true;
+                } else {
+                    console.warn('GameMessage: could not resolve sound fragment.', soundInfo);
+                    continue;
+                }
+            }
             const target = this._blockType() === 'narration'
+                // @ts-ignore guaranteed not to be sound
                 ? this._narrationTextEl : this._ensureDialogueFragment(fragment.type);
-            if (target) await this._drip(target, text);
+            if (target) await this._drip(target, text, markAsSound);
         }
         this._hideCursor();
     }
@@ -236,10 +294,14 @@ class GameMessage extends HTMLElement {
      */
     async _prepareAudio() {
         const session = window.GAME_VOCALIZER;
+
         if (!session || !this._hasContent()) {
-            this.dispatchEvent(new CustomEvent('on-pseudostream-init-done', { bubbles: true, composed: true }));
+            this._resolvePseudoStreamInitPromise?.();
+            this._pseudoStreamInitPromise = null;
+            this._resolvePseudoStreamInitPromise = null;
             return null;
         };
+
         const narratorVoice = await this.getNarratorVoice();
         const sender = this.getAttribute('sender-name');
         const characterVoices = this._blockType() === 'dialogue' && sender
@@ -259,7 +321,9 @@ class GameMessage extends HTMLElement {
         }
         return session.renderSegments(segments, () => {
             setTimeout(() => {
-                this.dispatchEvent(new CustomEvent('on-pseudostream-init-done', { bubbles: true, composed: true }));
+                this._resolvePseudoStreamInitPromise?.();
+                this._pseudoStreamInitPromise = null;
+                this._resolvePseudoStreamInitPromise = null;
             }, 10); // yield to the event loop so the caller can attach a listener
         });
     }
@@ -355,16 +419,62 @@ class GameMessage extends HTMLElement {
         }
     }
 
-    /** @param {'narration' | 'dialogue'} mode
-     * @param {string} text
+    /**
+     * 
+     * @param {DEVoiceMode | DEVoiceSound} soundInfo
+     * @param {boolean} returnForDrip
      */
-    _appendInstant(mode, text) {
+    _appendSound(soundInfo, returnForDrip = false) {
+        const soundInfoAsVoiceSound = /** @type {DEVoiceSound} */ (soundInfo);
+        const replacements = soundInfoAsVoiceSound.replacement || [];
+        const replacementsAsArray = Array.isArray(replacements) ? replacements : [replacements];
+
+        // get the current text that exists in the whole message
+        let numericSeed = ((this.getAttribute('gid') || "null") + this.getAttribute("content-index")).split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+
+        // move that seed a bit according to how many sounds have already been added
+        const existingSoundCount = this.querySelectorAll('.token-sound').length;
+        numericSeed += existingSoundCount;
+
+        // use the numeric seed to select a replacement from the array of replacements
+        const replacementIndex = numericSeed % replacementsAsArray.length;
+        const replacement = replacementsAsArray[replacementIndex];
+
+        // if the replacement is empty, add a space
+        if (!replacement || !replacement.trim()) {
+            console.warn('GameMessage: replacement is empty, adding a space instead.');
+            if (returnForDrip) return { type: 'dialogue', text: ' ' };
+            this._appendInstant('dialogue', '', true);
+            return { type: 'dialogue', text: ' ' };
+        }
+
+        // check what type of replacement we have, if the replacement has a em dash then it is narrative
+        if (replacement.includes('—')) {
+            // remove all em dashes and replace {{char}} with the sender name
+            const value = replacement.replace(/—/g, '').replace(/{{char}}/g, this.getAttribute('sender-name') || '');
+            if (returnForDrip) return { type: 'narration', text: value };
+            this._appendInstant('narration', value, true);
+            return { type: 'narration', text: value };
+        } else {
+            // append as it is and as dialogue
+            if (returnForDrip) return { type: 'dialogue', text: replacement };
+            this._appendInstant('dialogue', replacement, true);
+            return { type: 'dialogue', text: replacement };
+        }
+    }
+
+    /**
+     * @param {'narration' | 'dialogue'} mode
+     * @param {string} text
+     * @param {boolean} markAsSound - Whether to mark this text as a sound
+     */
+    _appendInstant(mode, text, markAsSound = false) {
         text = (text || '').replace(/\*/g, '');
         if (!text || (!this._rendered && !text.trim())) return;
         this._ensureRendered();
         const target = this._blockType() === 'narration'
             ? this._narrationTextEl : this._ensureDialogueFragment(mode);
-        if (target) this._writeInstant(target, text);
+        if (target) this._writeInstant(target, text, markAsSound);
     }
 
     /** @param {HTMLElement} rootEl */
@@ -454,10 +564,21 @@ class GameMessage extends HTMLElement {
     /**
      * @param {HTMLElement} target
      * @param {string} text
+     * @param {boolean} markAsSound
      */
-    _writeInstant(target, text) {
+    _writeInstant(target, text, markAsSound = false) {
+        // check if the previous element (if any in this target) is a sound type, if so, we will add a space before the new text to separate it from the previous sound
+        const lastChild = target.lastElementChild;
+        const previousIsSound = lastChild && lastChild.classList.contains('token-sound');
+        if (previousIsSound || (markAsSound && lastChild)) {
+            text = ', ' + text;
+        }
+
+        // should add end dot and remove it? is it better?
+
         const span = document.createElement('span');
         span.className = 'token-instant';
+        if (markAsSound) span.classList.add('token-sound');
         span.textContent = text;
         target.appendChild(span);
         this._scrollParent();
@@ -467,14 +588,24 @@ class GameMessage extends HTMLElement {
      * Drip text into a target element one token at a time at a measured pace.
      * @param {HTMLElement} target
      * @param {string} text
+     * @param {boolean} markAsSound
      */
-    async _drip(target, text) {
-        const tokens = this._tokenize(text);
-        for (const tok of tokens) {
+    async _drip(target, text, markAsSound = false) {
+        const tokens = markAsSound ? [text] : this._tokenize(text);
+        for (const toksrc of tokens) {
+            let tok = toksrc;
             if (this._cancelled) return;
             this._hideCursor();
+
+            const lastChild = target.lastElementChild;
+            const previousIsSound = lastChild && lastChild.classList.contains('token-sound');
+            if (previousIsSound || (markAsSound && lastChild)) {
+                tok = ', ' + tok;
+            }
+
             const span = document.createElement('span');
             span.className = 'token';
+            if (markAsSound) span.classList.add('token-sound');
             span.textContent = tok;
             target.appendChild(span);
             this._placeCursor(target);
