@@ -212,11 +212,13 @@ export function reweightVoiceForEmotion(baseVoice, primaryEmotion, emotionalRang
         };
     };
 
-    return {
+    const newVoice = {
         ...baseVoice,
         sounds: baseVoice.sounds.map(reweightItem),
         modes: baseVoice.modes.map(reweightItem),
     };
+
+    return newVoice;
 }
 
 /**

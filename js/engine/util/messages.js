@@ -432,6 +432,8 @@ export function convertContentToSimpleList(content, author, storyMaster) {
                     dialogueText += fragment.text;
                 } else if (fragment.type === "dialogue") {
                     dialogueText += fragment.text;
+                } else if (fragment.type === "sound") {
+                    dialogueText += " [" + fragment.text + "] ";
                 }
             }
             finalList.push({

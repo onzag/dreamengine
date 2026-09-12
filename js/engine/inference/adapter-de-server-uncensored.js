@@ -127,7 +127,7 @@ function describeForcedSounds(forcedSounds) {
 }
 
 /**
- * @param {{modes: string[]; sounds: string[]; forcedMode: string|null; forcedSounds: string[]}} options
+ * @param {{modes: string[]; sounds: string[]; forcedMode: string|null; forcedSounds: string[], primaryEmotion: string}} options
  * @returns {string}
  */
 export function buildVoiceTagInstructions(options) {
@@ -137,6 +137,7 @@ export function buildVoiceTagInstructions(options) {
         instructions.push(`Start the dialogue with the voice mode tag [${options.forcedMode}].`);
     } else if (options.modes.length > 0) {
         instructions.push(`Optionally use one relevant voice mode tag from ${formatVoiceTags(options.modes)}; omit it if none fits.`);
+        instructions.push(`Use the tag [normal] or [${options.primaryEmotion}] to reset or specify the ${options.primaryEmotion} voice.`);
     }
 
     const forcedSounds = options.forcedSounds.slice(0, 3);
@@ -160,7 +161,7 @@ export function buildVoiceTagInstructions(options) {
 
 /**
  * @param {string} characterName
- * @param {{narration: boolean; modes: string[]; sounds: string[]; forcedMode: string|null; forcedSounds: string[]}} options
+ * @param {{narration: boolean; modes: string[]; sounds: string[]; forcedMode: string|null; forcedSounds: string[], primaryEmotion: string}} options
  * @param {boolean} includeThirdPersonBeat
  * @returns {string}
  */

@@ -1,7 +1,7 @@
 import '../world-image.js';
 import '../dialog.js';
 import '../debug/debug-message.js';
-import { emotionsGrouped } from '../../../engine/util/emotions.js';
+import { emotions, emotionsGrouped } from '../../../engine/util/emotions.js';
 import { playNarration } from '../../sound.js';
 
 /**
@@ -307,17 +307,41 @@ class GameMessage extends HTMLElement {
         const characterVoices = this._blockType() === 'dialogue' && sender
             ? await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['characters', sender, 'metadata', 'voice'] })
             : null;
+        const characterVoiceModifiers = this._blockType() === 'dialogue' && sender
+            ? await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['characters', sender, 'metadata', 'voiceModifiers'] })
+            : null;
         /** @type {Array<import('../../../engine/voice/base.js').VocalizerSpeechSegment|import('../../../engine/voice/base.js').VocalizerDelaySegment>} */
         const segments = [];
+
+        const emotion = this.getAttribute('emotion') || 'neutral';
+
+        /**
+         * @type {string}
+         */
+        let lastMode = emotion;
         for (const fragment of this._fragments()) {
             if (this._cancelled) return null;
             if (!(fragment.text || '').trim()) continue;
-            const voice = fragment.type === 'narration' ? narratorVoice
-                : this._resolveFragmentVoice(narratorVoice, characterVoices || {});
-
-            const segment = await session.buildSpeechSegment(fragment.text, voice);
-
-            segments.push(segment);
+            
+            if (fragment.type === "dialogue" || fragment.type === "narration") {
+                const voice = fragment.type === 'narration' ? narratorVoice
+                    : this._resolveFragmentVoice(narratorVoice, characterVoices || {}, characterVoiceModifiers || {}, lastMode);
+                const segment = await session.buildSpeechSegment(fragment.text, voice);
+                segments.push(segment);
+            } else if (fragment.type === "sound") {
+                const soundInfoMode = fragment.soundInfo.mode;
+                if (soundInfoMode) {
+                    lastMode = soundInfoMode.label;
+                } else if (fragment.text) {
+                    const lowered = fragment.text.trim().toLowerCase();
+                    if (lowered === "normal" || lowered === "normal voice") {
+                        lastMode = emotion;
+                    } else if (emotions.includes(lowered)) {
+                        lastMode = lowered;
+                    }
+                }
+                // TODO sound and modes
+            }
         }
         return session.renderSegments(segments, () => {
             setTimeout(() => {
@@ -328,14 +352,17 @@ class GameMessage extends HTMLElement {
         });
     }
 
-    /** @param {CharacterVoiceEntry | null} narratorVoice
+    /**
+     * @param {CharacterVoiceEntry | null} narratorVoice
      * @param {CharacterVoiceAssets} characterVoiceInfo
+     * @param {CharacterVoiceModifiersAssets} characterVoiceModifiers
+     * @param {string} lastMode
      * @returns {CharacterVoiceEntry | null}
      */
-    _resolveFragmentVoice(narratorVoice, characterVoiceInfo) {
+    _resolveFragmentVoice(narratorVoice, characterVoiceInfo, characterVoiceModifiers, lastMode) {
         const emotion = this.getAttribute('emotion') || 'neutral';
         for (const key of this._emotionFallbacks(emotion)) {
-            const voice = characterVoiceInfo[/** @type {keyof CharacterVoiceAssets} */ (key)];
+            const voice = characterVoiceInfo[/** @type {keyof CharacterVoiceAssets} */ (key)] || characterVoiceModifiers[/** @type {keyof CharacterVoiceModifiersAssets} */ (key)];
             if (voice?.asset === '@none') return null;
             if (voice?.asset === '@narrator') return narratorVoice;
             if (voice?.asset) return voice;
