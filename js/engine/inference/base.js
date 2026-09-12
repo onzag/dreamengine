@@ -108,6 +108,10 @@ export class BaseInferenceAdapter {
      *   primaryEmotion: string,
      *   narration: boolean,
      *   activeStates: Array<{state: string, dominance: number}>,
+     *   modes: Array<string>,
+     *   sounds: Array<string>,
+     *   forcedMode: string,
+     *   forcedSounds: Array<string>,
      *   __debug_id?: string|null,
      * }} options
      * @returns {AsyncGenerator<{type: "text" | "warning" | "hidden", content: string}, void, boolean>}

@@ -1,10 +1,11 @@
+import { weightedRandom } from "../../util/random.js";
 import { DEngine } from "../index.js";
 import { getCharacterCanSee, getSysPromptForCharacter } from "../util/character-info.js";
 import { emotions } from "../util/emotions.js";
 import { createGrammarFromList, generateGrammarForVoice, parseListFromGrammarResponse } from "../util/grammar.js";
 import { convertContentToSimpleList, convertMessagesToSimpleList, getHistoryFragmentForCharacter } from "../util/messages.js";
 import { minimizeSoundDescription, minimizeModeDescription } from "../util/voice.js";
-import { mergeVoicesFrom } from "../util/voice.js";
+import { mergeVoicesFrom, reweightVoiceForEmotion } from "../util/voice.js";
 
 /**
  * @param {DEngine} engine 
@@ -599,6 +600,8 @@ export async function talk(engine, character, options) {
     let nextToGenerate = getNextToGenerate();
     let nextToGenerateIsSameAsPreviousButNarrativeAction = false;
 
+    const reweightedVoice = reweightVoiceForEmotion(baseVoice, primaryEmotion, emotionalRange, activeStates);
+
     let fragmentCount = -1;
     while (nextToGenerate) {
         fragmentCount++;
@@ -651,6 +654,8 @@ export async function talk(engine, character, options) {
                 grammar: nextIsNarration ? grammar.narrative : grammar.dialogue,
                 activeStates,
                 narration: nextIsNarration,
+                modes: baseVoice?.modes.map((mode) => mode.label) || [],
+                sounds: baseVoice?.sounds.map((sound) => sound.label) || [],
 
                 __debug_id: nextMessage.id + "__" + fragmentCount,
 

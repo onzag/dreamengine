@@ -1083,7 +1083,7 @@ declare interface DEVoiceDescription {
      */
     mute: boolean;
     /**
-     * An override for the narration style provided that the vocabulary limit is active
+     * An override for the narration style provided that the voice is active
      */
     narrationStyle?: DENarrationStyle;
     /**
@@ -1091,6 +1091,36 @@ declare interface DEVoiceDescription {
      * the argument for emotion is passed to the description template, so you can use it to describe how the character sounds when they are happy, sad, angry, etc...
      */
     description?: DEStringTemplateCharOnlyWithEmotion;
+    /**
+     * Dominance of the narration style, if not specified defaults to zero,
+     * meaning it will merge with other narration styles that are also the same
+     * number, if it is higher than other narration styles, it will override them, if it is lower, it will be overridden by them
+     */
+    narrationStyleDominance?: number;
+    /**
+     * Dominance of the description, if not specified defaults to zero,
+     * meaning it will merge with other descriptions that are also the same
+     * number, if it is higher than other descriptions, it will override them, if it is lower, it will be overridden by them
+     */
+    descriptionDominance?: number;
+    /**
+     * Dominance of the sounds, if not specified defaults to zero,
+     * meaning it will merge with other sounds that are also the same
+     * number, if it is higher than other sounds, it will override them, if it is lower, it will be overridden by them
+     */
+    soundsDominance?: number;
+    /**
+     * Dominance of the modes, if not specified defaults to zero,
+     * meaning it will merge with other modes that are also the same
+     * number, if it is higher than other modes, it will override them, if it is lower, it will be overridden by them
+     */
+    modesDominance?: number;
+    /**
+     * Dominance of the mute, if not specified defaults to zero,
+     * meaning it will merge with other mutes that are also the same
+     * number, if it is higher than other mutes, it will override them, if it is lower, it will be overridden by them
+     */
+    muteDominance?: number;
     /**
      * The sounds that a character can make
      */
