@@ -60,6 +60,11 @@ class GameMessage extends HTMLElement {
         this._resolveCancellation = null;
         /** @type {Promise<void>} */
         this._cancellation = new Promise(resolve => { this._resolveCancellation = resolve; });
+
+        /**
+         * @type {Array<string>}
+         */
+        this._locallyUploadedAssets = [];
     }
 
     static get observedAttributes() {
@@ -112,7 +117,8 @@ class GameMessage extends HTMLElement {
         this._ensureRendered();
         for (const fragment of this._fragments()) {
             if (fragment.type === 'sound') {
-                this._appendSound(fragment.soundInfo.sound || fragment.soundInfo.mode || { label: fragment.text || 'unknown', replacement: '{{char}} does ' + (fragment.text || 'a sound') });
+                const pseudoSoundsAndModes = ["normal", "normal voice", "pause", "short pause", "medium pause", "long pause", ...emotions];
+                this._appendSound(fragment.soundInfo.sound || fragment.soundInfo.mode || { label: fragment.text || 'unknown', replacement: pseudoSoundsAndModes.includes((fragment.text || '').trim().toLowerCase()) ? '' : '—{{char}} does ' + (fragment.text || 'a sound') });
             } else {
                 this._appendInstant(fragment.type, fragment.text);
             }
@@ -148,8 +154,14 @@ class GameMessage extends HTMLElement {
                     // @ts-ignore
                     this._appendSound(data.soundInfo.sound || data.soundInfo.mode);
                 } else {
+                    const pseudoSoundsAndModes = ["normal", "normal voice", "pause", "short pause", "medium pause", "long pause", ...emotions];
+                    if (data.text && pseudoSoundsAndModes.includes(data.text.trim().toLowerCase())) {
+                        // if the text is a pseudo sound or mode, we will not display it as a sound, but as a normal text
+                        this._appendSound({ label: data.text || 'unknown', replacement: '' });
+                        return;
+                    }
                     console.warn('GameMessage: received end-add-sound event without soundInfo.');
-                    this._appendSound({ label: data.text || 'unknown', replacement: '{{char}} does ' + (data.text || 'a sound') });
+                    this._appendSound({ label: data.text || 'unknown', replacement: '—{{char}} does ' + (data.text || 'a sound') });
                 }
                 
                 break;
@@ -267,7 +279,8 @@ class GameMessage extends HTMLElement {
             let markAsSound = false;
             if (!text) continue;
             if (fragment.type === 'sound') {
-                const soundInfo = fragment.soundInfo.sound || fragment.soundInfo.mode || { label: fragment.text || 'unknown', replacement: '{{char}} does ' + (fragment.text || 'a sound') };
+                const pseudoSoundsAndModes = ["normal", "normal voice", "pause", "short pause", "medium pause", "long pause", ...emotions];
+                const soundInfo = fragment.soundInfo.sound || fragment.soundInfo.mode || { label: fragment.text || 'unknown', replacement: pseudoSoundsAndModes.includes(fragment.text.trim().toLowerCase()) ? '' : '—{{char}} does ' + (fragment.text || 'a sound') };
                 const resolved = this._appendSound(soundInfo, true);
                 if (resolved) {
                     fragment = {
@@ -304,13 +317,28 @@ class GameMessage extends HTMLElement {
 
         const narratorVoice = await this.getNarratorVoice();
         const sender = this.getAttribute('sender-name');
+
+        /**
+         * @type {CharacterVoiceAssets | null}
+         */
         const characterVoices = this._blockType() === 'dialogue' && sender
             ? await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['characters', sender, 'metadata', 'voice'] })
             : null;
+
+        /**
+         * @type {CharacterVoiceModifiersAssets | null}
+         */
         const characterVoiceModifiers = this._blockType() === 'dialogue' && sender
             ? await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['characters', sender, 'metadata', 'voiceModifiers'] })
             : null;
-        /** @type {Array<import('../../../engine/voice/base.js').VocalizerSpeechSegment|import('../../../engine/voice/base.js').VocalizerDelaySegment>} */
+
+        /**
+         * @type {CharacterSoundAssets | null}
+         */
+        const characterSounds = this._blockType() === 'dialogue' && sender
+            ? await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['characters', sender, 'metadata', 'sounds'] })
+            : null;
+        /** @type {Array<import('../../../engine/voice/base.js').VocalizerSpeechSegment|import('../../../engine/voice/base.js').VocalizerDelaySegment|import('../../../engine/voice/base.js').VocalizerAudioSegment>} */
         const segments = [];
 
         const emotion = this.getAttribute('emotion') || 'neutral';
@@ -325,7 +353,7 @@ class GameMessage extends HTMLElement {
             
             if (fragment.type === "dialogue" || fragment.type === "narration") {
                 const voice = fragment.type === 'narration' ? narratorVoice
-                    : this._resolveFragmentVoice(narratorVoice, characterVoices || {}, characterVoiceModifiers || {}, lastMode);
+                    : this._resolveFragmentVoice(narratorVoice, characterVoices, characterVoiceModifiers, lastMode);
                 const segment = await session.buildSpeechSegment(fragment.text, voice);
                 segments.push(segment);
             } else if (fragment.type === "sound") {
@@ -339,8 +367,36 @@ class GameMessage extends HTMLElement {
                     } else if (emotions.includes(lowered)) {
                         lastMode = lowered;
                     }
+                } else {
+                    // we assume it is a sound
+                    const soundInfoSound = fragment.soundInfo.sound;
+                    if (soundInfoSound) {
+                        const sound = characterSounds?.[soundInfoSound.label];
+                        if (sound?.asset) {
+                            sound.preGapRange = sound.preGapRange || [0, 0];
+                            segments.push({ duration_ms: sound.preGapRange });
+
+                            const refInfo = await session.ensureAssetUploaded(sound.asset, this._locallyUploadedAssets);
+                            const refName = refInfo ? refInfo[0] : null;
+                            const assetPath = refInfo ? refInfo[1] : null;
+                            if (refName) {
+                                segments.push({ ref: refName });
+                                if (assetPath) this._locallyUploadedAssets.push(assetPath);
+                            }
+
+                            sound.postGapRange = sound.postGapRange || [0, 0];
+                            segments.push({ duration_ms: sound.postGapRange });
+                        }
+                    } else {
+                        const lowered = fragment.text.trim().toLowerCase();
+                        if (lowered === "pause" || lowered === "short pause" || lowered === "medium pause" || lowered === "long pause") {
+                            segments.push({ duration_ms: lowered === "short pause" ? [300, 500] : lowered === "medium pause" ? [700, 1000] : lowered === "long pause" ? [1500, 2000] : [700, 1000] });
+                        } else {
+                            console.warn('GameMessage: unrecognized sound fragment text, treating as a short pause.', fragment.text);
+                            segments.push({ duration_ms: [300, 500] });
+                        }
+                    }
                 }
-                // TODO sound and modes
             }
         }
         return session.renderSegments(segments, () => {
@@ -354,15 +410,15 @@ class GameMessage extends HTMLElement {
 
     /**
      * @param {CharacterVoiceEntry | null} narratorVoice
-     * @param {CharacterVoiceAssets} characterVoiceInfo
-     * @param {CharacterVoiceModifiersAssets} characterVoiceModifiers
+     * @param {CharacterVoiceAssets | null} characterVoiceInfo
+     * @param {CharacterVoiceModifiersAssets | null} characterVoiceModifiers
      * @param {string} lastMode
      * @returns {CharacterVoiceEntry | null}
      */
     _resolveFragmentVoice(narratorVoice, characterVoiceInfo, characterVoiceModifiers, lastMode) {
         const emotion = this.getAttribute('emotion') || 'neutral';
         for (const key of this._emotionFallbacks(emotion)) {
-            const voice = characterVoiceInfo[/** @type {keyof CharacterVoiceAssets} */ (key)] || characterVoiceModifiers[/** @type {keyof CharacterVoiceModifiersAssets} */ (key)];
+            const voice = (characterVoiceInfo?.[/** @type {keyof CharacterVoiceAssets} */ (key)]) || (characterVoiceModifiers?.[/** @type {keyof CharacterVoiceModifiersAssets} */ (key)]);
             if (voice?.asset === '@none') return null;
             if (voice?.asset === '@narrator') return narratorVoice;
             if (voice?.asset) return voice;
@@ -478,7 +534,7 @@ class GameMessage extends HTMLElement {
         // check what type of replacement we have, if the replacement has a em dash then it is narrative
         if (replacement.includes('—')) {
             // remove all em dashes and replace {{char}} with the sender name
-            const value = replacement.replace(/—/g, '').replace(/{{char}}/g, this.getAttribute('sender-name') || '');
+            const value = replacement.replace(/—/g, '').replace(/{{char}}/g, this.getAttribute('sender-name') || '').trim();
             if (returnForDrip) return { type: 'narration', text: value };
             this._appendInstant('narration', value, true);
             return { type: 'narration', text: value };

@@ -156,6 +156,8 @@ export function buildVoiceTagInstructions(options) {
         instructions.push("Do not use [sound tags] as they are not applicable in the next dialogue.");
     }
 
+    instructions.push("Use [pause] to indicate a pause in speech, you can use [short pause], [medium pause], or [long pause] to indicate the length of the pause.");
+
     return instructions.join(" ");
 }
 

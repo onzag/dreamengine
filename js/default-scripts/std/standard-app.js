@@ -92,9 +92,7 @@
 
 /**
  * @typedef {Object} CharacterSoundEntry
- * @property {string} asset - The path to the sound asset file.
- * @property {"hidden" | "narration" | "dialogue"} displayType - How the sound is displayed in the UI.
- * @property {string} [displayLabel] - The display label for the sound. Use `{char}` to refer to the character's name.
+ * @property {string|string[]} asset - The path to the sound asset file.
  * @property {[number, number]} preGapRange - Range of silence before the sound in milliseconds [min, max].
  * @property {[number, number]} postGapRange - Range of silence after the sound in milliseconds [min, max].
  * @property {number} volume - Volume adjustment factor, from 0.0 (silent) to 1.0 (full).

@@ -74,11 +74,38 @@ export class GameVocalizerSession {
      * Fetch (with caching) a voice asset and ensure it has been uploaded to the
      * server for this connection. Returns the reference name to use in scene
      * segments, or null if the asset could not be loaded.
-     * @param {string} assetPath
-     * @returns {Promise<string|null>}
+     * @param {string|string[]} assetPath
+     * @param {string[]} [localPerMessageCache] optional array of asset paths already used in a message, to avoid re-uploading the same asset multiple times in a single message
+     * @returns {Promise<[string, string]|null>}
      */
-    async ensureAssetUploaded(assetPath) {
+    async ensureAssetUploaded(assetPath, localPerMessageCache = []) {
         if (!assetPath || assetPath === '@none') return null;
+
+        if (Array.isArray(assetPath)) {
+            // here we try to pick a random asset that we don't have cached yet for variation
+            const assetPathWithoutCachedOnes = assetPath.filter(path => !this._cache.has(path));
+            if (assetPathWithoutCachedOnes.length > 0) {
+                // pick a random one from the list of non-cached assets
+
+                const idx = Math.floor(Math.random() * assetPathWithoutCachedOnes.length);
+                const chosenAssetPath = assetPathWithoutCachedOnes[idx];
+                return this.ensureAssetUploaded(chosenAssetPath);
+            }
+
+            const assetPathWithoutLocalCache = assetPath.filter(path => !localPerMessageCache.includes(path));
+            if (assetPathWithoutLocalCache.length > 0) {
+                // pick a random one from the list of non-local-cached assets
+                const idx = Math.floor(Math.random() * assetPathWithoutLocalCache.length);
+                const chosenAssetPath = assetPathWithoutLocalCache[idx];
+                localPerMessageCache.push(chosenAssetPath);
+                return this.ensureAssetUploaded(chosenAssetPath, localPerMessageCache);
+            }
+
+            // pick a random one from the list
+            const idx = Math.floor(Math.random() * assetPath.length);
+            const chosenAssetPath = assetPath[idx];
+            return this.ensureAssetUploaded(chosenAssetPath);
+        }
 
         const refName = this._refNameFor(assetPath);
         let entry = this._cache.get(assetPath);
@@ -115,7 +142,7 @@ export class GameVocalizerSession {
             }
         }
 
-        return refName;
+        return [refName, assetPath];
     }
 
     /** Evict least-recently-used cache entries until under the byte budget. */
@@ -151,7 +178,8 @@ export class GameVocalizerSession {
             return { "duration_ms": 1000 };
         }
 
-        const refName = await this.ensureAssetUploaded(voice.asset);
+        const refInfo = await this.ensureAssetUploaded(voice.asset);
+        const refName = refInfo ? refInfo[0] : null;
 
         if (!refName) return { "duration_ms": 1000 };
 
@@ -173,7 +201,7 @@ export class GameVocalizerSession {
 
     /**
      * Render a list of speech segments into a single audio object URL.
-     * @param {Array<import("../../../engine/voice/base.js").VocalizerSpeechSegment|import("../../../engine/voice/base.js").VocalizerDelaySegment>} segments
+     * @param {Array<import("../../../engine/voice/base.js").VocalizerSpeechSegment|import("../../../engine/voice/base.js").VocalizerDelaySegment|import("../../../engine/voice/base.js").VocalizerAudioSegment>} segments
      * @param {() => void} [onSegmentsSent] optional callback invoked after the segments have been sent to the server
      * @returns {Promise<string|null>} an object URL, or null on failure/empty input
      */

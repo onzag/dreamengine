@@ -42,6 +42,16 @@
  */
 
 /**
+ * @typedef {Object} VocalizerAudioSegment
+ * @property {string} ref                          // filename or "name-{n}.wav" glob pattern
+ * @property {boolean} [randomize]                 // pick a random match instead of sequential
+ * @property {number} [repeat]                     // number of clips to concatenate
+ * @property {(number|[number, number])} [volume]  // 1..9 or a [min,max] random range
+ * @property {(number|[number, number])} [volume_jitter] // per-repeat random volume range
+ * @property {number} [fade_ms]                    // crossfade duration in ms
+ */
+
+/**
  * A library sound clip segment (has `ref`, no `text`).
  *
  * @typedef {Object} VocalizerFileSegment
