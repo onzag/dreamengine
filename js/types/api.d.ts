@@ -53,7 +53,7 @@ declare global {
     DREAMENGINE_HOME: string;
     DREAMENGINE_DEFAULT_SCRIPTS_HOME: string;
     ENGINE_WORKER_CLIENT: EngineWorkerClient;
-    GAME_VOCALIZER: import("../app/components/game/vocalizer-session.js").GameVocalizerSession | null;
+    GAME_VOCALIZER: import("../app/components/game/voice-session.js").GameVocalizerSession | null;
     JS_ENGINE_UPDATE: (
       namespace: string,
       id: string,

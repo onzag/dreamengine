@@ -90,9 +90,10 @@ const INVALID_NAMES = ["system", "assistant", "user", "everyone", "nobody",
  */
 
 /**
- * @typedef {EngineConversationEventBase & {
+ * @typedef {{
  *  event: "new-conversation"
  *  obj: DEConversation;
+ *  conversationId: string;
  * }} EngineConversationEventNewConversation
  */
 
@@ -280,6 +281,7 @@ export function createCharacterFromUser(user) {
         race: null,
         groupBelonging: [],
         voice: {
+            mute: false,
             description: "",
             modes: [],
             sounds: [],
@@ -535,7 +537,7 @@ export class DEngine {
         };
 
         // @ts-ignore
-        this.deObject.utils = deEngineUtilsFn(this.deObject);
+        this.deObject.utils = deEngineUtilsFn(this.deObject, this);
 
         this.backupDEObject();
 
@@ -718,13 +720,11 @@ export class DEngine {
                         id: crypto.randomUUID(),
                         location: futureLocation.location,
                         locationSlot: futureLocation.locationSlot,
-                        messageId: null,
                         posture: "standing",
                         seenCharacters: [],
                         seenItems: [],
                         states: [],
                         time: this.deObject.initialTime,
-                        type: "BACKGROUND",
                         wearing: [],
                     }
                 }
@@ -968,10 +968,8 @@ export class DEngine {
             location: location,
             locationSlot: locationSlot,
             states: [],
-            type: "BACKGROUND",
             time: this.deObject.initialTime,
             conversationId: null,
-            messageId: null,
             posture: "standing",
 
             // chars start out empty handed
@@ -1082,7 +1080,6 @@ export class DEngine {
                 this.deObject.stateFor[participantName].location = sceneObject.location;
                 this.deObject.stateFor[participantName].locationSlot = sceneObject.locationSlot;
                 this.deObject.stateFor[participantName].conversationId = sceneId;
-                this.deObject.stateFor[participantName].type = "INTERACTING";
             }
 
             this.deObject.world.selectedScene = optionName;
@@ -1157,9 +1154,9 @@ export class DEngine {
                     },
                 ],
                 bondsAtStart: getFrozenBonds(this, expectedParticipants),
-                // TODO what do we do with bonds at end here?
-                bondsAtEnd: {},
+                bondsAtEnd: null,
                 startTime: { ...this.deObject.currentTime },
+                endTime: null,
                 location: sceneObject.location,
                 participants: expectedParticipants,
                 previousConversationIdsPerParticipant: {},
@@ -1172,7 +1169,6 @@ export class DEngine {
 
             this.triggerConversationMessageUpdate(this.deObject, {
                 conversationId: sceneId,
-                messageId: this.deObject.conversations[sceneId].messages[0].id,
                 event: "new-conversation",
                 obj: this.deObject.conversations[sceneId],
             });
@@ -1605,10 +1601,9 @@ export class DEngine {
                     const userCharacterStateCopy = deepCopyNoHistory(userCharacterState);
                     userCharacterState.history.push(userCharacterStateCopy);
                     userCharacterState.conversationId = expectedFutureConversationIdIfNotFound;
-                    if (!makeRejected) {
-                        userCharacterState.messageId = messageToAdd.id;
-                    }
-                    userCharacterState.type = "INTERACTING";
+                    // if (!makeRejected) {
+                    //     userCharacterState.messageId = messageToAdd.id;
+                    // }
                     // @ts-expect-error typescript issue as usual
                     this.deObject.conversations[expectedFutureConversationIdIfNotFound] = {
                         id: expectedFutureConversationIdIfNotFound,
@@ -1624,10 +1619,10 @@ export class DEngine {
                         pseudoConversation: false,
                         bondsAtStart: getFrozenBonds(this, [user]),
                         bondsAtEnd: null,
+                        endTime: null,
                     };
                     this.triggerConversationMessageUpdate(currentDEObject, {
                         conversationId: expectedFutureConversationIdIfNotFound,
-                        messageId: messageToAdd.id,
                         event: "new-conversation",
                         obj: currentDEObject.conversations[expectedFutureConversationIdIfNotFound],
                     });
@@ -1647,9 +1642,9 @@ export class DEngine {
                         event: "new-message",
                         obj: messageToAdd,
                     });
-                    if (!makeRejected) {
-                        userCharacterState.messageId = messageToAdd.id;
-                    }
+                    // if (!makeRejected) {
+                    //     userCharacterState.messageId = messageToAdd.id;
+                    // }
                     return userCharacterState.conversationId;
                 }
             }
@@ -1897,8 +1892,6 @@ export class DEngine {
             const userCharacterStateCopy = deepCopyNoHistory(userCharacterState);
             userCharacterState.history.push(userCharacterStateCopy);
             userCharacterState.conversationId = userConversationId;
-            userCharacterState.messageId = null;
-            userCharacterState.type = "INTERACTING";
             this.deObject.conversations[userConversationId] = {
                 id: userConversationId,
                 previousConversationIdsPerParticipant: {
@@ -1912,10 +1905,10 @@ export class DEngine {
                 pseudoConversation: false,
                 bondsAtStart: getFrozenBonds(this, [this.deObject.user]),
                 bondsAtEnd: null,
+                endTime: null,
             };
             this.triggerConversationMessageUpdate(this.deObject, {
                 conversationId: userConversationId,
-                messageId: messageToAdd.id,
                 event: "new-conversation",
                 obj: this.deObject.conversations[userConversationId],
             });

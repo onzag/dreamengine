@@ -1,27 +1,27 @@
 /**
- * The scene payload consumed by `Vocalizer.render_json` plus the output format
+ * The scene payload consumed by `Voice.render_json` plus the output format
  * the caller wants back. When rendered, `file`/`ref`/`prompt_ref` references
  * resolve against the files uploaded for this connection via {@link sendFile}.
  *
- * @typedef {Object} VocalizerJSONRequest
+ * @typedef {Object} VoiceJSONRequest
  * @property {("ogg"|"mp3")} [output_format]   // desired encoded output (default "ogg")
- * @property {VocalizerGeneration} [generation]
- * @property {VocalizerBackground} [background]
- * @property {VocalizerSegment[]} segments
+ * @property {VoiceGeneration} [generation]
+ * @property {VoiceBackground} [background]
+ * @property {VoiceSegment[]} segments
  */
 
 /**
  * Generation parameters shared by the whole scene (and overridable per speech
  * segment). Mirrors what vocalizer.py's `_resolve_generation_params` consumes.
  *
- * @typedef {Object} VocalizerGeneration
+ * @typedef {Object} VoiceGeneration
  */
 
 /**
  * Background bed configuration. Rendered as a looping track underneath the
  * whole scene; `background_update` segments mutate it over time.
  *
- * @typedef {Object} VocalizerBackground
+ * @typedef {Object} VoiceBackground
  * @property {string} file                     // library filename of the bed audio
  * @property {number} [volume]                 // 1..9 (5 = natural), default 5
  * @property {("on"|"off"|boolean)} [presence] // whether the bed is audible
@@ -32,7 +32,7 @@
  * A spoken segment. VoxCPM synthesizes `text`; an optional `ref` voice clip and
  * `voice_prompt` steer the delivery.
  *
- * @typedef {Object} VocalizerSpeechSegment
+ * @typedef {Object} VoiceSpeechSegment
  * @property {string} text                    // the line to speak (required)
  * @property {string} [ref]                   // library filename of a voice reference clip
  * @property {string} [voice_prompt]          // parenthetical style hint prepended to the text
@@ -42,7 +42,7 @@
  */
 
 /**
- * @typedef {Object} VocalizerAudioSegment
+ * @typedef {Object} VoiceAudioSegment
  * @property {string} ref                          // filename or "name-{n}.wav" glob pattern
  * @property {boolean} [randomize]                 // pick a random match instead of sequential
  * @property {number} [repeat]                     // number of clips to concatenate
@@ -54,7 +54,7 @@
 /**
  * A library sound clip segment (has `ref`, no `text`).
  *
- * @typedef {Object} VocalizerFileSegment
+ * @typedef {Object} VoiceFileSegment
  * @property {string} ref                          // filename or "name-{n}.wav" glob pattern
  * @property {boolean} [randomize]                 // pick a random match instead of sequential
  * @property {number} [repeat]                     // number of clips to concatenate
@@ -66,7 +66,7 @@
 /**
  * A silence/delay segment (has `duration_ms`, no `text`/`ref`).
  *
- * @typedef {Object} VocalizerDelaySegment
+ * @typedef {Object} VoiceDelaySegment
  * @property {(number|[number, number])} duration_ms // ms of silence, or a [min,max] range
  */
 
@@ -74,7 +74,7 @@
  * A background bed mutation (no `text`, no `ref`, no `duration_ms`). Applied at
  * the point in the timeline where it appears.
  *
- * @typedef {Object} VocalizerBackgroundUpdateSegment
+ * @typedef {Object} VoiceBackgroundUpdateSegment
  * @property {string} [file]                   // switch the bed to this library filename
  * @property {number} [volume]                 // new bed volume 1..9
  * @property {("on"|"off"|boolean)} [presence] // toggle audibility
@@ -86,10 +86,11 @@
  * are present (see `_infer_kind`): `text` -> speech, `duration_ms` -> delay,
  * `ref` (without `text`) -> file clip, otherwise -> background update.
  *
- * @typedef {(VocalizerSpeechSegment
- *   | VocalizerFileSegment
- *   | VocalizerDelaySegment
- *   | VocalizerBackgroundUpdateSegment)} VocalizerSegment
+ * @typedef {(VoiceSpeechSegment
+ *   | VoiceAudioSegment
+ *   | VoiceFileSegment
+ *   | VoiceDelaySegment
+ *   | VoiceBackgroundUpdateSegment)} VoiceSegment
  */
 
 export class BaseVoiceAdapter {
@@ -137,8 +138,8 @@ export class BaseVoiceAdapter {
     }
 
     /**
-     * @param {VocalizerJSONRequest} request
-     * @returns {Promise<VocalizerJSONResponse>}
+     * @param {VoiceJSONRequest} request
+     * @returns {Promise<VoiceJSONResponse>}
      */
     runWorkflow(request) {
         throw new Error("Method 'runWorkflow()' must be implemented.");
@@ -182,8 +183,8 @@ export class BaseVoiceAdapter {
 }
 
 /**
- * The rendered result of a {@link VocalizerJSONRequest}: a Blob containing the
+ * The rendered result of a {@link VoiceJSONRequest}: a Blob containing the
  * encoded audio (`audio/ogg` or `audio/mpeg` depending on `output_format`).
  *
- * @typedef {Blob} VocalizerJSONResponse
+ * @typedef {Blob} VoiceJSONResponse
  */

@@ -255,3 +255,13 @@
     0%, 100% { opacity: 0.75; }
     50%       { opacity: 0;    }
 }
+
+.token-sound {
+    font-style: italic;
+    font-weight: 800;
+    background-color: rgba(255, 224, 165, 0.86);
+    border-radius: 5px;
+    padding: 0 0.3vh;
+    display: inline-block;
+    margin: 0 0.3vh;
+}

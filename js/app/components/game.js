@@ -4,9 +4,8 @@ import './dialog.js';
 import './game/game-message.js';
 import './debug/debug-character.js';
 import './game/cycle-inform.js';
-import { emotionsGrouped } from '../../engine/util/emotions.js';
 import { VOICE_ADAPTERS } from '../../engine/voice/all.js';
-import { GameVocalizerSession } from './game/vocalizer-session.js';
+import { GameVoiceSession } from './game/voice-session.js';
 
 /**
  * The main in-dream game UI. Renders a transition ("falling asleep" white
@@ -88,6 +87,16 @@ class GameOverlay extends HTMLElement {
         this.lastMessageAdded = null;
 
         /**
+         * @type {string | null}
+         */
+        this.actualUserName = null;
+
+        /**
+         * @type {DEConversation | null}
+         */
+        this.lastConversationAdded = null;
+
+        /**
          * @type {"normal" | "hard" | "easy" | "debug"}
          */
         this.gameDifficulty = "normal";
@@ -108,9 +117,9 @@ class GameOverlay extends HTMLElement {
     async connectedCallback() {
         this.render();
 
-        // Establish the shared Vocalizer connection (if enabled) so every
+        // Establish the shared Voice connection (if enabled) so every
         // message block can synthesize speech through the one global session.
-        await this._initVocalizer();
+        await this._initVoice();
 
         // @ts-ignore
         document.querySelector('.fx').style.zIndex = '50'; // ensure fx controls are above the game UI
@@ -1558,6 +1567,8 @@ class GameOverlay extends HTMLElement {
                 path: ["user"],
             });
 
+            this.actualUserName = actualUserName;
+
             // TODO we have to optimize this somehow, because this will get every single message
             // and if the history is too long, this might cause performance issues. We should probably only get the last 50 messages or so, and then if the user scrolls up, we can fetch more.
             const history = await window.ENGINE_WORKER_CLIENT.getHistoryForCharacter({
@@ -1569,6 +1580,33 @@ class GameOverlay extends HTMLElement {
 
             this.lastMessageGid = history[history.length - 1].gid;
             this.firstMessageGid = history[0].gid;
+            
+            /**
+             * @type {string | null}
+             */
+            let lastConversationId = null;
+            for (const msg of history.reverse()) {
+                if (msg.conversationId) {
+                    lastConversationId = msg.conversationId;
+                    break;
+                }
+            }
+            if (lastConversationId && lastConversationId !== this.lastConversationAdded?.id) {
+                const lastConversationObject = await window.ENGINE_WORKER_CLIENT.queryDEObject({
+                    path: ["conversations", lastConversationId],
+                    pick: [
+                        "id",
+                        "participants",
+                        "startTime",
+                        "remoteParticipants",
+                        "previousConversationIdsPerParticipant",
+                        "location",
+                        "pseudoConversation",
+                        "pseudoConversationSummary",
+                    ],
+                });
+                this.lastConversationAdded = lastConversationObject;
+            }
 
             const historyReversed = history.reverse(); // this list contains the most recent messages first
             // and we want to render them in the order from oldest to newest, so we reverse the list before rendering
@@ -1737,9 +1775,24 @@ class GameOverlay extends HTMLElement {
      * @param {import('../../engine/index.js').EngineConversationEvent} data
      */
     async onMessageUpdate(data) {
+        if (!this.actualUserName) {
+            console.warn('onMessageUpdate called before actualUserName is set; ignoring event', data);
+            return;
+        }
+        if (data.event === "new-conversation") {
+            if (data.obj.participants.includes(this.actualUserName) || data.obj.remoteParticipants.includes(this.actualUserName)) {
+                this.lastConversationAdded = data.obj;
+            } else {
+                // ignore conversations that we are not part of
+            }
+        }
+
         const willAlwaysUsePseudostream = !!window.GAME_VOCALIZER;
         const needsToAwaitUntilInferenceEndsToTriggerPseudostreamVocalizationProcessing = window.GAME_VOCALIZER?.lowVramMode || false;
         if (data.event === "new-message") {
+            if (data.conversationId !== this.lastConversationAdded?.id) {
+                return; // ignore messages from other conversations that we are not tracking
+            }
             this.lastMessageAdded = data.obj;
 
             if (this.lastMessageAdded.content && this.lastMessageAdded.content.length > 0) {
@@ -1765,11 +1818,11 @@ class GameOverlay extends HTMLElement {
             // because it can do the voice processing in parallel with the next block
 
             // if needsToAwaitUntilInferenceEndsToTriggerPseudostreamVocalizationProcessing is true, then we will not run the pseudostream block immediately, but we will wait until the end-inference event is received
-            // then in the end-inference event we will trigger the vocalizer processing by doing the runPseudostream() method of all blocks that we just added that
+            // then in the end-inference event we will trigger the voice processing by doing the runPseudostream() method of all blocks that we just added that
             // are not streaming, for that we can check the isPseudoStreamAwait method of all the added blocks
 
             if (data.event === "end-dialogue-block" || data.event === "end-narration-block") {
-                if (this.lastMessageAdded) {
+                if (this.lastMessageAdded && data.conversationId === this.lastConversationAdded?.id) {
                     this._createMessageElement(this.lastMessageAdded, data.obj, data.contentIndex, true, !needsToAwaitUntilInferenceEndsToTriggerPseudostreamVocalizationProcessing);
                 }
             } else if (data.event === "end-inference" && needsToAwaitUntilInferenceEndsToTriggerPseudostreamVocalizationProcessing) {
@@ -1783,6 +1836,11 @@ class GameOverlay extends HTMLElement {
             // if a real stream is to be used then we will create the block when the add-dialogue-block or add-narration-block events are received
             // make it visible right away, and feed events manually to the block, everything is immediate
             if (data.event !== "end-inference" && data.event !== "start-inference") {
+
+                if (data.conversationId !== this.lastConversationAdded?.id) {
+                    return; // ignore messages from other conversations that we are not tracking
+                }
+
                 if (data.event === "add-dialogue" || data.event === "add-narration" || data.event === "add-sound" || data.event === "end-add-dialogue" || data.event === "end-add-narration" || data.event === "end-add-sound") {
                     const messageId = data.messageId;
                     const contentIndex = data.contentIndex;
@@ -2375,7 +2433,7 @@ class GameOverlay extends HTMLElement {
         this.stopEngine();
         document.removeEventListener('keydown', this.onF5Keydown);
 
-        // Tear down the shared Vocalizer connection.
+        // Tear down the shared Voice connection.
         if (window.GAME_VOCALIZER) {
             try { window.GAME_VOCALIZER.close(); } catch (_e) { /* ignore */ }
             window.GAME_VOCALIZER = null;
@@ -2385,31 +2443,31 @@ class GameOverlay extends HTMLElement {
     }
 
     /**
-     * Create the single, game-wide Vocalizer session shared by all message
+     * Create the single, game-wide Voice session shared by all message
      * blocks and expose it as `window.GAME_VOCALIZER`. No-op (and clears the
      * global) when voice generation is disabled or unconfigured. The socket
      * connects lazily in the background; failures are non-fatal.
      */
-    async _initVocalizer() {
+    async _initVoice() {
         try {
             const enabled = await window.API.getConfigValue("voiceEnabled");
-            const adapterName = await window.API.getConfigValue("voiceAdapter") || "Vocalizer";
+            const adapterName = await window.API.getConfigValue("voiceAdapter") || "Voice";
 
             if (enabled && adapterName && VOICE_ADAPTERS[adapterName]) {
                 try {
                     const adapter = await VOICE_ADAPTERS[adapterName].build(window.API.getConfigValue.bind(window.API));
                     const usesLowVramMode = await window.API.getConfigValue("voiceLowVramMode");
-                    window.GAME_VOCALIZER = new GameVocalizerSession(adapter, usesLowVramMode);
+                    window.GAME_VOCALIZER = new GameVoiceSession(adapter, usesLowVramMode);
                     await adapter.ensureInitialized();
                 } catch (err) {
-                    console.error("GameOverlay: failed to build Vocalizer adapter", err);
+                    console.error("GameOverlay: failed to build Voice adapter", err);
                     window.GAME_VOCALIZER = null;
                 }
             } else {
                 window.GAME_VOCALIZER = null;
             }
         } catch (err) {
-            console.error("GameOverlay: failed to initialise Vocalizer", err);
+            console.error("GameOverlay: failed to initialise Voice", err);
             window.GAME_VOCALIZER = null;
         }
     }

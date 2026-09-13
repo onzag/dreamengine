@@ -984,18 +984,12 @@ declare interface DEVoiceSoundMin {
      */
     label: string;
     /**
-     * The replacement for the label, for example if the message is "[laughs], I cannot believe what you are saying!" and replacement is "— {{char}} laughs —", it will be converted to eg. "{{char}} laughs - I cannot believe what you are saying".
-     * if not the replacement is a sort of expressive sound "hahaha, I cannot believe what you are saying!" replacement is "hahaha"
-     * 
-     * A comma will be automatically added before or after the replacement, or a dot at the end if it is the end of message
-     *
-     * Use {{char}} to refer to the character's name in the replacement
-     *  
-     * If you include em dashes in the replacement, they will be considered narration; all em dashes will be removed from the message nevertheless, they work for signaling only
+     * The replacement for the label, for example if the message is "[laughs] I cannot believe what you are saying!" and replacement is
+     * "hahaha, I cannot believe what you are saying!" replacement is "hahaha"
      * 
      * If specified as an array, the replacement will be chosen at random
      */
-    replacement: string | string[];
+    replacement: string | string[] | null;
 }
 
 declare interface DEVoiceSound extends DEVoiceSoundMin {
@@ -2480,14 +2474,8 @@ declare interface DEStateForCharacter {
     location: string;
     locationSlot: string;
     states: Array<DEApplyingState>;
-    type: "INTERACTING" | "BACKGROUND";
     time: DETimeDescription;
     conversationId: string | null;
-    /**
-     * The message ID of the last message the character sent in the current conversation,
-     * when this state was added
-     */
-    messageId: string | null;
     posture: DEPosture;
     carrying: DEItem[];
     carryingCharactersDirectly: Array<string>;
@@ -3274,6 +3262,10 @@ declare interface DEConversation {
      */
     startTime: DETimeDescription;
     /**
+     * The end time of the conversation
+     */
+    endTime: DETimeDescription | null;
+    /**
      * The list of messages that were exchanged in the conversation
      */
     messages: Array<DEConversationMessage>;
@@ -3574,6 +3566,10 @@ declare interface DEUtils {
     newMutualBond(char1: string | DECompleteCharacterReference | null, char2: string | DECompleteCharacterReference | null, bondDefinition: Omit<DESingleBondDescription, "towards">): [DESingleBondDescription | null, DESingleBondDescription | null];
     newFamilyRelation(char1: string | DECompleteCharacterReference | null, towards: string | DECompleteCharacterReference | null, relation: DEFamilyRelation): [DEFamilyTie | null, DEFamilyTie | null];
     newGlobalInterest(interest: DECharacterInterest);
+
+    addMessage(conversationId: string, message: DEConversationMessage): DEConversationMessage;
+    addMessageIntoTargetConversation(target: string, message: DEConversationMessage, options: { teleportParticipants?: boolean, unsafeMode?: boolean, isolation?: "isolate" | "join-target-group" | "merge-groups" } = {}): DEConversationMessage;
+    addConversation(conversation: Pick<DEConversation, "participants" | "remoteParticipants" | "location" | "pseudoConversation" | "pseudoConversationSummary">, options: { teleportParticipants?: boolean, unsafeMode?: boolean } = {}): DEConversation;
 
     isStrangerTowards(char1: string | DECompleteCharacterReference | null, char2: string | DECompleteCharacterReference | null): boolean;
     isAttractedTo(char1: string | DECompleteCharacterReference | null, potentialAttractiveChar2: string | DECompleteCharacterReference | null): boolean;
@@ -4185,6 +4181,7 @@ declare interface DEScript {
     }): Promise<void> | void;
     /**
      * Called whenever a scene just started, but hasn't set up yet, allowing for any necessary preparations or actions to be performed right at the start of the scene, before the characters interact and before the scene is fully set up
+     * 
      * @param DE 
      * @param scene 
      */

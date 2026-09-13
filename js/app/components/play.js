@@ -218,7 +218,7 @@ class PlayOverlay extends HTMLElement {
         /** @type {boolean} Whether the world's own narrator(s) should be overridden with the default. */
         this.overrideWorldNarrator = localStorage.getItem('defaultNarratorVoiceOverride') === 'true';
         /** @type {boolean} */
-        this.vocalizerEnabled = false;
+        this.voiceEnabled = false;
         /** @type {boolean} Whether ambience volume is currently lowered for the narration step. */
         this.ambienceLowered = false;
         /** @type {Array<{ id: string, label: string }>} */
@@ -237,12 +237,12 @@ class PlayOverlay extends HTMLElement {
 
     async connectedCallback() {
         try {
-            this.vocalizerEnabled = !!(await window.API.getConfigValue('vocalizerEnabled'));
+            this.voiceEnabled = !!(await window.API.getConfigValue('voiceEnabled'));
         } catch (err) {
-            console.error('Failed to read vocalizerEnabled config:', err);
-            this.vocalizerEnabled = false;
+            console.error('Failed to read voiceEnabled config:', err);
+            this.voiceEnabled = false;
         }
-        this.steps = this.vocalizerEnabled
+        this.steps = this.voiceEnabled
             ? [...STEPS, { id: 'narration', label: 'Narration' }]
             : STEPS.slice();
 
@@ -497,7 +497,7 @@ class PlayOverlay extends HTMLElement {
 
     /**
      * ── Step 5: Narration ────────────────────────────────────────────
-     * Shown only when the Vocalizer is enabled. Lets the user pick a default
+     * Shown only when the Voice is enabled. Lets the user pick a default
      * narrator voice and choose whether it overrides a world's own narrator(s).
      * Selecting a voice previews it by playing the audio file.
      * @param {Element} body

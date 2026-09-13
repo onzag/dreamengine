@@ -491,13 +491,13 @@ class Settings extends HTMLElement {
             const adapterNames = Object.keys(VOICE_ADAPTERS);
             tabsContainer.innerHTML = `<app-overlay-section section-title="Voice Generation Settings">
                 <app-overlay-input-boolean
-                    id="vocalizer-enabled-toggle"
+                    id="voice-enabled-toggle"
                     label="Enabled"
                     title="Enable or disable voice generation."
                     input-data-location="voiceEnabled"
                     input-default-value="false"
                 ></app-overlay-input-boolean>
-                <div id="vocalizer-settings-body">
+                <div id="voice-settings-body">
                     <app-overlay-select
                         id="voice-adapter-select"
                         label="Voice Adapter"
@@ -507,29 +507,29 @@ class Settings extends HTMLElement {
                     ></app-overlay-select>
                     <div id="voice-adapter-settings" aria-live="polite">Loading adapter settings...</div>
                     <br />
-                    <app-overlay-button id="test-vocalizer-connection" play-sound-on-click="false" aria-key="t" title="Open a voice generator to check the vocalizer settings">Test Voice Gen</app-overlay-button>
+                    <app-overlay-button id="test-voice-connection" play-sound-on-click="false" aria-key="t" title="Open a voice generator to check the voice settings">Test Voice Gen</app-overlay-button>
                 </div>
             </app-overlay-section>`;
 
-            const vocalizerEnabledToggle = tabsContainer.querySelector('#vocalizer-enabled-toggle');
-            const vocalizerSettingsBody = /** @type {HTMLElement|null} */ (tabsContainer.querySelector('#vocalizer-settings-body'));
+            const voiceEnabledToggle = tabsContainer.querySelector('#voice-enabled-toggle');
+            const voiceSettingsBody = /** @type {HTMLElement|null} */ (tabsContainer.querySelector('#voice-settings-body'));
 
             /**
              * 
              * @param {boolean} enabled 
              */
-            const applyVocalizerGrayState = (enabled) => {
-                if (vocalizerSettingsBody) {
-                    vocalizerSettingsBody.style.opacity = enabled ? '' : '0.4';
-                    vocalizerSettingsBody.style.pointerEvents = enabled ? '' : 'none';
+            const applyVoiceGrayState = (enabled) => {
+                if (voiceSettingsBody) {
+                    voiceSettingsBody.style.opacity = enabled ? '' : '0.4';
+                    voiceSettingsBody.style.pointerEvents = enabled ? '' : 'none';
                 }
             };
-            window.API.getConfigValue('vocalizerEnabled').then((val) => {
-                applyVocalizerGrayState(!!val);
+            window.API.getConfigValue('voiceEnabled').then((val) => {
+                applyVoiceGrayState(!!val);
             });
-            vocalizerEnabledToggle?.addEventListener('input-change', () => {
+            voiceEnabledToggle?.addEventListener('input-change', () => {
                 // @ts-ignore
-                applyVocalizerGrayState(vocalizerEnabledToggle.getValue());
+                applyVoiceGrayState(voiceEnabledToggle.getValue());
             });
 
             const voiceAdapterSelect = tabsContainer.querySelector('#voice-adapter-select');
@@ -539,15 +539,15 @@ class Settings extends HTMLElement {
                 settingsContainer: voiceAdapterSettings,
                 registry: VOICE_ADAPTERS,
                 sectionRenderId,
-                selfSignedDataLocation: "allowVocalizerSelfSigned",
+                selfSignedDataLocation: "allowVoiceSelfSigned",
                 selfSignedDescription: "Allow connecting to voice servers with self-signed SSL certificates. Only enable this for a trusted server; doing so makes the connection less secure.",
                 lowVramDataLocation: "voiceLowVramMode",
             });
 
             // @ts-expect-error
-            tabsContainer.querySelector('#test-vocalizer-connection').addEventListener('click', () => {
+            tabsContainer.querySelector('#test-voice-connection').addEventListener('click', () => {
                 const dialog = document.createElement('app-dialog');
-                dialog.setAttribute('dialog-title', 'Vocalizer Test');
+                dialog.setAttribute('dialog-title', 'Voice Test');
                 dialog.setAttribute('confirmation', 'true');
                 dialog.setAttribute('confirm-text', 'Close');
                 dialog.setAttribute('cancel-text-disable', 'true');
@@ -556,7 +556,7 @@ class Settings extends HTMLElement {
                 dialog.setAttribute("pre-expand", "true");
                 document.body.appendChild(dialog);
 
-                const testComponent = document.createElement('vocalizer-test');
+                const testComponent = document.createElement('voice-test');
                 dialog.appendChild(testComponent);
 
                 const exit = () => {

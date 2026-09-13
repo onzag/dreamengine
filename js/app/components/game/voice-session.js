@@ -1,11 +1,11 @@
 /**
- * Per-game Vocalizer session. Wraps a single {@link VoiceAdapterWebsocketVocalizer}
+ * Per-game Voice session. Wraps a single {@link VoiceAdapterWebsocketVoice}
  * connection shared by every `app-game-message` in the current game, and keeps a
  * small in-memory cache of reference audio files so the same voice asset is not
  * re-downloaded, re-hashed or re-uploaded over and over.
  *
  * game.js owns the lifecycle: it creates the session on start (when
- * `vocalizerEnabled` is true) and exposes it as `window.GAME_VOCALIZER`. Message
+ * `voiceEnabled` is true) and exposes it as `window.GAME_VOCALIZER`. Message
  * blocks read that global to synthesize their narration/dialogue.
  */
 
@@ -15,7 +15,7 @@ const DEFAULT_GENERATION = { };
 /** Maximum bytes of reference audio to keep resident before evicting (LRU). */
 const MAX_CACHE_BYTES = 25 * 1024 * 1024;
 
-export class GameVocalizerSession {
+export class GameVoiceSession {
     /**
      * @param {import("../../../engine/voice/base.js").BaseVoiceAdapter} adapter
      * @param {boolean} lowVramMode if true, the session will use a low-vram mode for caching voice assets
@@ -43,7 +43,7 @@ export class GameVocalizerSession {
         this._uploaded = new Set();
     }
 
-    /** @returns {import("../../../engine/voice/base.js").VocalizerGeneration} */
+    /** @returns {import("../../../engine/voice/base.js").VoiceGeneration} */
     get defaultGeneration() {
         return { ...DEFAULT_GENERATION };
     }
@@ -123,7 +123,7 @@ export class GameVocalizerSession {
                 const blob = await response.blob();
                 file = new File([blob], refName, { type: blob.type || 'audio/ogg' });
             } catch (err) {
-                console.error(`GameVocalizerSession: failed to fetch voice asset "${assetPath}"`, err);
+                console.error(`GameVoiceSession: failed to fetch voice asset "${assetPath}"`, err);
                 return null;
             }
             entry = { file, size: file.size, refName };
@@ -137,7 +137,7 @@ export class GameVocalizerSession {
                 await this.adapter.sendFile(entry.file, refName);
                 this._uploaded.add(refName);
             } catch (err) {
-                console.error(`GameVocalizerSession: failed to upload voice asset "${assetPath}"`, err);
+                console.error(`GameVoiceSession: failed to upload voice asset "${assetPath}"`, err);
                 return null;
             }
         }
@@ -169,7 +169,7 @@ export class GameVocalizerSession {
      *
      * @param {string} text
      * @param {{ asset: string, transcript: string|null, tags?: string[] } | null} voice
-     * @returns {Promise<import("../../../engine/voice/base.js").VocalizerSpeechSegment|import("../../../engine/voice/base.js").VocalizerDelaySegment>}
+     * @returns {Promise<import("../../../engine/voice/base.js").VoiceSpeechSegment|import("../../../engine/voice/base.js").VoiceDelaySegment>}
      */
     async buildSpeechSegment(text, voice) {
         const clean = (text || '').replace(/\*/g, '').trim();
@@ -183,7 +183,7 @@ export class GameVocalizerSession {
 
         if (!refName) return { "duration_ms": 1000 };
 
-        /** @type {import("../../../engine/voice/base.js").VocalizerSpeechSegment} */
+        /** @type {import("../../../engine/voice/base.js").VoiceSpeechSegment} */
         const segment = { text: clean };
 
         const tags = Array.isArray(voice.tags) ? voice.tags.filter(Boolean) : [];
@@ -201,7 +201,7 @@ export class GameVocalizerSession {
 
     /**
      * Render a list of speech segments into a single audio object URL.
-     * @param {Array<import("../../../engine/voice/base.js").VocalizerSpeechSegment|import("../../../engine/voice/base.js").VocalizerDelaySegment|import("../../../engine/voice/base.js").VocalizerAudioSegment>} segments
+     * @param {Array<import("../../../engine/voice/base.js").VoiceSpeechSegment|import("../../../engine/voice/base.js").VoiceDelaySegment|import("../../../engine/voice/base.js").VoiceAudioSegment>} segments
      * @param {() => void} [onSegmentsSent] optional callback invoked after the segments have been sent to the server
      * @returns {Promise<string|null>} an object URL, or null on failure/empty input
      */
@@ -219,7 +219,7 @@ export class GameVocalizerSession {
             const blob = await workflowCall;
             return URL.createObjectURL(blob);
         } catch (err) {
-            console.error("GameVocalizerSession: render failed", err);
+            console.error("GameVoiceSession: render failed", err);
             return null;
         }
     }

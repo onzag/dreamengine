@@ -593,6 +593,7 @@ async function stopAllAmbiencesAndStartNewOne(groups, stopfadeDurationMs) {
     .filter(id => !newIdSet.has(id))
     .map(id => stopAmbienceWithFade(id, stopfadeDurationMs)
       .catch(err => console.log('Error stopping ambience with fade:', err)));
+  CURRENT_AMBIENCES_MEANT_TO_BE_PLAYING.clear();
 
   // If a newer call has already superseded us, don't start anything.
   if (numberId !== lastNumberId) {

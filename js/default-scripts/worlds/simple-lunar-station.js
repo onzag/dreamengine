@@ -35,7 +35,7 @@ engine.exports = {
             narration: (info) => {
                 const others = DE.utils.allWorldCharactersButUser();
                 if (!others || others.length === 0) {
-                    return `${info.char.name} is a visitor to the Lunar Station, eager to explore this small outpost in space. The entire station is empty and quiet, allowing ${info.char.name} to explore their surroundings in solitude in space.`;
+                    return `${info.char.name} is a visitor to the Lunar Station, eager to explore this small outpost in space. The entire station is empty and quiet, allowing ${info.char.name} to explore their surroundings in solitude.`;
                 }
 
                 const dema = others.find((c) => c.name === "Dema");

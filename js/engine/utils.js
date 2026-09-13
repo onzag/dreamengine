@@ -2,6 +2,7 @@ import { getSurroundingCharacters, getPowerLevelFromCharacter, getRelationship, 
 import { generateIntSeedFromString, weightedRandomByLikelihood } from "../util/random.js";
 import { getCharacterVolume, getCharacterWeight } from "./util/weight-and-volume.js";
 import { emotions } from "./util/emotions.js";
+import { DEngine } from "./index.js";
 
 /**
  * @param {string[]} list
@@ -79,7 +80,7 @@ function getCausantsHelperLocal(DE, character, stateName) {
     let lastEntryWithActivation = null;
     for (let i = characterHistoryAndCurrent.length - 1; i >= 0; i--) {
         const entry = characterHistoryAndCurrent[i];
-        if (entry.type === "INTERACTING" && entry.states.find(s => s.state === actualStateName)) {
+        if (entry.states.find(s => s.state === actualStateName)) {
             lastEntryWithActivation = entry;
             break;
         }
@@ -96,9 +97,10 @@ function getCausantsHelperLocal(DE, character, stateName) {
 
 /**
  * @param {DEObject} DE
+ * @param {DEngine} engine
  * @returns {DEUtils}
  */
-export const deEngineUtilsFn = (DE) => ({
+export const deEngineUtilsFn = (DE, engine) => ({
     getCurrentlyInteractingCharacters(char) {
         const charRef = typeof char === "string" ? DE.characters[char] : char;
         return getCurrentlyInteractingCharacters(DE, charRef.name);
@@ -930,24 +932,306 @@ export const deEngineUtilsFn = (DE) => ({
 
     createVoiceFromPreset(presetName) {
         // TODO implement presets const voices = [
-                //     "moaning",
-                //     "gagging",
-                //     "panting",
-                //     "whimpering",
-                //     "crying",
-                //     "crying and moaning",
-                //     "screaming",
-                //     "screaming and moaning",
-                //     "mute",
-                //     "none",
-                //     "normal",
-                // ];
+        //     "moaning",
+        //     "gagging",
+        //     "panting",
+        //     "whimpering",
+        //     "crying",
+        //     "crying and moaning",
+        //     "screaming",
+        //     "screaming and moaning",
+        //     "mute",
+        //     "none",
+        //     "normal",
+        // ];
         return {
             mute: false,
             description: "",
             sounds: [],
             modes: [],
         };
+    },
+
+    addConversation(conversation, options = {}) {
+        const conversationId = "CONV_" + crypto.randomUUID();
+        const participants = conversation.participants;
+        const remoteParticipants = conversation.remoteParticipants;
+
+        if ((!participants || participants.length === 0) && (!options.unsafeMode)) {
+            throw new Error("Conversation must have at least one participant");
+        }
+
+        const location = conversation.location;
+
+        if (!options.unsafeMode) {
+            for (const participant of participants) {
+                if (!DE.characters[participant]) {
+                    throw new Error(`Participant ${participant} does not exist in DE.characters`);
+                }
+            }
+
+            for (const remoteParticipant of remoteParticipants) {
+                if (!DE.characters[remoteParticipant]) {
+                    throw new Error(`Remote participant ${remoteParticipant} does not exist in DE.characters`);
+                }
+            }
+
+            const hasUserInvolved = participants.includes(DE.user) || remoteParticipants.includes(DE.user);
+            if (hasUserInvolved && conversation.pseudoConversation) {
+                throw new Error("Cannot create a pseudo-conversation with the user involved");
+            }
+
+            // check if participant is also in remoteParticipants
+            for (const participant of participants) {
+                if (remoteParticipants.includes(participant)) {
+                    throw new Error(`Participant ${participant} cannot be both a participant and a remote participant`);
+                }
+            }
+        }
+
+        /**
+         * @type {DEConversation}
+         */
+        const newConversation = {
+            bondsAtEnd: null,
+            bondsAtStart: {},
+            id: conversationId,
+            participants: participants,
+            remoteParticipants: remoteParticipants,
+            location: location,
+            messages: [],
+            pseudoConversation: conversation.pseudoConversation || false,
+            previousConversationIdsPerParticipant: {},
+            startTime: { ...DE.currentTime },
+            endTime: null,
+            pseudoConversationSummary: conversation.pseudoConversationSummary,
+        };
+
+        const participantAndRemoteParticipants = [...participants, ...remoteParticipants];
+
+        const conversationsEnded = new Set();
+
+        for (const participant of participantAndRemoteParticipants) {
+            const charState = DE.stateFor[participant];
+            const isRemoteParticipant = remoteParticipants.includes(participant);
+            if (!charState && options.unsafeMode) {
+                console.warn(`Participant ${participant} does not have a state in DE.stateFor`);
+                continue;
+            }
+            if (charState.deadEnded) {
+                console.warn(`Participant ${participant} is dead-ended`);
+            }
+
+            if (charState.location !== location && !isRemoteParticipant) {
+                // TODO
+                if (options.teleportParticipants) {
+                    DE.utils.teleportCharacter(participant, location);
+                } else if (!options.unsafeMode) {
+                    throw new Error(`Participant ${participant} is not in the specified location ${location}`);
+                }
+            }
+
+            const oldConversation = charState.conversationId ? DE.conversations[charState.conversationId] : null;
+
+            charState.conversationId = conversationId;
+            newConversation.bondsAtStart[participant] = {
+                active: DE.bonds[participant].active.map(b => ({ ...b })),
+                ex: DE.bonds[participant].ex.map(b => ({ ...b })),
+            };
+            if (oldConversation) {
+                conversationsEnded.add(oldConversation.id);
+                oldConversation.bondsAtEnd = oldConversation.bondsAtEnd || {};
+                oldConversation.bondsAtEnd[participant] = newConversation.bondsAtStart[participant];
+            }
+            newConversation.previousConversationIdsPerParticipant[participant] = oldConversation ? oldConversation.id : null;
+        }
+
+        for (const endedConversationId of conversationsEnded) {
+            const endedConversation = DE.conversations[endedConversationId];
+            if (endedConversation && !endedConversation.endTime) {
+                endedConversation.endTime = { ...DE.currentTime };
+            }
+
+            let participantsLeft = endedConversation.participants.filter(p => !participantAndRemoteParticipants.includes(p));
+            let remoteParticipantsLeft = endedConversation.remoteParticipants.filter(p => !participantAndRemoteParticipants.includes(p));
+
+            if (participantsLeft.length !== 0 || remoteParticipantsLeft.length !== 0) {
+                // if the DE.user is in the remoteParticipantsLeft, we need to make them the new host and demote
+                // everyone else to remote participants
+                const deUserInRemoteParticipantsLeft = remoteParticipantsLeft.includes(DE.user);
+                if (deUserInRemoteParticipantsLeft) {
+                    const newHost = DE.user;
+                    remoteParticipantsLeft.splice(remoteParticipantsLeft.indexOf(newHost), 1);
+                    for (const participant of participantsLeft) {
+                        remoteParticipantsLeft.push(participant);
+                    }
+                    participantsLeft = [newHost];
+                }
+
+                const onlyRemoteParticipantsLeft = participantsLeft.length === 0 && remoteParticipantsLeft.length > 0;
+                // if only remote participants are left, pick a random remote participant to be the new "host" of the conversation, and make them a participant instead of a remote participant
+                if (onlyRemoteParticipantsLeft) {
+                    const newHost = remoteParticipantsLeft[Math.floor(Math.random() * remoteParticipantsLeft.length)];
+                    participantsLeft.push(newHost);
+                    remoteParticipantsLeft.splice(remoteParticipantsLeft.indexOf(newHost), 1);
+                }
+
+                // now for consistency we need to check if any of the remote participants left are at the same location as the ended conversation, and if so, turn them into participants
+                // since they are actually there
+                for (const remoteParticipant of remoteParticipantsLeft) {
+                    // check if they are at the same place of the host and turn them into a participant if they are
+                    const remoteParticipantState = DE.stateFor[remoteParticipant];
+                    if (remoteParticipantState && remoteParticipantState.location === endedConversation.location) {
+                        participantsLeft.push(remoteParticipant);
+                        remoteParticipantsLeft.splice(remoteParticipantsLeft.indexOf(remoteParticipant), 1);
+                    }
+                }
+
+                // now we need to create a new conversation for the remaining participants
+                /**
+                 * @type {DEConversation}
+                 */
+                const newConversationForRemainingParticipants = {
+                    bondsAtEnd: null,
+                    bondsAtStart: {},
+                    endTime: null,
+                    previousConversationIdsPerParticipant: {},
+                    startTime: { ...DE.currentTime },
+                    id: "CONV_" + crypto.randomUUID(),
+                    participants: participantsLeft,
+                    remoteParticipants: remoteParticipantsLeft,
+                    location: endedConversation.location,
+                    messages: [],
+                    pseudoConversation: participantsLeft.includes(DE.user) ? false : true,
+                };
+
+                for (const allParticipant of [...participantsLeft, ...remoteParticipantsLeft]) {
+                    const charState = DE.stateFor[allParticipant];
+
+                    charState.conversationId = newConversationForRemainingParticipants.id;
+                    newConversationForRemainingParticipants.bondsAtStart[allParticipant] = {
+                        active: DE.bonds[allParticipant].active.map(b => ({ ...b })),
+                        ex: DE.bonds[allParticipant].ex.map(b => ({ ...b })),
+                    };
+                    newConversationForRemainingParticipants.previousConversationIdsPerParticipant[allParticipant] = endedConversationId;
+                }
+
+                DE.conversations[newConversationForRemainingParticipants.id] = newConversationForRemainingParticipants;
+                engine.triggerConversationMessageUpdate(DE, {
+                    event: "new-conversation",
+                    conversationId: newConversationForRemainingParticipants.id,
+                    obj: newConversationForRemainingParticipants,
+                });
+            }
+        }
+
+        DE.conversations[conversationId] = newConversation;
+        engine.triggerConversationMessageUpdate(DE, {
+            event: "new-conversation",
+            conversationId: newConversation.id,
+            obj: newConversation,
+        });
+        return newConversation;
+    },
+
+    addMessage(conversationId, message, options = {}) {
+        const conversationObject = DE.conversations[conversationId];
+        if (!conversationObject) {
+            throw new Error(`Conversation with ID ${conversationId} not found`);
+        }
+
+        if (!conversationObject.participants.includes(message.sender) && !(conversationObject.remoteParticipants && conversationObject.remoteParticipants.includes(message.sender))) {
+            throw new Error(`Sender ${message.sender} is not a participant nor a remote participant of conversation ${conversationId}`);
+        }
+
+        if (conversationObject.pseudoConversation) {
+            throw new Error(`Cannot add message to pseudo-conversation ${conversationId}`);
+        }
+
+        conversationObject.messages.push(message);
+        engine.triggerConversationMessageUpdate(DE, {
+            event: "new-message",
+            conversationId: conversationId,
+            messageId: message.id,
+            obj: message,
+        });
+        return message;
+    },
+
+    addMessageIntoTargetConversation(target, message, options = {}) {
+        const targetChar = DE.stateFor[target];
+        if (!targetChar) {
+            throw new Error(`Target character state not found for target ${target}`);
+        }
+
+        const senderChar = DE.stateFor[message.sender];
+        let senderIsGhost = false;
+        if (!senderChar) {
+            if (!options.unsafeMode) {
+                throw new Error(`Sender character state not found for sender ${message.sender}`);
+            }
+            senderIsGhost = true;
+        }
+
+        const currentConversationIdOfTarget = targetChar.conversationId;
+
+        /**
+         * @type {Array<string>}
+         */
+        let newParticipants = [];
+        /**
+         * @type {Array<string>}
+         */
+        let newRemoteParticipants = [];
+        if (!senderIsGhost) {
+            if (options.isolation === "isolate") {
+                newParticipants = Array.from(new Set([target, message.sender]));
+            } else {
+                // this cheat will allow us to merge participants or not, depending on the isolation option
+                const currentConversationIdOfSender = senderChar && options.isolation === "merge-groups" ? senderChar.conversationId : null;
+                const participantsOfCurrentConversationOfTarget = currentConversationIdOfTarget ? DE.conversations[currentConversationIdOfTarget].participants : [];
+                const remoteParticipantsOfCurrentConversationOfTarget = currentConversationIdOfTarget ? DE.conversations[currentConversationIdOfTarget].remoteParticipants : [];
+                const participantsOfCurrentConversationOfSender = currentConversationIdOfSender ? DE.conversations[currentConversationIdOfSender].participants : [];
+                const remoteParticipantsOfCurrentConversationOfSender = currentConversationIdOfSender ? DE.conversations[currentConversationIdOfSender].remoteParticipants : [];
+                newParticipants = Array.from(new Set([target, message.sender, ...participantsOfCurrentConversationOfTarget, ...participantsOfCurrentConversationOfSender]));
+                newRemoteParticipants = Array.from(new Set([...remoteParticipantsOfCurrentConversationOfTarget, ...remoteParticipantsOfCurrentConversationOfSender]));
+
+                // check any remote participants that are also in newParticipants and remove them from newRemoteParticipants
+                newRemoteParticipants = newRemoteParticipants.filter(rp => !newParticipants.includes(rp));
+
+                // check any new remote participants that are actually at targetChar.location and turn them into participants instead of remote participants
+                for (const remoteParticipant of newRemoteParticipants) {
+                    const remoteParticipantState = DE.stateFor[remoteParticipant];
+                    if (remoteParticipantState && remoteParticipantState.location === targetChar.location) {
+                        newParticipants.push(remoteParticipant);
+                        newRemoteParticipants.splice(newRemoteParticipants.indexOf(remoteParticipant), 1);
+                    }
+                }
+            }
+        } else {
+            if (options.isolation === "isolate") {
+                newParticipants = [target];
+            } else {
+                const participantsOfCurrentConversationOfTarget = currentConversationIdOfTarget ? DE.conversations[currentConversationIdOfTarget].participants : [];
+                const remoteParticipantsOfCurrentConversationOfTarget = currentConversationIdOfTarget ? DE.conversations[currentConversationIdOfTarget].remoteParticipants : [];
+                newParticipants = participantsOfCurrentConversationOfTarget;
+                newRemoteParticipants = remoteParticipantsOfCurrentConversationOfTarget;
+            }
+        }
+
+        const currentConversationOfTarget = currentConversationIdOfTarget ? DE.conversations[currentConversationIdOfTarget] : null;
+        const currentConversationHasAllParticipantsAndRemoteParticipants = currentConversationOfTarget ?
+            newParticipants.every(p => currentConversationOfTarget.participants.includes(p) || currentConversationOfTarget.remoteParticipants.includes(p)) &&
+            newRemoteParticipants.every(rp => currentConversationOfTarget.participants.includes(rp) || currentConversationOfTarget.remoteParticipants.includes(rp)) : false;
+
+        const targetConversation = currentConversationHasAllParticipantsAndRemoteParticipants && currentConversationOfTarget ? currentConversationOfTarget : DE.utils.addConversation({
+            participants: newParticipants,
+            remoteParticipants: newRemoteParticipants,
+            location: targetChar.location,
+            pseudoConversation: newParticipants.includes(DE.user) || newRemoteParticipants.includes(DE.user) ? false : true,
+        }, options);
+
+        return DE.utils.addMessage(targetConversation.id, message);
     },
 
     createVoice(description) {
@@ -1154,7 +1438,7 @@ export const deEngineUtilsFn = (DE) => ({
             console.warn(`Character state for ${charRef.name} not found when checking if top naked`);
             return false;
         }
-        
+
         return !charState.wearing.find((i) => i.wearableProperties?.coversTopNakedness);
     },
 
@@ -1220,402 +1504,402 @@ export const deEngineUtilsFn = (DE) => ({
         return conversationToUse.messages.filter((m) => m.sender === char1Ref.name || m.sender === char2Ref.name).length <= 1;
     },
 
-        breakDownCharactersAndCausesTemplate(info) {
-            return async (info2) => {
-                let base = typeof info.base === "string" ? info.base : info.base({
-                    char: info2.char,
+    breakDownCharactersAndCausesTemplate(info) {
+        return async (info2) => {
+            let base = typeof info.base === "string" ? info.base : info.base({
+                char: info2.char,
+            });
+
+            if (info2.causes) {
+                /**
+                 * @type {string[]}
+                 */
+                const causants = [];
+                /**
+                 * @type {Record<string, string[]>}
+                 */
+                const causesPerCausant = {};
+                info2.causes.forEach(cause => {
+                    if (cause.causant) {
+                        if (!causesPerCausant[cause.causant.name]) {
+                            causesPerCausant[cause.causant.name] = [];
+                        }
+                        causesPerCausant[cause.causant.name].push(cause.description);
+                        if (!causants.includes(cause.causant.name)) {
+                            causants.push(cause.causant.name);
+                        }
+                    }
                 });
 
-                if (info2.causes) {
-                    /**
-                     * @type {string[]}
-                     */
-                    const causants = [];
-                    /**
-                     * @type {Record<string, string[]>}
-                     */
-                    const causesPerCausant = {};
-                    info2.causes.forEach(cause => {
-                        if (cause.causant) {
-                            if (!causesPerCausant[cause.causant.name]) {
-                                causesPerCausant[cause.causant.name] = [];
-                            }
-                            causesPerCausant[cause.causant.name].push(cause.description);
-                            if (!causants.includes(cause.causant.name)) {
-                                causants.push(cause.causant.name);
-                            }
-                        }
+                for (let i = 0; i < causants.length; i++) {
+                    const causant = causants[i];
+                    const other = DE.characters[causant];
+                    const otherFamilyRelationship = DE.characters[info2.char.name].familyTies[causant];
+                    const otherRelationship = await getRelationship(DE, info2.char, other);
+                    const descriptionForThatCausant = typeof info.perOther === "string" ? info.perOther : await info.perOther({
+                        char: info2.char,
+                        other: DE.characters[causant],
+                        otherFamilyRelation: otherFamilyRelationship.relation,
+                        otherRelationship: otherRelationship,
                     });
+                    if (base) {
+                        base += "\n\n";
+                    }
+                    base += descriptionForThatCausant;
 
-                    for (let i = 0; i < causants.length; i++) {
-                        const causant = causants[i];
-                        const other = DE.characters[causant];
-                        const otherFamilyRelationship = DE.characters[info2.char.name].familyTies[causant];
-                        const otherRelationship = await getRelationship(DE, info2.char, other);
-                        const descriptionForThatCausant = typeof info.perOther === "string" ? info.perOther : await info.perOther({
-                            char: info2.char,
-                            other: DE.characters[causant],
-                            otherFamilyRelation: otherFamilyRelationship.relation,
-                            otherRelationship: otherRelationship,
-                        });
-                        if (base) {
-                            base += "\n\n";
-                        }
-                        base += descriptionForThatCausant;
-
-                        if (causesPerCausant[causant].length > 1) {
-                            base += `. Reasons: ${info2.char.name} `;
-                            base += DE.utils.formatAnd(causesPerCausant[causant]);
-                            base += `, by ${other.name}`;
-                        }
+                    if (causesPerCausant[causant].length > 1) {
+                        base += `. Reasons: ${info2.char.name} `;
+                        base += DE.utils.formatAnd(causesPerCausant[causant]);
+                        base += `, by ${other.name}`;
                     }
                 }
+            }
 
-                if (info2.causes) {
-                    /**
-                     * @type {string[]}
-                     */
-                    const causants = [];
-                    /**
-                     * @type {Record<string, string[]>}
-                     */
-                    const causesPerCausant = {};
-                    info2.causes.forEach(cause => {
-                        if (cause.causant && cause.causant.type === "object") {
-                            if (!causesPerCausant[cause.causant.name]) {
-                                causesPerCausant[cause.causant.name] = [];
-                            }
-                            causesPerCausant[cause.causant.name].push(cause.description);
-                            if (!causants.includes(cause.causant.name)) {
-                                causants.push(cause.causant.name);
-                            }
+            if (info2.causes) {
+                /**
+                 * @type {string[]}
+                 */
+                const causants = [];
+                /**
+                 * @type {Record<string, string[]>}
+                 */
+                const causesPerCausant = {};
+                info2.causes.forEach(cause => {
+                    if (cause.causant && cause.causant.type === "object") {
+                        if (!causesPerCausant[cause.causant.name]) {
+                            causesPerCausant[cause.causant.name] = [];
                         }
+                        causesPerCausant[cause.causant.name].push(cause.description);
+                        if (!causants.includes(cause.causant.name)) {
+                            causants.push(cause.causant.name);
+                        }
+                    }
+                });
+
+                for (let i = 0; i < causants.length; i++) {
+                    const causant = causants[i];
+                    const descriptionForThatCausant = typeof info.perObject === "string" ? info.perObject : await info.perObject({
+                        char: info2.char,
+                        item: causant,
                     });
+                    if (base) {
+                        base += "\n\n";
+                    }
+                    base += descriptionForThatCausant;
 
-                    for (let i = 0; i < causants.length; i++) {
-                        const causant = causants[i];
-                        const descriptionForThatCausant = typeof info.perObject === "string" ? info.perObject : await info.perObject({
-                            char: info2.char,
-                            item: causant,
-                        });
-                        if (base) {
-                            base += "\n\n";
-                        }
-                        base += descriptionForThatCausant;
-
-                        if (causesPerCausant[causant].length > 1) {
-                            base += `. Reasons: ${info2.char.name} `;
-                            base += DE.utils.formatAnd(causesPerCausant[causant]);
-                            base += `, by/with the object: ${causant}`;
-                        }
+                    if (causesPerCausant[causant].length > 1) {
+                        base += `. Reasons: ${info2.char.name} `;
+                        base += DE.utils.formatAnd(causesPerCausant[causant]);
+                        base += `, by/with the object: ${causant}`;
                     }
                 }
+            }
 
-                return base;
+            return base;
+        }
+    },
+    getExternalDescriptionOfCharacter(char, onlyBasics, hideCurrentPosture) {
+        return getExternalDescriptionOfCharacter(DE, char.name, onlyBasics, hideCurrentPosture);
+    },
+    allWorldCharacters() {
+        return Object.keys(DE.stateFor).filter((charName) => !DE.stateFor[charName].deadEnded).map(name => DE.characters[name]);
+    },
+    allWorldCharactersButUser() {
+        return Object.keys(DE.stateFor).filter(name => name !== DE.user && !DE.stateFor[name].deadEnded).map(name => DE.characters[name]);
+    },
+    currentLocation() {
+        return DE.world.currentLocation;
+    },
+    currentLocationIsInVehicle() {
+        return !!DE.world.locations[DE.world.currentLocation]?.vehicleType || false;
+    },
+    currentLocationIsSafe() {
+        return DE.world.locations[DE.world.currentLocation]?.isSafe || false;
+    },
+    allCharactersAtLocation(locationName) {
+        const result = [];
+        for (const member of Object.keys(DE.stateFor)) {
+            if (DE.stateFor[member].location === locationName) {
+                const charRef = DE.characters[member];
+                if (charRef) result.push(charRef);
             }
-        },
-        getExternalDescriptionOfCharacter(char, onlyBasics, hideCurrentPosture) {
-            return getExternalDescriptionOfCharacter(DE, char.name, onlyBasics, hideCurrentPosture);
-        },
-        allWorldCharacters() {
-            return Object.keys(DE.stateFor).filter((charName) => !DE.stateFor[charName].deadEnded).map(name => DE.characters[name]);
-        },
-        allWorldCharactersButUser() {
-            return Object.keys(DE.stateFor).filter(name => name !== DE.user && !DE.stateFor[name].deadEnded).map(name => DE.characters[name]);
-        },
-        currentLocation() {
-            return DE.world.currentLocation;
-        },
-        currentLocationIsInVehicle() {
-            return !!DE.world.locations[DE.world.currentLocation]?.vehicleType || false;
-        },
-        currentLocationIsSafe() {
-            return DE.world.locations[DE.world.currentLocation]?.isSafe || false;
-        },
-        allCharactersAtLocation(locationName) {
-            const result = [];
-            for (const member of Object.keys(DE.stateFor)) {
-                if (DE.stateFor[member].location === locationName) {
-                    const charRef = DE.characters[member];
-                    if (charRef) result.push(charRef);
+        }
+        return result;
+    },
+    locationIsVehicle(locationName) {
+        return !!DE.world.locations[locationName]?.vehicleType || false;
+    },
+    locationIsSafe(locationName) {
+        return DE.world.locations[locationName]?.isSafe || false;
+    },
+    getLastStateCausants(char, stateName) {
+        return removeDuplicatesHelper(getCausantsHelperLocal(DE, char, stateName).map(c => c.name));
+    },
+    getLastStateCharacterCausants(char, stateName) {
+        return removeDuplicatesHelper(getCausantsHelperLocal(DE, char, stateName).filter(c => c.type === "character").map(c => c.name));
+    },
+    getLastStateObjectCausants(char, stateName) {
+        return getCausantsHelperLocal(DE, char, stateName).filter(c => c.type === "object").map(c => c.name);
+    },
+    getStates(char) {
+        return DE.stateFor[char.name].states.map(s => s.state);
+    },
+    getStateIntensity(char, stateName) {
+        const stateObject = DE.stateFor[char.name].states.find(s => s.state === stateName);
+        return stateObject ? stateObject.intensity : 0;
+    },
+    hasState(char, stateName) {
+        return DE.stateFor[char.name].states.some(s => s.state === stateName);
+    },
+    stateHasJustActivated(char, stateName) {
+        const stateObject = DE.stateFor[char.name].states.find(s => s.state === stateName);
+        if (!stateObject) return false;
+        return stateObject.contiguousStartActivationCyclesAgo === 0;
+    },
+    getStateActivationCyclesAgo(char, stateName) {
+        const stateObject = DE.stateFor[char.name].states.find(s => s.state === stateName);
+        if (!stateObject) {
+            const stateHistory = [...DE.stateFor[char.name].history, DE.stateFor[char.name]];
+            let cycle = -1;
+            for (let i = stateHistory.length - 1; i >= 0; i--) {
+                cycle++;
+                const entry = stateHistory[i];
+                const historicalStateObject = entry.states.find(s => s.state === stateName);
+                if (historicalStateObject) {
+                    return cycle + historicalStateObject.contiguousStartActivationCyclesAgo;
                 }
             }
-            return result;
-        },
-        locationIsVehicle(locationName) {
-            return !!DE.world.locations[locationName]?.vehicleType || false;
-        },
-        locationIsSafe(locationName) {
-            return DE.world.locations[locationName]?.isSafe || false;
-        },
-        getLastStateCausants(char, stateName) {
-            return removeDuplicatesHelper(getCausantsHelperLocal(DE, char, stateName).map(c => c.name));
-        },
-        getLastStateCharacterCausants(char, stateName) {
-            return removeDuplicatesHelper(getCausantsHelperLocal(DE, char, stateName).filter(c => c.type === "character").map(c => c.name));
-        },
-        getLastStateObjectCausants(char, stateName) {
-            return getCausantsHelperLocal(DE, char, stateName).filter(c => c.type === "object").map(c => c.name);
-        },
-        getStates(char) {
-            return DE.stateFor[char.name].states.map(s => s.state);
-        },
-        getStateIntensity(char, stateName) {
-            const stateObject = DE.stateFor[char.name].states.find(s => s.state === stateName);
-            return stateObject ? stateObject.intensity : 0;
-        },
-        hasState(char, stateName) {
-            return DE.stateFor[char.name].states.some(s => s.state === stateName);
-        },
-        stateHasJustActivated(char, stateName) {
-            const stateObject = DE.stateFor[char.name].states.find(s => s.state === stateName);
-            if (!stateObject) return false;
-            return stateObject.contiguousStartActivationCyclesAgo === 0;
-        },
-        getStateActivationCyclesAgo(char, stateName) {
-            const stateObject = DE.stateFor[char.name].states.find(s => s.state === stateName);
-            if (!stateObject) {
-                const stateHistory = [...DE.stateFor[char.name].history, DE.stateFor[char.name]];
-                let cycle = -1;
-                for (let i = stateHistory.length - 1; i >= 0; i--) {
-                    cycle++;
-                    const entry = stateHistory[i];
-                    const historicalStateObject = entry.states.find(s => s.state === stateName);
-                    if (historicalStateObject) {
-                        return cycle + historicalStateObject.contiguousStartActivationCyclesAgo;
-                    }
-                }
-                return -1;
-            }
-            return stateObject.contiguousStartActivationCyclesAgo;
-        },
-        getSocialGroup(char, minBondLevel, maxBondLevel, min2BondLevel, max2BondLevel) {
-            return DE.bonds[char.name].active.filter(bond => {
-                return bond.bond >= minBondLevel && bond.bond <= maxBondLevel && bond.bond2 >= min2BondLevel && bond.bond2 <= max2BondLevel;
-            }).map(bond => bond.towards);
-        },
-        getPresentSocialGroup(char, minBondLevel, maxBondLevel, min2BondLevel, max2BondLevel) {
-            const currentLocation = DE.world.currentLocation;
-            const socialGroup = DE.bonds[char.name].active.filter(bond => {
-                return bond.bond >= minBondLevel && bond.bond <= maxBondLevel && bond.bond2 >= min2BondLevel && bond.bond2 <= max2BondLevel;
-            }).map(bond => bond.towards);
-            return socialGroup.filter(memberName => DE.stateFor[memberName].location === currentLocation);
-        },
-        getPresentConversingSocialGroup(char, minBondLevel, maxBondLevel, min2BondLevel, max2BondLevel) {
-            if (minBondLevel === -100 && maxBondLevel === 100 && min2BondLevel === 0 && max2BondLevel === 100) {
-                const conversationId = DE.stateFor[char.name].conversationId;
-                if (!conversationId) return [];
-                return DE.conversations[conversationId].participants.filter(memberName => memberName !== char.name);
-            }
+            return -1;
+        }
+        return stateObject.contiguousStartActivationCyclesAgo;
+    },
+    getSocialGroup(char, minBondLevel, maxBondLevel, min2BondLevel, max2BondLevel) {
+        return DE.bonds[char.name].active.filter(bond => {
+            return bond.bond >= minBondLevel && bond.bond <= maxBondLevel && bond.bond2 >= min2BondLevel && bond.bond2 <= max2BondLevel;
+        }).map(bond => bond.towards);
+    },
+    getPresentSocialGroup(char, minBondLevel, maxBondLevel, min2BondLevel, max2BondLevel) {
+        const currentLocation = DE.world.currentLocation;
+        const socialGroup = DE.bonds[char.name].active.filter(bond => {
+            return bond.bond >= minBondLevel && bond.bond <= maxBondLevel && bond.bond2 >= min2BondLevel && bond.bond2 <= max2BondLevel;
+        }).map(bond => bond.towards);
+        return socialGroup.filter(memberName => DE.stateFor[memberName].location === currentLocation);
+    },
+    getPresentConversingSocialGroup(char, minBondLevel, maxBondLevel, min2BondLevel, max2BondLevel) {
+        if (minBondLevel === -100 && maxBondLevel === 100 && min2BondLevel === 0 && max2BondLevel === 100) {
             const conversationId = DE.stateFor[char.name].conversationId;
             if (!conversationId) return [];
-            const socialGroup = DE.bonds[char.name].active.filter(bond => {
-                return bond.bond >= minBondLevel && bond.bond <= maxBondLevel && bond.bond2 >= min2BondLevel && bond.bond2 <= max2BondLevel;
-            }).map(bond => bond.towards);
-            return DE.conversations[conversationId].participants.filter(memberName => socialGroup.includes(memberName));
-        },
-        getDifferenceOfPresentSocialGroup(char, list) {
-            const currentLocation = DE.world.currentLocation;
-            const socialGroup = DE.bonds[char.name].active.map(bond => bond.towards);
-            const presentSocialGroup = socialGroup.filter(memberName => DE.stateFor[memberName].location === currentLocation);
-            return list.filter(name => !presentSocialGroup.includes(name));
-        },
-        getExSocialGroup(char, minBondLevel, maxBondLevel, min2BondLevel, max2BondLevel) {
-            return DE.bonds[char.name].ex.filter(bond => {
-                return bond.bond >= minBondLevel && bond.bond <= maxBondLevel && bond.bond2 >= min2BondLevel && bond.bond2 <= max2BondLevel;
-            }).map(bond => bond.towards);
-        },
-        getCarryWeight(char) {
-            return getCharacterWeight(DE, char.name).weight;
-        },
-        getCarryVolume(char) {
-            return getCharacterVolume(DE, char.name).volume;
-        },
-        getPowerLevel(char) {
-            return getPowerLevelFromCharacter(char);
-        },
-        getTier(char) {
-            return char.tier;
-        },
-        getTierValue(char) {
-            return char.tierValue;
-        },
-        isDead(char) {
-            return DE.stateFor[char.name].dead;
-        },
-        getChar(potentialCharacter) {
-            return DE.characters[potentialCharacter] || null;
-        },
-        isUser(char) {
-            return DE.user === char.name;
-        },
-        isPresentMember(char) {
-            const currentLocation = DE.world.currentLocation;
-            return DE.stateFor[char.name].location === currentLocation;
-        },
-        isNotPresent(char) {
-            const currentLocation = DE.world.currentLocation;
-            return DE.stateFor[char.name].location !== currentLocation;
-        },
-        isGone(char) {
-            const exbonds = DE.bonds[char.name]?.ex;
-            if (!exbonds) return false;
-            return exbonds.length > 0;
-        },
-        isInConversation(char) {
-            const conversationId = DE.stateFor[char.name].conversationId;
-            return !!conversationId;
-        },
-        isIndoors(char) {
-            const locationOfChar = DE.stateFor[char.name].location;
-            const locationInfo = DE.world.locations[locationOfChar];
-            return locationInfo ? locationInfo.isIndoors : false;
-        },
-        isOutdoors(char) {
-            const locationOfChar = DE.stateFor[char.name].location;
-            const locationInfo = DE.world.locations[locationOfChar];
-            return locationInfo ? !locationInfo.isIndoors : false;
-        },
-        hasItem(char, itemName) {
-            return DE.stateFor[char.name].carrying.find(item => item.name === itemName) !== undefined;
-        },
-        getPosture(char) {
-            return DE.stateFor[char.name].posture;
-        },
-        lastSaw(char) {
-            const surroundingCharacters = getSurroundingCharacters(DE, char.name);
-            if (surroundingCharacters.nonStrangers.length > 0) {
-                return DE.stateFor[char.name].location;
+            return DE.conversations[conversationId].participants.filter(memberName => memberName !== char.name);
+        }
+        const conversationId = DE.stateFor[char.name].conversationId;
+        if (!conversationId) return [];
+        const socialGroup = DE.bonds[char.name].active.filter(bond => {
+            return bond.bond >= minBondLevel && bond.bond <= maxBondLevel && bond.bond2 >= min2BondLevel && bond.bond2 <= max2BondLevel;
+        }).map(bond => bond.towards);
+        return DE.conversations[conversationId].participants.filter(memberName => socialGroup.includes(memberName));
+    },
+    getDifferenceOfPresentSocialGroup(char, list) {
+        const currentLocation = DE.world.currentLocation;
+        const socialGroup = DE.bonds[char.name].active.map(bond => bond.towards);
+        const presentSocialGroup = socialGroup.filter(memberName => DE.stateFor[memberName].location === currentLocation);
+        return list.filter(name => !presentSocialGroup.includes(name));
+    },
+    getExSocialGroup(char, minBondLevel, maxBondLevel, min2BondLevel, max2BondLevel) {
+        return DE.bonds[char.name].ex.filter(bond => {
+            return bond.bond >= minBondLevel && bond.bond <= maxBondLevel && bond.bond2 >= min2BondLevel && bond.bond2 <= max2BondLevel;
+        }).map(bond => bond.towards);
+    },
+    getCarryWeight(char) {
+        return getCharacterWeight(DE, char.name).weight;
+    },
+    getCarryVolume(char) {
+        return getCharacterVolume(DE, char.name).volume;
+    },
+    getPowerLevel(char) {
+        return getPowerLevelFromCharacter(char);
+    },
+    getTier(char) {
+        return char.tier;
+    },
+    getTierValue(char) {
+        return char.tierValue;
+    },
+    isDead(char) {
+        return DE.stateFor[char.name].dead;
+    },
+    getChar(potentialCharacter) {
+        return DE.characters[potentialCharacter] || null;
+    },
+    isUser(char) {
+        return DE.user === char.name;
+    },
+    isPresentMember(char) {
+        const currentLocation = DE.world.currentLocation;
+        return DE.stateFor[char.name].location === currentLocation;
+    },
+    isNotPresent(char) {
+        const currentLocation = DE.world.currentLocation;
+        return DE.stateFor[char.name].location !== currentLocation;
+    },
+    isGone(char) {
+        const exbonds = DE.bonds[char.name]?.ex;
+        if (!exbonds) return false;
+        return exbonds.length > 0;
+    },
+    isInConversation(char) {
+        const conversationId = DE.stateFor[char.name].conversationId;
+        return !!conversationId;
+    },
+    isIndoors(char) {
+        const locationOfChar = DE.stateFor[char.name].location;
+        const locationInfo = DE.world.locations[locationOfChar];
+        return locationInfo ? locationInfo.isIndoors : false;
+    },
+    isOutdoors(char) {
+        const locationOfChar = DE.stateFor[char.name].location;
+        const locationInfo = DE.world.locations[locationOfChar];
+        return locationInfo ? !locationInfo.isIndoors : false;
+    },
+    hasItem(char, itemName) {
+        return DE.stateFor[char.name].carrying.find(item => item.name === itemName) !== undefined;
+    },
+    getPosture(char) {
+        return DE.stateFor[char.name].posture;
+    },
+    lastSaw(char) {
+        const surroundingCharacters = getSurroundingCharacters(DE, char.name);
+        if (surroundingCharacters.nonStrangers.length > 0) {
+            return DE.stateFor[char.name].location;
+        }
+        const charHistory = DE.stateFor[char.name].history;
+        for (let i = charHistory.length - 1; i >= 0; i--) {
+            const entry = charHistory[i];
+            if (entry.surroundingNonStrangers.length > 0) {
+                return entry.location;
             }
-            const charHistory = DE.stateFor[char.name].history;
-            for (let i = charHistory.length - 1; i >= 0; i--) {
-                const entry = charHistory[i];
-                if (entry.surroundingNonStrangers.length > 0) {
-                    return entry.location;
-                }
-            }
-            return "";
-        },
-        hasNoIdeaWhereIs(char) {
-            const surroundingCharacters = getSurroundingCharacters(DE, char.name);
-            if (surroundingCharacters.nonStrangers.length > 0) {
-                return false;
-            }
-            let shouldBeAt = null;
-            const charHistory = DE.stateFor[char.name].history;
-            let foundAtIndex = -1;
-            for (let i = charHistory.length - 1; i >= 0; i--) {
-                const entry = charHistory[i];
-                if (entry.surroundingNonStrangers.length > 0) {
-                    shouldBeAt = entry.location;
-                    foundAtIndex = i;
-                    break;
-                }
-            }
-            if (!shouldBeAt) return false;
-            if (DE.stateFor[char.name].location === shouldBeAt) return true;
-            for (let j = foundAtIndex + 1; j < charHistory.length; j++) {
-                if (charHistory[j].location === shouldBeAt) return true;
-            }
+        }
+        return "";
+    },
+    hasNoIdeaWhereIs(char) {
+        const surroundingCharacters = getSurroundingCharacters(DE, char.name);
+        if (surroundingCharacters.nonStrangers.length > 0) {
             return false;
-        },
-        doesNotKnow(char) {
-            const bonds = DE.bonds[char.name].active;
-            return bonds.length === 0;
-        },
-        isStrangersWith(char, towardsChar) {
-            const bonds = DE.bonds[char.name].active;
-            for (const bond of bonds) {
-                if (bond.towards === towardsChar.name && bond.stranger) {
-                    return true;
-                }
+        }
+        let shouldBeAt = null;
+        const charHistory = DE.stateFor[char.name].history;
+        let foundAtIndex = -1;
+        for (let i = charHistory.length - 1; i >= 0; i--) {
+            const entry = charHistory[i];
+            if (entry.surroundingNonStrangers.length > 0) {
+                shouldBeAt = entry.location;
+                foundAtIndex = i;
+                break;
             }
-            return false;
-        },
-        getBondTowards(char, towardsChar) {
-            const bonds = DE.bonds[char.name].active;
-            for (const bond of bonds) {
-                if (bond.towards === towardsChar.name) {
-                    return bond.bond;
-                }
+        }
+        if (!shouldBeAt) return false;
+        if (DE.stateFor[char.name].location === shouldBeAt) return true;
+        for (let j = foundAtIndex + 1; j < charHistory.length; j++) {
+            if (charHistory[j].location === shouldBeAt) return true;
+        }
+        return false;
+    },
+    doesNotKnow(char) {
+        const bonds = DE.bonds[char.name].active;
+        return bonds.length === 0;
+    },
+    isStrangersWith(char, towardsChar) {
+        const bonds = DE.bonds[char.name].active;
+        for (const bond of bonds) {
+            if (bond.towards === towardsChar.name && bond.stranger) {
+                return true;
             }
-            return 0;
-        },
-        getSecondaryBondTowards(char, towardsChar) {
-            const bonds = DE.bonds[char.name].active;
-            for (const bond of bonds) {
-                if (bond.towards === towardsChar.name) {
-                    return bond.bond2;
-                }
+        }
+        return false;
+    },
+    getBondTowards(char, towardsChar) {
+        const bonds = DE.bonds[char.name].active;
+        for (const bond of bonds) {
+            if (bond.towards === towardsChar.name) {
+                return bond.bond;
             }
-            return 0;
-        },
-        knowsNameOf(char, towardsChar) {
-            const bonds = DE.bonds[char.name].active;
-            for (const bond of bonds) {
-                if (bond.towards === towardsChar.name) {
-                    return bond.knowsName;
-                }
+        }
+        return 0;
+    },
+    getSecondaryBondTowards(char, towardsChar) {
+        const bonds = DE.bonds[char.name].active;
+        for (const bond of bonds) {
+            if (bond.towards === towardsChar.name) {
+                return bond.bond2;
             }
-            return false;
-        },
-        isAtSameLocation(char, char2) {
-            return DE.stateFor[char.name].location === DE.stateFor[char2.name].location;
-        },
-        isAtSameSlot(char, char2) {
-            return DE.stateFor[char.name].location === DE.stateFor[char2.name].location &&
-                DE.stateFor[char.name].locationSlot === DE.stateFor[char2.name].locationSlot;
-        },
-        isHere(char) {
-            return DE.stateFor[char.name].location === DE.world.currentLocation;
-        },
-        formatAnd(list) {
-            return formatAndHelper(list);
-        },
-        formatCommaList(list) {
-            if (!list || !Array.isArray(list)) return "";
-            return list.join(', ');
-        },
-        formatOr(list) {
-            return formatOrHelper(list);
-        },
-        formatVerbToBe(chars) {
-            return getPronounHelperLocal(DE, chars, "are", "is", "is", "is");
-        },
-        formatPluralOrSingular(chars, plural, singular) {
-            if (chars.length === 1) return singular;
-            return plural;
-        },
-        formatObjectPronoun(chars) {
-            return getPronounHelperLocal(DE, chars, "them", "him", "her", "them");
-        },
-        formatPossessive(chars) {
-            return getPronounHelperLocal(DE, chars, "their", "his", "her", "their");
-        },
-        formatReflexive(chars) {
-            return getPronounHelperLocal(DE, chars, "themselves", "himself", "herself", "themself");
-        },
-        formatPronoun(chars) {
-            return getPronounHelperLocal(DE, chars, "they", "he", "she", "they");
-        },
-        formatOwnershipPronoun(chars) {
-            return getPronounHelperLocal(DE, chars, "theirs", "his", "hers", "theirs");
-        },
-        getRandomSeedFromString(optionsNumber, inputString) {
-            return generateIntSeedFromString(optionsNumber, inputString);
-        },
-        getRandomSeedFromTime(optionsNumber) {
-            const currentTimeString = DE.currentTime.time.toString();
-            return generateIntSeedFromString(optionsNumber, currentTimeString);
-        },
-        getRandomOption(options) {
-            const result = weightedRandomByLikelihood(options.map(option => ({ item: option, likelihood: 1 })), generateIntSeedFromString(1000000, DE.currentTime.time.toString()));
-            return result ? result.item : options[0];
-        },
-        getRandomOptionFixedCharacter(char, options) {
-            const result = weightedRandomByLikelihood(options.map(option => ({ item: option, likelihood: 1 })), generateIntSeedFromString(1000000, char.name));
-            return result ? result.item : options[0];
-        },
+        }
+        return 0;
+    },
+    knowsNameOf(char, towardsChar) {
+        const bonds = DE.bonds[char.name].active;
+        for (const bond of bonds) {
+            if (bond.towards === towardsChar.name) {
+                return bond.knowsName;
+            }
+        }
+        return false;
+    },
+    isAtSameLocation(char, char2) {
+        return DE.stateFor[char.name].location === DE.stateFor[char2.name].location;
+    },
+    isAtSameSlot(char, char2) {
+        return DE.stateFor[char.name].location === DE.stateFor[char2.name].location &&
+            DE.stateFor[char.name].locationSlot === DE.stateFor[char2.name].locationSlot;
+    },
+    isHere(char) {
+        return DE.stateFor[char.name].location === DE.world.currentLocation;
+    },
+    formatAnd(list) {
+        return formatAndHelper(list);
+    },
+    formatCommaList(list) {
+        if (!list || !Array.isArray(list)) return "";
+        return list.join(', ');
+    },
+    formatOr(list) {
+        return formatOrHelper(list);
+    },
+    formatVerbToBe(chars) {
+        return getPronounHelperLocal(DE, chars, "are", "is", "is", "is");
+    },
+    formatPluralOrSingular(chars, plural, singular) {
+        if (chars.length === 1) return singular;
+        return plural;
+    },
+    formatObjectPronoun(chars) {
+        return getPronounHelperLocal(DE, chars, "them", "him", "her", "them");
+    },
+    formatPossessive(chars) {
+        return getPronounHelperLocal(DE, chars, "their", "his", "her", "their");
+    },
+    formatReflexive(chars) {
+        return getPronounHelperLocal(DE, chars, "themselves", "himself", "herself", "themself");
+    },
+    formatPronoun(chars) {
+        return getPronounHelperLocal(DE, chars, "they", "he", "she", "they");
+    },
+    formatOwnershipPronoun(chars) {
+        return getPronounHelperLocal(DE, chars, "theirs", "his", "hers", "theirs");
+    },
+    getRandomSeedFromString(optionsNumber, inputString) {
+        return generateIntSeedFromString(optionsNumber, inputString);
+    },
+    getRandomSeedFromTime(optionsNumber) {
+        const currentTimeString = DE.currentTime.time.toString();
+        return generateIntSeedFromString(optionsNumber, currentTimeString);
+    },
+    getRandomOption(options) {
+        const result = weightedRandomByLikelihood(options.map(option => ({ item: option, likelihood: 1 })), generateIntSeedFromString(1000000, DE.currentTime.time.toString()));
+        return result ? result.item : options[0];
+    },
+    getRandomOptionFixedCharacter(char, options) {
+        const result = weightedRandomByLikelihood(options.map(option => ({ item: option, likelihood: 1 })), generateIntSeedFromString(1000000, char.name));
+        return result ? result.item : options[0];
+    },
 });
 
 /**

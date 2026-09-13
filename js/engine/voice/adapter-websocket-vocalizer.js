@@ -463,8 +463,8 @@ export class VoiceAdapterWebsocketVocalizer extends BaseVoiceAdapter {
      * (ogg or mp3). Any files referenced in the scene must have been uploaded
      * first via {@link sendFile}.
      *
-     * @param {import("./base.js").VocalizerJSONRequest} request
-     * @returns {Promise<import("./base.js").VocalizerJSONResponse>}
+     * @param {import("./base.js").VoiceJSONRequest} request
+     * @returns {Promise<import("./base.js").VoiceJSONResponse>}
      */
     async runWorkflow(request) {
         await this.ensureInitialized();

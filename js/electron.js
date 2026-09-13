@@ -74,12 +74,12 @@ const createWindow = () => {
                 // invalid or empty host config, fall through to default
             }
         }
-        if (config.allowVocalizerSelfSigned) {
-            const vocalizerHost = config.vocalizerHost || '';
+        if (config.allowVoiceSelfSigned) {
+            const voiceHost = config.voiceHost || '';
             try {
-                const hostUrl = new URL(vocalizerHost);
+                const hostUrl = new URL(voiceHost);
                 if (request.hostname === hostUrl.hostname) {
-                    callback(0); // trust self-signed cert for vocalizer server
+                    callback(0); // trust self-signed cert for voice server
                     return;
                 }
             } catch {

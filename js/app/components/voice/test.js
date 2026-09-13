@@ -1,6 +1,6 @@
-// Vocalizer technical test area, as a custom element: <vocalizer-test>.
+// Voice technical test area, as a custom element: <voice-test>.
 //
-// This component owns everything needed to *manually* exercise a Vocalizer
+// This component owns everything needed to *manually* exercise a Voice
 // WebSocket server from the settings panel: it opens a connection using the
 // current settings, lets the tester upload mp3/ogg files under arbitrary
 // reference names, edit a raw workflow JSON payload, render it, and play back /
@@ -26,7 +26,7 @@ const DEFAULT_WORKFLOW = {
     ],
 };
 
-export class VocalizerTest extends HTMLElement {
+export class VoiceTest extends HTMLElement {
     constructor() {
         super();
         this.root = this.attachShadow({ mode: "open" });
@@ -116,7 +116,7 @@ export class VocalizerTest extends HTMLElement {
             </div>
             <div class="vt-files" data-el="files"></div>
 
-            <div class="vt-section-title">Workflow payload (VocalizerJSONRequest)</div>
+            <div class="vt-section-title">Workflow payload (VoiceJSONRequest)</div>
             <textarea data-el="payload" spellcheck="false"></textarea>
             <div class="vt-row">
                 <button class="vt-btn" data-el="render-btn" disabled>Render &amp; Play</button>
@@ -261,9 +261,9 @@ export class VocalizerTest extends HTMLElement {
         } catch (_e) { /* ignore, default mp3 */ }
         const a = document.createElement("a");
         a.href = this.lastRenderUrl;
-        a.download = `vocalizer-test.${ext}`;
+        a.download = `voice-test.${ext}`;
         a.click();
     }
 }
 
-customElements.define("vocalizer-test", VocalizerTest);
+customElements.define("voice-test", VoiceTest);

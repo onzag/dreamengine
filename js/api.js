@@ -362,7 +362,7 @@ window.API.pauseVoice = async () => {
         return;
     }
 
-    // this first is a hack way to pause the vocalizer
+    // this first is a hack way to pause the voice
     // since we made it a global in game so it can be passed down other components easily
     // we can grab the session and pause it
     if (window.GAME_VOCALIZER) {
@@ -373,7 +373,7 @@ window.API.pauseVoice = async () => {
             return window.GAME_VOCALIZER?.adapter.pause();
         });
     } else {
-        // No vocalizer adapter being used in game, we need to connect it to pause it.
+        // No voice adapter being used in game, we need to connect it to pause it.
         // this is a highly possible scenario actually, eg. generating voices in manage, then going to the wizard
         // and doing LLM calls, there is no voice adapter there and the connection would have been closed, so we need to connect it again to pause it.
         // and then just close the connection afterwards
@@ -401,7 +401,7 @@ window.API.resumeVoice = async () => {
         return;
     }
 
-    // this first is a hack way to resume the vocalizer
+    // this first is a hack way to resume the voice
     // since we made it a global in game so it can be passed down other components easily
     // we can grab the session and resume it
     if (window.GAME_VOCALIZER) {
@@ -412,7 +412,7 @@ window.API.resumeVoice = async () => {
             return window.GAME_VOCALIZER?.adapter.resume();
         });
     } else {
-        // No vocalizer adapter being used in game, we need to connect it to resume it.
+        // No voice adapter being used in game, we need to connect it to resume it.
         // this is a highly possible scenario actually, eg. generating voices in manage, then going to the wizard
         // and doing LLM calls, there is no voice adapter there and the connection would have been closed, so we need to connect it again to resume it.
         // and then just close the connection afterwards

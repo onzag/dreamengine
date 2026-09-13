@@ -117,8 +117,14 @@ class GameMessage extends HTMLElement {
         this._ensureRendered();
         for (const fragment of this._fragments()) {
             if (fragment.type === 'sound') {
-                const pseudoSoundsAndModes = ["normal", "normal voice", "pause", "short pause", "medium pause", "long pause", ...emotions];
-                this._appendSound(fragment.soundInfo.sound || fragment.soundInfo.mode || { label: fragment.text || 'unknown', replacement: pseudoSoundsAndModes.includes((fragment.text || '').trim().toLowerCase()) ? '' : '—{{char}} does ' + (fragment.text || 'a sound') });
+                this._appendSound(
+                    fragment.soundInfo.sound ||
+                    fragment.soundInfo.mode ||
+                    {
+                        label: fragment.text || 'unknown',
+                        replacement: null,
+                    }
+                );
             } else {
                 this._appendInstant(fragment.type, fragment.text);
             }
@@ -154,14 +160,10 @@ class GameMessage extends HTMLElement {
                     // @ts-ignore
                     this._appendSound(data.soundInfo.sound || data.soundInfo.mode);
                 } else {
-                    const pseudoSoundsAndModes = ["normal", "normal voice", "pause", "short pause", "medium pause", "long pause", ...emotions];
-                    if (data.text && pseudoSoundsAndModes.includes(data.text.trim().toLowerCase())) {
-                        // if the text is a pseudo sound or mode, we will not display it as a sound, but as a normal text
-                        this._appendSound({ label: data.text || 'unknown', replacement: '' });
-                        return;
-                    }
-                    console.warn('GameMessage: received end-add-sound event without soundInfo.');
-                    this._appendSound({ label: data.text || 'unknown', replacement: '—{{char}} does ' + (data.text || 'a sound') });
+                    this._appendSound({
+                        label: data.text || 'unknown',
+                        replacement: null,
+                    });
                 }
                 
                 break;
@@ -279,8 +281,7 @@ class GameMessage extends HTMLElement {
             let markAsSound = false;
             if (!text) continue;
             if (fragment.type === 'sound') {
-                const pseudoSoundsAndModes = ["normal", "normal voice", "pause", "short pause", "medium pause", "long pause", ...emotions];
-                const soundInfo = fragment.soundInfo.sound || fragment.soundInfo.mode || { label: fragment.text || 'unknown', replacement: pseudoSoundsAndModes.includes(fragment.text.trim().toLowerCase()) ? '' : '—{{char}} does ' + (fragment.text || 'a sound') };
+                const soundInfo = fragment.soundInfo.sound || fragment.soundInfo.mode || { label: fragment.text || 'unknown', replacement: null };
                 const resolved = this._appendSound(soundInfo, true);
                 if (resolved) {
                     fragment = {
@@ -338,7 +339,7 @@ class GameMessage extends HTMLElement {
         const characterSounds = this._blockType() === 'dialogue' && sender
             ? await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['characters', sender, 'metadata', 'sounds'] })
             : null;
-        /** @type {Array<import('../../../engine/voice/base.js').VocalizerSpeechSegment|import('../../../engine/voice/base.js').VocalizerDelaySegment|import('../../../engine/voice/base.js').VocalizerAudioSegment>} */
+        /** @type {Array<import('../../../engine/voice/base.js').VoiceSpeechSegment|import('../../../engine/voice/base.js').VoiceDelaySegment|import('../../../engine/voice/base.js').VoiceAudioSegment>} */
         const segments = [];
 
         const emotion = this.getAttribute('emotion') || 'neutral';
@@ -525,25 +526,15 @@ class GameMessage extends HTMLElement {
 
         // if the replacement is empty, add a space
         if (!replacement || !replacement.trim()) {
-            console.warn('GameMessage: replacement for sound ' + soundInfoAsVoiceSound.label + ' is empty, adding a space.');
-            if (returnForDrip) return { type: 'dialogue', text: ' ' };
-            this._appendInstant('dialogue', ' ', true);
-            return { type: 'dialogue', text: ' ' };
+            if (returnForDrip) return { type: 'dialogue', text: soundInfoAsVoiceSound.label || 'unknown' };
+            this._appendInstant('dialogue', soundInfoAsVoiceSound.label || 'unknown', true);
+            return { type: 'dialogue', text: soundInfoAsVoiceSound.label || 'unknown' };
         }
 
-        // check what type of replacement we have, if the replacement has a em dash then it is narrative
-        if (replacement.includes('—')) {
-            // remove all em dashes and replace {{char}} with the sender name
-            const value = replacement.replace(/—/g, '').replace(/{{char}}/g, this.getAttribute('sender-name') || '').trim();
-            if (returnForDrip) return { type: 'narration', text: value };
-            this._appendInstant('narration', value, true);
-            return { type: 'narration', text: value };
-        } else {
-            // append as it is and as dialogue
-            if (returnForDrip) return { type: 'dialogue', text: replacement };
-            this._appendInstant('dialogue', replacement, true);
-            return { type: 'dialogue', text: replacement };
-        }
+        // append as it is and as dialogue
+        if (returnForDrip) return { type: 'dialogue', text: replacement };
+        this._appendInstant('dialogue', replacement, true);
+        return { type: 'dialogue', text: replacement };
     }
 
     /**
@@ -552,7 +543,7 @@ class GameMessage extends HTMLElement {
      * @param {boolean} markAsSound - Whether to mark this text as a sound
      */
     _appendInstant(mode, text, markAsSound = false) {
-        text = (text || '').replace(/\*/g, '');
+        text = (text || '');
         if (!text || (!this._rendered && !text.trim())) return;
         this._ensureRendered();
         const target = this._blockType() === 'narration'
@@ -650,12 +641,12 @@ class GameMessage extends HTMLElement {
      * @param {boolean} markAsSound
      */
     _writeInstant(target, text, markAsSound = false) {
-        // check if the previous element (if any in this target) is a sound type, if so, we will add a space before the new text to separate it from the previous sound
-        const lastChild = target.lastElementChild;
-        const previousIsSound = lastChild && lastChild.classList.contains('token-sound');
-        if (previousIsSound || (markAsSound && lastChild)) {
-            text = ', ' + text;
-        }
+        // // check if the previous element (if any in this target) is a sound type, if so, we will add a space before the new text to separate it from the previous sound
+        // const lastChild = target.lastElementChild;
+        // const previousIsSound = lastChild && lastChild.classList.contains('token-sound');
+        // if (previousIsSound || (markAsSound && lastChild)) {
+        //     text = ', ' + text;
+        // }
 
         // should add end dot and remove it? is it better?
 
@@ -680,11 +671,11 @@ class GameMessage extends HTMLElement {
             if (this._cancelled) return;
             this._hideCursor();
 
-            const lastChild = target.lastElementChild;
-            const previousIsSound = lastChild && lastChild.classList.contains('token-sound');
-            if (previousIsSound || (markAsSound && lastChild)) {
-                tok = ', ' + tok;
-            }
+            // const lastChild = target.lastElementChild;
+            // const previousIsSound = lastChild && lastChild.classList.contains('token-sound');
+            // if (previousIsSound || (markAsSound && lastChild)) {
+            //     tok = ', ' + tok;
+            // }
 
             const span = document.createElement('span');
             span.className = 'token';

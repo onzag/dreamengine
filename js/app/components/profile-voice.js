@@ -52,7 +52,7 @@ const DEFAULT_GENERATION = { };
  *
  * By default it plays and downloads the audio located at its `voice-url` DE
  * asset path. When `editable` is present the user can change the clip: if the
- * Vocalizer is enabled a small dialog offers three options (upload a file,
+ * Voice is enabled a small dialog offers three options (upload a file,
  * generate a voice, or test a voice), otherwise it falls straight through to a
  * plain file upload. Just like the profile image, unsaved changes live in
  * memory and are only written back to `voice-url` via {@link saveValueToUserData}.
@@ -131,13 +131,13 @@ class ProfileVoice extends HTMLElement {
 
         if (this.hasAttribute('editable')) {
             const fileInput = this.root.querySelector('input[type="file"]');
-            const enabled = await window.API.getConfigValue("vocalizerEnabled");
+            const enabled = await window.API.getConfigValue("voiceEnabled");
 
             this.root.querySelector('.edit-btn')?.addEventListener('click', async () => {
-                const host = await window.API.getConfigValue("vocalizerHost");
-                const vocalizerAvailable = enabled && host && host.length > 0;
+                const host = await window.API.getConfigValue("voiceHost");
+                const voiceAvailable = enabled && host && host.length > 0;
 
-                if (vocalizerAvailable) {
+                if (voiceAvailable) {
                     this.openVoiceSourceChoiceDialog();
                 } else {
                     this.promptUploadFile();
@@ -331,7 +331,7 @@ class ProfileVoice extends HTMLElement {
     }
 
     /**
-     * Present the three change options when the Vocalizer is enabled: upload a
+     * Present the three change options when the Voice is enabled: upload a
      * file, generate a voice, or test a voice.
      */
     openVoiceSourceChoiceDialog() {
@@ -390,7 +390,7 @@ class ProfileVoice extends HTMLElement {
     }
 
     /**
-     * Open a form to render a voice through the Vocalizer. In `generate` mode the
+     * Open a form to render a voice through the Voice. In `generate` mode the
      * rendered clip becomes the pending change (saved to `voice-url` on confirm).
      * In `test` mode it is only played back and never saved.
      * @param {"generate"|"test"} mode
@@ -510,12 +510,12 @@ class ProfileVoice extends HTMLElement {
                 }
             }
 
-            /** @type {import("../../engine/voice/base.js").VocalizerSpeechSegment} */
+            /** @type {import("../../engine/voice/base.js").VoiceSpeechSegment} */
             const segment = { text };
             if (prompt) segment.voice_prompt = prompt;
             if (refName) segment.ref = refName;
 
-            /** @type {import("../../engine/voice/base.js").VocalizerJSONRequest} */
+            /** @type {import("../../engine/voice/base.js").VoiceJSONRequest} */
             const request = {
                 output_format: 'ogg',
                 generation: { ...DEFAULT_GENERATION },
@@ -545,7 +545,7 @@ class ProfileVoice extends HTMLElement {
 
     /**
      * Fetch the currently displayed audio (pending upload, primary clip, or
-     * fallback) as a File suitable for use as a Vocalizer reference clip.
+     * fallback) as a File suitable for use as a Voice reference clip.
      * @returns {Promise<File|null>}
      */
     async getCurrentAudioAsFile() {
@@ -561,10 +561,10 @@ class ProfileVoice extends HTMLElement {
     }
 
     /**
-     * Connect to the Vocalizer, optionally upload a reference clip, render the
+     * Connect to the Voice, optionally upload a reference clip, render the
      * given request, and return the resulting audio Blob. The connection is
      * closed afterwards.
-     * @param {import("../../engine/voice/base.js").VocalizerJSONRequest} request
+     * @param {import("../../engine/voice/base.js").VoiceJSONRequest} request
      * @param {File|null} refFile
      * @param {string|null} refName
      * @returns {Promise<Blob>}
