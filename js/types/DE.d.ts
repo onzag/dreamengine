@@ -3584,6 +3584,7 @@ declare interface DEUtils {
     isWithinAttractionGroupFor(option: "male" | "female" | "ambiguous", char1: string | DECompleteCharacterReference | null, potentialAttractiveChar2: string | DECompleteCharacterReference | null): boolean;
 
     createVoiceFromPreset(presetName: string): DEVoiceDescription;
+    createVoice(voiceDescription: DEVoiceDescription): DEVoiceDescription;
 
     isAloneWith(char1: string | DECompleteCharacterReference | null, char2: string | DECompleteCharacterReference | null): boolean;
     isInPrivateLocation(char1: string | DECompleteCharacterReference | null): boolean;

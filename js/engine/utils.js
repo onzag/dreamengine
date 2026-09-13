@@ -1,6 +1,7 @@
 import { getSurroundingCharacters, getPowerLevelFromCharacter, getRelationship, getExternalDescriptionOfCharacter, getCurrentlyInteractingCharacters } from "./util/character-info.js";
 import { generateIntSeedFromString, weightedRandomByLikelihood } from "../util/random.js";
 import { getCharacterVolume, getCharacterWeight } from "./util/weight-and-volume.js";
+import { emotions } from "./util/emotions.js";
 
 /**
  * @param {string[]} list
@@ -947,6 +948,52 @@ export const deEngineUtilsFn = (DE) => ({
             sounds: [],
             modes: [],
         };
+    },
+
+    createVoice(description) {
+        const reservedNames = [...emotions, "normal", "none"];
+        /**
+         * @type {Array<string>}
+         */
+        const usedInSounds = [];
+        if (description.sounds) {
+            for (const sound of description.sounds) {
+                // check that the label is a-z and that it is not a reserved name
+                if (!/^[a-z]+$/.test(sound.label)) {
+                    throw new Error(`Sound label ${sound.label} is invalid. It must be lowercase letters only.`);
+                }
+                if (reservedNames.includes(sound.label)) {
+                    throw new Error(`Sound label ${sound.label} is a reserved name.`);
+                }
+                if (usedInSounds.includes(sound.label)) {
+                    throw new Error(`Sound label ${sound.label} is already used by another sound.`);
+                }
+                usedInSounds.push(sound.label);
+            }
+        }
+        /**
+         * @type {Array<string>}
+         */
+        const usedInModes = [];
+        if (description.modes) {
+            for (const mode of description.modes) {
+                // check that the label is a-z and that it is not a reserved name
+                if (!/^[a-z]+$/.test(mode.label)) {
+                    throw new Error(`Mode label ${mode.label} is invalid. It must be lowercase letters only.`);
+                }
+                if (reservedNames.includes(mode.label)) {
+                    throw new Error(`Mode label ${mode.label} is a reserved name.`);
+                }
+                if (usedInSounds.includes(mode.label)) {
+                    throw new Error(`Mode label ${mode.label} is already used by a sound.`);
+                }
+                if (usedInModes.includes(mode.label)) {
+                    throw new Error(`Mode label ${mode.label} is already used by another mode.`);
+                }
+                usedInModes.push(mode.label);
+            }
+        }
+        return description;
     },
 
     isAloneWith(char1, char2) {
