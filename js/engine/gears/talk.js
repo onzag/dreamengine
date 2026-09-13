@@ -661,6 +661,7 @@ export async function talk(engine, character, options) {
                 sounds: baseVoice?.sounds.map((sound) => sound.label) || [],
                 forcedMode: forcedVoiceEffects.forcedMode,
                 forcedSounds: forcedVoiceEffects.forcedSounds,
+                emotionalRange: emotionalRange,
 
                 __debug_id: nextMessage.id + "__" + fragmentCount,
 

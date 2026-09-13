@@ -191,28 +191,40 @@ engine.exports = {
             },
             libido: 0,
             violence: 0,
-            voice: {
+            voice: DE.utils.createVoice({
+                mute: false,
                 modes: [
                     {
                         label: "whispering",
                     },
                 ],
-                description: async (info) => `${info.char.name} has a calm and soothing voice, with a metallic and robotic undertone that reflects its robotic nature.`,
                 sounds: [
                     {
                         label: "sigh",
-                        replacement: async (info) => `— ${info.char.name} sighs softly —`,
-                    },
-                    {
-                        label: "gasp",
-                        replacement: async (info) => `— ${info.char.name} gasps —`,
+                        replacement: `— {{char}} sighs softly —`,
                     },
                     {
                         label: "laugh",
-                        replacement: async (info) => `— ${info.char.name} laughs —`,
+                        replacement: `— {{char}} laughs —`,
                     },
+                    {
+                        label: "moan",
+                        replacement: `— {{char}} moans softly —`,
+                    },
+                    {
+                        label: "groan",
+                        replacement: `— {{char}} groans softly —`,
+                    },
+                    {
+                        label: "grunt",
+                        replacement: `— {{char}} grunts —`,
+                    },
+                    {
+                        label: "whimper",
+                        replacement: `— {{char}} whimpers —`,
+                    }
                 ],
-            }
+            })
         }, {
             type: "4d_creepy",
             strangerBad_n100_n5: {

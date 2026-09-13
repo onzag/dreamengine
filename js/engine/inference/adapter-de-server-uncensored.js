@@ -4,6 +4,7 @@
  */
 
 import { DEngine } from '../index.js';
+import { emotions } from '../util/emotions.js';
 import { BaseInferenceAdapter } from './base.js';
 
 const DUMMY_SENTENCES = [
@@ -127,17 +128,22 @@ function describeForcedSounds(forcedSounds) {
 }
 
 /**
- * @param {{modes: string[]; sounds: string[]; forcedMode: string|null; forcedSounds: string[], primaryEmotion: string}} options
+ * @param {{modes: string[]; sounds: string[]; forcedMode: string|null; forcedSounds: string[], primaryEmotion: string, emotionalRange: string[]}} options
  * @returns {string}
  */
 export function buildVoiceTagInstructions(options) {
     const instructions = [];
 
     if (options.forcedMode) {
-        instructions.push(`Start the dialogue with the voice mode tag [${options.forcedMode}].`);
-    } else if (options.modes.length > 0) {
-        instructions.push(`Optionally use one relevant voice mode tag from ${formatVoiceTags(options.modes)}; omit it if none fits.`);
-        instructions.push(`Use the tag [normal] or [${options.primaryEmotion}] to reset or specify the ${options.primaryEmotion} voice.`);
+        instructions.push(`Start the dialogue with the voice mode tag [${options.forcedMode}].\n`);
+    } else {
+        if (options.modes.length > 0) {
+            instructions.push(`Optionally use one relevant voice mode tag from ${formatVoiceTags(options.modes)}.`);
+        }
+        instructions.push(`Use the tag [normal] or [${options.primaryEmotion}] to reset or specify the ${options.primaryEmotion} voice (primary emotion of the character).`);
+        instructions.push(`Other common tags include ${formatVoiceTags(options.emotionalRange)} to indicate the emotion (the character experiences these currently)`);
+        const remainingEmotions = emotions.filter((e) => !options.emotionalRange.includes(e) && e !== options.primaryEmotion);
+        instructions.push(`and you might use ${formatVoiceTags(remainingEmotions)} to indicate other emotions.\n`);
     }
 
     const forcedSounds = options.forcedSounds.slice(0, 3);
@@ -158,12 +164,12 @@ export function buildVoiceTagInstructions(options) {
 
     instructions.push("Use [pause] to indicate a pause in speech, you can use [short pause], [medium pause], or [long pause] to indicate the length of the pause.");
 
-    return instructions.join(" ");
+    return instructions.join("\n");
 }
 
 /**
  * @param {string} characterName
- * @param {{narration: boolean; modes: string[]; sounds: string[]; forcedMode: string|null; forcedSounds: string[], primaryEmotion: string}} options
+ * @param {{narration: boolean; modes: string[]; sounds: string[]; forcedMode: string|null; forcedSounds: string[], primaryEmotion: string, emotionalRange: string[]}} options
  * @param {boolean} includeThirdPersonBeat
  * @returns {string}
  */
@@ -546,6 +552,7 @@ export class InferenceAdapterLlamaUncensored extends BaseInferenceAdapter {
      *   grammar: string|null,
      *   narration: boolean,
      *   primaryEmotion: string,
+     *   emotionalRange: Array<string>,
      *   activeStates: Array<{state: string, dominance: number}>,
      *   modes: Array<string>,
      *   sounds: Array<string>,

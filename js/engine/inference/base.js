@@ -106,6 +106,7 @@ export class BaseInferenceAdapter {
      *   followingAction?: string|null,
      *   grammar: string|null,
      *   primaryEmotion: string,
+     *   emotionalRange: Array<string>,
      *   narration: boolean,
      *   activeStates: Array<{state: string, dominance: number}>,
      *   modes: Array<string>,
