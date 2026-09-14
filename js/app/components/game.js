@@ -1571,10 +1571,12 @@ class GameOverlay extends HTMLElement {
 
             // TODO we have to optimize this somehow, because this will get every single message
             // and if the history is too long, this might cause performance issues. We should probably only get the last 50 messages or so, and then if the user scrolls up, we can fetch more.
-            const history = await window.ENGINE_WORKER_CLIENT.getHistoryForCharacter({
+            const historySource = await window.ENGINE_WORKER_CLIENT.getHistoryForCharacter({
                 characterName: actualUserName,
                 lastMessageGid: this.lastMessageGid,
             });
+
+            const historyFiltered = historySource.filter(msg => msg && msg.;
 
             if (!history || !Array.isArray(history) || history.length === 0) return;
 
@@ -1787,11 +1789,14 @@ class GameOverlay extends HTMLElement {
             }
         }
 
-        const willAlwaysUsePseudostream = !!window.GAME_VOCALIZER;
-        const needsToAwaitUntilInferenceEndsToTriggerPseudostreamVocalizationProcessing = window.GAME_VOCALIZER?.lowVramMode || false;
+        const willAlwaysUsePseudostream = !!window.GAME_VOICE;
+        const needsToAwaitUntilInferenceEndsToTriggerPseudostreamVocalizationProcessing = window.GAME_VOICE?.lowVramMode || false;
         if (data.event === "new-message") {
             if (data.conversationId !== this.lastConversationAdded?.id) {
                 return; // ignore messages from other conversations that we are not tracking
+            }
+            if (data.obj.canOnlyBeSeenByCharacter && data.obj.canOnlyBeSeenByCharacter !== this.actualUserName) {
+                return; // ignore messages that are not for the current character
             }
             this.lastMessageAdded = data.obj;
 
@@ -2434,9 +2439,9 @@ class GameOverlay extends HTMLElement {
         document.removeEventListener('keydown', this.onF5Keydown);
 
         // Tear down the shared Voice connection.
-        if (window.GAME_VOCALIZER) {
-            try { window.GAME_VOCALIZER.close(); } catch (_e) { /* ignore */ }
-            window.GAME_VOCALIZER = null;
+        if (window.GAME_VOICE) {
+            try { window.GAME_VOICE.close(); } catch (_e) { /* ignore */ }
+            window.GAME_VOICE = null;
         }
 
         await stopAllAmbiencesAndStartNewOne([{ id: 'dream-ambience', srcs: [{ src: window.DREAM_AMBIENCE_CHOSEN, fadeDurationMs: 2000, volume: window.DREAM_AMBIENCE_CHOSEN_VOLUME }] }], 1000);
@@ -2444,7 +2449,7 @@ class GameOverlay extends HTMLElement {
 
     /**
      * Create the single, game-wide Voice session shared by all message
-     * blocks and expose it as `window.GAME_VOCALIZER`. No-op (and clears the
+     * blocks and expose it as `window.GAME_VOICE`. No-op (and clears the
      * global) when voice generation is disabled or unconfigured. The socket
      * connects lazily in the background; failures are non-fatal.
      */
@@ -2457,18 +2462,18 @@ class GameOverlay extends HTMLElement {
                 try {
                     const adapter = await VOICE_ADAPTERS[adapterName].build(window.API.getConfigValue.bind(window.API));
                     const usesLowVramMode = await window.API.getConfigValue("voiceLowVramMode");
-                    window.GAME_VOCALIZER = new GameVoiceSession(adapter, usesLowVramMode);
+                    window.GAME_VOICE = new GameVoiceSession(adapter, usesLowVramMode);
                     await adapter.ensureInitialized();
                 } catch (err) {
                     console.error("GameOverlay: failed to build Voice adapter", err);
-                    window.GAME_VOCALIZER = null;
+                    window.GAME_VOICE = null;
                 }
             } else {
-                window.GAME_VOCALIZER = null;
+                window.GAME_VOICE = null;
             }
         } catch (err) {
             console.error("GameOverlay: failed to initialise Voice", err);
-            window.GAME_VOCALIZER = null;
+            window.GAME_VOICE = null;
         }
     }
 

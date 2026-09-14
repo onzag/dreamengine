@@ -581,12 +581,12 @@ class ProfileVoice extends HTMLElement {
 
             // hack to make prepare for use the same connection
             // @ts-ignore
-            window.GAME_VOCALIZER = {
+            window.GAME_VOICE = {
                 adapter,
             }
             await window.API.prepareFor("voice");
             // @ts-ignore
-            window.GAME_VOCALIZER = null;
+            window.GAME_VOICE = null;
 
             if (refFile && refName) {
                 await adapter.sendFile(refFile, refName);

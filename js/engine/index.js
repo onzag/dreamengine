@@ -1118,66 +1118,36 @@ export class DEngine {
                 char: this.deObject.characters[this.deObject.user],
             });
 
-            this.deObject.conversations[sceneId] = {
-                id: sceneId,
-                messages: [
-                    {
-                        id: `${sceneId}_MESSAGE_0`,
-                        canOnlyBeSeenByCharacter: null,
-                        // we specify the weather changing only if we stayed at the same place
-                        content: [
-                            {
-                                type: "narration",
-                                text: !didChangeLocation && timeForwardsMessages.length ? (timeForwardsMessages.join("\n\n") + "\n\n" + narration) : narration,
-                            },
-                        ],
-                        sender: "Story Master",
-                        duration: {
-                            inDays: 0,
-                            inHours: 0,
-                            inMinutes: 0,
-                            inSeconds: 0,
-                        },
-                        endTime: { ...this.deObject.currentTime },
-                        isCharacter: false,
-                        isDebugMessage: false,
-                        isRejectedMessage: false,
-                        isHiddenMessage: false,
-                        isStoryMasterMessage: true,
-                        startTime: { ...this.deObject.currentTime },
-                        perspectiveSummaryIds: {},
-                        singleSummary: null,
-                        emotion: null,
-                        emotionalRange: null,
-                        interactingCharacters: [],
-                        rumors: [],
-                    },
-                ],
-                bondsAtStart: getFrozenBonds(this, expectedParticipants),
-                bondsAtEnd: null,
-                startTime: { ...this.deObject.currentTime },
-                endTime: null,
+            const conversation = this.deObject.utils.addConversation({
                 location: sceneObject.location,
                 participants: expectedParticipants,
-                previousConversationIdsPerParticipant: {},
                 pseudoConversation: false,
                 remoteParticipants: [],
-            };
-            for (const participantName of expectedParticipants) {
-                this.deObject.conversations[sceneId].previousConversationIdsPerParticipant[participantName] = null;
-            }
-
-            this.triggerConversationMessageUpdate(this.deObject, {
-                conversationId: sceneId,
-                event: "new-conversation",
-                obj: this.deObject.conversations[sceneId],
+            }, {
+                teleportParticipants: true,
+                unsafeMode: false,
             });
 
-            this.triggerConversationMessageUpdate(this.deObject, {
-                conversationId: sceneId,
-                messageId: this.deObject.conversations[sceneId].messages[0].id,
-                event: "new-message",
-                obj: this.deObject.conversations[sceneId].messages[0],
+            this.deObject.utils.addMessage(conversation.id, {
+                canOnlyBeSeenByCharacter: null,
+                content: [
+                    {
+                        type: "narration",
+                        text: narration,
+                    },
+                ],
+                sender: "Story Master",
+                isCharacter: false,
+                isDebugMessage: false,
+                isRejectedMessage: false,
+                isHiddenMessage: false,
+                isStoryMasterMessage: true,
+                perspectiveSummaryIds: {},
+                singleSummary: null,
+                emotion: null,
+                emotionalRange: null,
+                interactingCharacters: [],
+                rumors: [],
             });
 
             await this.informDEObjectUpdated();
@@ -1199,25 +1169,13 @@ export class DEngine {
                 // some normalization
                 const actualMessages = messages.map((text) => text.trim()).filter((text) => text.length > 0).join("\n\n").split("\n\n");
 
-                index++;
-                /** @type {DEConversationMessage} */
-                const messageToAdd = {
-                    id: `${sceneId}_MESSAGE_${index}`,
-                    // @ts-ignore
-                    canOnlyBeSeenByCharacter: userOnly ? this.userCharacter.name : null,
+                this.deObject.utils.addMessage(conversation.id, {
+                    canOnlyBeSeenByCharacter: userOnly ? this.deObject.user : null,
                     content: actualMessages.map((text) => ({ type: "narration", text })),
                     sender: "Story Master",
-                    duration: {
-                        inDays: 0,
-                        inHours: 0,
-                        inMinutes: 0,
-                        inSeconds: 0,
-                    },
-                    endTime: { ...this.deObject.currentTime },
                     isCharacter: false,
                     isDebugMessage: false,
                     isStoryMasterMessage: true,
-                    startTime: { ...this.deObject.currentTime },
                     perspectiveSummaryIds: {},
                     singleSummary: null,
                     isRejectedMessage: false,
@@ -1226,14 +1184,6 @@ export class DEngine {
                     emotionalRange: null,
                     interactingCharacters: [],
                     rumors: [],
-                };
-                this.deObject.conversations[sceneId].messages.push(messageToAdd);
-
-                this.triggerConversationMessageUpdate(this.deObject, {
-                    conversationId: sceneId,
-                    messageId: messageToAdd.id,
-                    event: "new-message",
-                    obj: messageToAdd,
                 });
 
                 await this.informDEObjectUpdated();
@@ -1968,20 +1918,4 @@ export function deepCopyNoHistory(obj) {
         copy[key] = deepCopy(value);
     }
     return copy;
-}
-
-/**
-     * @param {DEngine} engine 
-     * @param {string[]} characters 
-     */
-export function getFrozenBonds(engine, characters) {
-    /**
-     * @type {Record<string, DEBondDescription>}
-     */
-    const frozenBonds = {};
-    characters.forEach(charName => {
-        // @ts-expect-error
-        frozenBonds[charName] = deepCopy(engine.deObject.bonds[charName]);
-    });
-    return frozenBonds;
 }

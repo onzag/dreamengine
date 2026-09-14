@@ -19,6 +19,46 @@ engine.exports = {
             description: "Whether the character is a robot or not. Robots are impervious to the vaccuum of space weather system",
         }
     },
+    onSceneStarted(DE, scene) {
+        // TODO remove this testing stuff
+        DE.utils.addMessageIntoTargetConversation(DE.user, {
+            canOnlyBeSeenByCharacter: null,
+            content: [
+                {
+                    type: "dialogue",
+                    fragments: [
+                        {
+                            type: "sound",
+                            soundInfo: {},
+                            text: "gasp",
+                        },
+                        {
+                            type: "dialogue",
+                            "text": "Booo! I am a ghost :3",
+                        },
+                    ],
+                },
+            ],
+            emotion: "surprised",
+            emotionalRange: [
+                "surprised",
+                "amazed",
+                "shocked",
+            ],
+            interactingCharacters: [],
+            isCharacter: true,
+            isDebugMessage: false,
+            isStoryMasterMessage: false,
+            isHiddenMessage: false,
+            isRejectedMessage: false,
+            perspectiveSummaryIds: {},
+            rumors: [],
+            sender: "Ghost of the Story Master",
+            singleSummary: null,
+        }, {
+            ghost: true,
+        });
+    },
     initialize(DE) {
         DE.world.scenes["Default Scene"] = /** @type {DEScene} */ ({
             location: "Lunar Station",

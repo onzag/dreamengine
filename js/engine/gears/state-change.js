@@ -2,7 +2,7 @@
  * Gear that calculates state changes for a character based on recent interactions.
  */
 
-import { DEngine, getFrozenBonds } from "../index.js";
+import { DEngine } from "../index.js";
 import { onStateRelievedOnCharacter, onStateRemovedOnCharacter } from "../utils.js";
 
 /**

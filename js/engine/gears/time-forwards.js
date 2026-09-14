@@ -155,7 +155,7 @@ export function timeForwardsToNewTime(engine, time) {
 }
 
 /**
- * 
+ * TODO this time forwards method is not very good it doesn't use last message but last story cycle
  * @param {DEngine} engine 
  * @param {DECompleteCharacterReference} character
  */
@@ -173,7 +173,7 @@ export default async function timeForwardsUsingLastMessage(engine, character) {
         msgLimit: "LAST_CYCLE",
     })).messages;
 
-    const systemMessage = `You are an assistant and story analyst that helps determine how much time has passed in a story based the last story fragment.`;
+    const systemMessage = `You are an assistant and story analyst that helps determine how much time has passed in a story based on the last story fragment.`;
     const systemPrompt = engine.inferenceAdapter.buildSystemPromptForQuestioningAgent(systemMessage, [
         "You must respond in the format, 'Time Passed: X', where X is the amount of time that has passed (e.g., '8 seconds', '5 minutes', '2 hours', '3 days', '1 week').",
         "Be realistic about how long actions take.",

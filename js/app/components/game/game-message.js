@@ -307,7 +307,7 @@ class GameMessage extends HTMLElement {
      * @returns {Promise<string | null>}
      */
     async _prepareAudio() {
-        const session = window.GAME_VOCALIZER;
+        const session = window.GAME_VOICE;
 
         if (!session || !this._hasContent()) {
             this._resolvePseudoStreamInitPromise?.();

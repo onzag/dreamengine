@@ -3567,8 +3567,20 @@ declare interface DEUtils {
     newFamilyRelation(char1: string | DECompleteCharacterReference | null, towards: string | DECompleteCharacterReference | null, relation: DEFamilyRelation): [DEFamilyTie | null, DEFamilyTie | null];
     newGlobalInterest(interest: DECharacterInterest);
 
-    addMessage(conversationId: string, message: DEConversationMessage): DEConversationMessage;
-    addMessageIntoTargetConversation(target: string, message: DEConversationMessage, options: { teleportParticipants?: boolean, unsafeMode?: boolean, isolation?: "isolate" | "join-target-group" | "merge-groups" } = {}): DEConversationMessage;
+    addMessage(conversationId: string, message: Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime">, options: { unsafeMode?: boolean } = {}): DEConversationMessage;
+    addMessageIntoTargetConversation(target: string, message: Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime">, options: { teleportParticipants?: boolean, unsafeMode?: boolean, isolation?: "isolate" | "join-target-group" | "merge-groups", ghost?: boolean } = {}): DEConversationMessage;
+
+    /**
+     * Broadcast a message, all characters at a given location (and beyond) will pick it up
+     * 
+     * The sender is not deemed a participant
+     * 
+     * @param message a function, modify what the message received is based on the distance
+     * @param location the location where the message is broadcasted
+     * @param travelDistance 
+     * @param travelDistaceType
+     */
+    addMessageBroadcast(message: (distance: number) => Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime">, location: string, travelDistance: number, travelDistaceType: "meters" | "connections"): DEConversationMessage[];
     addConversation(conversation: Pick<DEConversation, "participants" | "remoteParticipants" | "location" | "pseudoConversation" | "pseudoConversationSummary">, options: { teleportParticipants?: boolean, unsafeMode?: boolean } = {}): DEConversation;
 
     isStrangerTowards(char1: string | DECompleteCharacterReference | null, char2: string | DECompleteCharacterReference | null): boolean;

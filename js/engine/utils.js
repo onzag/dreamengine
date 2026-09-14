@@ -952,6 +952,61 @@ export const deEngineUtilsFn = (DE, engine) => ({
         };
     },
 
+    addMessageBroadcast(message, location, travelDistance, travelDistanceType) {
+        const locationsToBroadcast = new Set([
+            {
+                location: location,
+                distance: 0,
+            },
+        ]);
+
+        // TODO implement the logic to find all locations within the travelDistance based on the travelDistanceType
+        if (travelDistanceType === "connections") {
+            // now we are in sort of a graph traversal situation, we want to find all the locations that are within the travelDistance number of connections from the original location
+        } else if (travelDistanceType === "meters") {
+            // this is a similar case, as we need to check by the distance of the locations, aka each connection of this graph has a distance value, and we want to traverse that
+            // graph using that distance value and gather all the locations that are within that travel distance
+        }
+
+        const messagesToBroadcast = Array.from(locationsToBroadcast).map(loc => {
+            return {
+                message: message(loc.distance),
+                location: loc.location,
+                distance: loc.distance,
+            };
+        });
+        /**
+         * @type {DEConversationMessage[]}
+         */
+        const finalConversationeMessages = [];
+
+        messagesToBroadcast.forEach(m => {
+            const allCharactersInLocation = Object.keys(DE.stateFor).filter(c => DE.stateFor[c].location === m.location);
+            const allRelevantConversationIds = new Set();
+            const charactersWithoutConversation = new Set();
+            for (const charName of allCharactersInLocation) {
+                const charState = DE.stateFor[charName];
+                if (charState.conversationId) {
+                    allRelevantConversationIds.add(charState.conversationId);
+                } else {
+                    charactersWithoutConversation.add(charName);
+                }
+            }
+
+            for (const conversationId of allRelevantConversationIds) {
+                // allow adding the message even thought the character is not a participant of the conversation, because this is a broadcast message
+                // basically they were heard but are not there
+                finalConversationeMessages.push(DE.utils.addMessage(conversationId, m.message, { unsafeMode: true }));
+            }
+            for (const charName of charactersWithoutConversation) {
+                // basically creates a conversation with only that character and adds the message to it
+                finalConversationeMessages.push(DE.utils.addMessageIntoTargetConversation(charName, m.message, { unsafeMode: true, ghost: true, teleportParticipants: false }));
+            }
+        });
+
+        return finalConversationeMessages;
+    },
+
     addConversation(conversation, options = {}) {
         const conversationId = "CONV_" + crypto.randomUUID();
         const participants = conversation.participants;
@@ -1025,7 +1080,8 @@ export const deEngineUtilsFn = (DE, engine) => ({
             if (charState.location !== location && !isRemoteParticipant) {
                 // TODO
                 if (options.teleportParticipants) {
-                    DE.utils.teleportCharacter(participant, location);
+                    // TODO teleport participants
+                    // DE.utils.teleportCharacter(participant, location);
                 } else if (!options.unsafeMode) {
                     throw new Error(`Participant ${participant} is not in the specified location ${location}`);
                 }
@@ -1140,22 +1196,44 @@ export const deEngineUtilsFn = (DE, engine) => ({
             throw new Error(`Conversation with ID ${conversationId} not found`);
         }
 
-        if (!conversationObject.participants.includes(message.sender) && !(conversationObject.remoteParticipants && conversationObject.remoteParticipants.includes(message.sender))) {
+        if (
+            (
+                !conversationObject.participants.includes(message.sender) &&
+                !(
+                    conversationObject.remoteParticipants &&
+                    conversationObject.remoteParticipants.includes(message.sender)
+                ) &&
+                !options.unsafeMode &&
+                !message.isStoryMasterMessage
+            )) {
             throw new Error(`Sender ${message.sender} is not a participant nor a remote participant of conversation ${conversationId}`);
         }
 
-        if (conversationObject.pseudoConversation) {
-            throw new Error(`Cannot add message to pseudo-conversation ${conversationId}`);
+        const newMessageId = "MSG_" + crypto.randomUUID();
+        /**
+         * @type {DEConversationMessage}
+         */
+        const newMessage = {
+            ...message,
+            id: newMessageId,
+            startTime: { ...DE.currentTime },
+            duration: {
+                inDays: 0,
+                inHours: 0,
+                inMinutes: 0,
+                inSeconds: 0,
+            },
+            endTime: { ...DE.currentTime },
         }
 
-        conversationObject.messages.push(message);
+        conversationObject.messages.push(newMessage);
         engine.triggerConversationMessageUpdate(DE, {
             event: "new-message",
             conversationId: conversationId,
-            messageId: message.id,
-            obj: message,
+            messageId: newMessage.id,
+            obj: newMessage,
         });
-        return message;
+        return newMessage;
     },
 
     addMessageIntoTargetConversation(target, message, options = {}) {
@@ -1165,8 +1243,8 @@ export const deEngineUtilsFn = (DE, engine) => ({
         }
 
         const senderChar = DE.stateFor[message.sender];
-        let senderIsGhost = false;
-        if (!senderChar) {
+        let senderIsGhost = options.ghost || message.isStoryMasterMessage || false;
+        if (!senderChar && !senderIsGhost) {
             if (!options.unsafeMode) {
                 throw new Error(`Sender character state not found for sender ${message.sender}`);
             }
@@ -1231,7 +1309,9 @@ export const deEngineUtilsFn = (DE, engine) => ({
             pseudoConversation: newParticipants.includes(DE.user) || newRemoteParticipants.includes(DE.user) ? false : true,
         }, options);
 
-        return DE.utils.addMessage(targetConversation.id, message);
+        return DE.utils.addMessage(targetConversation.id, message, {
+            unsafeMode: options.unsafeMode || senderIsGhost || message.isStoryMasterMessage || false,
+        });
     },
 
     createVoice(description) {

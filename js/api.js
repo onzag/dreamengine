@@ -365,12 +365,12 @@ window.API.pauseVoice = async () => {
     // this first is a hack way to pause the voice
     // since we made it a global in game so it can be passed down other components easily
     // we can grab the session and pause it
-    if (window.GAME_VOCALIZER) {
-        return window.GAME_VOCALIZER.adapter.canBePaused().then((canBe) => {
+    if (window.GAME_VOICE) {
+        return window.GAME_VOICE.adapter.canBePaused().then((canBe) => {
             if (!canBe) {
                 return;
             }
-            return window.GAME_VOCALIZER?.adapter.pause();
+            return window.GAME_VOICE?.adapter.pause();
         });
     } else {
         // No voice adapter being used in game, we need to connect it to pause it.
@@ -404,12 +404,12 @@ window.API.resumeVoice = async () => {
     // this first is a hack way to resume the voice
     // since we made it a global in game so it can be passed down other components easily
     // we can grab the session and resume it
-    if (window.GAME_VOCALIZER) {
-        return window.GAME_VOCALIZER.adapter.canBePaused().then((canBe) => {
+    if (window.GAME_VOICE) {
+        return window.GAME_VOICE.adapter.canBePaused().then((canBe) => {
             if (!canBe) {
                 return;
             }
-            return window.GAME_VOCALIZER?.adapter.resume();
+            return window.GAME_VOICE?.adapter.resume();
         });
     } else {
         // No voice adapter being used in game, we need to connect it to resume it.

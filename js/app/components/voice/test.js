@@ -157,12 +157,12 @@ export class VoiceTest extends HTMLElement {
 
             // hack to make prepare for use the same connection
             // @ts-ignore
-            window.GAME_VOCALIZER = {
+            window.GAME_VOICE = {
                 adapter: this.adapter,
             }
             await window.API.prepareFor("voice");
             // @ts-ignore
-            window.GAME_VOCALIZER = null;
+            window.GAME_VOICE = null;
 
             this._log(`Connected to Voice adapter "${adapterName}".`);
 

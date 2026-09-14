@@ -5,7 +5,7 @@
  * re-downloaded, re-hashed or re-uploaded over and over.
  *
  * game.js owns the lifecycle: it creates the session on start (when
- * `voiceEnabled` is true) and exposes it as `window.GAME_VOCALIZER`. Message
+ * `voiceEnabled` is true) and exposes it as `window.GAME_VOICE`. Message
  * blocks read that global to synthesize their narration/dialogue.
  */
 
