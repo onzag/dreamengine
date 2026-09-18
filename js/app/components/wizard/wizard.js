@@ -1114,7 +1114,7 @@ export class GeneralWizard extends HTMLElement {
                 <div class="wizard-prev-button">prev</div>
             </div>
         </div>
-        <div class="wizard-content" data-de-role="scroller">
+        <div class="wizard-content" data-de-aria-role="scroller">
             <slot></slot>
         </div>
         <div class="wizard-buttons">

@@ -100,6 +100,7 @@
 
 /**
  * Sound assets for a character, keyed by sound label.
+ * 
  * @typedef {Record<string, CharacterSoundEntry>} CharacterSoundAssets
  */
 
@@ -115,6 +116,11 @@
  * @typedef {Object} WorldMetadataFields
  * @property {ThemeSong} [theme] - the theme song of the world
  * @property {CharacterVoiceEntry} [narrationVoice] - the voice of the narrator, if not specified, the default narrator voice will be used
+ * @property {Record<string, {
+ *   voice: CharacterVoiceAssets,
+ *   voiceModifiers?: CharacterVoiceModifiersAssets,
+ *   sounds?: CharacterSoundAssets
+ * }>} [ghostVoices] - the voices for the ghosts in the world, for voices of the ghosts of schizophrenic characters or just general voices
  */
 
 /**

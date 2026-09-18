@@ -1571,12 +1571,10 @@ class GameOverlay extends HTMLElement {
 
             // TODO we have to optimize this somehow, because this will get every single message
             // and if the history is too long, this might cause performance issues. We should probably only get the last 50 messages or so, and then if the user scrolls up, we can fetch more.
-            const historySource = await window.ENGINE_WORKER_CLIENT.getHistoryForCharacter({
+            const history = await window.ENGINE_WORKER_CLIENT.getHistoryForCharacter({
                 characterName: actualUserName,
                 lastMessageGid: this.lastMessageGid,
             });
-
-            const historyFiltered = historySource.filter(msg => msg && msg.;
 
             if (!history || !Array.isArray(history) || history.length === 0) return;
 

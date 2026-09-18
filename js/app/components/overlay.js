@@ -252,7 +252,7 @@ class Overlay extends HTMLElement {
             </div>
             ${specialButtonHTML}
         </div>
-        <div class="overlay-content" data-de-role="scroller">
+        <div class="overlay-content" data-de-aria-role="scroller">
             <slot></slot>
         </div>
         <div class="overlay-buttons">

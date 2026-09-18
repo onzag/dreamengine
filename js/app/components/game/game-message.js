@@ -322,23 +322,34 @@ class GameMessage extends HTMLElement {
         /**
          * @type {CharacterVoiceAssets | null}
          */
-        const characterVoices = this._blockType() === 'dialogue' && sender
+        let characterVoices = this._blockType() === 'dialogue' && sender
             ? await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['characters', sender, 'metadata', 'voice'] })
             : null;
 
         /**
          * @type {CharacterVoiceModifiersAssets | null}
          */
-        const characterVoiceModifiers = this._blockType() === 'dialogue' && sender
+        let characterVoiceModifiers = this._blockType() === 'dialogue' && sender
             ? await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['characters', sender, 'metadata', 'voiceModifiers'] })
             : null;
 
         /**
          * @type {CharacterSoundAssets | null}
          */
-        const characterSounds = this._blockType() === 'dialogue' && sender
+        let characterSounds = this._blockType() === 'dialogue' && sender
             ? await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['characters', sender, 'metadata', 'sounds'] })
             : null;
+
+        if (!characterVoices && this._blockType() === 'dialogue' && sender) {
+            characterVoices = await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['world', 'metadata', 'ghostVoices', sender, 'voice'] });
+        }
+        if (!characterVoiceModifiers && this._blockType() === 'dialogue' && sender) {
+            characterVoiceModifiers = await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['world', 'metadata', 'ghostVoices', sender, 'voiceModifiers'] });
+        }
+        if (!characterSounds && this._blockType() === 'dialogue' && sender) {
+            characterSounds = await window.ENGINE_WORKER_CLIENT.queryDEObject({ path: ['world', 'metadata', 'ghostVoices', sender, 'sounds'] });
+        }
+        
         /** @type {Array<import('../../../engine/voice/base.js').VoiceSpeechSegment|import('../../../engine/voice/base.js').VoiceDelaySegment|import('../../../engine/voice/base.js').VoiceAudioSegment>} */
         const segments = [];
 
