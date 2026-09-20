@@ -57,10 +57,8 @@ function exitGame() {
     });
     dialog.addEventListener('cancel', () => {
         document.body.removeChild(dialog);
-        makeHomeInert(false);
     });
     document.body.appendChild(dialog);
-    makeHomeInert(true);
 }
 
 // Get all menu buttons and add event listeners
@@ -80,10 +78,8 @@ newCharacterBtn?.addEventListener('click', async () => {
 
     const overlay = document.createElement("app-character");
     document.body.appendChild(overlay);
-    makeHomeInert(true);
     overlay.addEventListener('close', () => {
         document.body.removeChild(overlay);
-        makeHomeInert(false);
     });
 });
 
@@ -92,11 +88,9 @@ newWorldBtn?.addEventListener('click', async () => {
     await initialPromise;
 
     const overlay = document.createElement("app-world");
-    makeHomeInert(true);
     document.body.appendChild(overlay);
     overlay.addEventListener('close', () => {
         document.body.removeChild(overlay);
-        makeHomeInert(false);
     });
 });
 
@@ -104,11 +98,9 @@ const openSettingsBtn = document.getElementById('open-settings-btn');
 openSettingsBtn?.addEventListener('click', async () => {
     await initialPromise;
     const overlay = document.createElement("app-settings");
-    makeHomeInert(true);
     document.body.appendChild(overlay);
     overlay.addEventListener('close', () => {
         document.body.removeChild(overlay);
-        makeHomeInert(false);
     });
 });
 
@@ -119,10 +111,8 @@ playBtn?.addEventListener('click', async () => {
     await initialPromise;
     const overlay = document.createElement('app-play');
     document.body.appendChild(overlay);
-    makeHomeInert(true);
     overlay.addEventListener('cancel', () => {
         document.body.removeChild(overlay);
-        makeHomeInert(false);
     });
     overlay.addEventListener('start', (/** @type {any} */ e) => {
         const detail = e.detail || {};
@@ -152,7 +142,6 @@ playBtn?.addEventListener('click', async () => {
 
         game.addEventListener('exit', () => {
             document.body.removeChild(game);
-            makeHomeInert(false);
         });
 
         setTimeout(() => {
@@ -170,10 +159,8 @@ manageBtn?.addEventListener('click', async () => {
     await initialPromise;
     const overlay = document.createElement("app-manage");
     document.body.appendChild(overlay);
-    makeHomeInert(true);
     overlay.addEventListener('close', () => {
         document.body.removeChild(overlay);
-        makeHomeInert(false);
     });
 });
 
@@ -190,13 +177,11 @@ footerLinks.forEach(link => {
  * @param {string} tagName 
  */
 async function showCreditsOverlay(tagName) {
-    makeHomeInert(true);
     await initialPromise;
     const overlay = document.createElement(tagName);
     document.body.appendChild(overlay);
     overlay.addEventListener('close', async () => {
         document.body.removeChild(overlay);
-        makeHomeInert(false);
         await stopAllAmbiencesAndStartNewOne([{ id: 'dream-ambience', srcs: [{ src: window.DREAM_AMBIENCE_CHOSEN, fadeDurationMs: 1000, volume: window.DREAM_AMBIENCE_CHOSEN_VOLUME }] }], 1000);
     });
     await stopAllAmbiencesAndStartNewOne([{ id: 'credits', srcs: [{ src: './sounds/credits.mp3', fadeDurationMs: 1000, volume: 1.2 }] }], 1000);
@@ -410,7 +395,6 @@ async function initialChecks() {
             document.body.appendChild(settingsOverlay);
             settingsOverlay.addEventListener('close', () => {
                 document.body.removeChild(settingsOverlay);
-                makeHomeInert(false);
                 setTimeout(() => {
                     secondChecks();
                 }, 300);
@@ -424,7 +408,6 @@ async function initialChecks() {
             }, 300);
         });
         document.body.appendChild(dialog);
-        makeHomeInert(true);
     } else if (INFERENCE_ADAPTER_ERROR) {
         const dialog = document.createElement('app-dialog');
         dialog.setAttribute('dialog-title', 'Could not Connect to Server');
@@ -443,16 +426,13 @@ async function initialChecks() {
             document.body.appendChild(settingsOverlay);
             settingsOverlay.addEventListener('close', () => {
                 document.body.removeChild(settingsOverlay);
-                makeHomeInert(false);
             });
             document.body.removeChild(dialog);
         });
         dialog.addEventListener('cancel', () => {
             document.body.removeChild(dialog);
-            makeHomeInert(false);
         });
         document.body.appendChild(dialog);
-        makeHomeInert(true);
     } else if (INFERENCE_ADAPTER_WARNING) {
         const dialog = document.createElement('app-dialog');
         dialog.setAttribute('dialog-title', 'Warning');
@@ -466,16 +446,13 @@ async function initialChecks() {
             document.body.appendChild(settingsOverlay);
             settingsOverlay.addEventListener('close', () => {
                 document.body.removeChild(settingsOverlay);
-                makeHomeInert(false);
             });
             document.body.removeChild(dialog);
         });
         dialog.addEventListener('cancel', () => {
             document.body.removeChild(dialog);
-            makeHomeInert(false);
         });
         document.body.appendChild(dialog);
-        makeHomeInert(true);
     } else {
         secondChecks();
     }
@@ -513,16 +490,13 @@ async function secondChecks() {
             document.body.appendChild(settingsOverlay);
             settingsOverlay.addEventListener('close', () => {
                 document.body.removeChild(settingsOverlay);
-                makeHomeInert(false);
             });
             document.body.removeChild(dialog);
         });
         dialog.addEventListener('cancel', () => {
             document.body.removeChild(dialog);
-            makeHomeInert(false);
         });
         document.body.appendChild(dialog);
-        makeHomeInert(true);
     }
 }
 

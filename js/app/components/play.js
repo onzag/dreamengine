@@ -1566,13 +1566,25 @@ class PlayOverlay extends HTMLElement {
 
         this.root.innerHTML = `
         <link rel="stylesheet" href="components/play.css">
-        <div class="play-overlay">
+        <div class="play-overlay" data-de-aria-group="static" data-de-aria-group-use-inert data-de-aria-group-active role="dialog">
             <div class="play-header">
-                <div class="play-title">Play</div>
+                <div class="play-title" data-de-aria-text="true" tabindex="0">Play</div>
                 <div class="step-indicator">${stepsHTML}</div>
-                <div class="play-close" id="close-btn">&times;</div>
+                <div
+                    class="play-close"
+                    id="close-btn"
+                    role="button"
+                    data-de-aria-key="x"
+                    aria-label="Close"
+                    data-de-aria-action="click"
+                    tabindex="0"
+                >&times;</div>
             </div>
-            <div class="play-body"></div>
+            <div
+                class="play-body"
+                tabindex="-1"
+                data-de-aria-scroller
+            ></div>
             <div class="play-footer">
                 <div class="play-back hidden" id="back-btn">Back</div>
                 <div class="play-start disabled" id="continue-btn">Continue</div>

@@ -15,25 +15,6 @@ class Overlay extends HTMLElement {
     connectedCallback() {
         this.render();
 
-        // Find the direct child of document.body that contains this overlay.
-        // It may be this element itself, or an ancestor host if mounted inside a shadow root.
-        /** @type {HTMLElement} */
-        let bodyLevelChild = /** @type {HTMLElement} */ (this);
-        while (true) {
-            const p = /** @type {any} */ (bodyLevelChild.parentNode);
-            if (!p || p === document.body || p === document) break;
-            bodyLevelChild = p.nodeType === 11 /* DOCUMENT_FRAGMENT_NODE */ ? p.host : p;
-        }
-
-        /** @type {HTMLElement[]} */
-        this._madeInert = [];
-        for (const el of document.body.children) {
-            if (el !== bodyLevelChild && !/** @type {HTMLElement} */ (el).inert) {
-                /** @type {HTMLElement} */ (el).inert = true;
-                this._madeInert.push(/** @type {HTMLElement} */ (el));
-            }
-        }
-
         // hide stars when overlay is active
         // @ts-expect-error
         document.querySelector('.sky').style.display = 'none';
@@ -102,12 +83,6 @@ class Overlay extends HTMLElement {
 
     disconnectedCallback() {
         document.removeEventListener("keydown", this.onDocumentKeydown);
-        if (this._madeInert) {
-            for (const el of this._madeInert) {
-                el.inert = false;
-            }
-            this._madeInert = [];
-        }
         // only show stars if no other overlay is still active
         const remainingOverlays = document.querySelectorAll('app-character, app-world, app-settings, app-play, app-manage, app-license, app-other-attributions, app-cardtype-wizard, app-world-wizard');
         if (remainingOverlays.length === 0) {
@@ -245,7 +220,7 @@ class Overlay extends HTMLElement {
             color: #FF6B6B;
         }
       </style>
-      <div class="overlay">
+      <div class="overlay" role="dialog" data-de-aria-group="static" data-de-aria-group-use-inert data-de-aria-group-active>
         <div class="overlay-title">
             <div class="overlay-title-text" tabindex="0" data-de-aria-text="true">
                 ${title}
@@ -256,9 +231,9 @@ class Overlay extends HTMLElement {
             <slot></slot>
         </div>
         <div class="overlay-buttons">
-                ${cancelText ? `<div id="cancel-btn" role="button" aria-disabled="false" tabindex="0" data-de-aria-key="c" data-de-aria-horizontal-alignment="end-outside">${cancelText}</div>` : ''}
-                ${confirmText ? `<div id="confirm-btn" role="button" aria-disabled="false" tabindex="0" data-de-aria-key="k" data-de-aria-horizontal-alignment="start-outside">${confirmText}</div>` : ''}
-            </div>
+            ${cancelText ? `<div id="cancel-btn" role="button" aria-disabled="false" tabindex="0" data-de-aria-key="c" data-de-aria-horizontal-alignment="end-outside">${cancelText}</div>` : ''}
+            ${confirmText ? `<div id="confirm-btn" role="button" aria-disabled="false" tabindex="0" data-de-aria-key="k" data-de-aria-horizontal-alignment="start-outside">${confirmText}</div>` : ''}
+        </div>
       </div>
     `;
     }
@@ -1073,6 +1048,7 @@ class OverlayListInput extends HTMLElement {
             background-color: rgba(0, 0, 0, 0.7);
             color: white;
             font-size: 3.5vh;
+            position: relative;
         }
         .list-item-text {
             flex: 1;

@@ -92,7 +92,7 @@ class Settings extends HTMLElement {
             <div class="main-profile-image-container">
                 <app-profile-image image-url="profile" editable="true"></app-profile-image>
             </div>
-                <div class="profile-information-container" tabindex="0" role="text">
+                <div class="profile-information-container" tabindex="0" role="text" data-de-aria-text="true">
                     <p>This is your own profile information for quick self-inserts, a self-insert is limited to be a very basic representation of a character that you handle during roleplay.</p>
                     <p>If you want to get further complex experiences, specify clothing styles, spawning with specific items, and play as different personas, create a new character in the character generator; then when starting a world, play as that character instead of doing a self-insert.</p>
                     <p>A proper character has emotional expressions, voice, sounds, and supports narration mode. Meanwhile Self-Inserts remain useful for quick roleplay.</p>
@@ -386,7 +386,7 @@ class Settings extends HTMLElement {
                     title="The language used by the application."
                     input-data-location="language"
                 ></app-overlay-select>
-                <div style="margin-top:1vh;color:#ff6b6b;font-size:3vh;">&#9888; The app must be restarted after changing the language, the language affects which characters and worlds are available</div>
+                <div role="alert" data-de-aria-text="true" tabindex="0" style="margin-top:1vh;color:#ff6b6b;font-size:3vh;">&#9888; The app must be restarted after changing the language, the language affects which characters and worlds are available</div>
             </app-overlay-section>`;
         } else if (this.currentSectionIndex === 3 && tabsContainer) {
             this.renderAdapterSection({
@@ -433,11 +433,11 @@ class Settings extends HTMLElement {
                         title="Handles the diffusion executable as a child process, this will save VRAM memory by stopping inference when the app requires diffusion and restarting it when needed"
                         input-data-location="handleDiffusionExecutable"
                     ></app-overlay-input-boolean>
-                    ${window.API.mode === "web" ? `<div style="margin-top:1vh;color:#ff6b6b;font-size:3vh;">&#9888; The app must be restarted after changing the diffusion host or secret.</div>` : `<app-overlay-input-boolean
+                    ${window.API.mode === "web" ? `<div style="margin-top:1vh;color:#ff6b6b;font-size:3vh;" role="alert" data-de-aria-text="true" tabindex="0">&#9888; The app must be restarted after changing the diffusion host or secret.</div>` : `<app-overlay-input-boolean
                         label="Allow self-signed SSL certificates"
                         title="Allow connecting to diffusion servers with self-signed SSL certificates, only enable this if you are connecting to a trusted server with a self-signed certificate, enabling this will make your connection less secure and vulnerable"
                         input-data-location="allowDiffusionSelfSigned"
-                    ></app-overlay-input-boolean><div style="margin-top:1vh;color:#ff6b6b;font-size:3vh;">&#9888; The app must be restarted after changing the diffusion host, secret or self-signed SSL certificate settings.</div>`}
+                    ></app-overlay-input-boolean><div role="alert" data-de-aria-text="true" tabindex="0" style="margin-top:1vh;color:#ff6b6b;font-size:3vh;">&#9888; The app must be restarted after changing the diffusion host, secret or self-signed SSL certificate settings.</div>`}
                     <br />
                     <app-overlay-button id="test-diffusion-connection" play-sound-on-click="false" aria-key="t" title="Open an editor to check the diffusion settings">Launch Editor</app-overlay-button>
                 </div>
@@ -675,7 +675,7 @@ class Settings extends HTMLElement {
                     : '';
 
                 settingsContainer.innerHTML = `${fields}${lowVramField}${selfSignedField}
-                    <div style="margin-top:1vh;color:#ff6b6b;font-size:3vh;">&#9888; The app must be restarted after changing the adapter or its settings.</div>`;
+                    <div style="margin-top:1vh;color:#ff6b6b;font-size:3vh;" role="alert" data-de-aria-text="true" tabindex="0">&#9888; The app must be restarted after changing the adapter or its settings.</div>`;
             } catch (error) {
                 console.error(`Failed to load settings for ${adapterName}:`, error);
                 if (requestId === this.adapterSettingsRenderId && settingsContainer.isConnected) {

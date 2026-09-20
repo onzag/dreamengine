@@ -19,15 +19,6 @@ class Dialog extends HTMLElement {
     connectedCallback() {
         this.render();
 
-        /** @type {HTMLElement[]} */
-        this._madeInert = [];
-        for (const el of document.body.children) {
-            if (el !== this && !/** @type {HTMLElement} */ (el).inert) {
-                /** @type {HTMLElement} */ (el).inert = true;
-                this._madeInert.push(/** @type {HTMLElement} */ (el));
-            }
-        }
-
         playPauseSound();
         document.addEventListener("keydown", this.onDocumentKeydown);
 
@@ -85,12 +76,6 @@ class Dialog extends HTMLElement {
 
     disconnectedCallback() {
         document.removeEventListener("keydown", this.onDocumentKeydown);
-        if (this._madeInert) {
-            for (const el of this._madeInert) {
-                el.inert = false;
-            }
-            this._madeInert = [];
-        }
     }
 
     render() {
@@ -186,7 +171,7 @@ class Dialog extends HTMLElement {
         }
       </style>
       <div class="backdrop"></div>
-      <div class="dialog ${this.getAttribute("large") ? "" : "dialog-limited"}" role="dialog" aria-modal="true" aria-labelledby="dialog-title">
+      <div class="dialog ${this.getAttribute("large") ? "" : "dialog-limited"}" role="dialog" aria-modal="true" aria-labelledby="dialog-title" data-de-aria-group="static" data-de-aria-group-use-inert data-de-aria-group-active>
         <div class="dialog-title" id="dialog-title" tabindex="0" data-de-aria-text="true">
             ${title}
         </div>
