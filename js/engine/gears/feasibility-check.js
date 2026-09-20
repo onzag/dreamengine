@@ -2,6 +2,7 @@
  * Moves the time forwards by using the last message from a given character as a reference.
  */
 
+import { debug } from "../debug.js";
 import { DEngine } from "../index.js";
 import { getExternalDescriptionOfCharacter, getInternalDescriptionOfCharacter, getRelationshipBetweenCharacters, getSurroundingCharacters } from "../util/character-info.js";
 import { convertMessagesToSimpleList, getHistoryFragmentForCharacter } from "../util/messages.js";
@@ -1037,6 +1038,13 @@ export default async function testMessageFeasibilityForCharacter(engine, charact
         throw new Error("Inference adapter not set, cannot perform inference");
     } else if (!engine.deObject.user) {
         throw new Error("User character not set, cannot perform feasibility check for user");
+    }
+
+    if (!debug.ENABLED_FEASIBILITY_CHECK) {
+        return {
+            feasible: true,
+            reason: "Feasibility check is disabled in debug settings.",
+        }
     }
 
     const charState = engine.deObject.stateFor[character.name];

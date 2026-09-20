@@ -1,3 +1,4 @@
+import { debug } from "../debug.js";
 import { DEngine } from "../index.js";
 import { getBasicPostures, getExtendedPosturesOf, getExternalDescriptionOfCharacter, getExternalDescriptionOfCharacterPostureOnly, humanReadablePostureToPosture, POSTURE_MAP, postureToText } from "../util/character-info.js";
 import { createGrammarFromList, yesNoGrammar } from "../util/grammar.js";
@@ -14,6 +15,10 @@ export default async function calculatePostureChange(engine, character, knownCha
         throw new Error("DEngine object not initialized");
     } else if (!engine.inferenceAdapter) {
         throw new Error("Inference adapter not initialized");
+    }
+
+    if (!debug.ENABLED_POSTURE_CHANGE) {
+        return [];
     }
 
     // TODO instead of ask each posture one by one, we can better try asking which posture better describes the character

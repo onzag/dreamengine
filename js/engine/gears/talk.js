@@ -671,9 +671,9 @@ export async function talk(engine, character, options) {
         );
 
         // dialogue specific
-        let insideNarration = nextIsNarration;
+        let insideNarration = false;
         let insideSound = false;
-        let ignoreFirstNCharactersDialogueOnly = nextIsNarration ? 0 : (character.name + ": ").length;
+        let ignoreFirstNCharactersDialogueOnly = (character.name + ": ").length;
 
         let next = await generator.next(true);
         while (!next.done || next.value) {
@@ -714,30 +714,6 @@ export async function talk(engine, character, options) {
                     let textToStream = actualInfoContent.replace(/\*/g, "").replace(/"/g, "");
 
                     const currentBlockAsDialoge = /** @type {DEConversationMessageDialogue} */ (currentBlock);
-                    if (currentBlockAsDialoge.fragments.length === 0) {
-                        if (actualInfoContent.trim()[0] === "*") {
-                            // this shouldn't happen, it should always start with dialogue, but in case it starts with the asterisk
-                            // we will treat it as narration
-                            insideNarration = true;
-                        }
-                        if (actualInfoContent.trim()[0] === "[" && !insideNarration) {
-                            insideSound = true;
-                        }
-                        const typeToAdd = insideNarration ? "narration" : (insideSound ? "sound" : "dialogue");
-                        if (typeToAdd === "sound") {
-                            currentBlockAsDialoge.fragments.push({
-                                type: typeToAdd,
-                                text: textToStream,
-                                // no way to get the info yet, it is still streaming
-                                soundInfo: {}
-                            });
-                        } else {
-                            currentBlockAsDialoge.fragments.push({
-                                type: typeToAdd,
-                                text: "",
-                            });
-                        }
-                    }
 
                     // check if em dash in the text or one of the sound markers
                     if (textToStream.includes("—") || textToStream.includes("[") || textToStream.includes("]")) {
@@ -749,44 +725,60 @@ export async function talk(engine, character, options) {
                          * @type {Array<"narration" | "dialogue" | "sound">}
                          */
                         const types = [];
+                        /**
+                         * @type {boolean[]}
+                         */
+                        const hasSoundOpenDelimiter = [];
+
                         let accum = "";
+                        let accumHasSoundOpenDelimiter = false;
+
                         for (let i = 0; i < textToStream.length; i++) {
                             const char = textToStream[i];
                             if (char === "—") {
-                                parts.push(accum.trim());
+                                parts.push(accum);
                                 types.push(insideNarration ? "narration" : (insideSound ? "sound" : "dialogue"));
+                                hasSoundOpenDelimiter.push(false);
                                 accum = "";
+                                accumHasSoundOpenDelimiter = false;
                                 insideNarration = !insideNarration;
                                 if (insideNarration) {
                                     insideSound = false;
                                 }
-                            } else if (char === "[" && !insideNarration && !insideSound) {
-                                parts.push(accum.trim());
+                            } else if (char === "[" && !insideNarration) {
+                                parts.push(accum);
                                 types.push(insideNarration ? "narration" : (insideSound ? "sound" : "dialogue"));
+                                hasSoundOpenDelimiter.push(accumHasSoundOpenDelimiter);
                                 accum = "";
+                                accumHasSoundOpenDelimiter = true;
                                 insideSound = true;
                             } else if (char === "]" && !insideNarration && insideSound) {
-                                parts.push(accum.trim());
+                                parts.push(accum);
                                 types.push("sound");
+                                hasSoundOpenDelimiter.push(accumHasSoundOpenDelimiter);
                                 accum = "";
+                                accumHasSoundOpenDelimiter = false;
                                 insideSound = false;
                             } else {
                                 accum += char;
                             }
                         }
 
-                        if (accum.trim()) {
-                            parts.push(accum.trim());
+                        if (accum) {
+                            parts.push(accum);
                             types.push(insideNarration ? "narration" : (insideSound ? "sound" : "dialogue"));
+                            hasSoundOpenDelimiter.push(accumHasSoundOpenDelimiter);
                         }
 
                         for (let i = 0; i < parts.length; i++) {
                             const part = parts[i];
                             const type = types[i];
+                            const hasSoundOpenDelimiterValue = hasSoundOpenDelimiter[i];
 
                             if (part) {
                                 const isTypeSameAsLastFragment = currentBlockAsDialoge.fragments.length > 0 && currentBlockAsDialoge.fragments[currentBlockAsDialoge.fragments.length - 1].type === type;
-                                if (isTypeSameAsLastFragment) {
+                                const isSound = type === "sound";
+                                if (isTypeSameAsLastFragment && (isSound ? !hasSoundOpenDelimiterValue : true)) {
                                     currentBlockAsDialoge.fragments[currentBlockAsDialoge.fragments.length - 1].text += part;
                                 } else {
                                     const previousFragment = currentBlockAsDialoge.fragments[currentBlockAsDialoge.fragments.length - 1];

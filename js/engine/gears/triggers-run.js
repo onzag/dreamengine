@@ -2,7 +2,7 @@ import { weightedRandomWithNullsIfNoWeight } from "../../util/random.js";
 import { DEngine } from "../index.js";
 import { getBondDeclarationFromBondDescription, getBondDeclarationFromName, getFamilyBondRelation, getRelationship, getSurroundingCharacters } from "../util/character-info.js";
 import { isYes, numberGrammar, yesNoGrammar } from "../util/grammar.js";
-import { getHistoryFragmentForCharacter, convertMessagesToSimpleList } from "../util/messages.js";
+import { debug } from "../debug.js";
 
 /**
  * @param {DEngine} engine 
@@ -330,6 +330,10 @@ export default async function runAllTriggersFor(engine, character, interactedCha
         throw new Error("Inference adapter not initialized");
     } else if (!character.bonds) {
         throw new Error(`Character ${character.name} has no bonds defined.`);
+    }
+
+    if (!debug.ENABLED_TRIGGERS) {
+        return { microInjections: [], microVoices: [] };
     }
 
     const lastCycleMessagesInfo = await getHistoryFragmentForCharacter(engine, character, {

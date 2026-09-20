@@ -1,3 +1,4 @@
+import { debug } from "../debug.js";
 import { DEngine } from "../index.js";
 import { getExternalDescriptionOfCharacter, getSurroundingCharacters } from "../util/character-info.js";
 import { isYes } from "../util/grammar.js";
@@ -54,6 +55,11 @@ export default async function testWorldRulesOn(engine, character) {
     if (!engine.inferenceAdapter) {
         throw new Error("Inference adapter not initialized, cannot validate world rules");
     }
+
+    if (!debug.ENABLED_RULES) {
+        return { passed: true, reason: null, addedMessagesForStoryMaster: [] };
+    }
+
     const charState = engine.deObject.stateFor[character.name];
 
     const isUser = character.name === engine.deObject.user;

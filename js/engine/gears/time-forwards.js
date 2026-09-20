@@ -2,6 +2,7 @@ import { weightedRandomByLikelihood } from "../../util/random.js";
 import { deepCopyNoHistory, DEngine } from "../index.js";
 import { convertMessagesToSimpleList, getHistoryFragmentForCharacter } from "../util/messages.js";
 import { millisecondsToDuration, millisecondsToTime } from "../util/time.js";
+import { debug } from "../debug.js";
 
 /**
  * @param {DEngine} engine
@@ -165,6 +166,10 @@ export default async function timeForwardsUsingLastMessage(engine, character) {
     }
     if (!engine.inferenceAdapter) {
         throw new Error("Inference adapter not initialized");
+    }
+
+    if (!debug.ENABLED_TIME_FORWARD) {
+        return [];
     }
 
     const lastStoryFragment = (await getHistoryFragmentForCharacter(engine, character, {

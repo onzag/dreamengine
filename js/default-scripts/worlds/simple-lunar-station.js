@@ -30,11 +30,16 @@ engine.exports = {
                         {
                             type: "sound",
                             soundInfo: {},
+                            text: "surprised",
+                        },
+                        {
+                            type: "sound",
+                            soundInfo: {},
                             text: "gasp",
                         },
                         {
                             type: "dialogue",
-                            "text": "Booo! I am a ghost :3",
+                            "text": "Booo! I am a ghost :3 Don't listen to Dema",
                         },
                     ],
                 },
@@ -53,7 +58,7 @@ engine.exports = {
             isRejectedMessage: false,
             perspectiveSummaryIds: {},
             rumors: [],
-            sender: "Ghost of the Story Master",
+            sender: "Ghost",
             singleSummary: null,
         }, {
             ghost: true,

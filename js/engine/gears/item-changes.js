@@ -4,6 +4,7 @@ import { convertMessagesToSimpleList, getHistoryFragmentForCharacter } from "../
 import { getCharacterCarryingCapacity, getCharacterVolume, getCharacterWeight, getItemExcessElements, getItemVolume, getItemWeight, getWearableFitment, isAlreadyPlural, isSingularOfPlural, locationPathToMessage, locationPathToMessageWithoutItemName, resolvePath, utilItemCount } from "../util/weight-and-volume.js";
 import { yesNoGrammar, isYes } from "../util/grammar.js";
 import { getFullItemListAtLocation } from "../util/items.js";
+import { debug } from "../debug.js";
 
 /**
  * 
@@ -79,6 +80,14 @@ export default async function calculateItemChanges(engine, character) {
         throw new Error("Inference adapter not set, cannot perform inference");
     } else if (!engine.deObject.user) {
         throw new Error("User character not set, cannot perform feasibility check for user");
+    }
+
+    if (!debug.ENABLED_ITEM_CHANGE) {
+        return {
+            storyMasterMessages: [],
+            charactersThatMoved: {},
+            interactedCharacters: [],
+        };
     }
 
     // Step by step first we grab the character state that sent that last story fragment

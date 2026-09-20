@@ -2,6 +2,7 @@
  * Gear that calculates state changes for a character based on recent interactions.
  */
 
+import { debug } from "../debug.js";
 import { DEngine } from "../index.js";
 import { getFamilyBondRelation, getRelationship } from "../util/character-info.js";
 import { yesNoGrammar } from "../util/grammar.js";
@@ -47,6 +48,10 @@ export default async function calculateBondsChangesDueToMessages(engine, charact
         throw new Error("Inference adapter not initialized");
     } else if (!character.bonds) {
         throw new Error(`Character ${character.name} has no bonds defined.`);
+    }
+
+    if (!debug.ENABLED_BOND_CHANGE) {
+        return;
     }
 
     const lastCycleExpanded = (await getHistoryFragmentForCharacter(engine, character, {

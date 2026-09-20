@@ -2,6 +2,7 @@
  * Gear that calculates state changes for a character based on recent interactions.
  */
 
+import { debug } from "../debug.js";
 import { DEngine } from "../index.js";
 import { onStateRelievedOnCharacter, onStateRemovedOnCharacter } from "../utils.js";
 
@@ -16,6 +17,10 @@ export default async function calculateStateChange(engine, character, interacted
         throw new Error("DEngine not initialized");
     } else if (!engine.inferenceAdapter) {
         throw new Error("Inference adapter not initialized");
+    }
+
+    if (!debug.ENABLED_STATE_CHANGE) {
+        return;
     }
 
     const characterState = engine.deObject.stateFor[character.name];

@@ -1577,6 +1577,8 @@ class PlayOverlay extends HTMLElement {
                     data-de-aria-key="x"
                     aria-label="Close"
                     data-de-aria-action="click"
+                    data-de-aria-horizontal-alignment="center"
+                    data-de-aria-vertical-alignment="bottom-outside"
                     tabindex="0"
                 >&times;</div>
             </div>
