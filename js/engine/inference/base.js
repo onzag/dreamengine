@@ -22,8 +22,6 @@ import { DEngine } from "../index.js";
  * @property {Array<string>} stopAfter
  * @property {Array<string>} stopAt
  * @property {string|null} grammar
- * @property {string} primaryEmotion
- * @property {{state: string, dominance: number}[]} activeStates
  */
 
 /**

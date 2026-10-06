@@ -764,9 +764,10 @@ export async function talk(engine, character, options) {
                             }
                         }
 
-                        if (accum) {
+                        const typeToCreate = insideNarration ? "narration" : (insideSound ? "sound" : "dialogue");
+                        if (accum || (typeToCreate === "sound" && accumHasSoundOpenDelimiter)) {
                             parts.push(accum);
-                            types.push(insideNarration ? "narration" : (insideSound ? "sound" : "dialogue"));
+                            types.push(typeToCreate);
                             hasSoundOpenDelimiter.push(accumHasSoundOpenDelimiter);
                         }
 
@@ -774,10 +775,10 @@ export async function talk(engine, character, options) {
                             const part = parts[i];
                             const type = types[i];
                             const hasSoundOpenDelimiterValue = hasSoundOpenDelimiter[i];
+                            const isSound = type === "sound";
 
-                            if (part) {
+                            if (part || (isSound && hasSoundOpenDelimiterValue)) {
                                 const isTypeSameAsLastFragment = currentBlockAsDialoge.fragments.length > 0 && currentBlockAsDialoge.fragments[currentBlockAsDialoge.fragments.length - 1].type === type;
-                                const isSound = type === "sound";
                                 if (isTypeSameAsLastFragment && (isSound ? !hasSoundOpenDelimiterValue : true)) {
                                     currentBlockAsDialoge.fragments[currentBlockAsDialoge.fragments.length - 1].text += part;
                                 } else {

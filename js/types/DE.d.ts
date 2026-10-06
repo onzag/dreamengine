@@ -649,11 +649,6 @@ declare interface DENarrationInstruction<TemplateType> {
     likelihood?: number;
 };
 
-declare interface DEVocabularyToken {
-    type: "WORD" | "GRAMMAR";
-    value: string;
-}
-
 declare interface DEIntimateAction {
     /**
      * Action template to inject
@@ -1076,6 +1071,39 @@ declare interface DEVoiceDescription {
      * This makes the character mute
      */
     mute: boolean;
+    /**
+     * A list of words that the character commonly uses.
+     * 
+     * This is a whitelist for the de-slopper system, the de-slopper will try to avoid using same words over and over again. This whitelist will allow
+     * the character to use these words, you can also use a function to dynamically decide if the word will be whitelisted or not
+     * 
+     * This will affect both narration and dialogue
+     * 
+     * If used as a function, you will receive a blacklisted word and you should return true if you want to whitelist it, or false if you want to keep it blacklisted
+     * 
+     * a string value is equivalent to a function that returns true if the word is equal to the string value, and false otherwise
+     * 
+     * For example, if you want to whitelist the words "hello" and "world", you can do:
+     * 
+     * commonlyUsedWordsWhitelist: ["hello", "world"]
+     * 
+     * or
+     * 
+     * commonlyUsedWordsWhitelist: [(word) => word === "hello" || word === "world"]
+     * 
+     * the reason of the function is to allow more complex logic, for example, you can whitelist all words that start with "a" by doing:
+     * 
+     * commonlyUsedWordsWhitelist: [(word) => word.startsWith("a")]
+     * 
+     * This will allow the character to reuse words like "apple", "ant", "amazing", etc...
+     */
+    commonlyUsedWordsWhitelist?: Array<string | ((word: string) => boolean)>;
+    /**
+     * Simple blacklist of words that the character should not use, this is a simple array of strings
+     * 
+     * normally the de-slopper system will try to avoid using repeating words, but doesn't prevent them from appearing once, this blacklist will prevent them from appearing at all
+     */
+    blacklistedWords?: string[];
     /**
      * An override for the narration style provided that the voice is active
      */

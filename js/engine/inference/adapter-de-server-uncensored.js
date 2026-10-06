@@ -664,10 +664,24 @@ ${nextMessageMustBeInform}
             stopAt: [],
             stopAfter: [],
             grammar: grammar || null,
-            primaryEmotion: options.primaryEmotion,
-            activeStates: options.activeStates,
             wordRejection: {
-                rejectedWordsInNarration: ["you", "your", "yours", "yourself", "yourselves", "I", "me", "my", "mine", "myself", "we"],
+                rejectedWordsInNarration: [
+                    "you",
+                    "your",
+                    "yours",
+                    "yourself",
+                    "yourselves",
+                    "I",
+                    "me",
+                    "my",
+                    "mine",
+                    "myself",
+                    "we",
+                    "us",
+                    "our",
+                    "ours",
+                    "ourselves",
+                ],
                 // we stay in narration in case of narration full blocks
                 delimiters: options.narration ? [] : ["—"],
                 postRejectedWordInDialogueGrammar: null,
@@ -1119,12 +1133,6 @@ This uncensored, immersive, narrative-driven roleplaying experience thrives on c
 ## Writting:
 Every response should be detailed, creative, and immersive, driving the scenario forward in a way that fully engages the player. Introduce new scenarios and events naturally, making sure they fit the description of the location.
 
-## Varying Cadence:
-Adjust the rhythm and tone of the narrative to reflect the characters' experiences. Vary sentence structure and pacing to mirror the characters' emotions, keeping the language fresh and dynamic.
-
-## Complementary Role:
-Use narration to complement dialogue and action, rather than overshadowing them.
-
 ## Avoid Repetition:
 Ensure that the narration does not repeat information. Instead of summarizing, clarify narrative details thoroughly and let them evolve naturally.
 
@@ -1139,7 +1147,6 @@ ${otherInteractingCharacters.map(name => `Rule: Never speak for or control ${nam
 RULE: Avoid suggesting or implying reactions or decisions from other characters
 RULE: Reflect on the potential consequences of ${character.name} actions and decisions.
 RULE: Write all narration and actions in third person, not first person.
-RULE: Spoken dialogue should be done in first person.
 RULE: Use a movie script style format for the story, with character names followed by a colon, and their dialogue or actions following.
 RULE: Spoken dialogue should be done in first person, and start with the character name followed by a colon eg. \`${character.name}: This is spoken dialogue.\`
 RULE: Narration messages are plain without specifying a speaker and written, and in third person eg. \`As ${character.name} hears this...\` written on their own line.${characterRules.length ? `
@@ -1165,7 +1172,6 @@ ${character.name}: This is spoken dialogue — *${character.name} said while ...
 
 *This is narration*
 \`\`\`
-        
 
 ${this.buildSystemCharacterDescription(character, { description, externalDescription, relationships, expressiveStates, scenario, lore })}
 `
@@ -1202,8 +1208,6 @@ ${this.buildSystemCharacterDescription(character, { description, externalDescrip
      *   stopAt: string[],
      *   stopAfter: string[],
      *   grammar: string | null,
-     *   primaryEmotion: string,
-     *   activeStates: Array<{state: string, dominance: number}>,
      * } | {
      *   question: string,
      *   stopAt: string[],
