@@ -23,7 +23,12 @@
     letter-spacing: 0.05vw;
 }
 
-.de-aria-key-indicator[data-de-aria-direction="rtl"] {
+.de-aria-key-indicator[dir="rtl"] {
+    margin-left: 0;
+    margin-right: 0.4vh;
+}
+
+[dir="rtl"] .de-aria-key-indicator {
     margin-left: 0;
     margin-right: 0.4vh;
 }
@@ -60,4 +65,56 @@
 .de-aria-scroll-marked {
     outline: 0.25vh solid rgba(255, 255, 255, 0.7);
     outline-offset: -0.25vh;
+}
+
+[data-de-aria-group-active] {
+    outline: 0.25vh dashed rgba(255, 255, 255, 0.45);
+}
+
+/* ===== Group exit button ===== */
+
+[data-de-aria-group-exit] {
+    display: none;
+}
+
+[data-de-aria-group-active] > [data-de-aria-group-exit] {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: absolute;
+    top: 0.6vh;
+    right: 0.6vh;
+    width: 3vh;
+    height: 3vh;
+    padding: 0;
+    background: rgba(0, 0, 0, 0.65);
+    color: #ffffff;
+    font-size: 1.6vh;
+    line-height: 1;
+    border-radius: 0.6vh;
+    border: 0.15vh solid rgba(255, 255, 255, 0.55);
+    box-shadow: 0 0.3vh 1vh rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    cursor: pointer;
+    z-index: 99999;
+    font-size: 0;
+}
+
+[data-de-aria-group-active] > [data-de-aria-group-exit]::before {
+    content: "\00D7";
+    font-size: 1.8vh;
+    font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+    color: #ffffff;
+    text-shadow: 0 0.1vh 0.2vh rgba(0, 0, 0, 0.8);
+    pointer-events: none;
+}
+
+[data-de-aria-group-active] > [data-de-aria-group-exit]:hover {
+    background-color: #FF6B6B;
+}
+
+[dir="rtl"] [data-de-aria-group-active] > [data-de-aria-group-exit] {
+    right: auto;
+    left: 0.6vh;
 }
