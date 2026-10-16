@@ -1,6 +1,5 @@
 
 import { DEngine } from "../index.js";
-import { InferenceAdapterLlamaUncensored } from "./adapter-de-server-uncensored.js";
 import { InferenceAdapterVLLandLlamaMUncensored } from "./adapter-vllm-llama-uncensored.js";
 import { BaseInferenceAdapter } from "./base.js";
 

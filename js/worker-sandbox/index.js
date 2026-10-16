@@ -29,7 +29,6 @@ self.onunhandledrejection = (e) => {
         const [
             { DEngine },
             { DEJSEngine },
-            { InferenceAdapterLlamaUncensored },
             { generateBase },
             { generateBonds },
             { generateActivities },
@@ -39,7 +38,6 @@ self.onunhandledrejection = (e) => {
         ] = await Promise.all([
             import("../engine/index.js"),
             import("../jsengine/index.js"),
-            import("../engine/inference/adapter-de-server-uncensored.js"),
             import("../script-generation/generate-base.js"),
             import("../script-generation/generate-bonds.js"),
             import("../script-generation/generate-activities.js"),
@@ -48,7 +46,7 @@ self.onunhandledrejection = (e) => {
             import("../script-generation/generate-affective-states.js"),
         ]);
 
-        workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, generateBase, generateBonds, generateAffectiveStates, generateActivities, generateBondTriggers, generateBasicStates });
+        workerMain({ DEngine, DEJSEngine, generateBase, generateBonds, generateAffectiveStates, generateActivities, generateBondTriggers, generateBasicStates });
     } catch (err) {
         const detail = err instanceof Error ? `${err.message}\n${err.stack}` : String(err);
         console.error("[Worker] Failed to load modules:", detail);
@@ -60,7 +58,7 @@ self.onunhandledrejection = (e) => {
  * @param {object} deps
  */
 // @ts-ignore
-function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, generateBase, generateBonds, generateAffectiveStates, generateActivities, generateBondTriggers, generateBasicStates }) {
+function workerMain({ DEngine, DEJSEngine, generateBase, generateBonds, generateAffectiveStates, generateActivities, generateBondTriggers, generateBasicStates }) {
 
     // ── Script path resolvers (using file:// fetch) ────────────────────
     // The main thread sends the absolute paths via the "setScriptPaths" RPC.
@@ -274,7 +272,7 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
             await adapter.ensureInitialized();
             const supportedLanguages = adapter.getSupportedLanguages();
             let warning = null;
-            if (!supportedLanguages.includes(lang)) {
+            if (!supportedLanguages.includes(lang) && !supportedLanguages.includes("*")) {
                 warning = `Warning: Inference server does not support language '${lang}' for the given settings (check model). Supported languages: ${supportedLanguages.join(', ')}`;
             }
             return { ok: true, warning };

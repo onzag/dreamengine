@@ -35,6 +35,11 @@ export class InferenceAdapterVLLandLlamaMUncensored extends InferenceServerOpenA
      * @returns {Promise<number>}
      */
     async countTokens(text) {
+        if (this.useExperimentalTestMode) {
+            // No server to tokenize against; use the base approximation.
+            return super.countTokens(text);
+        }
+
         if (!this.connected || !this.selectedModel) {
             throw new Error("Adapter is not initialized");
         }
@@ -86,6 +91,76 @@ export class InferenceAdapterVLLandLlamaMUncensored extends InferenceServerOpenA
 
         // Fallback: rough approximation (same ratio used in test mode)
         return Math.ceil(text.length / 4);
+    }
+
+    /**
+     * Attaches server-specific fields to the outgoing chat completion payload.
+     * This is where the difference between vLLM and llama.cpp grammar / guided
+     * decoding, and assistant `trail` continuation, is expressed, keeping
+     * deServerStreamEmulator vendor-agnostic.
+     *
+     * The base emulator always appends the `trail` as a final assistant message;
+     * here we add the per-server flags that make the model *continue* that
+     * message (assistant prefill) rather than open a brand new assistant turn.
+     *
+     * @param {Record<string, any>} payload the payload about to be sent (mutated in place)
+     * @param {{ grammar?: string | null, trail?: string } & Record<string, any>} deServerOptions
+     * @returns {void}
+     */
+    addExtraOptions(payload, deServerOptions) {
+        const grammar = deServerOptions.grammar;
+        const trail = deServerOptions.trail;
+
+        if (this.serverType === 'vllm') {
+            // vLLM exposes GBNF guided decoding via `guided_grammar`.
+            if (grammar) payload.guided_grammar = grammar;
+            if (trail) {
+                // Continue the final assistant message instead of starting a new turn.
+                payload.continue_final_message = true;
+                payload.add_generation_prompt = false;
+            }
+        } else if (this.serverType === 'llama.cpp') {
+            // llama.cpp accepts a raw GBNF `grammar` field.
+            if (grammar) payload.grammar = grammar;
+            if (trail) {
+                // Suppress the generation prompt so the model continues the final
+                // assistant message (assistant prefill) rather than opening a new
+                // turn. llama.cpp also understands `continue_final_message`; both
+                // are set for robustness across versions and are ignored if unknown.
+                payload.add_generation_prompt = false;
+                payload.continue_final_message = true;
+            }
+        }
+    }
+
+    /**
+     * Resolves the selected model's context window size. For llama.cpp this comes
+     * from the /props endpoint (`default_generation_settings.n_ctx`); for vLLM it
+     * is the `max_model_len` already parsed from /v1/models by the base class.
+     *
+     * @param {string} baseUrl
+     * @param {Record<string, string>} headers
+     * @returns {Promise<void>}
+     */
+    async _resolveContextWindowSize(baseUrl, headers) {
+        if (this.serverType === 'llama.cpp') {
+            try {
+                const r = await fetch(`${baseUrl}/props`, { headers });
+                if (r.ok) {
+                    const props = await r.json();
+                    const nCtx = props?.default_generation_settings?.n_ctx ?? props?.n_ctx;
+                    if (typeof nCtx === 'number' && nCtx > 0) {
+                        this.contextWindowSize = nCtx;
+                        return;
+                    }
+                }
+            } catch {
+                // fall through to the generic resolution below
+            }
+        }
+
+        // vLLM (max_model_len) and generic fallback.
+        await super._resolveContextWindowSize(baseUrl, headers);
     }
 
     /**
