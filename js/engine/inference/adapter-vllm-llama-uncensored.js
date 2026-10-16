@@ -130,6 +130,14 @@ export class InferenceAdapterVLLandLlamaMUncensored extends InferenceServerOpenA
                 payload.add_generation_prompt = false;
                 payload.continue_final_message = true;
             }
+
+            // Enable llama.cpp's prompt KV-cache. When consecutive requests share
+            // the same system prompt + conversation history prefix, llama.cpp
+            // reuses the cached KV state and only processes the new tokens — the
+            // same performance benefit that the de-server's stateful WebSocket
+            // session gave for free. Without this flag every call pays the full
+            // prompt-processing cost cold.
+            payload.cache_prompt = true;
         }
     }
 
