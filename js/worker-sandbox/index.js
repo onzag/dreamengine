@@ -275,7 +275,7 @@ function workerMain({ DEngine, DEJSEngine, InferenceAdapterLlamaUncensored, gene
             const supportedLanguages = adapter.getSupportedLanguages();
             let warning = null;
             if (!supportedLanguages.includes(lang)) {
-                warning = `Warning: Inference server does not support language '${lang}'. Supported languages: ${supportedLanguages.join(', ')}`;
+                warning = `Warning: Inference server does not support language '${lang}' for the given settings (check model). Supported languages: ${supportedLanguages.join(', ')}`;
             }
             return { ok: true, warning };
         },

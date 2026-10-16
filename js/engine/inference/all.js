@@ -1,6 +1,7 @@
 
 import { DEngine } from "../index.js";
 import { InferenceAdapterLlamaUncensored } from "./adapter-de-server-uncensored.js";
+import { InferenceAdapterVLLandLlamaMUncensored } from "./adapter-vllm-llama-uncensored.js";
 import { BaseInferenceAdapter } from "./base.js";
 
 // Optional dependency: `gbnf` is declared as an optionalDependency in
@@ -21,22 +22,58 @@ const gbnfDetectionPromise = import('../../../node_modules/gbnf/dist/index.js')
  * @type {Object<string, {checkConfig: (getConfigValue: (key: string) => Promise<any>) => Promise<{title: string, message: string} | null>, buildConfig: (getConfigValue: (key: string) => Promise<any>) => Promise<any>, build: (engine: DEngine, getConfigValue: (key: string) => Promise<any>) => Promise<BaseInferenceAdapter>, hasSelfSignedOption?: boolean, hasLowVramOption?: boolean, settings: import("../setting").SettingsFunction}>}>}
  */
 export const INFERENCE_ADAPTERS = {
-    "DreamServer": {
+    "vLLM/Llama": {
         settings: async () => ({
-            // ALWAYS USE HOST when adding more adapters, this is used accross the app to determine the host regardless of the adapter
+            // ALWAYS USE HOST when adding more adapters, this is used across the app to determine the host regardless of the adapter
             host: {
-                label: "DreamServer Host",
-                description: "This is the host address for the DreamServer, you can define all parameters here for the remote server, for example wss://myserver.com:1234?model=custom&param=value, the protocol must be ws:// or wss://",
-                default: "wss://localhost:8765",
+                label: "vLLM/Llama Host",
+                description: "The base URL of the vLLM server exposing an OpenAI-compatible API, e.g. https://myserver.com:8765",
+                default: "https://localhost:8765",
                 type: "string",
-                placeholder: "Enter DreamServer host",
+                placeholder: "Enter vLLM host",
             },
             apiKey: {
-                label: "DreamServer API Key",
-                description: "This is the API key for the DreamServer, used for authentication.",
+                label: "vLLM/Llama API Key",
+                description: "API key for the vLLM server. Leave blank if the server does not require authentication.",
                 default: "",
                 type: "string",
-                placeholder: "Enter DreamServer API key",
+                placeholder: "Enter vLLM API key",
+            },
+            model: {
+                label: "Model",
+                description: "The model to use for inference. This should match the model name on the vLLM server.",
+                default: "",
+                type: "string",
+                placeholder: "Enter model name, or leave blank for default",
+            },
+            temperature: {
+                label: "Temperature",
+                description: "Sampling temperature. Higher values produce more varied output.",
+                default: 0.8,
+                type: "number",
+                placeholder: "Enter temperature",
+            },
+            topP: {
+                label: "Top P",
+                description: "Nucleus sampling probability mass. 1.0 disables nucleus sampling.",
+                default: 0.95,
+                type: "number",
+                placeholder: "Enter top-p",
+            },
+            topK: {
+                label: "Top K",
+                description: "Limits sampling to the top K most likely tokens. -1 disables this.",
+                default: -1,
+                type: "number",
+                integer: true,
+                placeholder: "Enter top-k",
+            },
+            repetitionPenalty: {
+                label: "Repetition Penalty",
+                description: "Penalises tokens that have already appeared in the output. 1.0 disables the penalty.",
+                default: 1.0,
+                type: "number",
+                placeholder: "Enter repetition penalty",
             },
             useExperimentalTestMode: await gbnfDetectionPromise.then(() => (gbnfAvailable ? {
                 label: "Use Experimental Test Mode",
@@ -48,36 +85,45 @@ export const INFERENCE_ADAPTERS = {
         }),
         hasSelfSignedOption: true,
         hasLowVramOption: true,
-        build: async (engine, getConfigValue) => new InferenceAdapterLlamaUncensored(engine, {
+        build: async (engine, getConfigValue) => new InferenceAdapterVLLandLlamaMUncensored(engine, {
+            host: await getConfigValue("host") || "https://localhost:8765",
             apiKey: await getConfigValue("apiKey"),
-            host: await getConfigValue("host") || "wss://localhost:8765",
+            temperature: await getConfigValue("temperature"),
+            topP: await getConfigValue("topP"),
+            topK: await getConfigValue("topK"),
+            repetitionPenalty: await getConfigValue("repetitionPenalty"),
             useExperimentalTestMode: await getConfigValue("useExperimentalTestMode") || false,
+            model: await getConfigValue("model"),
         }),
         buildConfig: async (getConfigValue) => {
-            const rs = {
-                apiKey: await getConfigValue("apiKey"),
-                host: await getConfigValue("host") || "wss://localhost:8765",
-                useExperimentalTestMode: await getConfigValue("useExperimentalTestMode") || false,
-            };
-            if (!rs.host) {
+            const host = await getConfigValue("host");
+            if (!host) {
                 return null;
             }
-            return rs;
+            return {
+                host,
+                apiKey: await getConfigValue("apiKey"),
+                temperature: await getConfigValue("temperature"),
+                topP: await getConfigValue("topP"),
+                topK: await getConfigValue("topK"),
+                repetitionPenalty: await getConfigValue("repetitionPenalty"),
+                useExperimentalTestMode: await getConfigValue("useExperimentalTestMode") || false,
+                model: await getConfigValue("model"),
+            };
         },
         checkConfig: async (getConfigValue) => {
-            const apiKey = await getConfigValue("apiKey");
-            if (!apiKey) {
-                return {
-                    title: "No API Key Configured",
-                    message: "You have not configured an API key on your DreamServer. You can enter your API key in the settings. Please note that you will need an API key to use the application even using local self-hosted mode.",
-                }
-            }
             const host = await getConfigValue("host");
-            if (!host.startsWith("ws://") && !host.startsWith("wss://")) {
+            if (!host) {
+                return {
+                    title: "No Host Configured",
+                    message: "You have not configured a vLLM host. Please enter the base URL of your vLLM server in the settings.",
+                };
+            }
+            if (!host.startsWith("http://") && !host.startsWith("https://")) {
                 return {
                     title: "Invalid Host",
-                    message: "The DreamServer host must start with ws:// or wss://. Please check your settings.",
-                }
+                    message: "The vLLM host must start with http:// or https://. Please check your settings.",
+                };
             }
             return null;
         },

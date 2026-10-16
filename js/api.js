@@ -442,7 +442,7 @@ window.API.prepareFor = async (option) => {
     const diffusionEnabled = await window.API.getConfigValue("diffusionEnabled");
 
     const _lowVRAMInference = await window.API.getConfigValue("lowVramMode");
-    const adapterName = await window.API.getConfigValue("inferenceAdapter") || "DreamServer";
+    const adapterName = await window.API.getConfigValue("inferenceAdapter") || "vLLM/Llama";
     const inferenceAdapterInfo = INFERENCE_ADAPTERS[adapterName];
     const lowVRAMInference = inferenceAdapterInfo?.hasLowVramOption ? _lowVRAMInference : false;
 

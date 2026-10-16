@@ -699,12 +699,22 @@ class Settings extends HTMLElement {
      * @returns {string}
      */
     renderAdapterSetting(dataLocation, setting) {
-        if (!setting || (setting.type !== "string" && setting.type !== "boolean")) {
+        if (!setting || (setting.type !== "string" && setting.type !== "boolean" && setting.type !== "number")) {
             console.warn(`Unsupported adapter setting type for ${dataLocation}.`);
             return '';
         }
 
-        const tagName = setting.type === "boolean" ? "app-overlay-input-boolean" : "app-overlay-input";
+        if (setting.type === "boolean") {
+            const defaultValue = setting.default !== undefined
+                ? ` input-default-value="${setting.default}"`
+                : '';
+            return `<app-overlay-input-boolean
+            label="${setting.label}"
+            title="${setting.description}"
+            input-data-location="${dataLocation}"${defaultValue}
+        ></app-overlay-input-boolean>`;
+        }
+
         const placeholder = setting.placeholder
             ? ` input-placeholder="${setting.placeholder}"`
             : '';
@@ -712,11 +722,23 @@ class Settings extends HTMLElement {
             ? ` input-default-value="${setting.default}"`
             : '';
 
-        return `<${tagName}
+        if (setting.type === "number") {
+            const inputType = ` input-type="number"`;
+            const isInteger = setting.integer ? ` input-is-integer="true"` : '';
+            const min = setting.min !== undefined ? ` input-number-min="${setting.min}"` : '';
+            const max = setting.max !== undefined ? ` input-number-max="${setting.max}"` : '';
+            return `<app-overlay-input
+                label="${setting.label}"
+                title="${setting.description}"
+                input-data-location="${dataLocation}"${placeholder}${defaultValue}${inputType}${isInteger}${min}${max}
+            ></app-overlay-input>`;
+        }
+
+        return `<app-overlay-input
             label="${setting.label}"
             title="${setting.description}"
             input-data-location="${dataLocation}"${placeholder}${defaultValue}
-        ></${tagName}>`;
+        ></app-overlay-input>`;
     }
 
     /**

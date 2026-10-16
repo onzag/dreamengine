@@ -268,29 +268,6 @@ export class BaseInferenceAdapter {
     }
 
     /**
-     * Specifies whether the adapter supports grammar generation
-     * @returns {boolean}
-     */
-    supportsGrammar() {
-        throw new Error("Method 'supportsGrammar()' must be implemented.");
-    }
-
-    /**
-     * Specifies whether the adapter supports parallel requests, meaning multiple ongoing questioning agents or inference processes at the same time
-     * @returns {boolean}
-     */
-    supportsParallelRequests() {
-        throw new Error("Method 'supportsParallelRequests()' must be implemented.");
-    }
-
-    /**
-     * @param {Array<{question: string; answer: string;}>} qaList 
-     */
-    buildContextInfoPreviousQuestionsAndAnswers(qaList) {
-        throw new Error("Method 'buildContextInfoPreviousQuestionsAndAnswers()' must be implemented.");
-    }
-
-    /**
      * Triggers the on connection status change event
      * @param {boolean} connected 
      * @param {string} [reason] 

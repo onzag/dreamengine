@@ -3,11 +3,6 @@ import "./profile-image.js";
 import { playCancelSound, playConfirmSound, playHoverSound, playPauseSound } from '../sound.js';
 
 const ATTRIBS = {
-    "withcatai": {
-        "url": "https://github.com/withcatai",
-        "for": "Node Llama CCP library used for local AI features in local non-vllm DreamServer",
-        "license": "MIT License"
-    },
     "Onza (The Author)": {
         "url": "https://github.com/onzag",
         "for": "Theme Music",

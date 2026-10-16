@@ -374,7 +374,7 @@ let INFERENCE_ADAPTER_WARNING = null;
 async function initialChecks() {
     // Check if the engine has any API keys configured, if not show the settings overlay
     const host = await window.API.getConfigValue('host');
-    const inferenceAdapter = await window.API.getConfigValue('inferenceAdapter') || 'DreamServer';
+    const inferenceAdapter = await window.API.getConfigValue('inferenceAdapter') || 'vLLM/Llama';
     const error = !INFERENCE_ADAPTERS[inferenceAdapter] ? (
         {
             title: "Inference Adapter Not Found",
@@ -522,7 +522,7 @@ client.ready.then(async () => {
     });
     await client.jsEnginePreloadAllScripts();
 
-    const adapterName = await window.API.getConfigValue('inferenceAdapter') || 'DreamServer';
+    const adapterName = await window.API.getConfigValue('inferenceAdapter') || 'vLLM/Llama';
     const config = await INFERENCE_ADAPTERS[adapterName].buildConfig(window.API.getConfigValue.bind(window.API));
 
     if (config) {

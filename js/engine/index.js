@@ -402,11 +402,6 @@ export class DEngine {
      */
     setInferenceAdapter(adapter) {
         this.inferenceAdapter = adapter;
-
-        // TODO, allow for non grammar supporting adapters
-        if (!this.inferenceAdapter.supportsGrammar()) {
-            throw new Error("Inference adapter does not support grammar generation, which is required in this version of DEngine.");
-        }
     }
 
     /**

@@ -751,7 +751,6 @@ ${nextMessageMustBeInform}
 
     /**
      * @param {string} gear the gear that is running this questioning agent
-     * @param {string} gear the gear that is running this questioning agent
      * @param {{
      *   system: string,
      *   contextInfoBefore: string|null,
@@ -1056,13 +1055,6 @@ ${nextMessageMustBeInform}
     }
 
     /**
-     * @param {Array<{question: string; answer: string;}>} qaList 
-     */
-    buildContextInfoPreviousQuestionsAndAnswers(qaList) {
-        return ("# Facts:\n\n" + qaList.map(qa => `## Question:\n\n${qa.question}\n\n## Answer:\n\n${qa.answer}`).join("\n\n"));
-    }
-
-    /**
      * @param {DECompleteCharacterReference} character 
      * @param {{
      *   description: string,
@@ -1176,14 +1168,6 @@ ${character.name}: This is spoken dialogue — *${character.name} said while ...
 ${this.buildSystemCharacterDescription(character, { description, externalDescription, relationships, expressiveStates, scenario, lore })}
 `
         )
-    }
-
-    supportsGrammar() {
-        return true;
-    }
-
-    supportsParallelRequests() {
-        return false || this.doSupportsParallelRequests;
     }
 
     /**

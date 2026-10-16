@@ -86,7 +86,9 @@ Because the system is not attention based, it doesn't consume tokens.
 
 ## Local Servers
 
-For local servers check out [DreamServer](https://github.com/onzag/de-server), a local server implementation for the DreamEngine protocol, that can be used to run the engine on your own hardware, and connect to it via this client, either in NodeJS or the Electron app client.
+For local servers check out vllm or Llama.cpp and deploy and openAI compatible API server, then point the engine to it.
+
+It is important to have grammar enabled in the server, as the engine uses grammar to keep track of the world state and the characters.
 
 ## Prebuilt Electron App
 
