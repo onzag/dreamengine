@@ -426,19 +426,26 @@ export function convertContentToSimpleList(content, author, storyMaster) {
                 storyMaster: storyMaster,
             });
         } else if (contentPart.type === "dialogue") {
-            let dialogueText = author + ": ";
+            // Reconstruct the authored format: spoken words are plain, action-beat narration
+            // goes back inside asterisks, and voice/sound tags back inside square brackets.
+            // The stored fragments never contain these markers themselves.
+            const pieces = [];
             for (const fragment of contentPart.fragments) {
+                const text = (fragment.text || "").trim();
+                if (!text) {
+                    continue;
+                }
                 if (fragment.type === "narration") {
-                    dialogueText += fragment.text;
+                    pieces.push("*" + text + "*");
                 } else if (fragment.type === "dialogue") {
-                    dialogueText += fragment.text;
+                    pieces.push(text);
                 } else if (fragment.type === "sound") {
-                    dialogueText += "[" + fragment.text + "]";
+                    pieces.push("[" + text + "]");
                 }
             }
             finalList.push({
                 author: author,
-                message: dialogueText,
+                message: author + ": " + pieces.join(" "),
                 storyMaster: storyMaster,
             });
         }

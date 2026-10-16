@@ -674,6 +674,10 @@ export async function talk(engine, character, options) {
         );
 
         // dialogue specific
+        // A dialogue line is spoken words by default; an asterisk toggles into a
+        // third-person narration/action beat (and the next asterisk toggles back out), and
+        // [..] are voice/sound tags. Asterisks are reserved exclusively for narration
+        // transitions, so they are treated as structural delimiters here, not decoration.
         let insideNarration = false;
         let insideSound = false;
         let ignoreFirstNCharactersDialogueOnly = (character.name + ": ").length;
@@ -682,7 +686,7 @@ export async function talk(engine, character, options) {
 
         /**
          * The dialogue fragment currently being streamed into, or null when none is open.
-         * This persists across streamed chunks so that markers ("—", "[", "]") split across
+         * This persists across streamed chunks so that markers ("*", "[", "]") split across
          * chunk boundaries are handled consistently for both the message data and the UI events.
          * @type {DEConversationMessageDialogueFragment | null}
          */
@@ -691,7 +695,7 @@ export async function talk(engine, character, options) {
         /**
          * @returns {"narration" | "dialogue" | "sound"}
          */
-        const currentDialogueType = () => insideNarration ? "narration" : (insideSound ? "sound" : "dialogue");
+        const currentDialogueType = () => insideSound ? "sound" : (insideNarration ? "narration" : "dialogue");
 
         /**
          * Closes the currently open fragment (if any), computing sound info for sound fragments
@@ -750,6 +754,12 @@ export async function talk(engine, character, options) {
             if (!text) {
                 return;
             }
+            // Pure-whitespace narration runs are just empty beats (e.g. a stray `* *` or
+            // `**`); dropping them avoids spurious empty narration fragments. Whitespace in
+            // spoken or sound runs is always preserved.
+            if (type === "narration" && !text.trim()) {
+                return;
+            }
             const fragment = ensureOpenDialogueFragment(type);
             fragment.text += text;
             engine.triggerConversationMessageUpdate(engine.getDEObject(), {
@@ -796,35 +806,37 @@ export async function talk(engine, character, options) {
                         }
                     }
 
-                    // replace all asterisks and quotes with nothing
-                    const textToStream = actualInfoContent.replace(/\*/g, "").replace(/"/g, "");
+                    // Asterisks are the narration delimiter, so they are kept for parsing
+                    // (not stripped); [..] delimit voice/sound tags. Both are consumed as
+                    // markers and never emitted as fragment text.
+                    const textToStream = actualInfoContent;
 
-                    // Persistent character-by-character state machine. "—" toggles narration,
-                    // "[" opens a sound (unless inside narration) and "]" closes it. Marker
-                    // characters are delimiters and are not emitted as text. Runs of plain text
-                    // are streamed into the fragment matching the current mode.
+                    // Persistent character-by-character state machine. An asterisk toggles
+                    // between spoken dialogue (default) and third-person narration beats;
+                    // "[" opens a sound/voice tag and "]" closes it (only while speaking).
                     let run = "";
                     for (let i = 0; i < textToStream.length; i++) {
                         const char = textToStream[i];
-                        if (char === "—") {
+                        if (insideSound) {
+                            if (char === "]") {
+                                appendDialogueRun("sound", run);
+                                run = "";
+                                insideSound = false;
+                                finalizeOpenDialogueFragment();
+                            } else {
+                                run += char;
+                            }
+                        } else if (char === "*") {
                             appendDialogueRun(currentDialogueType(), run);
                             run = "";
                             finalizeOpenDialogueFragment();
                             insideNarration = !insideNarration;
-                            if (insideNarration) {
-                                insideSound = false;
-                            }
                         } else if (char === "[" && !insideNarration) {
                             appendDialogueRun(currentDialogueType(), run);
                             run = "";
                             insideSound = true;
                             // open the sound fragment eagerly so an empty sound still renders
                             ensureOpenDialogueFragment("sound");
-                        } else if (char === "]" && !insideNarration && insideSound) {
-                            appendDialogueRun(currentDialogueType(), run);
-                            run = "";
-                            insideSound = false;
-                            finalizeOpenDialogueFragment();
                         } else {
                             run += char;
                         }

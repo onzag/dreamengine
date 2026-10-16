@@ -214,6 +214,6 @@ export function generateGrammarForVoice(engine, voice, charName, forcedMode) {
     
     return {
         narrative: `root ::= "*" [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] .+`,
-        dialogue: forcedModeValid ? `root ::= ${JSON.stringify(charName + ": [" + forcedMode + "] ")} .+` : `root ::= ${JSON.stringify(charName + ": ")} [^*—] [^*—] [^*—] .+`,
+        dialogue: forcedModeValid ? `root ::= ${JSON.stringify(charName + ": [" + forcedMode + "] ")} .+` : `root ::= ${JSON.stringify(charName + ": ")} [^*] [^*] [^*] .+`,
     };
 }

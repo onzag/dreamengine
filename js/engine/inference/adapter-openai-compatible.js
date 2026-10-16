@@ -109,11 +109,11 @@ function buildNextMessageInstructions(characterName, options, includeThirdPerson
     if (options.narration) {
         instructions.push(`Write the next passage as one paragraph of third-person narration wrapped in asterisks (*). Keep everyone, including ${characterName}, in the third person, and describe ${characterName}'s actions, feelings, and surroundings as an outside observer.`);
     } else {
-        instructions.push(`Write one line spoken aloud by ${characterName} in ${characterName}'s voice, beginning with "${characterName}:".`);
+        instructions.push(`Write one line spoken aloud by ${characterName}, beginning with "${characterName}:". The line is spoken dialogue by default.`);
         if (includeThirdPersonBeat) {
-            instructions.push(`You may interrupt the dialogue with one brief third-person action or attribution wrapped in em dashes, as in: ${characterName}: spoken words — *${characterName} acts* — more spoken words. Do not narrate on a separate line or describe another character's actions, thoughts, or feelings.`);
+            instructions.push(`You may interrupt the spoken dialogue with one brief third-person action beat wrapped in asterisks, as in: ${characterName}: spoken words *${characterName} acts* more spoken words. Asterisks are used EXCLUSIVELY to mark a transition into third-person narration, never for emphasis or bold text. Do not narrate on a separate line or describe another character's actions, thoughts, or feelings.`);
         } else {
-            instructions.push("Use dialogue only, without narration or action beats.");
+            instructions.push("Use dialogue only, without action beats or asterisks.");
         }
         instructions.push(buildVoiceTagInstructions(options));
     }
@@ -130,7 +130,7 @@ export function buildVoiceTagInstructions(options) {
     const instructions = [];
 
     if (options.forcedMode) {
-        instructions.push(`Start the dialogue with the voice mode tag [${options.forcedMode}].\n`);
+        instructions.push(`Start the spoken dialogue with the voice mode tag [${options.forcedMode}].\n`);
     } else {
         if (options.modes.length > 0) {
             instructions.push(`Optionally use one relevant voice mode tag from ${formatVoiceTags(options.modes)}.`);
@@ -1256,8 +1256,9 @@ ${nextMessageMustBeInform}
                     "I", "me", "my", "mine", "myself",
                     "we", "us", "our", "ours", "ourselves",
                 ],
-                // we stay in narration in case of narration full blocks
-                delimiters: options.narration ? [] : ["\u2014"],
+                // dialogue lines are spoken by default; an asterisk flips into a third-person
+                // narration/action beat, so the asterisk is the dialogue<->narration boundary
+                delimiters: options.narration ? [] : ["*"],
                 postRejectedWordInDialogueGrammar: undefined,
                 postRejectedWordInNarrationGrammar: undefined,
                 rejectedWordsInDialogue: /** @type {string[]} */ ([]),
@@ -1464,6 +1465,8 @@ RULE: Reflect on the potential consequences of ${character.name} actions and dec
 RULE: Write all narration and actions in third person, not first person.
 RULE: Use a movie script style format for the story, with character names followed by a colon, and their dialogue or actions following.
 RULE: Spoken dialogue should be done in first person, and start with the character name followed by a colon eg. \`${character.name}: This is spoken dialogue.\`
+RULE: Action beats inside a dialogue line must be wrapped in asterisks and written in third person eg. \`${character.name}: spoken words *${character.name} does something* more spoken words\`
+RULE: Asterisks are used exclusively to mark narration and action beats; never use asterisks for emphasis or bold text.
 RULE: Narration messages are plain without specifying a speaker and written, and in third person eg. \`As ${character.name} hears this...\` written on their own line.${characterRules.length ? `
 
 # Character Rules:
@@ -1483,7 +1486,7 @@ You are currently roleplaying as ${character.name}.
 \`\`\`
 *This is narration*
 
-${character.name}: This is spoken dialogue — *${character.name} said while ...* — this is spoken dialogue
+${character.name}: This is spoken dialogue *${character.name} does something* this is more spoken dialogue
 
 *This is narration*
 \`\`\`
