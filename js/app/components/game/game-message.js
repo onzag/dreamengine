@@ -60,6 +60,16 @@ class GameMessage extends HTMLElement {
         this._resolveCancellation = null;
         /** @type {Promise<void>} */
         this._cancellation = new Promise(resolve => { this._resolveCancellation = resolve; });
+        // Generic "this block has finished presenting" signal that resolves on
+        // EVERY completion path — instant setContent, live feedEvent done, and
+        // pseudostream finish. The pseudostream ordering gate waits on the
+        // predecessor's copy of this, so a staged block queues behind whatever
+        // precedes it even when that predecessor was rendered a different way
+        // (and thus never created a _pseudostreamFinishedPromise).
+        /** @type {(() => void) | null} */
+        this._resolveDoneRendering = null;
+        /** @type {Promise<void>} */
+        this._doneRendering = new Promise(resolve => { this._resolveDoneRendering = resolve; });
 
         /**
          * @type {Array<string>}
@@ -81,8 +91,16 @@ class GameMessage extends HTMLElement {
         this._presentationVersion++;
         this._resolveCancellation?.();
         if (this._pseudostreamState !== 'idle') this._finishPseudostream();
+        // Never let a removed block deadlock a successor waiting on its gate.
+        this._markDoneRendering();
         if (this._audioSrc) URL.revokeObjectURL(this._audioSrc);
         this._audioSrc = null;
+    }
+
+    /** Resolve the generic done-rendering gate exactly once. */
+    _markDoneRendering() {
+        this._resolveDoneRendering?.();
+        this._resolveDoneRendering = null;
     }
 
     attributeChangedCallback() {
@@ -113,7 +131,7 @@ class GameMessage extends HTMLElement {
         if (this._pseudostreamState !== 'idle') return;
         this._piece = piece;
         this._clearContent();
-        if (!this._hasContent()) return;
+        if (!this._hasContent()) { this._markDoneRendering(); return; }
         this._ensureRendered();
         for (const fragment of this._fragments()) {
             if (fragment.type === 'sound') {
@@ -129,6 +147,7 @@ class GameMessage extends HTMLElement {
                 this._appendInstant(fragment.type, fragment.text);
             }
         }
+        this._markDoneRendering();
     }
 
     /** @param {import('../../../engine/index.js').EngineConversationEvent} data */
@@ -171,6 +190,7 @@ class GameMessage extends HTMLElement {
             case 'end-dialogue-block':
             case 'done':
                 this._hideCursor();
+                this._markDoneRendering();
                 break;
         }
     }
@@ -222,8 +242,14 @@ class GameMessage extends HTMLElement {
     pseudostreamPrepare() {
         if (!this._preparationPromise) {
             const previous = this.previousElementSibling;
-            const predecessorPseudoFinished = previous instanceof GameMessage
-                ? previous._pseudostreamFinishedPromise : null;
+            // Gate on the predecessor's GENERIC done-rendering promise rather
+            // than its pseudostream-specific finished promise. The latter is
+            // null for any predecessor that wasn't staged for pseudostreaming
+            // (a live/real-stream block or an instant setContent block), which
+            // would make Promise.all resolve immediately and let this block
+            // animate on top of a predecessor that is still presenting.
+            const predecessorDone = previous instanceof GameMessage
+                ? previous._doneRendering : null;
             const predecessorInitFinished = previous instanceof GameMessage
                 ? previous._pseudoStreamInitPromise || Promise.resolve() : Promise.resolve();
 
@@ -236,7 +262,7 @@ class GameMessage extends HTMLElement {
             }).catch(error => {
                 console.error('GameMessage: voice preparation failed.', error);
             });
-            this._preparationPromise = Promise.all([audio, predecessorPseudoFinished]).then(() => {});
+            this._preparationPromise = Promise.all([audio, predecessorDone]).then(() => {});
         }
         return this._preparationPromise;
     }
@@ -274,6 +300,7 @@ class GameMessage extends HTMLElement {
         this._pseudostreamState = 'finished';
         if (!this._cancelled) this._showReplayButton();
         this._resolvePseudostreamFinished?.();
+        this._markDoneRendering();
         this.dispatchEvent(new CustomEvent('on-pseudostream-finished', { bubbles: true, composed: true }));
     }
 

@@ -1788,26 +1788,15 @@ class GameOverlay extends HTMLElement {
         }
 
         if (data.event === "start-inference") {
-            let hasMessagesPseudostreaming = false;
-            // check if there is an active messages that are pseudostreaming
-            const gameMessages = Array.from(this.root.querySelectorAll('app-game-message'));
-            for (const block of gameMessages) {
-                // @ts-ignore
-                if (block.hasUnfinishedPseudoStream()) {
-                    hasMessagesPseudostreaming = true;
-                    break;
-                }
-            }
-            // that backend must be really really fast if it can start inference before the last message is finished pseudostreaming, but we will handle that case anyway
-            // because it happened in Aes Sedai Absurd 768GB VRAM server, and it might happen in other servers too, so we will handle that case anyway
-            // in that case we will just fallback everything to pseudostreaming, pseudostreaming is absurd fast, if the backend is that fast it can overtake
-            // pseudostreaming, then it is okay to just fallback everything to pseudostreaming
-            this.hadMessagesPseudostreamingAtStartInference = hasMessagesPseudostreaming;
+            /**
+             * @type {Array<{ messageId: string, contentIndex: number }>}
+             */
+            this.messageShouldPseudoStream = [];
         }
 
         // we will always use pseudostream if we are using game voice, or if there are messages that are pseudostreaming
         // because otherwise they will start filling before previous pseudostream messages are finished
-        const willAlwaysUsePseudoStream = !!window.GAME_VOICE || !!this.hadMessagesPseudostreamingAtStartInference;
+        let willUsePseudoStream = !!window.GAME_VOICE;
 
         const needsToAwaitUntilInferenceEndsToTriggerPseudostreamVocalizationProcessing = window.GAME_VOICE?.lowVramMode || false;
         if (data.event === "new-message") {
@@ -1835,7 +1824,13 @@ class GameOverlay extends HTMLElement {
             return;
         }
 
-        if (willAlwaysUsePseudoStream) {
+        if (data.event === "end-dialogue-block" || data.event === "end-narration-block") {
+            if (this.messageShouldPseudoStream && this.messageShouldPseudoStream.findIndex(m => m.messageId === data.messageId && m.contentIndex === data.contentIndex) !== -1) {
+                willUsePseudoStream = true;
+            }
+        }
+
+        if (willUsePseudoStream) {
             // if will always use pseudostream is true, then we will only care of the end-dialogue-block and end-narration-block events since they contain
             // the full content of the block, we will set the data of the pseudostream block
 
@@ -1866,29 +1861,50 @@ class GameOverlay extends HTMLElement {
                     return; // ignore messages from other conversations that we are not tracking
                 }
 
-                if (data.event === "add-dialogue" || data.event === "add-narration" || data.event === "add-sound" || data.event === "end-add-dialogue" || data.event === "end-add-narration" || data.event === "end-add-sound") {
+                if (data.event === "add-dialogue" || data.event === "add-narration" || data.event === "add-sound" || data.event === "end-add-dialogue" || data.event === "end-add-narration" || data.event === "end-add-sound" || data.event === "end-dialogue-block" || data.event === "end-narration-block") {
                     const messageId = data.messageId;
                     const contentIndex = data.contentIndex;
                     const block = this.root.querySelector(`app-game-message[gid="${CSS.escape(messageId)}"][content-index="${contentIndex}"]`);
-                    // @ts-ignore
-                    block.feedEvent(data);
+
+                    // the block might actually not exist, because it was forced into pseudostreaming by a really fast server
+                    // @ts-expect-error
+                    block?.feedEvent(data);
                 } else if (data.event === "add-dialogue-block" || data.event === "add-narration-block") {
+
+                    let hasMessagesPseudostreaming = false;
+                    // check if there is an active messages that are pseudostreaming
+                    const gameMessages = Array.from(this.root.querySelectorAll('app-game-message'));
+                    for (const block of gameMessages) {
+                        // @ts-ignore
+                        if (block.hasUnfinishedPseudoStream()) {
+                            hasMessagesPseudostreaming = true;
+                            break;
+                        }
+                    }
+
                     if (this.lastMessageAdded) {
-                        this._createMessageElement(
-                            this.lastMessageAdded,
-                            data.event === "add-dialogue-block" ? {
-                                fragments: [],
-                                type: "dialogue",
-                                __debug_id: data.__debug_id || '',
-                            } : {
-                                text: "",
-                                type: "narration",
-                                __debug_id: data.__debug_id || '',
-                            },
-                            data.contentIndex,
-                            false,
-                            false,
-                        );
+                        if (!hasMessagesPseudostreaming) {
+                            this._createMessageElement(
+                                this.lastMessageAdded,
+                                data.event === "add-dialogue-block" ? {
+                                    fragments: [],
+                                    type: "dialogue",
+                                    __debug_id: data.__debug_id || '',
+                                } : {
+                                    text: "",
+                                    type: "narration",
+                                    __debug_id: data.__debug_id || '',
+                                },
+                                data.contentIndex,
+                                false,
+                                false,
+                            );
+                        } else {
+                            this.messageShouldPseudoStream?.push({
+                                messageId: data.messageId,
+                                contentIndex: data.contentIndex,
+                            });
+                        }
                     }
                 }
             }
