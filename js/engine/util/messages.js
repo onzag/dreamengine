@@ -155,6 +155,7 @@ export function makeTimestamp(deObject, time, includeNowLabel = true) {
  * @property {string} gid a global id, always available, always unique, can be used to identify a message uniquely
  * @property {DEEmotionNames|null} emotion the primary emotion of the message, provided there is a sender
  * @property {DEEmotionNames[]|null} emotionalRange the emotional range of the message
+ * @property {boolean} untimed whether this message is untimed or not
  */
 
 /**
@@ -257,6 +258,7 @@ export async function* getHistoryForCharacter(engine, character, options) {
             ],
             emotion: null,
             emotionalRange: null,
+            untimed: true,
         };
     };
 
@@ -320,6 +322,7 @@ export async function* getHistoryForCharacter(engine, character, options) {
                     gid: expectedId,
                     emotion: null,
                     emotionalRange: null,
+                    untimed: true,
                 };
                 if (!keepgoing) {
                     return;
@@ -342,6 +345,7 @@ export async function* getHistoryForCharacter(engine, character, options) {
                         gid: message.id,
                         emotion: message.emotion,
                         emotionalRange: message.emotionalRange,
+                        untimed: message.untimed || false,
                     });
                     if (!keepgoing) {
                         return;
@@ -371,6 +375,7 @@ export async function* getHistoryForCharacter(engine, character, options) {
                         gid: `story-master-${state.conversationId}-interaction-info`,
                         emotion: null,
                         emotionalRange: null,
+                        untimed: true,
                     };
                     if (!keepgoing) {
                         return;
@@ -475,7 +480,13 @@ export function convertMessagesToSimpleList(messages) {
  *   includeDebugMessages?: boolean | null,
  *   includeRejectedMessages?: boolean | null,
  *   includeHiddenMessages?: boolean | null,
- *   msgLimit: "LAST_CYCLE" | "LAST_CYCLE_EXCLUDE_CHAR" | "LAST_STORY_FRAGMENT_FROM_CHAR" | "LAST_CYCLE_EXPANDED" | "LAST_CYCLE_EXPANDED_EXCLUDE_CHAR" | "ALL",
+ *   msgLimit:
+ *      "ALL_MESSAGES_SINCE_CHAR_LAST_MESSAGE_INCLUDING_CHAR_LAST_MESSAGE" |
+ *      "ALL_MESSAGES_SINCE_CHAR_LAST_MESSAGE_EXCLUDING_CHAR_LAST_MESSAGE" |
+ *      "ALL_MESSAGES_SINCE_CHAR_2ND_LAST_MESSAGE_INCLUDING_CHAR_2ND_LAST_MESSAGE" |
+ *      "ALL_MESSAGES_SINCE_CHAR_2ND_LAST_MESSAGE_EXCLUDING_CHAR_2ND_LAST_MESSAGE" |
+ *      "ALL_UNTIMED_MESSAGES_UNTIL_FIRST_TIMED_MESSAGE" |
+ *      "ALL",
  *   useExponentialShrinkingSelectiveContextWindowStrategy?: boolean,
  *   enrichedMode?: boolean,
  * }} options
@@ -509,6 +520,7 @@ export async function getHistoryFragmentForCharacter(engine, character, options)
         throw new Error("useExponentialShrinkingSelectiveContextWindowStrategy cannot be used with enrichedMode set to an explicit false");
     }
 
+    // TODO implement useExponentialShrinkingSelectiveContextWindowStrategy
     // if (options.useExponentialShrinkingSelectiveContextWindowStrategy) {
     //     throw new Error("useExponentialShrinkingSelectiveContextWindowStrategy is not yet implemented");
     // }
@@ -524,27 +536,33 @@ export async function getHistoryFragmentForCharacter(engine, character, options)
             if (options.msgLimit === "ALL") {
                 shouldStopAddingMessages = false;
                 shouldAddMessage = true;
-            } else if (options.msgLimit === "LAST_STORY_FRAGMENT_FROM_CHAR") {
-                shouldAddMessage = generator.value.name === character.name;
-                shouldStopAddingMessages = shouldAddMessage;
-            } else if (options.msgLimit === "LAST_CYCLE") {
+            } else if (options.msgLimit === "ALL_MESSAGES_SINCE_CHAR_LAST_MESSAGE_INCLUDING_CHAR_LAST_MESSAGE") {
                 shouldAddMessage = cycleCount === 0;
-            } else if (options.msgLimit === "LAST_CYCLE_EXCLUDE_CHAR") {
+            } else if (options.msgLimit === "ALL_MESSAGES_SINCE_CHAR_LAST_MESSAGE_EXCLUDING_CHAR_LAST_MESSAGE") {
                 shouldAddMessage = cycleCount === 0 && generator.value.name !== character.name;
-            } else if (options.msgLimit === "LAST_CYCLE_EXPANDED") {
+            } else if (options.msgLimit === "ALL_MESSAGES_SINCE_CHAR_2ND_LAST_MESSAGE_INCLUDING_CHAR_2ND_LAST_MESSAGE") {
                 shouldAddMessage = cycleCount === 0 || (cycleCount === 1 && generator.value.name !== character.name);
-            } else if (options.msgLimit === "LAST_CYCLE_EXPANDED_EXCLUDE_CHAR") {
+            } else if (options.msgLimit === "ALL_MESSAGES_SINCE_CHAR_2ND_LAST_MESSAGE_EXCLUDING_CHAR_2ND_LAST_MESSAGE") {
                 shouldAddMessage = (cycleCount === 0 && generator.value.name !== character.name) || (cycleCount === 1 && generator.value.name !== character.name);
+            } else if (options.msgLimit === "ALL_UNTIMED_MESSAGES_UNTIL_FIRST_TIMED_MESSAGE") {
+                shouldAddMessage = generator.value.untimed;
+                shouldStopAddingMessages = !generator.value.untimed;
             }
 
             if (generator.value.name === character.name) {
                 cycleCount++;
             }
 
-            if (options.msgLimit === "LAST_CYCLE" || options.msgLimit === "LAST_CYCLE_EXCLUDE_CHAR") {
+            if (
+                options.msgLimit === "ALL_MESSAGES_SINCE_CHAR_LAST_MESSAGE_INCLUDING_CHAR_LAST_MESSAGE" ||
+                options.msgLimit === "ALL_MESSAGES_SINCE_CHAR_LAST_MESSAGE_EXCLUDING_CHAR_LAST_MESSAGE"
+            ) {
                 shouldStopAddingMessages = cycleCount >= 1;
             }
-            if (options.msgLimit === "LAST_CYCLE_EXPANDED" || options.msgLimit === "LAST_CYCLE_EXPANDED_EXCLUDE_CHAR") {
+            if (
+                options.msgLimit === "ALL_MESSAGES_SINCE_CHAR_2ND_LAST_MESSAGE_INCLUDING_CHAR_2ND_LAST_MESSAGE" ||
+                options.msgLimit === "ALL_MESSAGES_SINCE_CHAR_2ND_LAST_MESSAGE_EXCLUDING_CHAR_2ND_LAST_MESSAGE"
+            ) {
                 shouldStopAddingMessages = cycleCount >= 2;
             }
 

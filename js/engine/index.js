@@ -1030,6 +1030,8 @@ export class DEngine {
                 throw new Error(`Scene with option name ${optionName} not found.`);
             }
             const sceneObject = scene.prepareScene ? await scene.prepareScene(scene) || scene : scene;
+
+            // the scene has its own time, we need to check if it's in the past or future
             if (sceneObject.time) {
                 // check that the time is in the future
                 if (sceneObject.time.time < this.deObject.currentTime.time && this.deObject.world.selectedScene) {
@@ -1037,6 +1039,8 @@ export class DEngine {
                     this.informCycleState("warning", `Scene time ${sceneObject.time.time} is in the past compared to current time ${this.deObject.currentTime.time}. This may cause unexpected behavior.`);
                     await moveTimeForwards();
                 } else {
+                    // the scene time is in the future, we need to move time forwards to that point
+                    // if we don't have a selected scene, it means this is our first scene
                     if (!this.deObject.world.selectedScene) {
                         this.deObject.initialTime = { ...sceneObject.time };
                         this.deObject.currentTime = { ...sceneObject.time };

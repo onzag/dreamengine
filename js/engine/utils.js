@@ -1224,6 +1224,7 @@ export const deEngineUtilsFn = (DE, engine) => ({
                 inSeconds: 0,
             },
             endTime: { ...DE.currentTime },
+            untimed: true,
         }
 
         conversationObject.messages.push(newMessage);

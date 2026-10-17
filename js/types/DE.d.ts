@@ -3146,17 +3146,28 @@ declare interface DEConversationMessage {
     hiddenContent?: string;
     /**
      * The time when the message was sent
+     * 
+     * Note that this time is a estimate, and it can overlap with other messages; use this as a "more or less" time not as an exact time
      */
     startTime: DETimeDescription;
     /**
      * The duration of time it took to do what the message describes
      * in game time
+     * 
+     * Note that this duration is a estimate, and it can overlap with other messages; use this as a "more or less" duration not as an exact duration
      */
     duration: DETimeDurationDescription;
     /**
      * The time when the message action ended
+     * 
+     * Note that this time is a estimate, and it can overlap with other messages; use this as a "more or less" time not as an exact time
      */
     endTime: DETimeDescription;
+    /**
+     * Whether the message is actually untimed, meaning it is unknown whether the message duration and endtime are clear
+     * and they might just be zero
+     */
+    untimed: boolean;
     /**
      * If the message can only be seen by a specific character, their Name
      * eg. for private thoughts, state changes, or secret messages; basically representing the character's internal monologue
@@ -3595,8 +3606,8 @@ declare interface DEUtils {
     newFamilyRelation(char1: string | DECompleteCharacterReference | null, towards: string | DECompleteCharacterReference | null, relation: DEFamilyRelation): [DEFamilyTie | null, DEFamilyTie | null];
     newGlobalInterest(interest: DECharacterInterest);
 
-    addMessage(conversationId: string, message: Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime">, options: { unsafeMode?: boolean } = {}): DEConversationMessage;
-    addMessageIntoTargetConversation(target: string, message: Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime">, options: { teleportParticipants?: boolean, unsafeMode?: boolean, isolation?: "isolate" | "join-target-group" | "merge-groups", ghost?: boolean } = {}): DEConversationMessage;
+    addMessage(conversationId: string, message: Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime" | "untimed">, options: { unsafeMode?: boolean } = {}): DEConversationMessage;
+    addMessageIntoTargetConversation(target: string, message: Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime" | "untimed">, options: { teleportParticipants?: boolean, unsafeMode?: boolean, isolation?: "isolate" | "join-target-group" | "merge-groups", ghost?: boolean } = {}): DEConversationMessage;
 
     /**
      * Broadcast a message, all characters at a given location (and beyond) will pick it up
@@ -3608,7 +3619,7 @@ declare interface DEUtils {
      * @param travelDistance 
      * @param travelDistaceType
      */
-    addMessageBroadcast(message: (distance: number) => Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime">, location: string, travelDistance: number, travelDistaceType: "meters" | "connections"): DEConversationMessage[];
+    addMessageBroadcast(message: (distance: number) => Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime" | "untimed">, location: string, travelDistance: number, travelDistaceType: "meters" | "connections"): DEConversationMessage[];
     addConversation(conversation: Pick<DEConversation, "participants" | "remoteParticipants" | "location" | "pseudoConversation" | "pseudoConversationSummary">, options: { teleportParticipants?: boolean, unsafeMode?: boolean } = {}): DEConversation;
 
     isStrangerTowards(char1: string | DECompleteCharacterReference | null, char2: string | DECompleteCharacterReference | null): boolean;

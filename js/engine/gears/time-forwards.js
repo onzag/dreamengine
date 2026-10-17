@@ -153,14 +153,23 @@ export function timeForwardsToNewTime(engine, time) {
         charState.time = { ...time };
         charState.history.push(currentState);
     }
+
+    // update all conversation messages that are untimed to be timed with the new time
+    for (const conversation of Object.values(engine.deObject.conversations)) {
+        for (const message of conversation.messages) {
+            if (message.untimed) {
+                message.duration = millisecondsToDuration(time.time - message.startTime.time);
+                message.endTime = time;
+            }
+        }
+    }
 }
 
 /**
- * TODO this time forwards method is not very good it doesn't use last message but last story cycle
  * @param {DEngine} engine 
  * @param {DECompleteCharacterReference} character
  */
-export default async function timeForwardsUsingLastMessage(engine, character) {
+export default async function timeForwardsUsingUntimedMessages(engine, character) {
     if (!engine.deObject) {
         throw new Error("DEngine not initialized");
     }
@@ -172,10 +181,12 @@ export default async function timeForwardsUsingLastMessage(engine, character) {
         return [];
     }
 
+    // now this function is meant to be called every time a character sends a message and ends their talk turn
+    // or when the story starts (and since the character shouldn't have spoken yet it will get everything since the beginning of time)
     const lastStoryFragment = (await getHistoryFragmentForCharacter(engine, character, {
         includeDebugMessages: false,
         includeRejectedMessages: false,
-        msgLimit: "LAST_CYCLE",
+        msgLimit: "ALL_UNTIMED_MESSAGES_UNTIL_FIRST_TIMED_MESSAGE",
     })).messages;
 
     const systemMessage = `You are an assistant and story analyst that helps determine how much time has passed in a story based on the last story fragment.`;
@@ -185,7 +196,15 @@ export default async function timeForwardsUsingLastMessage(engine, character) {
         "Vary your estimates naturally - do not default to 1 of any unit. Consider the actual duration implied by the actions described, don't be afraid to estimate or guess if it is unclear and give variety in your responses.",
         "If the story fragment does not provide enough information to determine the time passed, give a rough estimate regardless.",
     ], null);
-    const timePassedGenerator = engine.inferenceAdapter.runQuestioningCustomAgentOn("time-forwards", { system: systemPrompt, contextInfoBefore: null, messages: convertMessagesToSimpleList(lastStoryFragment), contextInfoAfter: null, remarkLastStoryFragmentForAnalysis: true });
+    const timePassedGenerator = engine.inferenceAdapter.runQuestioningCustomAgentOn(
+        "time-forwards",
+        {
+            system: systemPrompt,
+            contextInfoBefore: null,
+            messages: convertMessagesToSimpleList(lastStoryFragment),
+            contextInfoAfter: null,
+        }
+    );
 
     const timePassedResponse = await timePassedGenerator.next();
     if (timePassedResponse.done) {
@@ -237,7 +256,7 @@ export default async function timeForwardsUsingLastMessage(engine, character) {
 
     const totalMilliseconds = numberSide * multiplier;
 
-    console.log(`Time-Forwards: Moving time forward by ${totalMilliseconds} milliseconds based on message from ${character.name}.`);
+    console.log(`Time-Forwards: Moving time forward by ${totalMilliseconds} milliseconds based on untimed messages from ${character.name} perspective.`);
 
     const currentTime = engine.deObject.currentTime;
 
@@ -289,8 +308,14 @@ export default async function timeForwardsUsingLastMessage(engine, character) {
             if (message.conversationId && message.id) {
                 const messageObj = engine.deObject.conversations[message.conversationId].messages.find(m => m.id === message.id);
                 if (messageObj) {
-                    messageObj.duration = duration;
                     messageObj.endTime = timeNow;
+
+                    const messageStartTimeInMs = messageObj.startTime.time;
+                    const messageDurationBasedOnEndTime = messageObj.endTime.time - messageStartTimeInMs;
+                    const duration = millisecondsToDuration(messageDurationBasedOnEndTime);
+                    messageObj.duration = duration;
+                    
+                    messageObj.untimed = false;
                 }
             }
         }

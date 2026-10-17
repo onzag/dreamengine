@@ -875,7 +875,6 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
                 const { done, value } = await reader.read();
                 if (done) break;
                 buffer += decoder.decode(value, { stream: true });
-                console.log(buffer);
 
                 let newlineIdx;
                 while ((newlineIdx = buffer.indexOf('\n')) !== -1) {
@@ -1355,7 +1354,7 @@ ${nextMessageMustBeInform}
         let userTrail;
         if (!remarkLastStoryFragmentForAnalysis) {
             const messagesFormatted = messages.map(m => m.message).join("\n\n");
-            const story = messagesFormatted ? `# Story:\n\n${messagesFormatted}\n\n` : "";
+            const story = messagesFormatted ? `# Story to Analyze:\n\n${messagesFormatted}\n\n` : "";
             userTrail = before + story + after;
         } else {
             // Split at the last message authored by a character (not the story
@@ -1371,9 +1370,9 @@ ${nextMessageMustBeInform}
             const lastMessageFormatted = lastMessage.map(m => m.message).join("\n\n");
 
             if (restMessages.length > 0) {
-                userTrail = before + "# Previous Story:\n" + restMessagesFormatted + "\n\n# Last Story Fragment to Analyze:\n" + lastMessageFormatted + after;
+                userTrail = before + "# Previous Story:\n" + restMessagesFormatted + "\n\n# Last Story Fragment to Analyze (This is what is relevant):\n" + lastMessageFormatted + after;
             } else {
-                userTrail = before + "# Last Story Fragment to Analyze:\n" + lastMessageFormatted + after;
+                userTrail = before + "# Last Story Fragment to Analyze (This is what is relevant):\n" + lastMessageFormatted + after;
             }
         }
 

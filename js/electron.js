@@ -93,7 +93,7 @@ const createWindow = () => {
     win.loadFile('./js/app/index.html')
 
     // Open dev tools with Ctrl+Shift+I (or Cmd+Option+I on macOS)
-    win.webContents.openDevTools();
+    // win.webContents.openDevTools();
 }
 
 const ALLOWED_LIBRARY_PATHS = [
