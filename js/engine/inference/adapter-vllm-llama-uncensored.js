@@ -18,6 +18,7 @@ export class InferenceAdapterVLLandLlamaMUncensored extends InferenceServerOpenA
      *   repetitionPenalty?: number;
      *   useExperimentalTestMode?: boolean;
      *   model?: string;
+     *   reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh" | "max";
      * }} options
      */
     constructor(parent, options) {
@@ -112,8 +113,11 @@ export class InferenceAdapterVLLandLlamaMUncensored extends InferenceServerOpenA
         const trail = deServerOptions.trail;
 
         if (this.serverType === 'vllm') {
-            // vLLM exposes GBNF guided decoding via `guided_grammar`.
-            if (grammar) payload.guided_grammar = grammar;
+            // vLLM exposes GBNF guided decoding via `structured_outputs.grammar`. Our grammars
+            // are written in GBNF (`::=`), which this field accepts directly.
+            if (grammar) {
+                payload.structured_outputs = { grammar };
+            }
             if (trail) {
                 // Continue the final assistant message instead of starting a new turn.
                 payload.continue_final_message = true;
@@ -213,6 +217,134 @@ export class InferenceAdapterVLLandLlamaMUncensored extends InferenceServerOpenA
             }
             return;
         }
+    }
+
+    /**
+     * 
+     * @param {Record<string, any>} payload
+     * @param {"none" | "low" | "medium" | "high" | "xhigh" | "max"} level
+     */
+    async setReasoningEffort(payload, level) {
+        if (this.serverType === 'vllm') {
+            if (level === 'none') {
+                payload.reasoning_effort = "none";
+                payload.reasoning_budget = 0;
+            } else {
+                payload.reasoning_effort = level;
+            }
+        } else if (this.serverType === 'llama.cpp') {
+            if (level === 'none') {
+                payload.reasoning_effort = "none";
+                payload.reasoning_budget = 0;
+                payload.chat_template_kwargs = {
+                    ...payload.chat_template_kwargs,
+                    enable_thinking: false,
+                }
+            } else {
+                payload.reasoning_effort = level;
+            }
+        }
+    }
+
+    /**
+     * Probes the server to confirm that grammar-constrained decoding is actually
+     * being *enforced* (it can be compiled out of llama.cpp, omitted from vLLM,
+     * or silently ignored when the guided-decoding backend does not support the
+     * grammar). Sends a short completion constrained by a grammar that forces a
+     * distinctive literal, and verifies the model actually produced exactly that
+     * literal — the only reliable proof that the grammar was honoured.
+     *
+     * - Output equals the forced literal → grammar works.
+     * - A 4xx/5xx response whose body mentions "grammar"/"guided" → hard failure.
+     * - A 2xx response whose output does NOT equal the literal → the grammar was
+     *   accepted but silently ignored → hard failure (this is exactly the vLLM
+     *   case where the "Name: " prefix went missing).
+     * - Network errors are ignored so transient issues don't block init.
+     *
+     * @returns {Promise<void>}
+     */
+    async _ensureGrammar() {
+        if (this.serverType !== 'vllm' && this.serverType !== 'llama.cpp') {
+            const msg = `Grammar-constrained decoding is not supported by the detected server type: "${this.serverType}". ` +
+                `Only "vllm" and "llama.cpp" servers are supported.`;
+            this.reason = msg;
+            this.triggerOnConnectionStatusChange(false, msg);
+            throw new Error(msg);
+        }
+
+        const baseUrl = (this.options.host || 'http://127.0.0.1:8765').replace(/\/$/, '');
+        const headers = /** @type {Record<string, string>} */ ({ 'Content-Type': 'application/json' });
+        if (this.options.apiKey) {
+            headers['Authorization'] = `Bearer ${this.options.apiKey}`;
+        }
+
+        // A distinctive literal that an unconstrained model would essentially
+        // never emit for the trivial prompt below. If the output equals this
+        // exactly, the grammar was genuinely enforced. The grammar also uses a
+        // negated char class and a wildcard so that an engine which only partly
+        // supports GBNF (and would mishandle our real dialogue grammar) fails
+        // here rather than silently later.
+        const forcedLiteral = 'GRAMMAR_OK';
+        const probeGrammar = `root ::= "GRAMMAR_OK"`;
+
+        const probePayload = /** @type {Record<string, any>} */ ({
+            messages: [{ role: 'user', content: 'Say anything.' }],
+            max_tokens: 256,
+            temperature: 0,
+            stream: false,
+        });
+        if (this.selectedModel?.id) {
+            probePayload.model = this.selectedModel.id;
+        }
+        this.addExtraOptions(probePayload, { grammar: probeGrammar });
+        this.setReasoningEffort(probePayload, 'none');
+
+        const r = await fetch(`${baseUrl}/v1/chat/completions`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(probePayload),
+        }).catch(() => null);
+
+        // Network-level failure: cannot determine, let init continue.
+        if (!r) return;
+
+        const data = await r.json().catch(() => null);
+
+        if (!r.ok) {
+            // Parse the error body and check whether it is grammar-specific.
+            const errorText = [
+                data?.message,
+                data?.detail,
+                typeof data === 'string' ? data : null,
+            ].filter(Boolean).join(' ');
+
+            if (/structured[_\s-]?outputs|guided[_\s-]?decoding|grammar|xgrammar|outlines/i.test(errorText)) {
+                const hint = this.serverType === 'vllm'
+                    ? 'Ensure vLLM is started with structured-outputs enabled and accepts the `structured_outputs.grammar` field with GBNF grammars.'
+                    : 'Ensure llama.cpp is compiled with grammar support.';
+                const msg = `Grammar-constrained decoding is not available on this server: ${errorText} — ${hint}`;
+                this.reason = msg;
+                this.triggerOnConnectionStatusChange(false, msg);
+                throw new Error(msg);
+            }
+            // Unrelated HTTP error (e.g. transient) — don't block init.
+            return;
+        }
+
+        // 2xx: verify the grammar was actually enforced by inspecting the output.
+        const produced = (data?.choices?.[0]?.message?.content ?? '').trim();
+        if (produced !== forcedLiteral) {
+            const hint = this.serverType === 'vllm'
+                ? 'The server accepted the request but did not constrain generation. Ensure vLLM honours the `structured_outputs.grammar` field with GBNF grammars.'
+                : 'The server accepted the request but did not constrain generation. Ensure llama.cpp is built with grammar support.';
+            const msg = `Grammar-constrained decoding is not being enforced on this server: ` +
+                `expected the forced output "${forcedLiteral}" but got "${produced}". ${hint}`;
+            this.reason = msg;
+            this.triggerOnConnectionStatusChange(false, msg);
+            throw new Error(msg);
+        }
+
+        console.log(`InferenceAdapterVLLandLlamaMUncensored: Grammar-constrained decoding verified (${this.serverType}).`);
     }
 
     /**

@@ -45,6 +45,20 @@ export const INFERENCE_ADAPTERS = {
                 type: "string",
                 placeholder: "Enter model name, or leave blank for default",
             },
+            reasoningEffort: {
+                label: "Reasoning Effort",
+                description: "Controls the amount of reasoning effort the model should use. Higher values may produce more accurate or coherent responses, but may also take longer to generate.",
+                default: "medium",
+                type: "select",
+                options: [
+                    { value: "none", label: "None" },
+                    { value: "low", label: "Low" },
+                    { value: "medium", label: "Medium" },
+                    { value: "high", label: "High" },
+                    { value: "xhigh", label: "Extra High" },
+                    { value: "max", label: "Maximum" },
+                ],
+            },
             temperature: {
                 label: "Temperature",
                 description: "Sampling temperature. Higher values produce more varied output.",
@@ -93,6 +107,7 @@ export const INFERENCE_ADAPTERS = {
             repetitionPenalty: await getConfigValue("repetitionPenalty"),
             useExperimentalTestMode: await getConfigValue("useExperimentalTestMode") || false,
             model: await getConfigValue("model"),
+            reasoningEffort: await getConfigValue("reasoningEffort") || "medium",
         }),
         buildConfig: async (getConfigValue) => {
             const host = await getConfigValue("host");
@@ -108,6 +123,7 @@ export const INFERENCE_ADAPTERS = {
                 repetitionPenalty: await getConfigValue("repetitionPenalty"),
                 useExperimentalTestMode: await getConfigValue("useExperimentalTestMode") || false,
                 model: await getConfigValue("model"),
+                reasoningEffort: await getConfigValue("reasoningEffort") || "medium",
             };
         },
         checkConfig: async (getConfigValue) => {

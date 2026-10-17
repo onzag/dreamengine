@@ -211,13 +211,18 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
      * @param {{
      *   host?: string;
      *   apiKey?: string;
-     *   model?: string;
+     *   temperature?: number;
+     *   topP?: number;
+     *   topK?: number;
+     *   repetitionPenalty?: number;
      *   useExperimentalTestMode?: boolean;
+     *   model?: string;
+     *   reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh" | "max";
      * }} options
      */
     constructor(parent, options) {
         super(parent);
-        /** @type {{ host?: string; apiKey?: string; model?: string; useExperimentalTestMode?: boolean; }} */
+        /** @type {{ host?: string; apiKey?: string; temperature?: number; topP?: number; topK?: number; repetitionPenalty?: number; model?: string; useExperimentalTestMode?: boolean; reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh" | "max"; }} */
         this.options = options;
 
         /**
@@ -238,7 +243,7 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
 
         /**
          * Detected server flavour. Populated during initialize().
-         * @type {"vllm" | "llama.cpp" | null}
+         * @type {"vllm" | "llama.cpp" | "unknown" | null}
          */
         this.serverType = null;
 
@@ -332,6 +337,7 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
      *   topK?: number,
      *   repetitionPenalty?: number,
      *   maxTokens?: number,
+     *   reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh" | "max",
      * }} standardOpenAIOptions
      * @param {{
      *   maxParagraphs?: number,
@@ -404,6 +410,7 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
             // is continued — which differs between vLLM and llama.cpp). This base
             // implementation is intentionally unaware of the concrete server.
             this.addExtraOptions(payload, { ...deServerOptions, trail, grammar });
+            this.setReasoningEffort(payload, standardOpenAIOptions.reasoningEffort || "medium");
 
             const controller = new AbortController();
 
@@ -868,6 +875,7 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
                 const { done, value } = await reader.read();
                 if (done) break;
                 buffer += decoder.decode(value, { stream: true });
+                console.log(buffer);
 
                 let newlineIdx;
                 while ((newlineIdx = buffer.indexOf('\n')) !== -1) {
@@ -876,13 +884,28 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
                     if (!line.startsWith('data:')) continue;
                     const data = line.slice('data:'.length).trim();
                     if (data === '[DONE]') return;
+                    let json;
                     try {
-                        const json = JSON.parse(data);
-                        const delta = json.choices?.[0]?.delta?.content;
-                        if (typeof delta === 'string' && delta.length > 0) {
-                            yield delta;
-                        }
-                    } catch { /* ignore malformed keep-alive lines */ }
+                        json = JSON.parse(data);
+                    } catch {
+                        // ignore malformed keep-alive lines
+                        continue;
+                    }
+                    // Some OpenAI-compatible servers (vLLM, llama.cpp) stream an
+                    // error object with a 200 status instead of failing the HTTP
+                    // request. Surface it as a thrown error rather than silently
+                    // ending the stream (which looks like a frozen/empty answer).
+                    if (json.error) {
+                        const err = json.error;
+                        const message = typeof err === 'string' ? err : (err.message || JSON.stringify(err));
+                        const code = typeof err === 'object' && err.code != null ? ` (code ${err.code})` : '';
+                        const type = typeof err === 'object' && err.type ? `${err.type}: ` : '';
+                        throw new Error(`Chat completion stream returned an error${code}: ${type}${message || '<empty message>'}`);
+                    }
+                    const delta = json.choices?.[0]?.delta?.content;
+                    if (typeof delta === 'string' && delta.length > 0) {
+                        yield delta;
+                    }
                 }
             }
         } finally {
@@ -903,6 +926,15 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
      * @returns {void}
      */
     addExtraOptions(_payload, _deServerOptions) {
+        // no-op by default
+    }
+
+    /**
+     * 
+     * @param {Record<string, any>} payload
+     * @param {"none" | "low" | "medium" | "high" | "xhigh" | "max"} effort
+     */
+    setReasoningEffort(payload, effort) {
         // no-op by default
     }
 
@@ -1049,6 +1081,8 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
         // ── Step 5: detect server flavour ──
         this.serverType = await this._detectServerType(baseUrl, headers);
 
+        await this._ensureGrammar();
+
         // ── Step 6: resolve the model's context window size ──
         await this._resolveContextWindowSize(baseUrl, headers);
 
@@ -1056,6 +1090,10 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
         this.reason = null;
         this.triggerOnConnectionStatusChange(true);
         console.log(`InferenceServerOpenAICompatible: Connected to ${baseUrl}, server type: ${this.serverType}, context window: ${this.contextWindowSize}`);
+    }
+
+    async _ensureGrammar() {
+        // no-op by default; subclasses may override to fetch grammar metadata from the server
     }
 
     /**
@@ -1081,7 +1119,7 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
      *
      * @param {string} baseUrl
      * @param {Record<string, string>} headers
-     * @returns {Promise<"vllm" | "llama.cpp">}
+     * @returns {Promise<"vllm" | "llama.cpp" | "unknown">}
      */
     async _detectServerType(baseUrl, headers) {
         // llama.cpp server exposes /props with vocab / context-window metadata.
@@ -1103,10 +1141,8 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
         } catch { /* not vllm */ }
 
         // Add more adapters here as needed
-
-        const msg = `Server at ${baseUrl} could not be identified as vLLM or llama.cpp`;
-        this.triggerOnConnectionStatusChange(false, msg);
-        throw new Error(msg);
+        console.log('InferenceServerOpenAICompatible: Server type unknown');
+        return 'unknown';
     }
 
     /**
@@ -1126,16 +1162,15 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
     /**
      * Collects the standard OpenAI sampling options from the adapter options.
      *
-     * @returns {{ temperature?: number, topP?: number, topK?: number, repetitionPenalty?: number }}
+     * @returns {{ temperature?: number, topP?: number, topK?: number, repetitionPenalty?: number, reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh" | "max" }} The standard OpenAI sampling options.
      */
     _standardOpenAIOptions() {
-        const o = /** @type {Record<string, any>} */ (this.options);
-        /** @type {{ temperature?: number, topP?: number, topK?: number, repetitionPenalty?: number }} */
         const out = {};
-        if (typeof o.temperature === 'number') out.temperature = o.temperature;
-        if (typeof o.topP === 'number') out.topP = o.topP;
-        if (typeof o.topK === 'number') out.topK = o.topK;
-        if (typeof o.repetitionPenalty === 'number') out.repetitionPenalty = o.repetitionPenalty;
+        if (typeof this.options.temperature === 'number') out.temperature = this.options.temperature;
+        if (typeof this.options.topP === 'number') out.topP = this.options.topP;
+        if (typeof this.options.topK === 'number') out.topK = this.options.topK;
+        if (typeof this.options.repetitionPenalty === 'number') out.repetitionPenalty = this.options.repetitionPenalty;
+        if (typeof this.options.reasoningEffort === 'string') out.reasoningEffort = this.options.reasoningEffort;
         return out;
     }
 

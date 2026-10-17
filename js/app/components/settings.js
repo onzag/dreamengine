@@ -699,7 +699,7 @@ class Settings extends HTMLElement {
      * @returns {string}
      */
     renderAdapterSetting(dataLocation, setting) {
-        if (!setting || (setting.type !== "string" && setting.type !== "boolean" && setting.type !== "number")) {
+        if (!setting || (setting.type !== "string" && setting.type !== "boolean" && setting.type !== "number" && setting.type !== "select")) {
             console.warn(`Unsupported adapter setting type for ${dataLocation}.`);
             return '';
         }
@@ -713,6 +713,24 @@ class Settings extends HTMLElement {
             title="${setting.description}"
             input-data-location="${dataLocation}"${defaultValue}
         ></app-overlay-input-boolean>`;
+        }
+
+        if (setting.type === "select") {
+            const options = Array.isArray(setting.options) ? setting.options : [];
+            const values = options.map(opt => opt.value);
+            const labels = options.map(opt => opt.label ?? opt.value);
+            const descriptions = options.map(opt => opt.description ?? '');
+            const defaultValue = setting.default !== undefined
+                ? ` input-default-value="${setting.default}"`
+                : '';
+            return `<app-overlay-select
+                label="${setting.label}"
+                title="${setting.description}"
+                input-data-location="${dataLocation}"
+                input-options='${JSON.stringify(values)}'
+                input-options-labels='${JSON.stringify(labels)}'
+                input-options-descriptions='${JSON.stringify(descriptions)}'${defaultValue}
+            ></app-overlay-select>`;
         }
 
         const placeholder = setting.placeholder

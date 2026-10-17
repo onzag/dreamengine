@@ -201,27 +201,27 @@ engine.exports = {
                 sounds: [
                     {
                         label: "sigh",
-                        replacement: `— {{char}} sighs softly —`,
+                        replacement: `{{char}} sighs softly`,
                     },
                     {
                         label: "laugh",
-                        replacement: `— {{char}} laughs —`,
+                        replacement: `{{char}} laughs`,
                     },
                     {
                         label: "moan",
-                        replacement: `— {{char}} moans softly —`,
+                        replacement: `{{char}} moans softly`,
                     },
                     {
                         label: "groan",
-                        replacement: `— {{char}} groans softly —`,
+                        replacement: `{{char}} groans softly`,
                     },
                     {
                         label: "grunt",
-                        replacement: `— {{char}} grunts —`,
+                        replacement: `{{char}} grunts`,
                     },
                     {
                         label: "whimper",
-                        replacement: `— {{char}} whimpers —`,
+                        replacement: `{{char}} whimpers`,
                     }
                 ],
             })
