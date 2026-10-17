@@ -195,9 +195,16 @@ export function generateGrammarForVoice(engine, voice, charName, forcedMode) {
         throw new Error("DEngine must be initialized to create grammar");
     }
 
+    // Portable "any character" tail. We avoid the GBNF `.` wildcard / `.+`
+    // because vLLM's structured-outputs backend (xgrammar) does not support it
+    // and crashes compiling the grammar (surfaced as a streamed HTTP 500). Both
+    // xgrammar and llama.cpp support negated classes and a newline literal, so
+    // "any char" is expressed as `[^\n] | "\n"`.
+    const anyRule = `ANY ::= [^\\n] | "\\n"`;
+
     if (voice?.mute) {
         return {
-            narrative: `root ::= "*" [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] .+`,
+            narrative: `root ::= "*" [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] ANY+\n${anyRule}`,
             dialogue: null,
         };
     }
@@ -213,7 +220,9 @@ export function generateGrammarForVoice(engine, voice, charName, forcedMode) {
     }
     
     return {
-        narrative: `root ::= "*" [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] .+`,
-        dialogue: forcedModeValid ? `root ::= ${JSON.stringify(charName + ": [" + forcedMode + "] ")} .+` : `root ::= ${JSON.stringify(charName + ": ")} [^*] [^*] [^*] .+`,
+        narrative: `root ::= "*" [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] [^\\n] ANY+\n${anyRule}`,
+        dialogue: forcedModeValid
+            ? `root ::= ${JSON.stringify(charName + ": [" + forcedMode + "] ")} ANY+\n${anyRule}`
+            : `root ::= ${JSON.stringify(charName + ": ")} [^*] [^*] [^*] ANY+\n${anyRule}`,
     };
 }

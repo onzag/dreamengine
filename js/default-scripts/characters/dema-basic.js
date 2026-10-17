@@ -205,7 +205,7 @@ engine.exports = {
                     },
                     {
                         label: "laugh",
-                        replacement: `{{char}} laughs`,
+                        replacement: ["Hahaha!", "Hehehe!", "Bahaha!", "Hohoho!"],
                     },
                     {
                         label: "moan",

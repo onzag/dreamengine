@@ -199,6 +199,10 @@ class GameMessage extends HTMLElement {
         return this._pseudostreamState === 'staged';
     }
 
+    hasUnfinishedPseudoStream() {
+        return this.getAttribute("pseudostream") === "true" && this._pseudostreamState !== 'finished';
+    }
+
     /** Start once; every caller receives the same completion promise. */
     /**
      * @returns {Promise<void>}
@@ -535,23 +539,27 @@ class GameMessage extends HTMLElement {
         const replacementIndex = numericSeed % replacementsAsArray.length;
         const replacement = replacementsAsArray[replacementIndex];
 
-        // if the replacement is empty, add a space
+        // if the replacement is empty or null, we will use the label of the sound as the text to display
         if (!replacement || !replacement.trim()) {
             if (returnForDrip) return { type: 'dialogue', text: soundInfoAsVoiceSound.label || 'unknown' };
-            this._appendInstant('dialogue', soundInfoAsVoiceSound.label || 'unknown', true);
+            this._appendInstant('dialogue', soundInfoAsVoiceSound.label || 'unknown', "direct");
             return { type: 'dialogue', text: soundInfoAsVoiceSound.label || 'unknown' };
         }
 
         // append as it is and as dialogue
         if (returnForDrip) return { type: 'dialogue', text: replacement };
-        this._appendInstant('dialogue', replacement, true);
+        this._appendInstant(
+            'dialogue',
+            replacement.replace("{{char}}", this.getAttribute('sender-name') || ''),
+            replacement.includes("{{char}}") ? 'narration-type' : "dialogue-type"
+        );
         return { type: 'dialogue', text: replacement };
     }
 
     /**
      * @param {'narration' | 'dialogue'} mode
      * @param {string} text
-     * @param {boolean} markAsSound - Whether to mark this text as a sound
+     * @param {"direct" | "dialogue-type" | "narration-type" | false} markAsSound - Whether to mark this text as a sound
      */
     _appendInstant(mode, text, markAsSound = false) {
         text = (text || '');
@@ -649,7 +657,7 @@ class GameMessage extends HTMLElement {
     /**
      * @param {HTMLElement} target
      * @param {string} text
-     * @param {boolean} markAsSound
+     * @param {"direct" | "dialogue-type" | "narration-type" | false} markAsSound
      */
     _writeInstant(target, text, markAsSound = false) {
         // // check if the previous element (if any in this target) is a sound type, if so, we will add a space before the new text to separate it from the previous sound
@@ -664,6 +672,8 @@ class GameMessage extends HTMLElement {
         const span = document.createElement('span');
         span.className = 'token-instant';
         if (markAsSound) span.classList.add('token-sound');
+        if (markAsSound === 'dialogue-type') span.classList.add('token-sound-dialogue');
+        if (markAsSound === 'narration-type') span.classList.add('token-sound-narration');
         span.textContent = text;
         target.appendChild(span);
         this._scrollParent();

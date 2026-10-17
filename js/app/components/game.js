@@ -1580,7 +1580,7 @@ class GameOverlay extends HTMLElement {
 
             this.lastMessageGid = history[history.length - 1].gid;
             this.firstMessageGid = history[0].gid;
-            
+
             /**
              * @type {string | null}
              */
@@ -1787,7 +1787,28 @@ class GameOverlay extends HTMLElement {
             }
         }
 
-        const willAlwaysUsePseudostream = !!window.GAME_VOICE;
+        if (data.event === "start-inference") {
+            let hasMessagesPseudostreaming = false;
+            // check if there is an active messages that are pseudostreaming
+            const gameMessages = Array.from(this.root.querySelectorAll('app-game-message'));
+            for (const block of gameMessages) {
+                // @ts-ignore
+                if (block.hasUnfinishedPseudoStream()) {
+                    hasMessagesPseudostreaming = true;
+                    break;
+                }
+            }
+            // that backend must be really really fast if it can start inference before the last message is finished pseudostreaming, but we will handle that case anyway
+            // because it happened in Aes Sedai Absurd 768GB VRAM server, and it might happen in other servers too, so we will handle that case anyway
+            // in that case we will just fallback everything to pseudostreaming, pseudostreaming is absurd fast, if the backend is that fast it can overtake
+            // pseudostreaming, then it is okay to just fallback everything to pseudostreaming
+            this.hadMessagesPseudostreamingAtStartInference = hasMessagesPseudostreaming;
+        }
+
+        // we will always use pseudostream if we are using game voice, or if there are messages that are pseudostreaming
+        // because otherwise they will start filling before previous pseudostream messages are finished
+        const willAlwaysUsePseudoStream = !!window.GAME_VOICE || !!this.hadMessagesPseudostreamingAtStartInference;
+
         const needsToAwaitUntilInferenceEndsToTriggerPseudostreamVocalizationProcessing = window.GAME_VOICE?.lowVramMode || false;
         if (data.event === "new-message") {
             if (data.conversationId !== this.lastConversationAdded?.id) {
@@ -1799,6 +1820,7 @@ class GameOverlay extends HTMLElement {
             this.lastMessageAdded = data.obj;
 
             if (this.lastMessageAdded.content && this.lastMessageAdded.content.length > 0) {
+                // normally there won't be any pieces when the new-message event is received, but if there are pieces then we will create the message element for each piece
                 for (const piece of this.lastMessageAdded.content) {
                     this._createMessageElement(
                         this.lastMessageAdded,
@@ -1813,7 +1835,7 @@ class GameOverlay extends HTMLElement {
             return;
         }
 
-        if (willAlwaysUsePseudostream) {
+        if (willAlwaysUsePseudoStream) {
             // if will always use pseudostream is true, then we will only care of the end-dialogue-block and end-narration-block events since they contain
             // the full content of the block, we will set the data of the pseudostream block
 

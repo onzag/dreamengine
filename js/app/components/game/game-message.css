@@ -265,3 +265,36 @@
     display: inline-block;
     margin: 0 0.3vh;
 }
+
+/* Onomatopoeia inside dialogue — no yellow fill, flanked by thin lines. */
+.token-sound.token-sound-dialogue {
+    background: none;
+    border: none;
+    border-radius: 0;
+    color: beige;
+    position: relative;
+}
+
+.token-sound.token-sound-dialogue::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 0.5vh;
+    background: rgba(255, 215, 140, 0.45);
+    pointer-events: none;
+}
+
+/* Onomatopoeia inside narration — styled like narration prose (amber italic). */
+.token-sound.token-sound-narration {
+    background: none;
+    border-top: 1.5px solid rgba(255, 215, 140, 0.45);
+    border-bottom: 1.5px solid rgba(255, 215, 140, 0.45);
+    border-left: none;
+    border-right: none;
+    border-radius: 0;
+    padding: 0 0.3vh;
+    color: rgba(255, 224, 165, 0.86);
+    letter-spacing: 0.04em;
+}

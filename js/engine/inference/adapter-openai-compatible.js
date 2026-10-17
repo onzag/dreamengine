@@ -109,11 +109,11 @@ function buildNextMessageInstructions(characterName, options, includeThirdPerson
     if (options.narration) {
         instructions.push(`Write the next passage as one paragraph of third-person narration wrapped in asterisks (*). Keep everyone, including ${characterName}, in the third person, and describe ${characterName}'s actions, feelings, and surroundings as an outside observer.`);
     } else {
-        instructions.push(`Write one line spoken aloud by ${characterName}, beginning with "${characterName}:". The line is spoken dialogue by default.`);
+        instructions.push(`Write EXACTLY ONE line spoken aloud by ${characterName}, beginning with "${characterName}:". Write that single line only and then stop: never write "${characterName}:" a second time, never start another dialogue line, and never continue onto a new line.`);
         if (includeThirdPersonBeat) {
-            instructions.push(`You may interrupt the spoken dialogue with one brief third-person action beat wrapped in asterisks, as in: ${characterName}: spoken words *${characterName} acts* more spoken words. Asterisks are used EXCLUSIVELY to mark a transition into third-person narration, never for emphasis or bold text. Do not narrate on a separate line or describe another character's actions, thoughts, or feelings.`);
+            instructions.push(`You may interrupt the spoken dialogue with one brief third-person action beat wrapped in asterisks, as in: ${characterName}: spoken words *${characterName} acts* more spoken words. Asterisks are used EXCLUSIVELY to wrap a complete third-person action sentence, never for emphasis, bold text, pauses, or sound effects. Short cues such as pauses or sounds are written as bracket tags (e.g. [pause]), never with asterisks. Do not narrate on a separate line or describe another character's actions, thoughts, or feelings.`);
         } else {
-            instructions.push("Use dialogue only, without action beats or asterisks.");
+            instructions.push("Use spoken dialogue only, without action beats or asterisks. Pauses and sounds are still written as bracket tags such as [pause], never with asterisks.");
         }
         instructions.push(buildVoiceTagInstructions(options));
     }
@@ -157,7 +157,7 @@ export function buildVoiceTagInstructions(options) {
         instructions.push("Do not use [sound tags] as they are not applicable in the next dialogue.");
     }
 
-    instructions.push("Use [pause] to indicate a pause in speech, you can use [short pause], [medium pause], or [long pause] to indicate the length of the pause.");
+    instructions.push("To indicate a pause in speech, write the bracket tag [pause] (or [short pause], [medium pause], [long pause] for length). Always write pauses as bracket tags — never as *pause* with asterisks, since asterisks are reserved for third-person action sentences.");
 
     return instructions.join("\n");
 }
@@ -1281,7 +1281,11 @@ ${nextMessageMustBeInform}
             maxCharacters: 200,
             maxCharactersCutOnDot: true,
             maxSafetyCharacters: 1000,
-            stopAt: /** @type {string[]} */ ([]),
+            // For a spoken dialogue turn, stop at the first newline so the model
+            // can only produce a single line and cannot begin a second
+            // "<name>:" dialogue line beneath the current one. Narration is a
+            // paragraph and is bounded by maxParagraphs instead.
+            stopAt: /** @type {string[]} */ (options.narration ? [] : ["\n"]),
             stopAfter: /** @type {string[]} */ ([]),
             trail: assistantPromptTrail,
             grammar: grammar || undefined,
