@@ -54,7 +54,8 @@ const createWindow = () => {
             const inferenceHost = config.host || '';
             try {
                 const hostUrl = new URL(inferenceHost);
-                if (request.hostname === hostUrl.hostname) {
+                const embeddingHostUrl = new URL(config.embeddingHost || '');
+                if (request.hostname === hostUrl.hostname || request.hostname === embeddingHostUrl.hostname) {
                     callback(0); // trust self-signed cert for inference server
                     return;
                 }

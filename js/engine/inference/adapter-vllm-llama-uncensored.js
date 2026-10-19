@@ -11,13 +11,22 @@ export class InferenceAdapterVLLandLlamaMUncensored extends InferenceServerOpenA
      * @param {DEngine} parent
      * @param {{
      *   host?: string;
+     *   embeddingHost?: string;
      *   apiKey?: string;
+     *   embeddingApiKey?: string;
      *   temperature?: number;
      *   topP?: number;
      *   topK?: number;
      *   repetitionPenalty?: number;
+     *   analysisTemperature?: number;
+     *   analysisTopP?: number;
+     *   analysisTopK?: number;
+     *   analysisRepetitionPenalty?: number;
+     *   analysisReasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh" | "max";
      *   useExperimentalTestMode?: boolean;
      *   model?: string;
+     *   analysisModel?: string;
+     *   embeddingModel?: string;
      *   reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh" | "max";
      * }} options
      */

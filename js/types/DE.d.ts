@@ -4,6 +4,11 @@ declare type DECharacterTier = "insect" | "critter" | "human" | "apex" | "street
 
 declare interface DEMinimalCharacterReference {
     /**
+     * The unique identifier of the character, this is used to identify the character in the world and in the story, it should be unique across all characters
+     * and should not be changed once set, as it is used to identify the character in the world and in the story
+     */
+    id: string;
+    /**
      * Arbitrary metadata attached to the character
      */
     metadata: Record<string, any>;
@@ -11,6 +16,10 @@ declare interface DEMinimalCharacterReference {
      * Name of the character
      */
     name: Readonly<string>;
+    /**
+     * The name of the character when they are unknown to the player, this is used for the player to refer to the character when they are unknown, for example "Mysterious Stranger" or "Unknown Person"
+     */
+    unknownName: Readonly<string>;
     /**
      * Biological sex of the character
      */
@@ -2105,13 +2114,52 @@ declare interface DEUndoableShift {
     recoveryRate: number;
 }
 
+declare interface DECharacterBondIdentity {
+    /**
+     * The character name that they are known as, for example, if the character is known as "Alice" to the other character, this will be "Alice"
+     * it also might be different if the character is known as a nickname or a title, for example, if the character is known as "The Great Detective" to the other character, this will be "The Great Detective"
+     */
+    name: string;
+    /**
+     * Whether the name is a nickname or a title, if true, the name is a nickname or a title, if false, the name is the character's real name
+     */
+    nickname?: boolean;
+    /**
+     * Whether this is the primary name this character uses to refer to the other character, if true, this is the primary name, if false, this is a secondary name
+     */
+    primary?: boolean;
+}
+
 declare interface DESingleBondDescription {
+    /**
+     * The character id that this bond is towards
+     */
     towards: string;
+    /**
+     * First dimension whether they are deemed a stranger or not
+     */
     stranger: boolean;
+    /**
+     * The bond value, a number from -100 to 100, where negative values represent negative bonds and positive values represent positive bonds
+     */
     bond: number;
+    /**
+     * The secondary bond, a number from 0 to 100, usually representing romance or sexual interest, where 0 means no interest and 100 means maximum interest
+     */
     bond2: number;
-    knowsName: boolean;
+    /**
+     * The names that the character knows the other character as, depends on introduction and how they introduce themselves
+     */
+    knowsAs: DECharacterBondIdentity[];
+    /**
+     * The time when this bond was created, this is used to determine how long the bond has been active and how it has evolved over time
+     */
     createdAt: DETimeDescription;
+    /**
+     * Undoable shifts are used to keep track of strong bond changes that are subject to a condition and can be undone
+     * for example if they were forced to do something against their will and they later learn they were being mentally manipulated by a 3rd party, they may undo the bond change keeping
+     * it back to the original state, or at least partially, depending on the recovery rate
+     */
     undoableShifts: {
         [shiftId: string]: DEUndoableShift;
     };
@@ -2119,12 +2167,24 @@ declare interface DESingleBondDescription {
     /**
      * A name for the relationship that overrides the default one
      * for example, if they got married the relationship can be "spouse" instead of "friend" or "lover"
+     * 
+     * usually the default relationship names comes from the system that is used, and this allows overriding the type
+     * of relationship that the character has with the other character, for example, if they are married, the relationship name can be "spouse" instead of "friend" or "lover"
      */
     relationshipNameOverride?: DEStringTemplateCharAndOther | null;
 }
 
+/**
+ * The bonds of a character towards other characters, this is a map of character ids to bond descriptions
+ */
 declare interface DEBondDescription {
+    /**
+     * active bonds are the ones that are currently active and being used by the character
+     */
     active: Array<DESingleBondDescription>;
+    /**
+     * Ex bonds represent bonds that existed with dead characters, characters that have been removed from the story and so on, these are kept for historical purposes and to allow the character to remember them and their relationship with them
+     */
     ex: Array<DESingleBondDescription>;
 }
 
@@ -2294,6 +2354,14 @@ declare interface DEItemCommunicationDeviceProperties {
 }
 
 declare interface DEItem {
+    /**
+     * A unique global identifier for this item, it should be unique across all items in the world, and should not change over time, even if the item is destroyed or removed from the world, this id should remain the same for that item
+     * a transformation or breaking allows for a new id since the item was transformed or broken into a new item, but the original item id should remain the same
+     */
+    id: string;
+    /**
+     * The name of the item, this is what the character will refer to when talking about it, and what the character will use to identify it in their inventory or when interacting with it
+     */
     name: string;
     volumeLiters: number;
     weightKg: number;
@@ -2447,16 +2515,13 @@ declare interface DEItem {
      * the ground
      */
     maxVolumeOnTopLiters: number | null;
-    /**
-     * The amount of this item in the stack
-     */
-    amount: number;
 
     /**
      * The id of the character that owns this item, null if no owner
      * this is useful for items that are owned by specific characters
      */
     owner: string | null;
+
     /**
      * If this item is a communication device, these are its properties
      * otherwise null or not specified
@@ -3596,462 +3661,451 @@ declare interface DENarrationStyle {
 }
 
 declare interface DEUtils {
-    newLocation(name: string, definition: DELocationDefinition): DELocationDefinition;
-    newCharacter(definition: DECompleteCharacterReference): DECompleteCharacterReference;
-    newConnection(definition: DEConnection): DEConnection;
-    createStateInAllCharacters(stateName: string, stateDefinition: DECharacterStateDefinition): DECharacterStateDefinition;
-    defineStateInCharacter(character: string | DECompleteCharacterReference | null, stateName: string, stateDefinition: DECharacterStateDefinition): DECharacterStateDefinition | null;
-    newBond(char1: string | DECompleteCharacterReference | null, towards: string | DECompleteCharacterReference | null, bondDefinition: Omit<DESingleBondDescription, "towards">, options?: { forceOverride: boolean }): DESingleBondDescription | null;
-    newMutualBond(char1: string | DECompleteCharacterReference | null, char2: string | DECompleteCharacterReference | null, bondDefinition: Omit<DESingleBondDescription, "towards">): [DESingleBondDescription | null, DESingleBondDescription | null];
-    newFamilyRelation(char1: string | DECompleteCharacterReference | null, towards: string | DECompleteCharacterReference | null, relation: DEFamilyRelation): [DEFamilyTie | null, DEFamilyTie | null];
-    newGlobalInterest(interest: DECharacterInterest);
+    items: {
+        newItem(definition: Omit<DEItemDescription, "id">): DEItemDescription;
+    },
+    world: {
+        newLocation(name: string, definition: DELocationDefinition): DELocationDefinition;
+        newConnection(definition: DEConnection): DEConnection;
+        defineGlobalInterest(interest: DECharacterInterest);
 
-    addMessage(conversationId: string, message: Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime" | "untimed">, options: { unsafeMode?: boolean } = {}): DEConversationMessage;
-    addMessageIntoTargetConversation(target: string, message: Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime" | "untimed">, options: { teleportParticipants?: boolean, unsafeMode?: boolean, isolation?: "isolate" | "join-target-group" | "merge-groups", ghost?: boolean } = {}): DEConversationMessage;
-
-    /**
-     * Broadcast a message, all characters at a given location (and beyond) will pick it up
-     * 
-     * The sender is not deemed a participant
-     * 
-     * @param message a function, modify what the message received is based on the distance
-     * @param location the location where the message is broadcasted
-     * @param travelDistance 
-     * @param travelDistaceType
-     */
-    addMessageBroadcast(message: (distance: number) => Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime" | "untimed">, location: string, travelDistance: number, travelDistaceType: "meters" | "connections"): DEConversationMessage[];
-    addConversation(conversation: Pick<DEConversation, "participants" | "remoteParticipants" | "location" | "pseudoConversation" | "pseudoConversationSummary">, options: { teleportParticipants?: boolean, unsafeMode?: boolean } = {}): DEConversation;
-
-    isStrangerTowards(char1: string | DECompleteCharacterReference | null, char2: string | DECompleteCharacterReference | null): boolean;
-    isAttractedTo(char1: string | DECompleteCharacterReference | null, potentialAttractiveChar2: string | DECompleteCharacterReference | null): boolean;
-    isAttractedToWithLevel(char1: string | DECompleteCharacterReference | null, potentialAttractiveChar2: string | DECompleteCharacterReference | null): "slight" | "moderate" | "strong" | false;
-    isAttractedToWithLevelAsNumber(char1: string | DECompleteCharacterReference | null, potentialAttractiveChar2: string | DECompleteCharacterReference | null): number;
-    isAttractedToWithReasoning(char1: string | DECompleteCharacterReference | null, potentialAttractiveChar2: string | DECompleteCharacterReference | null): { attracted: boolean, reasoning: string, level: "slight" | "moderate" | "strong" | false };
-
-    isWithinAttractionGroupFor(option: "male" | "female" | "ambiguous", char1: string | DECompleteCharacterReference | null, potentialAttractiveChar2: string | DECompleteCharacterReference | null): boolean;
-
-    createVoiceFromPreset(presetName: string): DEVoiceDescription;
-    createVoice(voiceDescription: DEVoiceDescription): DEVoiceDescription;
-
-    isAloneWith(char1: string | DECompleteCharacterReference | null, char2: string | DECompleteCharacterReference | null): boolean;
-    isInPrivateLocation(char1: string | DECompleteCharacterReference | null): boolean;
-    isAroundFriendsOrBetter(char1: string | DECompleteCharacterReference | null, options: { exclude?: string | DECompleteCharacterReference | Array<string | DECompleteCharacterReference>, excludeFamily?: boolean }): boolean;
-    isAroundFamily(char1: string | DECompleteCharacterReference | null, options: { exclude?: string | DECompleteCharacterReference | Array<string | DECompleteCharacterReference> }): boolean;
-
-    /**
-     * To be used during questions and triggers mostly
-     */
-    shiftBond(char1: string | DECompleteCharacterReference | null, towards: string | DECompleteCharacterReference | null, primaryShift: number, secondaryShift: number): void;
-    /**
-     * Whether the bond has already been shifted this cycle
-     */
-    hasBondBeenShiftedThisCycle(char1: string | DECompleteCharacterReference | null, towards: string | DECompleteCharacterReference | null): boolean;
-    /**
-     * Shifts the state of a character by a certain amount
-     * To be used during questions and triggers mostly
-     */
-    shiftState(character: string | DECompleteCharacterReference | null, stateName: string, shift: number, cap: number | null, causes: DEStateCause[] | null): void;
-    /**
-     * Adds a cause to a character state, this is used to keep track of what caused a state to be applied
-     */
-    addCauseToState(character: string | DECompleteCharacterReference | null, stateName: string, cause: DEStateCause): void;
-    /**
-     * Removes a cause from a character state, this is used to keep track of what caused a state to be applied
-     */
-    removeCauseFromState(character: string | DECompleteCharacterReference | null, stateName: string, cause: DEStateCause): void;
-    removeCausantFromState(character: string | DECompleteCharacterReference | null, stateName: string, causant: string, causantType: "character" | "object"): void;
-    /**
-     * To be used during questions and triggers mostly
-     * 
-     * Will trigger that action once the character is to talk
-     */
-    triggerActionNext(action: DEActionPromptInjection): void;
-    accumulateInCharacter(character: string | DECompleteCharacterReference, accumulatorName: string, amount: number): number;
-    getAccumulatedValueInCharacter(character: string | DECompleteCharacterReference, accumulatorName: string): number;
-
-    newTrigger(character: string | DECompleteCharacterReference, trigger: DECharacterYesNoQuestion | DECharacterNumericQuestion | DECharacterTextQuestion): void;
-    newTriggerInAllCharacters(trigger: DECharacterYesNoQuestion | DECharacterNumericQuestion | DECharacterTextQuestion): void;
-
-    charHasState(character: string | DECompleteCharacterReference, stateName: string): boolean;
-    charIsRelievingState(character: string | DECompleteCharacterReference, stateName: string): boolean;
-
-    /**
-     * Causes any bond intimacy types check to not run, say if they are in some form of conflicting state
-     * reducing a bond will also cause this effect
-     * 
-     * @param DE 
-     * @param char1 
-     * @param towards 
-     */
-    rejectIntimacy(char1: string | DECompleteCharacterReference | null, towards: string | DECompleteCharacterReference | null): void;
-
-    /**
-     * Within a conversation specifies if two characters have just started talking to each other, which can be used to trigger first impressions and initial reactions if
-     * combined with strangers or whatnot
-     * @param char1 
-     * @param char2 
-     */
-    justStartedTalkingToEachOther(char1: string | DECompleteCharacterReference | null, char2: string | DECompleteCharacterReference | null): boolean;
-
-    isTopNaked(char: string | DECompleteCharacterReference | null): boolean;
-    isBottomNaked(char: string | DECompleteCharacterReference | null): boolean;
-
-    /**
-     * Returns a DEStringTemplateCharAndCauses that is broken down into causants and causes
-     * 
-     * For example, say the state is "Angry"
-     * 
-     * By default the LLM will inject the following phrase into the template:
-     * 
-     * `{{char}} is very Angry` (or whatever the intensity is)
-     * 
-     * Then it will inject the template, this will simply do the following:
-     * 
-     * {{base}}
-     * 
-     * causes:
-     * [perOther]
-     * perOther cause: {{cause}}
-     * [/perOther]
-     * 
-     * [perItem]
-     * perItem cause: {{cause}}
-     * [/perItem]
-     * 
-     * @param DE 
-     * @param param1 
-     */
-    breakDownCharactersAndCausesTemplate(info: {
         /**
-         * A template on how the character acts in general
+         * The list of all characters available in the world, including the user
+         * @returns eg. [Arya, Thalon, Mira, Dorian, Luna, Kiro]
          */
-        base: DEStringTemplateCharOnly,
+        allWorldCharacters(): DECompleteCharacterReference[];
         /**
-         * A template on how the character will act towards a specific character
-         * that caused that given state, the reason why that charater will be added at the end of the sentence
+         * The list of all characters available in the world, excluding the user
+         * @returns eg. [Arya, Thalon, Mira, Dorian, Luna, Kiro]
          */
-        perOther: DEStringTemplateCharAndOther,
+        allWorldCharactersButUser(): DECompleteCharacterReference[];
         /**
-         * A template on how the character will act towards an object that caused that
-         * given state
+         * The name of the character current location
+         * @returns eg. Eldoria, Shadowfen
          */
-        perObject: DEStringTemplateCharAndItem,
-    }): DEStringTemplateCharAndCauses;
-    getExternalDescriptionOfCharacter(char: DECompleteCharacterReference, onlyBasics?: boolean, hideCurrentPosture?: boolean): Promise<string>;
-    /**
-     * The list of all characters available in the world, including the user
-     * @returns eg. [Arya, Thalon, Mira, Dorian, Luna, Kiro]
-     */
-    allWorldCharacters(): DECompleteCharacterReference[];
-    /**
-     * The list of all characters available in the world, excluding the user
-     * @returns eg. [Arya, Thalon, Mira, Dorian, Luna, Kiro]
-     */
-    allWorldCharactersButUser(): DECompleteCharacterReference[];
-    /**
-     * The name of the character current location
-     * @returns eg. Eldoria, Shadowfen
-     */
-    currentLocation(): string;
-    /**
-     * Boolean indicating if character is in a vehicle at the current location
-     * @returns true or false
-     */
-    currentLocationIsInVehicle(): boolean;
-    /**
-     * Boolean indicating if the character is in a safe location at the current location
-     * @returns true or false
-     */
-    currentLocationIsSafe(): boolean;
-    /**
-     * The list of all characters available in the current location of the world, including the user
-     * @returns eg. [Luna, Kiro]
-     */
-    allCharactersAtLocation(locationName: string): DECompleteCharacterReference[];
-    /**
-     * Boolean indicating if the provided location is a vehicle
-     * @returns true or false
-     */
-    locationIsVehicle(locationName: string): boolean;
-    /**
-     * Boolean indicating if the provided location is a safe location
-     * @returns true or false
-     */
-    locationIsSafe(locationName: string): boolean;
-    /**
-     * TODO does this work?
-     * The name of the characters/users/objects that activated the state last
-     * @returns eg. ["Aria", "Thalon", "Player", "The Ancient Sword"]
-     */
-    getLastStateCausants(char: DECompleteCharacterReference, stateName: string): string[];
-    /**
-     * TODO does this work?
-     * The name of the characters only that activated the state last
-     * @returns eg. ["Aria", "Thalon", "Player"]
-     */
-    getLastStateCharacterCausants(char: DECompleteCharacterReference, stateName: string): string[];
-    /**
-     * TODO does this work?
-     * The name of the characters only that activated the state last
-     * @returns eg. ["Aria", "Thalon", "Player"]
-     */
-    getLastStateObjectCausants(char: DECompleteCharacterReference, stateName: string): string[];
-    /**
-     * Get the list of active states for the current character
-     * @returns eg. [ANGRY, TIRED, HAPPY]
-     */
-    getStates(char: DECompleteCharacterReference): string[];
-    /**
-     * Get the intensity of the specified active state for the current character, intensities are integer numbers from 0 to 4
-     * @returns eg. 0, 1, 2, 3, 4
-     */
-    getStateIntensity(char: DECompleteCharacterReference, stateName: string): number;
-    /**
-     * Check if the current character has the specified active state
-     * @returns eg. true or false
-     */
-    hasState(char: DECompleteCharacterReference, stateName: string): boolean;
-    /**
-     * Check if the current character has just activated the specified state in this interaction
-     * @returns eg. true or false
-     */
-    stateHasJustActivated(char: DECompleteCharacterReference, stateName: string): boolean;
-    /**
-     * Get how many inference cycles ago the state was activated for the provided character
-     * @returns eg. 3, it will return -1 if the state is not found ever
-     */
-    getStateActivationCyclesAgo(char: DECompleteCharacterReference, stateName: string): number;
-    /**
-     * Get the list of social group members for the current character
-     * @returns eg. [Arya, Thalon, Mira]
-     */
-    getSocialGroup(char: DECompleteCharacterReference, minBondLevel: number, maxBondLevel: number, min2BondLevel: number, max2BondLevel: number): string[];
-    /**
-     * Get the list of social group members for the current character that are present at the same location as our character
-     * @returns eg. [Arya, Thalon, Mira]
-     */
-    getPresentSocialGroup(char: DECompleteCharacterReference, minBondLevel: number, maxBondLevel: number, min2BondLevel: number, max2BondLevel: number): string[];
-    /**
-     * Get the list of social group members for the current character, that are not only present but also in a conversation with our character
-     * @returns eg. [Thalon, Mira]
-     */
-    getPresentConversingSocialGroup(char: DECompleteCharacterReference, minBondLevel: number, maxBondLevel: number, min2BondLevel: number, max2BondLevel: number): string[];
-    /**
-     * Get the difference between the provided list and the present social group members
-     * @returns eg. [Arya, Thalon]
-     */
-    getDifferenceOfPresentSocialGroup(char: DECompleteCharacterReference, list: string[]): string[];
-    /**
-     * Get the list of social group members that are gone forever (most likely dead) for the current character
-     * @returns eg. [Thalon, Mira]
-     */
-    getExSocialGroup(char: DECompleteCharacterReference, minBondLevel: number, maxBondLevel: number, min2BondLevel: number, max2BondLevel: number): string[];
-    /**
-     * Get the currently carrying weight of the character
-     * @returns eg. 70
-     */
-    getCarryWeight(char: DECompleteCharacterReference): number;
-    /**
-     * Get the currently carrying volume of the character
-     * @returns eg. 70
-     */
-    getCarryVolume(char: DECompleteCharacterReference): number;
-    /**
-     * Get the power level of the specified character, a number that can be used to compare the strength of characters in a very general way
-     * @returns eg. 50
-     */
-    getPowerLevel(char: DECompleteCharacterReference): number;
-    /**
-     * Get the tier of the specified character, representing their overall power level
-     * @returns eg. human
-     */
-    getTier(char: DECompleteCharacterReference): string;
-    /**
-     * Get the numeric value of the specified character's tier, representing their power level within the tier
-     * @returns eg. 85
-     */
-    getTierValue(char: DECompleteCharacterReference): number;
-    /**
-     * Boolean indicating if the character is dead
-     * @returns true or false
-     */
-    isDead(char: DECompleteCharacterReference): boolean;
-    /**
-     * Boolean indicating if the string given is a character, this will give true to the user as well
-     * @returns true or false
-     */
-    getChar(potentialCharacter: string): DECompleteCharacterReference | null;
-    /**
-     * Boolean indicating if the character is the user
-     * @returns true or false
-     */
-    isUser(char: DECompleteCharacterReference): boolean;
-    /**
-     * Boolean indicating if the character is a present member of the social
-     * @returns true or false
-     */
-    isPresentMember(char: DECompleteCharacterReference): boolean;
-    /**
-     * Boolean indicating if the character is not present in the location
-     * @returns true or false
-     */
-    isNotPresent(char: DECompleteCharacterReference): boolean;
-    /**
-     * Boolean indicating if the character is gone forever (most likely dead)
-     * @returns true or false
-     */
-    isGone(char: DECompleteCharacterReference): boolean;
-    /**
-     * Boolean indicating if the character is currently in a conversation with our character
-     * @returns true or false
-     */
-    isInConversation(char: DECompleteCharacterReference): boolean;
-    /**
-     * Boolean indicating if the character is currently indoors
-     * @returns true or false
-     */
-    isIndoors(char: DECompleteCharacterReference): boolean;
-    /**
-     * Boolean indicating if the character is currently outdoors
-     * @returns true or false
-     */
-    isOutdoors(char: DECompleteCharacterReference): boolean;
-    /**
-     * Boolean indicating if the character has the specified item in their inventory
-     * @returns true or false
-     */
-    hasItem(char: DECompleteCharacterReference, itemName: string): boolean;
-    /**
-     * String indicating the current posture of the character
-     * @returns "standing" | "crawling" | "climbing" | "sitting" | "lying_down" | "crouching" | "kneeling" | "hanging" | "floating" | "flying" | "swimming"
-     */
-    getPosture(char: DECompleteCharacterReference): DEPosture;
-    /**
-     * String indicating a location where another character should be at according to the character's knowledge
-     * @returns eg. Eldoria, Shadowfen, or empty string if they have no idea
-     */
-    lastSaw(char: DECompleteCharacterReference): string;
-    /**
-     * Boolean indicating if the character is a member that got lost after being left behind (known to this member)
-     * @returns true or false
-     */
-    hasNoIdeaWhereIs(char: DECompleteCharacterReference): boolean;
-    /**
-     * Boolean indicating if the character does not know the questioned character and does not have a bond with them
-     * @returns true or false
-     */
-    doesNotKnow(char: DECompleteCharacterReference, towardsChar: DECompleteCharacterReference): boolean;
-    /**
-     * Boolean indicating if the character has a stranger relationship with the questioned character
-     * @returns true or false
-     */
-    isStrangersWith(char: DECompleteCharacterReference, towardsChar: DECompleteCharacterReference): boolean;
-    /**
-     * Get the bond value of our character towards the questioned character
-     * @returns eg. 50
-     */
-    getBondTowards(char: DECompleteCharacterReference, towardsChar: DECompleteCharacterReference): number;
-    /**
-     * Boolean indicating if the character
-     * knows the name of the questioned character
-     * @returns true or false
-     */
-    knowsNameOf(char: DECompleteCharacterReference, towardsChar: DECompleteCharacterReference): boolean;
-    /**
-     * Get the secondary bond value of our character towards the questioned character
-     * @returns eg. 30
-     */
-    getSecondaryBondTowards(char: DECompleteCharacterReference, towardsChar: DECompleteCharacterReference): number;
-    /**
-     * Boolean indicating if our character is at the same location of the questioned character
-     * @returns true or false
-     */
-    isAtSameLocation(char: DECompleteCharacterReference, char2: DECompleteCharacterReference): boolean;
-    /**
-     * Boolean indicating if our character is with the questioned character, taking the same slot
-     * @returns true or false
-     */
-    isAtSameSlot(char: DECompleteCharacterReference, char2: DECompleteCharacterReference): boolean;
-    /**
-     * Boolean indicating if the character is at the current location of the world
-     * @returns true or false
-     */
-    isHere(char: DECompleteCharacterReference): boolean;
-    /**
+        currentLocation(): string;
+        /**
+         * Boolean indicating if character is in a vehicle at the current location
+         * @returns true or false
+         */
+        currentLocationIsInVehicle(): boolean;
+        /**
+         * Boolean indicating if the character is in a safe location at the current location
+         * @returns true or false
+         */
+        currentLocationIsSafe(): boolean;
+        /**
+         * The list of all characters available in the current location of the world, including the user
+         * @returns eg. [Luna, Kiro]
+         */
+        allCharactersAtLocation(locationName: string): DECompleteCharacterReference[];
+        /**
+         * Boolean indicating if the provided location is a vehicle
+         * @returns true or false
+         */
+        locationIsVehicle(locationName: string): boolean;
+        /**
+         * Boolean indicating if the provided location is a safe location
+         * @returns true or false
+         */
+        locationIsSafe(locationName: string): boolean;
+    },
+    characters: {
+        newCharacter(definition: Omit<DECompleteCharacterReference, "id">): DECompleteCharacterReference;
+        newTrigger(character: string | DECompleteCharacterReference, trigger: DECharacterYesNoQuestion | DECharacterNumericQuestion | DECharacterTextQuestion): void;
+        newTriggerInAllCharacters(trigger: DECharacterYesNoQuestion | DECharacterNumericQuestion | DECharacterTextQuestion): void;
+
+        defineStateInAllCharacters(stateName: string, stateDefinition: DECharacterStateDefinition): DECharacterStateDefinition;
+        defineStateInCharacter(character: string | DECompleteCharacterReference | null, stateName: string, stateDefinition: DECharacterStateDefinition): DECharacterStateDefinition | null;
+        defineBond(char1: string | DECompleteCharacterReference | null, towards: string | DECompleteCharacterReference | null, bondDefinition: Omit<DESingleBondDescription, "towards">, options?: { forceOverride: boolean }): DESingleBondDescription | null;
+        defineMutualBond(char1: string | DECompleteCharacterReference | null, char2: string | DECompleteCharacterReference | null, bondDefinition: Omit<DESingleBondDescription, "towards">): [DESingleBondDescription | null, DESingleBondDescription | null];
+        defineFamilyRelation(char1: string | DECompleteCharacterReference | null, towards: string | DECompleteCharacterReference | null, relation: DEFamilyRelation): [DEFamilyTie | null, DEFamilyTie | null];
+
+        createVoiceFromPreset(presetName: string): DEVoiceDescription;
+        createVoice(voiceDescription: DEVoiceDescription): DEVoiceDescription;
+    },
+    conversations: {
+        addMessage(conversationId: string, message: Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime" | "untimed">, options: { unsafeMode?: boolean } = {}): DEConversationMessage;
+        addMessageIntoTargetConversation(targetCharacterId: string, message: Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime" | "untimed">, options: { teleportParticipants?: boolean, unsafeMode?: boolean, isolation?: "isolate" | "join-target-group" | "merge-groups", ghost?: boolean } = {}): DEConversationMessage;
+        /**
+         * Broadcast a message, all characters at a given location (and beyond) will pick it up
+         * 
+         * The sender is not deemed a participant
+         * 
+         * @param message a function, modify what the message received is based on the distance
+         * @param location the location where the message is broadcasted
+         * @param travelDistance 
+         * @param travelDistaceType
+         */
+        addMessageBroadcast(message: (distance: number) => Omit<DEConversationMessage, "id" | "startTime" | "duration" | "endTime" | "untimed">, location: string, travelDistance: number, travelDistaceType: "meters" | "connections"): DEConversationMessage[];
+        newConversation(conversation: Pick<DEConversation, "participants" | "remoteParticipants" | "location" | "pseudoConversation" | "pseudoConversationSummary">, options: { teleportParticipants?: boolean, unsafeMode?: boolean } = {}): DEConversation;
+    },
+    characterInfo: {
+        getExternalDescriptionOfCharacter(char: DECompleteCharacterReference, onlyBasics?: boolean, hideCurrentPosture?: boolean): Promise<string>;
+
+        isWithinAttractionGroupFor(option: "male" | "female" | "ambiguous", char1: string | DECompleteCharacterReference | null, potentialAttractiveChar2: string | DECompleteCharacterReference | null): boolean;
+
+        isAloneWith(char1: string | DECompleteCharacterReference | null, char2: string | DECompleteCharacterReference | null): boolean;
+        isInPrivateLocation(char1: string | DECompleteCharacterReference | null): boolean;
+        isAroundFriendsOrBetter(char1: string | DECompleteCharacterReference | null, options: { exclude?: string | DECompleteCharacterReference | Array<string | DECompleteCharacterReference>, excludeFamily?: boolean }): boolean;
+        isAroundFamily(char1: string | DECompleteCharacterReference | null, options: { exclude?: string | DECompleteCharacterReference | Array<string | DECompleteCharacterReference> }): boolean;
+
+        isTopNaked(char: string | DECompleteCharacterReference | null): boolean;
+        isBottomNaked(char: string | DECompleteCharacterReference | null): boolean;
+
+        /**
+         * Get the currently carrying weight of the character
+         * @returns eg. 70
+         */
+        getCarryWeight(char: string | DECompleteCharacterReference): number;
+        /**
+         * Get the currently carrying volume of the character
+         * @returns eg. 70
+         */
+        getCarryVolume(char: string | DECompleteCharacterReference): number;
+        /**
+         * Get the power level of the specified character, a number that can be used to compare the strength of characters in a very general way
+         * @returns eg. 50
+         */
+        getPowerLevel(char: string | DECompleteCharacterReference): number;
+        /**
+         * Get the tier of the specified character, representing their overall power level
+         * @returns eg. human
+         */
+        getTier(char: string | DECompleteCharacterReference): string;
+        /**
+         * Get the numeric value of the specified character's tier, representing their power level within the tier
+         * @returns eg. 85
+         */
+        getTierValue(char: string | DECompleteCharacterReference): number;
+        /**
+         * Boolean indicating if the character is dead
+         * @returns true or false
+         */
+        isDead(char: string | DECompleteCharacterReference): boolean;
+        /**
+         * Boolean indicating if the character is the user
+         * @returns true or false
+         */
+        isUser(char: string | DECompleteCharacterReference): boolean;
+
+        /**
+         * Boolean indicating if the character is gone forever (most likely dead)
+         * @returns true or false
+         */
+        isGone(char: string | DECompleteCharacterReference): boolean;
+        /**
+         * Boolean indicating if the character is currently in a conversation with our character
+         * @returns true or false
+         */
+        isInConversation(char: string | DECompleteCharacterReference): boolean;
+        /**
+         * Boolean indicating if the character is currently indoors
+         * @returns true or false
+         */
+        isIndoors(char: string | DECompleteCharacterReference): boolean;
+        /**
+         * Boolean indicating if the character is currently outdoors
+         * @returns true or false
+         */
+        isOutdoors(char: string | DECompleteCharacterReference): boolean;
+        /**
+         * Boolean indicating if the character has the specified item in their inventory
+         * @returns true or false
+         */
+        hasItem(char: string | DECompleteCharacterReference, itemName: string): boolean;
+        /**
+         * String indicating the current posture of the character
+         * @returns "standing" | "crawling" | "climbing" | "sitting" | "lying_down" | "crouching" | "kneeling" | "hanging" | "floating" | "flying" | "swimming"
+         */
+        getPosture(char: string | DECompleteCharacterReference): DEPosture;
+
+        /**
+         * String indicating a location where another character should be at according to the character's knowledge
+         * @returns eg. Eldoria, Shadowfen, or empty string if they have no idea
+         */
+        lastSaw(povChar: string | DECompleteCharacterReference, char: string | DECompleteCharacterReference): string;
+        /**
+         * Boolean indicating if the character is a member that got lost after being left behind (known to this member)
+         * @returns true or false
+         */
+        hasNoIdeaWhereIs(povChar: string | DECompleteCharacterReference, char: string | DECompleteCharacterReference): boolean;
+
+        /**
+         * Provides the list of characters that are currently interacting with another character
+         */
+        getCurrentlyInteractingCharacters(char: DECompleteCharacterReference | string): string[];
+    },
+    bonds: {
+        isStrangerTowards(char1: string | DECompleteCharacterReference | null, char2: string | DECompleteCharacterReference | null): boolean;
+        isAttractedTo(char1: string | DECompleteCharacterReference | null, potentialAttractiveChar2: string | DECompleteCharacterReference | null): boolean;
+        isAttractedToWithLevel(char1: string | DECompleteCharacterReference | null, potentialAttractiveChar2: string | DECompleteCharacterReference | null): "slight" | "moderate" | "strong" | false;
+        isAttractedToWithLevelAsNumber(char1: string | DECompleteCharacterReference | null, potentialAttractiveChar2: string | DECompleteCharacterReference | null): number;
+        isAttractedToWithReasoning(char1: string | DECompleteCharacterReference | null, potentialAttractiveChar2: string | DECompleteCharacterReference | null): { attracted: boolean, reasoning: string, level: "slight" | "moderate" | "strong" | false };
+
+        /**
+         * Boolean indicating if the character does not know the questioned character and does not have a bond with them
+         * @returns true or false
+         */
+        doesNotKnow(char: string | DECompleteCharacterReference, towardsChar: string | DECompleteCharacterReference): boolean;
+        /**
+         * Boolean indicating if the character has a stranger relationship with the questioned character
+         * @returns true or false
+         */
+        isStrangersWith(char: string | DECompleteCharacterReference, towardsChar: string | DECompleteCharacterReference): boolean;
+        /**
+         * Get the bond value of our character towards the questioned character
+         * @returns eg. 50
+         */
+        getBondTowards(char: string | DECompleteCharacterReference, towardsChar: string | DECompleteCharacterReference): number;
+        /**
+         * Get the secondary bond value of our character towards the questioned character
+         * @returns eg. 30
+         */
+        getSecondaryBondTowards(char: string | DECompleteCharacterReference, towardsChar: string | DECompleteCharacterReference): number;
+
+        /**
+         * Whether the bond has already been shifted this cycle
+         */
+        hasBondBeenShiftedThisCycle(char1: string | DECompleteCharacterReference | null, towards: string | DECompleteCharacterReference | null): boolean;
+        /**
+         * To be used during questions and triggers mostly
+         */
+        shiftBond(char1: string | DECompleteCharacterReference | null, towards: string | DECompleteCharacterReference | null, primaryShift: number, secondaryShift: number): void;
+
+        /**
+         * Causes any bond intimacy types check to not run, say if they are in some form of conflicting state
+         * reducing a bond will also cause this effect
+         * 
+         * @param DE 
+         * @param char1 
+         * @param towards 
+         */
+        rejectIntimacy(char1: string | DECompleteCharacterReference | null, towards: string | DECompleteCharacterReference | null): void;
+
+        /**
+         * Within a conversation specifies if two characters have just started talking to each other, which can be used to trigger first impressions and initial reactions if
+         * combined with strangers or whatnot
+         * @param char1 
+         * @param char2 
+         */
+        justStartedTalkingToEachOther(char1: string | DECompleteCharacterReference | null, char2: string | DECompleteCharacterReference | null): boolean;
+
+        /**
+         * Get the list of social group members for the current character
+         * @returns eg. [Arya, Thalon, Mira]
+         */
+        getSocialGroup(char: DECompleteCharacterReference, minBondLevel: number, maxBondLevel: number, min2BondLevel: number, max2BondLevel: number): string[];
+        /**
+         * Get the list of social group members for the current character that are present at the same location as our character
+         * @returns eg. [Arya, Thalon, Mira]
+         */
+        getPresentSocialGroup(char: DECompleteCharacterReference, minBondLevel: number, maxBondLevel: number, min2BondLevel: number, max2BondLevel: number): string[];
+        /**
+         * Get the list of social group members for the current character, that are not only present but also in a conversation with our character
+         * @returns eg. [Thalon, Mira]
+         */
+        getPresentConversingSocialGroup(char: DECompleteCharacterReference, minBondLevel: number, maxBondLevel: number, min2BondLevel: number, max2BondLevel: number): string[];
+        /**
+         * Get the difference between the provided list and the present social group members
+         * @returns eg. [Arya, Thalon]
+         */
+        getDifferenceOfPresentSocialGroup(char: DECompleteCharacterReference, list: string[]): string[];
+        /**
+         * Get the list of social group members that are gone forever (most likely dead) for the current character
+         * @returns eg. [Thalon, Mira]
+         */
+        getExSocialGroup(char: DECompleteCharacterReference, minBondLevel: number, maxBondLevel: number, min2BondLevel: number, max2BondLevel: number): string[];
+    },
+    states: {
+        charHasState(character: string | DECompleteCharacterReference, stateName: string): boolean;
+        charIsRelievingState(character: string | DECompleteCharacterReference, stateName: string): boolean;
+        /**
+         * Shifts the state of a character by a certain amount
+         * To be used during questions and triggers mostly
+         */
+        shiftState(character: string | DECompleteCharacterReference | null, stateName: string, shift: number, cap: number | null, causes: DEStateCause[] | null): void;
+        /**
+         * Adds a cause to a character state, this is used to keep track of what caused a state to be applied
+         */
+        addCauseToState(character: string | DECompleteCharacterReference | null, stateName: string, cause: DEStateCause): void;
+        /**
+         * Removes a cause from a character state, this is used to keep track of what caused a state to be applied
+         */
+        removeCauseFromState(character: string | DECompleteCharacterReference | null, stateName: string, cause: DEStateCause): void;
+        removeCausantFromState(character: string | DECompleteCharacterReference | null, stateName: string, causant: string, causantType: "character" | "object"): void;
+
+        /**
+         * TODO does this work?
+         * The name of the characters/users/objects that activated the state last
+         * @returns eg. ["Aria", "Thalon", "Player", "The Ancient Sword"]
+         */
+        getLastStateCausants(char: DECompleteCharacterReference, stateName: string): string[];
+        /**
+         * TODO does this work?
+         * The name of the characters only that activated the state last
+         * @returns eg. ["Aria", "Thalon", "Player"]
+         */
+        getLastStateCharacterCausants(char: DECompleteCharacterReference, stateName: string): string[];
+        /**
+         * TODO does this work?
+         * The name of the characters only that activated the state last
+         * @returns eg. ["Aria", "Thalon", "Player"]
+         */
+        getLastStateObjectCausants(char: DECompleteCharacterReference, stateName: string): string[];
+        /**
+         * Get the list of active states for the current character
+         * @returns eg. [ANGRY, TIRED, HAPPY]
+         */
+        getStates(char: DECompleteCharacterReference): string[];
+        /**
+         * Get the intensity of the specified active state for the current character, intensities are integer numbers from 0 to 4
+         * @returns eg. 0, 1, 2, 3, 4
+         */
+        getStateIntensity(char: DECompleteCharacterReference, stateName: string): number;
+        /**
+         * Check if the current character has the specified active state
+         * @returns eg. true or false
+         */
+        hasState(char: DECompleteCharacterReference, stateName: string): boolean;
+        /**
+         * Check if the current character has just activated the specified state in this interaction
+         * @returns eg. true or false
+         */
+        stateHasJustActivated(char: DECompleteCharacterReference, stateName: string): boolean;
+        /**
+         * Get how many inference cycles ago the state was activated for the provided character
+         * @returns eg. 3, it will return -1 if the state is not found ever
+         */
+        getStateActivationCyclesAgo(char: DECompleteCharacterReference, stateName: string): number;
+    },
+    triggersAndAccumulators: {
+        /**
+         * To be used during questions and triggers mostly
+         * 
+         * Will trigger that action once the character is to talk
+         */
+        triggerActionNext(action: DEActionPromptInjection): void;
+        accumulateInCharacter(character: string | DECompleteCharacterReference, accumulatorName: string, amount: number): number;
+        getAccumulatedValueInCharacter(character: string | DECompleteCharacterReference, accumulatorName: string): number;
+    };
+    templates: {
+        /**
+         * Returns a DEStringTemplateCharAndCauses that is broken down into causants and causes
+         * 
+         * For example, say the state is "Angry"
+         * 
+         * By default the LLM will inject the following phrase into the template:
+         * 
+         * `{{char}} is very Angry` (or whatever the intensity is)
+         * 
+         * Then it will inject the template, this will simply do the following:
+         * 
+         * {{base}}
+         * 
+         * causes:
+         * [perOther]
+         * perOther cause: {{cause}}
+         * [/perOther]
+         * 
+         * [perItem]
+         * perItem cause: {{cause}}
+         * [/perItem]
+         * 
+         * @param DE 
+         * @param param1 
+         */
+        breakDownCharactersAndCausesTemplate(info: {
+            /**
+             * A template on how the character acts in general
+             */
+            base: DEStringTemplateCharOnly,
+            /**
+             * A template on how the character will act towards a specific character
+             * that caused that given state, the reason why that charater will be added at the end of the sentence
+             */
+            perOther: DEStringTemplateCharAndOther,
+            /**
+             * A template on how the character will act towards an object that caused that
+             * given state
+             */
+            perObject: DEStringTemplateCharAndItem,
+        }): DEStringTemplateCharAndCauses;
+
+        /**
      * Formats a list with commas and 'and', do not use this for formatting causants use formatCommaList
      * @returns eg. Arya, Thalon, and Mira
      */
-    formatAnd(list: string[]): string;
-    /**
-     * Formats a list with commas only, do not use this for formatting causants use formatCommaList
-     * @returns eg. Arya, Thalon, Mira
-     */
-    formatCommaList(list: string[]): string;
-    /**
-     * Formats a list with commas and 'or'
-     * @returns eg. Arya, Thalon, or Mira
-     */
-    formatOr(list: string[]): string;
-    /**
-     * Formats the object pronoun for a list of characters or a single character
-     * @returns eg. are, is
-     */
-    formatVerbToBe(chars: Array<DECompleteCharacterReference | string>): string;
-    /**
-     * Formats the plural or singular form based on the list of characters or a single character
-     * @returns eg. sword, swords
-     */
-    formatPluralOrSingular(chars: Array<DECompleteCharacterReference | string>, plural, singular): string;
-    /**
-     * Formats the object pronoun for a list of characters or a single character
-     * @returns eg. him, her, them
-     */
-    formatObjectPronoun(chars: Array<DECompleteCharacterReference | string>): string;
-    /**
-     * Formats the possessive pronoun for a list of characters or a single character
-     * @returns eg. his, her, their
-     */
-    formatPossessive(chars: Array<DECompleteCharacterReference | string>): string;
-    /**
-     * Formats the reflexive pronoun for a list of characters or a single character
-     * @returns eg. himself, herself, themself
-     */
-    formatReflexive(chars: Array<DECompleteCharacterReference | string>): string;
-    /**
-     * Formats the pronoun for a list of characters or a single character
-     * @returns eg. he, she, they
-     */
-    formatPronoun(chars: Array<DECompleteCharacterReference | string>): string;
-    /**
-     * Formats the ownership pronoun for a list of characters or a single character
-     * @returns eg. his, hers, theirs
-     */
-    formatOwnershipPronoun(chars: Array<DECompleteCharacterReference | string>): string;
-    /**
-     * Generates a random seed integer from a string input for this specific character, the range will be from 0 to optionsNumber - 1, useful for creating random character traits for instantiable characters that will get a random name
-     * @returns integer
-     */
-    getRandomSeedFromString(optionsNumber: number, inputString: string): number;
-    /**
-     * Generates a random seed based on the current world time, the range will be from 0 to optionsNumber - 1, useful for creating random events that change over time
-     * @returns integer
-     */
-    getRandomSeedFromTime(optionsNumber: number): number;
-    /**
-     * Provides one of the random options by using the time as the seed
-     * @returns string
-     */
-    getRandomOption(options: string[]): string;
-    /**
-     * Provides one of the random options by using the character name and time as the seed, useful for generating consistent random choices per character that change over time
-     * @returns string
-     */
-    getRandomOptionFixedCharacter(char: DECompleteCharacterReference, options: string[]): string;
+        formatAnd(list: string[]): string;
+        /**
+         * Formats a list with commas only, do not use this for formatting causants use formatCommaList
+         * @returns eg. Arya, Thalon, Mira
+         */
+        formatCommaList(list: string[]): string;
+        /**
+         * Formats a list with commas and 'or'
+         * @returns eg. Arya, Thalon, or Mira
+         */
+        formatOr(list: string[]): string;
+        /**
+         * Formats the object pronoun for a list of characters or a single character
+         * @returns eg. are, is
+         */
+        formatVerbToBe(chars: Array<DECompleteCharacterReference | string>): string;
+        /**
+         * Formats the plural or singular form based on the list of characters or a single character
+         * @returns eg. sword, swords
+         */
+        formatPluralOrSingular(chars: Array<DECompleteCharacterReference | string>, plural: string, singular: string): string;
+        /**
+         * Formats the object pronoun for a list of characters or a single character
+         * @returns eg. him, her, them
+         */
+        formatObjectPronoun(chars: Array<DECompleteCharacterReference | string>): string;
+        /**
+         * Formats the possessive pronoun for a list of characters or a single character
+         * @returns eg. his, her, their
+         */
+        formatPossessive(chars: Array<DECompleteCharacterReference | string>): string;
+        /**
+         * Formats the reflexive pronoun for a list of characters or a single character
+         * @returns eg. himself, herself, themself
+         */
+        formatReflexive(chars: Array<DECompleteCharacterReference | string>): string;
+        /**
+         * Formats the pronoun for a list of characters or a single character
+         * @returns eg. he, she, they
+         */
+        formatPronoun(chars: Array<DECompleteCharacterReference | string>): string;
+        /**
+         * Formats the ownership pronoun for a list of characters or a single character
+         * @returns eg. his, hers, theirs
+         */
+        formatOwnershipPronoun(chars: Array<DECompleteCharacterReference | string>): string;
+    };
 
-    /**
-     * Provides the list of characters that are currently interacting with another character
-     */
-    getCurrentlyInteractingCharacters(char: DECompleteCharacterReference | string): string[];
+    ramdom: {
+        /**
+         * Generates a random seed integer from a string input for this specific character, the range will be from 0 to optionsNumber - 1, useful for creating random character traits for instantiable characters that will get a random name
+         * @returns integer
+         */
+        getRandomSeedFromString(optionsNumber: number, inputString: string): number;
+        /**
+         * Generates a random seed based on the current world time, the range will be from 0 to optionsNumber - 1, useful for creating random events that change over time
+         * @returns integer
+         */
+        getRandomSeedFromTime(optionsNumber: number): number;
+        /**
+         * Provides one of the random options by using the time as the seed
+         * @returns string
+         */
+        getRandomOption(options: string[]): string;
+        /**
+         * Provides one of the random options by using the character name and time as the seed, useful for generating consistent random choices per character that change over time
+         * @returns string
+         */
+        getRandomOptionFixedCharacter(char: DECompleteCharacterReference, options: string[]): string;
+    },
 }
 
 declare interface DEWorldRule {
@@ -4065,10 +4119,19 @@ declare interface DEWorldRule {
 declare interface DEObject {
     user: string;
     party: string[];
-    characters: Record<string, DECompleteCharacterReference>;
-    bonds: Record<string, DEBondDescription>;
+    characters: {
+        [charId: string]: DECompleteCharacterReference;
+    };
+    bonds: {
+        [charId: string]: DEBondDescription;
+    };
     worldNames: DENamePool;
-    stateFor: Record<string, DEStateForCharacterWithHistory>;
+    /**
+     * The state of each character in the world, including their history and current states
+     */
+    stateFor: {
+        [charId: string]: DECharacterState;
+    };
     /**
      * Stability of the simulation, a number from 0 to 1 representing how stable the world is
      * usually should be 1 unless you want madness to happen
@@ -4079,7 +4142,9 @@ declare interface DEObject {
      * All the conversations that have happened in the world
      * real or pseudo-conversations
      */
-    conversations: Record<string, DEConversation>;
+    conversations: {
+        [conversationId: string]: DEConversation;
+    };
     /**
      * A list of important events that have happened in the world
      * subject to rumors, depending who got to be aware of it

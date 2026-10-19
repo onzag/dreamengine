@@ -210,19 +210,28 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
      * @param {DEngine} parent
      * @param {{
      *   host?: string;
+     *   embeddingHost?: string;
      *   apiKey?: string;
+     *   embeddingApiKey?: string;
      *   temperature?: number;
      *   topP?: number;
      *   topK?: number;
      *   repetitionPenalty?: number;
+     *   analysisTemperature?: number;
+     *   analysisTopP?: number;
+     *   analysisTopK?: number;
+     *   analysisRepetitionPenalty?: number;
+     *   analysisReasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh" | "max";
      *   useExperimentalTestMode?: boolean;
      *   model?: string;
+     *   analysisModel?: string;
+     *   embeddingModel?: string;
      *   reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh" | "max";
      * }} options
      */
     constructor(parent, options) {
         super(parent);
-        /** @type {{ host?: string; apiKey?: string; temperature?: number; topP?: number; topK?: number; repetitionPenalty?: number; model?: string; useExperimentalTestMode?: boolean; reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh" | "max"; }} */
+        /** @type {{ host?: string; embeddingHost?: string; apiKey?: string; embeddingApiKey?: string; temperature?: number; topP?: number; topK?: number; repetitionPenalty?: number; analysisTemperature?: number; analysisTopP?: number; analysisTopK?: number; analysisRepetitionPenalty?: number; analysisReasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh" | "max"; model?: string; analysisModel?: string; embeddingModel?: string; useExperimentalTestMode?: boolean; reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh" | "max"; }} */
         this.options = options;
 
         /**
@@ -260,6 +269,29 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
         this.selectedModel = null;
 
         /**
+         * The model used for analysis / questioning agent calls. Resolved during
+         * initialization from the `analysisModel` option, the `default-analysis`
+         * tag, or the main selected model as a fallback.
+         * @type {OpenAIModelEntry | null}
+         */
+        this.analysisModel = null;
+
+        /**
+         * The model used for embeddings. Resolved during initialization from the
+         * `embeddingModel` option or the `default-embedding` tag on the embedding
+         * host. May remain null if no embedding model is configured/available.
+         * @type {OpenAIModelEntry | null}
+         */
+        this.embeddingModel = null;
+
+        /**
+         * Base URL of the embedding server, resolved during initialization from
+         * the `embeddingHost` option (falling back to the main host).
+         * @type {string | null}
+         */
+        this.embeddingBaseUrl = null;
+
+        /**
          * Languages supported by the selected model, derived from its two-letter
          * language tags. Populated during initialize().
          * @type {Array<string>}
@@ -272,6 +304,14 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
          * @type {GearModelMap}
          */
         this.gearModels = {};
+
+        /**
+         * Per-gear sub-model overrides for analysis, derived from
+         * `gear-[gear-name]:[model-id]` tags on the analysis model. Populated
+         * during initialize().
+         * @type {GearModelMap}
+         */
+        this.analysisGearModels = {};
 
         /**
          * In-flight initialize() promise, used by ensureInitialized() to
@@ -1042,39 +1082,104 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
         this.selectedModel = chosen;
 
         // ── Step 4: derive supported languages from two-letter tags ──
-        const langPattern = /^[a-z]{2}$/;
-        this.supportedLanguages = chosen.tags.filter(t => langPattern.test(t) || t === "*");
-        if (this.supportedLanguages.length === 0) {
-            console.warn(`InferenceServerOpenAICompatible: No two-letter language tags found on model "${chosen.id}". Assuming universal support.`);
-            this.supportedLanguages = ["*"];
-        }
-
-        console.log(`InferenceServerOpenAICompatible: Selected model "${chosen.id}", supported languages: [${this.supportedLanguages.join(', ') || 'none detected'}]`);
+        const mainLanguages = this._deriveSupportedLanguages(chosen);
+        console.log(`InferenceServerOpenAICompatible: Selected model "${chosen.id}", supported languages: [${mainLanguages.join(', ') || 'none detected'}]`);
 
         // ── Step 5: resolve gear→model overrides from gear-[gear-name]:[model-id] tags ──
-        const gearPrefix = 'gear-';
-        /** @type {GearModelMap} */
-        const gearModels = {};
-        for (const tag of chosen.tags) {
-            if (!tag.startsWith(gearPrefix)) continue;
-            const colonIdx = tag.indexOf(':');
-            if (colonIdx === -1) continue;
-            const gearName = tag.slice(gearPrefix.length, colonIdx);
-            const gearModelId = tag.slice(colonIdx + 1);
-            if (!gearName || !gearModelId) continue;
-            const gearModel = models.find(m => m.id === gearModelId);
-            if (!gearModel) {
-                const msg = `Model "${chosen.id}" has tag "${tag}" but model "${gearModelId}" was not found on the server.`;
-                this.reason = msg;
-                this.triggerOnConnectionStatusChange(false, msg);
-                throw new Error(msg);
-            }
-            gearModels[gearName] = gearModel;
-        }
+        const gearModels = this._resolveGearModels(chosen, models);
         this.gearModels = gearModels;
 
         if (Object.keys(gearModels).length > 0) {
             console.log(`InferenceServerOpenAICompatible: Gear model overrides: ${Object.entries(gearModels).map(([g, m]) => `${g}→${m.id}`).join(', ')}`);
+        }
+
+        // ── Resolve the analysis model ──
+        // An explicit `analysisModel` option wins (and must exist). Otherwise the
+        // model tagged "default-analysis" is used, falling back to the main
+        // selected model when no such tag is present.
+        const requestedAnalysisId = this.options.analysisModel?.trim();
+        if (requestedAnalysisId) {
+            const analysisModel = models.find(m => m.id === requestedAnalysisId);
+            if (!analysisModel) {
+                const available = models.map(m => m.id).join(', ') || '(none)';
+                const msg = `Requested analysis model "${requestedAnalysisId}" was not found on the server. Available models: ${available}`;
+                this.reason = msg;
+                this.triggerOnConnectionStatusChange(false, msg);
+                throw new Error(msg);
+            }
+            this.analysisModel = analysisModel;
+        } else {
+            this.analysisModel = models.find(m => m.tags.includes('default-analysis')) || chosen;
+        }
+
+        // The analysis model has its own gear overrides and is subject to the
+        // same language check. The adapter's reported supported languages are
+        // the intersection of the main and analysis model languages, so a story
+        // language is only offered when both models can handle it.
+        const analysisLanguages = this.analysisModel === chosen
+            ? mainLanguages
+            : this._deriveSupportedLanguages(this.analysisModel);
+        this.supportedLanguages = this._intersectLanguages(mainLanguages, analysisLanguages);
+
+        this.analysisGearModels = this.analysisModel === chosen
+            ? gearModels
+            : this._resolveGearModels(this.analysisModel, models);
+
+        console.log(`InferenceServerOpenAICompatible: Analysis model "${this.analysisModel.id}", supported languages: [${analysisLanguages.join(', ') || 'none detected'}]`);
+        if (this.analysisModel !== chosen && Object.keys(this.analysisGearModels).length > 0) {
+            console.log(`InferenceServerOpenAICompatible: Analysis gear model overrides: ${Object.entries(this.analysisGearModels).map(([g, m]) => `${g}→${m.id}`).join(', ')}`);
+        }
+        console.log(`InferenceServerOpenAICompatible: Effective supported languages: [${this.supportedLanguages.join(', ') || 'none detected'}]`);
+
+        // ── Resolve the embedding model ──
+        // The embedding model list is fetched from `embeddingHost` when provided,
+        // otherwise from the main host. An explicit `embeddingModel` option wins
+        // (and must exist); otherwise the model tagged "default-embedding" is used
+        // if present. Embedding generation itself is not implemented yet, only the
+        // model/host wiring is resolved here.
+        const embeddingBaseUrl = (this.options.embeddingHost?.trim() || this.options.host || 'http://127.0.0.1:8765').replace(/\/$/, '');
+        this.embeddingBaseUrl = embeddingBaseUrl;
+
+        /** @type {Array<OpenAIModelEntry>} */
+        let embeddingModels = models;
+        if (embeddingBaseUrl !== baseUrl) {
+            const embeddingHeaders = /** @type {Record<string, string>} */ ({});
+            const embKey = this.options.embeddingApiKey?.trim() || this.options.apiKey;
+            if (embKey) embeddingHeaders['Authorization'] = `Bearer ${embKey}`;
+            try {
+                const r = await fetch(`${embeddingBaseUrl}/v1/models`, { headers: embeddingHeaders });
+                if (r.ok) {
+                    const j = await r.json();
+                    embeddingModels = (j?.data ?? []).map((/** @type {any} */ m) => ({
+                        id: String(m.id),
+                        tags: Array.isArray(m.tags) ? m.tags.map(String) : [],
+                        maxModelLen: typeof m.max_model_len === 'number' ? m.max_model_len : undefined,
+                    }));
+                } else {
+                    embeddingModels = [];
+                }
+            } catch {
+                embeddingModels = [];
+            }
+        }
+
+        const requestedEmbeddingId = this.options.embeddingModel?.trim();
+        if (requestedEmbeddingId) {
+            const embeddingModel = embeddingModels.find(m => m.id === requestedEmbeddingId);
+            if (!embeddingModel) {
+                const available = embeddingModels.map(m => m.id).join(', ') || '(none)';
+                const msg = `Requested embedding model "${requestedEmbeddingId}" was not found on the embedding server (${embeddingBaseUrl}). Available models: ${available}`;
+                this.reason = msg;
+                this.triggerOnConnectionStatusChange(false, msg);
+                throw new Error(msg);
+            }
+            this.embeddingModel = embeddingModel;
+        } else {
+            this.embeddingModel = embeddingModels.find(m => m.tags.includes('default-embedding')) || null;
+        }
+
+        if (this.embeddingModel) {
+            console.log(`InferenceServerOpenAICompatible: Embedding model "${this.embeddingModel.id}" (${embeddingBaseUrl})`);
         }
 
         // ── Step 5: detect server flavour ──
@@ -1145,15 +1250,87 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
     }
 
     /**
-     * Resolves the model id to use for a given gear, falling back to the main
-     * selected model when no gear-specific override exists.
+     * Derives the list of supported languages for a model from its two-letter
+     * language tags (plus the "*" universal wildcard). Returns ["*"] when no
+     * language tags are present.
+     *
+     * @param {OpenAIModelEntry} model
+     * @returns {Array<string>}
+     */
+    _deriveSupportedLanguages(model) {
+        const langPattern = /^[a-z]{2}$/;
+        const languages = model.tags.filter(t => langPattern.test(t) || t === "*");
+        if (languages.length === 0) {
+            console.warn(`InferenceServerOpenAICompatible: No two-letter language tags found on model "${model.id}". Assuming universal support.`);
+            return ["*"];
+        }
+        return languages;
+    }
+
+    /**
+     * Intersects two supported-language lists, honouring the "*" universal
+     * wildcard: a list containing "*" matches every language in the other list.
+     *
+     * @param {Array<string>} a
+     * @param {Array<string>} b
+     * @returns {Array<string>}
+     */
+    _intersectLanguages(a, b) {
+        const aUniversal = a.includes("*");
+        const bUniversal = b.includes("*");
+        if (aUniversal && bUniversal) return ["*"];
+        if (aUniversal) return b.slice();
+        if (bUniversal) return a.slice();
+        const bSet = new Set(b);
+        return a.filter(lang => bSet.has(lang));
+    }
+
+    /**
+     * Resolves gear→model overrides from `gear-[gear-name]:[model-id]` tags on
+     * the given model. Throws if a referenced model id is not present on the
+     * server.
+     *
+     * @param {OpenAIModelEntry} model
+     * @param {Array<OpenAIModelEntry>} models
+     * @returns {GearModelMap}
+     */
+    _resolveGearModels(model, models) {
+        const gearPrefix = 'gear-';
+        /** @type {GearModelMap} */
+        const gearModels = {};
+        for (const tag of model.tags) {
+            if (!tag.startsWith(gearPrefix)) continue;
+            const colonIdx = tag.indexOf(':');
+            if (colonIdx === -1) continue;
+            const gearName = tag.slice(gearPrefix.length, colonIdx);
+            const gearModelId = tag.slice(colonIdx + 1);
+            if (!gearName || !gearModelId) continue;
+            const gearModel = models.find(m => m.id === gearModelId);
+            if (!gearModel) {
+                const msg = `Model "${model.id}" has tag "${tag}" but model "${gearModelId}" was not found on the server.`;
+                this.reason = msg;
+                this.triggerOnConnectionStatusChange(false, msg);
+                throw new Error(msg);
+            }
+            gearModels[gearName] = gearModel;
+        }
+        return gearModels;
+    }
+
+    /**
+     * Resolves the model id to use for a given gear, falling back to a provided
+     * model entry (e.g. the analysis model) and ultimately the main selected
+     * model when no gear-specific override exists.
      *
      * @param {string} gear
+     * @param {OpenAIModelEntry | null} [fallback]
+     * @param {GearModelMap} [gearModels]
      * @returns {string}
      */
-    _modelForGear(gear) {
-        const override = this.gearModels[gear];
+    _modelForGear(gear, fallback = null, gearModels = this.gearModels) {
+        const override = gearModels[gear];
         if (override) return override.id;
+        if (fallback) return fallback.id;
         if (this.selectedModel) return this.selectedModel.id;
         throw new Error("Adapter is not initialized, no model selected");
     }
@@ -1170,6 +1347,23 @@ export class InferenceServerOpenAICompatible extends BaseInferenceAdapter {
         if (typeof this.options.topK === 'number') out.topK = this.options.topK;
         if (typeof this.options.repetitionPenalty === 'number') out.repetitionPenalty = this.options.repetitionPenalty;
         if (typeof this.options.reasoningEffort === 'string') out.reasoningEffort = this.options.reasoningEffort;
+        return out;
+    }
+
+    /**
+     * Collects the analysis sampling options from the adapter options. These are
+     * separate from the standard sampling options and are used for analysis /
+     * questioning agent calls.
+     *
+     * @returns {{ temperature?: number, topP?: number, topK?: number, repetitionPenalty?: number, reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh" | "max" }} The analysis OpenAI sampling options.
+     */
+    _analysisOpenAIOptions() {
+        const out = {};
+        if (typeof this.options.analysisTemperature === 'number') out.temperature = this.options.analysisTemperature;
+        if (typeof this.options.analysisTopP === 'number') out.topP = this.options.analysisTopP;
+        if (typeof this.options.analysisTopK === 'number') out.topK = this.options.analysisTopK;
+        if (typeof this.options.analysisRepetitionPenalty === 'number') out.repetitionPenalty = this.options.analysisRepetitionPenalty;
+        if (typeof this.options.analysisReasoningEffort === 'string') out.reasoningEffort = this.options.analysisReasoningEffort;
         return out;
     }
 
@@ -1342,8 +1536,8 @@ ${nextMessageMustBeInform}
 
         await this.ensureInitialized();
 
-        const model = this._modelForGear(gear);
-        const standardOpenAIOptions = this._standardOpenAIOptions();
+        const model = this._modelForGear(gear, this.analysisModel, this.analysisGearModels);
+        const standardOpenAIOptions = this._analysisOpenAIOptions();
 
         const before = (contextInfoBefore || "") + (contextInfoBefore ? "\n" : "");
         const after = (contextInfoAfter ? "\n" + contextInfoAfter : "");
@@ -1690,5 +1884,20 @@ ${this.buildSystemCharacterDescription(character, { description, externalDescrip
      */
     getDebugPayload(__debug_id) {
         return this.__debug_last10TalkPayloads.find(p => p.id === __debug_id)?.payload || null;
+    }
+
+    /**
+     * Computes an embedding vector for the given text using the configured
+     * embedding host and model (resolved during initialize() into
+     * `this.embeddingBaseUrl` and `this.embeddingModel`).
+     *
+     * Not implemented yet — only the host/model wiring is resolved during
+     * initialization. Left unimplemented intentionally.
+     *
+     * @param {string} text
+     * @returns {Promise<number[]>}
+     */
+    async getEmbeddingFor(text) {
+        throw new Error("Method 'getEmbeddingFor()' is not implemented.");
     }
 }
