@@ -5,7 +5,7 @@ import { getWeatherSystemForLocationAndWeather } from "./world.js";
 
 /**
  * @param {DEObject} deObject 
- * @param {string} characterName
+ * @param {string} characterId
  * @return {{
  *    carrierName: string,
  *    carrierLocation: string,
@@ -16,18 +16,18 @@ import { getWeatherSystemForLocationAndWeather } from "./world.js";
  *    item: DEItem | null,
  * } | null}
  */
-export function getBeingCarriedByCharacter(deObject, characterName) {
-    const charState = deObject.stateFor[characterName];
+export function getBeingCarriedByCharacter(deObject, characterId) {
+    const charState = deObject.stateFor[characterId];
     if (!charState) {
-        throw new Error(`Character ${characterName} not found in engine state.`);
+        throw new Error(`Character ${characterId} not found in engine state.`);
     }
     for (const otherCharName in deObject.stateFor) {
         const otherCharState = deObject.stateFor[otherCharName];
-        if (otherCharName === characterName || charState.location !== otherCharState.location || otherCharState.deadEnded) {
+        if (otherCharName === characterId || charState.location !== otherCharState.location || otherCharState.deadEnded) {
             continue;
         }
 
-        if (otherCharState.carryingCharactersDirectly && otherCharState.carryingCharactersDirectly.includes(characterName)) {
+        if (otherCharState.carryingCharactersDirectly && otherCharState.carryingCharactersDirectly.includes(characterId)) {
             return {
                 carrierName: otherCharName,
                 carrierLocation: otherCharState.location,
@@ -39,7 +39,7 @@ export function getBeingCarriedByCharacter(deObject, characterName) {
             };
         }
 
-        const found = findLocationOfCharInsideOrAtopItemRecursive(characterName, otherCharState.carrying, ["characters", otherCharName, "carrying"]);
+        const found = findLocationOfCharInsideOrAtopItemRecursive(characterId, otherCharState.carrying, ["characters", otherCharName, "carrying"]);
         if (found) {
             return {
                 carrierName: otherCharName,
@@ -150,7 +150,7 @@ export function findLocationOfAnyCharInsideOrAtopItemRecursive(list, pathSoFar, 
 /**
  * 
  * @param {DEObject} deObject 
- * @param {string} characterName 
+ * @param {string} characterId 
  * @returns {{
  *   location: string,
  *   beingCarriedBy: string | null,
@@ -159,12 +159,12 @@ export function findLocationOfAnyCharInsideOrAtopItemRecursive(list, pathSoFar, 
  *   itemPathEnd: "containingCharacters" | "ontopCharacters" | null,
  * }}
  */
-export function getCharacterExactLocation(deObject, characterName) {
-    const charState = deObject.stateFor[characterName];
+export function getCharacterExactLocation(deObject, characterId) {
+    const charState = deObject.stateFor[characterId];
     if (!charState) {
-        throw new Error(`Character ${characterName} not found in engine state.`);
+        throw new Error(`Character ${characterId} not found in engine state.`);
     }
-    const beingCarriedInfo = getBeingCarriedByCharacter(deObject, characterName);
+    const beingCarriedInfo = getBeingCarriedByCharacter(deObject, characterId);
     if (beingCarriedInfo) {
         return {
             location: beingCarriedInfo.carrierLocation,
@@ -177,7 +177,7 @@ export function getCharacterExactLocation(deObject, characterName) {
     const location = charState.location;
     for (const slot in deObject.world.locations[location].slots) {
         const slotInfo = deObject.world.locations[location].slots[slot];
-        const foundChar = findLocationOfCharInsideOrAtopItemRecursive(characterName, slotInfo.items, ["slots", slot, "items"]);
+        const foundChar = findLocationOfCharInsideOrAtopItemRecursive(characterId, slotInfo.items, ["slots", slot, "items"]);
         if (foundChar) {
             return {
                 location: location,
@@ -200,10 +200,10 @@ export function getCharacterExactLocation(deObject, characterName) {
 /**
  * 
  * @param {DEObject} deObject 
- * @param {string} characterName 
+ * @param {string} characterId 
  */
-export function getAllItemsCharacterIsInsideOf(deObject, characterName) {
-    const exactLocation = getCharacterExactLocation(deObject, characterName);
+export function getAllItemsCharacterIsInsideOf(deObject, characterId) {
+    const exactLocation = getCharacterExactLocation(deObject, characterId);
     if (!exactLocation.itemPath) {
         return [];
     }
@@ -213,7 +213,7 @@ export function getAllItemsCharacterIsInsideOf(deObject, characterName) {
      */
     const items = [];
 
-    const characterLocationInfo = deObject.stateFor[characterName].location;
+    const characterLocationInfo = deObject.stateFor[characterId].location;
     const locationState = deObject.world.locations[characterLocationInfo];
 
     const expectedPath = [...exactLocation.itemPath, exactLocation.itemPathEnd]
@@ -227,7 +227,7 @@ export function getAllItemsCharacterIsInsideOf(deObject, characterName) {
     } else if (exactLocation.itemPath[0] === "characters") {
         base = deObject.stateFor[exactLocation.itemPath[1]].carrying;
     } else {
-        throw new Error(`Invalid item path for character ${characterName}: ${exactLocation.itemPath}`);
+        throw new Error(`Invalid item path for character ${characterId}: ${exactLocation.itemPath}`);
     }
 
     for (let i = 3; i < expectedPath.length; i++) {
@@ -247,7 +247,7 @@ export function getAllItemsCharacterIsInsideOf(deObject, characterName) {
 /**
  * 
  * @param {DEObject} deObject 
- * @param {string} characterName
+ * @param {string} characterId
  * @returns {Array<{
  *   carriedName: string,
  *   itemPath: Array<string | number> | null,
@@ -255,11 +255,11 @@ export function getAllItemsCharacterIsInsideOf(deObject, characterName) {
  *   itemPathEnd: "containingCharacters" | "ontopCharacters" | null,
  * }>}
  */
-export function getListOfCarriedCharactersByCharacter(deObject, characterName) {
-    const results1 = findLocationOfAnyCharInsideOrAtopItemRecursive(deObject.stateFor[characterName].carrying, ["characters", characterName, "carrying"], []);
-    findLocationOfAnyCharInsideOrAtopItemRecursive(deObject.stateFor[characterName].wearing, ["characters", characterName, "wearing"], results1);
+export function getListOfCarriedCharactersByCharacter(deObject, characterId) {
+    const results1 = findLocationOfAnyCharInsideOrAtopItemRecursive(deObject.stateFor[characterId].carrying, ["characters", characterId, "carrying"], []);
+    findLocationOfAnyCharInsideOrAtopItemRecursive(deObject.stateFor[characterId].wearing, ["characters", characterId, "wearing"], results1);
 
-    return (deObject.stateFor[characterName].carryingCharactersDirectly).map((carriedCharName) => ({
+    return (deObject.stateFor[characterId].carryingCharactersDirectly).map((carriedCharName) => ({
         carriedName: carriedCharName,
         itemPath: null,
         item: null,
@@ -275,13 +275,13 @@ export function getListOfCarriedCharactersByCharacter(deObject, characterName) {
 
 /**
  * @param {DEObject} deObject
- * @param {string} characterName
+ * @param {string} characterId
  * @returns {boolean}
  */
-export function isTopNaked(deObject, characterName) {
-    const charState = deObject.stateFor[characterName];
+export function isTopNaked(deObject, characterId) {
+    const charState = deObject.stateFor[characterId];
     if (!charState) {
-        throw new Error(`Character ${characterName} not found in engine state.`);
+        throw new Error(`Character ${characterId} not found in engine state.`);
     }
 
     const wearingItems = charState.wearing;
@@ -298,13 +298,13 @@ export function isTopNaked(deObject, characterName) {
 
 /**
  * @param {DEObject} deObject
- * @param {string} characterName
+ * @param {string} characterId
  * @returns {boolean}
  */
-export function isBottomNaked(deObject, characterName) {
-    const charState = deObject.stateFor[characterName];
+export function isBottomNaked(deObject, characterId) {
+    const charState = deObject.stateFor[characterId];
     if (!charState) {
-        throw new Error(`Character ${characterName} not found in engine state.`);
+        throw new Error(`Character ${characterId} not found in engine state.`);
     }
 
     const wearingItems = charState.wearing;
@@ -321,7 +321,7 @@ export function isBottomNaked(deObject, characterName) {
 
 /**
  * @param {DEObject} deObject
- * @param {string} characterName
+ * @param {string} characterId
  * @returns {{
  *   location: string,
  *   nonStrangers: string[],
@@ -330,10 +330,10 @@ export function isBottomNaked(deObject, characterName) {
  *   deadTotalStrangers: string[],
  * }}
  */
-export function getSurroundingCharacters(deObject, characterName) {
-    const charState = deObject.stateFor[characterName];
+export function getSurroundingCharacters(deObject, characterId) {
+    const charState = deObject.stateFor[characterId];
     if (!charState) {
-        throw new Error(`Character ${characterName} not found in engine state.`);
+        throw new Error(`Character ${characterId} not found in engine state.`);
     }
 
     const location = charState.location;
@@ -344,10 +344,10 @@ export function getSurroundingCharacters(deObject, characterName) {
     const deadTotalStrangers = [];
     for (const charToCheck in deObject.stateFor) {
         const charStateToCheck = deObject.stateFor[charToCheck];
-        if (charStateToCheck.location !== location || charToCheck === characterName) {
+        if (charStateToCheck.location !== location || charToCheck === characterId) {
             continue;
         }
-        if (deObject.bonds[characterName].active.find(b => b.towards === charToCheck) || deObject.bonds[characterName].ex.find(b => b.towards === charToCheck)) {
+        if (deObject.bonds[characterId].active.find(b => b.towards === charToCheck) || deObject.bonds[characterId].ex.find(b => b.towards === charToCheck)) {
             if (charStateToCheck.dead) {
                 deadNonStrangers.push(charToCheck);
             } else {
@@ -373,14 +373,14 @@ export function getSurroundingCharacters(deObject, characterName) {
 
 /**
  * @param {DEObject} deObject 
- * @param {string} characterName 
+ * @param {string} characterId 
  */
-export function getCurrentlyInteractingCharacters(deObject, characterName) {
+export function getCurrentlyInteractingCharacters(deObject, characterId) {
     // find the current conversation the character is engaging at
-    const charState = deObject.stateFor[characterName];
+    const charState = deObject.stateFor[characterId];
 
     if (!charState) {
-        throw new Error(`Character ${characterName} not found in engine state.`);
+        throw new Error(`Character ${characterId} not found in engine state.`);
     }
 
     const convId = charState.conversationId;
@@ -394,17 +394,17 @@ export function getCurrentlyInteractingCharacters(deObject, characterName) {
         return [];
     }
 
-    return conversation.participants.filter(participant => participant !== characterName);
+    return conversation.participants.filter(participant => participant !== characterId);
 }
 
 /**
  * @param {DEObject} deObject 
- * @param {string} characterName 
+ * @param {string} characterId 
  */
-export function getPowerLevel(deObject, characterName) {
-    const character = deObject.characters[characterName];
+export function getPowerLevel(deObject, characterId) {
+    const character = deObject.characters[characterId];
     if (!character) {
-        throw new Error(`Character ${characterName} not found in engine.`);
+        throw new Error(`Character ${characterId} not found in engine.`);
     }
 
     return getPowerLevelFromCharacter(character);
@@ -569,19 +569,19 @@ export function getPowerLevelFromCharacter(character) {
 
 /**
  * @param {DEObject} deObject 
- * @param {string} characterName 
+ * @param {string} characterId 
  * @param {boolean} onlyBasics
  * @param {boolean} hideCurrentPosture
  * @returns {Promise<string>}
  */
-export async function getExternalDescriptionOfCharacter(deObject, characterName, onlyBasics = false, hideCurrentPosture = false) {
-    const character = deObject.characters[characterName];
+export async function getExternalDescriptionOfCharacter(deObject, characterId, onlyBasics = false, hideCurrentPosture = false) {
+    const character = deObject.characters[characterId];
     if (!character) {
-        throw new Error(`Character ${characterName} not found.`);
+        throw new Error(`Character ${characterId} not found.`);
     }
-    const characterState = deObject.stateFor[characterName];
+    const characterState = deObject.stateFor[characterId];
     if (!characterState) {
-        throw new Error(`Character state for ${characterName} not found.`);
+        throw new Error(`Character state for ${characterId} not found.`);
     }
     let finalDescription = character.shortDescription;
     if (!finalDescription.endsWith(".")) {
@@ -647,8 +647,8 @@ export async function getExternalDescriptionOfCharacter(deObject, characterName,
         }
     }
 
-    const topNaked = isTopNaked(deObject, characterName);
-    const bottomNaked = isBottomNaked(deObject, characterName);
+    const topNaked = isTopNaked(deObject, characterId);
+    const bottomNaked = isBottomNaked(deObject, characterId);
 
     if (topNaked && character.shortDescriptionTopNakedAdd) {
         const lowercaseFirstLetter = character.shortDescriptionTopNakedAdd.charAt(0).toLowerCase();
@@ -690,12 +690,12 @@ export async function getExternalDescriptionOfCharacter(deObject, characterName,
 
             return isVisibleAtBottom || isVisibleAtTop;
         });
-        finalDescription += " Wearing " + deObject.utils.formatAnd(visibleWornItems.map(item => item.amount >= 2 ? item.amount + " of " + item.description + " (" + getWearableFitment(deObject, item, characterName).fitment + ")" : item.description + " (" + getWearableFitment(deObject, item, characterName).fitment + ")")) + ".";
+        finalDescription += " Wearing " + deObject.utils.formatAnd(visibleWornItems.map(item => item.amount >= 2 ? item.amount + " of " + item.description + " (" + getWearableFitment(deObject, item, characterId).fitment + ")" : item.description + " (" + getWearableFitment(deObject, item, characterId).fitment + ")")) + ".";
     } else {
         finalDescription += " Completely naked, without clothes or accessories.";
     }
 
-    const characterExactLocation = getCharacterExactLocation(deObject, characterName);
+    const characterExactLocation = getCharacterExactLocation(deObject, characterId);
 
     if (!onlyBasics) {
         if (characterState.carrying.length > 0) {
@@ -708,31 +708,31 @@ export async function getExternalDescriptionOfCharacter(deObject, characterName,
             finalDescription += ` Being carried by ${characterExactLocation.beingCarriedBy}.`;
         }
 
-        const carriedCharacters = getListOfCarriedCharactersByCharacter(deObject, characterName);
+        const carriedCharacters = getListOfCarriedCharactersByCharacter(deObject, characterId);
         if (carriedCharacters.length > 0) {
             finalDescription += ` Carrying characters: ` + deObject.utils.formatAnd(carriedCharacters.map((v) => v.carriedName)) + ".";
         }
     }
 
-    finalDescription += " " + getExternalDescriptionOfCharacterPostureOnly(deObject, characterName, hideCurrentPosture);
+    finalDescription += " " + getExternalDescriptionOfCharacterPostureOnly(deObject, characterId, hideCurrentPosture);
 
     return finalDescription;
 }
 
 /**
  * @param {DEObject} deObject 
- * @param {string} characterName 
+ * @param {string} characterId 
  * @param {boolean} hideCurrentPosture
  * @returns {string}
  */
-export function getExternalDescriptionOfCharacterPostureOnly(deObject, characterName, hideCurrentPosture = false) {
-    const character = deObject.characters[characterName];
+export function getExternalDescriptionOfCharacterPostureOnly(deObject, characterId, hideCurrentPosture = false) {
+    const character = deObject.characters[characterId];
     if (!character) {
-        throw new Error(`Character ${characterName} not found.`);
+        throw new Error(`Character ${characterId} not found.`);
     }
-    const characterState = deObject.stateFor[characterName];
+    const characterState = deObject.stateFor[characterId];
     if (!characterState) {
-        throw new Error(`Character state for ${characterName} not found.`);
+        throw new Error(`Character state for ${characterId} not found.`);
     }
 
     const posturesThatDoNotSpecifyGround = [
@@ -742,13 +742,13 @@ export function getExternalDescriptionOfCharacterPostureOnly(deObject, character
         "swimming",
     ]
 
-    const characterExactLocation = getCharacterExactLocation(deObject, characterName);
+    const characterExactLocation = getCharacterExactLocation(deObject, characterId);
 
     let postureAppliedOnDescription = (posturesThatDoNotSpecifyGround.includes(characterState.posture)) ? "at the " + characterState.locationSlot : "on the ground at the " + characterState.locationSlot;
     if (characterExactLocation.itemPathEnd === "ontopCharacters" && characterExactLocation.itemPath) {
-        postureAppliedOnDescription = locationPathToMessage(deObject, characterName, characterState.location, [...characterExactLocation.itemPath, characterExactLocation.itemPathEnd]);
+        postureAppliedOnDescription = locationPathToMessage(deObject, characterId, characterState.location, [...characterExactLocation.itemPath, characterExactLocation.itemPathEnd]);
     } else if (characterExactLocation.itemPathEnd === "containingCharacters" && characterExactLocation.itemPath) {
-        postureAppliedOnDescription = locationPathToMessage(deObject, characterName, characterState.location, [...characterExactLocation.itemPath, characterExactLocation.itemPathEnd]);
+        postureAppliedOnDescription = locationPathToMessage(deObject, characterId, characterState.location, [...characterExactLocation.itemPath, characterExactLocation.itemPathEnd]);
     }
 
     if (!hideCurrentPosture) {
@@ -830,21 +830,21 @@ export function humanReadablePostureToPosture(humanReadable) {
 
 /**
  * @param {DEObject} deObject 
- * @param {string} characterName 
+ * @param {string} characterId 
  */
-export async function getCharacterCanSee(deObject, characterName) {
+export async function getCharacterCanSee(deObject, characterId) {
     if (!deObject) {
         throw new Error("DEngine not initialized");
     }
 
-    const character = deObject.characters[characterName];
+    const character = deObject.characters[characterId];
     if (!character) {
-        throw new Error(`Character ${characterName} not found.`);
+        throw new Error(`Character ${characterId} not found.`);
     }
 
-    const characterState = deObject.stateFor[characterName];
+    const characterState = deObject.stateFor[characterId];
     if (!characterState) {
-        throw new Error(`Character state for ${characterName} not found.`);
+        throw new Error(`Character state for ${characterId} not found.`);
     }
 
     const location = deObject.world.locations[characterState.location];
@@ -876,7 +876,7 @@ export async function getCharacterCanSee(deObject, characterName) {
 
     let finalDescription = `# Items at the current location (${characterState.location}):\n\n`;
 
-    const carryingCapacity = getCharacterCarryingCapacity(deObject, characterName);
+    const carryingCapacity = getCharacterCarryingCapacity(deObject, characterId);
 
     /**
      * @param {DEItem} item 
@@ -948,7 +948,7 @@ export async function getCharacterCanSee(deObject, characterName) {
         }
 
         if (item.wearableProperties) {
-            const fitment = getWearableFitment(deObject, item, characterName);
+            const fitment = getWearableFitment(deObject, item, characterId);
             if (fitment.shouldBreak) {
                 tags.push(`too tight for ${character.name}, would break`);
             } else if (fitment.shouldFallDown) {
@@ -966,7 +966,7 @@ export async function getCharacterCanSee(deObject, characterName) {
      * @returns {boolean}
      */
     const isCharacterInsideOrOnTopItem = (item) => {
-        if (item.ontopCharacters && item.ontopCharacters.includes(characterName) || item.containingCharacters && item.containingCharacters.includes(characterName)) {
+        if (item.ontopCharacters && item.ontopCharacters.includes(characterId) || item.containingCharacters && item.containingCharacters.includes(characterId)) {
             return true;
         }
 
@@ -978,7 +978,7 @@ export async function getCharacterCanSee(deObject, characterName) {
      * @returns {boolean}
      */
     const isCharacterInsideItem = (item) => {
-        if (item.containingCharacters && item.containingCharacters.includes(characterName)) {
+        if (item.containingCharacters && item.containingCharacters.includes(characterId)) {
             return true;
         }
 
@@ -1006,9 +1006,9 @@ export async function getCharacterCanSee(deObject, characterName) {
                 finalDescription += `${space}  ${character.name} can see the following contents:\n`;
             } else if (charIsInside) {
                 finalDescription += `${space}  ${character.name} can see the following contents (from the inside):\n`;
-            } else if (item.owner === characterName) {
+            } else if (item.owner === characterId) {
                 finalDescription += `${space}  ${character.name} cannot see but knows ${item.name} contains (as the owner):\n`;
-            } else if (carriedByChar === characterName) {
+            } else if (carriedByChar === characterId) {
                 finalDescription += `${space}  ${character.name} cannot see but can feel more or less what ${item.name} contains (as the carrier):\n`;
             } else {
                 finalDescription += `${space}  ${character.name} cannot see what ${item.name} contains:\n`;
@@ -1051,23 +1051,23 @@ export async function getCharacterCanSee(deObject, characterName) {
 
     // now let's check each character excluding our own for now
     for (const otherCharName in deObject.stateFor) {
-        if (otherCharName === characterName) continue;
+        if (otherCharName === characterId) continue;
         const otherCharState = deObject.stateFor[otherCharName];
         if (otherCharState.deadEnded) continue;
         if (otherCharState.location === characterState.location) {
             finalDescription += `# Character: ${otherCharName}:\n\n`;
 
-            const bondToOtherChar = deObject.bonds[characterName].active.find(b => b.towards === otherCharName) || deObject.bonds[characterName].ex.find(b => b.towards === otherCharName);
+            const bondToOtherChar = deObject.bonds[characterId].active.find(b => b.towards === otherCharName) || deObject.bonds[characterId].ex.find(b => b.towards === otherCharName);
             if (!bondToOtherChar) {
-                finalDescription += `${otherCharName} is a complete stranger to ${characterName}, ${characterName} does not know their name or any details about them.\n\n`;
+                finalDescription += `${otherCharName} is a complete stranger to ${characterId}, ${characterId} does not know their name or any details about them.\n\n`;
             } else if (!bondToOtherChar.knowsName && bondToOtherChar.stranger) {
-                finalDescription += `${otherCharName} is a stranger to ${characterName}, ${characterName} does not know their name.\n\n`;
+                finalDescription += `${otherCharName} is a stranger to ${characterId}, ${characterId} does not know their name.\n\n`;
             } else if (!bondToOtherChar.knowsName) {
-                finalDescription += `${otherCharName} is an acquaintance to ${characterName}, but ${characterName} does not know their name!\n\n`;
+                finalDescription += `${otherCharName} is an acquaintance to ${characterId}, but ${characterId} does not know their name!\n\n`;
             } else if (bondToOtherChar.stranger) {
-                finalDescription += `${otherCharName} is a stranger to ${characterName}, but ${characterName} knows their name and some details about them.\n\n`;
+                finalDescription += `${otherCharName} is a stranger to ${characterId}, but ${characterId} knows their name and some details about them.\n\n`;
             } else {
-                finalDescription += `${otherCharName} is known to ${characterName}, ${characterName} knows their name and many details about them.\n\n`;
+                finalDescription += `${otherCharName} is known to ${characterId}, ${characterId} knows their name and many details about them.\n\n`;
             }
 
             // how many times bigger/smaller is the other character compared to the character
@@ -1075,123 +1075,123 @@ export async function getCharacterCanSee(deObject, characterName) {
             const ratioByHeight = character.heightCm / otherCharacter.heightCm;
             const reverseRatioByHeight = otherCharacter.heightCm / character.heightCm;
             if (ratioByHeight >= 100) {
-                finalDescription += `${otherCharName} is absurdly tiny compared to ${characterName} who is hundreds of times taller.\n\n`;
+                finalDescription += `${otherCharName} is absurdly tiny compared to ${characterId} who is hundreds of times taller.\n\n`;
             } else if (ratioByHeight >= 10) {
-                finalDescription += `${otherCharName} is very small compared to ${characterName} who is at least 10 times taller.\n\n`;
+                finalDescription += `${otherCharName} is very small compared to ${characterId} who is at least 10 times taller.\n\n`;
             } else if (ratioByHeight >= 5) {
-                finalDescription += `${otherCharName} is small compared to ${characterName} who is at least 5 times taller.\n\n`;
+                finalDescription += `${otherCharName} is small compared to ${characterId} who is at least 5 times taller.\n\n`;
             } else if (ratioByHeight >= 4) {
-                finalDescription += `${otherCharName} is small compared to ${characterName} who is at least 4 times taller.\n\n`;
+                finalDescription += `${otherCharName} is small compared to ${characterId} who is at least 4 times taller.\n\n`;
             } else if (ratioByHeight >= 3) {
-                finalDescription += `${otherCharName} is small compared to ${characterName} who is at least 3 times taller.\n\n`;
+                finalDescription += `${otherCharName} is small compared to ${characterId} who is at least 3 times taller.\n\n`;
             } else if (ratioByHeight >= 2) {
-                finalDescription += `${otherCharName} is somewhat small compared to ${characterName} who is at least double their height.\n\n`;
+                finalDescription += `${otherCharName} is somewhat small compared to ${characterId} who is at least double their height.\n\n`;
             } else if (ratioByHeight >= 1.5) {
-                finalDescription += `${otherCharName} is somewhat shorter compared to ${characterName} who is at least 1.5 times their height.\n\n`;
+                finalDescription += `${otherCharName} is somewhat shorter compared to ${characterId} who is at least 1.5 times their height.\n\n`;
             } else if (ratioByHeight >= 1.25) {
-                finalDescription += `${otherCharName} is slightly shorter compared to ${characterName} who is at least 1.25 times their height.\n\n`;
+                finalDescription += `${otherCharName} is slightly shorter compared to ${characterId} who is at least 1.25 times their height.\n\n`;
             } else if (ratioByHeight >= 1.1) {
-                finalDescription += `${otherCharName} is a bit shorter compared to ${characterName} who is slightly taller.\n\n`;
+                finalDescription += `${otherCharName} is a bit shorter compared to ${characterId} who is slightly taller.\n\n`;
             } else if (ratioByHeight >= 0.95) {
-                finalDescription += `${otherCharName} is about the same height as ${characterName}.\n\n`;
+                finalDescription += `${otherCharName} is about the same height as ${characterId}.\n\n`;
             } else if (ratioByHeight >= 0.8) {
-                finalDescription += `${otherCharName} is a bit taller compared to ${characterName} who is slightly shorter.\n\n`;
+                finalDescription += `${otherCharName} is a bit taller compared to ${characterId} who is slightly shorter.\n\n`;
             } else if (reverseRatioByHeight >= 100) {
-                finalDescription += `${otherCharName} is absurdly tall compared to ${characterName} who is hundreds of times shorter.\n\n`;
+                finalDescription += `${otherCharName} is absurdly tall compared to ${characterId} who is hundreds of times shorter.\n\n`;
             } else if (reverseRatioByHeight >= 10) {
-                finalDescription += `${otherCharName} is very tall compared to ${characterName} who is at least 10 times shorter.\n\n`;
+                finalDescription += `${otherCharName} is very tall compared to ${characterId} who is at least 10 times shorter.\n\n`;
             } else if (reverseRatioByHeight >= 5) {
-                finalDescription += `${otherCharName} is tall compared to ${characterName} who is at least 5 times shorter.\n\n`;
+                finalDescription += `${otherCharName} is tall compared to ${characterId} who is at least 5 times shorter.\n\n`;
             } else if (reverseRatioByHeight >= 4) {
-                finalDescription += `${otherCharName} is tall compared to ${characterName} who is at least 4 times shorter.\n\n`;
+                finalDescription += `${otherCharName} is tall compared to ${characterId} who is at least 4 times shorter.\n\n`;
             } else if (reverseRatioByHeight >= 3) {
-                finalDescription += `${otherCharName} is tall compared to ${characterName} who is at least 3 times shorter.\n\n`;
+                finalDescription += `${otherCharName} is tall compared to ${characterId} who is at least 3 times shorter.\n\n`;
             } else if (reverseRatioByHeight >= 2) {
-                finalDescription += `${otherCharName} is somewhat tall compared to ${characterName} who is at least double their height.\n\n`;
+                finalDescription += `${otherCharName} is somewhat tall compared to ${characterId} who is at least double their height.\n\n`;
             } else if (reverseRatioByHeight >= 1.5) {
-                finalDescription += `${otherCharName} is somewhat taller compared to ${characterName} who is at least 1.5 times their height.\n\n`;
+                finalDescription += `${otherCharName} is somewhat taller compared to ${characterId} who is at least 1.5 times their height.\n\n`;
             } else if (reverseRatioByHeight >= 1.25) {
-                finalDescription += `${otherCharName} is slightly taller compared to ${characterName} who is at least 1.25 times their height.\n\n`;
+                finalDescription += `${otherCharName} is slightly taller compared to ${characterId} who is at least 1.25 times their height.\n\n`;
             } else if (reverseRatioByHeight >= 1.1) {
-                finalDescription += `${otherCharName} is a bit taller compared to ${characterName} who is slightly shorter.\n\n`;
+                finalDescription += `${otherCharName} is a bit taller compared to ${characterId} who is slightly shorter.\n\n`;
             } else if (reverseRatioByHeight >= 0.95) {
-                finalDescription += `${otherCharName} is about the same height as ${characterName}.\n\n`;
+                finalDescription += `${otherCharName} is about the same height as ${characterId}.\n\n`;
             } else {
-                finalDescription += `${otherCharName} is a bit shorter compared to ${characterName} who is slightly taller.\n\n`;
+                finalDescription += `${otherCharName} is a bit shorter compared to ${characterId} who is slightly taller.\n\n`;
             }
 
             const ratioByWeight = character.weightKg / otherCharacter.weightKg;
             const reverseRatioByWeight = otherCharacter.weightKg / character.weightKg;
             if (ratioByWeight >= 100) {
-                finalDescription += `${otherCharName} is absurdly small compared to ${characterName} who is hundreds of times larger.\n\n`;
+                finalDescription += `${otherCharName} is absurdly small compared to ${characterId} who is hundreds of times larger.\n\n`;
             } else if (ratioByWeight >= 10) {
-                finalDescription += `${otherCharName} is very small compared to ${characterName} who is at least 10 times larger.\n\n`;
+                finalDescription += `${otherCharName} is very small compared to ${characterId} who is at least 10 times larger.\n\n`;
             } else if (ratioByWeight >= 5) {
-                finalDescription += `${otherCharName} is small compared to ${characterName} who is at least 5 times larger.\n\n`;
+                finalDescription += `${otherCharName} is small compared to ${characterId} who is at least 5 times larger.\n\n`;
             } else if (ratioByWeight >= 4) {
-                finalDescription += `${otherCharName} is small compared to ${characterName} who is at least 4 times larger.\n\n`;
+                finalDescription += `${otherCharName} is small compared to ${characterId} who is at least 4 times larger.\n\n`;
             } else if (ratioByWeight >= 3) {
-                finalDescription += `${otherCharName} is somewhat small compared to ${characterName} who is at least 3 times their size.\n\n`;
+                finalDescription += `${otherCharName} is somewhat small compared to ${characterId} who is at least 3 times their size.\n\n`;
             } else if (ratioByWeight >= 2) {
-                finalDescription += `${otherCharName} is somewhat small compared to ${characterName} who is at least double their size.\n\n`;
+                finalDescription += `${otherCharName} is somewhat small compared to ${characterId} who is at least double their size.\n\n`;
             } else if (ratioByWeight >= 1.5) {
-                finalDescription += `${otherCharName} is somewhat small compared to ${characterName} who is at least 1.5 times their size.\n\n`;
+                finalDescription += `${otherCharName} is somewhat small compared to ${characterId} who is at least 1.5 times their size.\n\n`;
             } else if (ratioByWeight >= 1.25) {
-                finalDescription += `${otherCharName} is slightly small compared to ${characterName} who is at least 1.25 times their size.\n\n`;
+                finalDescription += `${otherCharName} is slightly small compared to ${characterId} who is at least 1.25 times their size.\n\n`;
             } else if (ratioByWeight >= 1.1) {
-                finalDescription += `${otherCharName} is a bit small compared to ${characterName} who is slightly larger.\n\n`;
+                finalDescription += `${otherCharName} is a bit small compared to ${characterId} who is slightly larger.\n\n`;
             } else if (ratioByWeight >= 0.95) {
-                finalDescription += `${otherCharName} is about the same size as ${characterName}.\n\n`;
+                finalDescription += `${otherCharName} is about the same size as ${characterId}.\n\n`;
             } else if (ratioByWeight >= 0.8) {
-                finalDescription += `${otherCharName} is a bit larger compared to ${characterName} who is slightly smaller.\n\n`;
+                finalDescription += `${otherCharName} is a bit larger compared to ${characterId} who is slightly smaller.\n\n`;
             } else if (reverseRatioByWeight >= 100) {
-                finalDescription += `${otherCharName} is absurdly large compared to ${characterName} who is hundreds of times smaller.\n\n`;
+                finalDescription += `${otherCharName} is absurdly large compared to ${characterId} who is hundreds of times smaller.\n\n`;
             } else if (reverseRatioByWeight >= 10) {
-                finalDescription += `${otherCharName} is very large compared to ${characterName} who is at least 10 times smaller.\n\n`;
+                finalDescription += `${otherCharName} is very large compared to ${characterId} who is at least 10 times smaller.\n\n`;
             } else if (reverseRatioByWeight >= 5) {
-                finalDescription += `${otherCharName} is large compared to ${characterName} who is at least 5 times smaller.\n\n`;
+                finalDescription += `${otherCharName} is large compared to ${characterId} who is at least 5 times smaller.\n\n`;
             } else if (reverseRatioByWeight >= 4) {
-                finalDescription += `${otherCharName} is large compared to ${characterName} who is at least 4 times smaller.\n\n`;
+                finalDescription += `${otherCharName} is large compared to ${characterId} who is at least 4 times smaller.\n\n`;
             } else if (reverseRatioByWeight >= 3) {
-                finalDescription += `${otherCharName} is somewhat large compared to ${characterName} who is at least 3 times smaller.\n\n`;
+                finalDescription += `${otherCharName} is somewhat large compared to ${characterId} who is at least 3 times smaller.\n\n`;
             } else if (reverseRatioByWeight >= 2) {
-                finalDescription += `${otherCharName} is somewhat large compared to ${characterName} who is at least double their size.\n\n`;
+                finalDescription += `${otherCharName} is somewhat large compared to ${characterId} who is at least double their size.\n\n`;
             } else if (reverseRatioByWeight >= 1.5) {
-                finalDescription += `${otherCharName} is somewhat large compared to ${characterName} who is at least 1.5 times their size.\n\n`;
+                finalDescription += `${otherCharName} is somewhat large compared to ${characterId} who is at least 1.5 times their size.\n\n`;
             } else if (reverseRatioByWeight >= 1.25) {
-                finalDescription += `${otherCharName} is slightly large compared to ${characterName} who is at least 1.25 times their size.\n\n`;
+                finalDescription += `${otherCharName} is slightly large compared to ${characterId} who is at least 1.25 times their size.\n\n`;
             } else if (reverseRatioByWeight >= 1.1) {
-                finalDescription += `${otherCharName} is a bit large compared to ${characterName} who is slightly smaller.\n\n`;
+                finalDescription += `${otherCharName} is a bit large compared to ${characterId} who is slightly smaller.\n\n`;
             } else if (reverseRatioByWeight >= 0.95) {
-                finalDescription += `${otherCharName} is about the same size as ${characterName}.\n\n`;
+                finalDescription += `${otherCharName} is about the same size as ${characterId}.\n\n`;
             } else {
-                finalDescription += `${otherCharName} is a bit smaller compared to ${characterName} who is slightly larger.\n\n`;
+                finalDescription += `${otherCharName} is a bit smaller compared to ${characterId} who is slightly larger.\n\n`;
             }
 
             const otherCharacterWeight = getCharacterWeight(deObject, otherCharName);
             const otherCharacterVolume = getCharacterVolume(deObject, otherCharName);
 
             if (character.carryingCapacityKg < otherCharacter.weightKg) {
-                finalDescription += `${otherCharName} is too heavy for ${characterName} to carry.\n\n`;
+                finalDescription += `${otherCharName} is too heavy for ${characterId} to carry.\n\n`;
             } else if (character.carryingCapacityLiters < otherCharacter.weightKg) {
-                finalDescription += `${otherCharName} is too big for ${characterName} to carry.\n\n`;
+                finalDescription += `${otherCharName} is too big for ${characterId} to carry.\n\n`;
             } else if (character.carryingCapacityKg < otherCharacterWeight.weight) {
-                finalDescription += `${otherCharName} is too heavy for ${characterName} to carry (considering what ${otherCharName} is currently wearing and carrying).\n\n`;
+                finalDescription += `${otherCharName} is too heavy for ${characterId} to carry (considering what ${otherCharName} is currently wearing and carrying).\n\n`;
             } else if (character.carryingCapacityLiters < otherCharacterVolume.volume || carryingCapacity.carryingCapacityLiters < otherCharacterWeight.weight) {
-                finalDescription += `${otherCharName} is too big for ${characterName} to carry (considering what ${otherCharName} is currently wearing and carrying).\n\n`;
+                finalDescription += `${otherCharName} is too big for ${characterId} to carry (considering what ${otherCharName} is currently wearing and carrying).\n\n`;
             } else if (carryingCapacity.carryingCapacityKg < otherCharacterWeight.weight || carryingCapacity.carryingCapacityKg < otherCharacterWeight.weight) {
-                finalDescription += `${otherCharName} is too heavy for ${characterName} to carry (with current load).\n\n`;
+                finalDescription += `${otherCharName} is too heavy for ${characterId} to carry (with current load).\n\n`;
             } else {
                 if (otherCharacterWeight.weight >= character.carryingCapacityKg * 0.75) {
-                    finalDescription += `${otherCharName} can be carried by ${characterName} with some effort.\n\n`;
+                    finalDescription += `${otherCharName} can be carried by ${characterId} with some effort.\n\n`;
                 } else if (otherCharacterVolume.volume >= character.carryingCapacityLiters * 0.75) {
-                    finalDescription += `${otherCharName} can be carried by ${characterName} but is quite bulky.\n\n`;
+                    finalDescription += `${otherCharName} can be carried by ${characterId} but is quite bulky.\n\n`;
                 } else if (otherCharacterWeight.weight >= character.carryingCapacityKg * 0.5) {
-                    finalDescription += `${otherCharName} can be carried by ${characterName} but is somewhat heavy.\n\n`;
+                    finalDescription += `${otherCharName} can be carried by ${characterId} but is somewhat heavy.\n\n`;
                 } else if (otherCharacterVolume.volume >= character.carryingCapacityLiters * 0.5) {
-                    finalDescription += `${otherCharName} can be carried by ${characterName} but is somewhat bulky.\n\n`;
+                    finalDescription += `${otherCharName} can be carried by ${characterId} but is somewhat bulky.\n\n`;
                 } else {
-                    finalDescription += `${otherCharName} can be carried by ${characterName}.\n\n`;
+                    finalDescription += `${otherCharName} can be carried by ${characterId}.\n\n`;
                 }
             }
 
@@ -1251,63 +1251,63 @@ export async function getCharacterCanSee(deObject, characterName) {
     }
 
     // now let's do our own character
-    finalDescription += `# Character ${characterName} (our character)\n\n## Items worn by ${characterName}:\n\n`;
+    finalDescription += `# Character ${characterId} (our character)\n\n## Items worn by ${characterId}:\n\n`;
     if (characterState.wearing.length === 0) {
-        finalDescription += `${characterName} Is currently naked.\n\n`;
+        finalDescription += `${characterId} Is currently naked.\n\n`;
     } else {
         for (const item of characterState.wearing) {
-            listItems("", true, item, characterName);
+            listItems("", true, item, characterId);
         }
         finalDescription += `\n`;
     }
 
-    const carriedChars = getListOfCarriedCharactersByCharacter(deObject, characterName);
+    const carriedChars = getListOfCarriedCharactersByCharacter(deObject, characterId);
     if (carriedChars.length > 0) {
-        finalDescription += `## Characters carried by ${characterName}:\n\n`;
+        finalDescription += `## Characters carried by ${characterId}:\n\n`;
         for (const carriedChar of carriedChars) {
             if (carriedChar.itemPathEnd === "containingCharacters" && carriedChar.itemPath) {
-                finalDescription += `${characterName} is carrying ${carriedChar.carriedName} ${locationPathToMessage(deObject, characterName, characterState.location, [...carriedChar.itemPath, carriedChar.itemPathEnd], true)}.\n\n`;
+                finalDescription += `${characterId} is carrying ${carriedChar.carriedName} ${locationPathToMessage(deObject, characterId, characterState.location, [...carriedChar.itemPath, carriedChar.itemPathEnd], true)}.\n\n`;
             } else if (carriedChar.itemPathEnd === "ontopCharacters" && carriedChar.itemPath) {
-                finalDescription += `${characterName} is carrying ${carriedChar.carriedName} ${locationPathToMessage(deObject, characterName, characterState.location, [...carriedChar.itemPath, carriedChar.itemPathEnd], true)}.\n\n`;
+                finalDescription += `${characterId} is carrying ${carriedChar.carriedName} ${locationPathToMessage(deObject, characterId, characterState.location, [...carriedChar.itemPath, carriedChar.itemPathEnd], true)}.\n\n`;
             } else {
-                finalDescription += `${characterName} is carrying ${carriedChar.carriedName}.\n\n`;
+                finalDescription += `${characterId} is carrying ${carriedChar.carriedName}.\n\n`;
             }
         }
     }
 
-    finalDescription += `## Items carried by ${characterName}:\n\n`;
+    finalDescription += `## Items carried by ${characterId}:\n\n`;
     if (characterState.carrying.length === 0) {
-        finalDescription += `No items or characters carried by ${characterName}.\n\n`;
+        finalDescription += `No items or characters carried by ${characterId}.\n\n`;
     } else {
         for (const item of characterState.carrying) {
-            listItems("", true, item, characterName);
+            listItems("", true, item, characterId);
         }
         finalDescription += `\n`;
     }
 
-    const exactLocation = getCharacterExactLocation(deObject, characterName);
+    const exactLocation = getCharacterExactLocation(deObject, characterId);
     if (exactLocation.beingCarriedBy) {
-        finalDescription += `## ${characterName} is being carried by another character:\n\n`;
-        finalDescription += `${characterName} is being carried by character: ${exactLocation.beingCarriedBy}.\n\n`;
+        finalDescription += `## ${characterId} is being carried by another character:\n\n`;
+        finalDescription += `${characterId} is being carried by character: ${exactLocation.beingCarriedBy}.\n\n`;
     }
 
     if (exactLocation.itemPathEnd === "containingCharacters" && exactLocation.itemPath) {
-        finalDescription += `## ${characterName} is inside an item:\n\n`;
-        finalDescription += `${characterName} is ${locationPathToMessage(deObject, characterName, characterState.location, [...exactLocation.itemPath, exactLocation.itemPathEnd])}.\n\n`;
+        finalDescription += `## ${characterId} is inside an item:\n\n`;
+        finalDescription += `${characterId} is ${locationPathToMessage(deObject, characterId, characterState.location, [...exactLocation.itemPath, exactLocation.itemPathEnd])}.\n\n`;
     }
 
     if (exactLocation.itemPathEnd === "ontopCharacters" && exactLocation.itemPath) {
-        finalDescription += `## ${characterName} is on top of an item:\n\n`;
-        finalDescription += `${characterName} is ${locationPathToMessage(deObject, characterName, characterState.location, [...exactLocation.itemPath, exactLocation.itemPathEnd])}.\n\n`;
+        finalDescription += `## ${characterId} is on top of an item:\n\n`;
+        finalDescription += `${characterId} is ${locationPathToMessage(deObject, characterId, characterState.location, [...exactLocation.itemPath, exactLocation.itemPathEnd])}.\n\n`;
     }
 
-    const characterPowerLevel = getPowerLevel(deObject, characterName);
+    const characterPowerLevel = getPowerLevel(deObject, characterId);
 
-    finalDescription += `# ${characterName} Power Level Interactions:\n\n`;
+    finalDescription += `# ${characterId} Power Level Interactions:\n\n`;
 
     const characterTier = character.tier.replace("_", " ") + " tier";
     for (const otherCharName in deObject.stateFor) {
-        if (otherCharName === characterName) continue;
+        if (otherCharName === characterId) continue;
         const otherCharState = deObject.stateFor[otherCharName];
         if (otherCharState.deadEnded) {
             continue;
@@ -1319,33 +1319,33 @@ export async function getCharacterCanSee(deObject, characterName) {
             const reversePowerLevelRatio = otherCharacterPowerLevel / characterPowerLevel;
             const otherCharacterTier = deObject.characters[otherCharName].tier.replace("_", " ") + " tier";
             if (powerLevelRatio >= 100) {
-                finalDescription += `- ${characterName} (${characterTier}) is overwhelmingly more powerful than ${otherCharName} (${otherCharacterTier}), who is a complete non-threat.\n`;
+                finalDescription += `- ${characterId} (${characterTier}) is overwhelmingly more powerful than ${otherCharName} (${otherCharacterTier}), who is a complete non-threat.\n`;
             } else if (powerLevelRatio >= 10) {
-                finalDescription += `- ${characterName} (${characterTier}) is much more powerful than ${otherCharName} (${otherCharacterTier}), who is not a threat.\n`;
+                finalDescription += `- ${characterId} (${characterTier}) is much more powerful than ${otherCharName} (${otherCharacterTier}), who is not a threat.\n`;
             } else if (powerLevelRatio >= 5) {
-                finalDescription += `- ${characterName} (${characterTier}) is more powerful than ${otherCharName} (${otherCharacterTier}), who is a minor threat at best.\n`;
+                finalDescription += `- ${characterId} (${characterTier}) is more powerful than ${otherCharName} (${otherCharacterTier}), who is a minor threat at best.\n`;
             } else if (powerLevelRatio >= 2) {
-                finalDescription += `- ${characterName} (${characterTier}) is somewhat more powerful than ${otherCharName} (${otherCharacterTier}), who could pose a small threat.\n`;
+                finalDescription += `- ${characterId} (${characterTier}) is somewhat more powerful than ${otherCharName} (${otherCharacterTier}), who could pose a small threat.\n`;
             } else if (powerLevelRatio >= 1.5) {
-                finalDescription += `- ${characterName} (${characterTier}) is slightly more powerful than ${otherCharName} (${otherCharacterTier}), who could pose a minor threat.\n`;
+                finalDescription += `- ${characterId} (${characterTier}) is slightly more powerful than ${otherCharName} (${otherCharacterTier}), who could pose a minor threat.\n`;
             } else if (powerLevelRatio >= 1.25) {
-                finalDescription += `- ${characterName} (${characterTier}) is a bit more powerful than ${otherCharName} (${otherCharacterTier}), who could pose a minor threat.\n`;
+                finalDescription += `- ${characterId} (${characterTier}) is a bit more powerful than ${otherCharName} (${otherCharacterTier}), who could pose a minor threat.\n`;
             } else if (powerLevelRatio >= 0.95) {
-                finalDescription += `- ${characterName} (${characterTier}) and ${otherCharName} (${otherCharacterTier}) are about equally powerful, and could pose a threat to each other.\n`;
+                finalDescription += `- ${characterId} (${characterTier}) and ${otherCharName} (${otherCharacterTier}) are about equally powerful, and could pose a threat to each other.\n`;
             } else if (reversePowerLevelRatio >= 100) {
-                finalDescription += `- ${otherCharName} (${otherCharacterTier}) is overwhelmingly more powerful than ${characterName} (${characterTier}), who is a complete non-threat.\n`;
+                finalDescription += `- ${otherCharName} (${otherCharacterTier}) is overwhelmingly more powerful than ${characterId} (${characterTier}), who is a complete non-threat.\n`;
             } else if (reversePowerLevelRatio >= 10) {
-                finalDescription += `- ${otherCharName} (${otherCharacterTier}) is much more powerful than ${characterName} (${characterTier}), who is not a threat.\n`;
+                finalDescription += `- ${otherCharName} (${otherCharacterTier}) is much more powerful than ${characterId} (${characterTier}), who is not a threat.\n`;
             } else if (reversePowerLevelRatio >= 5) {
-                finalDescription += `- ${otherCharName} (${otherCharacterTier}) is more powerful than ${characterName} (${characterTier}), who is a minor threat at best.\n`;
+                finalDescription += `- ${otherCharName} (${otherCharacterTier}) is more powerful than ${characterId} (${characterTier}), who is a minor threat at best.\n`;
             } else if (reversePowerLevelRatio >= 2) {
-                finalDescription += `- ${otherCharName} (${otherCharacterTier}) is somewhat more powerful than ${characterName} (${characterTier}), who could pose a small threat.\n`;
+                finalDescription += `- ${otherCharName} (${otherCharacterTier}) is somewhat more powerful than ${characterId} (${characterTier}), who could pose a small threat.\n`;
             } else if (reversePowerLevelRatio >= 1.5) {
-                finalDescription += `- ${otherCharName} (${otherCharacterTier}) is slightly more powerful than ${characterName} (${characterTier}), who could pose a minor threat.\n`;
+                finalDescription += `- ${otherCharName} (${otherCharacterTier}) is slightly more powerful than ${characterId} (${characterTier}), who could pose a minor threat.\n`;
             } else if (reversePowerLevelRatio >= 1.25) {
-                finalDescription += `- ${otherCharName} (${otherCharacterTier}) is a bit more powerful than ${characterName} (${characterTier}), who could pose a minor threat.\n`;
+                finalDescription += `- ${otherCharName} (${otherCharacterTier}) is a bit more powerful than ${characterId} (${characterTier}), who could pose a minor threat.\n`;
             } else {
-                finalDescription += `- ${otherCharName} (${otherCharacterTier}) and ${characterName} (${characterTier}) are about equally powerful, and could pose a threat to each other.\n`;
+                finalDescription += `- ${otherCharName} (${otherCharacterTier}) and ${characterId} (${characterTier}) are about equally powerful, and could pose a threat to each other.\n`;
             }
 
             const whatCanTheySolo = getWhatCanSolo(otherChar.tier, otherChar.tierValue);
@@ -1367,20 +1367,20 @@ export async function getCharacterCanSee(deObject, characterName) {
 
     const whatCanTheySolo = getWhatCanSolo(character.tier, character.tierValue);
     if (character.tierValue <= 10) {
-        finalDescription += `- ${characterName} is a very low '${characterTier}' and has seen better days, ${whatCanTheySolo}`;
+        finalDescription += `- ${characterId} is a very low '${characterTier}' and has seen better days, ${whatCanTheySolo}`;
     } else if (character.tierValue <= 20) {
-        finalDescription += `- ${characterName} is a low '${characterTier}' and has seen better days, ${whatCanTheySolo}`;
+        finalDescription += `- ${characterId} is a low '${characterTier}' and has seen better days, ${whatCanTheySolo}`;
     } else if (character.tierValue <= 50) {
-        finalDescription += `- ${characterName} is a mid '${characterTier}', ${whatCanTheySolo}`;
+        finalDescription += `- ${characterId} is a mid '${characterTier}', ${whatCanTheySolo}`;
     } else if (character.tierValue <= 70) {
-        finalDescription += `- ${characterName} is a high '${characterTier}', ${whatCanTheySolo}`;
+        finalDescription += `- ${characterId} is a high '${characterTier}', ${whatCanTheySolo}`;
     } else if (character.tierValue <= 90) {
-        finalDescription += `- ${characterName} is a top '${characterTier}', ${whatCanTheySolo}`;
+        finalDescription += `- ${characterId} is a top '${characterTier}', ${whatCanTheySolo}`;
     } else {
-        finalDescription += `- ${characterName} embodies the perfection of '${characterTier}', ${whatCanTheySolo}`;
+        finalDescription += `- ${characterId} embodies the perfection of '${characterTier}', ${whatCanTheySolo}`;
     }
 
-    const surroundingChars = getSurroundingCharacters(deObject, characterName);
+    const surroundingChars = getSurroundingCharacters(deObject, characterId);
     const deadBodies = [surroundingChars.deadNonStrangers, surroundingChars.deadTotalStrangers].flat();
     if (deadBodies.length > 0) {
         finalDescription += `\n\n# Dead bodies at the location:\n\n`;
@@ -1398,21 +1398,21 @@ export async function getCharacterCanSee(deObject, characterName) {
 
 /**
  * @param {DEObject} deObject 
- * @param {string} characterName 
+ * @param {string} characterId 
  */
-export async function getInternalDescriptionOfCharacter(deObject, characterName) {
+export async function getInternalDescriptionOfCharacter(deObject, characterId) {
     if (!deObject) {
         throw new Error("DEngine not initialized");
     }
 
-    const character = deObject.characters[characterName];
+    const character = deObject.characters[characterId];
     if (!character) {
-        throw new Error(`Character ${characterName} not found.`);
+        throw new Error(`Character ${characterId} not found.`);
     }
 
-    const characterState = deObject.stateFor[characterName];
+    const characterState = deObject.stateFor[characterId];
     if (!characterState) {
-        throw new Error(`Character state for ${characterName} not found.`);
+        throw new Error(`Character state for ${characterId} not found.`);
     }
 
     let general = typeof character.general === "string" ? character.general : await character.general({
@@ -1616,7 +1616,7 @@ export async function getInternalDescriptionOfCharacter(deObject, characterName)
         }
     }
 
-    const bonds = deObject.bonds[characterName];
+    const bonds = deObject.bonds[characterId];
 
     /**
      * @type {Array<{title: string; description: string;}>}
@@ -1625,13 +1625,13 @@ export async function getInternalDescriptionOfCharacter(deObject, characterName)
 
     for (const activeBond of bonds.active) {
         if (!character.bonds) {
-            console.error(`Character ${characterName} has no bonds defined.`);
+            console.error(`Character ${characterId} has no bonds defined.`);
             continue;
         }
         const bondDeclaration = character.bonds.declarations.find(bondDecl => bondDecl.strangerBond === activeBond.stranger && bondDecl.minBondLevel <= activeBond.bond && activeBond.bond < (bondDecl.maxBondLevel === 100 ? 200 : bondDecl.maxBondLevel) && bondDecl.min2BondLevel <= activeBond.bond2 && activeBond.bond2 < (bondDecl.max2BondLevel === 100 ? 200 : bondDecl.max2BondLevel));
         const otherCharacter = deObject.characters[activeBond.towards];
         if (!otherCharacter) {
-            console.warn(`Other character ${activeBond.towards} not found for bond with ${characterName}.`);
+            console.warn(`Other character ${activeBond.towards} not found for bond with ${characterId}.`);
             continue;
         }
         const familyRelationship = getFamilyBondRelation(character, otherCharacter);
@@ -1658,17 +1658,17 @@ export async function getInternalDescriptionOfCharacter(deObject, characterName)
             }
 
             if (!activeBond.knowsName && activeBond.stranger) {
-                result += `\n\n${activeBond.towards} is a stranger to ${characterName}, ${characterName} does not know their name.`;
+                result += `\n\n${activeBond.towards} is a stranger to ${characterId}, ${characterId} does not know their name.`;
             } else if (!activeBond.knowsName) {
-                result += `\n\n${activeBond.towards} is an acquaintance to ${characterName}, but ${characterName} does not know their name!`;
+                result += `\n\n${activeBond.towards} is an acquaintance to ${characterId}, but ${characterId} does not know their name!`;
             } else if (activeBond.stranger) {
-                result += `\n\n${activeBond.towards} is a stranger to ${characterName}, but ${characterName} knows their name and some details about them.`;
+                result += `\n\n${activeBond.towards} is a stranger to ${characterId}, but ${characterId} knows their name and some details about them.`;
             } else {
-                result += `\n\n${activeBond.towards} is known to ${characterName}, ${characterName} knows their name and many details about them.`;
+                result += `\n\n${activeBond.towards} is known to ${characterId}, ${characterId} knows their name and many details about them.`;
             }
 
             if (familyRelationship) {
-                result += `\n\n${activeBond.towards} is ${characterName}'s ${familyRelationship}.`;
+                result += `\n\n${activeBond.towards} is ${characterId}'s ${familyRelationship}.`;
             }
 
             const isAttractive = deObject.utils.isAttractedToWithReasoning(character, activeBond.towards);
@@ -1687,12 +1687,12 @@ export async function getInternalDescriptionOfCharacter(deObject, characterName)
             }
 
             if (openToAffection.value !== "not") {
-                result += `\n\n${characterName} is ${valueToWord[openToAffection.value]} receptive to affection from ${activeBond.towards}`;
+                result += `\n\n${characterId} is ${valueToWord[openToAffection.value]} receptive to affection from ${activeBond.towards}`;
                 if (openToAffection.reason) {
                     result += `, reason: ${openToAffection.reason}`;
                 }
             } else {
-                result += `\n\n${characterName} is not open to receiving affection from ${activeBond.towards}`;
+                result += `\n\n${characterId} is not open to receiving affection from ${activeBond.towards}`;
                 if (openToAffection.reason) {
                     result += `, reason: ${openToAffection.reason}`;
                 }
@@ -1703,24 +1703,24 @@ export async function getInternalDescriptionOfCharacter(deObject, characterName)
             const openToIntimateAffection = await bondDeclaration.intimacy.openToIntimateAffection(character, deObject.characters[activeBond.towards]);
 
             if (openToIntimateAffection.value !== "not") {
-                result += `\n\n${characterName} is ${valueToWord[openToIntimateAffection.value]} receptive to intimate romantic affection (${openToSex.value !== "not" ? "including sexual acts (" + valueToWord[openToSex.value] + ")" : "excluding sexual acts"}) from ${activeBond.towards}`;
+                result += `\n\n${characterId} is ${valueToWord[openToIntimateAffection.value]} receptive to intimate romantic affection (${openToSex.value !== "not" ? "including sexual acts (" + valueToWord[openToSex.value] + ")" : "excluding sexual acts"}) from ${activeBond.towards}`;
                 if (openToIntimateAffection.reason) {
                     result += `, reason: ${openToIntimateAffection.reason}`;
                 }
             } else {
-                result += `\n\n${characterName} is not receptive to intimate romantic affection from ${activeBond.towards}`;
+                result += `\n\n${characterId} is not receptive to intimate romantic affection from ${activeBond.towards}`;
                 if (openToIntimateAffection.reason) {
                     result += `, reason: ${openToIntimateAffection.reason}`;
                 }
             }
 
             if (openToSex.value !== "not") {
-                result += `\n\n${characterName} is ${valueToWord[openToSex.value]} receptive to sexual acts from ${activeBond.towards}`;
+                result += `\n\n${characterId} is ${valueToWord[openToSex.value]} receptive to sexual acts from ${activeBond.towards}`;
                 if (openToSex.reason) {
                     result += `, reason: ${openToSex.reason}`;
                 }
             } else {
-                result += `\n\n${characterName} is not receptive to sexual acts from ${activeBond.towards}`;
+                result += `\n\n${characterId} is not receptive to sexual acts from ${activeBond.towards}`;
                 if (openToSex.reason) {
                     result += `, reason: ${openToSex.reason}`;
                 }
@@ -1754,7 +1754,7 @@ export async function getInternalDescriptionOfCharacter(deObject, characterName)
     // they may be mourning or have other effects on the character's mindset so only relevant to system prompt injections
     for (const exBond of bonds.ex) {
         if (!character.bonds) {
-            throw new Error(`Character ${characterName} has no bonds defined.`);
+            throw new Error(`Character ${characterId} has no bonds defined.`);
         }
         const bondDeclaration = getBondDeclarationFromBondDescription(deObject, character, exBond);
         const generalRelationship = await getRelationship(deObject, character, deObject.characters[exBond.towards]);
@@ -1779,10 +1779,10 @@ export async function getInternalDescriptionOfCharacter(deObject, characterName)
 
     // make final descriptions for total strangers for the standard stranger bond
     if (!character.bonds) {
-        throw new Error(`Character ${characterName} has no bonds defined.`);
+        throw new Error(`Character ${characterId} has no bonds defined.`);
     }
 
-    const surroundingChars = getSurroundingCharacters(deObject, characterName);
+    const surroundingChars = getSurroundingCharacters(deObject, characterId);
 
 
     // these do apply to all the total strangers
@@ -1828,9 +1828,9 @@ export async function getInternalDescriptionOfCharacter(deObject, characterName)
                     otherRelationship: generalRelationship,
                 })).trim();
             }
-            result += ` ${strangerName} is a total stranger to ${characterName} and ${characterName} does not know their name.`;
+            result += ` ${strangerName} is a total stranger to ${characterId} and ${characterId} does not know their name.`;
             if (familyRelationship) {
-                result += ` ${strangerName} is ${characterName}'s ${familyRelationship}.`;
+                result += ` ${strangerName} is ${characterId}'s ${familyRelationship}.`;
             }
 
             const titleOfRelationship = `${strangerCharacter.name} (Totally Unknown Stranger)`;
@@ -1950,27 +1950,27 @@ export function getBondDeclarationFromName(deObject, character, bondName) {
 /**
  * 
  * @param {DEngine} engine 
- * @param {string} characterName 
+ * @param {string} characterId 
  */
-export async function getSysPromptForCharacter(engine, characterName) {
+export async function getSysPromptForCharacter(engine, characterId) {
     if (!engine.deObject) {
         throw new Error("DEngine not initialized");
     }
     if (!engine.inferenceAdapter) {
         throw new Error("DEngine has no inference adapter defined");
     }
-    const character = engine.deObject.characters[characterName];
+    const character = engine.deObject.characters[characterId];
     if (!character) {
-        throw new Error(`Character ${characterName} not found.`);
+        throw new Error(`Character ${characterId} not found.`);
     }
 
-    const characterState = engine.deObject.stateFor[characterName];
+    const characterState = engine.deObject.stateFor[characterId];
     if (!characterState) {
-        throw new Error(`No state found for character "${characterName}".`);
+        throw new Error(`No state found for character "${characterId}".`);
     }
 
-    const externalDescription = await getExternalDescriptionOfCharacter(engine.deObject, characterName, true);
-    const internalDescription = await getInternalDescriptionOfCharacter(engine.deObject, characterName);
+    const externalDescription = await getExternalDescriptionOfCharacter(engine.deObject, characterId, true);
+    const internalDescription = await getInternalDescriptionOfCharacter(engine.deObject, characterId);
 
     /**
      * @type {string|null}
@@ -1992,10 +1992,10 @@ export async function getSysPromptForCharacter(engine, characterName) {
      * @type {Array<string>}
      */
     const interactingCharacters = [];
-    const potentialConversationId = engine.deObject.stateFor[characterName].conversationId;
+    const potentialConversationId = engine.deObject.stateFor[characterId].conversationId;
     if (potentialConversationId) {
         const conversation = engine.deObject.conversations[potentialConversationId];
-        interactingCharacters.push(...conversation.participants.filter(name => name !== characterName));
+        interactingCharacters.push(...conversation.participants.filter(name => name !== characterId));
     }
 
     /**
@@ -2031,20 +2031,20 @@ export async function getSysPromptForCharacter(engine, characterName) {
 
     // TODO move to inference adapter describeScenario soemthing
     let scenario = "";
-    const currentLocation = engine.deObject.world.locations[engine.deObject.stateFor[characterName].location];
+    const currentLocation = engine.deObject.world.locations[engine.deObject.stateFor[characterId].location];
     if (currentLocation) {
-        scenario = `## Location:\n\n${engine.deObject.stateFor[characterName].location}, ` + (typeof currentLocation.description === "string" ? currentLocation.description : await currentLocation.description({
+        scenario = `## Location:\n\n${engine.deObject.stateFor[characterId].location}, ` + (typeof currentLocation.description === "string" ? currentLocation.description : await currentLocation.description({
             char: character,
         }));
     }
-    const currentLocationSlot = currentLocation.slots[engine.deObject.stateFor[characterName].locationSlot];
+    const currentLocationSlot = currentLocation.slots[engine.deObject.stateFor[characterId].locationSlot];
     if (currentLocationSlot) {
-        scenario += `\n\nSpecifically at the ${engine.deObject.stateFor[characterName].locationSlot} of ${engine.deObject.stateFor[characterName].location}, ` + (typeof currentLocationSlot.description === "string" ? currentLocationSlot.description : await currentLocationSlot.description({
+        scenario += `\n\nSpecifically at the ${engine.deObject.stateFor[characterId].locationSlot} of ${engine.deObject.stateFor[characterId].location}, ` + (typeof currentLocationSlot.description === "string" ? currentLocationSlot.description : await currentLocationSlot.description({
             char: character,
         }));
     }
 
-    scenario += `\n\n## Weather:\n\n${await whatIsWeatherLikeForCharacter(engine.deObject, characterName)}`;
+    scenario += `\n\n## Weather:\n\n${await whatIsWeatherLikeForCharacter(engine.deObject, characterId)}`;
 
     scenario += `\n\n## Current time and date in the world:\n\n${makeTimestamp(engine.deObject, engine.deObject.currentTime, false)}`;
 
@@ -2079,18 +2079,18 @@ export async function getSysPromptForCharacter(engine, characterName) {
 
 /**
  * @param {DEObject} deObject 
- * @param {string} characterName 
+ * @param {string} characterId 
  * @returns 
  */
-export async function whatIsWeatherLikeForCharacter(deObject, characterName) {
+export async function whatIsWeatherLikeForCharacter(deObject, characterId) {
     if (!deObject) {
         throw new Error("DEngine not initialized");
     }
-    if (!deObject.stateFor[characterName]) {
-        throw new Error(`No state found for character "${characterName}".`);
+    if (!deObject.stateFor[characterId]) {
+        throw new Error(`No state found for character "${characterId}".`);
     }
-    const character = deObject.characters[characterName];
-    const characterState = deObject.stateFor[characterName];
+    const character = deObject.characters[characterId];
+    const characterState = deObject.stateFor[characterId];
     const characterLocation = characterState.location;
     const characterLocationSlot = characterState.locationSlot;
     const location = deObject.world.locations[characterLocation];
@@ -2099,23 +2099,23 @@ export async function whatIsWeatherLikeForCharacter(deObject, characterName) {
 
     if (!weatherSystem) {
         console.error(`Weather system "${weatherThere}" not found in location "${characterLocation}".`);
-        return `The current weather where "${characterName}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}".`;
+        return `The current weather where "${characterId}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}".`;
     }
 
-    const isSheltered = await isCharacterShelteredFromWeather(deObject, characterName, weatherThere, characterLocation, characterLocationSlot);
+    const isSheltered = await isCharacterShelteredFromWeather(deObject, characterId, weatherThere, characterLocation, characterLocationSlot);
 
     if (isSheltered.fullySheltered) {
         const noEffectDescription = typeof weatherSystem.noEffectDescription === "string" ? weatherSystem.noEffectDescription : await weatherSystem.noEffectDescription({ char: character });
-        return `The current weather where "${characterName}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}". However, "${characterName}" is fully sheltered from its effects. ${isSheltered.reason || ""}, therefore ${noEffectDescription || "no weather effects apply to them."}`;
+        return `The current weather where "${characterId}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}". However, "${characterId}" is fully sheltered from its effects. ${isSheltered.reason || ""}, therefore ${noEffectDescription || "no weather effects apply to them."}`;
     } else if (isSheltered.partiallySheltered) {
         const partialEffectDescription = typeof weatherSystem.partialEffectDescription === "string" ? weatherSystem.partialEffectDescription : await weatherSystem.partialEffectDescription({ char: character });
-        return `The current weather where "${characterName}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}". "${characterName}" is partially sheltered from its effects. ${isSheltered.reason || ""}, therefore ${partialEffectDescription || "some weather effects may apply to them."}`;
+        return `The current weather where "${characterId}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}". "${characterId}" is partially sheltered from its effects. ${isSheltered.reason || ""}, therefore ${partialEffectDescription || "some weather effects may apply to them."}`;
     } else if (isSheltered.negativelyExposed) {
         const negativeEffectsDescription = typeof weatherSystem.negativelyExposedDescription === "string" ? weatherSystem.negativelyExposedDescription : await weatherSystem.negativelyExposedDescription({ char: character });
-        return `The current weather where "${characterName}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}". "${characterName}" is negatively exposed to its effects. ${isSheltered.reason || ""}, therefore ${negativeEffectsDescription || "strongly negative weather effects apply to them."}`;
+        return `The current weather where "${characterId}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}". "${characterId}" is negatively exposed to its effects. ${isSheltered.reason || ""}, therefore ${negativeEffectsDescription || "strongly negative weather effects apply to them."}`;
     } else {
         const effectDescription = typeof weatherSystem.fullEffectDescription === "string" ? weatherSystem.fullEffectDescription : await weatherSystem.fullEffectDescription({ char: character });
-        return `The current weather where "${characterName}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}". ${isSheltered.reason || ""}, therefore ${effectDescription || "all weather effects apply to them."}`;
+        return `The current weather where "${characterId}" is (${characterLocation}, ${characterLocationSlot}) is "${weatherThere}". ${isSheltered.reason || ""}, therefore ${effectDescription || "all weather effects apply to them."}`;
     }
 }
 
@@ -2123,12 +2123,12 @@ export async function whatIsWeatherLikeForCharacter(deObject, characterName) {
  * Determines if a character is fully or partially sheltered from a certain weather condition
  * by their current location or surroundings, or by an item they are carrying or wearing.
  * @param {DEObject} deObject 
- * @param {string} characterName 
+ * @param {string} characterId 
  * @param {string} weatherName
  * @param {string} locationName
  * @param {string} slotName
  */
-export async function isCharacterShelteredFromWeather(deObject, characterName, weatherName, locationName, slotName) {
+export async function isCharacterShelteredFromWeather(deObject, characterId, weatherName, locationName, slotName) {
     if (!deObject) {
         throw new Error("DEngine not initialized");
     }
@@ -2136,14 +2136,14 @@ export async function isCharacterShelteredFromWeather(deObject, characterName, w
         fullySheltered: false,
         partiallySheltered: false,
         negativelyExposed: false,
-        reason: `${characterName} is fully exposed to the weather condition "${weatherName}"`,
+        reason: `${characterId} is fully exposed to the weather condition "${weatherName}"`,
     }
 
     const weatherSystem = getWeatherSystemForLocationAndWeather(deObject, locationName, weatherName);
 
-    const character = deObject.characters[characterName];
+    const character = deObject.characters[characterId];
     if (!character) {
-        throw new Error(`Character ${characterName} not found in world.`);
+        throw new Error(`Character ${characterId} not found in world.`);
     }
 
     const locationInfo = deObject.world.locations[locationName];
@@ -2156,15 +2156,15 @@ export async function isCharacterShelteredFromWeather(deObject, characterName, w
         throw new Error(`Slot ${slotName} not found in location ${locationName}.`);
     }
 
-    const characterState = deObject.stateFor[characterName];
+    const characterState = deObject.stateFor[characterId];
     if (!characterState) {
-        throw new Error(`Character state for ${characterName} not found.`);
+        throw new Error(`Character state for ${characterId} not found.`);
     }
 
     /**
      * @type {DEItem[]}
      */
-    const potentiallyProtectingItemsCharacterIsInsideOf = getAllItemsCharacterIsInsideOf(deObject, characterName);
+    const potentiallyProtectingItemsCharacterIsInsideOf = getAllItemsCharacterIsInsideOf(deObject, characterId);
 
     // FULLY PROTECTED CHECKS
     // check for location based sheltering
@@ -2178,28 +2178,28 @@ export async function isCharacterShelteredFromWeather(deObject, characterName, w
     for (const item of characterState.wearing) {
         if (item.wearableProperties?.fullyProtectsFromWeathers?.includes(weatherName)) {
             returnInformation.fullySheltered = true;
-            returnInformation.reason = `The item "${item.name}" worn by "${characterName}" fully protects from the weather condition "${weatherName}"`;
+            returnInformation.reason = `The item "${item.name}" worn by "${characterId}" fully protects from the weather condition "${weatherName}"`;
             return returnInformation;
         }
     }
     for (const item of characterState.carrying) {
         if (item.carriableProperties?.fullyProtectsFromWeathers?.includes(weatherName)) {
             returnInformation.fullySheltered = true;
-            returnInformation.reason = `The item "${item.name}" carried by "${characterName}" fully protects from the weather condition "${weatherName}"`;
+            returnInformation.reason = `The item "${item.name}" carried by "${characterId}" fully protects from the weather condition "${weatherName}"`;
             return returnInformation;
         }
     }
 
     if (weatherSystem.fullyProtectedNaked) {
         returnInformation.fullySheltered = true;
-        returnInformation.reason = `Because ${characterName} is naked ${characterName} is immune to the weather condition "${weatherName}"`;
+        returnInformation.reason = `Because ${characterId} is naked ${characterId} is immune to the weather condition "${weatherName}"`;
         return returnInformation;
     }
     if (weatherSystem.fullyProtectingWornItems.length > 0) {
         for (const item of characterState.wearing) {
             if (weatherSystem.fullyProtectingWornItems.includes(item.name)) {
                 returnInformation.fullySheltered = true;
-                returnInformation.reason = `The item "${item.name}" worn by "${characterName}" fully protects from the weather condition "${weatherName}"`;
+                returnInformation.reason = `The item "${item.name}" worn by "${characterId}" fully protects from the weather condition "${weatherName}"`;
                 return returnInformation;
             }
         }
@@ -2208,7 +2208,7 @@ export async function isCharacterShelteredFromWeather(deObject, characterName, w
         for (const item of characterState.carrying) {
             if (weatherSystem.fullyProtectingCarriedItems.includes(item.name)) {
                 returnInformation.fullySheltered = true;
-                returnInformation.reason = `The item "${item.name}" carried by "${characterName}" fully protects from the weather condition "${weatherName}"`;
+                returnInformation.reason = `The item "${item.name}" carried by "${characterId}" fully protects from the weather condition "${weatherName}"`;
                 return returnInformation;
             }
         }
@@ -2216,7 +2216,7 @@ export async function isCharacterShelteredFromWeather(deObject, characterName, w
     for (const potentialProtectingItem of potentiallyProtectingItemsCharacterIsInsideOf || []) {
         if (potentialProtectingItem.containerProperties?.fullyProtectsFromWeathers?.includes(weatherName)) {
             returnInformation.fullySheltered = true;
-            returnInformation.reason = `The item "${potentialProtectingItem.name}" that "${characterName}" is inside of fully protects from the weather condition "${weatherName}"`;
+            returnInformation.reason = `The item "${potentialProtectingItem.name}" that "${characterId}" is inside of fully protects from the weather condition "${weatherName}"`;
             return returnInformation;
         }
     }
@@ -2226,7 +2226,7 @@ export async function isCharacterShelteredFromWeather(deObject, characterName, w
             if (weatherSystem.fullyProtectingStates.includes(state.state)) {
                 returnInformation.fullySheltered = true;
                 // TODO improve this description of the state
-                returnInformation.reason = `Because "${characterName}" is in a state of "${state.state}", ${characterName} is immune to the weather condition "${weatherName}"`;
+                returnInformation.reason = `Because "${characterId}" is in a state of "${state.state}", ${characterId} is immune to the weather condition "${weatherName}"`;
                 return returnInformation;
             }
         }
@@ -2235,7 +2235,7 @@ export async function isCharacterShelteredFromWeather(deObject, characterName, w
         const hasFullProtect = typeof weatherSystem.fullyProtectedTemplate === "string" ? weatherSystem.fullyProtectedTemplate : await weatherSystem.fullyProtectedTemplate({ char: character });
         if (hasFullProtect) {
             returnInformation.fullySheltered = true;
-            returnInformation.reason = `Because ${hasFullProtect}, ${characterName} is immune to the weather condition "${weatherName}"`;
+            returnInformation.reason = `Because ${hasFullProtect}, ${characterId} is immune to the weather condition "${weatherName}"`;
             return returnInformation;
         }
     }
@@ -2252,14 +2252,14 @@ export async function isCharacterShelteredFromWeather(deObject, characterName, w
     for (const item of characterState.wearing) {
         if (item.wearableProperties?.partiallyProtectsFromWeathers?.includes(weatherName)) {
             returnInformation.partiallySheltered = true;
-            returnInformation.reason = `The item "${item.name}" worn by "${characterName}" partially protects from the weather condition "${weatherName}"`;
+            returnInformation.reason = `The item "${item.name}" worn by "${characterId}" partially protects from the weather condition "${weatherName}"`;
             return returnInformation;
         }
     }
     for (const item of characterState.carrying) {
         if (item.carriableProperties?.partiallyProtectsFromWeathers?.includes(weatherName)) {
             returnInformation.partiallySheltered = true;
-            returnInformation.reason = `The item "${item.name}" carried by "${characterName}" partially protects from the weather condition "${weatherName}"`;
+            returnInformation.reason = `The item "${item.name}" carried by "${characterId}" partially protects from the weather condition "${weatherName}"`;
             return returnInformation;
         }
     }
@@ -2267,7 +2267,7 @@ export async function isCharacterShelteredFromWeather(deObject, characterName, w
         const isNaked = characterState.wearing.filter(item => item.wearableProperties?.coversTopNakedness || item.wearableProperties?.coversBottomNakedness).length === 0;
         if (isNaked) {
             returnInformation.partiallySheltered = true;
-            returnInformation.reason = `Because ${characterName} is partially/totally naked, ${characterName} is partially immune to the weather condition "${weatherName}"`;
+            returnInformation.reason = `Because ${characterId} is partially/totally naked, ${characterId} is partially immune to the weather condition "${weatherName}"`;
             return returnInformation;
         }
     }
@@ -2276,7 +2276,7 @@ export async function isCharacterShelteredFromWeather(deObject, characterName, w
         for (const item of characterState.wearing) {
             if (weatherSystem.partiallyProtectingWornItems.includes(item.name)) {
                 returnInformation.partiallySheltered = true;
-                returnInformation.reason = `The item "${item.name}" worn by "${characterName}" partially protects from the weather condition "${weatherName}"`;
+                returnInformation.reason = `The item "${item.name}" worn by "${characterId}" partially protects from the weather condition "${weatherName}"`;
                 return returnInformation;
             }
         }
@@ -2286,7 +2286,7 @@ export async function isCharacterShelteredFromWeather(deObject, characterName, w
         for (const item of characterState.carrying) {
             if (weatherSystem.partiallyProtectingCarriedItems.includes(item.name)) {
                 returnInformation.partiallySheltered = true;
-                returnInformation.reason = `The item "${item.name}" carried by "${characterName}" partially protects from the weather condition "${weatherName}"`;
+                returnInformation.reason = `The item "${item.name}" carried by "${characterId}" partially protects from the weather condition "${weatherName}"`;
                 return returnInformation;
             }
         }
@@ -2295,7 +2295,7 @@ export async function isCharacterShelteredFromWeather(deObject, characterName, w
     for (const potentialProtectingItem of potentiallyProtectingItemsCharacterIsInsideOf || []) {
         if (potentialProtectingItem.containerProperties?.partiallyProtectsFromWeathers?.includes(weatherName)) {
             returnInformation.partiallySheltered = true;
-            returnInformation.reason = `The item "${potentialProtectingItem.name}" that "${characterName}" is inside of partially protects from the weather condition "${weatherName}"`;
+            returnInformation.reason = `The item "${potentialProtectingItem.name}" that "${characterId}" is inside of partially protects from the weather condition "${weatherName}"`;
             return returnInformation;
         }
     }
@@ -2305,7 +2305,7 @@ export async function isCharacterShelteredFromWeather(deObject, characterName, w
             if (weatherSystem.partiallyProtectingStates.includes(state.state)) {
                 returnInformation.partiallySheltered = true;
                 // TODO improve this description of the state
-                returnInformation.reason = `Because "${characterName}" is in a state of "${state.state}", ${characterName} is partially protected from the weather condition "${weatherName}".`;
+                returnInformation.reason = `Because "${characterId}" is in a state of "${state.state}", ${characterId} is partially protected from the weather condition "${weatherName}".`;
                 return returnInformation;
             }
         }
@@ -2315,7 +2315,7 @@ export async function isCharacterShelteredFromWeather(deObject, characterName, w
         const hasPartialEffect = typeof weatherSystem.partiallyProtectedTemplate === "string" ? weatherSystem.partiallyProtectedTemplate : await weatherSystem.partiallyProtectedTemplate(deObject, { char: character });
         if (hasPartialEffect) {
             returnInformation.partiallySheltered = true;
-            returnInformation.reason = `Because ${hasPartialEffect}, ${characterName} is partially protected from the weather condition "${weatherName}".`;
+            returnInformation.reason = `Because ${hasPartialEffect}, ${characterId} is partially protected from the weather condition "${weatherName}".`;
             return returnInformation;
         }
     }
@@ -2332,7 +2332,7 @@ export async function isCharacterShelteredFromWeather(deObject, characterName, w
     for (const item of characterState.wearing) {
         if (item.wearableProperties?.negativelyExposesToWeathers?.includes(weatherName)) {
             returnInformation.negativelyExposed = true;
-            returnInformation.reason = `The item "${item.name}" worn by "${characterName}" negatively exposes to the weather condition "${weatherName}"`;
+            returnInformation.reason = `The item "${item.name}" worn by "${characterId}" negatively exposes to the weather condition "${weatherName}"`;
             return returnInformation;
         }
     }
@@ -2340,7 +2340,7 @@ export async function isCharacterShelteredFromWeather(deObject, characterName, w
     for (const item of characterState.carrying) {
         if (item.carriableProperties?.negativelyExposesToWeathers?.includes(weatherName)) {
             returnInformation.negativelyExposed = true;
-            returnInformation.reason = `The item "${item.name}" carried by "${characterName}" negatively exposes to the weather condition "${weatherName}"`;
+            returnInformation.reason = `The item "${item.name}" carried by "${characterId}" negatively exposes to the weather condition "${weatherName}"`;
             return returnInformation;
         }
     }
@@ -2349,7 +2349,7 @@ export async function isCharacterShelteredFromWeather(deObject, characterName, w
         const isNaked = characterState.wearing.filter(item => item.wearableProperties?.coversTopNakedness || item.wearableProperties?.coversBottomNakedness).length === 0;
         if (isNaked) {
             returnInformation.negativelyExposed = true;
-            returnInformation.reason = `Because ${characterName} is partially/totally naked, ${characterName} is negatively exposed to the weather condition "${weatherName}"`;
+            returnInformation.reason = `Because ${characterId} is partially/totally naked, ${characterId} is negatively exposed to the weather condition "${weatherName}"`;
             return returnInformation;
         }
     }
@@ -2358,7 +2358,7 @@ export async function isCharacterShelteredFromWeather(deObject, characterName, w
         for (const item of characterState.wearing) {
             if (weatherSystem.negativelyAffectingWornItems.includes(item.name)) {
                 returnInformation.negativelyExposed = true;
-                returnInformation.reason = `The item "${item.name}" worn by "${characterName}" negatively exposes to the weather condition "${weatherName}"`;
+                returnInformation.reason = `The item "${item.name}" worn by "${characterId}" negatively exposes to the weather condition "${weatherName}"`;
                 return returnInformation;
             }
         }
@@ -2368,7 +2368,7 @@ export async function isCharacterShelteredFromWeather(deObject, characterName, w
         for (const item of characterState.carrying) {
             if (weatherSystem.negativelyAffectingCarriedItems.includes(item.name)) {
                 returnInformation.negativelyExposed = true;
-                returnInformation.reason = `The item "${item.name}" carried by "${characterName}" negatively exposes to the weather condition "${weatherName}"`;
+                returnInformation.reason = `The item "${item.name}" carried by "${characterId}" negatively exposes to the weather condition "${weatherName}"`;
                 return returnInformation;
             }
         }
@@ -2377,7 +2377,7 @@ export async function isCharacterShelteredFromWeather(deObject, characterName, w
     for (const potentialProtectingItem of potentiallyProtectingItemsCharacterIsInsideOf || []) {
         if (potentialProtectingItem.containerProperties?.negativelyExposesToWeathers?.includes(weatherName)) {
             returnInformation.negativelyExposed = true;
-            returnInformation.reason = `The item "${potentialProtectingItem.name}" that "${characterName}" is inside of negatively exposes ${characterName} to the weather condition "${weatherName}"`;
+            returnInformation.reason = `The item "${potentialProtectingItem.name}" that "${characterId}" is inside of negatively exposes ${characterId} to the weather condition "${weatherName}"`;
             return returnInformation;
         }
     }
@@ -2387,7 +2387,7 @@ export async function isCharacterShelteredFromWeather(deObject, characterName, w
             if (weatherSystem.negativelyAffectingStates.includes(state.state)) {
                 returnInformation.negativelyExposed = true;
                 // TODO improve this description of the state
-                returnInformation.reason = `Because "${characterName}" is in a state of "${state.state}", ${characterName} is negatively exposed to the weather condition "${weatherName}"`;
+                returnInformation.reason = `Because "${characterId}" is in a state of "${state.state}", ${characterId} is negatively exposed to the weather condition "${weatherName}"`;
                 return returnInformation;
             }
         }
@@ -2397,7 +2397,7 @@ export async function isCharacterShelteredFromWeather(deObject, characterName, w
         const hasNegativeEffect = typeof weatherSystem.negativelyAffectedTemplate === "string" ? weatherSystem.negativelyAffectedTemplate : await weatherSystem.negativelyAffectedTemplate(deObject, { char: character });
         if (hasNegativeEffect) {
             returnInformation.negativelyExposed = true;
-            returnInformation.reason = `Because ${hasNegativeEffect}, ${characterName} is negatively exposed to the weather condition "${weatherName}"`;
+            returnInformation.reason = `Because ${hasNegativeEffect}, ${characterId} is negatively exposed to the weather condition "${weatherName}"`;
             return returnInformation;
         }
     }
@@ -2408,24 +2408,24 @@ export async function isCharacterShelteredFromWeather(deObject, characterName, w
 
 /**
  * @param {DEObject} deObject 
- * @param {string} characterName 
+ * @param {string} characterId 
  * @param {string} towards
  * @returns {Promise<[boolean, DESingleBondDescription, DEBondDeclaration, string]>} bond description and bond info
  */
-export async function getRelationshipBetweenCharacters(deObject, characterName, towards) {
+export async function getRelationshipBetweenCharacters(deObject, characterId, towards) {
     if (!deObject) {
         throw new Error("DEngine not initialized");
     }
-    const character = deObject.characters[characterName];
+    const character = deObject.characters[characterId];
     if (!character) {
-        throw new Error(`Character ${characterName} not found.`);
+        throw new Error(`Character ${characterId} not found.`);
     }
     const towardsCharacter = deObject.characters[towards];
     if (!towardsCharacter) {
         throw new Error(`Character ${towards} not found.`);
     }
     // @ts-ignore
-    let bond = deObject.bonds[characterName].active.find(bond => bond.towards === towards);
+    let bond = deObject.bonds[characterId].active.find(bond => bond.towards === towards);
     let bondInfo = "";
     let pseudoBond = false;
     if (!bond) {
@@ -2443,12 +2443,12 @@ export async function getRelationshipBetweenCharacters(deObject, characterName, 
     }
 
     if (!character.bonds) {
-        throw new Error(`Character ${characterName} has no bonds defined.`);
+        throw new Error(`Character ${characterId} has no bonds defined.`);
     }
 
     const bondDecl = character.bonds.declarations.find((b => b.strangerBond === bond.stranger && b.minBondLevel <= bond.bond && bond.bond < (b.maxBondLevel === 100 ? 200 : b.maxBondLevel) && b.min2BondLevel <= bond.bond2 && bond.bond2 < (b.max2BondLevel === 100 ? 200 : b.max2BondLevel)));
     if (!bondDecl) {
-        throw new Error(`No bond description found for bond level ${bond.bond} and secondary bond level ${bond.bond2} from character "${characterName}" towards character "${towards}".`);
+        throw new Error(`No bond description found for bond level ${bond.bond} and secondary bond level ${bond.bond2} from character "${characterId}" towards character "${towards}".`);
     }
 
     // @ts-ignore

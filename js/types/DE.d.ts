@@ -9,6 +9,20 @@ declare interface DEMinimalCharacterReference {
      */
     id: string;
     /**
+     * This is an id given by the script to identify the character so it can be reclaimed by the script, this is also unique like the id
+     * but it is a much more complex id that is not meant to be human readable, and it is meant to identify the owner script plus a character id
+     * from that script, the script should guarantee that the scriptGivenId is the same each time it is executed for the same character
+     * 
+     * The scriptGivenId is generated automatically by the newCharacter function which assigns the owner script and uses the name as an unique identifier
+     */
+    scriptGivenId: string;
+    /**
+     * Similar to scriptGivenId but just the owner script id, this is used to identify the owner script of the character, this is useful for scripts that want to identify their own characters and not others
+     * 
+     * Here you should pass `engine.script` determines the script that generated and owns this character and manages it
+     */
+    script: string;
+    /**
      * Arbitrary metadata attached to the character
      */
     metadata: Record<string, any>;
@@ -2600,7 +2614,13 @@ declare interface DEStateForCharacter {
 }
 
 declare interface DEStateForCharacterWithHistoricInformation extends DEStateForCharacter {
+    /**
+     * The ids of characters that were surrounding this character when this state was active, reduced description
+     */
     surroundingNonStrangers: Array<string>;
+    /**
+     * The ids of characters that were surrounding this character when this state was active, reduced description
+     */
     surroundingStrangers: Array<string>;
 }
 
@@ -3340,13 +3360,13 @@ declare interface DEConversation {
      */
     id: Readonly<string>;
     /**
-     * The list of participants of the conversation
+     * The list of participants of the conversation, a list of ids
      * The participants of a given conversation never change, each conversation is unique to its participants
      * if a new participant joins, a new conversation is created including the new participants
      */
     participants: Array<string>;
     /**
-     * List of the remote participants in the conversation
+     * List of the remote participants in the conversation, a list of ids
      * these are participants that are not physically present in the same location as the other participants
      * for example, if two characters are talking on the phone
      */
@@ -3661,6 +3681,11 @@ declare interface DENarrationStyle {
 }
 
 declare interface DEUtils {
+    id: {
+        itemIdGenerator(): string;
+        characterIdGenerator(): string;
+        conversationIdGenerator(): string;
+    },
     items: {
         newItem(definition: Omit<DEItemDescription, "id">): DEItemDescription;
     },
@@ -3711,17 +3736,66 @@ declare interface DEUtils {
         locationIsSafe(locationName: string): boolean;
     },
     characters: {
-        newCharacter(definition: Omit<DECompleteCharacterReference, "id">): DECompleteCharacterReference;
+        /**
+         * A new character, this will create a new character in the world with the provided definition, and optionally assign a scriptGivenId to it
+         * by default the script given id will be the script path + the name of the character
+         * 
+         * If your script for some reason makes two characters with the same name, you can provide a scriptGivenId to differentiate them
+         * 
+         * You should still use engine.script + somethingElse to make sure the scriptGivenId is unique, otherwise you may have issues with character references add the script
+         * path to ensure uniqueness, for example, if your script is "my_namespace/my_script" and you want to create a character named "John", you can use "my_namespace/my_script:John" as the scriptGivenId
+         * normally this is automatic when you pass the script as it uses the name of the character to make this, but if you have two characters with the same name in the same script
+         * you can do something like "my_namespace/my_script:John1" and "my_namespace/my_script:John2" to differentiate them
+         * 
+         * @param definition 
+         * @param scriptGivenId 
+         */
+        newCharacter(definition: Omit<DECompleteCharacterReference, "id" | "scriptGivenId">, scriptGivenId?: string): DECompleteCharacterReference;
         newTrigger(character: string | DECompleteCharacterReference, trigger: DECharacterYesNoQuestion | DECharacterNumericQuestion | DECharacterTextQuestion): void;
         newTriggerInAllCharacters(trigger: DECharacterYesNoQuestion | DECharacterNumericQuestion | DECharacterTextQuestion): void;
 
         defineStateInAllCharacters(stateName: string, stateDefinition: DECharacterStateDefinition): DECharacterStateDefinition;
+        /**
+         * defines a state in a character, fails silently if the character is not found
+         * @param character 
+         * @param stateName 
+         * @param stateDefinition 
+         */
         defineStateInCharacter(character: string | DECompleteCharacterReference | null, stateName: string, stateDefinition: DECharacterStateDefinition): DECharacterStateDefinition | null;
+        /**
+         * Defines a bond between two characters, fails silently if either character is not found
+         * @param char1 
+         * @param towards 
+         * @param bondDefinition 
+         * @param options 
+         */
         defineBond(char1: string | DECompleteCharacterReference | null, towards: string | DECompleteCharacterReference | null, bondDefinition: Omit<DESingleBondDescription, "towards">, options?: { forceOverride: boolean }): DESingleBondDescription | null;
+        /**
+         * Defines a mutual bond between two characters, fails silently if either character is not found
+         * @param char1 
+         * @param char2 
+         * @param bondDefinition 
+         */
         defineMutualBond(char1: string | DECompleteCharacterReference | null, char2: string | DECompleteCharacterReference | null, bondDefinition: Omit<DESingleBondDescription, "towards">): [DESingleBondDescription | null, DESingleBondDescription | null];
+        /**
+         * Defines a family relation between two characters, fails silently if either character is not found
+         * @param char1 
+         * @param towards 
+         * @param relation 
+         */
         defineFamilyRelation(char1: string | DECompleteCharacterReference | null, towards: string | DECompleteCharacterReference | null, relation: DEFamilyRelation): [DEFamilyTie | null, DEFamilyTie | null];
 
+        /**
+         * Creates a voice for a character that can be added to their voice description, this is useful to refer to how they talk, their tone, etc...
+         * @param presetName 
+         */
         createVoiceFromPreset(presetName: string): DEVoiceDescription;
+        /**
+         * Creates a voice for a character that can be added to their voice description, this is useful to refer to how they talk, their tone, etc...
+         * 
+         * This function does it from scratch, so you can customize the voice as you want, but it is more work than using a preset
+         * @param voiceDescription 
+         */
         createVoice(voiceDescription: DEVoiceDescription): DEVoiceDescription;
     },
     conversations: {
@@ -3794,11 +3868,6 @@ declare interface DEUtils {
          * @returns true or false
          */
         isGone(char: string | DECompleteCharacterReference): boolean;
-        /**
-         * Boolean indicating if the character is currently in a conversation with our character
-         * @returns true or false
-         */
-        isInConversation(char: string | DECompleteCharacterReference): boolean;
         /**
          * Boolean indicating if the character is currently indoors
          * @returns true or false
@@ -4130,7 +4199,7 @@ declare interface DEObject {
      * The state of each character in the world, including their history and current states
      */
     stateFor: {
-        [charId: string]: DECharacterState;
+        [charId: string]: DEStateForCharacterWithHistory;
     };
     /**
      * Stability of the simulation, a number from 0 to 1 representing how stable the world is
@@ -4192,6 +4261,16 @@ declare interface DEObject {
      * List of interests that characters can have
      */
     interests: Record<string, DECharacterInterest>;
+    /**
+     * Counters to generate character and items IDs, these are used to generate unique IDs for characters and items in the world
+     * they start at 0 and increment by 1 each time a new character or item is created, this ensures that each character and item has a unique ID that can be used to reference them in the world
+     * we don't use uuids because they are harder for the LLM and we just need to guarantee uniqueness within the world
+     */
+    counters: {
+        characterId: number;
+        itemId: number;
+        conversationId: number;
+    };
     /**
      * The current play mode of the game'
      * 
@@ -4385,6 +4464,18 @@ declare interface engine {
      * Assign a {@link DEScript}
      */
     exports: DEScript;
+    /**
+     * The script's id regardless of namespace, e.g. `"sfw-simplified-standard"`. This is the last segment of the logical address.
+     */
+    scriptId: Readonly<string>;
+    /**
+     * The script's namespace, e.g. `"bond-systems"`. This is the first segment of the logical address.
+     */
+    scriptNamespace: Readonly<string>;
+    /**
+     * The script's logical address, e.g. `"bond-systems/sfw-simplified-standard"`. This is the combination of namespace and id.
+     */
+    script: Readonly<string>;
 }
 declare var engine: engine;
 

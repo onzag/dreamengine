@@ -143,9 +143,19 @@ export class DEJSEngine {
 
         const insecureFn = loadFunctionInsecure("importScript, engine", file.src, file.srcUrl);
         /**
-         * @type {{ exports: any }} The module object that the script will populate
+         * @type {{
+         *   exports: any,
+         *   scriptNamespace: Readonly<string>,
+         *   scriptId: Readonly<string>,
+         *   script: Readonly<string>,
+         * }} The module object that the script will populate
          */
-        const engine = { exports: undefined };
+        const engine = {
+            exports: undefined,
+            scriptNamespace: namespace,
+            scriptId: id,
+            script: key,
+        };
 
         /**
          * 
