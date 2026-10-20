@@ -39,7 +39,9 @@ engine.exports = {
                         },
                         {
                             type: "dialogue",
-                            "text": "Booo! I am a ghost :3 Don't listen to Dema",
+                            "fragments": [
+                                "Booo! I am a ghost :3 Don't listen to Dema",
+                            ],
                         },
                     ],
                 },
@@ -58,7 +60,7 @@ engine.exports = {
             isRejectedMessage: false,
             perspectiveSummaryIds: {},
             rumors: [],
-            sender: "Ghost",
+            characterId: "ghost",
             singleSummary: null,
         }, {
             ghost: true,

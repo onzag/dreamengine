@@ -140,57 +140,6 @@ export function findLocationOfAnyCharInsideOrAtopItemRecursive(list, pathSoFar, 
     return resultsSoFar;
 }
 
-
-/**
- * 
- * @param {DEObject} deObject 
- * @param {string} characterId 
- * @returns {{
- *   location: string,
- *   beingCarriedBy: string | null,
- *   itemPath: Array<string | number> | null,
- *   item: DEItem | null,
- *   itemPathEnd: "containingCharacters" | "ontopCharacters" | null,
- * }}
- */
-export function getCharacterExactLocation(deObject, characterId) {
-    const charState = deObject.stateFor[characterId];
-    if (!charState) {
-        throw new Error(`Character ${characterId} not found in engine state.`);
-    }
-    const beingCarriedInfo = getBeingCarriedByCharacter(deObject, characterId);
-    if (beingCarriedInfo) {
-        return {
-            location: beingCarriedInfo.carrierLocation,
-            beingCarriedBy: beingCarriedInfo.carrierName,
-            itemPath: beingCarriedInfo.itemPath,
-            item: beingCarriedInfo.item,
-            itemPathEnd: beingCarriedInfo.itemPathEnd,
-        };
-    }
-    const location = charState.location;
-    for (const slot in deObject.world.locations[location].slots) {
-        const slotInfo = deObject.world.locations[location].slots[slot];
-        const foundChar = findLocationOfCharInsideOrAtopItemRecursive(characterId, slotInfo.items, ["slots", slot, "items"]);
-        if (foundChar) {
-            return {
-                location: location,
-                beingCarriedBy: null,
-                itemPath: foundChar.path,
-                item: foundChar.item,
-                itemPathEnd: foundChar.end,
-            };
-        }
-    }
-    return {
-        location: location,
-        beingCarriedBy: null,
-        itemPath: null,
-        item: null,
-        itemPathEnd: null,
-    };
-}
-
 /**
  * 
  * @param {DEObject} deObject 

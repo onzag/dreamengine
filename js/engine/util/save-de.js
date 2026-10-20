@@ -113,6 +113,7 @@ export function regenerateDEFromSavedDE(engine, savedDE) {
             name: "",
             scenes: {},
             temp: {},
+            metadata: {},
         },
         interests: {},
         narrationStyle: {
@@ -126,11 +127,12 @@ export function regenerateDEFromSavedDE(engine, savedDE) {
             amb: [],
         },
         worldRules: {},
+        counters: savedDE.counters,
 
         // @ts-ignore
         utils: null,
     };
-    properDE.utils = deEngineUtilsFn(properDE);
+    properDE.utils = deEngineUtilsFn(properDE, engine);
 
     for (const [charId, char] of Object.entries(savedDE.characters)) {
         const isUser = charId === savedDE.user;
@@ -179,6 +181,7 @@ export function regenerateDEFromSavedDE(engine, savedDE) {
             parent: null,
             slots: {},
             temp: {},
+            metadata: {},
         };
     }
 

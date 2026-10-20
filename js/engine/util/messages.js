@@ -352,7 +352,7 @@ export async function* getHistoryForCharacter(engine, character, options) {
                     }
 
                     const otherCharInfo = engine.getDEObject().characters[message.characterId];
-                    const knownName = getNameIdentificationForOneCharacterTowardsAnother(engine, character, otherCharInfo);
+                    const knownName = !otherCharInfo ? "<" + message.characterId + ":Unknown Entity>" : getNameIdentificationForOneCharacterTowardsAnother(engine, character, otherCharInfo);
                     
                     const keepgoing = yield ({
                         name: knownName,

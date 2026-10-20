@@ -7,7 +7,6 @@ import calculateBondsChangesDueToMessages from "./gears/bond-change.js";
 import testWorldRulesOn from "./gears/rules-enforce.js";
 import testMessageFeasibilityForCharacter from "./gears/feasibility-check.js";
 import { getCharacterVolume, getCharacterWeight, getItemVolume, getItemWeight, getWearableFitment, locationPathToMessage } from "./util/weight-and-volume.js";
-import { getAllItemsCharacterIsInsideOf, getBeingCarriedByCharacter, getCharacterExactLocation, getExternalDescriptionOfCharacter, getListOfCarriedCharactersByCharacter, getSurroundingCharacters, isBottomNaked, isTopNaked } from "./util/character-info.js";
 import { DEJSEngine } from "../jsengine/index.js";
 import calculatePostureChange from "./gears/posture-change.js";
 import calculateItemChanges from "./gears/item-changes.js";

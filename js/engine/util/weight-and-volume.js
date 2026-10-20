@@ -1,16 +1,16 @@
 
 /**
  * @param {DEObject} deObject
- * @param {string} characterName 
+ * @param {string} characterId 
  */
-export function getCharacterWeight(deObject, characterName) {
-    if (!deObject.characters?.[characterName]) {
-        throw new Error(`Character ${characterName} not found in engine`);
+export function getCharacterWeight(deObject, characterId) {
+    if (!deObject.characters?.[characterId]) {
+        throw new Error(`Character ${characterId} not found in engine`);
     }
     let singularWeight = 0;
 
-    const character = deObject.characters[characterName];
-    const charState = deObject.stateFor[characterName];
+    const character = deObject.characters[characterId];
+    const charState = deObject.stateFor[characterId];
     singularWeight += character.weightKg;
 
     for (const childItem of charState.wearing) {
@@ -22,7 +22,7 @@ export function getCharacterWeight(deObject, characterName) {
         singularWeight += results.completeWeight;
     }
     for (const directlyCarried of charState.carryingCharactersDirectly) {
-        const results = getCharacterWeight(deObject, directlyCarried);
+        const results = getCharacterWeight(deObject, directlyCarried.id);
         singularWeight += results.weight;
     }
     return {
@@ -32,16 +32,16 @@ export function getCharacterWeight(deObject, characterName) {
 
 /**
  * @param {DEObject} deObject
- * @param {string} characterName 
+ * @param {string} characterId 
  */
-export function getCharacterVolume(deObject, characterName) {
-    if (!deObject.characters?.[characterName]) {
-        throw new Error(`Character ${characterName} not found in engine`);
+export function getCharacterVolume(deObject, characterId) {
+    if (!deObject.characters?.[characterId]) {
+        throw new Error(`Character ${characterId} not found in engine`);
     }
     let singularVolume = 0;
 
-    const character = deObject.characters[characterName];
-    const charState = deObject.stateFor[characterName];
+    const character = deObject.characters[characterId];
+    const charState = deObject.stateFor[characterId];
     singularVolume += character.weightKg; // assume water density, so same as weight in kg
 
     for (const childItem of charState.wearing) {
@@ -54,7 +54,7 @@ export function getCharacterVolume(deObject, characterName) {
         singularVolume += results.completeVolume;
     }
     for (const directlyCarried of charState.carryingCharactersDirectly) {
-        const results = getCharacterVolume(deObject, directlyCarried);
+        const results = getCharacterVolume(deObject, directlyCarried.id);
         singularVolume += results.volume;
     }
     return {
@@ -68,17 +68,6 @@ export function getCharacterVolume(deObject, characterName) {
  */
 export function getItemWeight(deObject, item) {
     let singularWeight = 0;
-
-    if (item.amount === 0) {
-        return {
-            singularWeight: 0,
-            completeWeight: 0,
-            amount: 0,
-            allCharactersInvolved: [],
-            charactersOnlyDirectlyInside: [],
-            charactersOnlyDirectlyOnTop: [],
-        }
-    }
 
     singularWeight += item.weightKg;
 
@@ -106,22 +95,22 @@ export function getItemWeight(deObject, item) {
         singularWeight += results.completeWeight;
     }
     for (const character of item.ontopCharacters) {
-        const results = getCharacterWeight(deObject, character);
-        charactersOnlyDirectlyOnTop.push(character);
-        allCharactersInvolved.push(character);
+        const results = getCharacterWeight(deObject, character.id);
+        charactersOnlyDirectlyOnTop.push(character.id);
+        allCharactersInvolved.push(character.id);
         singularWeight += results.weight;
     }
     for (const character of item.containingCharacters) {
-        const results = getCharacterWeight(deObject, character);
-        charactersOnlyDirectlyInside.push(character);
-        allCharactersInvolved.push(character);
+        const results = getCharacterWeight(deObject, character.id);
+        charactersOnlyDirectlyInside.push(character.id);
+        allCharactersInvolved.push(character.id);
         singularWeight += results.weight;
     }
 
     return {
         singularWeight,
-        completeWeight: singularWeight * item.amount,
-        amount: item.amount,
+        completeWeight: singularWeight,
+        amount: 1,
         allCharactersInvolved,
         charactersOnlyDirectlyInside,
         charactersOnlyDirectlyOnTop,
@@ -134,17 +123,6 @@ export function getItemWeight(deObject, item) {
  */
 export function getItemVolume(deObject, item) {
     let singularVolume = 0;
-
-    if (item.amount === 0) {
-        return {
-            singularVolume: 0,
-            completeVolume: 0,
-            amount: 0,
-            allCharactersInvolved: [],
-            charactersOnlyDirectlyInside: [],
-            charactersOnlyDirectlyOnTop: [],
-        }
-    }
 
     /**
      * @type {string[]}
@@ -169,9 +147,9 @@ export function getItemVolume(deObject, item) {
         }
     }
     for (const character of item.containingCharacters) {
-        const results = getCharacterVolume(deObject, character);
-        allCharactersInvolved.push(character);
-        charactersOnlyDirectlyInside.push(character);
+        const results = getCharacterVolume(deObject, character.id);
+        allCharactersInvolved.push(character.id);
+        charactersOnlyDirectlyInside.push(character.id);
         if (!isRigid) {
             singularVolume += results.volume;
         }
@@ -182,16 +160,16 @@ export function getItemVolume(deObject, item) {
         singularVolume += results.completeVolume;
     }
     for (const character of item.ontopCharacters) {
-        allCharactersInvolved.push(character);
-        charactersOnlyDirectlyOnTop.push(character);
-        const results = getCharacterVolume(deObject, character);
+        allCharactersInvolved.push(character.id);
+        charactersOnlyDirectlyOnTop.push(character.id);
+        const results = getCharacterVolume(deObject, character.id);
         singularVolume += results.volume;
     }
 
     return {
         singularVolume,
-        completeVolume: singularVolume * item.amount,
-        amount: item.amount,
+        completeVolume: singularVolume,
+        amount: 1,
         allCharactersInvolved,
         charactersOnlyDirectlyInside,
         charactersOnlyDirectlyOnTop,
@@ -201,18 +179,18 @@ export function getItemVolume(deObject, item) {
 /**
  * 
  * @param {DEObject} deObject 
- * @param {string} characterName 
+ * @param {string} characterId 
  */
-export function getCharacterCarryingCapacity(deObject, characterName) {
-    if (!deObject.characters?.[characterName]) {
-        throw new Error(`Character ${characterName} not found in engine`);
+export function getCharacterCarryingCapacity(deObject, characterId) {
+    if (!deObject.characters?.[characterId]) {
+        throw new Error(`Character ${characterId} not found in engine`);
     }
 
-    const character = deObject.characters[characterName];
+    const character = deObject.characters[characterId];
     let carryingCapacityKg = character.carryingCapacityKg;
     let carryingCapacityLiters = character.carryingCapacityLiters;
 
-    const wearableItems = deObject.stateFor[characterName].wearing;
+    const wearableItems = deObject.stateFor[characterId].wearing;
     for (const item of wearableItems) {
         if (item.wearableProperties) {
             carryingCapacityKg += item.wearableProperties.addedCarryingCapacityKg;
@@ -275,20 +253,20 @@ export function getItemExcessElements(deObject, item) {
     }
 
     for (const childCharacter of item.containingCharacters) {
-        const results = getCharacterWeight(deObject, childCharacter);
+        const results = getCharacterWeight(deObject, childCharacter.id);
         if (carriedWeight + results.weight > capacityInWeight) {
             isOverweightAndBreaks = true;
-            breakReasonsItemsAndCharacters.push(childCharacter);
+            breakReasonsItemsAndCharacters.push(childCharacter.id);
         } else {
             carriedWeight += results.weight;
         }
     }
 
-    const itemNameForText = utilItemCount(deObject, null, item.owner, item.amount, item.name, false, true);
+    const itemNameForText = utilItemCount(deObject, null, item.owner, 1, item.name, false, true);
 
     if (isOverweightAndBreaks) {
-        const breakList = breakReasonsItemsAndCharacters.map((i, ind) => typeof i === "string" ? i : utilItemCount(deObject, null, i.owner, i.amount, i.name, false, true));
-        const listOfItems = deObject?.utils.formatAnd(breakList);
+        const breakList = breakReasonsItemsAndCharacters.map((i, ind) => typeof i === "string" ? i : utilItemCount(deObject, null, i.owner, 1, i.name, false, true));
+        const listOfItems = deObject?.utils.templates.formatAnd(breakList);
         const overweightReasons = [
             `${listOfItems} causes ${itemNameForText} to be overweight and break`,
             `${itemNameForText} bursts apart from the sheer amount of ${listOfItems} stuffed inside`,
@@ -303,11 +281,11 @@ export function getItemExcessElements(deObject, item) {
             expelledOntopCharacters: item.ontopCharacters,
             expelledContainedItems: item.containing.map(i => ({
                 item: i,
-                amount: i.amount,
+                amount: 1,
             })),
             expelledOntopItems: item.ontop.map(i => ({
                 item: i,
-                amount: i.amount,
+                amount: 1,
             })),
             breaks: true,
             breakStyle: "overweight",
@@ -326,18 +304,18 @@ export function getItemExcessElements(deObject, item) {
     }
 
     for (const childCharacter of item.ontopCharacters) {
-        const results = getCharacterWeight(deObject, childCharacter);
+        const results = getCharacterWeight(deObject, childCharacter.id);
         if (capacityOnTopWeight !== null && ontopWeight + results.weight > capacityOnTopWeight) {
             isOverweightAndBreaks = true;
-            breakReasonsItemsAndCharacters.push(childCharacter);
+            breakReasonsItemsAndCharacters.push(childCharacter.id);
         } else {
             ontopWeight += results.weight;
         }
     }
 
     if (isOverweightAndBreaks) {
-        const breakList = breakReasonsItemsAndCharacters.map((i, ind) => typeof i === "string" ? i : utilItemCount(deObject, null, i.owner, i.amount, i.name, false, true));
-        const listOfItems = deObject?.utils.formatAnd(breakList);
+        const breakList = breakReasonsItemsAndCharacters.map((i, ind) => typeof i === "string" ? i : utilItemCount(deObject, null, i.owner, 1, i.name, false, true));
+        const listOfItems = deObject?.utils.templates.formatAnd(breakList);
         const crushedReasons = [
             `${listOfItems} causes ${itemNameForText} to be overloaded and it breaks under the weight`,
             `${itemNameForText} collapses under the crushing weight of ${listOfItems}`,
@@ -352,11 +330,11 @@ export function getItemExcessElements(deObject, item) {
             expelledOntopCharacters: item.ontopCharacters,
             expelledContainedItems: item.containing.map(i => ({
                 item: i,
-                amount: i.amount,
+                amount: 1,
             })),
             expelledOntopItems: item.ontop.map(i => ({
                 item: i,
-                amount: i.amount,
+                amount: 1,
             })),
             breaks: true,
             breakStyle: "crushed",
@@ -381,12 +359,12 @@ export function getItemExcessElements(deObject, item) {
         if (howManyCanFit <= 0) {
             expelledContainedItems.push({
                 item: childItem,
-                amount: childItem.amount,
+                amount: 1,
             });
-        } else if (howManyCanFit < (childItem.amount || 1)) {
+        } else if (howManyCanFit < 1) {
             expelledContainedItems.push({
                 item: childItem,
-                amount: (childItem.amount || 1) - howManyCanFit,
+                amount: 1 - howManyCanFit,
             });
             carriedVolume += howManyCanFit * results.singularVolume;
         } else {
@@ -395,7 +373,7 @@ export function getItemExcessElements(deObject, item) {
     }
 
     for (const childCharacter of item.containingCharacters) {
-        const results = getCharacterVolume(deObject, childCharacter);
+        const results = getCharacterVolume(deObject, childCharacter.id);
         if (carriedVolume + results.volume > capacityInVolume) {
             expelledContainedCharacters.push(childCharacter);
         } else {
@@ -410,12 +388,12 @@ export function getItemExcessElements(deObject, item) {
         if (howManyCanFit <= 0) {
             expelledOntopItems.push({
                 item: childItem,
-                amount: childItem.amount,
+                amount: 1,
             });
-        } else if (howManyCanFit < (childItem.amount || 1)) {
+        } else if (howManyCanFit < 1) {
             expelledOntopItems.push({
                 item: childItem,
-                amount: (childItem.amount || 1) - howManyCanFit,
+                amount: 1 - howManyCanFit,
             });
             ontopVolume += howManyCanFit * results.singularVolume;
         } else {
@@ -424,7 +402,7 @@ export function getItemExcessElements(deObject, item) {
     }
 
     for (const childCharacter of item.ontopCharacters) {
-        const results = getCharacterVolume(deObject, childCharacter);
+        const results = getCharacterVolume(deObject, childCharacter.id);
         if (capacityOnTopVolume !== null && ontopVolume + results.volume > capacityOnTopVolume) {
             expelledOntopCharacters.push(childCharacter);
         } else {
@@ -483,7 +461,7 @@ export function getWearableFitment(deObject, item, character, isNotBeingCurrentl
                 extraAddedExtraTraitsAtTheEnd.push(trait);
             }
             return {
-                fitment: deObject.utils.formatAnd(["fits perfectly", ...extraAddedExtraTraitsAtTheEnd]),
+                fitment: deObject.utils.templates.formatAnd(["fits perfectly", ...extraAddedExtraTraitsAtTheEnd]),
                 shouldFallDown: false,
                 shouldBreak: false,
                 breakReason: null,
@@ -501,10 +479,10 @@ export function getWearableFitment(deObject, item, character, isNotBeingCurrentl
                 fitmentDescription = "fits extremely tightly";
             }
 
-            const itemNameForText = utilItemCount(deObject, null, item.owner, item.amount, item.name, false, true);
+            const itemNameForText = utilItemCount(deObject, null, item.owner, 1, item.name, false, true);
 
             return {
-                fitment: deObject.utils.formatAnd([fitmentDescription, ...extraAddedExtraTraitsAtTheEnd]),
+                fitment: deObject.utils.templates.formatAnd([fitmentDescription, ...extraAddedExtraTraitsAtTheEnd]),
                 shouldFallDown: false,
                 shouldBreak: totalBodyVolume > largestSizeItCanFit,
                 breakReason: totalBodyVolume > largestSizeItCanFit ? (() => {
@@ -531,7 +509,7 @@ export function getWearableFitment(deObject, item, character, isNotBeingCurrentl
             }
 
             return {
-                fitment: deObject.utils.formatAnd([fitmentDescription, ...extraAddedExtraTraitsAtTheEnd]),
+                fitment: deObject.utils.templates.formatAnd([fitmentDescription, ...extraAddedExtraTraitsAtTheEnd]),
                 shouldFallDown: totalBodyVolume < smallestSizeItCanFit,
                 shouldBreak: false,
                 breakReason: null,
@@ -799,10 +777,10 @@ export function checkItemIsOneOfAKindAtLocation(deObject, location, item) {
                 continue; // skip items that have been moved, as they are not really present in the location anymore
             }
             if (itemInList.name.trim().toLowerCase() === itemTrimmedLower) {
-                totalCount += itemInList.amount || 1;
+                totalCount += 1;
             } else if (itemInList.name.trim().toLowerCase().includes(itemTrimmedLower)) {
                 // we also check if the item name includes the item we are looking for, this is just to increase the chances of finding
-                totalCount += itemInList.amount || 1;
+                totalCount += 1;
             }
             if (totalCount > 1) {
                 return;
@@ -848,12 +826,12 @@ export function checkItemIsOneOfAKindAtLocation(deObject, location, item) {
 
 /**
  * @param {DEObject} deObject
- * @param {string} characterName
+ * @param {string} characterId
  * @param {string} currentLocation
  * @param {Array<string | number>} locationPath
  * @param {boolean} [ignoreCarrierWearer] whether to ignore the carrier/wearer in the message, this is used for example when we are trying to figure out if an item is being worn by a character, as the LLM may refer to the item in a different way than how it is named in the world state, for example it may say "hat" instead of "red hat", so we want to ignore case and also check if the item name includes the name we are looking for instead of checking for an exact match, this is just to increase the chances of finding the item and thus accepting feasible changes even if they are not perfectly formatted
  */
-export function locationPathToMessageWithoutItemName(deObject, characterName, currentLocation, locationPath, ignoreCarrierWearer = false) {
+export function locationPathToMessageWithoutItemName(deObject, characterId, currentLocation, locationPath, ignoreCarrierWearer = false) {
     if (!deObject) {
         throw new Error("DEngine not initialized");
     }
@@ -865,17 +843,17 @@ export function locationPathToMessageWithoutItemName(deObject, characterName, cu
         pathCopy.pop();
     }
 
-    return locationPathToMessage(deObject, characterName, currentLocation, pathCopy, ignoreCarrierWearer);
+    return locationPathToMessage(deObject, characterId, currentLocation, pathCopy, ignoreCarrierWearer);
 }
 
 /**
  * @param {DEObject} deObject
- * @param {string} characterName
+ * @param {string} characterId
  * @param {string} currentLocation
  * @param {Array<string | number>} locationPath
  * @param {boolean} [ignoreCarrierWearer] whether to ignore the carrier/wearer in the message, this is used for example when we are trying to figure out if an item is being worn by a character, as the LLM may refer to the item in a different way than how it is named in the world state, for example it may say "hat" instead of "red hat", so we want to ignore case and also check if the item name includes the name we are looking for instead of checking for an exact match, this is just to increase the chances of finding the item and thus accepting feasible changes even if they are not perfectly formatted
  */
-export function locationPathToMessage(deObject, characterName, currentLocation, locationPath, ignoreCarrierWearer = false) {
+export function locationPathToMessage(deObject, characterId, currentLocation, locationPath, ignoreCarrierWearer = false) {
     if (!deObject) {
         throw new Error("DEngine not initialized");
     }
@@ -885,7 +863,8 @@ export function locationPathToMessage(deObject, characterName, currentLocation, 
      */
     let elementToFollow = null;
     if (locationPath[0] === "characters") {
-        base = ignoreCarrierWearer ? "" : `${locationPath[2] === "carrying" ? "carried" : "worn"} by ${locationPath[1]}`;
+        const carrierWearerName = deObject.characters[locationPath[1]]?.name ?? locationPath[1];
+        base = ignoreCarrierWearer ? "" : `${locationPath[2] === "carrying" ? "carried" : "worn"} by ${carrierWearerName}`;
         // @ts-ignore
         elementToFollow = engine.deObject.stateFor[locationPath[1]][locationPath[2]];
     } else if (locationPath[0] === "slots") {
@@ -903,7 +882,7 @@ export function locationPathToMessage(deObject, characterName, currentLocation, 
 
         let itemNameToUse = elementToFollow[itemId].name;
         if (!itemNameToUse.toLowerCase().startsWith("a ") && !itemNameToUse.toLowerCase().startsWith("an ") && !itemNameToUse.toLowerCase().startsWith("the ")) {
-            if (checkItemIsOneOfAKindAtLocation(deObject, deObject.stateFor[characterName].location, elementToFollow[itemId].name)) {
+            if (checkItemIsOneOfAKindAtLocation(deObject, deObject.stateFor[characterId].location, elementToFollow[itemId].name)) {
                 itemNameToUse = "the " + itemNameToUse;
             } else if (itemNameToUse.toLowerCase().startsWith("a")) {
                 itemNameToUse = "an " + itemNameToUse;

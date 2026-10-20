@@ -1,6 +1,4 @@
 import { DEngine } from "../index.js";
-import { getSurroundingCharacters } from "./character-info.js";
-import { BASIC_WORDS } from "./voice.js";
 
 /**
  * @param {string} word 
